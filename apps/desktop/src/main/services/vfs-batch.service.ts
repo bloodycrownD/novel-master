@@ -4,10 +4,10 @@
  * @module services/vfs-batch
  */
 import {
+  VfsServiceFactory,
   buildUserVfsCreateFileOp,
   buildUserVfsMkdirOp,
   buildUserVfsSaveOp,
-  createVfsBatchIoService,
   readUserVfsSaveBaseline,
   type BatchApplyReport,
   type BatchIngestRawEntry,
@@ -149,7 +149,7 @@ export async function ingestVfsFromHostPaths(runtime: DesktopNovelMasterRuntime,
   }
 
   const rawEntries = await collectHostPathEntries(options.hostPaths);
-  const batch = createVfsBatchIoService(runtime.conn);
+  const batch = VfsServiceFactory.createBatchIo(runtime.conn);
   const planned = await batch.planBatchIngest(scope, targetDir, rawEntries);
   // 失败沿 Result 返回，由唯一调用方 handleVfsBatchIngestFromPaths 转码。
   if (!planned.ok) return Result.err(planned.error);
@@ -244,7 +244,7 @@ type ExportVfsFileOptions = { readonly logicalPath: string };
 type ExportFileResult = Result<"saved" | "cancelled", AppError>;
 
 export async function exportVfsFileWithDialog(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: ExportVfsFileOptions, parentWindow?: BrowserWindow | null): Promise<ExportFileResult> {
-  const batch = createVfsBatchIoService(runtime.conn);
+  const batch = VfsServiceFactory.createBatchIo(runtime.conn);
   const planned = await batch.planBatchExport(scope, [options.logicalPath]);
   // 失败沿 Result 返回，由唯一调用方 handleVfsFileExport 转码。
   if (!planned.ok) return Result.err(planned.error);
@@ -332,7 +332,7 @@ export async function stageVfsBatchExport(runtime: DesktopNovelMasterRuntime, sc
     return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "没有可导出的路径" }));
   }
 
-  const batch = createVfsBatchIoService(runtime.conn);
+  const batch = VfsServiceFactory.createBatchIo(runtime.conn);
   const planned = await batch.planBatchExport(scope, logicalPaths);
   // 失败沿 Result 返回，由唯一调用方 handleVfsBatchExportStage 转码。
   if (!planned.ok) return Result.err(planned.error);

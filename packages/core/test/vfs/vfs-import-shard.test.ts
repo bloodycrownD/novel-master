@@ -14,10 +14,7 @@ import { isVfsError } from "../../src/errors/guards.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import {
-  createScopedVfsService,
-  createVfsZipIoService,
-} from "@novel-master/core/vfs";
+import { VfsServiceFactory } from "@novel-master/core/vfs";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -80,7 +77,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const scope = { kind: "project" as const, projectId: project.id };
 
     probe.reset();
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       scope,
       buildVfsZip(filesMap(450)),
       { confirmed: true }
@@ -105,7 +102,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const scope = { kind: "project" as const, projectId: project.id };
 
     probe.reset();
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       scope,
       buildVfsZip(filesMap(450)),
       { confirmed: true }
@@ -127,7 +124,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const scopeKey = `project:${project.id}`;
     const expected = filesMap(450);
 
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       { kind: "project", projectId: project.id },
       buildVfsZip(expected),
       { confirmed: true }
@@ -144,7 +141,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
   it("A4/钩子: 第 3 片注入既有钩子 → 抛原始 Error、半棵新树被补偿、旧内容不恢复", async () => {
     const project = await ctx.projects.create(`P-a4hook-${Date.now()}`);
     const scope = { kind: "project" as const, projectId: project.id };
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     await vfs.write("/before.md", "旧内容");
 
     const files = filesMap(450);
@@ -152,7 +149,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const failPath = "/f0200.md";
     await assert.rejects(
       () =>
-        createVfsZipIoService(conn, {
+        VfsServiceFactory.createZipIo(conn, {
           testHook: { throwOnInsertLogical: failPath },
         }).import(scope, buildVfsZip(files), { confirmed: true }),
       (e: unknown) =>
@@ -186,7 +183,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
   it("A4/真实失败: 非钩子失败 → IMPORT_FAILED 且消息带分片进度", async () => {
     const project = await ctx.projects.create(`P-a4real-${Date.now()}`);
     const scope = { kind: "project" as const, projectId: project.id };
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
 
     // 文件序：先 200 个正常文件（第 1 片），再「a.md」+「a.md/b.md」。
     // 第二片的第二条让 ensureParentDirectories 撞上「父路径是文件行」⇒ 真实
@@ -197,7 +194,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
 
     await assert.rejects(
       () =>
-        createVfsZipIoService(conn).import(
+        VfsServiceFactory.createZipIo(conn).import(
           scope,
           buildVfsZip(files),
           { confirmed: true }
@@ -234,7 +231,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     try {
       await assert.rejects(
         () =>
-          createVfsZipIoService(conn, {
+          VfsServiceFactory.createZipIo(conn, {
             testHook: { throwOnInsertLogical: "/f0200.md" },
           }).import(scope, buildVfsZip(filesMap(450)), { confirmed: true }),
         (e: unknown) =>
@@ -257,7 +254,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const files = filesMap(5000);
 
     probe.reset();
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       scope,
       buildVfsZip(files),
       { confirmed: true }

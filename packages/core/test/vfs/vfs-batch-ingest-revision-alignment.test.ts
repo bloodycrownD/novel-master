@@ -17,7 +17,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
+import { VfsServiceFactory } from "@novel-master/core/vfs";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
@@ -76,10 +76,10 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     const project = unwrap(await ctx.projects.create(`P-d1-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     unwrap(await vfs.write("/chap/a.md", "old-a"));
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("new-a") },
       { kind: "file", relativePath: "b.md", bytes: enc("B") },
@@ -112,10 +112,10 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     const project = unwrap(await ctx.projects.create(`P-d2-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     unwrap(await vfs.write("/a.md", "old"));
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "a.md", bytes: enc("new") },
       { kind: "file", relativePath: "b.md", bytes: enc("b") },
@@ -157,7 +157,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       }))
     ).id;
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "pinned.md", bytes: enc("pinned-body") },
     ]));
@@ -195,11 +195,11 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     const project = unwrap(await ctx.projects.create(`P-d5-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     unwrap(await vfs.write("/x.md", "v1"));
     unwrap(await vfs.write("/x.md", "v2"));
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "x.md", bytes: enc("v3") },
     ]));
@@ -231,7 +231,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const entries = [{ kind: "file" as const, relativePath: "same.md", bytes: enc("same") }];
     unwrap(await batch.applyBatchIngest(
       scope,
@@ -267,7 +267,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     const project = unwrap(await ctx.projects.create(`P-name-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "尾随空格.md ", bytes: enc("x") },
       { kind: "file", relativePath: "控制符\u0001.md", bytes: enc("z") },

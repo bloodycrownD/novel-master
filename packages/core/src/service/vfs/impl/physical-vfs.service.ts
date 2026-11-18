@@ -25,7 +25,7 @@ import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import { Path } from "@/common/path.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { createScopedVfsService } from "../create-scoped-vfs-service.js";
+import { VfsServiceFactory } from "../vfs-service-factory.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
 
 /** 目录行优先、再按展示键（label，无则路径末段 basename，单源 `common/path.ts`）字典序；合成行按项目名/会话名排而非 UUID。 */
@@ -233,7 +233,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     let result: Result<VfsReadResult, AppError>;
     try {
-      result = await createScopedVfsService(this.conn, resolved.scope).read(resolved.logicalPath);
+      result = await VfsServiceFactory.createScoped(this.conn, resolved.scope).read(resolved.logicalPath);
     } catch (error) {
       // inner 的 read 链若仍有边界抛出（如旧 wiring），此处转码到 Result 通道；
       // 目录行按「无此文件」归一（本视图 read 只面向文件）。

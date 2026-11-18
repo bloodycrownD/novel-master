@@ -3,7 +3,7 @@ import { Result } from "../../src/errors/either.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
+import { VfsServiceFactory } from "@novel-master/core/vfs";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -37,7 +37,7 @@ describe("VfsBatchIoService", () => {
     unwrap(await vfs.write("/keep.md", "keep"));
     unwrap(await vfs.mkdir("/chap"));
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
@@ -59,7 +59,7 @@ describe("VfsBatchIoService", () => {
     const vfs = ctx.projectVfs(project.id);
     unwrap(await vfs.write("/chap/a.md", "old"));
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("new") },
@@ -79,7 +79,7 @@ describe("VfsBatchIoService", () => {
     const vfs = ctx.projectVfs(project.id);
 
     const bad = new Uint8Array([0xff, 0xfe, 0xfd]);
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "bad.bin", bytes: bad },
@@ -102,7 +102,7 @@ describe("VfsBatchIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "directory", relativePath: "empty" },
@@ -123,7 +123,7 @@ describe("VfsBatchIoService", () => {
     unwrap(await vfs.write("/chap/a.md", "A"));
     unwrap(await vfs.write("/chap/sub/b.md", "B"));
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       ["/chap"],
@@ -141,7 +141,7 @@ describe("VfsBatchIoService", () => {
     unwrap(await vfs.write("/卷一/第一章.md", "A"));
     unwrap(await vfs.write("/卷二/第一章.md", "B"));
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       ["/卷一/第一章.md", "/卷二/第一章.md"],
@@ -160,7 +160,7 @@ describe("VfsBatchIoService", () => {
     const vfs = ctx.projectVfs(project.id);
     unwrap(await vfs.write("/卷一/第一章.md", "A"));
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       ["/卷一/第一章.md"],
@@ -178,7 +178,7 @@ describe("VfsBatchIoService", () => {
     unwrap(await vfs.write("/卷一/a.md", "单文件"));
     unwrap(await vfs.write("/卷一/子/b.md", "目录里的"));
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       // 单文件在前 ⇒ 它先占住 `卷一/a.md`；随后目录分支再产出同 rel ⇒ 撞名
@@ -200,7 +200,7 @@ describe("VfsBatchIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
-    const batch = createVfsBatchIoService(ctx.conn, {
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn, {
       testHook: { throwOnWriteLogical: "/chap/b.md" },
     });
     const scope = { kind: "project" as const, projectId: project.id };
@@ -234,7 +234,7 @@ describe("VfsBatchIoService", () => {
     const total = 401;
     const failIndex = 200; // 第 2 片（0-based）的首个文件
     const failLogical = `/chap/f${String(failIndex).padStart(4, "0")}.md`;
-    const batch = createVfsBatchIoService(ctx.conn, {
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn, {
       testHook: { throwOnWriteLogical: failLogical },
     });
     const scope = { kind: "project" as const, projectId: project.id };
@@ -275,7 +275,7 @@ describe("VfsBatchIoService", () => {
   it("T-B7: plan detects same-path file/directory type conflict", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "foo", bytes: enc("file") },
@@ -293,7 +293,7 @@ describe("VfsBatchIoService", () => {
   it("T-B9: plan detects file-under-file type conflict", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "foo", bytes: enc("parent") },
@@ -313,7 +313,7 @@ describe("VfsBatchIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
@@ -606,9 +606,9 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     );
   });
 
-  it("T-C5: 工厂单参 createVfsBatchIoService(conn) 默认注入 sessionKkv", async () => {
+  it("T-C5: 工厂单参 VfsServiceFactory.createBatchIo(conn) 默认注入 sessionKkv", async () => {
     const ctx = getNovelMasterTestContext();
-    const batch = createVfsBatchIoService(ctx.conn);
+    const batch = VfsServiceFactory.createBatchIo(ctx.conn);
     // 这里只锁「工厂单参即带 sessionKkv」这一件事：由后续 seed + import 能清空两域
     // 反证（ctx.sessionKkv 的脏 key 能被清掉）。不断言 applyBatchIngest 的存在性
     // ——那是类型层的既有事实，写出来只是恒真噪声。
@@ -766,7 +766,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
     // 场景一：**同片**失败（零写入）⇒ 两域保持脏 key 原样。抛错点在第 1 片内，
     // 没有任何已提交分片，门闸 writtenLogical.length > 0 不该放行。
-    const sameShardBatch = createVfsBatchIoService(ctx.conn, {
+    const sameShardBatch = VfsServiceFactory.createBatchIo(ctx.conn, {
       testHook: { throwOnWriteLogical: "/chap/b.md" },
     });
     await seedDirtyCaches(session.id, "tc7-same-shard");
@@ -798,7 +798,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     const total = 401;
     const failIndex = 200;
     const failLogical = `/chap2/f${String(failIndex).padStart(4, "0")}.md`;
-    const crossShardBatch = createVfsBatchIoService(ctx.conn, {
+    const crossShardBatch = VfsServiceFactory.createBatchIo(ctx.conn, {
       testHook: { throwOnWriteLogical: failLogical },
     });
     const entries = Array.from({ length: total }, (_, i) => ({
@@ -868,7 +868,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
       bytes: enc(`C${i}`),
     }));
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const plan = unwrap(await batch.planBatchIngest(scope, "/chap", entries));
     probe.reset();
     const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
@@ -896,7 +896,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
   it("T-B6d: plan.writes 为空（纯 mkdir）⇒ 只跑段 B0 一条事务；全空 plan ⇒ 零事务", async () => {
     const project = unwrap(await ctx.projects.create(`P-batchio-${testIsolationSuffix()}`));
     const scope = { kind: "project" as const, projectId: project.id };
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
 
     const mkdirOnly = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "directory", relativePath: "empty-dir" },
@@ -916,7 +916,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
     assert.deepEqual(report.written, []);
     assert.equal(
       unwrap(
-        await createScopedVfsService(conn, scope).list("/", {
+        await VfsServiceFactory.createScoped(conn, scope).list("/", {
           recursive: false,
         }),
       ).length,

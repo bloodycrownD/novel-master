@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
+import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 
 import {
   getNovelMasterTestContext,
@@ -48,7 +48,7 @@ describe("directory NULL content contract", () => {
     assert.equal(entry!.content, "");
     assert.notEqual(entry!.content, "null");
 
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     await rejectsErr(() => vfs.read(GLOBAL_SCOPE, dir), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_IS_DIRECTORY"));
     });

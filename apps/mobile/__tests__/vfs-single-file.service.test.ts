@@ -20,8 +20,10 @@ const mockUnlink = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
   ...jest.requireActual('@novel-master/core/vfs'),
-  createVfsBatchIoService: (...args: unknown[]) =>
-    mockCreateVfsBatchIoService(...args),
+  VfsServiceFactory: {
+    createBatchIo: (...args: unknown[]) =>
+      mockCreateVfsBatchIoService(...args),
+  },
 }));
 
 jest.mock('@react-native-documents/picker', () => ({

@@ -3,7 +3,7 @@
  * Flow: confirmed Alert (caller) → picker png/json → importFromBytes.
  */
 import {AppError} from '@novel-master/core/errors';
-import {createCharacterCardImportService, CHARACTER_CARD_MAX_INPUT_BYTES, type CharacterCardImportOptions, type VfsScope} from '@novel-master/core/vfs';
+import {VfsServiceFactory, CHARACTER_CARD_MAX_INPUT_BYTES, type CharacterCardImportOptions, type VfsScope} from '@novel-master/core/vfs';
 import {pickAndReadBytes, type PickAndReadOptions} from './document-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {assertCharacterCardFileName, characterCardImportPickTypes} from './character-card-document-pick';
@@ -37,7 +37,7 @@ export async function importCharacterCard(runtime: MobileNovelMasterRuntime, sco
   }
 
   const directoryPath = options.directoryPath == null || options.directoryPath.trim() === '' ? '/' : options.directoryPath;
-  const svc = createCharacterCardImportService(runtime.conn);
+  const svc = VfsServiceFactory.createCharacterCardImport(runtime.conn);
   await svc.importFromBytes(scope, bytes, {
     confirmed: options.confirmed,
     directoryPath,

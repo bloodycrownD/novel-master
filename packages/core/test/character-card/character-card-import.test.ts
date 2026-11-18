@@ -2,11 +2,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-
-  createCharacterCardImportService,
-  type VfsService,
-} from "@novel-master/core/vfs";
+import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
 import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } from "../../src/domain/character-card/logic/character-card-limits.js";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 
@@ -82,7 +78,7 @@ describe("CharacterCardImportService", () => {
     unwrap(await vfs.write("/角色/旧文件.md", "old"));
     unwrap(await vfs.write("/大纲/保留.md", "outline"));
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, {
       confirmed: true,
@@ -123,7 +119,7 @@ describe("CharacterCardImportService", () => {
     unwrap(await vfs.write("/角色/独有旧文件.md", oldBody));
     const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" });
 
@@ -153,7 +149,7 @@ describe("CharacterCardImportService", () => {
     };
     unwrap(await vfs.write("/角色/stay.md", "stay"));
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
     const unconfirmed = await svc.import(scope, tree, {
       confirmed: false,
@@ -183,7 +179,7 @@ describe("CharacterCardImportService", () => {
     // 对齐 ZIP Z5：目标子树先写旧文件，insert 钩子失败后应被补偿清掉
     unwrap(await vfs.write("/角色/旧文件.md", "old"));
 
-    const svc = createCharacterCardImportService(ctx.conn, {
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn, {
       testHook: { throwOnInsertLogical: "/角色/角色描述.md" },
     });
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
@@ -218,7 +214,7 @@ describe("CharacterCardImportService", () => {
     unwrap(await vfs.write("/角色/stay.md", "stay-bytes"));
 
     let deleteReached = false;
-    const hooked = createCharacterCardImportService(ctx.conn, {
+    const hooked = VfsServiceFactory.createCharacterCardImport(ctx.conn, {
       testHook: {
         onBeforeDeletePrefix: () => {
           deleteReached = true;
@@ -266,7 +262,7 @@ describe("CharacterCardImportService", () => {
     assert.ok(before);
     assert.equal(before.headCount, 7);
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     await svc.importFromBytes(
       scope,
       new TextEncoder().encode(JSON.stringify(SAMPLE_V2)),
@@ -296,7 +292,7 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = new Map([
       ["角色描述.md", "描述"],
       ["开场/开场001.md", "开场"],
@@ -342,7 +338,7 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     await svc.import(
       scope,
       new Map([["开场/开场001.md", "开场"]]),
@@ -376,7 +372,7 @@ describe("CharacterCardImportService", () => {
 
     // 故障注入：upsertDirRule 执行一条必失败的 SQL（表不存在），
     // 验证语句级失败不自动 ROLLBACK，导入事务照常提交
-    const svc = createCharacterCardImportService(ctx.conn, {
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn, {
       testHook: {
         createWorkplaceRepo: (tx) =>
           ({
@@ -420,7 +416,7 @@ describe("CharacterCardImportService", () => {
     };
 
     // directoryPath 缺省即根：CLI --path / desktop resolveDirectoryPath 的主场景
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = new Map([
       ["角色描述.md", "描述"],
       ["世界书/章节/深层/设定.md", "深层设定"],
@@ -461,7 +457,7 @@ describe("CharacterCardImportService", () => {
 
     // 故障注入：仅 /角色/世界书 这一条补行抛错（目录全集按 path 排序，
     // 它之前是 /角色，之后是 章节链），验证逐目录容错不阻断剩余补行
-    const svc = createCharacterCardImportService(ctx.conn, {
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn, {
       testHook: {
         createWorkplaceRepo: (tx) =>
           ({
@@ -532,7 +528,7 @@ describe("CharacterCardImportService", () => {
       data: { description: "PNG落盘" },
     });
     const expected = parseTree(bytes);
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     await svc.importFromBytes(scope, bytes, {
       confirmed: true,
       directoryPath: "/角色",
@@ -564,7 +560,7 @@ describe("CharacterCardImportService", () => {
     // 目标目录名与合成树首段无关；即使叫「开场」也不应套 ZIP basename 前缀规则
     unwrap(await vfs.mkdir("/开场"));
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(
       JSON.stringify({
         spec: "chara_card_v2",
@@ -595,7 +591,7 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(
       JSON.stringify({
         spec: "chara_card_v2",
@@ -678,7 +674,7 @@ describe("CharacterCardImportService", () => {
       updatedAt: Date.now(),
     });
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, {
       confirmed: true,
@@ -731,7 +727,7 @@ describe("CharacterCardImportService", () => {
       updatedAt: Date.now(),
     });
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(
       { kind: "project", projectId: project.id },
@@ -802,7 +798,7 @@ describe("CharacterCardImportService", () => {
     };
     unwrap(await vfs.write("/角色/stay.md", "stay"));
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     // 48MB + 1 字节的任意内容：闸门在解析之前拦截，无需合法 PNG/JSON
     const oversized = new Uint8Array(48 * 1024 * 1024 + 1);
     // 输入闸门沿 Result.err 通道（错误通道迁移），按 Err 断言
@@ -834,7 +830,7 @@ describe("CharacterCardImportService", () => {
     };
     unwrap(await vfs.write("/角色/stay.md", "stay"));
 
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     // 直接走 import（桌面/CLI 的公开入口）验证树闸门：单文件 8MiB + 1 字节
     const tree = new Map([[
       "巨型设定.md",
@@ -870,7 +866,7 @@ describe("CharacterCardImportService", () => {
     for (let i = 0; i <= CHARACTER_CARD_MAX_FILE_COUNT; i++) {
       tree.set(`f${i}.md`, "x");
     }
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const countGated = await svc.import(scope, tree, {
       confirmed: true,
       directoryPath: "/角色",
@@ -902,7 +898,7 @@ describe("CharacterCardImportService", () => {
     for (let i = 0; i < 5; i++) {
       tree.set(`part${i}.md`, chunk);
     }
-    const svc = createCharacterCardImportService(ctx.conn);
+    const svc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const totalGated = await svc.import(scope, tree, {
       confirmed: true,
       directoryPath: "/角色",

@@ -1,7 +1,7 @@
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
+import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
@@ -9,13 +9,13 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 novelMasterTestFixture();
 
 describe("DefaultVfsService (integration)", () => {
-  // createVfsService 返回 InternalVfsService（scopeKey + 逻辑路径）
+  // VfsServiceFactory.create 返回 InternalVfsService（scopeKey + 逻辑路径）
   const GLOBAL = "global";
 
   it("creates paths at version 1", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const written = unwrap(await vfs.write(GLOBAL, "/new.txt", "hello"));
     assert.equal(written.version, 1);
     const read = unwrap(await vfs.read(GLOBAL, "/new.txt"));
@@ -26,7 +26,7 @@ describe("DefaultVfsService (integration)", () => {
   it("writes with expected version", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/v.txt", "one"));
     const first = unwrap(await vfs.read(GLOBAL, "/v.txt"));
     const updated = unwrap(await vfs.write(GLOBAL, "/v.txt", "two"));
@@ -36,7 +36,7 @@ describe("DefaultVfsService (integration)", () => {
   it("stale expected version：版本比对已移除，不拒绝且覆盖成功", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/stale.txt", "one"));
     unwrap(await vfs.write(GLOBAL, "/stale.txt", "two"));
     const updated = unwrap(await vfs.write(GLOBAL, "/stale.txt", "three"));
@@ -49,7 +49,7 @@ describe("DefaultVfsService (integration)", () => {
   it("replaces first occurrence and all occurrences", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/r.txt", "hello world"));
     const once = unwrap(await vfs.replace(GLOBAL, "/r.txt", "world", "there"));
     assert.equal(once.replacements, 1);
@@ -64,7 +64,7 @@ describe("DefaultVfsService (integration)", () => {
   it("fails replace when oldString is missing", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/missing.txt", "hello"));
     await rejectsErr(() => vfs.replace(GLOBAL, "/missing.txt", "nope", "x"), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_REPLACE_NOT_FOUND"));
@@ -74,7 +74,7 @@ describe("DefaultVfsService (integration)", () => {
   it("glob and grep", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/docs/a.md", "# A"));
     unwrap(await vfs.write(GLOBAL, "/docs/b.txt", "plain"));
     const paths = await vfs.glob(GLOBAL, "**/*.md");
@@ -88,7 +88,7 @@ describe("DefaultVfsService (integration)", () => {
   it("grep with pathGlob filters by file pattern", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/grep-glob/a.md", "# A"));
     unwrap(await vfs.write(GLOBAL, "/grep-glob/b.txt", "# B"));
     const hits = unwrap(await vfs.grep(GLOBAL, "#", { pathGlob: "/grep-glob/**/*.md" }));
@@ -99,7 +99,7 @@ describe("DefaultVfsService (integration)", () => {
 
   it("空 storage root 目录 list 返回 [] 而非 NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     // 用独立的临时 scopeKey，避免与其他测试的 global 路径冲突
     const isolatedScope = `test:${testIsolationSuffix()}`;
     assert.deepEqual(unwrap(await vfs.list(isolatedScope, "/")), []);
@@ -108,7 +108,7 @@ describe("DefaultVfsService (integration)", () => {
   it("lists with recursive depth", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.mkdir(GLOBAL, "/a"));
     unwrap(await vfs.mkdir(GLOBAL, "/a/b"));
     unwrap(await vfs.write(GLOBAL, "/a/b/c", "c"));
@@ -127,7 +127,7 @@ describe("DefaultVfsService (integration)", () => {
   it("deletes recursively", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.mkdir(GLOBAL, "/del"));
     unwrap(await vfs.write(GLOBAL, "/del/child", "child"));
     unwrap(await vfs.delete(GLOBAL, "/del", { recursive: true }));

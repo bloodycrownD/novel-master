@@ -5,7 +5,7 @@
  *
  * @module services/vfs-character-card
  */
-import { createCharacterCardImportService, type VfsScope } from "@novel-master/core/vfs";
+import { VfsServiceFactory, type VfsScope } from "@novel-master/core/vfs";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -34,7 +34,7 @@ export async function importCharacterCardWithDialog(runtime: DesktopNovelMasterR
   }
 
   const bytes = new Uint8Array(await readFile(result.filePaths[0]!));
-  const cardSvc = createCharacterCardImportService(runtime.conn);
+  const cardSvc = VfsServiceFactory.createCharacterCardImport(runtime.conn);
   await cardSvc.importFromBytes(scope, bytes, {
     confirmed: options.confirmed,
     directoryPath,

@@ -6,7 +6,7 @@
  *
  * @module services/vfs-zip
  */
-import { assertZipArchive, createVfsZipIoService, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
+import { VfsServiceFactory, assertZipArchive, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
 import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import { dialog, type BrowserWindow } from "electron";
@@ -27,7 +27,7 @@ export async function exportVfsZipWithDialog(runtime: DesktopNovelMasterRuntime,
   const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
   const directoryPath = directoryPathResult.value;
-  const zipSvc = createVfsZipIoService(runtime.conn);
+  const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
   const exported = await zipSvc.export(scope, { directoryPath });
   // 失败沿 Result 返回，由唯一调用方 handleVfsZipExport 转码。
   if (!exported.ok) return Result.err(exported.error);
@@ -80,7 +80,7 @@ export async function importVfsZipBytes(runtime: DesktopNovelMasterRuntime, scop
   if (!archiveCheck.ok) return archiveCheck;
   const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
-  const zipSvc = createVfsZipIoService(runtime.conn);
+  const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
   return zipSvc.import(scope, options.bytes, {
     confirmed: options.confirmed,
     directoryPath: directoryPathResult.value,

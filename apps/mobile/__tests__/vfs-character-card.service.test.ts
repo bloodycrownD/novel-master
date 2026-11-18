@@ -10,8 +10,10 @@ const mockExists = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
   ...jest.requireActual('@novel-master/core/vfs'),
-  createCharacterCardImportService: (...args: unknown[]) =>
-    mockCreateCharacterCardImportService(...args),
+  VfsServiceFactory: {
+    createCharacterCardImport: (...args: unknown[]) =>
+      mockCreateCharacterCardImportService(...args),
+  },
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
@@ -69,7 +71,7 @@ describe('vfs-character-card.service', () => {
     mockReadFile.mockResolvedValue(CARD_BASE64);
   });
 
-  it('uses createCharacterCardImportService(conn) and importFromBytes', async () => {
+  it('uses VfsServiceFactory.createCharacterCardImport(conn) and importFromBytes', async () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.json', name: 'card.json'},
     ]);

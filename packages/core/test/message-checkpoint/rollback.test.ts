@@ -4,7 +4,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { createCharacterCardImportService } from "@novel-master/core/vfs";
+import { VfsServiceFactory } from "@novel-master/core/vfs";
 
 import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -199,7 +199,7 @@ describe("MessageRollbackService (revision model)", () => {
     // 会给这条消息补 baseline checkpoint。
     const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("你好")));
 
-    const cardSvc = createCharacterCardImportService(ctx.conn);
+    const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = new Map<string, string>([
       ["角色描述.md", "card-desc"],
       ["世界书/设定.md", "world"],
@@ -254,7 +254,7 @@ describe("MessageRollbackService (revision model)", () => {
     }));
 
     // 消息 6 时导入角色卡——backfill 应只补 4、5、6，不碰 1、2。
-    const cardSvc = createCharacterCardImportService(ctx.conn);
+    const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = new Map<string, string>([
       ["新文件.md", "imported"],
     ]);

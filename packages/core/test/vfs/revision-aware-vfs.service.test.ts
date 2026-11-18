@@ -1,4 +1,4 @@
-import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
+import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 import { isAppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@novel-master/core";
 import assert from "node:assert/strict";
@@ -72,7 +72,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("write produces v1 then v2 revisions", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     const first = unwrap(await vfs.write(GLOBAL_SCOPE, "/rev.txt", "one"));
@@ -96,7 +96,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("read returns live head content", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
 
     unwrap(await vfs.write(GLOBAL_SCOPE, "/head.txt", "first"));
     unwrap(await vfs.write(GLOBAL_SCOPE, "/head.txt", "second", { expectedVersion: 1 }));
@@ -109,7 +109,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("old revision remains readable after head advances", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     unwrap(await vfs.write(GLOBAL_SCOPE, "/history.txt", "v1"));
@@ -128,7 +128,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("delete appends deleted revision at head+1 and removes entry", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
 
     const written = unwrap(await vfs.write(GLOBAL_SCOPE, "/del.txt", "content"));
     const eidBeforeDelete = await entryIdForPath(conn, "/del.txt");
@@ -150,7 +150,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("re-create after delete allocates version 1 (entry 重建后从 1 开始)", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     unwrap(await vfs.write(GLOBAL_SCOPE, "/again.txt", "v1"));
@@ -174,7 +174,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("recursive delete succeeds when directory row is missing but children exist", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const root = `/${testIsolationSuffix()}`;
     unwrap(await vfs.mkdir(GLOBAL_SCOPE, root));
     const dir = `${root}/55`;
@@ -201,7 +201,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("T-V1：head 回拨后 write 跳过占号段（MAX+1），ref 配对正确", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
     const path = `/${testIsolationSuffix()}/tv1.txt`;
 
@@ -235,7 +235,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("T-V2：head 回拨后 rm 墓碑取 MAX+1，旧 head 引用释放、entry 删除", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const path = `/${testIsolationSuffix()}/tv2.txt`;
 
     let r = unwrap(await vfs.write(GLOBAL_SCOPE, path, "c1"));
@@ -277,7 +277,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("T-V3：部分文件 head 回拨时递归删除，批量墓碑全部成功无 UNIQUE 冲突", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const root = `/${testIsolationSuffix()}`;
     const dir = `${root}/tv3`;
     unwrap(await vfs.mkdir(GLOBAL_SCOPE, root));
@@ -328,7 +328,7 @@ describe("RevisionAwareVfsService (integration)", () => {
   it("T-V7：发号器回退库（孤儿占号 + seq 压低）repair 后 write/rm 均成功", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const root = `/${testIsolationSuffix()}`;
 
     // 造病灶：orphan 写到 v2 后直接删 entry 行（revision 留下占号），再把 sqlite_sequence 压回 max(entry_id)

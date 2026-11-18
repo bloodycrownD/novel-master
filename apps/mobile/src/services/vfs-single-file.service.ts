@@ -13,7 +13,7 @@
  *   session scope 下 core 会顺带清该会话的提示词缓存（R5）。
  */
 import {AppError} from '@novel-master/core/errors';
-import {createVfsBatchIoService, type BatchApplyReport, type BatchIngestPlan, type VfsScope} from '@novel-master/core/vfs';
+import {VfsServiceFactory, type BatchApplyReport, type BatchIngestPlan, type VfsScope} from '@novel-master/core/vfs';
 import {Result} from '@novel-master/core/errors';
 import {exportBytesViaDocumentPicker, knownTypesForExtension, pickAndReadFileWithMeta, type PickAndReadOptions} from './document-io';
 import {blobFs} from './rn-file-io';
@@ -91,7 +91,7 @@ export async function importVfsSingleFile(runtime: MobileNovelMasterRuntime, sco
   }
 
   const targetDir = options.targetDir == null || options.targetDir.trim() === '' ? '/' : options.targetDir;
-  const batchIo = createVfsBatchIoService(runtime.conn);
+  const batchIo = VfsServiceFactory.createBatchIo(runtime.conn);
   const planned = await batchIo.planBatchIngest(scope, targetDir, [{relativePath: picked.fileName, kind: 'file', bytes: picked.bytes}]);
   if (!planned.ok) return Result.err(planned.error);
   const plan = planned.value;
@@ -120,7 +120,7 @@ export async function importVfsSingleFile(runtime: MobileNovelMasterRuntime, sco
  * 这里按 spec D4 的口径校验 files.length === 1，误传目录直接报错不写盘。
  */
 export async function exportVfsSingleFile(runtime: MobileNovelMasterRuntime, scope: VfsScope, logicalPath: string): Promise<Result<'saved' | 'cancelled', AppError>> {
-  const batchIo = createVfsBatchIoService(runtime.conn);
+  const batchIo = VfsServiceFactory.createBatchIo(runtime.conn);
   const planned = await batchIo.planBatchExport(scope, [logicalPath]);
   if (!planned.ok) return Result.err(planned.error);
   const plan = planned.value;

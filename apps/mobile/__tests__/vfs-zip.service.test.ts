@@ -18,8 +18,10 @@ const mockProjectsGet = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
   ...jest.requireActual('@novel-master/core/vfs'),
-  createVfsZipIoService: (...args: unknown[]) =>
-    mockCreateVfsZipIoService(...args),
+  VfsServiceFactory: {
+    createZipIo: (...args: unknown[]) =>
+      mockCreateVfsZipIoService(...args),
+  },
   parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
 }));
 
@@ -116,14 +118,14 @@ describe('vfs-zip.service', () => {
     mockReadFile.mockResolvedValue(VALID_ZIP_BASE64);
   });
 
-  it('Android export uses Core default createVfsZipIoService(conn)', async () => {
+  it('Android export uses Core default VfsServiceFactory.createZipIo(conn)', async () => {
     await exportVfsZip(runtime, scope);
     expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
     expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
     expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
   });
 
-  it('iOS export uses Core default createVfsZipIoService(conn)', async () => {
+  it('iOS export uses Core default VfsServiceFactory.createZipIo(conn)', async () => {
     Platform.OS = 'ios';
     await exportVfsZip(runtime, scope);
     expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);

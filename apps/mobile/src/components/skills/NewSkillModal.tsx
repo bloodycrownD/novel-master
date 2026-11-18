@@ -12,7 +12,7 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {ChatProject} from '@novel-master/core/chat';
 import {buildNewSkillDoc, previewSkillZip, validateSkillName, type SkillDomain, type SkillZipPreview} from '@novel-master/core/skills';
-import {createVfsZipIoService, type VfsScope} from '@novel-master/core/vfs';
+import {VfsServiceFactory, type VfsScope} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {withSkillFrontMatterValues} from './skill-ui';
@@ -172,7 +172,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
         // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
         const scope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
-        const zipSvc = createVfsZipIoService(runtime.conn);
+        const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
         await zipSvc.import(scope, imported.bytes, {
           confirmed: true,
           directoryPath: `/meta/skills/${name}`,

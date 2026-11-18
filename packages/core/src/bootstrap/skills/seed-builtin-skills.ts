@@ -149,7 +149,7 @@ const AGENT_CONFIG_LEDGER_KEY = "agent-config";
  *
  * WHY 走 SkillsService 而非直写 globalMetaVfs：多一层技能名 / 路径校验
  * 与领域语义。只能在 bootstrap 事务之外调用（SkillsService 内部经
- * createScopedVfsService 另起连接级装配，事务内嵌套冲突）——技能正文
+ * VfsServiceFactory.createScoped 另起连接级装配，事务内嵌套冲突）——技能正文
  * 存 VFS（vfs_entry/revision/内容寻址 blob），migration 事务内裸写等于
  * 重实现一遍 VFS 写路径，故升级逻辑挂本 seed 而非 SCHEMA_MIGRATIONS。
  *

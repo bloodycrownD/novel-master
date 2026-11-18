@@ -33,7 +33,7 @@ import type { SkillDomain } from "@/domain/skills/model/skill.schema.js";
 import { validateSkillName } from "@/domain/skills/model/skill-name.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
-import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
+import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { SkillEditMatch, SkillFileContent, SkillInfoChanges, SkillListItem, SkillListScope, SkillLocation, SkillService, SkillWriteOptions } from "../skills.port.js";
 
@@ -445,7 +445,7 @@ export class SkillsService implements SkillService {
 
         // 事务内用 tx 建 scoped vfs（嵌套先例见方法注释）
         const scope = location.domain === "global" ? { kind: "global-meta" as const } : { kind: "project-meta" as const, projectId: location.projectId! };
-        const vfs = createScopedVfsService(tx, scope);
+        const vfs = VfsServiceFactory.createScoped(tx, scope);
 
         // 校验链 5：目录迁移（entry_id / revision 历史自动跟随；
         // renamePrefix 无目标存在检查，由上一步事务内查重保证）

@@ -12,10 +12,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
 import { isAppError, type AppError } from "../../src/errors/app-error.js";
-import {
-  createPhysicalVfsService,
-  type PhysicalVfsService,
-} from "@novel-master/core/vfs";
+import { VfsServiceFactory, type PhysicalVfsService } from "@novel-master/core/vfs";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -40,7 +37,7 @@ void assertNoWriteMethods;
 describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
   it("物理根 = template/meta/projects 三个挂载点目录行", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     assert.deepEqual(unwrap(await svc.list("/")), [
       { path: "/meta", kind: "directory" },
       { path: "/projects", kind: "directory" },
@@ -62,7 +59,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
       "S",
     ));
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const templateRows = unwrap(await svc.list("/template"));
     assert.ok(
       templateRows.some(
@@ -106,7 +103,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     // 项目 2：空项目、无会话
     const p2 = unwrap(await ctx.projects.create(`P2-${suffix}`));
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
 
     // /projects 下两个项目目录行（含空项目），label = 项目名（展示用，替代 UUID）
     const projectRows = unwrap(await svc.list("/projects"));
@@ -181,7 +178,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
 
   it("不存在或不落任何域前缀的目录报 NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     await rejectsErr(svc.list("/nope"), (err: unknown) => {
       assert.ok(isAppError(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
@@ -219,7 +216,7 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
       .sessionVfs(project.id, session.id)
       .write(`/ss-${suffix}.md`, "SESSION");
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     assert.equal(
       unwrap(await svc.read(`/template/g-${suffix}.md`)).content,
       "GLOBAL",
@@ -257,7 +254,7 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
 
   it("read 不存在路径报 NOT_FOUND（含不落任何域前缀的路径）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const suffix = testIsolationSuffix();
     // 文件不存在（域前缀合法）
     await rejectsErr(svc.read(`/template/absent-${suffix}.md`), (err: unknown) => {
@@ -273,7 +270,7 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
 
   it("服务无任何写方法（运行时成员枚举 + 编译期类型断言）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     // 运行时：原型上不得出现任何写方法名（私有列目录辅助方法允许存在）
     const writeMethods = [
       "write",
@@ -339,7 +336,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
       "深层辅助文件",
     ));
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const rows = unwrap(await svc.listTree("/meta"));
     // 全部层级行一次返回；目录行在前、文件行在后，同层按展示键
     // （无 label 用路径末段）排序，故目录间按 basename 而非全路径排
@@ -378,7 +375,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     ));
     await ctx.globalVfs().write(`/g-${suffix}.md`, "G");
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const tree = unwrap(await svc.listTree("/"));
     // 根树包含三挂载点与项目/会话虚拟目录行（子会话目录行同样合成）
     assert.ok(tree.some((r) => r.path === "/template" && r.kind === "directory"));
@@ -411,7 +408,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-sub-${suffix}`));
     await ctx.projectVfs(project.id).write(`/a/${suffix}.md`, "A");
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
 
     const subTree = unwrap(await svc.listTree(`/projects/${project.id}/template`));
     // 子树只含后代行（含隐含中间目录行），根自身不返回
@@ -437,7 +434,7 @@ describe("core/B-1: 排序键统一 label ?? 路径末段", () => {
     const unnamed = unwrap(await ctx.projects.create(`z占位-${suffix}`));
     const named = unwrap(await ctx.projects.create(`0-${suffix}`));
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const rows = unwrap(await svc.list("/projects")).filter(
       (r) =>
         r.path === `/projects/${named.id}` ||
@@ -470,7 +467,7 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
     // （田版本写入过）才应显示。给 child 造一条残留，grand 保持无条目。
     await ctx.sessionVfs(project.id, child.id).write(`/left-${suffix}.md`, "R");
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const rows = unwrap(await svc.list(`/projects/${project.id}/sessions`));
     const paths = rows.map((r) => r.path);
     assert.ok(
@@ -498,7 +495,7 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
     const projectB = unwrap(await ctx.projects.create(`PB-g1-${suffix}`));
     const sessionB = unwrap(await ctx.sessions.create(projectB.id, `B会话-${suffix}`));
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     await rejectsErr(svc.list(`/projects/${projectA.id}/sessions/${sessionB.id}`), (err: unknown) => {
       assert.ok(isAppError(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
@@ -533,7 +530,7 @@ describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
     ));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const svc = createPhysicalVfsService(ctx.conn);
+    const svc = VfsServiceFactory.createPhysical(ctx.conn);
     const mountRoots = [
       "/template",
       "/meta",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
+import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 import { isAppError, type AppError } from "@/errors/app-error.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
@@ -31,7 +31,7 @@ function isolatedRoot(): string {
 }
 
 async function prepareRoot(
-  vfs: ReturnType<typeof createVfsService>,
+  vfs: ReturnType<typeof VfsServiceFactory.create>,
 ): Promise<string> {
   const root = isolatedRoot();
   await vfs.mkdir(GLOBAL_SCOPE, root);
@@ -41,7 +41,7 @@ async function prepareRoot(
 describe("VFS directory nodes", () => {
   it("mkdir creates empty directory visible in list", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
@@ -56,7 +56,7 @@ describe("VFS directory nodes", () => {
 
   it("delete empty directory and reject non-empty without recursive", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
@@ -77,7 +77,7 @@ describe("VFS directory nodes", () => {
 
   it("read/write/replace fail on directory paths", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
@@ -94,7 +94,7 @@ describe("VFS directory nodes", () => {
 
   it("write ensures parent directory chain", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.write(GLOBAL_SCOPE, `${drafts}/a.md`, "hi", { versionCheck: false });
@@ -105,7 +105,7 @@ describe("VFS directory nodes", () => {
   it("update write does not recreate deleted parent directory rows", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.write(GLOBAL_SCOPE, `${drafts}/a.md`, "hi", { versionCheck: false });
@@ -124,7 +124,7 @@ describe("VFS directory nodes", () => {
   it("recursive delete succeeds for virtual directory without directory row", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const root = await prepareRoot(vfs);
     const dir = `${root}/55`;
     await vfs.write(GLOBAL_SCOPE, `${dir}/诗歌.txt`, "poem", { versionCheck: false });
@@ -142,7 +142,7 @@ describe("VFS directory nodes", () => {
 
   it("recursive delete succeeds for worktree-only empty virtual directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const root = await prepareRoot(vfs);
     const dir = `${root}/empty-virtual`;
     const delResult = await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true });
@@ -151,7 +151,7 @@ describe("VFS directory nodes", () => {
 
   it("mkdir fails when parent path is a file row", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const parentFile = `${await prepareRoot(vfs)}/parent-file`;
     await vfs.write(GLOBAL_SCOPE, parentFile, "content", { versionCheck: false });
     await rejectsErr(() => vfs.mkdir(GLOBAL_SCOPE, `${parentFile}/child`), (e: unknown) => {
@@ -161,7 +161,7 @@ describe("VFS directory nodes", () => {
 
   it("mkdir requires existing parent", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const nested = `${await prepareRoot(vfs)}/nested/leaf`;
     await rejectsErr(() => vfs.mkdir(GLOBAL_SCOPE, nested), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_PARENT_NOT_FOUND"));
@@ -170,7 +170,7 @@ describe("VFS directory nodes", () => {
 
   it("grep skips directory rows; glob skips directory paths", async () => {
     const ctx = getNovelMasterTestContext();
-    const vfs = createVfsService(ctx.conn);
+    const vfs = VfsServiceFactory.create(ctx.conn);
     const root = await prepareRoot(vfs);
     const dir = `${root}/dir`;
     await vfs.mkdir(GLOBAL_SCOPE, dir);
@@ -186,7 +186,7 @@ describe("VFS directory nodes", () => {
   it("worktree buildListRows shows explicit empty directory", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const root = await prepareRoot(vfs);
     await vfs.mkdir(GLOBAL_SCOPE, `${root}/empty`);
     const wt = createWorkplaceService(conn, { kind: "global" });

@@ -9,8 +9,8 @@
 import {types} from '@react-native-documents/picker';
 import {AppError} from '@novel-master/core/errors';
 import {
+  VfsServiceFactory,
   assertZipArchive,
-  createVfsZipIoService,
   resolveZipDirectoryPath,
   zipBaseNameFromPath,
   type VfsScope,
@@ -57,7 +57,7 @@ export async function exportVfsZip(runtime: MobileNovelMasterRuntime, scope: Vfs
   const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
   const directoryPath = directoryPathResult.value;
-  const zipSvc = createVfsZipIoService(runtime.conn);
+  const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
   const exported = await zipSvc.export(scope, {directoryPath});
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
@@ -106,7 +106,7 @@ export async function importVfsZip(runtime: MobileNovelMasterRuntime, scope: Vfs
 
   const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
-  const zipSvc = createVfsZipIoService(runtime.conn);
+  const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
   return zipSvc.import(scope, zipBytes, {
     confirmed: options.confirmed,
     directoryPath: directoryPathResult.value,

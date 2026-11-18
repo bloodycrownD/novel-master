@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
+import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -56,7 +56,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
 
   it("T-SC1: 同文 write 两次，version 与 revision 行数不变", async () => {
     const { conn } = getNovelMasterTestContext();
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const path = `/sc1-${testIsolationSuffix()}.md`;
 
     const first = unwrap(await vfs.write(GLOBAL_SCOPE, path, "same-body"));
@@ -74,7 +74,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
 
   it("T-SC2: 异文 write 升版；entry/revision 的 content_hash 非空", async () => {
     const { conn } = getNovelMasterTestContext();
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const path = `/sc2-${testIsolationSuffix()}.md`;
 
     unwrap(await vfs.write(GLOBAL_SCOPE, path, "alpha"));
@@ -108,7 +108,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
 
   it("T-SC3: 版本比对已移除——后写直接覆盖为最新版（last-write-wins）", async () => {
     const { conn } = getNovelMasterTestContext();
-    const vfs = createVfsService(conn);
+    const vfs = VfsServiceFactory.create(conn);
     const path = `/sc3-${testIsolationSuffix()}.md`;
 
     unwrap(await vfs.write(GLOBAL_SCOPE, path, "live"));

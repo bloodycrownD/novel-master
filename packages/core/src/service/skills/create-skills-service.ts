@@ -5,7 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
+import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { SkillsService } from "./impl/skills.service.js";
 import type { SkillService } from "./skills.port.js";
 
@@ -21,8 +21,8 @@ import type { SkillService } from "./skills.port.js";
 export function createSkillsService(conn: TdbcConnection): SkillService {
   return new SkillsService({
     conn,
-    globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
+    globalMetaVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global-meta" }),
     projectMetaVfs: (projectId) =>
-      createScopedVfsService(conn, { kind: "project-meta", projectId }),
+      VfsServiceFactory.createScoped(conn, { kind: "project-meta", projectId }),
   });
 }

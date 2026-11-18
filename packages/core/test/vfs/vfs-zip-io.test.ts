@@ -3,10 +3,8 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
-import { createVfsZipIoService } from "@novel-master/core/vfs";
+import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
 import { isAppError } from "@novel-master/core/errors";
-
-import { createCharacterCardImportService, type VfsService } from "@novel-master/core/vfs";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -42,7 +40,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/plain.md", "中文正文-zip-io1");
     await vfs.write("/empty.md", "");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const bytes = unwrap(await zipSvc.export({
       kind: "session",
       projectId: project.id,
@@ -57,7 +55,7 @@ describe("VfsZipIoService", () => {
   it("Z2: global export has no projects/ prefix", async () => {
     const ctx = getNovelMasterTestContext();
     await ctx.globalVfs().write("/x.md", "X");
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const bytes = unwrap(await zipSvc.export({ kind: "global" }));
     const names = Object.keys(unzipSync(bytes));
     assert.ok(names.includes("x.md"));
@@ -72,7 +70,7 @@ describe("VfsZipIoService", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/old.md", "old");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, buildVfsZip(new Map([["new.md", "new"]])), { confirmed: true }));
 
     await rejectsErr(() => vfs.read("/old.md"), (e: unknown) => {
@@ -109,7 +107,7 @@ describe("VfsZipIoService", () => {
     // put 幂等（已有行直接返回 hash），不产生副作用
     const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, buildVfsZip(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])), { confirmed: true }));
 
     const residue = await ctx.conn.query<{ n: number }>(
@@ -135,7 +133,7 @@ describe("VfsZipIoService", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/keep.md", "keep");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const invalidUtf8Zip = zipSync({
       "bad.md": new Uint8Array([0xff, 0xfe, 0x80]),
     });
@@ -158,7 +156,7 @@ describe("VfsZipIoService", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/before.md", "before");
 
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: { throwOnInsertLogical: "/new.md" },
     });
     const zipBytes = buildVfsZip(
@@ -190,7 +188,7 @@ describe("VfsZipIoService", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/stay.md", "stay");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const zipBytes = buildVfsZip(new Map([["other.md", "x"]]));
     await rejectsErr(
       zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
@@ -217,7 +215,7 @@ describe("VfsZipIoService", () => {
       "mkdir should create /test directory row"
     );
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const exported = unwrap(await zipSvc.export(scope));
     const names = Object.keys(unzipSync(exported));
     assert.ok(names.includes("test/"), `expected test/ dir marker, got ${names.join(",")}`);
@@ -248,7 +246,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/ddd/love_message.txt", "你好\nline2");
     await vfs.write("/note.md", "ascii");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const exported = unwrap(await zipSvc.export(scope));
     unwrap(await zipSvc.import(scope, exported, { confirmed: true }));
 
@@ -268,7 +266,7 @@ describe("VfsZipIoService", () => {
         ["dir/beta.md", "beta"],
       ])
     );
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const scopeA = {
       kind: "session" as const,
       projectId: project.id,
@@ -293,7 +291,7 @@ describe("VfsZipIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-val-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     let deleteReached = false;
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: {
         onBeforeDeletePrefix: () => {
           deleteReached = true;
@@ -315,7 +313,7 @@ describe("VfsZipIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-path-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     let deleteReached = false;
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: {
         onBeforeDeletePrefix: () => {
           deleteReached = true;
@@ -338,7 +336,7 @@ describe("VfsZipIoService", () => {
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/t.md", "T");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const bytes = unwrap(await zipSvc.export({ kind: "project", projectId: project.id }));
     const names = Object.keys(unzipSync(bytes));
     assert.ok(names.includes("t.md"));
@@ -357,7 +355,7 @@ describe("VfsZipIoService", () => {
         [".DS_Store", ""],
       ])
     );
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import({ kind: "global" }, zip, { confirmed: true }));
     const paths = await listFilePaths(ctx.globalVfs());
     assert.deepEqual(paths, ["/readme.md"]);
@@ -371,7 +369,7 @@ describe("VfsZipIoService", () => {
     const content = "你好";
     await svfs.write("/ddd/love_message.txt", content);
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const zipBytes = unwrap(await zipSvc.export({
       kind: "session",
       projectId: project.id,
@@ -398,7 +396,7 @@ describe("VfsZipIoService", () => {
     const logicalPath = "笔记/第一章.md";
     const zipBytes = buildGbkFilenameZip([{ logicalPath, content: "GBK 正文" }]);
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, zipBytes, { confirmed: true }));
 
     const paths = await listFilePaths(vfs);
@@ -419,7 +417,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/old.md", "旧内容");
 
     const zipBytes = buildGbkFilenameZip([{ logicalPath: "new.md", content: "新内容" }]);
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, zipBytes, { confirmed: true }));
 
     const paths = await listFilePaths(vfs);
@@ -442,7 +440,7 @@ describe("VfsZipIoService", () => {
     };
     await vfs.write("/old.md", "old");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["new.md", "new"]])), {
       confirmed: true,
     }));
@@ -466,7 +464,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/a/foo.txt", "A");
     await vfs.write("/b/bar.txt", "B");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     const bytes = unwrap(await zipSvc.export(scope, { directoryPath: "/a" }));
     const names = Object.keys(unzipSync(bytes));
     assert.ok(names.includes("foo.txt"), `got ${names.join(",")}`);
@@ -487,7 +485,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/a/old.txt", "old");
     await vfs.write("/b/keep.txt", "keep");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["fresh.txt", "fresh"]])), {
       confirmed: true,
       directoryPath: "/a",
@@ -513,7 +511,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/a/stay.txt", "stay-a");
     await vfs.write("/b/stay.txt", "stay-b");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     await rejectsErr(
       zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
         confirmed: false,
@@ -549,7 +547,7 @@ describe("VfsZipIoService", () => {
     };
     await vfs.write("/a/keep.txt", "keep");
     let deleteReached = false;
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: {
         onBeforeDeletePrefix: () => {
           deleteReached = true;
@@ -583,7 +581,7 @@ describe("VfsZipIoService", () => {
     };
     await vfs.write("/a/keep.txt", "keep");
     let deleteReached = false;
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: {
         onBeforeDeletePrefix: () => {
           deleteReached = true;
@@ -623,7 +621,7 @@ describe("VfsZipIoService", () => {
     };
     await vfs.write("/note.md", "note");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     // export / import 两分支都直抛 AppError，按 key 断言。
     const assertInvalidPath = (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH");
 
@@ -653,7 +651,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/a/old.txt", "old");
     await vfs.write("/b/sib.txt", "sib");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, buildVfsZip(new Map()), {
       confirmed: true,
       directoryPath: "/a",
@@ -683,7 +681,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/a/old.txt", "old");
     await vfs.write("/b/sib.txt", "sib");
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["foo.txt", "foo"]])), {
       confirmed: true,
       directoryPath: "/a",
@@ -714,7 +712,7 @@ describe("VfsZipIoService", () => {
       updatedAt: Date.now(),
     });
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["a.md", "zip-a"]])), {
       confirmed: true,
     }));
@@ -738,7 +736,7 @@ describe("VfsZipIoService", () => {
       updatedAt: Date.now(),
     });
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import({ kind: "global" }, buildVfsZip(new Map([["readme.md", "global-r"]])), { confirmed: true }));
 
     assert.equal(unwrap(await ctx.globalVfs().read("/readme.md")).content, "global-r");
@@ -750,8 +748,8 @@ describe("VfsZipIoService", () => {
   it("T-IC5: 两个工厂单参可构造且 sessionKkv 已内部装配（对外签名回归钉死）", async () => {
     const ctx = getNovelMasterTestContext();
     // 单参构造不抛（mobile 测试钉死 calls[0]?.[1] === undefined 的签名契约）
-    const zipSvc = createVfsZipIoService(ctx.conn);
-    const cardSvc = createCharacterCardImportService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
+    const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     assert.equal(typeof zipSvc.import, "function");
     assert.equal(typeof cardSvc.import, "function");
 
@@ -806,7 +804,7 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     };
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     // 显式 directories（"设定集/"）+ 文件路径隐式父链（世界书/章节/深层）
     unwrap(await zipSvc.import(
       scope,
@@ -861,7 +859,7 @@ describe("VfsZipIoService", () => {
     }));
     unwrap(await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false }));
 
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["世界书/设定.md", "设定"]])), { confirmed: true, directoryPath: "/角色" }));
 
     const after = unwrap(await wt.getDirRule("/角色"));
@@ -885,7 +883,7 @@ describe("VfsZipIoService", () => {
     };
 
     // directoryPath 缺省即根（CLI import-zip 不带 --path 的主场景）
-    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(
       scope,
       buildVfsZip(
@@ -926,7 +924,7 @@ describe("VfsZipIoService", () => {
 
     // 故障注入：仅 /角色/世界书 这一条补行抛错（目录全集按 path 排序，
     // 它之前是 /角色，之后是 章节链），验证逐目录容错不阻断剩余补行
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: {
         createWorkplaceRepo: (tx) =>
           ({
@@ -979,7 +977,7 @@ describe("VfsZipIoService", () => {
 
     // 故障注入（同构角色卡侧 T-I5）：upsertDirRule 执行一条必失败的 SQL
     // （表不存在），验证语句级失败不自动 ROLLBACK，导入事务照常提交
-    const zipSvc = createVfsZipIoService(ctx.conn, {
+    const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: {
         createWorkplaceRepo: (tx) =>
           ({

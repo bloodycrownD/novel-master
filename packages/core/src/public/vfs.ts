@@ -1,12 +1,8 @@
 export type { VfsEntry, VfsEntryKind } from "../domain/vfs/model/vfs-entry.js";
 export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
-export { createScopedVfsService } from "../service/vfs/create-scoped-vfs-service.js";
-export { createPhysicalVfsService } from "../service/vfs/create-physical-vfs-service.js";
+export { VfsServiceFactory } from "../service/vfs/vfs-service-factory.js";
+export type { CreateCharacterCardImportServiceOptions } from "../service/vfs/vfs-service-factory.js";
 export type { PhysicalVfsService } from "../service/vfs/physical-vfs.port.js";
-export { createVfsZipIoService } from "../service/vfs/create-vfs-zip-io-service.js";
-export { createCharacterCardImportService } from "../service/vfs/create-character-card-import-service.js";
-export type { CreateCharacterCardImportServiceOptions } from "../service/vfs/create-character-card-import-service.js";
-export { createVfsBatchIoService } from "../service/vfs/create-vfs-batch-io-service.js";
 // 归属例外（check-public-ownership）：角色卡经 VFS 导入，上限常量留本门面。
 export { CHARACTER_CARD_MAX_INPUT_BYTES } from "../domain/character-card/logic/character-card-limits.js";
 export type {
