@@ -21,18 +21,16 @@ import {
   agentDefinitionSchema,
   createAgentRegistryService,
 } from "@novel-master/core/agent";
-import {
-  createMessageService,
-  createProjectService,
-  createSessionService,
-  textBlocks,
-} from "@novel-master/core/chat";
+import { createMessageService, textBlocks } from "@novel-master/core/chat";
 import { createScopedVfsService } from "@novel-master/core/vfs";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
+import { DefaultProjectService } from "@/service/chat/impl/project.service.js";
+import { DefaultSessionService } from "@/service/chat/impl/session.service.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -73,8 +71,12 @@ async function main(): Promise<void> {
   );
   await state.setCurrentAgentId("bench-agent");
 
-  const projects = createProjectService(conn);
-  const sessions = createSessionService(conn, { state, agentRegistry });
+  const projectRepo = new SqliteProjectRepository(conn);
+  const sessionRepo = new SqliteSessionRepository(conn);
+  const messageRepo = new SqliteMessageRepository(conn);
+  const vfsRepo = new SqliteVfsEntryRepository(conn);
+  const projects = new DefaultProjectService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo });
+  const sessions = new DefaultSessionService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, state, agentRegistry });
   const messages = createMessageService(conn);
 
   const bench = async (

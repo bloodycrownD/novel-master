@@ -14,8 +14,6 @@
   "createChatServices",
   "createMessageService",
   "createMessageTranscriptEffectsService",
-  "createProjectService",
-  "createSessionService",
   "createUserVfsTurnServiceBundle",
   "formatMessageForCli",
   "isMessageAnnotatePath",

@@ -28,14 +28,13 @@ import {
   createAgentRegistryService,
   type AgentRegistryService,
 } from "@novel-master/core/agent";
-import {
-  createMessageService,
-  createProjectService,
-  createSessionService,
-  type MessageService,
-  type ProjectService,
-  type SessionService,
-} from "@novel-master/core/chat";
+import { createMessageService, type MessageService, type ProjectService, type SessionService } from "@novel-master/core/chat";
+import { SqliteProjectRepository } from "../../src/domain/chat/repositories/impl/sqlite-project.repository.js";
+import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
+import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { DefaultProjectService } from "../../src/service/chat/impl/project.service.js";
+import { DefaultSessionService } from "../../src/service/chat/impl/session.service.js";
 import {
   createMessageCheckpointService,
   type MessageCheckpointService,
@@ -215,14 +214,19 @@ export async function openSqlCountingNovelMasterTestConnection(): Promise<
   );
   await state.setCurrentAgentId("test-default-agent");
 
+  const projectRepo = new SqliteProjectRepository(conn);
+  const sessionRepo = new SqliteSessionRepository(conn);
+  const messageRepo = new SqliteMessageRepository(conn);
+  const vfsRepo = new SqliteVfsEntryRepository(conn);
+
   return {
     conn,
     counter,
     state,
     agentRegistry,
     preferences: createPersistentPreferences(conn),
-    projects: createProjectService(conn),
-    sessions: createSessionService(conn, { state, agentRegistry }),
+    projects: new DefaultProjectService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo }),
+    sessions: new DefaultSessionService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, state, agentRegistry }),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),

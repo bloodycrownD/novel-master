@@ -5,7 +5,7 @@
  */
 
 import type { AppError } from "@/errors/app-error.js";
-import { Result } from "@/errors/either.js";
+import type { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -103,38 +103,17 @@ export function createChatServices(conn: TdbcConnection, sessionDeps: ChatServic
   return { projects, sessions, messages, usageStats };
 }
 
-/** Creates a {@link ProjectService} instance. */
-export function createProjectService(conn: TdbcConnection): ProjectService {
-  return createChatServices(conn, _stubSessionDeps()).projects;
-}
-
-/** Creates a {@link SessionService} instance. */
-export function createSessionService(conn: TdbcConnection, sessionDeps: ChatServicesSessionDeps): SessionService {
-  return createChatServices(conn, sessionDeps).sessions;
-}
-
-/** Creates a {@link MessageService} instance. */
-export function createMessageService(conn: TdbcConnection): MessageService {
-  return createChatServices(conn, _stubSessionDeps()).messages;
-}
-
-/** Creates a {@link UsageStatsService} instance. */
-export function createUsageStatsService(conn: TdbcConnection): UsageStatsService {
-  return createChatServices(conn, _stubSessionDeps()).usageStats;
-}
-
 /**
- * `createProjectService` / `createMessageService` 不消费 session 依赖，
- * 但复用 `createChatServices` 时仍需构造一份占位（永不触发 state/registry 调用）。
+ * Creates a {@link MessageService} instance.
+ *
+ * yieldFn 只由 desktop/mobile 主 runtime 经 createChatServices bundle 注入；
+ * 若未来需经本工厂注入再加可选参。
  */
-function _stubSessionDeps(): ChatServicesSessionDeps {
-  return {
-    state: {
-      getCurrentAgentId: async () => Result.ok(undefined),
-      getCurrentModelId: async () => Result.ok(undefined),
-    },
-    agentRegistry: {
-      listAgentIds: async () => [],
-    },
-  };
+export function createMessageService(conn: TdbcConnection): MessageService {
+  const sessionRepo = new SqliteSessionRepository(conn);
+  const messageRepo = new SqliteMessageRepository(conn);
+  const vfsRepo = new SqliteVfsEntryRepository(conn);
+  const checkpointRepo = new SqliteMessageCheckpointRepository(conn);
+  const revisionRepo = new SqliteVfsRevisionRepository(conn);
+  return new DefaultMessageService({ conn, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, checkpoints: checkpointRepo, revisions: revisionRepo });
 }

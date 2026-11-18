@@ -77,8 +77,6 @@ export { ChatMessage } from "../domain/chat/logic/message/chat-message.js";
 export type { ChatMessageDescriptor, ChatMessageKey } from "../domain/chat/i18n/keys.js";
 export {
   createChatServices,
-  createProjectService,
-  createSessionService,
   createMessageService,
 } from "../service/chat/create-chat-services.js";
 export type { ChatServicesSessionDeps } from "../service/chat/create-chat-services.js";
