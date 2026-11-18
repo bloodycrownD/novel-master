@@ -30,7 +30,7 @@ import { matchOutcome } from "@/errors/outcome.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_LINES } from "../logic/tool-output-limits.js";
-import { deriveSkillLoadTruncation, deriveSkillReadTruncation } from "../logic/skill-read-truncation.js";
+import { SkillTruncation } from "../logic/skill-read-truncation.js";
 
 /** 工具注册名（catalog / policy / 卡片解析四处同名字符串）。 */
 export const SKILL_TOOL_NAME = "skill";
@@ -304,7 +304,7 @@ action 说明：
         // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
         // —— 推导单源在 `domain/tool/logic/skill-read-truncation.ts`
         // （skill-tool 执行侧与读侧共享同一份推导函数）。
-        const { content, truncated } = deriveSkillLoadTruncation(result.value.content);
+        const { content, truncated } = SkillTruncation.deriveLoad(result.value.content);
         // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件。
         // listSkills 走 Outcome 通道：取消按工具取消码回收（TOOL_CANCELLED 只作展示标签）。
         const list = matchOutcome<SkillListItem[], Result<SkillListItem[], AppError>>(await service.listSkills(result.value.domain === "global" ? "global" : { projectId: skills.projectId }), {
@@ -340,7 +340,7 @@ action 说明：
         // 推导函数内部短路（跳过整套截断推导、只回 totalLines 供报错文案），
         // 故这里直接在推导后判越界——判定收在单源函数内，调用方不重复推导，
         // 报错文案与「推导前先判定」逐字一致。
-        const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.value.content, offset, limit);
+        const { content, returnedLines, totalLines, truncated, nextOffset } = SkillTruncation.deriveRead(result.value.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
           return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)` }));
         }

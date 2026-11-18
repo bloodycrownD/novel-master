@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "../../src/errors/app-error.js";
-import { vfsUserMessage } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
+import { VfsErrorForUser } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
 import { tCore } from "../helpers/core-i18n.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 
@@ -13,10 +13,10 @@ const sessionScope: VfsScope = {
 
 /** descriptor → 经测试 translator 渲染后的中文文案（key 直读 zh-CN catalog）。 */
 function render(error: unknown, scope?: VfsScope): string {
-  return tCore(vfsUserMessage(error, scope));
+  return tCore(VfsErrorForUser.format(error, scope));
 }
 
-describe("vfsUserMessage", () => {
+describe("VfsErrorForUser.format", () => {
   it("REPLACE_NOT_FOUND 返回中文刷新提示", () => {
     const err = new AppError("VFS_REPLACE_NOT_FOUND", {path: "/projects/proj-1/sessions/sess-1/note.md", detail: "Replace string not found in /note.md"});
     assert.equal(
@@ -72,7 +72,7 @@ describe("vfsUserMessage", () => {
 
   it("带 messageKey 的错误优先透传 descriptor（INVALID_NAME 迁移路径）", () => {
     const err = new AppError("VFS_INVALID_NAME", { descriptor: { key: "error.vfs.invalid_name.blank" }, path: "" });
-    assert.deepEqual(vfsUserMessage(err), {key: "error.vfs.invalid_name.blank"});
+    assert.deepEqual(VfsErrorForUser.format(err), {key: "error.vfs.invalid_name.blank"});
   });
 
   it("无表项 VFS code 走操作失败兜底（{detail} 取路径）", () => {

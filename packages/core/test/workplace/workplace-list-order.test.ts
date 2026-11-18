@@ -25,11 +25,11 @@ describe("worktree list order", () => {
     });
     const rows = unwrap(await wt.buildListRows());
 
-    const parentDir = "/parent";
+    const parentPath = "/parent";
     const subDir = "/parent/sub";
     const aFile = "/parent/a.md";
 
-    const parentIdx = rows.findIndex((r) => r.path === parentDir);
+    const parentIdx = rows.findIndex((r) => r.path === parentPath);
     const subIdx = rows.findIndex((r) => r.path === subDir);
     const aIdx = rows.findIndex((r) => r.path === aFile);
 

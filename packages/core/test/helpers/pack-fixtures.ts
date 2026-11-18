@@ -7,7 +7,7 @@
 
 import { createDelta } from "fossil-delta";
 import { VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackSpan } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
-import { compressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
+import { ZlibCodec } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import { AppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 
@@ -38,7 +38,7 @@ export function encodeZlibConcatPack(memberPlains: ReadonlyArray<Uint8Array>): R
     spans.push({ offset: cursor, length: plain.byteLength });
     cursor += plain.byteLength;
   }
-  return Result.ok({ bytes: compressZlib(concat), spans });
+  return Result.ok({ bytes: ZlibCodec.compress(concat), spans });
 }
 
 /**
@@ -52,7 +52,7 @@ export function encodeFossilChainPack(memberPlains: ReadonlyArray<Uint8Array>): 
   if (memberPlains.length === 0) {
     return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, memberCount: 0 }));
   }
-  const segmentBytes = memberPlains.map((plain, index) => (index === 0 ? compressZlib(plain) : compressZlib(createDelta(memberPlains[index - 1]!, plain))));
+  const segmentBytes = memberPlains.map((plain, index) => (index === 0 ? ZlibCodec.compress(plain) : ZlibCodec.compress(createDelta(memberPlains[index - 1]!, plain))));
   const header = new Uint8Array(4 + 4 * segmentBytes.length);
   const headerView = new DataView(header.buffer);
   headerView.setUint32(0, segmentBytes.length, true);

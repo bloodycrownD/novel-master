@@ -4,9 +4,9 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
-import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
-import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { LiveHeadRevisionSeeder } from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -25,16 +25,16 @@ import { Encoding } from "@/common/encoding.js";
 import { yieldToEventLoop } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
-import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
-import { logicalFromZipEntryRelativeToDirectory, resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
+import { VfsZipPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
-import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray } from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -87,7 +87,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
       return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or confirm dialog)" }));
     }
 
-    const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+    const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
     if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
     const directoryPath = directoryPathResult.value;
     const directoryRow = await this.repo.findByPath(LogicalPath.scopeKey(scope), directoryPath);
@@ -126,7 +126,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         }
       }
 
-      const logicalResult = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
+      const logicalResult = VfsZipPath.logicalFromEntryRelativeToDirectory(relativePath, directoryPath);
       if (!logicalResult.ok) {
         return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: logicalResult.error.message }));
       }
@@ -166,10 +166,10 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         const repoTx = new SqliteVfsEntryRepository(tx);
         const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
-        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
+        await VfsTreeCopy.releaseAndDeletePrefix(repoTx, revisionTx, sk, directoryPath);
         if (directoryPath !== "/") {
           // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-          unwrapOrRollback(await ensureParentDirectories(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
+          unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
           const existing = unwrapOrRollback(await repoTx.findByPath(sk, directoryPath));
           if (existing == null) {
             unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
@@ -192,13 +192,13 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     // 就停手（CS-06/CS-07 的守卫触发器要求「无 entry 引用」才删行），vfs_entry
     // 上零触发器补不了这一步 ⇒ 残留只能靠全库 gc。口径对齐 ZIP 导入链与另外
     // 5 处删除链的既有约定：事务提交后调一次。
-    await runDeferredBlobGc(this.conn);
+    await DeferredBlobGc.run(this.conn);
 
     // 段 B1..Bk：每片 ≤200 个文件的独立短事务；补偿挂在**片失败的内层**
     // （测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被绕过）。
     let committedShards = 0;
     let shardIndex = 0;
-    for (const shard of chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
+    for (const shard of VfsImportChunk.chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
       try {
         await this.conn.transaction(async (tx) => {
           const repoTx = new SqliteVfsEntryRepository(tx);
@@ -210,8 +210,8 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
               throw new Error("test import failure");
             }
             // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-            unwrapOrRollback(await ensureParentDirectories(repoTx, sk, logical));
-            await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
+            unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
+            await LiveHeadRevisionSeeder.insertFileSeeding(repoTx, revisionTx, sk, logical, content);
           }
         });
         committedShards += 1;
@@ -222,7 +222,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         // revision）；裸 `deleteVfsPrefix` 会留下永不回收的孤儿 revision 与 blob。
         try {
           await this.conn.transaction(async (tx) => {
-            await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
+            await VfsTreeCopy.releaseAndDeletePrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
           });
         } catch (compensateError) {
           log.warn("import compensation failed", { error: compensateError });

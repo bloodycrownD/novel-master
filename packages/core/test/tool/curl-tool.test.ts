@@ -5,12 +5,12 @@ import { afterEach, describe, it, mock } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import { curlTool } from "../../src/domain/tool/builtin/curl-tool.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { formatToolErrorForLlm, formatToolOutputForLlm, ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
-import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
+import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
+import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
@@ -103,7 +103,7 @@ function makeRunner(): {
   readonly registry: ToolRegistry<BuiltinToolContext>;
 } {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return { runner: new ToolRunner(registry), registry };
 }
 
@@ -306,7 +306,7 @@ describe("curl 工具", () => {
     await rejectsErr(pending, (err) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
-      const message = formatToolErrorForLlm(err);
+      const message = ToolOutput.formatErrorForLlm(err);
       assert.match(message, /timed out/);
       assert.match(message, /https:\/\/example\.com\/slow/);
     });
@@ -334,7 +334,7 @@ describe("curl 工具", () => {
     await rejectsErr(pending, (err) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
-      const message = formatToolErrorForLlm(err);
+      const message = ToolOutput.formatErrorForLlm(err);
       assert.match(message, /timed out/);
       assert.match(message, /https:\/\/example\.com\/slow-body/);
     });
@@ -353,7 +353,7 @@ describe("curl 工具", () => {
     );
     assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
     assert.equal(err.key, "TOOL_FAILED");
-    assert.match(formatToolErrorForLlm(err), /Network request failed/);
+    assert.match(ToolOutput.formatErrorForLlm(err), /Network request failed/);
   });
 
   it("T-CT6: HTTP 404 不是错误：照常返回输出（status=404，body 照常处理）", async () => {
@@ -426,7 +426,7 @@ describe("curl 工具", () => {
     const rec = out as { url: string; finalUrl: string };
     assert.equal(rec.url, "https://example.com/old");
     assert.equal(rec.finalUrl, "https://example.com/new");
-    const formatted = formatToolOutputForLlm(out);
+    const formatted = ToolOutput.formatForLlm(out);
     assert.ok(formatted.includes("curl GET https://example.com/old → https://example.com/new"));
     assert.ok(formatted.includes("moved"));
   });
@@ -458,7 +458,7 @@ describe("curl 工具", () => {
     const { runner } = makeRunner();
     const { vfs } = makeRecordingVfs();
     const out = unwrap(await runner.call("curl", { url: "https://example.com/big" }, makeCtx(mock.fn(async () => fakeResponse({ body: "b".repeat(300_000) })) as unknown as typeof fetch, { vfs })));
-    const formatted = formatToolOutputForLlm(out);
+    const formatted = ToolOutput.formatForLlm(out);
     assert.ok(!formatted.trimStart().startsWith("{"), "不应回落 JSON.stringify");
     assert.ok(formatted.startsWith("curl GET https://example.com/big"));
     assert.ok(formatted.includes("Status: 200"));
@@ -494,8 +494,8 @@ describe("curl 工具", () => {
     assert.equal(ToolOutput.isCurl(readOut), false);
   });
 
-  it("T-CT11: buildToolResultBlock 摘要——正常 `200 · 12.3KB`、降级截断 `truncated · 50KB/1.2MB`、落盘 `已落盘 …`", () => {
-    const normal = buildToolResultBlock(
+  it("T-CT11: ToolResultBlock.build 摘要——正常 `200 · 12.3KB`、降级截断 `truncated · 50KB/1.2MB`、落盘 `已落盘 …`", () => {
+    const normal = ToolResultBlock.build(
       "tu-normal",
       {
         ok: true,
@@ -515,7 +515,7 @@ describe("curl 工具", () => {
     assert.equal(normal.summary, "200 · 12.3KB");
     assert.ok(normal.content.startsWith("curl GET https://example.com"));
 
-    const truncated = buildToolResultBlock(
+    const truncated = ToolResultBlock.build(
       "tu-trunc",
       {
         ok: true,
@@ -537,7 +537,7 @@ describe("curl 工具", () => {
     assert.equal(truncated.summary, "truncated · 50KB/1.2MB");
 
     // 落盘形态（savedPath）：summary 显示已落盘路径，优先于体积档位。
-    const saved = buildToolResultBlock(
+    const saved = ToolResultBlock.build(
       "tu-saved",
       {
         ok: true,
@@ -560,7 +560,7 @@ describe("curl 工具", () => {
 
     // 字节格式化规则抽查：1024 进位、保留 1 位小数。
     assert.equal(
-      buildToolResultBlock(
+      ToolResultBlock.build(
         "tu-b",
         {
           ok: true,
@@ -583,7 +583,7 @@ describe("curl 工具", () => {
 
   it("T-CT12: 注册与策略——deny 摘除、孙 agent（depth>=2）不摘", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     assert.ok(registry.list().includes("curl"));
     assert.ok(registry.list().includes(curlTool.name));
 
@@ -729,7 +729,7 @@ describe("curl 工具", () => {
     await rejectsErr(pending, (err) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
-      const message = formatToolErrorForLlm(err);
+      const message = ToolOutput.formatErrorForLlm(err);
       assert.match(message, /timed out after 2000ms/);
       assert.match(message, /https:\/\/example\.com\/slow/);
     });
@@ -746,7 +746,7 @@ describe("curl 工具", () => {
       // 取消统一 TOOL_CANCELLED 控制流码；formatter 渲染为中性文案
       // （不带 Error 前缀、不携带 URL，UI 卡片不弹错误）。
       assert.equal(err.key, "TOOL_CANCELLED");
-      assert.equal(formatToolErrorForLlm(err), "工具调用已取消");
+      assert.equal(ToolOutput.formatErrorForLlm(err), "工具调用已取消");
     });
     assert.equal(fetchFn.mock.callCount(), 0, "预取消不得发起任何请求");
   });

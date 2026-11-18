@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "../../src/errors/app-error.js";
-import { buildReplaceNotFoundError } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
-import {
-  formatToolErrorForLlm,
-  formatToolOutputForLlm,
-  formatToolResultContentForDisplay,
-  ToolOutput,
-} from "../../src/domain/tool/logic/format-tool-output.js";
+import { ReplaceNotFoundError } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
+import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 
 const sessionScope: VfsScope = {
@@ -19,32 +14,32 @@ const sessionScope: VfsScope = {
 // entry_id 化后 vfsError.path 已是纯逻辑路径，不再含物理前缀
 const physicalPath = "/missing.txt";
 
-describe("formatToolOutputForLlm", () => {
+describe("ToolOutput.formatForLlm", () => {
   it("returns ok for version-only write result", () => {
-    assert.equal(formatToolOutputForLlm({ version: 1 }), "ok");
+    assert.equal(ToolOutput.formatForLlm({ version: 1 }), "ok");
   });
 
   it("T10: returns ok for edit result with one replacement", () => {
     assert.equal(
-      formatToolOutputForLlm({ version: 2, replacements: 1 }),
+      ToolOutput.formatForLlm({ version: 2, replacements: 1 }),
       "ok",
     );
   });
 
   it("T10: multi replacement edit result returns ok", () => {
     assert.equal(
-      formatToolOutputForLlm({ version: 2, replacements: 3 }),
+      ToolOutput.formatForLlm({ version: 2, replacements: 3 }),
       "ok",
     );
   });
 
   it("returns ok for { ok: true } fs mutating results", () => {
-    assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
+    assert.equal(ToolOutput.formatForLlm({ ok: true }), "ok");
   });
 
   it("MUT-01: skill write 变更回执渲染 ok（不再 JSON 展开）", () => {
     assert.equal(
-      formatToolOutputForLlm({
+      ToolOutput.formatForLlm({
         action: "write",
         domain: "project",
         name: "demo",
@@ -57,7 +52,7 @@ describe("formatToolOutputForLlm", () => {
 
   it("MUT-01: skill edit 变更回执（含 replacements）渲染 ok", () => {
     assert.equal(
-      formatToolOutputForLlm({
+      ToolOutput.formatForLlm({
         action: "edit",
         domain: "global",
         name: "demo",
@@ -71,7 +66,7 @@ describe("formatToolOutputForLlm", () => {
 
   it("MUT-01: agent create/update 保存回执渲染 ok", () => {
     assert.equal(
-      formatToolOutputForLlm({
+      ToolOutput.formatForLlm({
         action: "create",
         name: "translator",
         agentId: "agent-abc123",
@@ -79,7 +74,7 @@ describe("formatToolOutputForLlm", () => {
       "ok",
     );
     assert.equal(
-      formatToolOutputForLlm({
+      ToolOutput.formatForLlm({
         action: "update",
         name: "translator",
         agentId: "agent-abc123",
@@ -89,7 +84,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("MUT-02: 带 content 的输出不撞变更回执守卫（load 走正文格式）", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       action: "write",
       domain: "project",
       name: "demo",
@@ -102,7 +97,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("LOAD-01: skill load 正文带行号、附属文件清单作尾注", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       action: "load",
       domain: "project",
       name: "demo",
@@ -119,7 +114,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("LOAD-02: skill load 截断时提示续读走 skill read", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       action: "load",
       domain: "project",
       name: "demo",
@@ -133,7 +128,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("LOAD-03: alreadyReferenced 短提示直接返回文本，不加行号", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       action: "load",
       domain: "project",
       name: "demo",
@@ -148,7 +143,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-READ-03: formats truncated read with line numbers and nextOffset hint", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       path: "/a.md",
       content: "line-1",
       version: 1,
@@ -167,7 +162,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-READ-01: non-truncated read uses line numbers, not JSON", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       path: "/a.md",
       content: "alpha\nbeta",
       version: 1,
@@ -183,7 +178,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-READ-02: offset=10 starts line numbers at 10", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       path: "/a.md",
       content: "line-ten\nline-eleven",
       version: 1,
@@ -198,7 +193,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-GREP-01: grep matches as path:line:column per line", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       matches: [
         { path: "/src/a.ts", line: 3, column: 5, excerpt: "const x = 1;" },
         { path: "/src/b.ts", line: 10, column: 1, excerpt: "export {}" },
@@ -214,7 +209,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-GREP-01: truncated grep uses line format plus hint", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       matches: [{ path: "/a.ts", line: 1, column: 1, excerpt: "foo" }],
       total: 50,
       truncated: true,
@@ -225,7 +220,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-GLOB-01: glob paths one per line", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       paths: ["/src/a.ts", "/src/b.ts"],
       total: 2,
       truncated: false,
@@ -235,7 +230,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-GLOB-01: truncated glob uses line format plus hint", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       paths: ["/a.ts"],
       total: 10,
       truncated: true,
@@ -246,16 +241,16 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-REG-01: edit/write still return ok", () => {
-    assert.equal(formatToolOutputForLlm({ version: 1 }), "ok");
+    assert.equal(ToolOutput.formatForLlm({ version: 1 }), "ok");
     assert.equal(
-      formatToolOutputForLlm({ version: 2, replacements: 2 }),
+      ToolOutput.formatForLlm({ version: 2, replacements: 2 }),
       "ok",
     );
-    assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
+    assert.equal(ToolOutput.formatForLlm({ ok: true }), "ok");
   });
 
   it("FMT-REG-02: fs ls tab format unchanged", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       entries: [{ path: "/a", kind: "file" }],
       total: 100,
       truncated: true,
@@ -281,14 +276,14 @@ describe("formatToolOutputForLlm", () => {
       total: 1,
       truncated: false,
     };
-    const out = formatToolOutputForLlm(input);
+    const out = ToolOutput.formatForLlm(input);
     assert.ok(out.includes('"messageId"'));
     assert.ok(out.includes('"seq"'));
     assert.ok(!out.includes("msg-1:1:3:"));
   });
 
   it("T10: formats fs ls truncated output", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       entries: [{ path: "/a", kind: "file" }],
       total: 100,
       truncated: true,
@@ -299,7 +294,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-LIST-01: skill list 条目（name/description）不再拼出 undefined", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       action: "list",
       entries: [
         { name: "助手派遣", description: "派发任务的通用规范", mode: "primary" },
@@ -315,7 +310,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-LIST-02: agent list 条目（name/description/mode）同款字段自适应", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       action: "list",
       entries: [{ name: "理性助手", description: "理性分析", mode: "primary" }],
       total: 1,
@@ -325,7 +320,7 @@ describe("formatToolOutputForLlm", () => {
   });
 
   it("FMT-LIST-03: fs ls 条目（path/kind）不受自适应影响", () => {
-    const out = formatToolOutputForLlm({
+    const out = ToolOutput.formatForLlm({
       entries: [
         { path: "/创作规则.md", kind: "file" },
         { path: "/原著", kind: "directory" },
@@ -336,12 +331,12 @@ describe("formatToolOutputForLlm", () => {
   });
 });
 
-describe("formatToolErrorForLlm", () => {
+describe("ToolOutput.formatErrorForLlm", () => {
   it("unwraps VfsError cause from ToolError", () => {
     const cause = new AppError("VFS_NOT_FOUND", {path: "/missing", detail: "Path not found: /missing"});
     const err = new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "Tool failed: read"});
     assert.equal(
-      formatToolErrorForLlm(err),
+      ToolOutput.formatErrorForLlm(err),
       "Error: [NOT_FOUND] Path not found: /missing",
     );
   });
@@ -349,7 +344,7 @@ describe("formatToolErrorForLlm", () => {
   it("T-ERR-01: session scope maps physical path to logical", () => {
     const cause = new AppError("VFS_NOT_FOUND", {path: physicalPath, detail: `Path not found: ${physicalPath}`});
     const err = new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "Tool failed: read"});
-    const content = formatToolErrorForLlm(err, { vfsScope: sessionScope });
+    const content = ToolOutput.formatErrorForLlm(err, { vfsScope: sessionScope });
     assert.ok(content.includes("[NOT_FOUND]"));
     assert.ok(content.includes("/missing.txt"));
     assert.ok(!content.includes("/projects/"));
@@ -358,8 +353,8 @@ describe("formatToolErrorForLlm", () => {
 
   it("T-ERR-02: REPLACE_NOT_FOUND includes category and LCS diagnostics", () => {
     // oldString 12 字符；文件里 "same" 出现 2 次 ⇒ lcsLength=4、lcsOccurrences=2。
-    const cause = buildReplaceNotFoundError(physicalPath, "aa same bb same cc", "sameXXXXXXXX");
-    const content = formatToolErrorForLlm(
+    const cause = ReplaceNotFoundError.build(physicalPath, "aa same bb same cc", "sameXXXXXXXX");
+    const content = ToolOutput.formatErrorForLlm(
       new AppError("TOOL_FAILED", {toolName: "edit", cause, detail: "Tool failed: edit"}),
       { vfsScope: sessionScope },
     );
@@ -370,7 +365,7 @@ describe("formatToolErrorForLlm", () => {
 
   it("T-ERR-03: NOT_FOUND category", () => {
     const cause = new AppError("VFS_NOT_FOUND", {path: physicalPath, detail: `Path not found: ${physicalPath}`});
-    const content = formatToolErrorForLlm(
+    const content = ToolOutput.formatErrorForLlm(
       new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
@@ -378,8 +373,8 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-04: REPLACE_NOT_FOUND includes LCS snippet", () => {
-    const cause = buildReplaceNotFoundError(physicalPath, "prefix function hello() suffix", "function hello()tail");
-    const content = formatToolErrorForLlm(
+    const cause = ReplaceNotFoundError.build(physicalPath, "prefix function hello() suffix", "function hello()tail");
+    const content = ToolOutput.formatErrorForLlm(
       new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
@@ -389,8 +384,8 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-05: short LCS suggests re-read", () => {
-    const cause = buildReplaceNotFoundError(physicalPath, "xx ab yy", "abZZZZZZ");
-    const content = formatToolErrorForLlm(
+    const cause = ReplaceNotFoundError.build(physicalPath, "xx ab yy", "abZZZZZZ");
+    const content = ToolOutput.formatErrorForLlm(
       new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
@@ -402,7 +397,7 @@ describe("formatToolErrorForLlm", () => {
     // 预览并列就能看出 `&ldquo;` vs `“` 的区别，且 LLM 可直接照抄修正。
     // 预览值是本用例的断言对象，无法由 LCS 计算复现，直接按生产形态构造 AppError。
     const cause = new AppError("VFS_REPLACE_NOT_FOUND", {path: physicalPath, oldStringLength: 20, longestCommonSubstring: "你好世界测试", lcsLength: 6, lcsOccurrences: 1, oldStringPreview: '&ldquo;你好', fileHintPreview: '“你好', detail: `Replace string not found in ${physicalPath}`});
-    const content = formatToolErrorForLlm(
+    const content = ToolOutput.formatErrorForLlm(
       new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
@@ -417,26 +412,26 @@ describe("formatToolErrorForLlm", () => {
 
   it("summarizes INVALID_ARGUMENT zod issues", () => {
     const err = new AppError("TOOL_INVALID_ARGUMENT", {toolName: "write", issues: [{ code: "custom", path: ["path"], message: "Required" }], detail: "Invalid input for tool: write"});
-    assert.equal(formatToolErrorForLlm(err), "Error: Required");
+    assert.equal(ToolOutput.formatErrorForLlm(err), "Error: Required");
   });
 
   it("falls back to ToolError message without cause", () => {
     const err = new AppError("TOOL_NOT_FOUND", {toolName: "missing", detail: "Tool not registered: missing"});
     assert.equal(
-      formatToolErrorForLlm(err),
+      ToolOutput.formatErrorForLlm(err),
       "Error: Tool not registered: missing",
     );
   });
 });
 
-describe("formatToolResultContentForDisplay", () => {
+describe("ToolOutput.formatContentForDisplay", () => {
   it("prettifies legacy JSON version payloads", () => {
-    assert.equal(formatToolResultContentForDisplay('{\n  "version": 1\n}'), "ok");
+    assert.equal(ToolOutput.formatContentForDisplay('{\n  "version": 1\n}'), "ok");
   });
 
   it("preserves error strings", () => {
     assert.equal(
-      formatToolResultContentForDisplay("Error: not found"),
+      ToolOutput.formatContentForDisplay("Error: not found"),
       "Error: not found",
     );
   });
@@ -456,7 +451,7 @@ describe("curl 输出形状回归", () => {
     };
     assert.equal(ToolOutput.isCurl(curlOut), true);
 
-    const out = formatToolOutputForLlm(curlOut);
+    const out = ToolOutput.formatForLlm(curlOut);
     // 可读文本而非 JSON 串：不以 { 开头、无 JSON 键名、含 curl 请求行/Status 头。
     assert.ok(!out.trimStart().startsWith("{"));
     assert.ok(!out.includes('"contentType"'));

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError, isAppError } from "@/errors/app-error.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 
 /** 把 Result 收成路径串：失败分支在测试里直接断言失败。 */
-function unwrapPath(result: ReturnType<typeof normalizePath>): string {
+function unwrapPath(result: ReturnType<typeof PathNormalizer.normalize>): string {
   return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
 }
 
-/** HEAD 的 throw 型 normalizePath（原样转录自 `git show HEAD:.../normalize-path.ts`），仅作逐值等价对照。 */
+/** HEAD 的 throw 型 PathNormalizer.normalize（原样转录自 `git show HEAD:.../normalize-path.ts`），仅作逐值等价对照。 */
 function legacyNormalizePath(path: string): string {
   if (typeof path !== "string" || path.length === 0) {
     throw new AppError("VFS_INVALID_PATH", {path: String(path), reason: "path must be a non-empty string", detail: `Invalid path ${String(path)}: path must be a non-empty string`});
@@ -49,21 +49,21 @@ function legacyOutcome(input: unknown): PathOutcome {
 }
 
 function resultOutcome(input: unknown): PathOutcome {
-  const result = normalizePath(input as string);
+  const result = PathNormalizer.normalize(input as string);
   return result.ok ? {ok: true, value: result.value} : {ok: false, message: result.error.message, path: result.error.details?.path};
 }
 
-describe("normalizePath（Result 型）", () => {
+describe("PathNormalizer.normalize（Result 型）", () => {
   it("成功分支逐值等价：绝对 POSIX 形态、反斜杠转正、`.`/`..` 消化", () => {
-    assert.equal(unwrapPath(normalizePath("/a/b")), "/a/b");
-    assert.equal(unwrapPath(normalizePath("/a//b")), "/a/b");
-    assert.equal(unwrapPath(normalizePath("/a\\b")), "/a/b");
-    assert.equal(unwrapPath(normalizePath("/a/./b/../c/")), "/a/c");
-    assert.equal(unwrapPath(normalizePath("/")), "/");
+    assert.equal(unwrapPath(PathNormalizer.normalize("/a/b")), "/a/b");
+    assert.equal(unwrapPath(PathNormalizer.normalize("/a//b")), "/a/b");
+    assert.equal(unwrapPath(PathNormalizer.normalize("/a\\b")), "/a/b");
+    assert.equal(unwrapPath(PathNormalizer.normalize("/a/./b/../c/")), "/a/c");
+    assert.equal(unwrapPath(PathNormalizer.normalize("/")), "/");
   });
 
   it("空串 → VFS_INVALID_PATH，message / details.path / messageKey 与原 VfsError 同口径", () => {
-    const result = normalizePath("");
+    const result = PathNormalizer.normalize("");
     assert.equal(result.ok, false);
     if (result.ok) {
       return;
@@ -78,14 +78,14 @@ describe("normalizePath（Result 型）", () => {
   });
 
   it("非绝对路径与越根 → VFS_INVALID_PATH，返回而非抛出", () => {
-    const relative = normalizePath("relative");
+    const relative = PathNormalizer.normalize("relative");
     assert.equal(relative.ok, false);
     if (!relative.ok) {
       assert.equal(relative.error.message, "Invalid path relative: path must start with /");
       assert.deepEqual(relative.error.details, { path: "relative", detail: "Invalid path relative: path must start with /" });
     }
 
-    const escape = normalizePath("/../x");
+    const escape = PathNormalizer.normalize("/../x");
     assert.equal(escape.ok, false);
     if (!escape.ok) {
       assert.equal(escape.error.message, "Invalid path /../x: path escapes above root");

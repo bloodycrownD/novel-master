@@ -17,13 +17,13 @@ import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
-import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createTemplatePullService } from "@/service/template/create-template-pull-service.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { decode } from "@/infra/serialization/decode.js";
-import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
+import { deleteSessionFsData, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
@@ -166,7 +166,7 @@ export class DefaultSessionService implements SessionService {
     await this.deps.conn.transaction(async (tx) => {
       await this.deleteSessionTree(tx, session.value);
     });
-    await runDeferredBlobGc(this.deps.conn);
+    await DeferredBlobGc.run(this.deps.conn);
     // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
     await runDeferredFileCacheGc(this.deps.conn);
     return Result.ok(undefined);
@@ -176,7 +176,7 @@ export class DefaultSessionService implements SessionService {
    * 递归删除 session 及其全部子 session（messages/fs/kkv/run_state/vfs 全清）。
    *
    * 必须在事务内调：先 `listByParentSession` 取直接子，递归调本函数删子，
-   * 再删自己。子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})`
+   * 再删自己。子 session delete 时 `VfsTreeCopy.deletePrefix(session:{pid}:{childId})`
    * 是无害空操作（子 session 根本没建过 VFS scope），不需 special-case 跳过。
    *
    * @remarks **修法 3（`yieldFn` 透传）本波未做 ⇒ 这里的窄投影读仍是同步 parse。**
@@ -203,7 +203,7 @@ export class DefaultSessionService implements SessionService {
     // 同事务清 run_state 行：留着孤儿 starting/running 行会在重启水合时
     // 生成幽灵 interrupted 单元（递归子会话在本函数逐层清理时一并覆盖）。
     await createSessionRunStateService(tx).deleteBySession(session.id);
-    await deleteVfsPrefix(r.vfs, `session:${session.projectId}:${session.id}`, "/");
+    await VfsTreeCopy.deletePrefix(r.vfs, `session:${session.projectId}:${session.id}`, "/");
     const deleted = await r.sessions.delete(session.id);
     if (!deleted) {
       throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${session.id}`, kind: "session", id: session.id });
@@ -344,7 +344,7 @@ export class DefaultSessionService implements SessionService {
       // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
       // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 copy。
       const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
-      const vfsCopied = await copyVfsTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", copyOptions);
+      const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", copyOptions);
       if (vfsCopied.kind === "failed") throw vfsCopied.error;
       if (vfsCopied.kind !== "completed") throw createAbortError();
       const inserted = await r.messages.batchInsert(copyMessages, hooks);

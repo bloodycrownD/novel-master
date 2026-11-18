@@ -101,7 +101,7 @@ describe("CharacterCardImportService", () => {
    *
    * 机理同 zip 链（见 `vfs-tree-copy.ts` `sweepRevisionsUnderScope` 的
    * @remarks）：CS-06/CS-07 的守卫触发器让 sweep 后旧 blob 计数落 0、行留着，
-   * 而 `vfs_entry` 零触发器 ⇒ 残留只能靠 `runDeferredBlobGc` 收，本链**从不调**
+   * 而 `vfs_entry` 零触发器 ⇒ 残留只能靠 `DeferredBlobGc.run` 收，本链**从不调**
    * 它。**红了就是该升方案甲（补 gc）**。
    */
   it("T-CARD-GC-RESIDUE: 卡片导入替换后无 ref_count<=0 的 blob 残留行", async () => {
@@ -133,7 +133,7 @@ describe("CharacterCardImportService", () => {
     assert.equal(
       Number(residue[0]!.n),
       0,
-      "角色卡导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）",
+      "角色卡导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 DeferredBlobGc.run）",
     );
   });
 

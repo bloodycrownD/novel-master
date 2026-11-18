@@ -3,7 +3,7 @@ import { Result } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
-import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
+import { type BuiltinToolContext, type  TdbcConnection } from "@novel-master/core";
 import { ChatServiceFactory } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
@@ -12,7 +12,7 @@ import { fileCacheKey, parseFileCachePayload } from "../../src/domain/workplace/
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import { DefaultUserVfsTurnService } from "../../src/service/chat/impl/user-vfs-turn.service.js";
 import { DefaultMessageService } from "../../src/service/chat/impl/message.service.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -21,7 +21,7 @@ import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/d
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { ContentHash } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
@@ -64,7 +64,7 @@ function makeUserVfsTurnDeps(conn: TdbcConnection, overrides: Partial<UserVfsTur
   });
 
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   const toolRunner = new ToolRunner(registry);
 
   return {
@@ -183,7 +183,7 @@ describe("UserVfsTurnService", () => {
     };
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const toolRunner = {
       runParallel: async (calls, toolCtx) => {
@@ -234,14 +234,14 @@ describe("UserVfsTurnService", () => {
     const keys = await revisions.listKeysUnderScope(sk, "/");
     // entry 已被回滚清理，scope 下的 revision 均不可达，应全部被 sweep
     assert.equal(keys.filter((k) => k.entryId !== undefined).length, 0, "失败回滚后 scope 下不应有残留 revision");
-    // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
+    // content_hash 列始终存 ContentHash.hash() 输出的 hex 格式（SHA-256 hex），
     // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证。
-    const orphanHash = hashContent("A-orphan-body");
+    const orphanHash = ContentHash.hash("A-orphan-body");
     const hashRows = await ctx.conn.query<{ content_hash: string }>(`SELECT content_hash FROM vfs_content_blob`, []);
     assert.equal(
       hashRows.some((r) => String(r.content_hash) === orphanHash),
       false,
-      "orphan blob 应被 runDeferredBlobGc 清理"
+      "orphan blob 应被 DeferredBlobGc.run 清理"
     );
 
     // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失

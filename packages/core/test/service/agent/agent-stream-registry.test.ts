@@ -20,11 +20,7 @@ import { AgentServiceFactory, type AgentDefinition } from "@novel-master/core/ag
 import { InMemoryAgentSession } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  registerBuiltinTools,
-  ToolRegistry,
-  type BuiltinToolContext,
-} from "@novel-master/core";
+import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { type VfsService } from "@novel-master/core/vfs";
@@ -294,7 +290,7 @@ describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
     );
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,

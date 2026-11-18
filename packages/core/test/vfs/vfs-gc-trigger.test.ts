@@ -26,8 +26,8 @@ import { createTemplatePullService } from "../../src/service/template/create-tem
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { deleteUnreferencedUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import {
   VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT,
   VFS_BLOB_GC_TRIGGER_LEGACY_NAMES,
@@ -73,7 +73,7 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
     );
     assert.equal(Number(blobBefore[0]!.ref_count), 2, "初始 ref_count 应为 2");
 
-    // deleteUnreferencedUnderScope JOIN vfs_entry 圈定范围，
+    // RevisionRefCount.deleteUnreferencedUnderScope JOIN vfs_entry 圈定范围，
     // 所以必须先 decrement ref + sweep（entry 还在），最后才删 entry。
     const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
@@ -82,7 +82,7 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
     assert.ok(aRev != null);
     await revisionRepo.adjustRefCount(entryA.entryId, aRev, -1);
 
-    const deleted = await deleteUnreferencedUnderScope(revisionRepo, scopeKey, "/");
+    const deleted = await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKey, "/");
     assert.ok(deleted >= 1, "ref_count 归零的 revision 应被 sweep 删除");
 
     // 现在 entry 可安全删
@@ -107,7 +107,7 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
     assert.ok(bRev != null);
     await revisionRepo.adjustRefCount(entryB.entryId, bRev, -1);
 
-    const deleted2 = await deleteUnreferencedUnderScope(revisionRepo, scopeKey, "/");
+    const deleted2 = await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKey, "/");
     assert.ok(deleted2 >= 1, "第二条 revision 也应被 sweep 删除");
     unwrap(await entryRepo.delete(scopeKey, "/b.md", { recursive: false }));
 
@@ -224,7 +224,7 @@ describe("T-G2: 模板替换链后无 orphan blob（pullSessionTemplate 载体�
     );
 
     // 直调 replaceVfsSubtree（projectTemplatePull 拆除后的通用 sweep/GC 载体）
-    await replaceVfsSubtree(
+    await VfsTreeCopy.replaceSubtree(
       entryRepo,
       { scopeKey: "global" },
       "/repl",

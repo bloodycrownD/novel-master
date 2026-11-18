@@ -13,8 +13,8 @@ import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { assert } from "@/common/assert.js";
-import { sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
@@ -359,7 +359,7 @@ export class SkillsService implements SkillService {
     await this.deps.conn.transaction(async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      await sweepRevisionsUnderScope(entryRepo, revisionRepo, vfsScopeKey, prefix);
+      await VfsTreeCopy.sweepRevisionsUnderScope(entryRepo, revisionRepo, vfsScopeKey, prefix);
 
       // 连带清理负清单行：project 域只清本项目行；global 域清所有项目行，
       // 否则会留下指向不存在技能的孤儿禁用行。
@@ -378,7 +378,7 @@ export class SkillsService implements SkillService {
     // 递减到 0 就停手（CS-06/CS-07 的守卫触发器要求「无 entry 引用」才删行），
     // vfs_entry 上零触发器补不了这一步 ⇒ 残留只能靠全库 gc。口径对齐另外 5 处
     // 删除链的既有约定：事务提交后调一次。
-    await runDeferredBlobGc(this.deps.conn);
+    await DeferredBlobGc.run(this.deps.conn);
     return Result.ok(undefined);
   }
 

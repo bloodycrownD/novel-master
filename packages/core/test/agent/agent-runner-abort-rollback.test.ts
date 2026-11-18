@@ -12,17 +12,12 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  registerBuiltinTools,
-  ToolRegistry,
-  ToolRunner,
-  type BuiltinToolContext,
-} from "@novel-master/core";
+import { BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
@@ -175,7 +170,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -216,7 +211,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const controller = new AbortController();
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: wrappedSession,
@@ -246,7 +241,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const controller = new AbortController();
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -293,7 +288,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -340,7 +335,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -370,7 +365,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const controller = new AbortController();
     const model = singleToolUseModel();
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const abortBeforeToolRunner = {
       runParallel: async (..._args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -424,7 +419,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       })),
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const trackingRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -485,7 +480,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       })),
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const trackingRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -548,7 +543,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       })),
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,

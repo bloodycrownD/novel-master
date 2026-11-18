@@ -11,7 +11,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
 import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
@@ -36,7 +36,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
         clearCheckpoints: true,
       });
     });
-    await runDeferredBlobGc(this.conn);
+    await DeferredBlobGc.run(this.conn);
     // 模板拉取是 session scope 的整树覆盖（文件正文/路径树/规则快照全变），
     // 与角色卡 / ZIP 导入同族，必须对齐 prompt 缓存：rule_snapshot + file_cache
     // 两域清空 + 失效 prompt token cache + toolUseCount 哨兵。
@@ -59,7 +59,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     await this.conn.transaction(async (tx) => {
       await pushSessionWorkspace(tx, session.projectId, sessionId);
     });
-    await runDeferredBlobGc(this.conn);
+    await DeferredBlobGc.run(this.conn);
     return Result.ok(undefined);
   }
 }

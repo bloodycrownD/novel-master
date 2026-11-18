@@ -37,7 +37,7 @@ import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
-import { sinkOversizedOutput, type OversizedSinkResult } from "./overflow-sink.js";
+import { OverflowSink, type OversizedSinkResult } from "./overflow-sink.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("tool.curl");
@@ -276,7 +276,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
     // fetch / text() 两阶段的错误统一映射：父级取消走 TOOL_CANCELLED（控制流
     // 信号，工具结果块呈现为 cancelled、UI 不弹错误文案），超时保留 TOOL_FAILED
     // 失败语义（两者都让 controller.signal 为 aborted，按父 signal 分流），其余
-    // 错误包 TOOL_FAILED 原样透传——formatToolErrorForLlm 会解 cause 给模型可读文案。
+    // 错误包 TOOL_FAILED 原样透传——ToolOutput.formatErrorForLlm 会解 cause 给模型可读文案。
     // 七期起取消/失败都沿 Result.err 返回值传播，不再 throw。
     const phaseError = (e: unknown): Result<never, AppError> => {
       if (!controller.signal.aborted) return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: e, detail: `Tool failed: curl`}));
@@ -355,7 +355,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       if (originalBytes > TOOL_OUTPUT_MAX_BYTES) {
         let sink: OversizedSinkResult | undefined;
         try {
-          sink = await sinkOversizedOutput(ctx, { tool: "curl", content: text, contentType });
+          sink = await OverflowSink.sink(ctx, { tool: "curl", content: text, contentType });
         } catch (error) {
           log.debug("超预算落盘失败，降级字节截断", { error });
         }

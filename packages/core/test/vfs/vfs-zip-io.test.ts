@@ -6,7 +6,7 @@ import { unzipSync, zipSync } from "fflate";
 import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
 import { isAppError } from "@novel-master/core/errors";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -71,7 +71,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/old.md", "old");
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, buildVfsZip(new Map([["new.md", "new"]])), { confirmed: true }));
+    unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, VfsZipBuild.build(new Map([["new.md", "new"]])), { confirmed: true }));
 
     await rejectsErr(() => vfs.read("/old.md"), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_NOT_FOUND"));
@@ -88,7 +88,7 @@ describe("VfsZipIoService", () => {
    * Wave C 的 CS-06/CS-07 把 blob DELETE 触发器换成带 `vfs_entry` 守卫的 v2，
    * 所以 sweep 三步跑完时旧 blob 计数落到 0、**行留着**；而 `vfs_entry` 上零
    * 触发器，紧随的 `deleteVfsPrefix` 不会回头收它。收残留只能靠
-   * `runDeferredBlobGc` —— 本链（zip 导入）**从不调**它（另 5 处调用点里没有
+   * `DeferredBlobGc.run` —— 本链（zip 导入）**从不调**它（另 5 处调用点里没有
    * `vfs-zip-io.service.ts`）。本用例钉住这个口径：**红了就是该升方案甲（补 gc）**。
    *
    * 内容取「本次唯一」（带 isolation suffix）⇒ 不会被别的 entry/revision 共享，
@@ -108,14 +108,14 @@ describe("VfsZipIoService", () => {
     const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, buildVfsZip(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])), { confirmed: true }));
+    unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, VfsZipBuild.build(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])), { confirmed: true }));
 
     const residue = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_content_blob
        WHERE content_hash = ? AND ref_count <= 0`,
       [oldHash]
     );
-    assert.equal(Number(residue[0]!.n), 0, "zip 导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）");
+    assert.equal(Number(residue[0]!.n), 0, "zip 导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 DeferredBlobGc.run）");
   });
 
   it("markdown front matter passes UTF-8 zip validation", () => {
@@ -159,7 +159,7 @@ describe("VfsZipIoService", () => {
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn, {
       testHook: { throwOnInsertLogical: "/new.md" },
     });
-    const zipBytes = buildVfsZip(
+    const zipBytes = VfsZipBuild.build(
       new Map([
         ["before.md", "mutated"],
         ["new.md", "new"],
@@ -189,7 +189,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/stay.md", "stay");
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    const zipBytes = buildVfsZip(new Map([["other.md", "x"]]));
+    const zipBytes = VfsZipBuild.build(new Map([["other.md", "x"]]));
     await rejectsErr(
       zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
       (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_NOT_CONFIRMED"))
@@ -260,7 +260,7 @@ describe("VfsZipIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-z7-${testIsolationSuffix()}`));
     const sessionA = unwrap(await ctx.sessions.create(project.id));
     const sessionB = unwrap(await ctx.sessions.create(project.id));
-    const zipBytes = buildVfsZip(
+    const zipBytes = VfsZipBuild.build(
       new Map([
         ["alpha.md", "alpha"],
         ["dir/beta.md", "beta"],
@@ -341,14 +341,14 @@ describe("VfsZipIoService", () => {
     const names = Object.keys(unzipSync(bytes));
     assert.ok(names.includes("t.md"));
 
-    unwrap(await zipSvc.import({ kind: "project", projectId: project.id }, buildVfsZip(new Map([["t.md", "T2"]])), { confirmed: true }));
+    unwrap(await zipSvc.import({ kind: "project", projectId: project.id }, VfsZipBuild.build(new Map([["t.md", "T2"]])), { confirmed: true }));
     const read = unwrap(await pvfs.read("/t.md"));
     assert.equal(read.content, "T2");
   });
 
   it("skips __MACOSX and .DS_Store junk entries on import", async () => {
     const ctx = getNovelMasterTestContext();
-    const zip = buildVfsZip(
+    const zip = VfsZipBuild.build(
       new Map([
         ["readme.md", "ok"],
         ["__MACOSX/._readme.md", ""],
@@ -441,7 +441,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/old.md", "old");
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["new.md", "new"]])), {
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["new.md", "new"]])), {
       confirmed: true,
     }));
 
@@ -486,7 +486,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/b/keep.txt", "keep");
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["fresh.txt", "fresh"]])), {
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["fresh.txt", "fresh"]])), {
       confirmed: true,
       directoryPath: "/a",
     }));
@@ -513,7 +513,7 @@ describe("VfsZipIoService", () => {
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     await rejectsErr(
-      zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
+      zipSvc.import(scope, VfsZipBuild.build(new Map([["x.txt", "x"]])), {
         confirmed: false,
         directoryPath: "/a",
       }),
@@ -592,7 +592,7 @@ describe("VfsZipIoService", () => {
       () =>
         zipSvc.import(
           scope,
-          buildVfsZip(
+          VfsZipBuild.build(
             new Map([
               ["a/foo.txt", "foo"],
               ["a/bar.md", "bar"],
@@ -628,7 +628,7 @@ describe("VfsZipIoService", () => {
     await rejectsErr(() => zipSvc.export(scope, { directoryPath: "/note.md" }), assertInvalidPath);
     await rejectsErr(
       () =>
-        zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
+        zipSvc.import(scope, VfsZipBuild.build(new Map([["x.txt", "x"]])), {
           confirmed: true,
           directoryPath: "/note.md",
         }),
@@ -652,7 +652,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/b/sib.txt", "sib");
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map()), {
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map()), {
       confirmed: true,
       directoryPath: "/a",
     }));
@@ -682,7 +682,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/b/sib.txt", "sib");
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["foo.txt", "foo"]])), {
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["foo.txt", "foo"]])), {
       confirmed: true,
       directoryPath: "/a",
     }));
@@ -713,7 +713,7 @@ describe("VfsZipIoService", () => {
     });
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["a.md", "zip-a"]])), {
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["a.md", "zip-a"]])), {
       confirmed: true,
     }));
 
@@ -737,7 +737,7 @@ describe("VfsZipIoService", () => {
     });
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import({ kind: "global" }, buildVfsZip(new Map([["readme.md", "global-r"]])), { confirmed: true }));
+    unwrap(await zipSvc.import({ kind: "global" }, VfsZipBuild.build(new Map([["readme.md", "global-r"]])), { confirmed: true }));
 
     assert.equal(unwrap(await ctx.globalVfs().read("/readme.md")).content, "global-r");
     assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), ["canon"]);
@@ -766,7 +766,7 @@ describe("VfsZipIoService", () => {
       promptTokens: 5,
       updatedAt: Date.now(),
     });
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["b.md", "b"]])), {
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["b.md", "b"]])), {
       confirmed: true,
     }));
     assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), []);
@@ -808,7 +808,7 @@ describe("VfsZipIoService", () => {
     // 显式 directories（"设定集/"）+ 文件路径隐式父链（世界书/章节/深层）
     unwrap(await zipSvc.import(
       scope,
-      buildVfsZip(
+      VfsZipBuild.build(
         new Map([
           ["设定集/显式目录条目.md", "显式"],
           ["世界书/章节/深层/设定.md", "深层设定"],
@@ -860,7 +860,7 @@ describe("VfsZipIoService", () => {
     unwrap(await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false }));
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
-    unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["世界书/设定.md", "设定"]])), { confirmed: true, directoryPath: "/角色" }));
+    unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["世界书/设定.md", "设定"]])), { confirmed: true, directoryPath: "/角色" }));
 
     const after = unwrap(await wt.getDirRule("/角色"));
     assert.ok(after);
@@ -886,7 +886,7 @@ describe("VfsZipIoService", () => {
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     unwrap(await zipSvc.import(
       scope,
-      buildVfsZip(
+      VfsZipBuild.build(
         new Map([
           ["设定集/显式目录条目.md", "显式"],
           ["世界书/章节/深层/设定.md", "深层设定"],
@@ -941,7 +941,7 @@ describe("VfsZipIoService", () => {
     const records: LogRecord[] = [];
     setDefaultLogSink({ write: (record) => records.push(record) });
     try {
-      const ruleImport = unwrap(await zipSvc.import(scope, buildVfsZip(new Map([["世界书/章节/深层/设定.md", "深层设定"]])), { confirmed: true, directoryPath: "/角色" }));
+      const ruleImport = unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["世界书/章节/深层/设定.md", "深层设定"]])), { confirmed: true, directoryPath: "/角色" }));
       void ruleImport;
     } finally {
       restoreDefaultLogSink();
@@ -990,7 +990,7 @@ describe("VfsZipIoService", () => {
     });
     const ruleImport = unwrap(await zipSvc.import(
         scope,
-        buildVfsZip(
+        VfsZipBuild.build(
           new Map([
             ["a.md", "甲"],
             ["世界书/章节/深层/设定.md", "深层设定"],

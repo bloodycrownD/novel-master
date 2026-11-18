@@ -19,7 +19,7 @@ import type { ChatMessageData } from "../../model/message.js";
 import type { MessageAttachment } from "../../model/message-attachment.schema.js";
 import { AttachBudget, BINARY_ATTACH_NOTE, OVERSIZED_ATTACH_NOTE } from "../attachment/attach-budget.js";
 import { attachmentXmlCodec } from "../attachment/attachment-xml-codec.js";
-import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import { promptPathSeen } from "../attachment/prompt-path-seen.js";
 import { attachmentScanner } from "../attachment/attachment-scanner.js";
 import { dirAttachTreeRenderer } from "../attachment/render-dir-attach-tree.js";
@@ -110,7 +110,7 @@ function unwrapLegacyBody(content: string, tag: "file" | "dir"): { body: string;
 
 /** skillAttach 不存在提示行 XML（不写 seen：技能后续创建可自愈重附全文）。 */
 function buildSkillAttachMissingXml(name: string): string {
-  return buildUserVfsActionXml("skillAttach", { name, missing: true, note: SKILL_ATTACH_MISSING_NOTE });
+  return UserVfsActionXml.build("skillAttach", { name, missing: true, note: SKILL_ATTACH_MISSING_NOTE });
 }
 
 /** 一轮 prepare 独占的附件 hydrate 状态。 */
@@ -206,7 +206,7 @@ export class AttachmentHydrator {
         ...attachment,
         path: logicalPath,
         action: "userAttach",
-        content: buildUserVfsActionXml("userAttach", { path: logicalPath, alreadyReferenced: true }),
+        content: UserVfsActionXml.build("userAttach", { path: logicalPath, alreadyReferenced: true }),
       };
     }
     return this.hydrateFileFull({ ...attachment, path: logicalPath }, logicalPath);
@@ -222,7 +222,7 @@ export class AttachmentHydrator {
       return {
         ...attachment,
         action: "skillAttach",
-        content: buildUserVfsActionXml("skillAttach", { name, alreadyReferenced: true }),
+        content: UserVfsActionXml.build("skillAttach", { name, alreadyReferenced: true }),
       };
     }
     if (this.runtime.skills == null || this.runtime.projectId == null) return attachment;
@@ -254,7 +254,7 @@ export class AttachmentHydrator {
     return {
       ...attachment,
       action: "skillAttach",
-      content: buildUserVfsActionXml("skillAttach", {
+      content: UserVfsActionXml.build("skillAttach", {
         name,
         content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
         ...(oversized ? { display: "filename" as const } : {}),

@@ -16,7 +16,7 @@
  */
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
-import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -138,7 +138,7 @@ export async function resolveReconcilePathSets(deps: ResolveReconcilePathDeps, p
       pathsNeedWrite.add(pair.logicalPath);
       continue;
     }
-    const meta = revisionMetaByKey.get(revisionPairKey(pair.entryId, pair.version));
+    const meta = revisionMetaByKey.get(RevisionPairKey.build(pair.entryId, pair.version));
     if (meta == null) {
       pathsNeedWrite.add(pair.logicalPath);
       continue;

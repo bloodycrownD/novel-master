@@ -11,24 +11,26 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 
-/**
- * 单事务内重命名单个 entry 的逻辑路径。
- *
- * @returns 影响行数
- * @throws 当旧路径不存在时由 repo.renamePathInScope 抛 NOT_FOUND
- */
-export async function renameVfsEntry(tx: TdbcConnection, entryRepo: VfsEntryRepository, scopeKey: string, oldPath: string, newPath: string): Promise<void> {
-  await entryRepo.renamePathInScope(tx, scopeKey, oldPath, newPath);
-}
+export const VfsRenamePrimitive = {
+  /**
+   * 单事务内重命名单个 entry 的逻辑路径。
+   *
+   * @returns 影响行数
+   * @throws 当旧路径不存在时由 repo.renamePathInScope 抛 NOT_FOUND
+   */
+  async renameEntry(tx: TdbcConnection, entryRepo: VfsEntryRepository, scopeKey: string, oldPath: string, newPath: string): Promise<void> {
+    await entryRepo.renamePathInScope(tx, scopeKey, oldPath, newPath);
+  },
 
-/**
- * 单事务内批量重命名目录前缀下所有子 entry。
- *
- * 子路径用 `REPLACE(path, oldBase||'/', newBase||'/')` 统一替换，
- * 再单独 UPDATE 目录根自身。entry_id 全部不变，revision/checkpoint 零操作。
- *
- * @throws 当旧目录前缀不存在时由 repo.renamePrefixInScope 抛 NOT_FOUND
- */
-export async function renameVfsDirectory(tx: TdbcConnection, entryRepo: VfsEntryRepository, scopeKey: string, oldDir: string, newDir: string): Promise<void> {
-  await entryRepo.renamePrefixInScope(tx, scopeKey, oldDir, newDir);
-}
+  /**
+   * 单事务内批量重命名目录前缀下所有子 entry。
+   *
+   * 子路径用 `REPLACE(path, oldBase||'/', newBase||'/')` 统一替换，
+   * 再单独 UPDATE 目录根自身。entry_id 全部不变，revision/checkpoint 零操作。
+   *
+   * @throws 当旧目录前缀不存在时由 repo.renamePrefixInScope 抛 NOT_FOUND
+   */
+  async renameDirectory(tx: TdbcConnection, entryRepo: VfsEntryRepository, scopeKey: string, oldDir: string, newDir: string): Promise<void> {
+    await entryRepo.renamePrefixInScope(tx, scopeKey, oldDir, newDir);
+  },
+} as const;

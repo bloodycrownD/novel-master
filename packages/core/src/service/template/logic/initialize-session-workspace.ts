@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { mapProjectWorkplacePathToSession } from "@/domain/workplace/logic/workplace-path-map.js";
@@ -29,7 +29,7 @@ export async function initializeSessionWorkspace(tx: TdbcConnection, projectId: 
   const vfs = new SqliteVfsEntryRepository(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
   const worktree = new SqliteWorkplaceRepository(tx);
-  await replaceVfsSubtree(vfs, { scopeKey: `project:${projectId}` }, "/", { scopeKey: `session:${projectId}:${sessionId}` }, "/", {
+  await VfsTreeCopy.replaceSubtree(vfs, { scopeKey: `project:${projectId}` }, "/", { scopeKey: `session:${projectId}:${sessionId}` }, "/", {
     revisions,
     contentStore: new SqliteVfsContentStore(tx),
     // 技能已重定位到独立 meta 域，project 域全部内容都带入 session，无需排除项

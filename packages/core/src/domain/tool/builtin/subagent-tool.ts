@@ -73,7 +73,7 @@ export interface TaskToolInput {
  * 供 UI 卡片读取与主 agent 上下文（task 全 JSON 化后随 content 回流）。
  *
  * 中断回流（phase-1-abort-reflow）：子 agent 被用户停止（stopReason=cancelled）时，
- * 额外带上 `stopped: true` 与 `failureReason`，让 `buildToolResultBlock` 能把这条
+ * 额外带上 `stopped: true` 与 `failureReason`，让 `ToolResultBlock.build` 能把这条
  * tool_result 标成 `ok: false`，主 agent 才能区分「用户停止」和「工具崩溃」。
  */
 export interface TaskToolOutput {
@@ -274,7 +274,7 @@ ${callableList}
     // 不能用空串吞掉回流，否则主 agent 会收到一个内容为空的 tool_result。
     //
     // 回流内容以结构化 JSON 给主 agent（task 工具输出本就是给 AI 看的）——
-    // formatToolOutputForLlm 对 task 输出走 JSON.stringify，主 agent 从 content 里
+    // ToolOutput.formatForLlm 对 task 输出走 JSON.stringify，主 agent 从 content 里
     // 能同时拿到 stopped / failureReason / text / subagentSessionId。
     if (result.stopReason === "cancelled") {
       return Result.ok({

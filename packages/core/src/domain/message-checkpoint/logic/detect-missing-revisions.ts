@@ -8,7 +8,7 @@
  */
 
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
@@ -82,7 +82,7 @@ export async function findMissingRevisionPointers(deps: FindMissingRevisionDeps,
   const metas = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
 
   for (const pair of queryable) {
-    const key = revisionPairKey(pair.entryId, pair.version);
+    const key = RevisionPairKey.build(pair.entryId, pair.version);
     if (!metas.has(key)) {
       missing.push(pair.logicalPath);
     }

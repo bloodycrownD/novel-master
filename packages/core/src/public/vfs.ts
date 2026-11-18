@@ -16,11 +16,10 @@ export {
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
 } from "../service/vfs/build-user-vfs-turn-op.js";
-export { buildVfsZip } from "../domain/vfs/logic/vfs-zip-build.js";
-export { parseVfsZip } from "../domain/vfs/logic/vfs-zip-parse.js";
-export { zipBaseNameFromPath } from "../domain/vfs/logic/vfs-zip-path.js";
-export { resolveZipDirectoryPath } from "../domain/vfs/logic/vfs-zip-path.js";
-export { assertZipArchive } from "../domain/vfs/logic/vfs-zip-archive.js";
+export { VfsZipBuild } from "../domain/vfs/logic/vfs-zip-build.js";
+export { VfsZipParse } from "../domain/vfs/logic/vfs-zip-parse.js";
+export { VfsZipPath } from "../domain/vfs/logic/vfs-zip-path.js";
+export { VfsZipArchive } from "../domain/vfs/logic/vfs-zip-archive.js";
 export type {
   VfsZipIoService,
   VfsZipImportOptions,
@@ -38,11 +37,7 @@ export type {
   BatchExportSkip,
   BatchIngestWriter,
 } from "../domain/vfs/ports/vfs-batch-io.port.js";
-export {
-  joinTargetLogicalPath,
-  normalizeBatchRelativePath,
-  relativePathUnderAnchor,
-} from "../domain/vfs/logic/vfs-batch-path.js";
+export { VfsBatchPath } from "../domain/vfs/logic/vfs-batch-path.js";
 export type {
   VfsService,
   VfsReadResult,
@@ -57,30 +52,17 @@ export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
 export { LogicalPath } from "../domain/vfs/logic/vfs-path-mapper.js";
 // 路径族单源：宽松父目录（root/非法 → null）留在 VFS 域；basename / 去尾斜杠 /
 // 改挂目录等纯字符串原语已收敛到 `@novel-master/core/common` 的 `Path`。
-export { parentDirOrNull } from "../domain/vfs/logic/parent-dir.js";
-export {
-  createVfsFile,
-  createVfsDirectory,
-  deleteVfsEntry,
-} from "../domain/vfs/logic/vfs-entry-ops.js";
-export {
-  moveVfsPath,
-  mkdirIgnoreExists,
-  mkdirIgnoreExistingDirectory,
-} from "../domain/vfs/logic/vfs-move.js";
-export { copyVfsPath } from "../domain/vfs/logic/vfs-copy.js";
+export { ParentDir } from "../domain/vfs/logic/parent-dir.js";
+export { VfsEntryOps } from "../domain/vfs/logic/vfs-entry-ops.js";
+export { VfsMove } from "../domain/vfs/logic/vfs-move.js";
+export { VfsCopy } from "../domain/vfs/logic/vfs-copy.js";
 export type { CopyVfsPathOptions } from "../domain/vfs/logic/vfs-copy.js";
-export { replaceVfsSubtree } from "../domain/vfs/logic/vfs-tree-copy.js";
-export {
-  mapUserSaveToToolUses,
-  buildUserVfsActionXml,
-  buildUserVfsSaveEditActionXml,
-  buildUserVfsSaveWriteActionXml,
-  buildUserVfsSimpleActionXml,
-} from "../domain/vfs/logic/user-vfs-save-mapping.js";
-export { readUserVfsSaveBaseline } from "../domain/vfs/logic/read-user-vfs-save-baseline.js";
-export { vfsUserMessage } from "../domain/vfs/logic/format-vfs-error-for-user.js";
-export { validateVfsEntryName } from "../domain/vfs/logic/validate-entry-name.js";
+export { VfsTreeCopy } from "../domain/vfs/logic/vfs-tree-copy.js";
+export { UserVfsSaveMapping } from "../domain/vfs/logic/user-vfs-save-mapping.js";
+export { UserVfsActionXml } from "../domain/vfs/logic/user-vfs-action-xml.js";
+export { UserVfsSaveBaseline } from "../domain/vfs/logic/read-user-vfs-save-baseline.js";
+export { VfsErrorForUser } from "../domain/vfs/logic/format-vfs-error-for-user.js";
+export { EntryNameValidator } from "../domain/vfs/logic/validate-entry-name.js";
 export type { UserVfsSaveMappingOptions } from "../domain/vfs/logic/user-vfs-save-mapping.js";
-export { actionXmlToToolUses } from "../domain/vfs/logic/action-xml-to-tool-uses.js";
+export { ActionXmlToolUses } from "../domain/vfs/logic/action-xml-to-tool-uses.js";
 export type { DerivedToolUseInput } from "../domain/vfs/logic/action-xml-to-tool-uses.js";

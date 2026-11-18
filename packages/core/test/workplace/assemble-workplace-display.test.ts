@@ -9,7 +9,7 @@ import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_S
 import { fileCacheKey, parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
-import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
+import { FileTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
@@ -241,7 +241,7 @@ describe("assembleWorkplaceDisplay", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const writeTool = createVfsTools().find((t) => t.name === "write");
+    const writeTool = FileTools.create().find((t) => t.name === "write");
     assert.ok(writeTool != null);
     await writeTool!.run(
       { path: "/w.md", content: "full-content" },
@@ -267,7 +267,7 @@ describe("assembleWorkplaceDisplay", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/e.md", "alpha");
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
-    const editTool = createVfsTools().find((t) => t.name === "edit");
+    const editTool = FileTools.create().find((t) => t.name === "edit");
     assert.ok(editTool != null);
     await editTool!.run(
       { path: "/e.md", oldString: "alpha", newString: "beta" },
@@ -339,7 +339,7 @@ describe("assembleWorkplaceDisplay", () => {
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey, cachedBody);
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey, cachedBody);
 
-    const fsTool = createVfsTools().find((t) => t.name === "fs");
+    const fsTool = FileTools.create().find((t) => t.name === "fs");
     assert.ok(fsTool != null);
     const toolCtx = {
       vfs,

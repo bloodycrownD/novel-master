@@ -9,8 +9,8 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { decrementLiveRefsUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import type { RollbackProbe } from "@/service/message-checkpoint/message-rollback.port.js";
@@ -45,7 +45,7 @@ export function createSessionFsService(conn: TdbcConnection, options?: SessionFs
  * 删除会话 checkpoint / live ref / revision 打扫（会话删除 / 模板拉取时使用）。
  *
  * 顺序：−checkpoint ref → −live ref → 删 checkpoint 行 → revision 前缀打扫。
- * blob gc 由调用方在事务提交后调度 {@link runDeferredBlobGc}。
+ * blob gc 由调用方在事务提交后调度 {@link DeferredBlobGc.run}。
  */
 export async function deleteSessionFsData(conn: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
   const checkpoints = new SqliteMessageCheckpointRepository(conn);
@@ -59,9 +59,9 @@ export async function deleteSessionFsData(conn: TdbcConnection, projectId: strin
   const sk = LogicalPath.scopeKey(sessionScope);
 
   await checkpoints.deleteCheckpointsForSession(sessionId);
-  await decrementLiveRefsUnderScope(revisions, entries, sk, "/");
+  await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
   await sweepSessionRevisions(revisions, projectId, sessionId);
 }
 
 /** 事务提交后调度全库 blob gc（项目/会话删除批量路径用）。 */
-export { runDeferredBlobGc };
+export { DeferredBlobGc };

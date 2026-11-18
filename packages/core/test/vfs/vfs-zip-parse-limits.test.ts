@@ -31,7 +31,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
-import { parseVfsZip } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
+import { VfsZipParse } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
 import { previewSkillZip } from "@/domain/skills/logic/preview-skill-zip.js";
 import { VFS_ZIP_MAX_ENTRY_COUNT, VFS_ZIP_MAX_ENTRY_PATH_LEN, VFS_ZIP_MAX_UNCOMPRESSED_BYTES } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 
@@ -106,7 +106,7 @@ function expectZipError(result: ErrorResultLike, key: string, messageFragment: s
   assert.ok(!error.message.includes(MISJUDGED_REJECTION_MESSAGE), `不该出现误杀文案 ${JSON.stringify(MISJUDGED_REJECTION_MESSAGE)}（CR-F05 已删该闸）：${error.message}`);
 }
 
-function unwrapZip(result: ReturnType<typeof parseVfsZip>) {
+function unwrapZip(result: ReturnType<typeof VfsZipParse.parse>) {
   assert.ok(result.ok);
   return result.value;
 }
@@ -163,9 +163,9 @@ describe("CS-09 ZIP 解析期闸门", () => {
 
   it("H1: 5001 条 entry 的 zip 在解压任何一条之前就抛 PAYLOAD_TOO_LARGE", () => {
     const zip = manyEmptyEntries(VFS_ZIP_MAX_ENTRY_COUNT + 1);
-    expectZipError(parseVfsZip(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
+    expectZipError(VfsZipParse.parse(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
     // 未越限的同款 zip 必须正常解析（断言不是恒真）。
-    const ok = unwrapZip(parseVfsZip(manyEmptyEntries(10)));
+    const ok = unwrapZip(VfsZipParse.parse(manyEmptyEntries(10)));
     assert.equal(ok.size, 10);
   });
 
@@ -177,7 +177,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
     assert.throws(() => unzipSync(zip), /unknown compression type/);
 
     // 期望：条数闸在读到那条 method 之前就判掉。
-    expectZipError(parseVfsZip(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
+    expectZipError(VfsZipParse.parse(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
   });
 
   it("H2: 声明 33MB 的单条 entry 在解压之前抛 PAYLOAD_TOO_LARGE", () => {
@@ -195,7 +195,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
     // 任何实现下都成立，信息量为零。「未真解压」这一维度改由 H7-H10 间接覆盖：
     // 那四条是真的把 20MiB / 10×3MiB 的正文喂进去逐字节比对，只有「解压后才判」
     // 的实现才会在它们身上露出体量/耗时形态。
-    expectZipError(parseVfsZip(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
+    expectZipError(VfsZipParse.parse(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
   });
 
   it("H3: 技能预检走同一个解析器 ⇒ 同款 PAYLOAD_TOO_LARGE", () => {
@@ -232,7 +232,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
 
     // 期望：回退分支解完之后判限，抛 PAYLOAD_TOO_LARGE（抛点在 try 之外 ⇒
     // 不会被外层 catch 改写成 INVALID_ZIP）。
-    expectZipError(parseVfsZip(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
+    expectZipError(VfsZipParse.parse(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
   });
 
   it("H4 对照: 同款中央目录破坏但体积未越限 ⇒ 回退路径正常解析（证明确实走到了 fflate）", () => {
@@ -240,7 +240,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
     const eocd = findEocd(zip);
     writeU32LE(zip, eocd + 12, 4);
 
-    const parsed = unwrapZip(parseVfsZip(zip));
+    const parsed = unwrapZip(VfsZipParse.parse(zip));
     assert.equal(parsed.size, 2);
     assert.deepEqual(Array.from(parsed.get("a.txt")!), [1, 2, 3]);
   });
@@ -263,7 +263,7 @@ describe("CR-F05: 合法大体积归档不被误杀", () => {
     // 自证确实走了 DEFLATE（否则本用例会悄悄退化成 STORE 对照，形同虚设）。
     assert.ok(zip.length < MIB, `20MiB 可压内容不该产出 ${zip.length} 字节归档`);
 
-    const parsed = unwrapZip(parseVfsZip(zip));
+    const parsed = unwrapZip(VfsZipParse.parse(zip));
     assert.equal(parsed.size, 1);
     assertBytesEqual(parsed.get("big.md")!, content, "20MiB DEFLATE");
   });
@@ -273,7 +273,7 @@ describe("CR-F05: 合法大体积归档不被误杀", () => {
     const zip = zipSync(payload, { level: 6 });
     assert.ok(zip.length < 10 * MIB, "10 × 3MiB 可压内容不该近原样");
 
-    const parsed = unwrapZip(parseVfsZip(zip));
+    const parsed = unwrapZip(VfsZipParse.parse(zip));
     assert.equal(parsed.size, 10);
     for (const [name, body] of contents) {
       assertBytesEqual(parsed.get(name)!, body, `DEFLATE ${name}`);
@@ -285,7 +285,7 @@ describe("CR-F05: 合法大体积归档不被误杀", () => {
     const zip = zipSync({ "big.md": content }, { level: 0 });
     assert.ok(zip.length >= 20 * MIB, "STORE 对照应当几乎不压缩");
 
-    const parsed = unwrapZip(parseVfsZip(zip));
+    const parsed = unwrapZip(VfsZipParse.parse(zip));
     assert.equal(parsed.size, 1);
     assertBytesEqual(parsed.get("big.md")!, content, "20MiB STORE");
   });
@@ -294,7 +294,7 @@ describe("CR-F05: 合法大体积归档不被误杀", () => {
     const { payload, contents } = manyFillEntries(10, 3 * MIB);
     const zip = zipSync(payload, { level: 0 });
 
-    const parsed = unwrapZip(parseVfsZip(zip));
+    const parsed = unwrapZip(VfsZipParse.parse(zip));
     assert.equal(parsed.size, 10);
     for (const [name, body] of contents) {
       assertBytesEqual(parsed.get(name)!, body, `STORE ${name}`);

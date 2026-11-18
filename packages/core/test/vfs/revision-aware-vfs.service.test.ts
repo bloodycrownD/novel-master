@@ -4,7 +4,7 @@ import type { TdbcConnection } from "@novel-master/core";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
+import { EntrySequenceRepair } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
@@ -344,7 +344,7 @@ describe("RevisionAwareVfsService (integration)", () => {
     );
 
     // 发号器推号越过孤儿（对齐启动期 entry-sequence repair）
-    const op = createVfsEntrySequenceRepairOperation(conn);
+    const op = EntrySequenceRepair.create(conn);
     await op.repair();
 
     // write 新文件：新 entry_id 不撞孤儿，version 从 1 起

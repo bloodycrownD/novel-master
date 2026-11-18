@@ -3,14 +3,14 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { AppError } from "@novel-master/core/errors";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
-import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
+import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type  AgentRunFinishedPayload, type  AgentRunStartedPayload, type  AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { Random } from "../../src/common/random.js";
-import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
@@ -185,7 +185,7 @@ describe("AgentRunner", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -225,7 +225,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -267,7 +267,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -317,7 +317,7 @@ describe("AgentRunner", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const bus = new SimpleEventBus();
     const phases: AgentStepCommittedPayload["phase"][] = [];
     bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
@@ -379,7 +379,7 @@ describe("AgentRunner", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const trackingRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -439,7 +439,7 @@ describe("AgentRunner", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -483,7 +483,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const abortAfterToolsRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -611,7 +611,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -678,7 +678,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -766,7 +766,7 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
@@ -839,7 +839,7 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
@@ -886,7 +886,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -948,7 +948,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
@@ -1023,7 +1023,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
@@ -1059,7 +1059,7 @@ describe("AgentRunner", () => {
     );
   });
 
-  it("tool_result content includes VfsError path from formatToolErrorForLlm", async () => {
+  it("tool_result content includes VfsError path from ToolOutput.formatErrorForLlm", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -1087,7 +1087,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
@@ -1187,7 +1187,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
@@ -1254,7 +1254,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
@@ -1325,7 +1325,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
@@ -1393,7 +1393,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
@@ -1447,7 +1447,7 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -1500,7 +1500,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -1564,7 +1564,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -1607,7 +1607,7 @@ describe("AgentRunner", () => {
       { assistantText: "ok", blocks: [{ type: "text", text: "ok-2" }], raw: {} },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -1662,7 +1662,7 @@ describe("AgentRunner", () => {
       { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -1714,7 +1714,7 @@ describe("AgentRunner", () => {
       };
 
       const registry = new ToolRegistry();
-      registerBuiltinTools(registry);
+      BuiltinTools.register(registry);
       const runner = AgentServiceFactory.createRunner(
         runnerDeps({
           session,

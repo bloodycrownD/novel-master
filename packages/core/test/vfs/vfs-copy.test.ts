@@ -2,7 +2,7 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { copyVfsPath } from "../../src/domain/vfs/logic/vfs-copy.js";
+import { VfsCopy } from "../../src/domain/vfs/logic/vfs-copy.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -19,7 +19,7 @@ describe("copyVfsPath", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     unwrap(await vfs.write("/a.txt", "hello"));
-    assertOk(await copyVfsPath(vfs, "/a.txt", "/b.txt"));
+    assertOk(await VfsCopy.copy(vfs, "/a.txt", "/b.txt"));
 
     assert.equal(unwrap(await vfs.read("/a.txt")).content, "hello");
     assert.equal(unwrap(await vfs.read("/b.txt")).content, "hello");
@@ -34,7 +34,7 @@ describe("copyVfsPath", () => {
     unwrap(await vfs.mkdir("/src"));
     unwrap(await vfs.write("/src/x.md", "x"));
 
-    assertOk(await copyVfsPath(vfs, "/src", "/dst", { recursive: true }));
+    assertOk(await VfsCopy.copy(vfs, "/src", "/dst", { recursive: true }));
 
     assert.equal(unwrap(await vfs.read("/src/x.md")).content, "x");
     assert.equal(unwrap(await vfs.read("/dst/x.md")).content, "x");
@@ -49,7 +49,7 @@ describe("copyVfsPath", () => {
     unwrap(await vfs.mkdir("/src"));
     unwrap(await vfs.write("/src/x.md", "x"));
 
-    const result = await copyVfsPath(vfs, "/src", "/dst");
+    const result = await VfsCopy.copy(vfs, "/src", "/dst");
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error.key, "VFS_IS_DIRECTORY");
     assert.equal(unwrap(await vfs.read("/src/x.md")).content, "x");

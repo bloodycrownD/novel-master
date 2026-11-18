@@ -2,7 +2,7 @@
  * T-GC1：删文件后 revision + blob 孤儿泄漏的回归测试（findings 发现 14）。
  *
  * 修复前：vfs.delete 删文件后 entry 行被删，旧版 active revision 的 ref_count 被减到 0
- * 但行还在。revision GC 的 deleteUnreferencedUnderScope 靠 JOIN vfs_entry 圈定范围，
+ * 但行还在。revision GC 的 RevisionRefCount.deleteUnreferencedUnderScope 靠 JOIN vfs_entry 圈定范围，
  * entry 已删的 revision JOIN 不到，成为扫不到的孤儿，其 blob 也无法回收——数据库只增不减。
  *
  * 修复后：sweepSessionRevisions 在 path-scoped 清扫后追加 deleteGlobalOrphans，
@@ -20,7 +20,7 @@ import { describe, it } from "node:test";
 
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -97,7 +97,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     const swept = await sweepSessionRevisions(revRepo, project.id, session.id);
 
     // 触发器已连带回收归零 blob，再跑一次延期 blob GC 兜底（应无残留可清）。
-    const gcBlobs = await runDeferredBlobGc(ctx.conn);
+    const gcBlobs = await DeferredBlobGc.run(ctx.conn);
 
     const afterActiveRev = await ctx.conn.query<{ cnt: number }>(
       `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
@@ -159,7 +159,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     }
 
     const swept = await sweepSessionRevisions(revRepo, project.id, session.id);
-    await runDeferredBlobGc(ctx.conn);
+    await DeferredBlobGc.run(ctx.conn);
 
     // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
     const orphanActiveRev = await ctx.conn.query<{ cnt: number }>(

@@ -6,7 +6,7 @@
  * @module domain/chat/logic/attachment/attachment-xml-codec
  */
 
-import {buildUserVfsActionXml} from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import {Coerce} from "@/common/coerce.js";
 import {type AnnotateDraft, isMessageAnnotatePath} from "../../model/annotate-draft.schema.js";
 import {attachmentStorageName, type MessageAttachment} from "../../model/message-attachment.schema.js";
@@ -23,7 +23,7 @@ class AttachmentXmlCodec {
         readonly content: string;
         readonly display: AttachmentDisplayKind
     }): string {
-        return buildUserVfsActionXml(params.action, {
+        return UserVfsActionXml.build(params.action, {
             path: params.path,
             content: params.content,
             display: params.display,
@@ -32,7 +32,7 @@ class AttachmentXmlCodec {
 
     /** 目录树：`kind: "dirTree"`，content = ASCII 树（无外层 `<dir>`）。 */
     encodeDirTree(path: string, treeBody: string): string {
-        return buildUserVfsActionXml("userAttach", {
+        return UserVfsActionXml.build("userAttach", {
             path,
             content: treeBody,
             kind: "dirTree",
@@ -59,7 +59,7 @@ class AttachmentXmlCodec {
             const end = typeof endLine === "number" && Number.isFinite(endLine) && endLine >= 1 ? Math.max(start, Math.floor(endLine)) : start;
             params.locationLabel = start === end ? `第 ${start} 行` : `第 ${start}-${end} 行`;
         }
-        const xml = buildUserVfsActionXml("annotate", params);
+        const xml = UserVfsActionXml.build("annotate", params);
         return {
             name: attachmentStorageName(path),
             source: "user_ops",

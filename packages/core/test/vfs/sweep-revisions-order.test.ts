@@ -2,7 +2,7 @@
  * CS-04：`sweepRevisionsUnderScope` 三步顺序的定向测试。
  *
  * 病症：该函数原本是「decrement live ref → 删 entry → GC 无引用 revision」，
- * 而 scoped GC（`deleteUnreferencedUnderScope`）靠 `JOIN vfs_entry` 圈定范围，
+ * 而 scoped GC（`RevisionRefCount.deleteUnreferencedUnderScope`）靠 `JOIN vfs_entry` 圈定范围，
  * entry 在第 2 步已被整棵删掉 ⇒ JOIN 命中 0 行 ⇒ 第 3 步恒等于删 0 行，
  * 即这条被 5 个调用点当作「释放引用 + 删条目 + 回收 revision」三件套用的函数
  * **从来没回收过任何一行 revision**。修法：换序为 decrement → GC → 删 entry
@@ -19,10 +19,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  releaseAndDeleteVfsPrefix,
-  sweepRevisionsUnderScope,
-} from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -87,7 +84,7 @@ describe("CS-04: sweepRevisionsUnderScope 的 GC 步必须在删 entry 之前", 
       "前置条件：live-head revision 行存在",
     );
 
-    await sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, "/");
+    await VfsTreeCopy.sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, "/");
 
     assert.equal(
       await revisionRowCount(entryId, version),
@@ -140,7 +137,7 @@ describe("CS-04: sweepRevisionsUnderScope 的 GC 步必须在删 entry 之前", 
       "前置条件：非豁免侧 revision 初始存在",
     );
 
-    await sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, "/", [
+    await VfsTreeCopy.sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, "/", [
       "/meta/skills",
     ]);
 
@@ -208,8 +205,8 @@ describe("CS-04: sweepRevisionsUnderScope 的 GC 步必须在删 entry 之前", 
     const dirVersion = await dirRevRepo.findMaxVersionForEntry(dirEntry!.entryId);
     assert.ok(dirVersion != null);
 
-    await releaseAndDeleteVfsPrefix(fwdEntryRepo, fwdRevRepo, fwdScope, "/");
-    await sweepRevisionsUnderScope(dirEntryRepo, dirRevRepo, dirScope, "/");
+    await VfsTreeCopy.releaseAndDeletePrefix(fwdEntryRepo, fwdRevRepo, fwdScope, "/");
+    await VfsTreeCopy.sweepRevisionsUnderScope(dirEntryRepo, dirRevRepo, dirScope, "/");
 
     // 两个入口的 entry / revision 侧计数逐项相等
     assert.equal(

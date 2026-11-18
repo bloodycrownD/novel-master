@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import iconv from "iconv-lite";
 import { strToU8, zipSync } from "fflate";
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { decodeZipEntryName, ZIP_GPBF_UTF8_EFS } from "../../src/domain/vfs/logic/vfs-zip-filename-decode.js";
-import { parseVfsZip } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
+import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { VfsZipFilenameDecode, ZIP_GPBF_UTF8_EFS } from "../../src/domain/vfs/logic/vfs-zip-filename-decode.js";
+import { VfsZipParse } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
 import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
 
 const EOCD_SIGNATURE = 0x06054b50;
 
-function unwrapZip(result: ReturnType<typeof parseVfsZip>) {
+function unwrapZip(result: ReturnType<typeof VfsZipParse.parse>) {
   assert.ok(result.ok);
   return result.value;
 }
 
-function unwrapName(result: ReturnType<typeof decodeZipEntryName>) {
+function unwrapName(result: ReturnType<typeof VfsZipFilenameDecode.decode>) {
   assert.ok(result.ok);
   return result.value;
 }
@@ -41,8 +41,8 @@ describe("parseVfsZip", () => {
       ["笔记/第一章.md", "# 标题\n正文"],
       ["readme.md", "ascii"],
     ]);
-    const zipBytes = buildVfsZip(files);
-    const entries = unwrapZip(parseVfsZip(zipBytes));
+    const zipBytes = VfsZipBuild.build(files);
+    const entries = unwrapZip(VfsZipParse.parse(zipBytes));
 
     assert.ok(entries.has("笔记/第一章.md"));
     assert.ok(entries.has("readme.md"));
@@ -53,7 +53,7 @@ describe("parseVfsZip", () => {
   it("GBK：手工 fixture 解码中文路径", () => {
     const logicalPath = "笔记/第一章.md";
     const zipBytes = buildGbkFilenameZip([{ logicalPath, content: "章节内容" }]);
-    const entries = unwrapZip(parseVfsZip(zipBytes));
+    const entries = unwrapZip(VfsZipParse.parse(zipBytes));
 
     assert.ok(entries.has(logicalPath));
     assert.equal(new TextDecoder().decode(entries.get(logicalPath)!), "章节内容");
@@ -61,37 +61,37 @@ describe("parseVfsZip", () => {
 
   it("CP437：纯 ASCII 文件名回归", () => {
     const rawName = new TextEncoder().encode("dir/readme.md");
-    const name = unwrapName(decodeZipEntryName(rawName, 0));
+    const name = unwrapName(VfsZipFilenameDecode.decode(rawName, 0));
     assert.equal(name, "dir/readme.md");
 
-    const zipBytes = buildVfsZip(new Map([["dir/readme.md", "hello"]]));
-    const entries = unwrapZip(parseVfsZip(zipBytes));
+    const zipBytes = VfsZipBuild.build(new Map([["dir/readme.md", "hello"]]));
+    const entries = unwrapZip(VfsZipParse.parse(zipBytes));
     assert.ok(entries.has("dir/readme.md"));
     assert.equal(new TextDecoder().decode(entries.get("dir/readme.md")!), "hello");
   });
 
   it("decodeZipEntryName：EFS 标志优先于 GBK 启发式", () => {
     const utf8Bytes = new TextEncoder().encode("测试.md");
-    const decoded = unwrapName(decodeZipEntryName(utf8Bytes, ZIP_GPBF_UTF8_EFS));
+    const decoded = unwrapName(VfsZipFilenameDecode.decode(utf8Bytes, ZIP_GPBF_UTF8_EFS));
     assert.equal(decoded, "测试.md");
   });
 
   it("decodeZipEntryName：反斜杠归一化为正斜杠", () => {
     const raw = iconv.encode("笔记\\第一章.md", "gbk");
-    const decoded = unwrapName(decodeZipEntryName(raw, 0));
+    const decoded = unwrapName(VfsZipFilenameDecode.decode(raw, 0));
     assert.equal(decoded, "笔记/第一章.md");
   });
 
   it("fflate zipSync 产物可由 parseVfsZip 解析", () => {
     const zipBytes = zipSync({ "fallback/a.md": strToU8("content") });
-    const entries = unwrapZip(parseVfsZip(zipBytes));
+    const entries = unwrapZip(VfsZipParse.parse(zipBytes));
     assert.ok(entries.has("fallback/a.md"));
     assert.equal(new TextDecoder().decode(entries.get("fallback/a.md")!), "content");
   });
 
   it("中央目录解析失败时回退 unzipSync", () => {
     const zipBytes = buildCentralDirCorruptZip();
-    const entries = unwrapZip(parseVfsZip(zipBytes));
+    const entries = unwrapZip(VfsZipParse.parse(zipBytes));
     assert.ok(entries.has("a.md"));
     assert.equal(new TextDecoder().decode(entries.get("a.md")!), "hi");
   });

@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { normalizePath } from "../repositories/impl/normalize-path.js";
+import { PathNormalizer } from "../repositories/impl/normalize-path.js";
 
 /** VFS visibility scope (global, project, session, and meta domains). */
 export type VfsScope = { kind: "global" } | { kind: "project"; projectId: string } | { kind: "session"; projectId: string; sessionId: string } | { kind: "global-meta" } | { kind: "project-meta"; projectId: string };
@@ -36,7 +36,7 @@ export const LogicalPath = {
    * Resolves caller path input to a normalized absolute logical path.
    *
    * @param input - Absolute (`/notes/a.md`) or relative (`notes/a.md`) path
-   * @returns Normalized logical path under `/`；空输入或 {@link normalizePath} 拒绝时返回
+   * @returns Normalized logical path under `/`；空输入或 {@link PathNormalizer.normalize} 拒绝时返回
    * `VFS_INVALID_PATH` 而非抛出
    */
   resolve: (input: string): Result<string, AppError<"VFS_INVALID_PATH">> => {
@@ -45,9 +45,9 @@ export const LogicalPath = {
       return Result.err(new AppError("VFS_INVALID_PATH", { detail: `Invalid path ${String(input)}: path must be a non-empty string`, path: String(input) }));
     }
     if (trimmed.startsWith("/")) {
-      return normalizePath(trimmed);
+      return PathNormalizer.normalize(trimmed);
     }
-    return normalizePath(`/${trimmed}`);
+    return PathNormalizer.normalize(`/${trimmed}`);
   },
 
   /**
@@ -109,7 +109,7 @@ export const LogicalPath = {
    * @returns 失败分支载荷为 `VFS_INVALID_PATH`（物理路径非法或越出 scope）
    */
   toLogical: (scope: VfsScope, physical: string): Result<string, AppError<"VFS_INVALID_PATH">> => {
-    const resolved = normalizePath(physical);
+    const resolved = PathNormalizer.normalize(physical);
     if (!resolved.ok) return resolved;
     const normalized = resolved.value;
     switch (scope.kind) {

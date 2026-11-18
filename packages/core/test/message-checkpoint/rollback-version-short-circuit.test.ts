@@ -8,7 +8,7 @@ import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
@@ -83,7 +83,7 @@ describe("rollback version short-circuit", () => {
       findMetaByEntryAndVersion: async () => null,
       findMetasByEntryVersions: async (pairs) => {
         batchCalls++;
-        return new Map([[revisionPairKey(entryId, pairs[0]!.version), { status: "active", contentHash: null }]]);
+        return new Map([[RevisionPairKey.build(entryId, pairs[0]!.version), { status: "active", contentHash: null }]]);
       },
       findMaxVersionForEntry: async () => null,
       append: async () => undefined,

@@ -9,20 +9,20 @@
  * @module service/vfs/impl/revision-aware-vfs.service
  */
 
-import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { assertValidVfsEntryName } from "@/domain/vfs/logic/validate-entry-name.js";
+import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import { EntryNameValidator } from "@/domain/vfs/logic/validate-entry-name.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
-import { adjustRef, transferLiveRef, deleteUnreferencedUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
-import { renameVfsEntry, renameVfsDirectory } from "@/domain/vfs/logic/vfs-rename-primitive.js";
-// WHY 反向 import：writeWithRevision / nextVersionFor 已下沉到
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { ReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
+import { VfsRenamePrimitive } from "@/domain/vfs/logic/vfs-rename-primitive.js";
+// WHY 反向 import：WriteWithRevision.write / WriteWithRevision.nextVersionFor 已下沉到
 // domain 层（批量 ingest 复用同一条写路径，见 domain/vfs/logic/write-with-revision.ts），
-// 本文件的删除路径（appendDeletedRevision → nextVersionFor）必须跟着引用共享实现。
-import { nextVersionFor, writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
+// 本文件的删除路径（appendDeletedRevision → WriteWithRevision.nextVersionFor）必须跟着引用共享实现。
+import { WriteWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -72,14 +72,14 @@ export class RevisionAwareVfsService implements InternalVfsService {
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      return writeWithRevision(entryRepo, revisionRepo, scopeKey, path, content);
+      return WriteWithRevision.write(entryRepo, revisionRepo, scopeKey, path, content);
     });
   }
 
   async replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>> {
     const current = await this.read(scopeKey, path);
     if (!current.ok) return Result.err(current.error);
-    const computed = computeReplaceResult(path, current.value.content, oldString, newString, options);
+    const computed = ReplaceResult.compute(path, current.value.content, oldString, newString, options);
     if (!computed.ok) return Result.err(computed.error);
     const { nextContent, replacements } = computed.value;
 
@@ -97,7 +97,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   }
 
   async delete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
@@ -130,11 +130,11 @@ export class RevisionAwareVfsService implements InternalVfsService {
           return;
         }
         if (entry.entryKind === "file") {
-          // 墓碑 revision：nextVersionFor 避开 checkpoint 钉住的占号版本；append 后 +1、旧 head −1。
-          const deletedVersion = await nextVersionFor(revisionRepo, entry.entryId, entry.version);
+          // 墓碑 revision：WriteWithRevision.nextVersionFor 避开 checkpoint 钉住的占号版本；append 后 +1、旧 head −1。
+          const deletedVersion = await WriteWithRevision.nextVersionFor(revisionRepo, entry.entryId, entry.version);
           await revisionRepo.append({ entryId: entry.entryId, version: deletedVersion, content: null, status: "deleted", mtimeMs: Date.now() });
-          await adjustRef(revisionRepo, entry.entryId, deletedVersion, +1);
-          await adjustRef(revisionRepo, entry.entryId, entry.version, -1);
+          await RevisionRefCount.adjust(revisionRepo, entry.entryId, deletedVersion, +1);
+          await RevisionRefCount.adjust(revisionRepo, entry.entryId, entry.version, -1);
           unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
           return;
         }
@@ -154,7 +154,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   }
 
   async resetHeadToVersion(scopeKey: string, path: string, version: number): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     // 事务回调内仍按「失败靠抛错回滚」抛；到本方法边界把**域失败**收进 Err——
@@ -185,13 +185,13 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
         // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
         const contentHash = await contentStore.put(rev.content);
-        unwrapOrRollback(await ensureParentDirectories(entryRepo, scopeKey, normalized));
+        unwrapOrRollback(await ParentDirs.ensure(entryRepo, scopeKey, normalized));
         const oldVersion = existing.entryKind === "file" ? existing.version : null;
         unwrapOrRollback(await entryRepo.setHeadContentHash(scopeKey, normalized, { version: rev.version, contentHash, mtimeMs: rev.mtimeMs }));
         if (oldVersion != null && oldVersion !== rev.version) {
-          await transferLiveRef(revisionRepo, entryId, oldVersion, rev.version);
+          await RevisionRefCount.transferLive(revisionRepo, entryId, oldVersion, rev.version);
         } else if (oldVersion == null) {
-          await adjustRef(revisionRepo, entryId, rev.version, +1);
+          await RevisionRefCount.adjust(revisionRepo, entryId, rev.version, +1);
         }
       });
     } catch (cause) {
@@ -203,7 +203,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   }
 
   async hardDelete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
@@ -220,19 +220,19 @@ export class RevisionAwareVfsService implements InternalVfsService {
         const revisionRepo = new SqliteVfsRevisionRepository(tx);
         // 本回调内的 repo 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
         if (options?.recursive === true) {
-          // B-1 修复保留：recursive hardDelete 仍要先 adjustRef 释放 live head。
+          // B-1 修复保留：recursive hardDelete 仍要先 RevisionRefCount.adjust 释放 live head。
           const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, normalized);
           for (const head of heads) {
-            await adjustRef(revisionRepo, head.entryId, head.headVersion, -1);
+            await RevisionRefCount.adjust(revisionRepo, head.entryId, head.headVersion, -1);
           }
           // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
-          await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
+          await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
         } else {
           const entry = unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
           if (entry != null && entry.entryKind === "file") {
-            await adjustRef(revisionRepo, entry.entryId, entry.version, -1);
+            await RevisionRefCount.adjust(revisionRepo, entry.entryId, entry.version, -1);
             // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
-            await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
+            await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
           }
         }
         // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
@@ -247,13 +247,13 @@ export class RevisionAwareVfsService implements InternalVfsService {
   }
 
   async renamePath(scopeKey: string, fromLogical: string, toLogical: string, _options?: { overwrite?: boolean }): Promise<Result<void, AppError>> {
-    const resolvedFrom = normalizePath(fromLogical);
+    const resolvedFrom = PathNormalizer.normalize(fromLogical);
     if (!resolvedFrom.ok) return Result.err(resolvedFrom.error);
     const normalizedFrom = resolvedFrom.value;
-    const resolvedTo = normalizePath(toLogical);
+    const resolvedTo = PathNormalizer.normalize(toLogical);
     if (!resolvedTo.ok) return Result.err(resolvedTo.error);
     const normalizedTo = resolvedTo.value;
-    const nameCheck = assertValidVfsEntryName(normalizedTo);
+    const nameCheck = EntryNameValidator.assertValid(normalizedTo);
     if (!nameCheck.ok) return nameCheck;
     // 事务回调内失败靠抛错回滚（缺源路径由 repo 通道抛 VFS_NOT_FOUND）；到方法
     // 边界把域失败收进 Err（vfs-move / skills 的 rename 失败按 Result 消费，
@@ -261,7 +261,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     try {
       await runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
-        await renameVfsEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
+        await VfsRenamePrimitive.renameEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
       });
     } catch (cause) {
       const domain = unwrapTxDomainError(cause);
@@ -272,20 +272,20 @@ export class RevisionAwareVfsService implements InternalVfsService {
   }
 
   async renamePrefix(scopeKey: string, oldDirLogical: string, newDirLogical: string): Promise<Result<void, AppError>> {
-    const resolvedOld = normalizePath(oldDirLogical);
+    const resolvedOld = PathNormalizer.normalize(oldDirLogical);
     if (!resolvedOld.ok) return Result.err(resolvedOld.error);
     const normalizedOld = resolvedOld.value;
-    const resolvedNew = normalizePath(newDirLogical);
+    const resolvedNew = PathNormalizer.normalize(newDirLogical);
     if (!resolvedNew.ok) return Result.err(resolvedNew.error);
     const normalizedNew = resolvedNew.value;
-    const nameCheck = assertValidVfsEntryName(normalizedNew);
+    const nameCheck = EntryNameValidator.assertValid(normalizedNew);
     if (!nameCheck.ok) return nameCheck;
     // 事务回调内失败靠抛错回滚（幽灵目录由 repo 抛 VFS_NOT_FOUND）；到方法边界
     // 把域失败收进 Err（同 renamePath：调用方按 Result 消费失败）。
     try {
       await runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
-        await renameVfsDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
+        await VfsRenamePrimitive.renameDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
       });
     } catch (cause) {
       const domain = unwrapTxDomainError(cause);
@@ -303,11 +303,11 @@ export class RevisionAwareVfsService implements InternalVfsService {
  * live file head 的 `(entryId, headVersion)`，再用 `findMaxVersionsForEntries` 一次取齐
  * 各 entry 的 MAX(version)（逐 entry 计算 `max(headVersion, MAX) + 1`，避免 N+1），然后用
  * `batchAdjustRefCount` 一次性 −1 旧 head、`batchAppendWithRefCount` 一次性落 deleted 行。
- * 这样把原来「逐文件 findByPath + adjustRef + append + adjustRef」的 3N 次 SQL 压成
+ * 这样把原来「逐文件 findByPath + RevisionRefCount.adjust + append + RevisionRefCount.adjust」的 3N 次 SQL 压成
  * 4 条（分块 100，100 文件以内各一条）。
  *
  * 注意 deleted 行的 ref_count 直接以 `refCount=1` 落库——`batchAppendWithRefCount` 是
- * `INSERT ... ref_count = ?`，等价于「逐条 append(ref_count=0) + adjustRef(+1)」，
+ * `INSERT ... ref_count = ?`，等价于「逐条 append(ref_count=0) + RevisionRefCount.adjust(+1)」，
  * 所以不再额外发一轮 `batchAdjustRefCount +1`（语义完全一致，SQL 更少）。
  */
 async function appendDeletedRevisionsForSubtree(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string): Promise<void> {

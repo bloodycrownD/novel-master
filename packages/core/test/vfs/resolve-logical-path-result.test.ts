@@ -8,7 +8,7 @@ function unwrapPath(result: ReturnType<typeof LogicalPath.resolve>): string {
   return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
 }
 
-/** HEAD 的 throw 型 normalizePath（原样转录自 `git show HEAD:.../normalize-path.ts`），仅作逐值等价对照。 */
+/** HEAD 的 throw 型 PathNormalizer.normalize（原样转录自 `git show HEAD:.../normalize-path.ts`），仅作逐值等价对照。 */
 function legacyNormalizePath(path: string): string {
   if (typeof path !== "string" || path.length === 0) {
     throw new AppError("VFS_INVALID_PATH", {path: String(path), reason: "path must be a non-empty string", detail: `Invalid path ${String(path)}: path must be a non-empty string`});
@@ -87,7 +87,7 @@ describe("LogicalPath.resolve（Result 型）", () => {
     assert.equal(result.error.messageKey, undefined);
   });
 
-  it("规范化失败（越根）→ 透传 normalizePath 的 VFS_INVALID_PATH，路径串含此前补的 leading `/`", () => {
+  it("规范化失败（越根）→ 透传 PathNormalizer.normalize 的 VFS_INVALID_PATH，路径串含此前补的 leading `/`", () => {
     const result = LogicalPath.resolve("a/../../b");
     assert.equal(result.ok, false);
     if (result.ok) {

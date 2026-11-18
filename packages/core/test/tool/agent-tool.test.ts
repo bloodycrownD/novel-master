@@ -4,11 +4,8 @@ import { describe, it } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import {
-  AGENT_TOOL_NAME,
-  agentTool,
-} from "../../src/domain/tool/builtin/agent-tool.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { AGENT_TOOL_NAME, agentTool } from "../../src/domain/tool/builtin/agent-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
@@ -125,14 +122,14 @@ function makeCtx(
 
 function makeRunner(): ToolRunner<BuiltinToolContext> {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return new ToolRunner(registry);
 }
 
 describe("agent 管理工具", () => {
-  it("registerBuiltinTools 注册 agent（共 11 个内置工具）", () => {
+  it("BuiltinTools.register 注册 agent（共 11 个内置工具）", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     assert.ok(registry.list().includes(AGENT_TOOL_NAME));
     assert.equal(registry.list().length, 11);
   });
@@ -528,7 +525,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
   it("注册表含 agent 时注入闭包：agents 快照映射 + registeredToolNames 透传", () => {
     const agentRegistry = fakeAgentRegistry();
     const probe = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(probe);
+    BuiltinTools.register(probe);
     const allDefs: AgentDefinition[] = [
       GENERAL_DEF,
       def("beta", { mode: "subagent" }),
@@ -553,7 +550,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
 
   it("注册表不含 agent（子/孙摘除 D6 或 deny）时返回 undefined（闭包不注入）", () => {
     const probe = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(probe);
+    BuiltinTools.register(probe);
 
     // 摘除路径 1：mode === "subagent"
     const subRegistry = resolveAgentToolRegistry(

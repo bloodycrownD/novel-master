@@ -13,13 +13,10 @@ import { describe, it } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { AgentServiceFactory } from "@novel-master/core/agent";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
 import { tCore } from "../helpers/core-i18n.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 
@@ -27,7 +24,7 @@ novelMasterTestFixture();
 
 function makeRunner(): ToolRunner<BuiltinToolContext> {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return new ToolRunner(registry);
 }
 
@@ -36,7 +33,7 @@ function makeRealCtx(): BuiltinToolContext {
   const ctx = getNovelMasterTestContext();
   const registry = AgentServiceFactory.createRegistry(ctx.conn);
   const probe = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(probe);
+  BuiltinTools.register(probe);
   return {
     vfs: {} as never,
     projectId: "proj-1",

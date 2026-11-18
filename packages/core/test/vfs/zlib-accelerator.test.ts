@@ -5,7 +5,7 @@
  *  1. 交叉兼容：`node:zlib` 产物 fflate 可解、fflate 产物 `node:zlib` 可解，
  *     解出明文字节逐字节等值（两种实现的压缩产物**不保证字节相等**，等价面
  *     是解压结果）；
- *  2. 注册后往返：zlib-codec（compressZlib/decompressZlib）与 pack-codec 两
+ *  2. 注册后往返：zlib-codec（ZlibCodec.compress/ZlibCodec.decompress）与 pack-codec 两
  *     format 编解码真实走加速器（spy 计数佐证），往返等值；
  *  3. 防御与不变性：加速器返回 null / 抛错 → 回落 fflate 且产物与 fflate
  *     逐字节一致；未注册时全部路径与历史行为一致（fflate 产物字节等值）。
@@ -20,9 +20,9 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { deflateSync, inflateSync } from "node:zlib";
 import { unzlibSync, zlibSync } from "fflate";
-import { clearZlibCodecAccelerator, registerZlibCodecAccelerator, tryZlibDeflate, tryZlibInflate, type ZlibCodecAccelerator } from "../../src/domain/vfs/content-store/logic/zlib-accelerator.js";
-import { compressZlib, decompressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
-import { decodeFossilChainSpans, decodeZlibConcatSpans } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
+import { ZlibAccelerator, type ZlibCodecAccelerator } from "../../src/domain/vfs/content-store/logic/zlib-accelerator.js";
+import { ZlibCodec } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
+import { PackCodec } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
 import { encodeFossilChainPack, encodeZlibConcatPack } from "../helpers/pack-fixtures.js";
 import type { Result } from "../../src/errors/either.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
@@ -37,7 +37,7 @@ function unwrapResult<T, E>(result: Result<T, E>): T {
 
 /** 若后续用例忘记清理，注册会泄漏到同文件后续用例——每例后强制注销。 */
 afterEach(() => {
-  clearZlibCodecAccelerator();
+  ZlibAccelerator.clear();
 });
 
 /** 与宿主（desktop main / cli）同款注册实现。 */
@@ -107,47 +107,47 @@ describe("zlib 加速器（W1-P1-4）", () => {
     const fflateCompressed = zlibSync(TEXT_PLAIN);
 
     const spy = countingNodeAccelerator();
-    registerZlibCodecAccelerator(spy.accel);
+    ZlibAccelerator.register(spy.accel);
 
     const roundTrips = [TEXT_PLAIN, EMPTY_PLAIN, BINARY_PLAIN];
     for (const plain of roundTrips) {
-      const compressed = compressZlib(plain);
-      assert.deepEqual(new Uint8Array(unwrapResult(decompressZlib(compressed))), plain, "注册后 compress/decompress 往返应等值");
+      const compressed = ZlibCodec.compress(plain);
+      assert.deepEqual(new Uint8Array(unwrapResult(ZlibCodec.decompress(compressed))), plain, "注册后 compress/decompress 往返应等值");
     }
     // 注册后读 fflate 产物（跨实现读兼容）。
-    assert.deepEqual(new Uint8Array(unwrapResult(decompressZlib(fflateCompressed))), TEXT_PLAIN);
+    assert.deepEqual(new Uint8Array(unwrapResult(ZlibCodec.decompress(fflateCompressed))), TEXT_PLAIN);
 
-    // level 透传面（pbp-17）：compressZlib 目前恒不传 level，但契约上的
+    // level 透传面（pbp-17）：ZlibCodec.compress 目前恒不传 level，但契约上的
     // level 一旦被透传，宿主适配器的三元分支必须能安全交给 node:zlib。
     // 有加速器时直接断言产物可被 fflate 解回等值明文。
-    const levelNine = tryZlibDeflate(TEXT_PLAIN, 9);
+    const levelNine = ZlibAccelerator.tryDeflate(TEXT_PLAIN, 9);
     assert.ok(levelNine != null, "注册后带 level 调用应走加速器");
     assert.deepEqual(unzlibSync(levelNine), TEXT_PLAIN, "level=9 产物 fflate unzlibSync 应解出逐字节等值明文");
 
     // 无加速器时同一调用回落（返回 null），调用方按 fflate 走，同样不炸。
-    clearZlibCodecAccelerator();
-    assert.equal(tryZlibDeflate(TEXT_PLAIN, 9), null);
-    assert.deepEqual(new Uint8Array(compressZlib(TEXT_PLAIN)), new Uint8Array(zlibSync(TEXT_PLAIN)), "注销后带 level 的调用回落 fflate，产物应与 fflate 逐字节一致");
-    registerZlibCodecAccelerator(spy.accel);
+    ZlibAccelerator.clear();
+    assert.equal(ZlibAccelerator.tryDeflate(TEXT_PLAIN, 9), null);
+    assert.deepEqual(new Uint8Array(ZlibCodec.compress(TEXT_PLAIN)), new Uint8Array(zlibSync(TEXT_PLAIN)), "注销后带 level 的调用回落 fflate，产物应与 fflate 逐字节一致");
+    ZlibAccelerator.register(spy.accel);
 
     const counts = spy.counts();
-    assert.ok(counts.deflates >= roundTrips.length, "compressZlib 应调加速器 deflate");
-    assert.ok(counts.inflates >= roundTrips.length + 1, "decompressZlib 应调加速器 inflate");
+    assert.ok(counts.deflates >= roundTrips.length, "ZlibCodec.compress 应调加速器 deflate");
+    assert.ok(counts.inflates >= roundTrips.length + 1, "ZlibCodec.decompress 应调加速器 inflate");
   });
 
   it("注册后：pack-codec 两 format 编解码往返等值且走加速器", () => {
     const spy = countingNodeAccelerator();
-    registerZlibCodecAccelerator(spy.accel);
+    ZlibAccelerator.register(spy.accel);
     const members = [encoder.encode("版本一：" + "山雨欲来风满楼。".repeat(400)), encoder.encode("版本二：" + "山雨欲来风满楼。".repeat(400) + "尾段"), BINARY_PLAIN];
 
     const concat = unwrapResult(encodeZlibConcatPack(members));
-    const concatPlain = unwrapResult(decodeZlibConcatSpans(concat.bytes, concat.spans));
+    const concatPlain = unwrapResult(PackCodec.decodeZlibConcatSpans(concat.bytes, concat.spans));
     concatPlain.forEach((plain, index) => {
       assert.deepEqual(plain, members[index], `zlib-concat 成员 ${index} 往返等值`);
     });
 
     const fossil = unwrapResult(encodeFossilChainPack(members));
-    const fossilPlain = unwrapResult(decodeFossilChainSpans(fossil.bytes, fossil.spans));
+    const fossilPlain = unwrapResult(PackCodec.decodeFossilChainSpans(fossil.bytes, fossil.spans));
     fossilPlain.forEach((plain, index) => {
       assert.deepEqual(plain, members[index], `fossil-chain 成员 ${index} 往返等值`);
     });
@@ -170,9 +170,9 @@ describe("zlib 加速器（W1-P1-4）", () => {
 
     // 第一段：注册抛错加速器，触发一次 deflate / inflate 抛错把闩锁打上。
     const first = captureWarnings(() => {
-      registerZlibCodecAccelerator(throwing("#1"));
-      compressZlib(TEXT_PLAIN);
-      unwrapResult(decompressZlib(zlibSync(TEXT_PLAIN)));
+      ZlibAccelerator.register(throwing("#1"));
+      ZlibCodec.compress(TEXT_PLAIN);
+      unwrapResult(ZlibCodec.decompress(zlibSync(TEXT_PLAIN)));
     });
     assert.ok(
       first.warnings.some((line) => line.includes("deflate 加速器抛错")),
@@ -184,14 +184,14 @@ describe("zlib 加速器（W1-P1-4）", () => {
     );
 
     // 注销：闩锁按注册期计，应随之复位（回到从未注册的状态）。
-    clearZlibCodecAccelerator();
+    ZlibAccelerator.clear();
 
     // 第二段：同形态抛错再来一次，告警必须再次出现——若闩锁没随注销复位，
     // 这里会被静默吞掉（后续注册的加速器再也报不出错，生产上无从发现）。
     const second = captureWarnings(() => {
-      registerZlibCodecAccelerator(throwing("#2"));
-      compressZlib(TEXT_PLAIN);
-      unwrapResult(decompressZlib(zlibSync(TEXT_PLAIN)));
+      ZlibAccelerator.register(throwing("#2"));
+      ZlibCodec.compress(TEXT_PLAIN);
+      unwrapResult(ZlibCodec.decompress(zlibSync(TEXT_PLAIN)));
     });
     assert.ok(
       second.warnings.some((line) => line.includes("deflate 加速器抛错")),
@@ -213,9 +213,9 @@ describe("zlib 加速器（W1-P1-4）", () => {
           throw new Error("inflate boom");
         },
       };
-      registerZlibCodecAccelerator(throwing);
-      const compressed = compressZlib(TEXT_PLAIN);
-      const decompressed = unwrapResult(decompressZlib(compressed));
+      ZlibAccelerator.register(throwing);
+      const compressed = ZlibCodec.compress(TEXT_PLAIN);
+      const decompressed = unwrapResult(ZlibCodec.decompress(compressed));
       return { compressed, decompressed };
     });
     assert.deepEqual(new Uint8Array(result.compressed), new Uint8Array(zlibSync(TEXT_PLAIN)), "抛错回落后的压缩产物应与 fflate 逐字节一致");
@@ -230,13 +230,13 @@ describe("zlib 加速器（W1-P1-4）", () => {
     );
 
     const nullish = captureWarnings(() => {
-      registerZlibCodecAccelerator({
+      ZlibAccelerator.register({
         deflate: () => null,
         inflate: () => null,
       });
       return {
-        compressed: compressZlib(TEXT_PLAIN),
-        decompressed: unwrapResult(decompressZlib(zlibSync(TEXT_PLAIN))),
+        compressed: ZlibCodec.compress(TEXT_PLAIN),
+        decompressed: unwrapResult(ZlibCodec.decompress(zlibSync(TEXT_PLAIN))),
       };
     });
     assert.deepEqual(new Uint8Array(nullish.result.compressed), new Uint8Array(zlibSync(TEXT_PLAIN)), "返回 null 回落后的压缩产物应与 fflate 逐字节一致");
@@ -244,16 +244,16 @@ describe("zlib 加速器（W1-P1-4）", () => {
   });
 
   it("未注册时行为与历史一致（try* 返回 null、产物与 fflate 逐字节一致）", () => {
-    clearZlibCodecAccelerator();
-    assert.equal(tryZlibDeflate(TEXT_PLAIN), null);
-    assert.equal(tryZlibInflate(TEXT_PLAIN), null);
-    assert.deepEqual(new Uint8Array(compressZlib(TEXT_PLAIN)), new Uint8Array(zlibSync(TEXT_PLAIN)));
-    assert.deepEqual(unwrapResult(decompressZlib(zlibSync(TEXT_PLAIN))), TEXT_PLAIN);
+    ZlibAccelerator.clear();
+    assert.equal(ZlibAccelerator.tryDeflate(TEXT_PLAIN), null);
+    assert.equal(ZlibAccelerator.tryInflate(TEXT_PLAIN), null);
+    assert.deepEqual(new Uint8Array(ZlibCodec.compress(TEXT_PLAIN)), new Uint8Array(zlibSync(TEXT_PLAIN)));
+    assert.deepEqual(unwrapResult(ZlibCodec.decompress(zlibSync(TEXT_PLAIN))), TEXT_PLAIN);
 
     // 注销后注册态彻底消失（再次 try* 仍为 null）。
-    registerZlibCodecAccelerator(NODE_ACCELERATOR);
-    assert.ok(tryZlibDeflate(TEXT_PLAIN) != null);
-    clearZlibCodecAccelerator();
-    assert.equal(tryZlibDeflate(TEXT_PLAIN), null);
+    ZlibAccelerator.register(NODE_ACCELERATOR);
+    assert.ok(ZlibAccelerator.tryDeflate(TEXT_PLAIN) != null);
+    ZlibAccelerator.clear();
+    assert.equal(ZlibAccelerator.tryDeflate(TEXT_PLAIN), null);
   });
 });

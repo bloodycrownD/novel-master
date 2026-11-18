@@ -24,7 +24,7 @@ import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-too
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
-import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolAgentsContext, BuiltinToolContext, BuiltinToolSearchContext, BuiltinToolSkillsContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
 import { AGENT_TOOL_NAME } from "@/domain/tool/builtin/agent-tool.js";
@@ -171,7 +171,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly preferences?: Pick<PersistentPreferences, "getThinkingContextEnabled" | "getSubagentStreamEnabled">;
   /**
    * 搜索配置存储（search 工具用）：desktop / mobile runtime 用 core 导出
-   * 的 `createSearchConfigStore(kkv + secretStore)` 工厂装配。
+   * 的 `SearchConfig.createStore(kkv + secretStore)` 工厂装配。
    *
    * 可选声明照 preferences Pick 先例——不强制旧测试 mock 补字段；未注入
    * 时（CLI 无 kkv）search 工具 run 返回可读错误，恒不可用（known
@@ -743,7 +743,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
 
       stage = "validate-agent-definition";
       const toolProbe = new ToolRegistry<BuiltinToolContext>();
-      registerBuiltinTools(toolProbe);
+      BuiltinTools.register(toolProbe);
       const validation = await validateAgentDefinition(definition, { registeredToolNames: toolProbe.list() });
       if (!validation.ok) {
         // 前奏期校验已知失败（四期门⑦沿 Result 到达）：终态记账与下方 catch 同款。
@@ -758,7 +758,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
 
       // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
       // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
-      // task 是静态内置工具，registerBuiltinTools 已注册（probe 也含 task）；
+      // task 是静态内置工具，BuiltinTools.register 已注册（probe 也含 task）；
       // 这里不单独注册 task，只把 callable 塞进下方 toolCtx.subagent.callableAgents 供 description lambda 读。
       const allDefsResult = await runtime.agentRegistry.list();
       // 毒行 decode 失败（五期门⑦沿 Result 到达）：前奏期已知失败，终态记账与
@@ -1197,7 +1197,7 @@ async function runChildAgent(args: {
 
     // 装配子 agent 用的 registry：vfs 6 件 + 静态 task（孙 agent 被 resolve deny）。
     const baseRegistry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(baseRegistry);
+    BuiltinTools.register(baseRegistry);
     // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
     // task 是否对 LLM 可见由下方 resolveAgentToolRegistry 的 depth 判断控制（depth>=2 deny）。
     const childAllDefsResult = await runtime.agentRegistry.list();

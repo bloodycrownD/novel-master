@@ -12,7 +12,7 @@
 import { evaluateFileDisplay, sortDirPaths, sortFilesForDir, type WorkplaceFileSortMeta } from "./workplace-eval.js";
 import { directChildDirs } from "./workplace-tree.js";
 import { isWorkplaceRootPath, workplaceRootLogicalPath } from "./workplace-scope.js";
-import { parentDirOrNull } from "@/domain/vfs/logic/parent-dir.js";
+import { ParentDir } from "@/domain/vfs/logic/parent-dir.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { DisplayState, InclusionMode, RuleState, WorkplaceRuleRow, WorkplaceScope } from "../model/workplace-types.js";
@@ -39,7 +39,7 @@ export function evaluateWorkplaceRuleView(scope: WorkplaceScope, ctx: WorkplaceR
   const filesByDir = new Map<string, string[]>();
   for (const filePath of ctx.fileSet) {
     // ctx.fileSet 已由 workplace.service 归一化；root 处返回 null（无父目录）。
-    const parent = parentDirOrNull(filePath);
+    const parent = ParentDir.orNull(filePath);
     if (parent == null) {
       continue;
     }
@@ -85,7 +85,7 @@ export function evaluateWorkplaceRuleView(scope: WorkplaceScope, ctx: WorkplaceR
   const displayByPath = new Map<string, DisplayState>();
   for (const filePath of ctx.fileSet) {
     // ctx.fileSet 已由 workplace.service 归一化；root 处返回 null（无父目录）。
-    const parent = parentDirOrNull(filePath);
+    const parent = ParentDir.orNull(filePath);
     if (parent == null) {
       continue;
     }

@@ -4,11 +4,11 @@ import { describe, it, mock } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import { SEARCH_TOOL_NAME, searchTool } from "../../src/domain/tool/builtin/search/search-tool.js";
-import { SEARCH_NOT_CONFIGURED_MESSAGE, dispatchSearch } from "../../src/domain/tool/builtin/search/engines/dispatch.js";
+import { SEARCH_NOT_CONFIGURED_MESSAGE, SearchDispatch } from "../../src/domain/tool/builtin/search/engines/dispatch.js";
 import { assembleSearchToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { createSearchConfigStore, type SearchConfigPublic, type SearchConfigStore } from "../../src/domain/tool/builtin/search/search-config.js";
+import { SearchConfig, type SearchConfigPublic, type  SearchConfigStore } from "../../src/domain/tool/builtin/search/search-config.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
@@ -16,8 +16,8 @@ import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
-import { formatToolOutputForLlm, ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
-import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
+import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
+import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import type { ParallelToolOutcome } from "../../src/domain/tool/logic/tool-runner.js";
 
 /** 内存 fake（同 search-config.test.ts，工具 e2e 装配用）。 */
@@ -73,7 +73,7 @@ function makeCtx(
 
 function makeRunner(): ToolRunner<BuiltinToolContext> {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return new ToolRunner(registry);
 }
 
@@ -130,7 +130,7 @@ async function enableWithKey(store: SearchConfigStore, engineId: string, key: st
 describe("search 工具：注册与策略", () => {
   it("registry 含 search（共 11 个内置工具），不在任何摘除分支内", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     assert.ok(registry.list().includes(SEARCH_TOOL_NAME));
     assert.equal(registry.list().length, 11);
   });
@@ -150,7 +150,7 @@ describe("search 工具：run 基础行为", () => {
       SEARCH_TOOL_NAME,
       { params: { q: "q" } },
       makeCtx({
-        search: await assembleSearchToolContext(createSearchConfigStore({ kkv, secretStore })),
+        search: await assembleSearchToolContext(SearchConfig.createStore({ kkv, secretStore })),
         fetchFn,
       })
     ));
@@ -162,7 +162,7 @@ describe("search 工具：run 基础行为", () => {
 
   it("T-S4：全关（含 DDG 关闭）返回中性链空提示，不崩溃、不枚举引擎 id", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     unwrap(await store.setEnabled("duckduckgo", false));
 
     const runner = makeRunner();
@@ -189,7 +189,7 @@ describe("search 工具：run 基础行为", () => {
   it("schema：params 缺搜索词时 run 抛可读错误；count 透传给引擎", async () => {
     const runner = makeRunner();
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     const search = await assembleSearchToolContext(store);
     const fetchFn = (async () => bochaResponse()) as typeof globalThis.fetch;
@@ -241,7 +241,7 @@ describe("search 工具：run 基础行为", () => {
 
   it("T-S2（e2e）：params 透传——模板引擎合并进 POST 请求体（同名覆盖），DDG 忽略 params", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "deepseek", "sk-deepseek");
     const search = await assembleSearchToolContext(store);
 
@@ -282,7 +282,7 @@ describe("search 工具：run 基础行为", () => {
 
   it("T-O3：结果序列化超 50KB 走 overflow-sink 落盘（savedPath/message，全文可读回）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     // 20 条 × 3KB snippet ≈ 61KB 序列化 > 50KB 预算。
     const longSnippet = "s".repeat(3000);
@@ -351,12 +351,12 @@ describe("search 工具：run 基础行为", () => {
     ).read(rec.savedPath!)) as { content: string };
     assert.equal(readBack.content, saved);
     // formatter 落盘形态：显示「已落盘 路径」。
-    assert.ok(formatToolOutputForLlm(rec).startsWith(`已落盘 ${rec.savedPath}`));
+    assert.ok(ToolOutput.formatForLlm(rec).startsWith(`已落盘 ${rec.savedPath}`));
   });
 
   it("T-O3 对偶：落盘失败（vfs.write 抛错）→ 降级回落完整 SearchResponse", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     // 与 T-O3 同构：20 条 × 3KB snippet ≈ 61KB 序列化超 50KB 预算。
     const longSnippet = "s".repeat(3000);
@@ -411,7 +411,7 @@ describe("search 工具：run 基础行为", () => {
 
   it("引擎错误经 toolFailed 包装（FAILED），错误文案不含 key 明文", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha-secret");
     const fetchFn = (async () =>
       new Response("unauthorized token sk-bocha-secret", {
@@ -431,7 +431,7 @@ describe("search 工具：run 基础行为", () => {
 describe("search 工具：描述快照（T-D1）", () => {
   it("启用两引擎时描述含两段说明且按链序；关闭引擎后描述无其字样（含 DDG 关闭）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
     unwrap(await store.setEnabled("duckduckgo", false));
@@ -452,7 +452,7 @@ describe("search 工具：描述快照（T-D1）", () => {
 
   it("快照口径=链同款：启用但未配置（无 key）的引擎不出现", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     unwrap(await store.setEnabled("brave", true)); // 无 key → 配置不完整
     unwrap(await store.setEnabled("duckduckgo", false));
 
@@ -463,7 +463,7 @@ describe("search 工具：描述快照（T-D1）", () => {
 
   it("DDG 启用时描述含 DUCKDUCKGO_ENGINE_META 逐引擎段", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const description = searchTool.description(makeCtx({ search: await assembleSearchToolContext(store) }));
     assert.ok(description.includes(`- duckduckgo（${DUCKDUCKGO_ENGINE_META.name}）：${DUCKDUCKGO_ENGINE_META.paramHint}`));
   });
@@ -488,7 +488,7 @@ describe("search 工具：描述快照（T-D1）", () => {
       canRun: ["bocha"],
     };
     const store: SearchConfigStore = {
-      ...createSearchConfigStore(fakeStores()),
+      ...SearchConfig.createStore(fakeStores()),
       readConfig: async () => Result.ok(config),
     };
     const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
@@ -505,7 +505,7 @@ describe("search 工具：描述快照（T-D1）", () => {
 
   it("装配 readConfig 失败 → 空快照降级不击穿装配（链解析仍在 run 内自会报错）", async () => {
     const failingStore: SearchConfigStore = {
-      ...createSearchConfigStore(fakeStores()),
+      ...SearchConfig.createStore(fakeStores()),
       // 四期门⑦：readConfig 失败沿返回值通道到达（Err），不再 throw。
       readConfig: async () => Result.err(new AppError("KKV_NOT_FOUND", "search config unavailable")),
     };
@@ -520,7 +520,7 @@ describe("search 工具：描述快照（T-D1）", () => {
 
   it("回合内配置变更不刷新描述（下回合生效，照 skills 快照语义）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     unwrap(await store.setEnabled("duckduckgo", false));
     const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
@@ -534,7 +534,7 @@ describe("search 工具：描述快照（T-D1）", () => {
 describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化）", () => {
   it("① 链首 401 → 降级到下一引擎成功，输出含 attempts 轨迹，formatter 展示轨迹行", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
 
@@ -563,14 +563,14 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     assert.deepEqual(JSON.parse(rec.results as string), [{ title: "t", url: "https://t.example.com", content: "c" }]);
     assert.deepEqual(urls, ["https://api.bochaai.com/v1/web-search", "https://api.tavily.com/search"]);
     // formatter：模板引擎 JSON 文本形态走「响应文本」抬头 + 尝试轨迹 + 原样文本块。
-    const text = formatToolOutputForLlm(rec);
+    const text = ToolOutput.formatForLlm(rec);
     assert.equal(text.split("\n")[0], "search tavily · 响应文本");
     assert.ok(text.includes("bocha 失败(401) → tavily 成功"), `attempts 应可见：${text.slice(0, 200)}`);
   });
 
   it("② 全链失败（含 DDG 兜底也失败）：聚合错误每引擎一行摘要、无 key 明文", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha-secret");
     await enableWithKey(store, "tavily", "sk-tavily-secret");
 
@@ -604,7 +604,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
 
   it("③ 显式 engine 且失败：不降级直接报错（链中后续引擎零请求）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
 
@@ -630,7 +630,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
 
   it("④ 链总预算 120s 耗尽：模板引擎各 30s 超时后剩余引擎不再尝试，带已收集错误返回（mock timers）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
     await enableWithKey(store, "brave", "sk-brave");
@@ -703,7 +703,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
 describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 同步 abort → 降级链短路）", () => {
   it("① 中途取消：链首请求 abort → run 以「搜索已取消」ToolError 终止（非链聚合错误），第二引擎零请求", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
 
@@ -740,7 +740,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
 
   it("② 先行取消：进入 run 前 signal 已 abort → 立即「搜索已取消」，任何引擎零请求", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
 
@@ -760,7 +760,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
 
   it("③ 首引擎 401 失败后取消：链在第二引擎尝试前短路（取消优先于降级），仍是「搜索已取消」", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
 
@@ -799,7 +799,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
 describe("search 工具：params 条数别名归一（G-1，count / max_results / maxResults 三键同效）", () => {
   it("模板引擎：max_results / maxResults 别名喂 {{count}}，count 主键优先于别名", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     const search = await assembleSearchToolContext(store);
 
@@ -824,7 +824,7 @@ describe("search 工具：params 条数别名归一（G-1，count / max_results 
 
   it("DDG：max_results 别名进入客户端截断（3 条可解析结果只回 2 条）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const fetchFn = (async () => ddgHtmlWithResults(3)) as typeof globalThis.fetch;
     const runner = makeRunner();
     const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
@@ -842,7 +842,7 @@ describe("search 工具：params 条数别名归一（G-1，count / max_results 
 describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）", () => {
   it("q 全空白：跳过并回退 query（DDG URL q 参数为「真词」）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const urls: string[] = [];
     const fetchFn = (async (url: string | URL | Request) => {
       urls.push(String(url));
@@ -856,7 +856,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
 
   it("q 非字符串：仅 q:42 报缺搜索词；q:42 与 query 同传回退 query", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const search = await assembleSearchToolContext(store);
     const urls: string[] = [];
     const fetchFn = (async (url: string | URL | Request) => {
@@ -878,12 +878,12 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
 
   it("count 非字符串：字符串 count 不采纳（6 条可解析结果按默认 5 截断），同传 max_results 不生效", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const fetchFn = (async () => ddgHtmlWithResults(6)) as typeof globalThis.fetch;
     const runner = makeRunner();
     const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
 
-    // 现状口径：count:"7" 非 nullish 短路 ?? 链后被 typeof 守卫打回 → normalizeMaxResults(undefined) = 默认 5；
+    // 现状口径：count:"7" 非 nullish 短路 ?? 链后被 typeof 守卫打回 → SearchEngine.normalizeMaxResults(undefined) = 默认 5；
     // max_results:2 因 ?? 已短路不参与（DDG 完全忽略 params，截断只随归一条数）。若实现改为 typeof 感知回落，需同步更新本断言。
     const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: "7", max_results: 2 } }, ctx));
     assert.equal((out as { results: unknown[] }).results.length, 5, "字符串 count 不采纳，按默认 5 截断；max_results 不参与");
@@ -891,7 +891,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
 
   it("搜索词优先序：q 与 query 同传时 q 优先（DDG URL q 参数为 A）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const urls: string[] = [];
     const fetchFn = (async (url: string | URL | Request) => {
       urls.push(String(url));
@@ -905,7 +905,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
 
   it("条数别名对内优先序：max_results 优先于 maxResults（bocha body count）", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     const bodies: string[] = [];
     const fetchFn = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -922,7 +922,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
 describe("search 工具：显式未知 engine（钉死未知 id）", () => {
   it("engine 不在动态全集：链解析抛 AppError（search_engine_not_found，params 带 id），经 ToolRunner 包装为 FAILED", async () => {
     const { kkv, secretStore } = fakeStores();
-    const store = createSearchConfigStore({ kkv, secretStore });
+    const store = SearchConfig.createStore({ kkv, secretStore });
     const runner = makeRunner();
     await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "google", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
@@ -947,7 +947,7 @@ describe("search 工具：formatter 与 summary", () => {
       ],
     };
     assert.equal(ToolOutput.isSearch(rec), true);
-    const text = formatToolOutputForLlm(rec);
+    const text = ToolOutput.formatForLlm(rec);
     assert.equal(text.split("\n")[0], "search tavily · 2 条结果");
     assert.ok(text.includes("原生回答"));
     assert.ok(text.includes("- 甲 — https://a.example.com — 摘要甲"));
@@ -960,7 +960,7 @@ describe("search 工具：formatter 与 summary", () => {
       results: '[{"name":"结果甲","link":"https://a.example.com"}]',
     };
     assert.equal(ToolOutput.isSearch(rec), true);
-    const text = formatToolOutputForLlm(rec);
+    const text = ToolOutput.formatForLlm(rec);
     assert.equal(text.split("\n")[0], "search bocha · 响应文本");
     assert.ok(text.includes("尝试轨迹: duckduckgo 失败(403) → bocha 成功"));
     assert.ok(text.includes('{"name":"结果甲","link":"https://a.example.com"}'));
@@ -989,11 +989,11 @@ describe("search 工具：formatter 与 summary", () => {
       message: "结果超过 50KB，全文已保存，可用 read 分页读取。",
     };
     assert.equal(ToolOutput.isSearch(rec), true);
-    assert.equal(formatToolOutputForLlm(rec), "已落盘 /tmp/search-20260906-ab12.json\n结果超过 50KB，全文已保存，可用 read 分页读取。");
+    assert.equal(ToolOutput.formatForLlm(rec), "已落盘 /tmp/search-20260906-ab12.json\n结果超过 50KB，全文已保存，可用 read 分页读取。");
   });
 
   it("summary：bocha · N 条结果；文本形态「引擎 · 响应文本」；落盘形态显示已落盘路径；字符串提示无 summary", () => {
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu-1",
       {
         ok: true,
@@ -1011,7 +1011,7 @@ describe("search 工具：formatter 与 summary", () => {
     assert.equal(block.summary, "bocha · 5 条结果");
 
     // 文本形态（模板引擎透传）：results 为 JSON 字符串 → summary「引擎 · 响应文本」。
-    const textForm = buildToolResultBlock(
+    const textForm = ToolResultBlock.build(
       "tu-1b",
       {
         ok: true,
@@ -1024,7 +1024,7 @@ describe("search 工具：formatter 与 summary", () => {
     );
     assert.equal(textForm.summary, "bocha · 响应文本");
 
-    const saved = buildToolResultBlock(
+    const saved = ToolResultBlock.build(
       "tu-2",
       {
         ok: true,
@@ -1038,7 +1038,7 @@ describe("search 工具：formatter 与 summary", () => {
     );
     assert.equal(saved.summary, "已落盘 /tmp/search-20260906-ab12.json");
 
-    const hint = buildToolResultBlock(
+    const hint = ToolResultBlock.build(
       "tu-3",
       {
         ok: true,
@@ -1060,7 +1060,7 @@ describe("dispatch：引擎分发与链空文案", () => {
     }
   });
 
-  it("dispatchSearch 按引擎路由：模板引擎走 resolved.template，DDG 特判走原适配器", async () => {
+  it("SearchDispatch.dispatch 按引擎路由：模板引擎走 resolved.template，DDG 特判走原适配器", async () => {
     const urls: string[] = [];
     const fetchFn = (async (url: string | URL | Request) => {
       const target = String(url);
@@ -1074,17 +1074,17 @@ describe("dispatch：引擎分发与链空文案", () => {
       apiKey: "k",
       template: PRESET_ENGINE_TEMPLATES.bocha,
     };
-    const out = unwrap(await dispatchSearch(resolved, "q", {}, {}, fetchFn));
+    const out = unwrap(await SearchDispatch.dispatch(resolved, "q", {}, {}, fetchFn));
     assert.equal(out.engine, "bocha");
     assert.equal(urls[0], "https://api.bochaai.com/v1/web-search");
 
-    const ddg = unwrap(await dispatchSearch({ engine: "duckduckgo" }, "q", {}, { ignored: true }, fetchFn));
+    const ddg = unwrap(await SearchDispatch.dispatch({ engine: "duckduckgo" }, "q", {}, { ignored: true }, fetchFn));
     assert.equal(ddg.engine, "duckduckgo");
     assert.ok(urls[1]!.startsWith("https://html.duckduckgo.com/html/"));
   });
 
-  it("dispatchSearch 未知 id / 无模板：rejected promise 抛 engineFailed 可读错误（含引擎 id，W3 async 化后同时序）", async () => {
+  it("SearchDispatch.dispatch 未知 id / 无模板：rejected promise 抛 SearchEngine.failed 可读错误（含引擎 id，W3 async 化后同时序）", async () => {
     const fetchFn = (async () => bochaResponse()) as typeof globalThis.fetch;
-    await assert.rejects(dispatchSearch({ engine: "custom:missing" }, "q", {}, {}, fetchFn), /unknown search engine: custom:missing/);
+    await assert.rejects(SearchDispatch.dispatch({ engine: "custom:missing" }, "q", {}, {}, fetchFn), /unknown search engine: custom:missing/);
   });
 });

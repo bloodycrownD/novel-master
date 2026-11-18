@@ -15,7 +15,7 @@ import { executeTemplate } from "@/infra/tdbc/logic/template-helper.js";
  * 不得缩成单会话——clearDomain/delete 只删本会话引用行，其他会话可能
  * 仍共享同一 blob，按单会话算引用集会误删在用内容。
  *
- * 调度纪律对齐 {@link runDeferredBlobGc}：必须在删除 entry 引用行的
+ * 调度纪律对齐 {@link DeferredBlobGc.run}：必须在删除 entry 引用行的
  * 事务**提交后**调度（session/project service 的 delete 链路），事务内
  * 调用会与未提交的引用行删除互相看不见。
  *

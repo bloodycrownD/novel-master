@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
 import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
 
 describe("toolsFromRegistry parameter descriptions", () => {
   it("edit tool schema includes property descriptions for LLM", () => {
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const edit = toolsFromRegistry(registry, { subagent: { callableAgents: [{ name: "general" }] } }).find((t) => t.name === "edit");
     assert.ok(edit);
     assert.match(edit!.description, /尾追/);
@@ -22,7 +22,7 @@ describe("toolsFromRegistry parameter descriptions", () => {
 
   it("registers 11 builtin tools without chat_grep", () => {
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     assert.equal(registry.list().length, 11);
     assert.ok(!registry.list().includes("chat_grep"));
   });

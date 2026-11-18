@@ -5,10 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  captureMutatingPathHeadSnapshots,
-  restoreMutatingPathHeads,
-} from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
+import { MutatingPathHeads } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -19,7 +16,7 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
-describe("restoreMutatingPathHeads", () => {
+describe("MutatingPathHeads.restore", () => {
   it("present 路径写回旧 content；absent 路径 delete 新建文件", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
@@ -28,7 +25,7 @@ describe("restoreMutatingPathHeads", () => {
 
     await vfs.write("/base.md", "before", { versionCheck: false });
 
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, [
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, [
       "/base.md",
       "/new.md",
     ]));
@@ -36,7 +33,7 @@ describe("restoreMutatingPathHeads", () => {
     await vfs.write("/base.md", "mutated", { versionCheck: false });
     await vfs.write("/new.md", "created", { versionCheck: false });
 
-    await restoreMutatingPathHeads(vfs, snapshots, ["/base.md", "/new.md"]);
+    await MutatingPathHeads.restore(vfs, snapshots, ["/base.md", "/new.md"]);
 
     assert.equal((unwrap(await vfs.read("/base.md"))).content, "before");
     await rejectsErr(() => vfs.read("/new.md"), (e: unknown) => {
@@ -54,7 +51,7 @@ describe("restoreMutatingPathHeads", () => {
     await vfs.write("/dir/a.md", "A", { versionCheck: false });
     await vfs.write("/dir/sub/b.md", "B", { versionCheck: false });
 
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/dir"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/dir"]));
     const snapshot = snapshots.get("/dir");
     assert.equal(snapshot?.kind, "directory");
     if (snapshot?.kind !== "directory") {
@@ -66,7 +63,7 @@ describe("restoreMutatingPathHeads", () => {
     await vfs.write("/dir/a.md", "A-mutated", { versionCheck: false });
     await vfs.write("/dir/sub/b.md", "B-mutated", { versionCheck: false });
 
-    await restoreMutatingPathHeads(vfs, snapshots, ["/dir"]);
+    await MutatingPathHeads.restore(vfs, snapshots, ["/dir"]);
 
     assert.deepEqual(
       (unwrap(await vfs.list("/dir", { recursive: true })))
@@ -86,7 +83,7 @@ describe("restoreMutatingPathHeads", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     await vfs.mkdir("/empty");
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/empty"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/empty"]));
     const snapshot = snapshots.get("/empty");
     assert.equal(snapshot?.kind, "directory");
     if (snapshot?.kind !== "directory") {
@@ -95,7 +92,7 @@ describe("restoreMutatingPathHeads", () => {
     assert.equal(snapshot.files.length, 0);
 
     await vfs.delete("/empty");
-    await restoreMutatingPathHeads(vfs, snapshots, ["/empty"]);
+    await MutatingPathHeads.restore(vfs, snapshots, ["/empty"]);
     assert.deepEqual(unwrap(await vfs.list("/empty")), []);
   });
 
@@ -113,7 +110,7 @@ describe("restoreMutatingPathHeads", () => {
       [`${physicalPrefix}/55`],
     );
 
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/55"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/55"]));
     const snapshot = snapshots.get("/55");
     assert.equal(snapshot?.kind, "directory");
     if (snapshot?.kind !== "directory") {

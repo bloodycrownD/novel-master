@@ -7,11 +7,8 @@ import { describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
-import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
-import {
-  compressZlib,
-  VFS_CONTENT_ENCODING_ZLIB,
-} from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { ZlibCodec, VFS_CONTENT_ENCODING_ZLIB } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -23,7 +20,7 @@ novelMasterTestFixture();
 
 /** 构造 quick-sqlite 时代写入的 base64 文本行内容（bytes 列的 TEXT 形态）。 */
 function legacyB64Text(plain: string): string {
-  return Buffer.from(compressZlib(new TextEncoder().encode(plain))).toString(
+  return Buffer.from(ZlibCodec.compress(new TextEncoder().encode(plain))).toString(
     "base64",
   );
 }
@@ -36,7 +33,7 @@ describe("VfsContentStore", () => {
     const h1 = await store.put(plain);
     const h2 = await store.put(plain);
     assert.equal(h1, h2);
-    assert.equal(h1, hashContent(plain));
+    assert.equal(h1, ContentHash.hash(plain));
 
     const rows = await conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`,
@@ -106,7 +103,7 @@ describe("VfsContentStore", () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const plain = `legacy-zlib-b64-${testIsolationSuffix()}-中文`;
-    const contentHash = hashContent(plain);
+    const contentHash = ContentHash.hash(plain);
     const b64 = legacyB64Text(plain);
 
     // 直插模拟 RN 存量库：encoding=zlib-b64，bytes 列存 base64 文本。
@@ -134,7 +131,7 @@ describe("VfsContentStore", () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const plain = `legacy-zlib-string-${testIsolationSuffix()}`;
-    const contentHash = hashContent(plain);
+    const contentHash = ContentHash.hash(plain);
     const b64 = legacyB64Text(plain);
 
     // 模拟存量：encoding 仍标 zlib，但列里实际是 base64 文本（RN 读回形态）。
@@ -151,7 +148,7 @@ describe("VfsContentStore", () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const plain = `reuse-encoding-${testIsolationSuffix()}`;
-    const contentHash = hashContent(plain);
+    const contentHash = ContentHash.hash(plain);
     const b64 = legacyB64Text(plain);
 
     // 先手插一条存量 zlib-b64 文本行，再 put 同明文：应复用、不改写。

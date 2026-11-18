@@ -7,14 +7,14 @@
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import { collectMutatingPathsFromCalls, extractMutatingPaths } from "@/domain/vfs/logic/extract-mutating-paths.js";
-import { captureMutatingPathHeadSnapshots, MutatingPathRestoreCompositeError, restoreMutatingPathHeads } from "@/domain/vfs/logic/restore-mutating-path-heads.js";
+import { MutatingPaths } from "@/domain/vfs/logic/extract-mutating-paths.js";
+import { MutatingPathHeads, MutatingPathRestoreCompositeError } from "@/domain/vfs/logic/restore-mutating-path-heads.js";
 import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -72,8 +72,8 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       name: tool.name,
       input: tool.input,
     }));
-    const mutatingPaths = collectMutatingPathsFromCalls(calls);
-    const captured = await captureMutatingPathHeadSnapshots(toolCtx.vfs, mutatingPaths);
+    const mutatingPaths = MutatingPaths.collectFromCalls(calls);
+    const captured = await MutatingPathHeads.captureSnapshots(toolCtx.vfs, mutatingPaths);
     if (!captured.ok) {
       return { ok: false, error: captured.error };
     }
@@ -90,14 +90,14 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
           continue;
         }
         const tool = op.tools[index]!;
-        const paths = extractMutatingPaths({
+        const paths = MutatingPaths.extract({
           name: tool.name,
           input: tool.input,
         });
         if (paths == null || paths.length === 0) {
           continue;
         }
-        const restored = await restoreMutatingPathHeads(toolCtx.vfs, headSnapshots, paths);
+        const restored = await MutatingPathHeads.restore(toolCtx.vfs, headSnapshots, paths);
         if (!restored.ok) {
           if (restored.error instanceof MutatingPathRestoreCompositeError) {
             restoreErrors.push(...restored.error.causes);
@@ -108,7 +108,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       }
       // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
       await sweepSessionRevisions(this.deps.revisions, session.projectId, sessionId);
-      await runDeferredBlobGc(this.deps.conn);
+      await DeferredBlobGc.run(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {
           ok: false,

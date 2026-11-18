@@ -5,7 +5,7 @@ import { z } from "zod";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -34,7 +34,7 @@ describe("ToolRunner.runParallel", () => {
     }));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
@@ -70,7 +70,7 @@ describe("ToolRunner.runParallel", () => {
     }));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
@@ -112,7 +112,7 @@ describe("ToolRunner.runParallel", () => {
     await vfs.write("/y.md", "y");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const ctxForTools = makeToolContext(vfs, project.id, session.id);
 

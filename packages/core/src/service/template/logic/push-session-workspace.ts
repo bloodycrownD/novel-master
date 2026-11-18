@@ -11,7 +11,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { mapSessionWorkplacePathToProject } from "@/domain/workplace/logic/workplace-path-map.js";
@@ -25,7 +25,7 @@ export async function pushSessionWorkspace(tx: TdbcConnection, projectId: string
   const vfs = new SqliteVfsEntryRepository(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
   const worktree = new SqliteWorkplaceRepository(tx);
-  await replaceVfsSubtree(vfs, { scopeKey: `session:${projectId}:${sessionId}` }, "/", { scopeKey: `project:${projectId}` }, "/", {
+  await VfsTreeCopy.replaceSubtree(vfs, { scopeKey: `session:${projectId}:${sessionId}` }, "/", { scopeKey: `project:${projectId}` }, "/", {
     revisions,
     contentStore: new SqliteVfsContentStore(tx),
   });

@@ -14,7 +14,7 @@
 
 // legacy-port: VfsRestorePort — phase 2
 
-import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
@@ -42,7 +42,7 @@ export type ReviveDeletedEntryParams = Pick<RestorePathParams, "scope" | "logica
  * 3. 路径被新 entry 占用（删除后同路径重建场景）→ 先墓碑删掉新 entry，
  *    tail 期新建的同路径文件被回退；
  * 4. put 幂等保 blob → 重建父目录链 → 显式 entry_id 重建 entry 行 →
- *    adjustRef(+1)（对齐 resetHeadToVersion 的 oldVersion==null 分支：
+ *    RevisionRefCount.adjust(+1)（对齐 resetHeadToVersion 的 oldVersion==null 分支：
  *    复活行此前没有 live ref）。
  *
  * @remarks 占用探测直查 DB（不信 prefetch）：prefetch 的 entryIdByPath 来自
@@ -107,6 +107,6 @@ export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps,
     headVersion: version,
     mtimeMs: rev.value.mtimeMs,
   });
-  await adjustRef(revisionRepo, checkpointEntryId, version, +1);
+  await RevisionRefCount.adjust(revisionRepo, checkpointEntryId, version, +1);
   return Result.ok("restored");
 }

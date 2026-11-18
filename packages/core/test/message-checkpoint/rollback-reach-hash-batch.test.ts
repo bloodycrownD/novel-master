@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
-import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -69,7 +69,7 @@ describe("rollback reach hash batch", () => {
         batchCalls++;
         const map = new Map<string, { status: "active"; contentHash: string | null }>();
         for (const pair of pairs) {
-          map.set(revisionPairKey(pair.entryId, pair.version), {
+          map.set(RevisionPairKey.build(pair.entryId, pair.version), {
             status: "active",
             contentHash: null,
           });
@@ -170,7 +170,7 @@ describe("rollback reach hash batch", () => {
     };
     const prefetch: RestorePathPrefetch = {
       entryIdByPath: new Map([["/hash-same.md", entryId]]),
-      revisionMetaByKey: new Map([[revisionPairKey(entryId, 1), { status: "active", contentHash: "same-hash" }]]),
+      revisionMetaByKey: new Map([[RevisionPairKey.build(entryId, 1), { status: "active", contentHash: "same-hash" }]]),
       liveHashByPath: new Map([["/hash-same.md", "same-hash"]]),
     };
 
@@ -205,7 +205,7 @@ describe("rollback reach hash batch", () => {
     const entry = unwrap(await entries.findByPath(sk, "/batch-del.md"));
     assert.ok(entry != null);
     const liveVersion = unwrap(await svfs.read("/batch-del.md")).version;
-    const reachable = new Set([revisionPairKey(entry.entryId, liveVersion)]);
+    const reachable = new Set([RevisionPairKey.build(entry.entryId, liveVersion)]);
 
     const deleted = await revisions.deleteExceptReachable(sk, "/", reachable);
     const keys = await revisions.listKeysUnderScope(sk, "/");

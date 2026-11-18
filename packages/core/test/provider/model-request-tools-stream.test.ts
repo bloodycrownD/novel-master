@@ -3,7 +3,7 @@ import { describe, it, mock } from "node:test";
 import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
 import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
-import { ToolRegistry, registerBuiltinTools } from "@novel-master/core";
+import { ToolRegistry, BuiltinTools } from "@novel-master/core";
 
 import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
 
@@ -227,7 +227,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
 
   it("toolsFromRegistry produces serializable schemas", () => {
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const tools = toolsFromRegistry(registry, { subagent: { callableAgents: [{ name: "general" }] } });
     assert.ok(tools.length >= 6);
     for (const t of tools) {

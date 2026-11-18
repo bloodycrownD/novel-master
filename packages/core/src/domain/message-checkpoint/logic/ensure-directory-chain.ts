@@ -6,14 +6,14 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { mkdirIgnoreExistingDirectory } from "@/domain/vfs/logic/vfs-move.js";
-import { parentDir } from "@/domain/vfs/logic/parent-dir.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { VfsMove } from "@/domain/vfs/logic/vfs-move.js";
+import { ParentDir } from "@/domain/vfs/logic/parent-dir.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 
 /**
  * 父目录链重建失败载荷：入口路径非法、父目录被同名文件占用，以及上游
- * `parentDir` / `mkdirIgnoreExistingDirectory` 透传的其余路径类码。
+ * `ParentDir.resolve` / `mkdirIgnoreExistingDirectory` 透传的其余路径类码。
  *
  * 非法路径原按旧实现在入口抛错；四期改为走返回值通道（错误通道迁移四期门：
  * throw x.error 清零），`RestorePathError` 已同步放宽，消费方经 `Result.err`
@@ -29,17 +29,17 @@ type EnsureDirectoryChainError = AppError;
  * 可能已被一并删除。
  */
 export async function ensureDirectoryChain(vfs: VfsRestorePort, logicalPath: string): Promise<Result<void, EnsureDirectoryChainError>> {
-  const normalized = normalizePath(logicalPath);
+  const normalized = PathNormalizer.normalize(logicalPath);
   if (!normalized.ok) return Result.err(normalized.error);
   const dirs: string[] = [];
-  let current = parentDir(normalized.value);
+  let current = ParentDir.resolve(normalized.value);
   while (current.ok && current.value !== "/") {
     dirs.unshift(current.value);
-    current = parentDir(current.value);
+    current = ParentDir.resolve(current.value);
   }
   if (!current.ok) return Result.err(current.error);
   for (const dir of dirs) {
-    const mkdir = await mkdirIgnoreExistingDirectory(vfs, dir);
+    const mkdir = await VfsMove.mkdirIgnoreExistingDirectory(vfs, dir);
     if (!mkdir.ok) {
       return Result.err(mkdir.error);
     }

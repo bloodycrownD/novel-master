@@ -226,7 +226,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     assert.equal(head.version, 3);
   });
 
-  it("幂等：同内容再导入一次不新增 revision（共享 writeWithRevision 的同文短路）", async () => {
+  it("幂等：同内容再导入一次不新增 revision（共享 WriteWithRevision.write 的同文短路）", async () => {
     const project = unwrap(await ctx.projects.create(`P-idem-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
@@ -261,7 +261,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     assert.equal((await headTable(scopeKey))[0]!.head, 1);
   });
 
-  it("writeWithRevision 复用：批量通道保留导入链路的外部文件名语义（跳过名校验）", async () => {
+  it("WriteWithRevision.write 复用：批量通道保留导入链路的外部文件名语义（跳过名校验）", async () => {
     // 牙齿：把 `skipNameValidation` 去掉，本条立刻红（以前能导入的外部文件名
     // 变成「导入失败」，改变了 validate-entry-name.ts 已拍板的导入语义）。
     const project = unwrap(await ctx.projects.create(`P-name-${Date.now()}`));
@@ -277,7 +277,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       overwriteConfirmed: false,
     }));
     assert.equal(report.failed.length, 0, JSON.stringify(report.failed));
-    // 尾随空格被 normalizePath 规范化掉；控制符原样保留（这正是「以前能导入」的形态）。
+    // 尾随空格被 PathNormalizer.normalize 规范化掉；控制符原样保留（这正是「以前能导入」的形态）。
     assert.deepEqual(report.written.sort(), [
       "/尾随空格.md",
       "/控制符\u0001.md",

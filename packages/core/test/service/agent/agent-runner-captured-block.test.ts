@@ -9,17 +9,10 @@ import { AgentServiceFactory, type AgentDefinition } from "@novel-master/core/ag
 import { InMemoryAgentSession } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  registerBuiltinTools,
-  ToolRegistry,
-  type BuiltinToolContext,
-} from "@novel-master/core";
+import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "@novel-master/core/session-kkv";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@novel-master/core/session-kkv";
 import { type VfsService } from "@novel-master/core/vfs";
 import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
 import { noopSavedModelRepository } from "../../helpers/noop-saved-model-repo.js";
@@ -134,7 +127,7 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,

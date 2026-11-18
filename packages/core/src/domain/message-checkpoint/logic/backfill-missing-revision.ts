@@ -10,7 +10,7 @@
 import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 
@@ -58,7 +58,7 @@ export async function backfillMissingRevisionIfNeeded(deps: BackfillRevisionDeps
       status: "active",
       mtimeMs,
     });
-    await adjustRef(deps.revisionRepo, entryId, targetVersion, +1);
+    await RevisionRefCount.adjust(deps.revisionRepo, entryId, targetVersion, +1);
     return Result.ok(true);
   }
 
@@ -69,6 +69,6 @@ export async function backfillMissingRevisionIfNeeded(deps: BackfillRevisionDeps
     status: "deleted",
     mtimeMs,
   });
-  await adjustRef(deps.revisionRepo, entryId, targetVersion, +1);
+  await RevisionRefCount.adjust(deps.revisionRepo, entryId, targetVersion, +1);
   return Result.ok(true);
 }

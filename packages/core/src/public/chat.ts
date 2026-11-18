@@ -79,7 +79,7 @@ export { ChatServiceFactory } from "../service/chat/chat-service-factory.js";
 export type { ChatServicesSessionDeps } from "../service/chat/chat-service-factory.js";
 // 归属例外（check-public-ownership）：VFS 工具卡路径解析，desktop/mobile
 // 的 transcript 消费方都在 chat 门面取（domain/tool 无独立出口）。
-export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
+export { VfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
 export { skillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
 export type { SkillToolRef } from "../domain/chat/model/content-block.js";
 export type {

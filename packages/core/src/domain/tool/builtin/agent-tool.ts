@@ -41,7 +41,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolAgentsContext, BuiltinToolContext } from "./builtin-tool-context.js";
-import { capMatchList, TOOL_OUTPUT_MAX_MATCHES } from "../logic/tool-output-limits.js";
+import { ToolOutputLimits, TOOL_OUTPUT_MAX_MATCHES } from "../logic/tool-output-limits.js";
 
 /** 工具注册名（catalog / policy / 卡片解析同名字符串）。 */
 export const AGENT_TOOL_NAME = "agent";
@@ -200,7 +200,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
     switch (input.action) {
       case "list": {
         // 快照直出（无 IO）；条数 + 字节预算截断走 capMatchList。
-        const capped = capMatchList(agentsCtx.agents, TOOL_OUTPUT_MAX_MATCHES, (e) => JSON.stringify(e));
+        const capped = ToolOutputLimits.capMatchList(agentsCtx.agents, TOOL_OUTPUT_MAX_MATCHES, (e) => JSON.stringify(e));
         return Result.ok({
           action: "list",
           entries: capped.items.map((e) => ({

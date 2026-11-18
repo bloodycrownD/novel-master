@@ -3,29 +3,16 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import {
-  textBlocks,
-  userMessageFormatter,
-  type ChatMessageData,
-  type ContentBlock,
-} from "@novel-master/core/chat";
+import { textBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock } from "@novel-master/core/chat";
 import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import { tCore } from "../helpers/core-i18n.js";
 
 /** DTO 断言 helper：summaryText 为 MessageLike、metaText 为 MessageLike[]（G3.5），渲染后比对。 */
 const summaryOf = (m: unknown) => tCore(m as Parameters<typeof tCore>[0]);
 const metaOf = (parts: readonly unknown[]) => parts.map((m) => summaryOf(m)).join(" · ");
-import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 
-import {
-  PromptBuilder,
-  messageBodyTextFromBlocks,
-  type AgentPromptLayout,
-  type PromptPreviewTurn,
-  type PromptRenderContext,
-  type PromptToolGroupCardData,
-  type PromptTurnCardData,
-} from "@novel-master/core/prompt";
+import { PromptBuilder, messageBodyTextFromBlocks, type AgentPromptLayout, type  PromptPreviewTurn, type  PromptRenderContext, type  PromptToolGroupCardData, type  PromptTurnCardData } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
@@ -1064,7 +1051,7 @@ function workplaceFilesOf(turn: PromptPreviewTurn) {
  * 一轮「assistant 工具调用 + tool_result 回传」：组卡的 result.body 即断言对象。
  *
  * @param toolName 工具名（只影响组卡标签，不影响正文判据）。
- * @param content tool_result 原始 content（走 `formatToolResultContentForDisplay`）。
+ * @param content tool_result 原始 content（走 `ToolOutput.formatContentForDisplay`）。
  */
 async function toolResultBodyOf(toolName: string, content: string): Promise<string> {
   const messages: ChatMessageData[] = [
@@ -1453,7 +1440,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("annotate 块不动（没有 `content` 键，原文一律不碰）", async () => {
-    const actionXml = buildUserVfsActionXml("annotate", {
+    const actionXml = UserVfsActionXml.build("annotate", {
       path: "notes/a.md",
       originalText: "1|这行不是行号",
       userAnnotation: "2|批注也不是",
@@ -1498,7 +1485,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("skillAttach 块不动（`content` 是无行号原文，判据不适用）", async () => {
-    const actionXml = buildUserVfsActionXml("skillAttach", {
+    const actionXml = UserVfsActionXml.build("skillAttach", {
       name: "novel-master",
       content: "第一行\n12|这不是行号",
     });

@@ -8,14 +8,14 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
@@ -216,7 +216,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       [eid, version],
     );
 
-    const report = await repairRefCounts(
+    const report = await RevisionRefCount.repair(
       revisions,
       entries,
       checkpoints,
@@ -347,7 +347,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     assert.equal(unwrap(await revisions.findByEntryAndVersion(eid, version)), null);
   });
 
-  it("T-RB-GC-DEFER: sweep 后 runDeferredBlobGc 删除 orphan blob", async () => {
+  it("T-RB-GC-DEFER: sweep 后 DeferredBlobGc.run 删除 orphan blob", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -365,7 +365,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     await svfs.write("/defer.md", "keep-final", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
-    const orphanHash = hashContent(orphanContent);
+    const orphanHash = ContentHash.hash(orphanContent);
     const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey({kind:"session",projectId:project.id,sessionId:session.id}), "/defer.md"));
     assert.ok(entry != null);
     // 确认 orphan revision 存在
@@ -378,9 +378,9 @@ describe("rollback ref_count + deferred blob gc", () => {
     const afterSweep = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));
     assert.equal(afterSweep, null, "orphan revision 应在 sweep 后被删除");
 
-    // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
+    // content_hash 列始终存 ContentHash.hash() 输出的 hex 格式（SHA-256 hex），
     // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证 blob gc。
-    await runDeferredBlobGc(ctx.conn);
+    await DeferredBlobGc.run(ctx.conn);
     // 观测面（2026-09-30 换）：读路径已接进程内解压产物层（按内容哈希索引、
     // 命中即返回），该 hash 只要在本进程里读成功过一次就不再必然抛错——故
     // 「行已删」直查 vfs_content_blob，「缺失必抛」的清池冷态读分开断言。

@@ -13,14 +13,14 @@ import type { MessageLike } from "../../common/i18n.js";
 import { Text } from "../../common/text.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview, messageBodyTextFromBlocks } from "../../domain/chat/content/message-body-text.js";
-import type { ContentBlock, ToolResultBlock } from "../../domain/chat/model/content-block.js";
+import type { ContentBlock, ToolResultBlock as ChatToolResultBlock } from "../../domain/chat/model/content-block.js";
 import type { AgentPromptLayout } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { DEFAULT_SKILLS_INDEX_PREFIX, layoutHasWorkplace } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
 import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
 import type { PromptLlmInput, PromptRenderContext, PromptSkillIndexEntry } from "../../domain/prompt/model/prompt-render-context.js";
-import { resolveToolResultOk } from "../../domain/tool/logic/build-tool-result-block.js";
-import { formatToolResultContentForDisplay } from "../../domain/tool/logic/format-tool-output.js";
+import { ToolResultBlock } from "../../domain/tool/logic/build-tool-result-block.js";
+import { ToolOutput } from "../../domain/tool/logic/format-tool-output.js";
 import type { AppError } from "../../errors/app-error.js";
 import { Result } from "../../errors/either.js";
 
@@ -302,7 +302,7 @@ type PromptToolGroupStatus = "ok" | "error" | "lost";
 /** 工具组卡的结果格数据；`null` 表示悬挂 use（丢失占位，槽位保留）。 */
 interface PromptToolGroupResultData {
   readonly toolUseId: string;
-  /** `resolveToolResultOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
+  /** `ToolResultBlock.resolveOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
   readonly ok: boolean;
   /**
    * 结果正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
@@ -511,7 +511,7 @@ function stripAttachmentContentLinePrefix(text: string): string {
  * nm-style: keep-local — 纯消息投影阶段；内联会把块序合并状态（textBuffer/flushText）叠进切轮循环，
  * 使「轮切分」与「块序合并」两个不变量耦合，且与 buildUserTurnCards 的双端口径分路对应。
  */
-function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string, ToolResultBlock>, includeThinking: boolean): PromptTurnCardData[] {
+function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string, ChatToolResultBlock>, includeThinking: boolean): PromptTurnCardData[] {
   const blocks = message.content.blocks;
   const parallel = blocks.filter((block) => block.type === "tool_use").length > 1;
   const cards: PromptTurnCardData[] = [];
@@ -539,7 +539,7 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
     if (block.type === "tool_use") {
       flushText();
       const resultBlock = results.get(block.id);
-      const ok = resultBlock !== undefined && resolveToolResultOk(resultBlock);
+      const ok = resultBlock !== undefined && ToolResultBlock.resolveOk(resultBlock);
       const inputJson = JSON.stringify(block.input, null, 2);
       cards.push({
         type: "toolGroup",
@@ -554,7 +554,7 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
                 toolUseId: resultBlock.toolUseId,
                 ok,
                 // cards 是显示层口径 → 剥行号；同源 wire 正文在 items/body 段原样保留。
-                body: Text.stripLinePrefix(formatToolResultContentForDisplay(resultBlock.content), TOOL_RESULT_LINE_PREFIX),
+                body: Text.stripLinePrefix(ToolOutput.formatContentForDisplay(resultBlock.content), TOOL_RESULT_LINE_PREFIX),
               },
         status: resultBlock === undefined ? "lost" : ok ? "ok" : "error",
         parallel,
@@ -668,7 +668,7 @@ async function buildPromptPreviewTurnsFromLayout(layout: AgentPromptLayout, ctx:
   // hidden 消息整条跳过（与段产出侧 `continue` 同一口径）：hidden 不进提示词，
   // 它的 tool_result 不该把 use 的组卡从「lost」救成「ok」，否则会出现「段里没有、卡里有」。
   const messageById = new Map<string, ChatMessageData>();
-  const toolResults = new Map<string, ToolResultBlock>();
+  const toolResults = new Map<string, ChatToolResultBlock>();
   for (const message of ctx.messages) {
     messageById.set(message.id, message);
     if (message.hidden) {

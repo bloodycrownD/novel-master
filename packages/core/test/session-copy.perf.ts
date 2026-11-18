@@ -27,7 +27,7 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { DefaultProjectService } from "@/service/chat/impl/project.service.js";
 import { DefaultSessionService } from "@/service/chat/impl/session.service.js";
@@ -40,7 +40,7 @@ import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 
@@ -175,7 +175,7 @@ async function main(): Promise<void> {
 
         const vfsRepo = new SqliteVfsEntryRepository(tx);
         t0 = performance.now();
-        await copyVfsTree(
+        await VfsTreeCopy.copyTree(
           vfsRepo,
           { scopeKey: `session:${project.id}:${session.id}` },
           "/",
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
         await workplace2.copyScope(
           workplaceScopeKey({ kind: "session", projectId: project.id, sessionId: session.id }),
           workplaceScopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id }),
-          (p) => normalizePath(p),
+          (p) => PathNormalizer.normalize(p),
         );
         phases.push(`sp-workplace=${fmt(performance.now() - t1)}`);
 

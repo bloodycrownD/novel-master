@@ -3,24 +3,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import {
-  createVfsTools,
-  isMutatingFileToolName,
-  MUTATING_FILE_TOOL_NAMES,
-} from "../../src/domain/tool/builtin/vfs-tools.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { FileTools, MUTATING_FILE_TOOL_NAMES } from "../../src/domain/tool/builtin/vfs-tools.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 
-import {
-  TOOL_OUTPUT_MAX_BYTES,
-  TOOL_OUTPUT_MAX_LINES,
-  TOOL_OUTPUT_MAX_MATCHES,
-} from "../../src/domain/tool/logic/tool-output-limits.js";
-import { formatToolOutputForLlm } from "../../src/domain/tool/logic/format-tool-output.js";
+import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
+import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function toolCtx(
@@ -38,7 +30,7 @@ function toolCtx(
 describe("Builtin file tools V2 (unit)", () => {
   it("legacy replace tool name is NOT_FOUND", async () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     await rejectsErr(
       () => runner.call("replace", { path: "/t.txt", oldString: "a", newString: "b" }, {} as BuiltinToolContext),
@@ -46,9 +38,9 @@ describe("Builtin file tools V2 (unit)", () => {
     );
   });
 
-  it("registers exactly 11 builtin tools via registerBuiltinTools", () => {
+  it("registers exactly 11 builtin tools via BuiltinTools.register", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     assert.equal(registry.list().length, 11);
     assert.ok(registry.list().includes("task"));
     assert.ok(registry.list().includes("skill"));
@@ -61,10 +53,10 @@ describe("Builtin file tools V2 (unit)", () => {
       "fs",
       "write",
     ]);
-    assert.equal(isMutatingFileToolName("read"), false);
-    assert.equal(isMutatingFileToolName("glob"), false);
-    assert.equal(isMutatingFileToolName("grep"), false);
-    assert.equal(isMutatingFileToolName("fs"), true);
+    assert.equal(FileTools.isMutatingName("read"), false);
+    assert.equal(FileTools.isMutatingName("glob"), false);
+    assert.equal(FileTools.isMutatingName("grep"), false);
+    assert.equal(FileTools.isMutatingName("fs"), true);
   });
 
   it("write 相对路径规范化后统一写入与 file_cache，不报 INVALID_PATH", async () => {
@@ -86,7 +78,7 @@ describe("Builtin file tools V2 (unit)", () => {
       sessionKkv,
     };
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
 
     const result = unwrap(await runner.call<{ version: number }>(
@@ -125,7 +117,7 @@ describe("Builtin file tools V2 (unit)", () => {
       workplace,
     };
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
 
     // 全新嵌套路径：各层祖先（跳过根、不含文件自身）都补上默认规则
@@ -160,7 +152,7 @@ describe("Builtin file tools V2 (unit)", () => {
       workplace,
     };
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
 
     unwrap(await runner.call("fs", { action: "mkdir", path: "m/n" }, ctx));
@@ -201,7 +193,7 @@ describe("Builtin file tools V2 (unit)", () => {
       workplace,
     };
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
 
     const result = unwrap(await runner.call<{ version: number }>(
@@ -235,7 +227,7 @@ describe("Builtin file tools V2 (unit)", () => {
       workplace,
     };
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
 
     // write 主流程不受探测失败影响，但补规则被保守跳过
@@ -259,7 +251,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -293,7 +285,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -314,7 +306,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -349,7 +341,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/docs/b.txt", "plain"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -384,7 +376,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -406,7 +398,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/dir/a.txt", "gone"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -426,7 +418,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/dir/a.txt", "gone"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -445,7 +437,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/old.md", "body"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -465,7 +457,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/src/x.md", "x"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -483,7 +475,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/src/x.md", "x"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -501,7 +493,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/big.txt", content));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -526,7 +518,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/a.txt", "gone"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -545,7 +537,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/small.txt", "one\n two"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -563,7 +555,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/long.txt", "a".repeat(3000)));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -589,7 +581,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/long-oneline.txt", "a".repeat(300 * 1024)));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -616,7 +608,7 @@ describe("Builtin file tools V2 (integration)", () => {
     // 被截行是文件末行：跳过后无剩余内容，不给 nextOffset（避免续读超界）。
     assert.equal(read.nextOffset, undefined);
     // formatter 提示注明末行截断、尾部不可续读。
-    const formatted = formatToolOutputForLlm(read);
+    const formatted = ToolOutput.formatForLlm(read);
     assert.match(formatted, /tail is not resumable/);
   });
 
@@ -635,7 +627,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/multi-big.txt", lines.join("\n")));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -686,7 +678,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/normal.txt", content));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -715,7 +707,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await vfs.write("/big-t-r2.txt", content));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -743,7 +735,7 @@ describe("Builtin file tools V2 (integration)", () => {
     }
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -792,7 +784,7 @@ describe("Builtin file tools V2 (integration)", () => {
       })) as typeof globalThis.fetch;
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx: BuiltinToolContext = {
       ...toolCtx(vfs, project.id, session.id),
@@ -862,7 +854,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
@@ -890,7 +882,7 @@ describe("Builtin file tools V2 (integration)", () => {
     });
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx: BuiltinToolContext = {
       ...toolCtx(vfs, project.id, session.id),
@@ -924,7 +916,7 @@ describe("Builtin file tools V2 (integration)", () => {
     });
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx: BuiltinToolContext = {
       ...toolCtx(vfs, project.id, session.id),
@@ -984,7 +976,7 @@ describe("Builtin file tools V2 (integration)", () => {
     };
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const baseCtx: BuiltinToolContext = {
       ...toolCtx(vfs, project.id, session.id),
@@ -1011,7 +1003,7 @@ describe("Builtin file tools V2 (integration)", () => {
 });
 
 describe("T-CS02-03: edit 工具 schema 拒绝空串 oldString", () => {
-  const editTool = createVfsTools().find((t) => t.name === "edit");
+  const editTool = FileTools.create().find((t) => t.name === "edit");
   const schema = editTool?.inputSchema as
     | { safeParse: (v: unknown) => { success: boolean } }
     | undefined;

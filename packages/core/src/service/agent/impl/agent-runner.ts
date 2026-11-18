@@ -7,11 +7,11 @@
 import { assert } from "@/common/assert.js";
 import { Text } from "@/common/text.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
+import type { ToolResultBlock as ChatToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import { DoomLoopDetector } from "@/domain/agent/logic/doom-loop.js";
-import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
-import { anyToolUseMutatesWorkspace } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
+import { ToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
+import { ToolUseMutation } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner, type ParallelToolOutcome, type ToolCall } from "@/domain/tool/logic/tool-runner.js";
@@ -743,10 +743,10 @@ export class DefaultAgentRunner implements AgentRunner {
           }
         }
 
-        const vfsMutated = anyToolUseMutatesWorkspace(toolUses);
+        const vfsMutated = ToolUseMutation.any(toolUses);
         vfsMutatedInRun = vfsMutatedInRun || vfsMutated;
-        const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
-          buildToolResultBlock(tu.id, outcomes[i]!, {
+        const toolResults: ChatToolResultBlock[] = toolUses.map((tu, i) =>
+          ToolResultBlock.build(tu.id, outcomes[i]!, {
             toolName: tu.name,
             // 工具操作落到的 VFS scope 归属者（子 agent 写入落父 session scope）。
             vfsScope: {
@@ -754,7 +754,7 @@ export class DefaultAgentRunner implements AgentRunner {
               projectId,
               sessionId: session.workplaceScopeSessionId,
             },
-            // task 工具输出对象含 subagentSessionId：buildToolResultBlock
+            // task 工具输出对象含 subagentSessionId：ToolResultBlock.build
             // 内部从 outcome.output.subagentSessionId 自动检测并透传到 meta（P0-1）。
             // skill：read 缺省域命中生效副本的解析结果由输出携带，
             // projectId 上下文从这里补进 meta.skillRef（T-SK8）。

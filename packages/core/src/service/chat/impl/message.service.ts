@@ -20,10 +20,10 @@ import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import type { Outcome } from "@/errors/outcome.js";
-import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
@@ -213,7 +213,7 @@ export class DefaultMessageService implements MessageService {
       await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
       await sweepSessionRevisions(revisions, session.projectId, message.sessionId);
     });
-    await runDeferredBlobGc(this.deps.conn);
+    await DeferredBlobGc.run(this.deps.conn);
     await this.invalidatePromptTokens(message.sessionId);
     await this.invalidateToolUseCount(message.sessionId);
     return Result.ok(undefined);
@@ -310,7 +310,7 @@ export class DefaultMessageService implements MessageService {
       // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
       // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 fork。
       const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
-      const vfsCopied = await copyVfsTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
+      const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
       if (vfsCopied.kind === "failed") throw vfsCopied.error;
       if (vfsCopied.kind !== "completed") throw createAbortError();
 

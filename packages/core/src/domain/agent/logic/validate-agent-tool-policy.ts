@@ -4,7 +4,7 @@
  * @module domain/agent/logic/validate-agent-tool-policy
  */
 
-import { FILE_TOOL_NAMES, LEGACY_FILE_TOOL_HINTS, normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
+import { FILE_TOOL_NAMES, FileTools, LEGACY_FILE_TOOL_HINTS } from "@/domain/tool/builtin/vfs-tools.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AgentToolPolicy } from "../model/agent-definition.js";
@@ -41,7 +41,7 @@ export function validateAgentToolPolicy(tools: AgentToolPolicy | undefined, regi
       if (typeof raw !== "string") {
         return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", { detail: `${listLabel} must contain only strings` }));
       }
-      const name = normalizeAgentToolPolicyName(raw);
+      const name = FileTools.normalizeAgentToolPolicyName(raw);
       if (registryNames.has(name)) {
         continue;
       }

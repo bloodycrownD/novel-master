@@ -43,7 +43,7 @@ import { seedBuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-
 import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, runPendingSchemaMigrations } from "./schema-migrations/index.js";
-import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
+import { EntrySequenceRepair } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
 
@@ -388,7 +388,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
   // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
   // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
   try {
-    const reports = await new IntegrityRepairRegistry().register(createVfsEntrySequenceRepairOperation(conn)).runAll();
+    const reports = await new IntegrityRepairRegistry().register(EntrySequenceRepair.create(conn)).runAll();
     for (const report of reports) {
       if (report.error != null) {
         log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });

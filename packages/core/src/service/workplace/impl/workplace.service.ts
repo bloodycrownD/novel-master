@@ -9,7 +9,7 @@ import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
 import { buildWorkplaceDirSet } from "@/domain/workplace/logic/workplace-tree.js";
@@ -47,7 +47,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async setDirRule(input: SetDirRuleInput): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(input.logicalPath);
+    const resolved = PathNormalizer.normalize(input.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const allowed = LogicalPath.validate(this.scope, logicalPath);
@@ -75,7 +75,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async getDirRule(logicalPath: string): Promise<Result<WorkplaceDirRule | undefined, AppError>> {
-    const resolved = normalizePath(logicalPath);
+    const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const allowed = LogicalPath.validate(this.scope, normalized);
@@ -90,7 +90,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async setFileRule(input: SetFileRuleInput): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(input.logicalPath);
+    const resolved = PathNormalizer.normalize(input.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const allowed = LogicalPath.validate(this.scope, logicalPath);
@@ -101,7 +101,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(logicalPrefix);
+    const resolved = PathNormalizer.normalize(logicalPrefix);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const allowed = LogicalPath.validate(this.scope, normalized);
@@ -112,9 +112,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async renameRulesUnderLogicalPrefix(oldPrefix: string, newPrefix: string): Promise<Result<void, AppError>> {
-    const oldResolved = normalizePath(oldPrefix);
+    const oldResolved = PathNormalizer.normalize(oldPrefix);
     if (!oldResolved.ok) return Result.err(oldResolved.error);
-    const newResolved = normalizePath(newPrefix);
+    const newResolved = PathNormalizer.normalize(newPrefix);
     if (!newResolved.ok) return Result.err(newResolved.error);
     const oldNormalized = oldResolved.value;
     const newNormalized = newResolved.value;
@@ -259,25 +259,25 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const fileRuleMap = new Map(fileRules.map((r) => [r.logicalPath, r]));
     const fileSet = new Set<string>();
     for (const row of fileMeta) {
-      const resolved = normalizePath(row.path);
+      const resolved = PathNormalizer.normalize(row.path);
       if (!resolved.ok) return Result.err(resolved.error);
       fileSet.add(resolved.value);
     }
     // VFS 中真实存在的目录行（normalize 后作判据；喂 allDirs 用同一份数据）
     const dirPathSet = new Set<string>();
     for (const logical of dirPaths) {
-      const resolved = normalizePath(logical);
+      const resolved = PathNormalizer.normalize(logical);
       if (!resolved.ok) return Result.err(resolved.error);
       dirPathSet.add(resolved.value);
     }
     // 过滤幽灵规则路径：rename/删除残留的规则路径（VFS 目录行与文件都已不存在）若继续喂给
     // buildWorkplaceDirSet，会把早已消失的目录整链渲染进文件树与 `{{$filetree}}` 宏。保留口径：
     // 根路径 `/` 永远保留；目录规则 P 在 dirPathSet 中、或前缀 `P/` 下仍有 live 文件时保留；
-    // 文件规则 P 在 fileSet 中时保留。normalizePath 失败沿 Result 原样上交调用方。
+    // 文件规则 P 在 fileSet 中时保留。PathNormalizer.normalize 失败沿 Result 原样上交调用方。
     const keptPaths: string[] = [];
     const files = [...fileSet];
     for (const raw of [...dirRules.map((r) => r.logicalPath), ...fileRules.map((r) => r.logicalPath)]) {
-      const resolved = normalizePath(raw);
+      const resolved = PathNormalizer.normalize(raw);
       if (!resolved.ok) return Result.err(resolved.error);
       const n = resolved.value;
       if (n === "/") {

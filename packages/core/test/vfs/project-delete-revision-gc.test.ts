@@ -5,10 +5,10 @@
  * （`project:{id}` / `project:{id}:meta`）只调了裸 `deleteVfsPrefix`——
  * 它只删 `vfs_entry` 行，既不释放 live-head 引用、也不 GC revision。
  * 而 `ProjectService.copy` 会在这两个 scope 下种下 `ref_count = 1` 的
- * live-head revision（`seedLiveHeadRevisionsUnderPrefix`）。
+ * live-head revision（`LiveHeadRevisionSeeder.seedUnderPrefix`）。
  *
  * ⇒ entry 已删、revision 的 ref_count 永远停在 1，两条 GC 路径都选不中它：
- * - `deleteUnreferencedUnderScope` 靠 `JOIN vfs_entry` 圈范围 → JOIN 命中 0 行；
+ * - `RevisionRefCount.deleteUnreferencedUnderScope` 靠 `JOIN vfs_entry` 圈范围 → JOIN 命中 0 行；
  * - 全局兜底 `deleteGlobalOrphans` 只清 `ref_count <= 0` 的 JOIN 孤儿 → 谓词不选。
  * 每「种下一次 live-head revision 再删除该项目」一轮就永久泄漏一批 revision 行
  * + 其 `vfs_content_blob`，无自愈路径。

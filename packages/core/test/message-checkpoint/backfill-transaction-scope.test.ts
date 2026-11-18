@@ -21,7 +21,7 @@ import { VfsServiceFactory } from "@novel-master/core/vfs";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import type { WorkplaceDirRule } from "@/domain/workplace/model/workplace-types.js";
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
@@ -98,7 +98,7 @@ describe("CS-05b backfill 事务边界", () => {
     };
 
     probe.reset();
-    await VfsServiceFactory.createZipIo(conn).import(scope, buildVfsZip(filesMap(450)), {
+    await VfsServiceFactory.createZipIo(conn).import(scope, VfsZipBuild.build(filesMap(450)), {
       confirmed: true,
     });
 
@@ -196,7 +196,7 @@ describe("CS-05b backfill 事务边界", () => {
       });
 
       await assert.doesNotReject(() =>
-        zipSvc.import(scope, buildVfsZip(expected), { confirmed: true })
+        zipSvc.import(scope, VfsZipBuild.build(expected), { confirmed: true })
       );
     } finally {
       restoreDefaultLogSink();
@@ -271,7 +271,7 @@ describe("CS-05b backfill 事务边界", () => {
       await assert.doesNotReject(() =>
         VfsServiceFactory.createZipIo(conn).import(
           scope,
-          buildVfsZip(expected),
+          VfsZipBuild.build(expected),
           { confirmed: true }
         )
       );

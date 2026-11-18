@@ -34,19 +34,19 @@ type SkillRelPathResolution =
  * 结果保守放弃串行化（该调用会被 schema/服务层拒绝）。
  */
 export function resolveSkillRelPathCore(name: string, path: string | undefined): SkillRelPathResolution {
-  // 反斜杠与 normalizePath 同口径按分隔符处理，否则 `..\..\x` 会绕过下面的
-  // `..` 段拦截，进而在 normalizePath 里以 VFS_INVALID_PATH 的 AppError 抛错（本函数承诺不抛）。
+  // 反斜杠与 PathNormalizer.normalize 同口径按分隔符处理，否则 `..\..\x` 会绕过下面的
+  // `..` 段拦截，进而在 PathNormalizer.normalize 里以 VFS_INVALID_PATH 的 AppError 抛错（本函数承诺不抛）。
   const raw = (path ?? SKILL_ENTRY_FILE).replace(/\\/g, "/");
   if (raw.trim().length === 0) {
     return { ok: false, reason: "empty" };
   }
-  // normalizePath 会把 `..` 消化成目录回溯而不是拒绝，这里必须先显式拦截，
+  // PathNormalizer.normalize 会把 `..` 消化成目录回溯而不是拒绝，这里必须先显式拦截，
   // 否则 `notes/../../other/SKILL.md` 会被静默解析进隔壁技能目录。
   if (raw.split("/").includes("..")) {
     return { ok: false, reason: "dotdot" };
   }
   const dirPrefix = `${SKILLS_ROOT}/${name}/`;
-  // `..` 段已在上面全部拒绝，dirPrefix 又以 `/meta/skills/` 起头，normalizePath
+  // `..` 段已在上面全部拒绝，dirPrefix 又以 `/meta/skills/` 起头，PathNormalizer.normalize
   // 的 Err（越过根）在正常技能名下不可达；仍按迁移前的透传口径携带原错误，时机不变。
   // 剩余失败只有“归一化后跑到技能目录外”。
   const logical = LogicalPath.resolve(`${dirPrefix}${raw}`);

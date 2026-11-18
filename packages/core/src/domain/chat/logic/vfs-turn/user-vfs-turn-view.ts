@@ -9,8 +9,8 @@ import {Coerce} from "@/common/coerce.js";
 import type {ToolResultBlock, ToolUseBlock} from "../../model/content-block.js";
 import type {ChatMessageData} from "../../model/message.js";
 import {readMessageMetadata} from "../../model/message-metadata.js";
-import {actionXmlToToolUses, type DerivedToolUseInput} from "../../../vfs/logic/action-xml-to-tool-uses.js";
-import {buildUserVfsActionXml, parseUserVfsActionsFromText} from "../../../vfs/logic/user-vfs-action-xml.js";
+import {ActionXmlToolUses, type DerivedToolUseInput} from "../../../vfs/logic/action-xml-to-tool-uses.js";
+import { UserVfsActionXml } from "../../../vfs/logic/user-vfs-action-xml.js";
 import {attachmentPath} from "../message/attachment-path.js";
 import {USER_VFS_TURN_ACK_TEXT} from "./user-vfs-turn-constants.js";
 
@@ -51,7 +51,7 @@ export const USER_VFS_TURN_SPAN = 2 as const;
 class UserVfsTurns {
     /** 解析文本中全部 `<action name="…">`。 */
     parseActions(text: string): readonly ParsedUserVfsAction[] {
-        return parseUserVfsActionsFromText(text).map(({name, params}) => {
+        return UserVfsActionXml.parseFromText(text).map(({name, params}) => {
             let resolvedName = name;
             if (name === "rename" || name === "move") {
                 const from = Coerce.string(params.from);
@@ -82,14 +82,14 @@ class UserVfsTurns {
         const xmlParts: string[] = [];
         for (const action of actions) {
             if (action.name === "edit" && action.hunks.length > 0) {
-                xmlParts.push(action.hunks.map((hunk) => buildUserVfsActionXml("edit", {path: action.path, oldString: hunk.old, newString: hunk.new})).join("\n"));
+                xmlParts.push(action.hunks.map((hunk) => UserVfsActionXml.build("edit", {path: action.path, oldString: hunk.old, newString: hunk.new})).join("\n"));
                 continue;
             }
             const [renameFrom = "", renameTo = ""] = action.path.split("→");
             const params = Object.keys(action.params).length > 0 ? action.params : action.name === "rename" || action.name === "move" ? {from: renameFrom, to: renameTo} : {path: action.path};
-            xmlParts.push(buildUserVfsActionXml(action.name || action.kind, params));
+            xmlParts.push(UserVfsActionXml.build(action.name || action.kind, params));
         }
-        return actionXmlToToolUses(xmlParts.join("\n"));
+        return ActionXmlToolUses.toToolUses(xmlParts.join("\n"));
     }
 
     /** 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。 */

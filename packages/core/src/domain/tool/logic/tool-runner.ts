@@ -10,7 +10,7 @@ import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AbortReason } from "@/errors/outcome.js";
 import { FsCommand } from "./fs-command.js";
-import { checkToolPathPolicy } from "./tool-path-policy.js";
+import { ToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
 
 /** A single tool invocation for parallel dispatch. */
@@ -21,7 +21,7 @@ export interface ToolCall {
 
 /** Outcome of one parallel tool invocation (errors are captured, not thrown). */
 // 取消是控制流信号不是失败：`TOOL_CANCELLED` 命中时落 `{ ok: false, error, kind: "cancelled", reason }`。
-// 保留 ok/error 让展示层（buildToolResultBlock / formatToolErrorForLlm）沿用既有 `isAppError` 取消分类；
+// 保留 ok/error 让展示层（ToolResultBlock.build / ToolOutput.formatErrorForLlm）沿用既有 `isAppError` 取消分类；
 // `kind`/`reason` 供上层按 `Outcome.cancelled` 识别控制流（七期：取消改返回值传播）。
 export type ParallelToolOutcome =
   | { readonly ok: true; readonly output: unknown }
@@ -78,8 +78,8 @@ export class ToolRunner<Ctx = unknown> {
     }
 
     // A-14: path 白名单二次校验（schema 之后的第二道闸）。
-    // ctx 上没有 allowedPaths 时 checkToolPathPolicy 直接返回 null，向后兼容。
-    const disallowedPath = checkToolPathPolicy(parsedIn.data, ctx);
+    // ctx 上没有 allowedPaths 时 ToolPathPolicy.check 直接返回 null，向后兼容。
+    const disallowedPath = ToolPathPolicy.check(parsedIn.data, ctx);
     if (disallowedPath !== null) {
       return Result.err(new AppError("TOOL_FORBIDDEN", {toolName: name, path: disallowedPath, detail: `Tool path outside allowed scope: ${name} -> ${disallowedPath}`}));
     }

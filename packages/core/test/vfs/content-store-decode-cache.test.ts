@@ -114,7 +114,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
     const sessionKkv = createSessionKkvService(conn);
     const body = `共享正文-${testIsolationSuffix()}：${"章节正文\n".repeat(60)}`;
 
-    // 两条存储各有自己的 hash 算法，但都是 hashContent(明文)——前提本身有牙
+    // 两条存储各有自己的 hash 算法，但都是 ContentHash.hash(明文)——前提本身有牙
     const vfsHash = await store.put(body);
     const sessionId = `s-${testIsolationSuffix()}`;
     const key = `full:/share-${testIsolationSuffix()}.md`;

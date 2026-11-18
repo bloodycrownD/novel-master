@@ -15,11 +15,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import {
-  decrementLiveRefsUnderScope,
-  decrementRefsForCheckpointFiles,
-  incrementRefsForCheckpointFiles,
-} from "@/domain/vfs/logic/revision-ref-count.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -241,7 +237,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     }
 
     // increment helper：每条 +1
-    await incrementRefsForCheckpointFiles(
+    await RevisionRefCount.incrementForCheckpointFiles(
       revisions,
       pointers.map((p) => ({ entryId: p.entryId, revisionVersion: p.version })),
     );
@@ -250,7 +246,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     }
 
     // decrement helper：每条 -1
-    await decrementRefsForCheckpointFiles(
+    await RevisionRefCount.decrementForCheckpointFiles(
       revisions,
       pointers.map((p) => ({ entryId: p.entryId, revisionVersion: p.version })),
     );
@@ -259,7 +255,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     }
   });
 
-  it("T-BATCH-REF-LIVE：decrementLiveRefsUnderScope 批量扣减 scope 下 live head", async () => {
+  it("T-BATCH-REF-LIVE：RevisionRefCount.decrementLiveUnderScope 批量扣减 scope 下 live head", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -282,7 +278,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     }
 
     // 批量扣减 scope 下所有 live head（每条 -1）
-    await decrementLiveRefsUnderScope(revisions, entries, sk, "/");
+    await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
     for (const p of pointers) {
       // 初始 1（live head）- 1 = 0
       assert.equal(await readRefCount(ctx.conn, p.entryId, p.version), 0);
@@ -296,14 +292,14 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     // increment helper 内部调 batchAdjustRefCount(+1)，缺失应抛错
     await assert.rejects(
       () =>
-        incrementRefsForCheckpointFiles(revisions, [
+        RevisionRefCount.incrementForCheckpointFiles(revisions, [
           { entryId: 555001, revisionVersion: 1 },
         ]),
       (err: unknown) => isAppError(err, "VFS_NOT_FOUND"),
     );
 
     // decrement helper 对缺失行 no-op，不抛错
-    await decrementRefsForCheckpointFiles(revisions, [
+    await RevisionRefCount.decrementForCheckpointFiles(revisions, [
       { entryId: 555002, revisionVersion: 1 },
     ]);
   });

@@ -7,108 +7,110 @@
  * @module domain/vfs/logic/seed-live-head-revisions
  */
 
-import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import { isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
+import { VfsExcludePrefixes } from "./vfs-exclude-prefixes.js";
 
-/**
- * 为 scope + 前缀下每个 live file head 补种缺失的 revision 行，并 +1 live ref。
- *
- * @returns Result.ok 新写入的 revision 行数
- * @remarks 已存在的 (entryId, version) 跳过（不二次 +1）。
- * `excludePrefixes` 非空时跳过排除前缀下的 head（隔离豁免，与 replaceVfsSubtree
- * 三侧对齐；防御性——排除前缀下本就不该被本次拷贝触碰）。
- */
-export async function seedLiveHeadRevisionsUnderPrefix(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, pathPrefix: string, contentStore?: VfsContentStore, excludePrefixes?: readonly string[]): Promise<Result<number, AppError>> {
-  const excludes = excludePrefixes ?? [];
-  const heads = (await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix)).filter((h) => !isVfsPathExcluded(h.path, excludes));
-  if (heads.length === 0) {
-    return Result.ok(0);
-  }
-
-  // 批量检查哪些 (entryId, version) 的 revision 已存在
-  const existingKeys = await revisionRepo.findExistingEntryVersionKeys(heads.map((h) => ({ entryId: h.entryId, version: h.headVersion })));
-  const needsSeed = heads.filter((h) => !existingKeys.has(`${h.entryId}:${h.headVersion}`));
-  if (needsSeed.length === 0) {
-    return Result.ok(0);
-  }
-
-  // 批量取每个待种文件的 content_hash（不解明文）
-  const hashes = await entryRepo.findContentHashesByPaths(scopeKey, needsSeed.map((h) => h.path));
-  if (!hashes.ok) return Result.err(hashes.error);
-  const hashMap = hashes.value;
-
-  // 批量确保 blob 存在（同库时全部已存在）
-  const allHashes = [...new Set(needsSeed.map((h) => hashMap.get(h.path) ?? null).filter((h): h is string => h != null))];
-  if (allHashes.length > 0 && contentStore != null) {
-    const existingBlobs = await contentStore.findExistingBlobHashes(allHashes);
-    const missingHashes = allHashes.filter((h) => !existingBlobs.has(h));
-    // blob 缺失时逐个 ensureBlob（回退路径；同库复制不会走到）
-    for (const hash of missingHashes) {
-      await contentStore.ensureBlob(hash, null);
+export const LiveHeadRevisionSeeder = {
+  /**
+   * 为 scope + 前缀下每个 live file head 补种缺失的 revision 行，并 +1 live ref。
+   *
+   * @returns Result.ok 新写入的 revision 行数
+   * @remarks 已存在的 (entryId, version) 跳过（不二次 +1）。
+   * `excludePrefixes` 非空时跳过排除前缀下的 head（隔离豁免，与 replaceVfsSubtree
+   * 三侧对齐；防御性——排除前缀下本就不该被本次拷贝触碰）。
+   */
+  async seedUnderPrefix(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, pathPrefix: string, contentStore?: VfsContentStore, excludePrefixes?: readonly string[]): Promise<Result<number, AppError>> {
+    const excludes = excludePrefixes ?? [];
+    const heads = (await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix)).filter((h) => !VfsExcludePrefixes.isPathExcluded(h.path, excludes));
+    if (heads.length === 0) {
+      return Result.ok(0);
     }
-  }
 
-  // 批量 INSERT revision（ref_count = 1，省掉逐条 adjustRefCount）
-  const items = needsSeed.map((h) => {
-    const contentHash = hashMap.get(h.path) ?? null;
-    // file entry 理应有 hash；遇 null 视为受损数据，以 deleted 兜底，防止脏 revision 污染 head
-    const status = contentHash != null ? "active" : "deleted";
-    return {
-      entryId: h.entryId,
-      version: h.headVersion,
-      contentHash,
-      status,
-      // 用 entry.mtimeMs 保留“文件真实修改时间”，避免漂移成种子时刻
-      mtimeMs: h.mtimeMs,
-      refCount: 1,
-    };
-  });
-  await revisionRepo.batchAppendWithRefCount(items);
-  return Result.ok(needsSeed.length);
-}
+    // 批量检查哪些 (entryId, version) 的 revision 已存在
+    const existingKeys = await revisionRepo.findExistingEntryVersionKeys(heads.map((h) => ({ entryId: h.entryId, version: h.headVersion })));
+    const needsSeed = heads.filter((h) => !existingKeys.has(`${h.entryId}:${h.headVersion}`));
+    if (needsSeed.length === 0) {
+      return Result.ok(0);
+    }
 
-/**
- * 插入文件并立即种 revision（对齐 RevisionAwareVfsService 新建路径）。
- * 若路径上仍有历史 revision（如 checkpoint 仍钉旧版），版本取 max+1。
- */
-export async function insertFileSeedingRevision(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, logicalPath: string, content: string): Promise<Result<{ version: number }, AppError>> {
-  const found = await entryRepo.findByPath(scopeKey, logicalPath);
-  if (!found.ok) return Result.err(found.error);
-  const entryId = found.value?.entryId;
-  let version: number;
-  if (entryId != null) {
-    const maxRevision = await revisionRepo.findMaxVersionForEntry(entryId);
-    if (maxRevision != null) {
-      const insertedAt = await entryRepo.insertAtVersion(scopeKey, logicalPath, content, maxRevision + 1);
-      if (!insertedAt.ok) return Result.err(insertedAt.error);
-      version = maxRevision + 1;
+    // 批量取每个待种文件的 content_hash（不解明文）
+    const hashes = await entryRepo.findContentHashesByPaths(scopeKey, needsSeed.map((h) => h.path));
+    if (!hashes.ok) return Result.err(hashes.error);
+    const hashMap = hashes.value;
+
+    // 批量确保 blob 存在（同库时全部已存在）
+    const allHashes = [...new Set(needsSeed.map((h) => hashMap.get(h.path) ?? null).filter((h): h is string => h != null))];
+    if (allHashes.length > 0 && contentStore != null) {
+      const existingBlobs = await contentStore.findExistingBlobHashes(allHashes);
+      const missingHashes = allHashes.filter((h) => !existingBlobs.has(h));
+      // blob 缺失时逐个 ensureBlob（回退路径；同库复制不会走到）
+      for (const hash of missingHashes) {
+        await contentStore.ensureBlob(hash, null);
+      }
+    }
+
+    // 批量 INSERT revision（ref_count = 1，省掉逐条 adjustRefCount）
+    const items = needsSeed.map((h) => {
+      const contentHash = hashMap.get(h.path) ?? null;
+      // file entry 理应有 hash；遇 null 视为受损数据，以 deleted 兜底，防止脏 revision 污染 head
+      const status = contentHash != null ? "active" : "deleted";
+      return {
+        entryId: h.entryId,
+        version: h.headVersion,
+        contentHash,
+        status,
+        // 用 entry.mtimeMs 保留“文件真实修改时间”，避免漂移成种子时刻
+        mtimeMs: h.mtimeMs,
+        refCount: 1,
+      };
+    });
+    await revisionRepo.batchAppendWithRefCount(items);
+    return Result.ok(needsSeed.length);
+  },
+
+  /**
+   * 插入文件并立即种 revision（对齐 RevisionAwareVfsService 新建路径）。
+   * 若路径上仍有历史 revision（如 checkpoint 仍钉旧版），版本取 max+1。
+   */
+  async insertFileSeeding(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, logicalPath: string, content: string): Promise<Result<{ version: number }, AppError>> {
+    const found = await entryRepo.findByPath(scopeKey, logicalPath);
+    if (!found.ok) return Result.err(found.error);
+    const entryId = found.value?.entryId;
+    let version: number;
+    if (entryId != null) {
+      const maxRevision = await revisionRepo.findMaxVersionForEntry(entryId);
+      if (maxRevision != null) {
+        const insertedAt = await entryRepo.insertAtVersion(scopeKey, logicalPath, content, maxRevision + 1);
+        if (!insertedAt.ok) return Result.err(insertedAt.error);
+        version = maxRevision + 1;
+      } else {
+        const inserted = await entryRepo.insert(scopeKey, logicalPath, content);
+        if (!inserted.ok) return Result.err(inserted.error);
+        version = inserted.value.version;
+      }
     } else {
       const inserted = await entryRepo.insert(scopeKey, logicalPath, content);
       if (!inserted.ok) return Result.err(inserted.error);
       version = inserted.value.version;
     }
-  } else {
-    const inserted = await entryRepo.insert(scopeKey, logicalPath, content);
-    if (!inserted.ok) return Result.err(inserted.error);
-    version = inserted.value.version;
-  }
-  const after = await entryRepo.findByPath(scopeKey, logicalPath);
-  if (!after.ok) return Result.err(after.error);
-  const contentHash = await entryRepo.findContentHash(scopeKey, logicalPath);
-  if (!contentHash.ok) return Result.err(contentHash.error);
-  await revisionRepo.append({
-    entryId: after.value!.entryId,
-    version,
-    content: null,
-    contentHash: contentHash.value,
-    status: "active",
-    mtimeMs: after.value?.mtimeMs ?? Date.now(),
-  });
-  await adjustRef(revisionRepo, after.value!.entryId, version, +1);
-  return Result.ok({ version });
-}
+    const after = await entryRepo.findByPath(scopeKey, logicalPath);
+    if (!after.ok) return Result.err(after.error);
+    const contentHash = await entryRepo.findContentHash(scopeKey, logicalPath);
+    if (!contentHash.ok) return Result.err(contentHash.error);
+    await revisionRepo.append({
+      entryId: after.value!.entryId,
+      version,
+      content: null,
+      contentHash: contentHash.value,
+      status: "active",
+      mtimeMs: after.value?.mtimeMs ?? Date.now(),
+    });
+    await RevisionRefCount.adjust(revisionRepo, after.value!.entryId, version, +1);
+    return Result.ok({ version });
+  },
+} as const;

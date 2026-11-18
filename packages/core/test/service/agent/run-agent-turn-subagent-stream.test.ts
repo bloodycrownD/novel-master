@@ -18,7 +18,7 @@ import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
+import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type  AgentTurnRuntimePort } from "@novel-master/core/agent";
 import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type {
   ModelRequestService,
@@ -26,11 +26,7 @@ import type {
 } from "@/service/provider/model-request.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
@@ -358,7 +354,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     // 主 run 继续收尾。因此断言口径不是「runAgentTurn 整体抛出」，而是三件
     // 可观察事实：① 主 run 正常完成；② 子 run 因重抛发生在子 runner.run
     // 之前而从未发起 model 调用；③ boom 经 ToolError.cause 解包出现在第 2
-    // 次主 run 请求的输入里（formatToolErrorForLlm 输出 "Error: boom"）。
+    // 次主 run 请求的输入里（ToolOutput.formatErrorForLlm 输出 "Error: boom"）。
     // 若实现删掉 :869 重抛行（catch 吞一切静默回退），boom 被吞、子 run 会
     // 以 stream=true 启动并消费掉第 2 个响应，主 run 第 3 次调用无预设响应
     // 而抛错——①②③ 全部转红。

@@ -7,14 +7,14 @@
  *
  * 解压 / 按 encoding 解码 / 字节形态校验失败走 `Result`（key
  * `VFS_CONTENT_CORRUPT` / `VFS_CONTENT_UNSUPPORTED_FORMAT`），调用方按
- * `if (!r.ok)` 收窄后自行决定抛还是降级；`compressZlib` 是对任意字节都成立的
+ * `if (!r.ok)` 收窄后自行决定抛还是降级；`compress` 是对任意字节都成立的
  * 纯编码，不套 Result。
  *
  * @module domain/vfs/content-store/logic/zlib-codec
  */
 
 import { unzlibSync, zlibSync } from "fflate";
-import { tryZlibDeflate, tryZlibInflate } from "./zlib-accelerator.js";
+import { ZlibAccelerator } from "./zlib-accelerator.js";
 import { Encoding } from "@/common/encoding.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -32,102 +32,104 @@ type VfsContentError = AppError<"VFS_CONTENT_CORRUPT" | "VFS_CONTENT_UNSUPPORTED
  */
 export const VFS_CONTENT_ENCODING_ZLIB = "zlib" as const;
 
-/**
- * zlib 压缩明文 UTF-8 字节。
- *
- * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
- * 宿主注册了 zlib 加速器（Node `node:zlib`）时优先走加速器，未注册/加速器
- * 失败回落 fflate（行为与历史一致）。压缩是对任意 `Uint8Array` 都成立的纯编码，
- * 没有「输入/数据不合法」这类可恢复失败，故不套 Result。
- */
-export function compressZlib(plainUtf8: Uint8Array): Uint8Array {
-  return tryZlibDeflate(plainUtf8) ?? zlibSync(plainUtf8);
-}
+export const ZlibCodec = {
+  /**
+   * zlib 压缩明文 UTF-8 字节。
+   *
+   * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
+   * 宿主注册了 zlib 加速器（Node `node:zlib`）时优先走加速器，未注册/加速器
+   * 失败回落 fflate（行为与历史一致）。压缩是对任意 `Uint8Array` 都成立的纯编码，
+   * 没有「输入/数据不合法」这类可恢复失败，故不套 Result。
+   */
+  compress(plainUtf8: Uint8Array): Uint8Array {
+    return ZlibAccelerator.tryDeflate(plainUtf8) ?? zlibSync(plainUtf8);
+  },
 
-/**
- * zlib 解压为 UTF-8 字节；坏流返回 `VFS_CONTENT_CORRUPT`。
- *
- * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
- * 宿主注册了 zlib 加速器（Node `node:zlib`）时优先走加速器，未注册/加速器
- * 失败回落 fflate（行为与历史一致）。
- */
-export function decompressZlib(compressed: Uint8Array): Result<Uint8Array, VfsContentError> {
-  try {
-    return Result.ok(tryZlibInflate(compressed) ?? unzlibSync(compressed));
-  } catch (error) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `zlib 解压失败: ${Errors.text(error)}` }, { cause: error }));
-  }
-}
-
-/**
- * 确保 BLOB 绑定使用独立 ArrayBuffer（RN / better-sqlite3 约定）。
- *
- * @remarks vfs content-store put 与 session-kkv file_cache encode 落库前
- * 共用：源视图可能带 byteOffset，直接绑参会越界，拷贝成紧凑数组兜底。
- */
-export function tightBytes(source: Uint8Array): Uint8Array {
-  const copy = new Uint8Array(source.byteLength);
-  copy.set(source);
-  return copy;
-}
-
-/**
- * 将已知为二进制 BLOB 的列值收成 Uint8Array；形态不符返回 `VFS_CONTENT_CORRUPT`。
- *
- * @remarks string 不得经此函数；zlib-b64 / 存量 string 路径在
- * {@link decodeCompressedBytes} 的约定分支处理。`label` 为错误文案中的
- * 表.列 名（如 `vfs_content_blob.bytes`），由调用方传入。
- */
-export function asUint8Array(value: unknown, label: string): Result<Uint8Array, VfsContentError> {
-  if (value instanceof Uint8Array) {
-    return Result.ok(value);
-  }
-  // RN quick-sqlite / 部分绑定可能直接给出 ArrayBuffer。
-  if (value instanceof ArrayBuffer) {
-    return Result.ok(new Uint8Array(value));
-  }
-  return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(value)}`, label, actualType: Object.prototype.toString.call(value) }));
-}
-
-/** base64 文本 → 字节；非法文本返回 `VFS_CONTENT_CORRUPT`（保留底层原因）。 */
-function decodeBase64Text(text: string): Result<Uint8Array, VfsContentError> {
-  try {
-    return Result.ok(Encoding.base64ToBytes(text));
-  } catch (error) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `base64 解码失败: ${Errors.text(error)}` }, { cause: error }));
-  }
-}
-
-/**
- * 按 encoding 将 blob 列值解成 zlib 压缩字节。
- *
- * 三形态兼容（vfs content-store 与 session-kkv file_cache 的 get 共用，
- * 含 RN 平台存量口径）：
- * - `zlib` + Uint8Array/ArrayBuffer：原样
- * - `zlib` + string：存量 RN 误存 base64，按 base64 解
- * - `zlib-b64`：取 base64 文本再解码
- *
- * @param label 错误文案中的表.列 名（如 `vfs_content_blob.bytes` /
- *   `session_file_cache_blob.bytes`），由调用方传入以区分两表。
- * @returns 成功为 zlib 压缩字节；形态不符 / base64 非法返回 `VFS_CONTENT_CORRUPT`，
- *   encoding 不在值域返回 `VFS_CONTENT_UNSUPPORTED_FORMAT`。
- */
-export function decodeCompressedBytes(encoding: string, bytes: unknown, label: string): Result<Uint8Array, VfsContentError> {
-  if (encoding === VFS_CONTENT_ENCODING_ZLIB) {
-    if (typeof bytes === "string") {
-      // 存量：Mobile 曾写 encoding=zlib，但 quick-sqlite 读回为 base64 字符串。
-      return decodeBase64Text(bytes);
+  /**
+   * zlib 解压为 UTF-8 字节；坏流返回 `VFS_CONTENT_CORRUPT`。
+   *
+   * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
+   * 宿主注册了 zlib 加速器（Node `node:zlib`）时优先走加速器，未注册/加速器
+   * 失败回落 fflate（行为与历史一致）。
+   */
+  decompress(compressed: Uint8Array): Result<Uint8Array, VfsContentError> {
+    try {
+      return Result.ok(ZlibAccelerator.tryInflate(compressed) ?? unzlibSync(compressed));
+    } catch (error) {
+      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `zlib 解压失败: ${Errors.text(error)}` }, { cause: error }));
     }
-    return asUint8Array(bytes, label);
-  }
-  if (encoding === VFS_CONTENT_ENCODING_ZLIB_B64) {
-    if (typeof bytes === "string") {
-      return decodeBase64Text(bytes);
+  },
+
+  /**
+   * 确保 BLOB 绑定使用独立 ArrayBuffer（RN / better-sqlite3 约定）。
+   *
+   * @remarks vfs content-store put 与 session-kkv file_cache encode 落库前
+   * 共用：源视图可能带 byteOffset，直接绑参会越界，拷贝成紧凑数组兜底。
+   */
+  tightBytes(source: Uint8Array): Uint8Array {
+    const copy = new Uint8Array(source.byteLength);
+    copy.set(source);
+    return copy;
+  },
+
+  /**
+   * 将已知为二进制 BLOB 的列值收成 Uint8Array；形态不符返回 `VFS_CONTENT_CORRUPT`。
+   *
+   * @remarks string 不得经此函数；zlib-b64 / 存量 string 路径在
+   * {@link ZlibCodec.decodeCompressedBytes} 的约定分支处理。`label` 为错误文案中的
+   * 表.列 名（如 `vfs_content_blob.bytes`），由调用方传入。
+   */
+  asUint8Array(value: unknown, label: string): Result<Uint8Array, VfsContentError> {
+    if (value instanceof Uint8Array) {
+      return Result.ok(value);
     }
-    if (bytes instanceof Uint8Array || bytes instanceof ArrayBuffer) {
-      return decodeBase64Text(new TextDecoder().decode(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)));
+    // RN quick-sqlite / 部分绑定可能直接给出 ArrayBuffer。
+    if (value instanceof ArrayBuffer) {
+      return Result.ok(new Uint8Array(value));
     }
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(bytes)}`, label, actualType: Object.prototype.toString.call(bytes) }));
-  }
-  return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", { detail: `不支持的 blob encoding: ${encoding}`, encoding, label }));
-}
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(value)}`, label, actualType: Object.prototype.toString.call(value) }));
+  },
+
+  /** base64 文本 → 字节；非法文本返回 `VFS_CONTENT_CORRUPT`（保留底层原因）。 */
+  decodeBase64Text(text: string): Result<Uint8Array, VfsContentError> {
+    try {
+      return Result.ok(Encoding.base64ToBytes(text));
+    } catch (error) {
+      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `base64 解码失败: ${Errors.text(error)}` }, { cause: error }));
+    }
+  },
+
+  /**
+   * 按 encoding 将 blob 列值解成 zlib 压缩字节。
+   *
+   * 三形态兼容（vfs content-store 与 session-kkv file_cache 的 get 共用，
+   * 含 RN 平台存量口径）：
+   * - `zlib` + Uint8Array/ArrayBuffer：原样
+   * - `zlib` + string：存量 RN 误存 base64，按 base64 解
+   * - `zlib-b64`：取 base64 文本再解码
+   *
+   * @param label 错误文案中的表.列 名（如 `vfs_content_blob.bytes` /
+   *   `session_file_cache_blob.bytes`），由调用方传入以区分两表。
+   * @returns 成功为 zlib 压缩字节；形态不符 / base64 非法返回 `VFS_CONTENT_CORRUPT`，
+   *   encoding 不在值域返回 `VFS_CONTENT_UNSUPPORTED_FORMAT`。
+   */
+  decodeCompressedBytes(encoding: string, bytes: unknown, label: string): Result<Uint8Array, VfsContentError> {
+    if (encoding === VFS_CONTENT_ENCODING_ZLIB) {
+      if (typeof bytes === "string") {
+        // 存量：Mobile 曾写 encoding=zlib，但 quick-sqlite 读回为 base64 字符串。
+        return ZlibCodec.decodeBase64Text(bytes);
+      }
+      return ZlibCodec.asUint8Array(bytes, label);
+    }
+    if (encoding === VFS_CONTENT_ENCODING_ZLIB_B64) {
+      if (typeof bytes === "string") {
+        return ZlibCodec.decodeBase64Text(bytes);
+      }
+      if (bytes instanceof Uint8Array || bytes instanceof ArrayBuffer) {
+        return ZlibCodec.decodeBase64Text(new TextDecoder().decode(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)));
+      }
+      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(bytes)}`, label, actualType: Object.prototype.toString.call(bytes) }));
+    }
+    return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", { detail: `不支持的 blob encoding: ${encoding}`, encoding, label }));
+  },
+} as const;

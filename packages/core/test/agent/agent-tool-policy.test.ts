@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { registerBuiltinTools, ToolRegistry, ToolRunner } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry, ToolRunner } from "@novel-master/core";
 
-import { resolveAgentToolRegistry, validateAgentDefinition, validateAgentToolPolicy, type AgentDefinition, type AgentToolPolicy } from "@novel-master/core/agent";
+import { resolveAgentToolRegistry, validateAgentDefinition, validateAgentToolPolicy, type AgentDefinition, type  AgentToolPolicy } from "@novel-master/core/agent";
 import { AppError, isAppError } from "@novel-master/core/errors";
 
 import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
@@ -16,7 +16,7 @@ const BASE_DEF: AgentDefinition = {
 
 function vfsRegistryNames(): string[] {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return registry.list();
 }
 
@@ -51,7 +51,7 @@ describe("agent tool policy", () => {
 
   it("T1: no tools config exposes all builtin tools", () => {
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, BASE_DEF);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
     assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, vfsRegistryNames().length);
@@ -63,7 +63,7 @@ describe("agent tool policy", () => {
       tools: { allow: ["read", "grep"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
     assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, 2);
@@ -76,7 +76,7 @@ describe("agent tool policy", () => {
       tools: { allow: [] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list(), []);
     assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, 0);
@@ -88,7 +88,7 @@ describe("agent tool policy", () => {
       tools: { deny: ["write"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.ok(!filtered.list().includes("write"));
     assert.ok(filtered.list().includes("read"));
@@ -110,7 +110,7 @@ describe("agent tool policy", () => {
       tools: { allow: ["vfs.read", "vfs.grep"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
   });
@@ -133,7 +133,7 @@ describe("agent tool policy", () => {
   it("empty deny matches default (all tools)", () => {
     const def: AgentDefinition = { ...BASE_DEF, tools: { deny: [] } };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
   });
@@ -144,7 +144,7 @@ describe("agent tool policy", () => {
       tools: { allow: ["read", "grep"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     const runner = new ToolRunner(filtered);
 
@@ -170,7 +170,7 @@ describe("agent tool policy", () => {
       tools: { deny: ["skill"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.ok(!filtered.list().includes("skill"));
     assert.ok(filtered.list().includes("read"));
@@ -190,7 +190,7 @@ describe("agent tool policy", () => {
       tools: { allow: ["skill", "read"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.ok(!filtered.list().includes("skill"));
     assert.ok(filtered.list().includes("read"));
@@ -212,7 +212,7 @@ describe("agent tool policy", () => {
       tools: { allow: ["skill"] },
     };
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list(), ["skill"]);
   });
@@ -220,7 +220,7 @@ describe("agent tool policy", () => {
   // T-AG4：agent 管理工具的摘除与策略路径（对应 PRD 验收 7）
   it("T-AG4: mode 为 subagent 或 depth>=2 的注册表不含 agent（与 task 同分支摘除）", () => {
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
 
     // 子 agent（mode === "subagent"）：task / agent 均强制移除
     const subDef: AgentDefinition = { ...BASE_DEF, mode: "subagent" };
@@ -248,7 +248,7 @@ describe("agent tool policy", () => {
 
   it("T-AG4: deny 含 agent → 摘除；allow 显式含 agent → 保留（主 agent 策略路径）", () => {
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
 
     // deny 名单校验通过（agent 是合法策略名）
     assert.equal(validateAgentToolPolicy({ deny: ["agent"] }, registryNames).ok, true);

@@ -4,7 +4,7 @@
  * @module domain/workplace/workplace-file-tree
  */
 
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { DisplayState, WorkplaceDirRule, WorkplaceScope } from "../model/workplace-types.js";
@@ -55,7 +55,7 @@ function appendDirLines(lines: string[], dirPath: string, prefix: string, params
   if (!childDirs.ok) return Result.err(childDirs.error);
   const subdirs = sortDirPaths(childDirs.value, dirRule, { smartRules: params.smartRules, dirMtimeByPath: params.dirMtimeByPath }).map((path) => ({ kind: "dir" as const, path }));
 
-  const resolvedDir = normalizePath(dirPath);
+  const resolvedDir = PathNormalizer.normalize(dirPath);
   if (!resolvedDir.ok) return Result.err(resolvedDir.error);
   const dirPrefix = resolvedDir.value === "/" ? "/" : `${resolvedDir.value}/`;
   const childFiles: string[] = [];
@@ -73,8 +73,8 @@ function appendDirLines(lines: string[], dirPath: string, prefix: string, params
     const isLast = i === children.length - 1;
     const branch = isLast ? "└── " : "├── ";
     const child = children[i]!;
-    // entryName 内联：normalizePath 失败沿返回值通道原样上交（决定权交给调用方）。
-    const resolved = normalizePath(child.path);
+    // entryName 内联：PathNormalizer.normalize 失败沿返回值通道原样上交（决定权交给调用方）。
+    const resolved = PathNormalizer.normalize(child.path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     let lineName: string;

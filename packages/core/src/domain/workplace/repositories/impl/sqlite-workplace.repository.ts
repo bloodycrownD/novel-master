@@ -8,8 +8,8 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { escapeLike } from "@/domain/vfs/repositories/impl/scope-prefix-helpers.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { ScopePrefix } from "@/domain/vfs/repositories/impl/scope-prefix-helpers.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { WORKPLACE_DIR_RULE_TABLE, WORKPLACE_FILE_RULE_TABLE } from "@/bootstrap/workplace/workplace-schema.js";
@@ -46,10 +46,10 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   /**
-   * 解包接力（错误通道迁移四期门⑦）：normalizePath 失败沿返回值通道原样上交（本仓储各方法同款），决定权逐层交给调用方。
+   * 解包接力（错误通道迁移四期门⑦）：PathNormalizer.normalize 失败沿返回值通道原样上交（本仓储各方法同款），决定权逐层交给调用方。
    */
   async upsertDirRule(rule: WorkplaceDirRule): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(rule.logicalPath);
+    const resolved = PathNormalizer.normalize(rule.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
@@ -81,7 +81,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
 
   /** nm-style: keep-public — 实现 WorkplaceRepository.upsertFileRule 端口方法；内联会把 upsert SQL 搬进调用层。 */
   async upsertFileRule(rule: WorkplaceFileRule): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(rule.logicalPath);
+    const resolved = PathNormalizer.normalize(rule.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
@@ -119,7 +119,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         fill_policy = excluded.fill_policy`;
     const paramsList: unknown[][] = [];
     for (const rule of rules) {
-      const resolved = normalizePath(rule.logicalPath);
+      const resolved = PathNormalizer.normalize(rule.logicalPath);
       if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([rule.scopeKey, resolved.value, rule.ruleEnabled ? 1 : 0, rule.sortField, rule.sortOrder, rule.headCount, rule.tailCount, rule.fillPolicy]);
     }
@@ -139,7 +139,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         inclusion_mode = excluded.inclusion_mode`;
     const paramsList: unknown[][] = [];
     for (const rule of rules) {
-      const resolved = normalizePath(rule.logicalPath);
+      const resolved = PathNormalizer.normalize(rule.logicalPath);
       if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([rule.scopeKey, resolved.value, rule.inclusionMode]);
     }
@@ -173,7 +173,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
-    const resolved = normalizePath(logicalPath);
+    const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
@@ -187,7 +187,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     const sql33 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
-    const resolved = normalizePath(logicalPath);
+    const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
@@ -221,10 +221,10 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   }
 
   async deleteRulesUnderLogicalPrefix(scopeKey: string, logicalPrefix: string): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(logicalPrefix);
+    const resolved = PathNormalizer.normalize(logicalPrefix);
     if (!resolved.ok) return Result.err(resolved.error);
     const base = resolved.value;
-    const escaped = escapeLike(base);
+    const escaped = ScopePrefix.escapeLike(base);
     const childPattern = `${escaped}/%`;
     const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
@@ -238,13 +238,13 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   }
 
   async renameRulesUnderLogicalPrefix(scopeKey: string, oldPrefix: string, newPrefix: string): Promise<Result<void, AppError>> {
-    const oldResolved = normalizePath(oldPrefix);
+    const oldResolved = PathNormalizer.normalize(oldPrefix);
     if (!oldResolved.ok) return Result.err(oldResolved.error);
-    const newResolved = normalizePath(newPrefix);
+    const newResolved = PathNormalizer.normalize(newPrefix);
     if (!newResolved.ok) return Result.err(newResolved.error);
     const oldBase = oldResolved.value;
     const newBase = newResolved.value;
-    const escaped = escapeLike(oldBase);
+    const escaped = ScopePrefix.escapeLike(oldBase);
     const childPattern = `${escaped}/%`;
     const matchClause = "scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')";
     // 一条 UPDATE：精确匹配自身（替换为 newBase）或子路径（拼接 newBase + 剩余部分）

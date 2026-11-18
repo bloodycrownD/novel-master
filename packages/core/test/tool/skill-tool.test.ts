@@ -7,11 +7,8 @@ import { describe, it } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import {
-  SKILL_TOOL_NAME,
-  skillTool,
-} from "../../src/domain/tool/builtin/skill-tool.js";
+import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import { SKILL_TOOL_NAME, skillTool } from "../../src/domain/tool/builtin/skill-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type {
   EffectiveSkill,
@@ -129,12 +126,12 @@ function makeRunner(): {
   readonly registry: ToolRegistry<BuiltinToolContext>;
 } {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return { runner: new ToolRunner(registry), registry };
 }
 
 describe("skill 工具", () => {
-  it("registerBuiltinTools 注册 skill（共 11 个内置工具）", () => {
+  it("BuiltinTools.register 注册 skill（共 11 个内置工具）", () => {
     const { registry } = makeRunner();
     assert.ok(registry.list().includes(SKILL_TOOL_NAME));
     assert.equal(registry.list().length, 11);
@@ -513,7 +510,7 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
 
   function registryWithSkillOpt(denySkillOpt: boolean): ToolRegistry<BuiltinToolContext> {
     const base = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(base);
+    BuiltinTools.register(base);
     if (!denySkillOpt) return base;
     return resolveAgentToolRegistry(
       base,

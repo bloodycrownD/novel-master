@@ -16,19 +16,19 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import { Coerce } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
-import { resolveEntryPlainContent } from "../../content-store/logic/resolve-stored-content.js";
+import { StoredContent } from "../../content-store/logic/resolve-stored-content.js";
 import type { VfsEntry, VfsEntryKind } from "../../model/vfs-entry.js";
 import type { VfsContentSize } from "../../model/vfs-content-size.js";
 import type { VfsListEntry } from "../../model/vfs-list-entry.js";
 import type { VfsDeleteOptions, VfsListOptions } from "../../model/vfs-options.js";
 import type { VfsEntryRepository } from "../vfs-entry.port.js";
-import { normalizePath } from "./normalize-path.js";
-import { escapeLike } from "./scope-prefix-helpers.js";
+import { PathNormalizer } from "./normalize-path.js";
+import { ScopePrefix } from "./scope-prefix-helpers.js";
 import { Path } from "@/common/path.js";
 
 /** 统一前缀扫描的 LIKE 子串（base 为 `/` 时匹配 `/%`）。 */
 function childLikePattern(base: string): string {
-  return base === "/" ? "/%" : `${escapeLike(base)}/%`;
+  return base === "/" ? "/%" : `${ScopePrefix.escapeLike(base)}/%`;
 }
 
 /**
@@ -46,7 +46,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
    * 路径归一化失败与已知失败走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，调用方逐层接力）。
    */
   async list(scopeKey: string, dir: string, options?: VfsListOptions): Promise<Result<VfsListEntry[], AppError>> {
-    const resolved = normalizePath(dir);
+    const resolved = PathNormalizer.normalize(dir);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalizedDir = resolved.value;
     const pattern = childLikePattern(normalizedDir);
@@ -90,7 +90,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async findByPath(scopeKey: string, path: string): Promise<Result<VfsEntry | null, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql28 = "SELECT entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind\n       FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}";
@@ -101,7 +101,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const row = rows[0]!;
     const kindRaw = row.entry_kind;
     const entryKind: VfsEntryKind = kindRaw === "directory" ? "directory" : "file";
-    const resolvedContent = await resolveEntryPlainContent(this.contentStore, { entryKind, content: Coerce.nullableText(row.content), contentHash: Coerce.nullableText(row.content_hash) });
+    const resolvedContent = await StoredContent.resolveEntry(this.contentStore, { entryKind, content: Coerce.nullableText(row.content), contentHash: Coerce.nullableText(row.content_hash) });
     if (!resolvedContent.ok) return Result.err(resolvedContent.error);
     return Result.ok({
       entryId: Number(row.entry_id),
@@ -115,7 +115,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async findContentHash(scopeKey: string, path: string): Promise<Result<string | null, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql29 = "SELECT content_hash, entry_kind FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
@@ -137,7 +137,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
     const normalizedValues: string[] = [];
     for (const path of paths) {
-      const resolved = normalizePath(path);
+      const resolved = PathNormalizer.normalize(path);
       if (!resolved.ok) return Result.err(resolved.error);
       normalizedValues.push(resolved.value);
     }
@@ -174,7 +174,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.findContentSizeByPath 端口方法；内联会把大小探测 SQL 搬进调用层。 */
   async findContentSizeByPath(scopeKey: string, path: string): Promise<Result<VfsContentSize | null, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     // 只取长度不解正文：内联行 length(content) 为字符数（NULL 行不拉正文）；
@@ -232,7 +232,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.insertWithContentHash 端口方法；内联会把 INSERT SQL 搬进调用层。 */
   async insertWithContentHash(scopeKey: string, path: string, contentHash: string): Promise<Result<{ version: number }, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
@@ -243,7 +243,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async insertAtVersion(scopeKey: string, path: string, content: string, version: number): Promise<Result<{ version: number }, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
@@ -254,7 +254,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async insertDirectory(scopeKey: string, path: string): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
@@ -265,7 +265,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.reviveEntryAtVersion 端口方法；内联会把显式 entry_id 重建 SQL 搬进调用层。 */
   async reviveEntryAtVersion(input: { entryId: number; scopeKey: string; path: string; contentHash: string; headVersion: number; mtimeMs: number }): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(input.path);
+    const resolved = PathNormalizer.normalize(input.path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql35 = "INSERT INTO vfs_entry (entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{entryId}, #{scopeKey}, #{path}, NULL, #{contentHash}, #{headVersion}, #{mtimeMs}, 'file')";
@@ -286,7 +286,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async updateWithContentHash(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
@@ -308,7 +308,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       contentHash: string;
       mtimeMs: number;
     }): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql37 = "SELECT entry_id FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
@@ -338,7 +338,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<Result<number, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const pattern = childLikePattern(normalized);
@@ -373,7 +373,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (entries.length === 0) {
       return Result.ok(0);
     }
-    // base 为空串时 normalizePath 会判 INVALID_PATH；空串与根 "/" 在 childLikePattern 下
+    // base 为空串时 PathNormalizer.normalize 会判 INVALID_PATH；空串与根 "/" 在 childLikePattern 下
     // 都匹配 "/%"（即全部以 / 开头的路径），语义等价，这里用 "/" 替代空串。
     const deletePath = base === "" ? "/" : base;
     // delete() 现在透出 changes（实际删除行数），比之前返回探测命中数更准——
@@ -480,7 +480,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       return this.resolveScanRows(rows);
     }
 
-    const resolved = normalizePath(pathPrefix);
+    const resolved = PathNormalizer.normalize(pathPrefix);
     if (!resolved.ok) return Result.err(resolved.error);
     const base = resolved.value;
     const pattern = childLikePattern(base);
@@ -513,7 +513,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       })));
     }
 
-    const resolved = normalizePath(pathPrefix);
+    const resolved = PathNormalizer.normalize(pathPrefix);
     if (!resolved.ok) return Result.err(resolved.error);
     const base = resolved.value;
     const pattern = childLikePattern(base);
@@ -535,7 +535,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
     const normalizedValues: string[] = [];
     for (const p of paths) {
-      const resolved = normalizePath(p);
+      const resolved = PathNormalizer.normalize(p);
       if (!resolved.ok) return Result.err(resolved.error);
       normalizedValues.push(resolved.value);
     }
@@ -569,7 +569,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
     const paramsList: unknown[][] = [];
     for (const e of entries) {
-      const resolved = normalizePath(e.path);
+      const resolved = PathNormalizer.normalize(e.path);
       if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([scopeKey, resolved.value, e.contentHash, e.mtimeMs]);
     }
@@ -584,7 +584,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const now = Date.now();
     const paramsList: unknown[][] = [];
     for (const p of paths) {
-      const resolved = normalizePath(p);
+      const resolved = PathNormalizer.normalize(p);
       if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([scopeKey, resolved.value, now]);
     }
@@ -638,9 +638,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.renamePathInScope 端口方法；内联会把事务内改名 SQL 搬进调用层。 */
   async renamePathInScope(tx: TdbcConnection, scopeKey: string, oldPath: string, newPath: string): Promise<Result<void, AppError>> {
-    const oldResolved = normalizePath(oldPath);
+    const oldResolved = PathNormalizer.normalize(oldPath);
     if (!oldResolved.ok) return Result.err(oldResolved.error);
-    const newResolved = normalizePath(newPath);
+    const newResolved = PathNormalizer.normalize(newPath);
     if (!newResolved.ok) return Result.err(newResolved.error);
     const oldNorm = oldResolved.value;
     const newNorm = newResolved.value;
@@ -668,7 +668,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       scopeKey,
       oldWithSlash: `${oldBase}/`,
       newWithSlash: `${newBase}/`,
-      pattern: `${escapeLike(oldBase)}/%`,
+      pattern: `${ScopePrefix.escapeLike(oldBase)}/%`,
     };
     const result = await executeTemplate(tx, parser, sql50, sql50Bindings);
     // 处理前缀根自身（oldBase → newBase）。

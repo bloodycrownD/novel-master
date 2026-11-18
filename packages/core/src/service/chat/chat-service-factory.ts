@@ -15,7 +15,7 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
@@ -185,7 +185,7 @@ export const ChatServiceFactory = {
     });
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const toolRunner = new ToolRunner(registry);
     const sessionKkv = createSessionKkvService(conn);
 

@@ -1,7 +1,7 @@
 /**
  * Revision garbage collection for session-scoped paths.
  *
- * entry_id 化后可达集按 `(scopeKey, entryId)`；前缀打扫走 `deleteUnreferencedUnderScope`。
+ * entry_id 化后可达集按 `(scopeKey, entryId)`；前缀打扫走 `RevisionRefCount.deleteUnreferencedUnderScope`。
  *
  * 历史背景：曾依据 `isSchemaMigrationApplied(VFS_REVISION_REF_COUNT_V1_ID)` 在
  * 「ref_count 回填完成前」fallback 到 `deleteExceptReachable` 可达集路径。Step 21 后
@@ -12,7 +12,7 @@
  */
 
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { deleteUnreferencedUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
 /**
@@ -24,7 +24,7 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
  * 函数体从未使用它们，调用方也不再为接口让位传真对象。
  *
  * 两步打扫：
- * 1. path-scoped `deleteUnreferencedUnderScope`——靠 JOIN vfs_entry 圈定当前 session
+ * 1. path-scoped `RevisionRefCount.deleteUnreferencedUnderScope`——靠 JOIN vfs_entry 圈定当前 session
  *    scope 下 ref_count<=0 的 revision；
  * 2. 全局 `deleteGlobalOrphans`——清掉「entry 已删、ref_count<=0」的 JOIN 孤儿
  *    （findings 发现 14：删文件后旧版 active revision 的 entry 已删，path-scoped
@@ -38,7 +38,7 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
  * `includeGlobalOrphans: true`，其余调用方（删除链 / user-vfs-turn /
  * 会话删除）行为不变。
  *
- * blob GC 须经 {@link runDeferredBlobGc} 另行调度，本函数不再同步 collect/gc
+ * blob GC 须经 {@link DeferredBlobGc.run} 另行调度，本函数不再同步 collect/gc
  * （revision DELETE 触发器已能连带回收归零 blob）。
  *
  * @returns Count of deleted revision rows (scoped + global orphans).
@@ -50,7 +50,7 @@ export async function sweepSessionRevisions(revisionRepo: VfsRevisionRepository,
     sessionId,
   };
   const scopeKeyStr = LogicalPath.scopeKey(scope);
-  const scoped = await deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
+  const scoped = await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
   if (options?.includeGlobalOrphans === false) {
     // scoped-only：全局孤儿兜底由调用方在事务提交后 deferred 调度。
     return scoped;

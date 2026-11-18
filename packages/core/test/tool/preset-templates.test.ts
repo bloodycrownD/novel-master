@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { unwrap } from "../helpers/result-unwrap.js";
-import { runTemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
+import { TemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { validateSearchEngineTemplate, type SearchResponse, type SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
+import { SearchEngine, type SearchResponse, type  SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
 
 const QUERY = "测试 查询";
 
@@ -25,7 +25,7 @@ async function runPreset(
     });
   }) as typeof globalThis.fetch;
   const template = PRESET_ENGINE_TEMPLATES[id];
-  const out = unwrap(await runTemplateEngine(template, { engine: id, template, ...extra }, QUERY, options, params, fetchFn));
+  const out = unwrap(await TemplateEngine.run(template, { engine: id, template, ...extra }, QUERY, options, params, fetchFn));
   return { call: calls[0]!, out };
 }
 
@@ -194,7 +194,7 @@ describe("出厂模板：常量数据锁（T-P 附带）", () => {
 
   it("六份出厂模板全部通过保存路径校验（含明文密钥启发式检测，占位符不误报）", () => {
     for (const [id, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
-      const validated = validateSearchEngineTemplate(template);
+      const validated = SearchEngine.validateTemplate(template);
       assert.ok(validated.ok, `${id} 模板应通过校验：${validated.ok ? "" : validated.error.message}`);
     }
   });

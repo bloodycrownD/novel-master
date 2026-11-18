@@ -881,7 +881,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
     assert.equal(plan.mkdirPaths.length, 0);
     assert.equal(probe.transactionCount, 3, "旧形态（整批一条事务）这里是 1");
     // 每片文件数上界：单条事务内的 entry 插入只可能来自本片文件 + 它们的父目录行
-    // （`ensureParentDirectories` 造的 `/chap` 目录行落在第 1 片里）。
+    // （`ParentDirs.ensure` 造的 `/chap` 目录行落在第 1 片里）。
     let totalInserts = 0;
     for (let i = 0; i < probe.transactionCount; i++) {
       const inserts = probe

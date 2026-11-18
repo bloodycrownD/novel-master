@@ -40,9 +40,9 @@ import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
 import type { Tool } from "../../model/tool.js";
 import type { BuiltinToolContext } from "../builtin-tool-context.js";
-import { sinkOversizedOutput } from "../overflow-sink.js";
-import { normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
-import { dispatchSearch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
+import { OverflowSink } from "../overflow-sink.js";
+import { SearchEngine, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
+import { SearchDispatch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("tool.search");
@@ -177,7 +177,7 @@ ${engineSection}
     }
     if (query.length === 0) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     const rawCount = params.count ?? params.max_results ?? params.maxResults;
-    const maxResults = normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
+    const maxResults = SearchEngine.normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
 
     // 显式 engine 钉死：只尝试链首（含顺位回落后的链首），失败不降级
     // 直接报错；缺省调用才沿链降级。
@@ -194,7 +194,7 @@ ${engineSection}
     // 单引擎失败摘要收编（已知 Err 与未知异常同口；脱敏 + 截断口径不变）。
     const recordEngineFailure = (entry: ResolvedEngineConfig, e: unknown): void => {
       const msg = e instanceof Error ? e.message : String(e);
-      const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
+      const safe = SearchEngine.redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
       const code = msg.match(/error (\d{3})/i)?.[1];
       const timeout = msg.match(/timed out after (\d+)ms/);
       const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
@@ -211,7 +211,7 @@ ${engineSection}
       //（首引擎前 elapsed 为 0，不会误拦）。
       if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
       try {
-        const response = await dispatchSearch(entry, query, { maxResults }, params, fetchFn, signal);
+        const response = await SearchDispatch.dispatch(entry, query, { maxResults }, params, fetchFn, signal);
         if (!response.ok) {
           // 引擎已知失败（四期门⑦沿 Result 回来）：取消重判后记降级行，
           // 尝试链中下一个引擎（钉死时仅一员，自然止）；取消沿 Result.err 返回。
@@ -245,7 +245,7 @@ ${engineSection}
     const serialized = JSON.stringify(success);
     if (Encoding.utf8ByteLength(serialized) > TOOL_OUTPUT_MAX_BYTES) {
       try {
-        const sink = await sinkOversizedOutput(ctx, { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" });
+        const sink = await OverflowSink.sink(ctx, { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" });
         return Result.ok({
           engine: success.engine,
           savedPath: sink.savedPath,

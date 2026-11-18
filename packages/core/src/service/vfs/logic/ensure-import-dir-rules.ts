@@ -16,7 +16,7 @@
  */
 
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -36,10 +36,10 @@ const log = createLogger("vfs.import-dir-rules");
  *
  * nm-style: keep-local — 默认规则行构造契约（等价性注记）由单测 3 处直接构造期望行，
  * 内联会丢注记且须改测试。
- * 错误通道迁移四期：normalizePath 失败走返回值通道（输入来自已入库路径），决定权交给上层。
+ * 错误通道迁移四期：PathNormalizer.normalize 失败走返回值通道（输入来自已入库路径），决定权交给上层。
  */
 export function buildDefaultDirRule(scopeKey: string, logicalPath: string): Result<WorkplaceDirRule, AppError> {
-  const normalized = normalizePath(logicalPath);
+  const normalized = PathNormalizer.normalize(logicalPath);
   if (!normalized.ok) return Result.err(normalized.error);
   return Result.ok({
     scopeKey,
@@ -67,7 +67,7 @@ type WriteDefaultDirRule = (logicalPath: string) => Promise<Result<void, AppErro
  */
 export async function backfillMissingDirRules(candidates: readonly string[], existing: ReadonlySet<string>, writeDefaultRule: WriteDefaultDirRule): Promise<Result<void, AppError>> {
   for (const candidate of candidates) {
-    const normalized = normalizePath(candidate);
+    const normalized = PathNormalizer.normalize(candidate);
     if (!normalized.ok) return Result.err(normalized.error);
     const logicalPath = normalized.value;
     if (logicalPath === "/" || existing.has(logicalPath)) {
@@ -103,7 +103,7 @@ interface EnsureImportDirRulesDeps {
 export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Promise<void> {
   const { vfsRepo, workplaceRepo, scope, directoryPath } = deps;
   try {
-    const normalizedPrefix = normalizePath(directoryPath);
+    const normalizedPrefix = PathNormalizer.normalize(directoryPath);
     if (!normalizedPrefix.ok) {
       log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error: normalizedPrefix.error });
       return;
@@ -113,7 +113,7 @@ export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Prom
     const directories = await vfsRepo.listDirectoryPathsUnderPrefix(LogicalPath.scopeKey(scope), prefix);
     const existing = new Set<string>();
     for (const rule of await workplaceRepo.listDirRules(targetScopeKey)) {
-      const normalized = normalizePath(rule.logicalPath);
+      const normalized = PathNormalizer.normalize(rule.logicalPath);
       if (!normalized.ok) {
         log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error: normalized.error });
         return;

@@ -1,7 +1,7 @@
 /**
  * fork / session.copy 共用：种带 content 的 revision、复制 workplace 规则、挂同树 checkpoint。
  *
- * entry_id 化后 revision append / adjustRef 吃 entryId；checkpoint files 直接存 entryId。
+ * entry_id 化后 revision append / RevisionRefCount.adjust 吃 entryId；checkpoint files 直接存 entryId。
  *
  * **唯一入口**：workplace / checkpoints / revisions / entries 的 Sqlite 实例仅在此 helper 内自建；
  * message.service / session.service 的 reposFor 不得重复构造上述 repo。
@@ -12,7 +12,7 @@
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -73,7 +73,7 @@ class ForkCopySeeder {
       }
 
       // 一次批量 INSERT 落全部 revision（ref_count 直接置 1，等价于逐条
-      // append + adjustRef(+1)，且省去 adjustRef 的存在性回查）。
+      // append + RevisionRefCount.adjust(+1)，且省去 RevisionRefCount.adjust 的存在性回查）。
       const now = Date.now();
       const items = heads.map((head) => {
         const meta = metaByEntryId.get(head.entryId);
@@ -102,7 +102,7 @@ class ForkCopySeeder {
 
     const sourceScope = workplaceScopeKey({ kind: "session", projectId, sessionId: sourceSessionId });
     const targetScope = workplaceScopeKey({ kind: "session", projectId, sessionId: targetSessionId });
-    const copied = await workplace.copyScope(sourceScope, targetScope, (p) => normalizePath(p));
+    const copied = await workplace.copyScope(sourceScope, targetScope, (p) => PathNormalizer.normalize(p));
     if (!copied.ok) {
       return Result.err(copied.error);
     }

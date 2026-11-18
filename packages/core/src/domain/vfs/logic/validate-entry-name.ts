@@ -13,10 +13,10 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 
-/** assertValidVfsEntryName 的失败载荷。 */
+/** assertValid 的失败载荷。 */
 type VfsInvalidNameError = AppError<"VFS_INVALID_NAME">;
 
-/** {@link validateVfsEntryName} 的返回形态（reason 为 invalid_name.* descriptor）。 */
+/** {@link EntryNameValidator.validate} 的返回形态（reason 为 invalid_name.* descriptor）。 */
 type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; readonly reason: CoreMessageDescriptor };
 
 /** C0（U+0000–U+001F，含 \n \r \t）、DEL（U+007F）与 C1（U+0080–U+009F）控制字符。 */
@@ -24,43 +24,45 @@ type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; read
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 
-/**
- * 校验单个 VFS 条目名（不含 `/` 的路径末段）。
- *
- * @remarks
- * 只拦「用户/agent 显式创建与重命名」的入口；导入链路（zip/角色卡）不走本校验
- * （外部文件名可先导入再用改名功能纠正）。存量条目的读取与内容更新不受影响。
- * `String.prototype.trim` 同时覆盖半角与全角空白（U+3000 等），纯空白与首尾空白
- * 判断均以它为准。
- */
-export function validateVfsEntryName(name: string): VfsEntryNameValidation {
-  if (name === "." || name === "..") {
-    return { ok: false, reason: {key: "error.vfs.invalid_name.dotdot"} };
-  }
-  if (name.trim() === "") {
-    return { ok: false, reason: {key: "error.vfs.invalid_name.blank"} };
-  }
-  if (CONTROL_CHARS.test(name)) {
-    return { ok: false, reason: {key: "error.vfs.invalid_name.control_chars"} };
-  }
-  if (name !== name.trim()) {
-    return { ok: false, reason: {key: "error.vfs.invalid_name.edge_spaces"} };
-  }
-  return { ok: true };
-}
+export const EntryNameValidator = {
+  /**
+   * 校验单个 VFS 条目名（不含 `/` 的路径末段）。
+   *
+   * @remarks
+   * 只拦「用户/agent 显式创建与重命名」的入口；导入链路（zip/角色卡）不走本校验
+   * （外部文件名可先导入再用改名功能纠正）。存量条目的读取与内容更新不受影响。
+   * `String.prototype.trim` 同时覆盖半角与全角空白（U+3000 等），纯空白与首尾空白
+   * 判断均以它为准。
+   */
+  validate(name: string): VfsEntryNameValidation {
+    if (name === "." || name === "..") {
+      return { ok: false, reason: {key: "error.vfs.invalid_name.dotdot"} };
+    }
+    if (name.trim() === "") {
+      return { ok: false, reason: {key: "error.vfs.invalid_name.blank"} };
+    }
+    if (CONTROL_CHARS.test(name)) {
+      return { ok: false, reason: {key: "error.vfs.invalid_name.control_chars"} };
+    }
+    if (name !== name.trim()) {
+      return { ok: false, reason: {key: "error.vfs.invalid_name.edge_spaces"} };
+    }
+    return { ok: true };
+  },
 
-/**
- * 创建/重命名入口的断言式校验：末段名不合法时返回 VFS_INVALID_NAME。
- *
- * 只在「新条目诞生」的时机调用（mkdir、write 创建分支、renamePath/renamePrefix
- * 的新路径）——存量条目的内容更新不重新审判名字（zip 导入的历史名可继续编辑）。
- */
-export function assertValidVfsEntryName(normalizedPath: string): Result<void, VfsInvalidNameError> {
-  const idx = normalizedPath.lastIndexOf("/");
-  const name = idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1) || "/";
-  const result = validateVfsEntryName(name);
-  if (!result.ok) {
-    return Result.err(new AppError("VFS_INVALID_NAME", { descriptor: result.reason, path: name }));
-  }
-  return Result.ok(undefined);
-}
+  /**
+   * 创建/重命名入口的断言式校验：末段名不合法时返回 VFS_INVALID_NAME。
+   *
+   * 只在「新条目诞生」的时机调用（mkdir、write 创建分支、renamePath/renamePrefix
+   * 的新路径）——存量条目的内容更新不重新审判名字（zip 导入的历史名可继续编辑）。
+   */
+  assertValid(normalizedPath: string): Result<void, VfsInvalidNameError> {
+    const idx = normalizedPath.lastIndexOf("/");
+    const name = idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1) || "/";
+    const result = EntryNameValidator.validate(name);
+    if (!result.ok) {
+      return Result.err(new AppError("VFS_INVALID_NAME", { descriptor: result.reason, path: name }));
+    }
+    return Result.ok(undefined);
+  },
+} as const;

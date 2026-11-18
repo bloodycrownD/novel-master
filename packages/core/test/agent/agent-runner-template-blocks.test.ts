@@ -2,29 +2,18 @@ import assert from "node:assert/strict";
 import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
-import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps, type BuiltinToolContext } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps, type  BuiltinToolContext } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
-import {
-  type ModelRequestOptions,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
+import { type ModelRequestOptions, type  ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { SimpleEventBus } from "@novel-master/core/events";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
-import {
-  RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  fileCacheKey,
-  serializeFileCachePayload,
-  serializeRuleSnapshot,
-} from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, serializeFileCachePayload, serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -222,7 +211,7 @@ describe("AgentRunner template blocks", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const vfs = mockVfs();
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({

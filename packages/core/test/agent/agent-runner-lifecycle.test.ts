@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { AgentServiceFactory, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
-import { type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
+import { type ModelRequestOptions, type  ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { SimpleEventBus } from "@novel-master/core/events";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 
@@ -119,7 +119,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -184,7 +184,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const makeRunner = (session: InMemoryAgentSession) =>
       AgentServiceFactory.createRunner(
         runnerDeps({
@@ -258,7 +258,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,

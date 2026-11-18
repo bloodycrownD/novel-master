@@ -63,7 +63,7 @@ const { InMemoryAgentSession } = await import(
 );
 const { textBlocks } = await import("@novel-master/core/chat");
 const { SimpleEventBus } = await import("@novel-master/core/events");
-const { registerBuiltinTools, ToolRegistry } = await import("@novel-master/core");
+const { BuiltinTools, ToolRegistry } = await import("@novel-master/core");
 const { createMemorySessionKkv } = await import(
   "../helpers/prompt-layout-test-helpers.js"
 );
@@ -177,7 +177,7 @@ describe("AgentRunner compaction (T-AR1)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
 
     const HIDE_START_DEPTH = 7;
     const compactionConditions = createCompactionConditionsStub(
@@ -335,7 +335,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
     const compactionConditions = realVisibleFloorEvaluator(999);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
 
     const runner = AgentServiceFactory.createRunner({
       session,
@@ -389,7 +389,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
     const compactionConditions = realVisibleFloorEvaluator(0);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
 
     const callsBefore = runCompactionCalls.length;
 
@@ -483,7 +483,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
       const n = (await session.list()).length;
 
       const registry = new ToolRegistry();
-      registerBuiltinTools(registry);
+      BuiltinTools.register(registry);
 
       const callsBefore = runCompactionCalls.length;
       const runner = AgentServiceFactory.createRunner({

@@ -11,7 +11,7 @@ import { strFromU8 } from "fflate";
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
+import { VfsZipParse } from "@/domain/vfs/logic/vfs-zip-parse.js";
 import { parseSkillFrontMatter } from "./parse-skill-front-matter.js";
 
 /** 本模块的失败载荷：zip 不可读 / 非法 UTF-8 条目名 / 超出解压限制。 */
@@ -37,7 +37,7 @@ export interface SkillZipPreview {
  * @returns 归档不可读 / 超出解压限制时为 `Err`（key `VFS_ZIP_*`），本函数不抛。
  */
 export function previewSkillZip(zipBytes: Uint8Array): Result<SkillZipPreview, SkillZipPreviewError> {
-  const parsedZip = parseVfsZip(zipBytes);
+  const parsedZip = VfsZipParse.parse(zipBytes);
   if (!parsedZip.ok) {
     return Result.err(parsedZip.error);
   }

@@ -13,13 +13,13 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import { Coerce } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
-import { resolveRevisionPlainContent } from "../../content-store/logic/resolve-stored-content.js";
+import { StoredContent } from "../../content-store/logic/resolve-stored-content.js";
 import type { VfsRevision, VfsRevisionStatus } from "../../model/vfs-revision.js";
 import type { VfsRevisionAppendInput, VfsRevisionPointerMeta, VfsRevisionRepository } from "../vfs-revision.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { revisionPairKey } from "../../logic/revision-pair-key.js";
-import { escapeLike } from "./scope-prefix-helpers.js";
+import { RevisionPairKey } from "../../logic/revision-pair-key.js";
+import { ScopePrefix } from "./scope-prefix-helpers.js";
 import { Path } from "@/common/path.js";
 
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
@@ -95,7 +95,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const row = rows[0]!;
     const statusRaw = String(row.status);
     const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";
-    const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: Coerce.nullableText(row.content_hash) });
+    const resolved = await StoredContent.resolveRevision(this.contentStore, { status, content: null, contentHash: Coerce.nullableText(row.content_hash) });
     if (!resolved.ok) return Result.err(resolved.error);
     return Result.ok({
       entryId: Number(row.entry_id),
@@ -145,7 +145,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
          WHERE ${conditions}`;
       const rows = await queryTemplate<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, sql56, bindings);
       for (const row of rows) {
-        result.set(revisionPairKey(Number(row.entry_id), Number(row.version)), {
+        result.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), {
           status: row.status as VfsRevisionStatus,
           contentHash: Coerce.nullableText(row.content_hash),
         });
@@ -169,7 +169,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
       const rows = await this.conn.query<{ entry_id: number; version: number }>(`SELECT entry_id, version FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`, params);
       for (const row of rows) {
-        result.add(revisionPairKey(Number(row.entry_id), Number(row.version)));
+        result.add(RevisionPairKey.build(Number(row.entry_id), Number(row.version)));
       }
     }
     return result;
@@ -212,7 +212,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   /** nm-style: keep-public — 实现 VfsRevisionRepository.listKeysUnderScope 端口方法；唯一生产调用来自同类 deleteExceptReachable（同为端口方法），内联会在调用点复制 JOIN 扫描 SQL，且端口仍要求此方法存在。 */
   async listKeysUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number }>> {
     const base = Path.stripTrailingSlash(pathPrefix);
-    const escaped = escapeLike(base);
+    const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     const sql57 = "SELECT r.entry_id AS entry_id, r.version AS version\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
     const rows = await queryTemplate<{ entry_id: number; version: number }>(this.conn, this.parser, sql57, { scopeKey, path: base, pattern });
@@ -225,7 +225,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   /** nm-style: keep-public — 实现 VfsRevisionRepository.listKeysWithRefCountUnderScope 端口方法；内联会把 JOIN 扫描 SQL 搬进调用层。 */
   async listKeysWithRefCountUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number; refCount: number }>> {
     const base = Path.stripTrailingSlash(pathPrefix);
-    const escaped = escapeLike(base);
+    const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     const sql58 = "SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
     const rows = await queryTemplate<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, sql58, { scopeKey, path: base, pattern });
@@ -239,7 +239,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   /** nm-style: keep-public — 实现 VfsRevisionRepository.deleteExceptReachable 端口方法；可达集 fallback 已退役（revision-gc.ts），生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async deleteExceptReachable(scopeKey: string, pathPrefix: string, reachable: ReadonlySet<string>): Promise<number> {
     const candidates = await this.listKeysUnderScope(scopeKey, pathPrefix);
-    const toDelete = candidates.filter(({ entryId, version }) => !reachable.has(revisionPairKey(entryId, version)));
+    const toDelete = candidates.filter(({ entryId, version }) => !reachable.has(RevisionPairKey.build(entryId, version)));
     if (toDelete.length === 0) {
       return 0;
     }
@@ -288,7 +288,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       const existing = await this.findExistingEntryVersionKeys(pointers);
       const missing: Array<{ entryId: number; version: number }> = [];
       for (const p of pointers) {
-        if (!existing.has(revisionPairKey(p.entryId, p.version))) {
+        if (!existing.has(RevisionPairKey.build(p.entryId, p.version))) {
           missing.push({ entryId: p.entryId, version: p.version });
         }
       }
@@ -360,14 +360,14 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
       const rows = await this.conn.query<{ entry_id: number; version: number; ref_count: number }>(`SELECT entry_id, version, ref_count FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`, params);
       for (const row of rows) {
-        currentMap.set(revisionPairKey(Number(row.entry_id), Number(row.version)), Number(row.ref_count));
+        currentMap.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), Number(row.ref_count));
       }
     }
 
     // Step 2：内存算 diff，只挑 current < expected 的项（保持「只增不减」语义）。
     const toUpdate: Array<[number, number, number]> = [];
     for (const item of items) {
-      const current = currentMap.get(revisionPairKey(item.entryId, item.version));
+      const current = currentMap.get(RevisionPairKey.build(item.entryId, item.version));
       if (current == null) {
         continue;
       }
@@ -396,7 +396,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   /** nm-style: keep-public — 实现 VfsRevisionRepository.deleteUnreferencedUnderScope 端口方法；内联会把 COUNT + 子查询 DELETE 搬进调用层。 */
   async deleteUnreferencedUnderScope(scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<number> {
     const base = Path.stripTrailingSlash(pathPrefix);
-    const escaped = escapeLike(base);
+    const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     // 隔离豁免：排除前缀下的 revision 不参与 GC（NOT (path = excl OR path LIKE excl/%)）
     const excludes = excludePrefixes ?? [];
@@ -410,7 +410,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       const exclRaw = excludes[i]!;
       const excl = Path.stripTrailingSlash(exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`);
       bindings[`exclPath${i}`] = excl;
-      bindings[`exclPattern${i}`] = `${escapeLike(excl)}/%`;
+      bindings[`exclPattern${i}`] = `${ScopePrefix.escapeLike(excl)}/%`;
       excludeClauses.push(`(e.path = #{exclPath${i}} OR e.path LIKE #{exclPattern${i}} ESCAPE '\\')`);
     }
     const excludeSql = excludeClauses.length > 0 ? ` AND NOT (${excludeClauses.join(" OR ")})` : "";

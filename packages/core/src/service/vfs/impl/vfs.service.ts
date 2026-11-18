@@ -10,17 +10,17 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { isStorageRootParent, parentDir } from "@/domain/vfs/logic/parent-dir.js";
-import { assertValidVfsEntryName } from "@/domain/vfs/logic/validate-entry-name.js";
+import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import { ParentDir } from "@/domain/vfs/logic/parent-dir.js";
+import { EntryNameValidator } from "@/domain/vfs/logic/validate-entry-name.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
-import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { ReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { matchGlob } from "../glob-match.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
-import { grepContents } from "@/domain/vfs/logic/vfs-grep.js";
+import { VfsGrep } from "@/domain/vfs/logic/vfs-grep.js";
 
 /**
  * VFS service delegating persistence to {@link VfsEntryRepository}.
@@ -29,13 +29,13 @@ export class DefaultVfsService implements InternalVfsService {
   constructor(private readonly repo: VfsEntryRepository) {}
 
   async list(scopeKey: string, dir: string, options?: { recursive?: boolean; maxDepth?: number }): Promise<Result<VfsListEntry[], AppError>> {
-    const resolved = normalizePath(dir);
+    const resolved = PathNormalizer.normalize(dir);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const entries = await this.repo.list(scopeKey, normalized, options);
     if (!entries.ok) return entries;
     if (normalized !== "/") {
-      const rootParent = isStorageRootParent(normalized);
+      const rootParent = ParentDir.isStorageRoot(normalized);
       if (!rootParent.ok) return Result.err(rootParent.error);
       if (!rootParent.value) {
         const entry = await this.repo.findByPath(scopeKey, normalized);
@@ -50,13 +50,13 @@ export class DefaultVfsService implements InternalVfsService {
   }
 
   async mkdir(scopeKey: string, path: string): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
       return Result.err(new AppError("VFS_INVALID_PATH", {path, reason: "cannot mkdir root", detail: `Invalid path ${path}: cannot mkdir root`}));
     }
-    const nameCheck = assertValidVfsEntryName(normalized);
+    const nameCheck = EntryNameValidator.assertValid(normalized);
     if (!nameCheck.ok) return nameCheck;
 
     const existing = await this.repo.findByPath(scopeKey, normalized);
@@ -65,10 +65,10 @@ export class DefaultVfsService implements InternalVfsService {
       return Result.err(new AppError("VFS_ALREADY_EXISTS", {path: normalized, detail: `Path already exists: ${normalized}`}));
     }
 
-    const parent = parentDir(normalized);
+    const parent = ParentDir.resolve(normalized);
     if (!parent.ok) return Result.err(parent.error);
     if (parent.value !== "/") {
-      const parentIsRoot = isStorageRootParent(parent.value);
+      const parentIsRoot = ParentDir.isStorageRoot(parent.value);
       if (!parentIsRoot.ok) return Result.err(parentIsRoot.error);
       if (!parentIsRoot.value) {
         const parentEntry = await this.repo.findByPath(scopeKey, parent.value);
@@ -109,7 +109,7 @@ export class DefaultVfsService implements InternalVfsService {
   }
 
   async write(scopeKey: string, path: string, content: string): Promise<Result<{ version: number }, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const existing = await this.repo.findByPath(scopeKey, normalized);
@@ -119,9 +119,9 @@ export class DefaultVfsService implements InternalVfsService {
     }
     if (existing.value == null) {
       // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
-      const nameCheck = assertValidVfsEntryName(normalized);
+      const nameCheck = EntryNameValidator.assertValid(normalized);
       if (!nameCheck.ok) return Result.err(nameCheck.error);
-      const parentCheck = await ensureParentDirectories(this.repo, scopeKey, normalized);
+      const parentCheck = await ParentDirs.ensure(this.repo, scopeKey, normalized);
       if (!parentCheck.ok) return Result.err(parentCheck.error);
       return this.repo.insert(scopeKey, normalized, content);
     }
@@ -131,7 +131,7 @@ export class DefaultVfsService implements InternalVfsService {
   async replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>> {
     const current = await this.read(scopeKey, path);
     if (!current.ok) return Result.err(current.error);
-    const computed = computeReplaceResult(path, current.value.content, oldString, newString, options);
+    const computed = ReplaceResult.compute(path, current.value.content, oldString, newString, options);
     if (!computed.ok) return Result.err(computed.error);
     const { nextContent, replacements } = computed.value;
 
@@ -159,13 +159,13 @@ export class DefaultVfsService implements InternalVfsService {
     const rows = await this.repo.scanContents(scopeKey, options?.pathPrefix);
     if (!rows.ok) return Result.err(rows.error);
     const filtered = options?.pathGlob != null ? rows.value.filter((row) => matchGlob(options.pathGlob!, row.path)) : rows.value;
-    const matches = grepContents(filtered, pattern, options);
+    const matches = VfsGrep.grepContents(filtered, pattern, options);
     if (!matches.ok) return matches;
     return Result.ok(matches.value);
   }
 
   async delete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
-    const resolved = normalizePath(path);
+    const resolved = PathNormalizer.normalize(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {

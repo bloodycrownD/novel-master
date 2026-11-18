@@ -1,7 +1,7 @@
 /**
  * file_cache 域 blob 编解码：FileCachePayload JSON 字符串 ↔ 两表写库字段。
  *
- * 压缩 / 哈希 / 字节收整（tightBytes、decodeCompressedBytes 等）
+ * 压缩 / 哈希 / 字节收整（ZlibCodec.tightBytes、ZlibCodec.decodeCompressedBytes 等）
  * 全部复用 vfs ContentStore 侧共享模块（hash-content / zlib-codec），
  * 落库形态与存量兼容口径对齐
  * SqliteVfsContentStore，不另起实现。
@@ -9,8 +9,8 @@
  * @module domain/session-kkv/logic/file-cache-blob-codec
  */
 
-import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { compressZlib, decodeCompressedBytes, decompressZlib, tightBytes, VFS_CONTENT_ENCODING_ZLIB } from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { ZlibCodec, VFS_CONTENT_ENCODING_ZLIB } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -40,7 +40,7 @@ export function hashFileCachePayload(value: string): HashedFileCachePayload | nu
     return null;
   }
   return {
-    contentHash: hashContent(payload.value.body),
+    contentHash: ContentHash.hash(payload.value.body),
     mtimeMs: payload.value.mtimeMs,
     body: payload.value.body,
   };
@@ -52,8 +52,8 @@ export function compressFileCacheBodyForBlob(body: string): {
   bytes: Uint8Array;
   byteLen: number;
 } {
-  const compressed = compressZlib(new TextEncoder().encode(body));
-  const bytes = tightBytes(compressed);
+  const compressed = ZlibCodec.compress(new TextEncoder().encode(body));
+  const bytes = ZlibCodec.tightBytes(compressed);
   return {
     encoding: VFS_CONTENT_ENCODING_ZLIB,
     bytes,
@@ -69,9 +69,9 @@ export function compressFileCacheBodyForBlob(body: string): {
  * 重读，复用既有容错链路）。
  */
 export function decodeFileCacheBlobBody(encoding: string, bytes: unknown): Result<string, FileCacheBlobError> {
-  const compressed = decodeCompressedBytes(encoding, bytes, "session_file_cache_blob.bytes");
+  const compressed = ZlibCodec.decodeCompressedBytes(encoding, bytes, "session_file_cache_blob.bytes");
   if (!compressed.ok) return Result.err(compressed.error);
-  const plainUtf8 = decompressZlib(compressed.value);
+  const plainUtf8 = ZlibCodec.decompress(compressed.value);
   if (!plainUtf8.ok) return Result.err(plainUtf8.error);
   return Result.ok(new TextDecoder().decode(plainUtf8.value));
 }

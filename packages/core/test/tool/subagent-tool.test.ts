@@ -16,7 +16,7 @@ import type {
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
+import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -336,7 +336,7 @@ describe("subagent-tool / task", () => {
 describe("resolveAgentToolRegistry 递归上限", () => {
   function makeBaseRegistry(): ToolRegistry<BuiltinToolContext> {
     const r = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(r);
+    BuiltinTools.register(r);
     return r;
   }
   const def: AgentDefinition = { name: "x", prompts: { persist: [], dynamic: [] } };

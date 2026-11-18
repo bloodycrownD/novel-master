@@ -3,7 +3,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { LogicalPath } from "@novel-master/core/vfs";
-import { stripKnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
+import { KnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
 
 /** 解包 Result 成功分支；失败直接让测试失败。 */
 function unwrapPath(result: ReturnType<typeof LogicalPath.resolve>): string {
@@ -71,18 +71,18 @@ describe("vfs-path-mapper", () => {
 
   it("脱敏规则剥离 meta 两域物理前缀（先具体后泛化）", () => {
     assert.equal(
-      stripKnownPhysicalPrefixes(
+      KnownPhysicalPrefixes.strip(
         "not found: /projects/p1/meta/skills/foo/SKILL.md",
       ),
       "not found: /skills/foo/SKILL.md",
     );
     assert.equal(
-      stripKnownPhysicalPrefixes("not found: /meta/skills/foo/SKILL.md"),
+      KnownPhysicalPrefixes.strip("not found: /meta/skills/foo/SKILL.md"),
       "not found: /skills/foo/SKILL.md",
     );
     // 既有三域规则不回退
     assert.equal(
-      stripKnownPhysicalPrefixes(
+      KnownPhysicalPrefixes.strip(
         "not found: /projects/p1/template/a.md at /template/b.md",
       ),
       "not found: /a.md at /b.md",

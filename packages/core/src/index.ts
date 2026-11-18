@@ -24,11 +24,11 @@ export { bootstrapNovelMaster } from "./bootstrap/novel-master-bootstrap.js";
  * 宿主注册的 zlib 加速器（Node 侧 `node:zlib`）：desktop main / CLI 启动
  * 装配期注册；未注册（RN / 测试默认）时全部热路径走 fflate，现行为零变化。
  *
- * 注：`clearZlibCodecAccelerator` 不进主入口——注销是测试与宿主卸载用的
+ * 注：`ZlibAccelerator.clear` 不进主入口——注销是测试与宿主卸载用的
  * 生命周期动作，导出它等于给应用侧一条生产可达的「关掉加速器」入口。
  * 需要它的测试直接经源文件相对路径导入（`test/vfs/zlib-accelerator.test.ts`）。
  */
-export { registerZlibCodecAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
+export { ZlibAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
 export type { ZlibCodecAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
 
 /**
@@ -126,30 +126,24 @@ export type { Tool } from "./domain/tool/model/tool.js";
 export { ToolRegistry } from "./domain/tool/logic/tool-registry.js";
 export { ToolRunner } from "./domain/tool/logic/tool-runner.js";
 export type { ToolCall, ParallelToolOutcome } from "./domain/tool/logic/tool-runner.js";
-export { buildToolResultBlock, resolveToolResultOk } from "./domain/tool/logic/build-tool-result-block.js";
+export { ToolResultBlock } from "./domain/tool/logic/build-tool-result-block.js";
 export type { BuildToolResultBlockMeta } from "./domain/tool/logic/build-tool-result-block.js";
-export {
-  createVfsTools,
-  FILE_TOOL_NAMES,
-  FILE_OPEN_TOOL_NAMES,
-  MUTATING_FILE_TOOL_NAMES,
-  isMutatingFileToolName,
-} from "./domain/tool/builtin/vfs-tools.js";
-export { registerBuiltinTools } from "./domain/tool/builtin/register-builtin-tools.js";
-export { toolUseMutatesWorkspace, anyToolUseMutatesWorkspace } from "./domain/tool/logic/tool-use-mutates-workspace.js";
+export { FileTools, FILE_TOOL_NAMES, FILE_OPEN_TOOL_NAMES, MUTATING_FILE_TOOL_NAMES } from "./domain/tool/builtin/vfs-tools.js";
+export { BuiltinTools } from "./domain/tool/builtin/register-builtin-tools.js";
+export { ToolUseMutation } from "./domain/tool/logic/tool-use-mutates-workspace.js";
 export { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_MATCHES } from "./domain/tool/logic/tool-output-limits.js";
 export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
 export type { BuiltinToolContext, VfsToolContext } from "./domain/tool/builtin/builtin-tool-context.js";
 /**
  * `search` 工具与搜索引擎配置（SKSP ref + KKV `nm-search` 模块）。
  *
- * desktop / mobile runtime 用 `createSearchConfigStore` 工厂包
+ * desktop / mobile runtime 用 `SearchConfig.createStore` 工厂包
  * `kkv + secretStore` 装配到 `AgentTurnRuntimePort.searchConfig`。
  *
  * 引擎实例 id 已动态化（六预置 ∪ `duckduckgo` ∪ customEngines 现存 id）：
  * 静态清单 `ENGINE_IDS` / `KEY_ENGINE_IDS` 与 `EngineId` / `KeyEngineId`
  * 收窄类型已退役，id 与顺序一律读 `readConfig()`。模板校验走
- * `validateSearchEngineTemplate`，curl 导入走 `parseCurlCommand`（双端共用），
+ * `SearchEngine.validateTemplate`，curl 导入走 `CurlImport.parseCommand`（双端共用），
  * 出厂模板常量 `PRESET_ENGINE_TEMPLATES` 供预置模板编辑表单预填与恢复默认。
  * v2 透传改造：响应映射类型（SearchEngineFieldMap / SearchEngineEnvelope）
  * 与模板映射字段一并废除，模板引擎结果以 JSON 文本回流。
@@ -160,11 +154,11 @@ export type { BuiltinToolContext, VfsToolContext } from "./domain/tool/builtin/b
  * `testEngine` store 方法与 TestEngine* 载荷类型整链随撤。
  */
 export type { SearchResponse, SearchResult, SearchToolOptions, SearchOversizeOutput, ResolvedEngineConfig, SearchEngineTemplate, CustomEngineDef } from "./domain/tool/builtin/search/types.js";
-export { validateSearchEngineTemplate } from "./domain/tool/builtin/search/types.js";
+export { SearchEngine } from "./domain/tool/builtin/search/types.js";
 export type { SearchConfigPublic, SearchConfigStore } from "./domain/tool/builtin/search/search-config.js";
-export { SEARCH_KKV_MODULE, searchApiKeyRef, createSearchConfigStore, readSearchConfig, resolveEngineChain } from "./domain/tool/builtin/search/search-config.js";
+export { SearchConfig, SEARCH_KKV_MODULE } from "./domain/tool/builtin/search/search-config.js";
 export { PRESET_ENGINE_TEMPLATES } from "./domain/tool/builtin/search/preset-templates.js";
-export { parseCurlCommand } from "./domain/tool/builtin/search/curl-import.js";
+export { CurlImport } from "./domain/tool/builtin/search/curl-import.js";
 export type { CurlCommandDraft, CurlParseError } from "./domain/tool/builtin/search/curl-import.js";
 
 /**

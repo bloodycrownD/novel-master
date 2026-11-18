@@ -1,7 +1,7 @@
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { moveVfsPath } from "../../src/domain/vfs/logic/vfs-move.js";
+import { VfsMove } from "../../src/domain/vfs/logic/vfs-move.js";
 import { Path } from "../../src/common/path.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
@@ -20,7 +20,7 @@ describe("moveVfsPath", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     unwrap(await vfs.write("/old.md", "content"));
-    assertOk(await moveVfsPath(vfs, "/old.md", "/new.md"));
+    assertOk(await VfsMove.move(vfs, "/old.md", "/new.md"));
 
     const read = unwrap(await vfs.read("/new.md"));
     assert.equal(read.content, "content");
@@ -40,7 +40,7 @@ describe("moveVfsPath", () => {
     unwrap(await vfs.write("/src/a.md", "a"));
     unwrap(await vfs.write("/src/sub/b.md", "b"));
 
-    assertOk(await moveVfsPath(vfs, "/src", "/dst"));
+    assertOk(await VfsMove.move(vfs, "/src", "/dst"));
 
     assert.equal(unwrap(await vfs.read("/dst/a.md")).content, "a");
     assert.equal(unwrap(await vfs.read("/dst/sub/b.md")).content, "b");
@@ -58,7 +58,7 @@ describe("moveVfsPath", () => {
     unwrap(await vfs.mkdir("/empty-dir"));
 
     // 空目录（有 directory 行、零子项）也必须允许 rename，不能误报 NOT_FOUND。
-    assertOk(await moveVfsPath(vfs, "/empty-dir", "/renamed-dir"));
+    assertOk(await VfsMove.move(vfs, "/empty-dir", "/renamed-dir"));
 
     // directory 行的 path 已更新：新路径是空目录（list 成功且为空），旧路径不存在。
     assert.deepEqual(unwrap(await vfs.list("/renamed-dir")), []);
@@ -78,7 +78,7 @@ describe("moveVfsPath", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     const suffix = testIsolationSuffix();
 
-    // %/_ 是 LIKE 通配字符，move 的子项迁移依赖 escapeLike + ESCAPE '\'
+    // %/_ 是 LIKE 通配字符，move 的子项迁移依赖 ScopePrefix.escapeLike + ESCAPE '\'
     // 转义后匹配，目录名含它们时根行与子项都要完整迁移、旧路径无残留。
     const oldDir = `/源_目%录-${suffix}`;
     const newDir = `/目_标%d-${suffix}`;
@@ -86,7 +86,7 @@ describe("moveVfsPath", () => {
     unwrap(await vfs.mkdir(oldDir));
     unwrap(await vfs.write(`${oldDir}/child.md`, "child"));
 
-    assertOk(await moveVfsPath(vfs, oldDir, newDir));
+    assertOk(await VfsMove.move(vfs, oldDir, newDir));
 
     assert.equal(unwrap(await vfs.read(`${newDir}/child.md`)).content, "child");
     const children = unwrap(await vfs.list(newDir));
@@ -111,7 +111,7 @@ describe("moveVfsPath", () => {
     unwrap(await vfs.write("/a.md", "original-a"));
     unwrap(await vfs.write("/b.md", "original-b"));
 
-    const result = await moveVfsPath(vfs, "/b.md", "/a.md");
+    const result = await VfsMove.move(vfs, "/b.md", "/a.md");
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error.key, "VFS_ALREADY_EXISTS");
     assert.equal(unwrap(await vfs.read("/a.md")).content, "original-a");
@@ -127,7 +127,7 @@ describe("moveVfsPath", () => {
     unwrap(await vfs.mkdir("/dirA"));
     unwrap(await vfs.write("/other.md", "stay"));
 
-    const result = await moveVfsPath(vfs, "/other.md", "/dirA");
+    const result = await VfsMove.move(vfs, "/other.md", "/dirA");
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error.key, "VFS_ALREADY_EXISTS");
     assert.equal(unwrap(await vfs.read("/other.md")).content, "stay");
@@ -141,7 +141,7 @@ describe("moveVfsPath", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     unwrap(await vfs.write("/same.md", "content"));
-    assertOk(await moveVfsPath(vfs, "/same.md", "/same.md"));
+    assertOk(await VfsMove.move(vfs, "/same.md", "/same.md"));
     assert.equal(unwrap(await vfs.read("/same.md")).content, "content");
   });
 
@@ -151,7 +151,7 @@ describe("moveVfsPath", () => {
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    const result = await moveVfsPath(vfs, "/missing", "/elsewhere");
+    const result = await VfsMove.move(vfs, "/missing", "/elsewhere");
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error.key, "VFS_NOT_FOUND");
   });

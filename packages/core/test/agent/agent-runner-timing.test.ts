@@ -12,15 +12,12 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
-import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
-import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
-import {
-  type LlmChatRequest,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
+import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
+import { type LlmChatRequest, type  ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
@@ -118,7 +115,7 @@ function makeRunner(
   model: ModelRequestService,
 ): ReturnType<typeof AgentServiceFactory.createRunner> {
   const registry = new ToolRegistry();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return AgentServiceFactory.createRunner(
     runnerDeps({
       session,

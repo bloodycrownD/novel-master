@@ -3,7 +3,7 @@
  *
  * ## 为什么需要它
  * 项目里原本散落三套「不一致兜底」逻辑，签名和调用时机各不相同：
- *   1. **repair** —— vfs 的 `repairRefCounts`，重算 checkpoint 指针 + live head，
+ *   1. **repair** —— vfs 的 `RevisionRefCount.repair`，重算 checkpoint 指针 + live head，
  *      把偏低的 `vfs_revision.ref_count` 上调（保守纠偏，只增不减）；
  *   2. **backfill** —— chat-message 的 `backfillBaselineCheckpoints`，给空窗消息
  *      补一条 baseline checkpoint；
@@ -16,12 +16,12 @@
  *
  * ## 双引用计数器裁决（T-SC5）
  * vfs 里有两套 `ref_count`，用途完全不同，**并存不矛盾，绝不强行合一**：
- *   - `vfs_revision.ref_count`：应用层维护（`repairRefCounts` / `adjustRef`），
+ *   - `vfs_revision.ref_count`：应用层维护（`RevisionRefCount.repair` / `RevisionRefCount.adjust`），
  *     表示「有几条 checkpoint 或 live head 指向这条 revision」，用于 revision 可达性 GC。
  *   - `vfs_content_blob.ref_count`：SQLite 触发器维护（revision INSERT/DELETE/UPDATE
  *     OF content_hash 时 ±1），表示「有几条 revision 行引用这个 blob」，用于 blob 回收。
  *
- * 关键不变量：`repairRefCounts` 只走 `batchRepairRefCountFloor`（以及保留的逐条 `repairRefCountFloor`），
+ * 关键不变量：`RevisionRefCount.repair` 只走 `batchRepairRefCountFloor`（以及保留的逐条 `repairRefCountFloor`），
  * 而这两者都只更新 `ref_count` 列、不碰 `content_hash`，所以 `AFTER UPDATE OF content_hash`
  * 触发器**不会 fire**——应用层修复 revision 可达性计数时，绝不会顺带 bump blob 侧的计数器，
  * 两条路径不重复计数。

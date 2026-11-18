@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { isAppError } from "@/errors/app-error.js";
 
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -19,11 +19,11 @@ function isolatedRoot(): string {
 
 /** 解包 Result 成功分支；失败直接让测试失败。 */
 function normalized(path: string): string {
-  const result = normalizePath(path);
+  const result = PathNormalizer.normalize(path);
   return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
 }
 
-describe("normalizePath", () => {
+describe("PathNormalizer.normalize", () => {
   it("normalizes POSIX paths", () => {
     assert.equal(normalized("/a/b"), "/a/b");
     assert.equal(normalized("/a//b"), "/a/b");
@@ -31,7 +31,7 @@ describe("normalizePath", () => {
   });
 
   it("rejects invalid paths", () => {
-    const result = normalizePath("relative");
+    const result = PathNormalizer.normalize("relative");
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.ok(isAppError(result.error, "VFS_INVALID_PATH"));

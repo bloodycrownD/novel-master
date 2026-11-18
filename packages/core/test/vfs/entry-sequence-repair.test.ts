@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { createVfsEntrySequenceRepairOperation } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
+import { EntrySequenceRepair } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
 import { runIntegrityRepair } from "../../src/service/integrity-repair.js";
 import {
   getNovelMasterTestContext,
@@ -62,7 +62,7 @@ describe("vfs entry-sequence repair", () => {
     const { orphanIds } = await seedOrphanOccupiedIds(ctx);
     const maxOrphan = Math.max(...orphanIds);
 
-    const op = createVfsEntrySequenceRepairOperation(ctx.conn);
+    const op = EntrySequenceRepair.create(ctx.conn);
     const det = await op.detect();
     assert.equal(det.needsRepair, true, "应检出发号器低于孤儿占号");
 
@@ -102,7 +102,7 @@ describe("vfs entry-sequence repair", () => {
 
   it("健康库：detect 为 false，repair 无副作用", async () => {
     const ctx = getNovelMasterTestContext();
-    const op = createVfsEntrySequenceRepairOperation(ctx.conn);
+    const op = EntrySequenceRepair.create(ctx.conn);
     const det = await op.detect();
     assert.equal(det.needsRepair, false);
     await op.repair();
@@ -127,7 +127,7 @@ describe("vfs entry-sequence repair", () => {
       },
       async close() {},
     };
-    const op = createVfsEntrySequenceRepairOperation(brokenConn);
+    const op = EntrySequenceRepair.create(brokenConn);
 
     // detect 不吞错：异常直接上抛，绝不返回「健康」
     await assert.rejects(

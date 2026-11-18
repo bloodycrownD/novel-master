@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
 
 import { validateAgentToolPolicy } from "@novel-master/core/agent";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 
 function vfsRegistryNames(): Set<string> {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return new Set(registry.list());
 }
 
 describe("validateAgentToolPolicy task 是合法工具（T-C4）", () => {
   const registryNames = vfsRegistryNames();
 
-  it("registryNames 含 task（task 进 registerBuiltinTools）", () => {
+  it("registryNames 含 task（task 进 BuiltinTools.register）", () => {
     assert.ok(registryNames.has("task"));
   });
 

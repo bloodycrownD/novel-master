@@ -156,7 +156,7 @@ describe("SkillService（T-SK5）", () => {
       (error: unknown) =>
         isAppError(error, "SKILL_INVALID_PATH"),
     );
-    // write：`..` 会被 normalizePath 静默消化成回溯，必须在这里拦截
+    // write：`..` 会被 PathNormalizer.normalize 静默消化成回溯，必须在这里拦截
     await rejectsErr(
       () =>
         skills.writeSkillFile(
@@ -363,7 +363,7 @@ describe("SkillService（T-SK5）", () => {
    *
    * 机理同 zip/角色卡两条链（见 `vfs-tree-copy.ts` `sweepRevisionsUnderScope` 的
    * @remarks）：CS-06/CS-07 的守卫触发器让 sweep 后旧 blob 计数落 0、行留着，
-   * `vfs_entry` 零触发器补不了这一步 ⇒ 残留只能靠 `runDeferredBlobGc` 收，而
+   * `vfs_entry` 零触发器补不了这一步 ⇒ 残留只能靠 `DeferredBlobGc.run` 收，而
    * 本链（`skills.service.ts` deleteSkill）**从不调**它。**红了就是该升方案甲**。
    *
    * description 带 isolation suffix ⇒ SKILL.md 正文本次唯一，不被别处共享，
@@ -390,7 +390,7 @@ describe("SkillService（T-SK5）", () => {
     assert.equal(
       Number(residue[0]!.n),
       0,
-      "deleteSkill 后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）",
+      "deleteSkill 后不应残留 ref_count<=0 的 blob 行（本链不调 DeferredBlobGc.run）",
     );
   });
 

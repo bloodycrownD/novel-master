@@ -15,7 +15,7 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { VfsServiceFactory } from "@novel-master/core/vfs";
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 
@@ -35,7 +35,7 @@ import { tCore } from "../helpers/core-i18n.js";
 /** 分片大小上界（与实现共用常量，防止测试悄悄跟实现漂移）。 */
 const CHUNK = ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK;
 
-/** 单个文件在一条分片事务内的语句条数上界（findByPath ×3 + 落 entry/blob/revision + adjustRef）。 */
+/** 单个文件在一条分片事务内的语句条数上界（findByPath ×3 + 落 entry/blob/revision + RevisionRefCount.adjust）。 */
 const STATEMENTS_PER_FILE_UPPER_BOUND = 15;
 
 function pad(n: number): string {
@@ -79,7 +79,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     probe.reset();
     await VfsServiceFactory.createZipIo(conn).import(
       scope,
-      buildVfsZip(filesMap(450)),
+      VfsZipBuild.build(filesMap(450)),
       { confirmed: true }
     );
 
@@ -97,18 +97,18 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     assert.equal(countSql(probe, last, "INSERT INTO vfs_entry"), 0);
   });
 
-  it("A2: 任一文件片内 insertFileSeedingRevision 调用次数 ≤ 200", async () => {
+  it("A2: 任一文件片内 LiveHeadRevisionSeeder.insertFileSeeding 调用次数 ≤ 200", async () => {
     const project = await ctx.projects.create(`P-a2-${Date.now()}`);
     const scope = { kind: "project" as const, projectId: project.id };
 
     probe.reset();
     await VfsServiceFactory.createZipIo(conn).import(
       scope,
-      buildVfsZip(filesMap(450)),
+      VfsZipBuild.build(filesMap(450)),
       { confirmed: true }
     );
 
-    // 每个文件恰好一条 vfs_revision（insertFileSeedingRevision 的 append）⇒
+    // 每个文件恰好一条 vfs_revision（LiveHeadRevisionSeeder.insertFileSeeding 的 append）⇒
     // 「revision 行数 == 片内文件数」即「该片调用次数」，不必去 spy 模块函数。
     const perShard = [1, 2, 3].map((i) => countSql(probe, i, "INSERT INTO vfs_revision"));
     assert.deepEqual(perShard, [200, 200, 50]);
@@ -126,7 +126,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
 
     await VfsServiceFactory.createZipIo(conn).import(
       { kind: "project", projectId: project.id },
-      buildVfsZip(expected),
+      VfsZipBuild.build(expected),
       { confirmed: true }
     );
 
@@ -151,7 +151,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
       () =>
         VfsServiceFactory.createZipIo(conn, {
           testHook: { throwOnInsertLogical: failPath },
-        }).import(scope, buildVfsZip(files), { confirmed: true }),
+        }).import(scope, VfsZipBuild.build(files), { confirmed: true }),
       (e: unknown) =>
         // 测试钩子直抛分支绕过了 IMPORT_FAILED 包装 ⇒ 断言必须是原始 Error。
         e instanceof Error && e.message === "test import failure"
@@ -186,7 +186,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const vfs = VfsServiceFactory.createScoped(conn, scope);
 
     // 文件序：先 200 个正常文件（第 1 片），再「a.md」+「a.md/b.md」。
-    // 第二片的第二条让 ensureParentDirectories 撞上「父路径是文件行」⇒ 真实
+    // 第二片的第二条让 ParentDirs.ensure 撞上「父路径是文件行」⇒ 真实
     // 语句级失败（不是测试钩子）。
     const files = filesMap(200, "ok");
     files.set("a.md", "A");
@@ -196,7 +196,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
       () =>
         VfsServiceFactory.createZipIo(conn).import(
           scope,
-          buildVfsZip(files),
+          VfsZipBuild.build(files),
           { confirmed: true }
         ),
       (e: unknown) =>
@@ -233,7 +233,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
         () =>
           VfsServiceFactory.createZipIo(conn, {
             testHook: { throwOnInsertLogical: "/f0200.md" },
-          }).import(scope, buildVfsZip(filesMap(450)), { confirmed: true }),
+          }).import(scope, VfsZipBuild.build(filesMap(450)), { confirmed: true }),
         (e: unknown) =>
           e instanceof Error && e.message === "test import failure"
       );
@@ -256,7 +256,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     probe.reset();
     await VfsServiceFactory.createZipIo(conn).import(
       scope,
-      buildVfsZip(files),
+      VfsZipBuild.build(files),
       { confirmed: true }
     );
 

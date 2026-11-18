@@ -9,13 +9,13 @@
  */
 
 import { SKILLS_ROOT, resolveSkillRelPathCore } from "@/domain/skills/logic/skill-paths.js";
-import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
-import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
+import { VfsCopy } from "@/domain/vfs/logic/vfs-copy.js";
+import { VfsMove } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SKILL_TOOL_NAME } from "../builtin/skill-tool.js";
-import { capUtf8Bytes, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
+import { ToolOutputLimits, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
 
 type ParsedFsCommand =
   | { readonly kind: "rm"; readonly path: string; readonly recursive: boolean }
@@ -173,12 +173,12 @@ export const FsCommand = {
         return Result.ok({ ok: true as const });
       }
       case "mv": {
-        const moved = await moveVfsPath(vfs, parsed.from, parsed.to);
+        const moved = await VfsMove.move(vfs, parsed.from, parsed.to);
         if (!moved.ok) return Result.err(moved.error);
         return Result.ok({ ok: true as const });
       }
       case "cp": {
-        const copied = await copyVfsPath(vfs, parsed.from, parsed.to, { recursive: parsed.recursive });
+        const copied = await VfsCopy.copy(vfs, parsed.from, parsed.to, { recursive: parsed.recursive });
         if (!copied.ok) return Result.err(copied.error);
         return Result.ok({ ok: true as const });
       }
@@ -192,7 +192,7 @@ export const FsCommand = {
         const entries = await vfs.list(parsed.dir, listOptions);
         if (!entries.ok) return Result.err(entries.error);
         const lines = entries.value.map((entry) => `${entry.path}\t${entry.kind}`);
-        const capped = capUtf8Bytes(lines, TOOL_OUTPUT_MAX_BYTES);
+        const capped = ToolOutputLimits.capUtf8Bytes(lines, TOOL_OUTPUT_MAX_BYTES);
         const formattedEntries = capped.lines.map((line) => {
           const tab = line.indexOf("\t");
           const path = tab >= 0 ? line.slice(0, tab) : line;

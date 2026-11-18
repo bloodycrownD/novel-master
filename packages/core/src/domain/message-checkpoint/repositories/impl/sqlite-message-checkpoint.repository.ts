@@ -12,7 +12,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import { decrementRefsForCheckpointFiles, incrementRefsForCheckpointFiles } from "@/domain/vfs/logic/revision-ref-count.js";
+import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MessageCheckpointFile } from "../../model/message-checkpoint.js";
 import type { CheckpointFilePointer, MessageCheckpointDistinctPointer, MessageCheckpointInsertInput, MessageCheckpointRepository } from "../message-checkpoint.port.js";
@@ -130,7 +130,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     const oldRows = await queryTemplate(this.conn, this.parser, sql4, { sessionId: input.sessionId, messageId: input.messageId });
     if (oldRows.length > 0) {
       const oldPointers = oldRows.map((row) => rowToFilePointer(row));
-      await decrementRefsForCheckpointFiles(revisionRepo, oldPointers);
+      await RevisionRefCount.decrementForCheckpointFiles(revisionRepo, oldPointers);
     }
 
     const sql5 = "DELETE FROM message_checkpoint_file\n       WHERE session_id = #{sessionId} AND message_id = #{messageId}";
@@ -154,7 +154,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
 
     if (input.files.length > 0) {
       const insertedPointers = input.files.map((file) => ({ entryId: file.entryId, revisionVersion: file.revisionVersion }));
-      await incrementRefsForCheckpointFiles(revisionRepo, insertedPointers);
+      await RevisionRefCount.incrementForCheckpointFiles(revisionRepo, insertedPointers);
     }
   }
 
@@ -292,7 +292,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
     // 顺序不许变：先**逐块读完** message_checkpoint_file 行并 concat，
-    // 一次性 decrementRefsForCheckpointFiles（ref −1 必须先于行删除），
+    // 一次性 RevisionRefCount.decrementForCheckpointFiles（ref −1 必须先于行删除），
     // 再逐块执行那两条 DELETE。块内读失败会抛 ⇒ 整批不动（调用方在事务内）。
     const fileRows: MessageCheckpointFile[] = [];
     const chunks = [...chunkIdList(messageIds, 1)];
@@ -306,7 +306,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
       }
     }
     if (fileRows.length > 0) {
-      await decrementRefsForCheckpointFiles(revisionRepo, fileRows);
+      await RevisionRefCount.decrementForCheckpointFiles(revisionRepo, fileRows);
     }
 
     for (const chunk of chunks) {
@@ -326,7 +326,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     const fileRows = await queryTemplate(this.conn, this.parser, sql17, { sessionId });
     if (fileRows.length > 0) {
       const pointers = fileRows.map((row) => rowToFilePointer(row));
-      await decrementRefsForCheckpointFiles(revisionRepo, pointers);
+      await RevisionRefCount.decrementForCheckpointFiles(revisionRepo, pointers);
     }
 
     await executeTemplate(this.conn, this.parser, `DELETE FROM message_checkpoint_file WHERE session_id = #{sessionId}`, { sessionId });

@@ -6,10 +6,10 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
-import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
@@ -113,7 +113,7 @@ describe("AgentRunner message checkpoint", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
@@ -159,7 +159,7 @@ describe("AgentRunner message checkpoint", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,

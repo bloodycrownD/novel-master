@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "../../src/errors/app-error.js";
-import {
-  buildToolResultBlock,
-  resolveToolResultOk,
-} from "../../src/domain/tool/logic/build-tool-result-block.js";
+import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 
-describe("buildToolResultBlock", () => {
+describe("ToolResultBlock.build", () => {
   it("R1: success outcome sets ok true and formats content", () => {
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu1",
       { ok: true, output: { version: 1 } },
       { toolName: "write" },
@@ -21,7 +18,7 @@ describe("buildToolResultBlock", () => {
   });
 
   it("R1: error outcome sets ok false and Error: content", () => {
-    const block = buildToolResultBlock("tu2", {
+    const block = ToolResultBlock.build("tu2", {
       ok: false,
       error: new AppError("TOOL_NOT_FOUND", {toolName: "read", detail: "Path not found"}),
     });
@@ -33,7 +30,7 @@ describe("buildToolResultBlock", () => {
   it("T-BTRB-01: error with vfsScope summary uses classified message", () => {
     // entry_id 化后 vfsError.path 已是逻辑路径（无物理前缀）
     const cause = new AppError("VFS_NOT_FOUND", {path: "/f.txt", detail: "Path not found: /f.txt"});
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu4",
       {
         ok: false,
@@ -52,7 +49,7 @@ describe("buildToolResultBlock", () => {
   it("R2: read output with terrors in body stays ok true", () => {
     const ravenSnippet =
       "Thrilled me—filled me with fantastic terrors never felt before;";
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu3",
       {
         ok: true,
@@ -69,11 +66,11 @@ describe("buildToolResultBlock", () => {
     assert.equal(block.ok, true);
     assert.ok(block.content.includes("terrors"));
     assert.equal(block.summary, "30 lines");
-    assert.equal(resolveToolResultOk(block), true);
+    assert.equal(ToolResultBlock.resolveOk(block), true);
   });
 
   it("BTRB-FMT-01: read/grep/glob content uses readable formatters", () => {
-    const readBlock = buildToolResultBlock(
+    const readBlock = ToolResultBlock.build(
       "tu-read",
       {
         ok: true,
@@ -91,7 +88,7 @@ describe("buildToolResultBlock", () => {
     );
     assert.equal(readBlock.content, "     1|hello");
 
-    const grepBlock = buildToolResultBlock(
+    const grepBlock = ToolResultBlock.build(
       "tu-grep",
       {
         ok: true,
@@ -107,7 +104,7 @@ describe("buildToolResultBlock", () => {
     );
     assert.equal(grepBlock.content, "/x.ts:2:4: needle");
 
-    const globBlock = buildToolResultBlock(
+    const globBlock = ToolResultBlock.build(
       "tu-glob",
       {
         ok: true,
@@ -123,7 +120,7 @@ describe("buildToolResultBlock", () => {
   });
 
   it("T-SK8: skill read 成功输出自动检测透传 meta.skillRef（含 skillProjectId）", () => {
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu-skill",
       {
         ok: true,
@@ -152,7 +149,7 @@ describe("buildToolResultBlock", () => {
   });
 
   it("T-SK8: skill load 成功输出也透传 meta.skillRef，摘要含文件数", () => {
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu-skill-load",
       {
         ok: true,
@@ -179,7 +176,7 @@ describe("buildToolResultBlock", () => {
   });
 
   it("T-SK8: skill write 输出也透传（global 域不带 projectId）", () => {
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu-skill-w",
       {
         ok: true,
@@ -192,7 +189,7 @@ describe("buildToolResultBlock", () => {
 
   it("T-SK8: 非 skill 工具同形态输出不透传 skillRef", () => {
     // domain/name 字段撞名的输出（如未来工具）不应误命中：工具名门控兜底
-    const block = buildToolResultBlock(
+    const block = ToolResultBlock.build(
       "tu-other",
       {
         ok: true,
@@ -204,7 +201,7 @@ describe("buildToolResultBlock", () => {
   });
 
   it("T-SK8: skill 失败 outcome 不透传 skillRef", () => {
-    const block = buildToolResultBlock("tu-skill-e", {
+    const block = ToolResultBlock.build("tu-skill-e", {
       ok: false,
       error: new AppError("TOOL_NOT_FOUND", {toolName: "skill", detail: "Skill not found"}),
     });
@@ -213,7 +210,7 @@ describe("buildToolResultBlock", () => {
 
   // T-AG5 附带：agent 工具成功输出的摘要分支（Step B3 同步项）
   it("T-AG5: agent list/get/create 输出带动作语义摘要（不落入 generic matches 分支）", () => {
-    const listBlock = buildToolResultBlock(
+    const listBlock = ToolResultBlock.build(
       "tu-agent-l",
       {
         ok: true,
@@ -230,7 +227,7 @@ describe("buildToolResultBlock", () => {
     );
     assert.equal(listBlock.summary, "2 agents");
 
-    const listTruncated = buildToolResultBlock(
+    const listTruncated = ToolResultBlock.build(
       "tu-agent-lt",
       {
         ok: true,
@@ -245,7 +242,7 @@ describe("buildToolResultBlock", () => {
     );
     assert.equal(listTruncated.summary, "1/5 agents");
 
-    const getBlock = buildToolResultBlock(
+    const getBlock = ToolResultBlock.build(
       "tu-agent-g",
       {
         ok: true,
@@ -255,7 +252,7 @@ describe("buildToolResultBlock", () => {
     );
     assert.equal(getBlock.summary, "beta");
 
-    const createBlock = buildToolResultBlock(
+    const createBlock = ToolResultBlock.build(
       "tu-agent-c",
       {
         ok: true,

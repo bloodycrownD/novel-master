@@ -10,9 +10,9 @@ import { Result } from "@/errors/either.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import { hashContent } from "../logic/hash-content.js";
-import { decodePackMembers, type VfsPackSpan } from "../logic/pack-codec.js";
-import { asUint8Array, compressZlib, decodeCompressedBytes, decompressZlib, tightBytes, VFS_CONTENT_ENCODING_ZLIB } from "../logic/zlib-codec.js";
+import { ContentHash } from "../logic/hash-content.js";
+import { PackCodec, type VfsPackSpan } from "../logic/pack-codec.js";
+import { ZlibCodec, VFS_CONTENT_ENCODING_ZLIB } from "../logic/zlib-codec.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { VfsContentStore } from "../vfs-content-store.port.js";
 
@@ -27,7 +27,7 @@ const CONTENT_GETMANY_CHUNK_SIZE = 500;
  *
  * 写侧统一落 `zlib` 二进制 BLOB：op-sqlite 的 blob 绑参语义已在真机验证
  * （见 tdbc-driver-op-sqlite/bindings），不再有 `zlib-b64` 文本分支。
- * 读侧仍由 {@link decodeCompressedBytes} 兼容存量 `zlib-b64` / `zlib` + base64
+ * 读侧仍由 {@link ZlibCodec.decodeCompressedBytes} 兼容存量 `zlib-b64` / `zlib` + base64
  * 文本两种历史形态。
  *
  * 打包扩展（vfs_content_pack / vfs_content_pack_member）：`content_hash → 明文`
@@ -41,7 +41,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
   constructor(private readonly conn: TdbcConnection) {}
 
   async put(plain: string): Promise<string> {
-    const contentHash = hashContent(plain);
+    const contentHash = ContentHash.hash(plain);
     const existing = await queryTemplate<{ content_hash: string }>(this.conn, this.parser, `SELECT content_hash FROM vfs_content_blob WHERE content_hash = #{contentHash}`, { contentHash });
     if (existing.length > 0) {
       // 同 hash 复用已有行，不改 encoding / bytes：存量行可能是 `zlib-b64`
@@ -65,8 +65,8 @@ export class SqliteVfsContentStore implements VfsContentStore {
     const wasPacked = await this.deleteMemberRow(contentHash);
 
     const utf8 = new TextEncoder().encode(plain);
-    const compressed = compressZlib(utf8);
-    const bytes = tightBytes(compressed);
+    const compressed = ZlibCodec.compress(utf8);
+    const bytes = ZlibCodec.tightBytes(compressed);
     const params = {
       contentHash,
       encoding: VFS_CONTENT_ENCODING_ZLIB,
@@ -89,7 +89,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
   async get(contentHash: string): Promise<Result<string, AppError>> {
     // 进程内解压产物层（infra/content-cache）：内容是内容寻址的，同 hash
     // 必同正文，命中即免掉「读压缩字节 + inflate」两笔钱。本层的键与
-    // session-kkv file_cache 的 content_hash 同一个算法（hashContent(明文)），
+    // session-kkv file_cache 的 content_hash 同一个算法（ContentHash.hash(明文)），
     // 两套存储共享同一份内存条目。
     const cached = decodedContentCache.get(contentHash);
     if (cached != null) {
@@ -100,9 +100,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
       // blob 命中走原路径（热路径零改动），member 行不参与。
       const row = rows[0]!;
       const encoding = String(row.encoding);
-      const compressed = decodeCompressedBytes(encoding, row.bytes, "vfs_content_blob.bytes");
+      const compressed = ZlibCodec.decodeCompressedBytes(encoding, row.bytes, "vfs_content_blob.bytes");
       if (!compressed.ok) return Result.err(compressed.error);
-      const plainUtf8 = decompressZlib(compressed.value);
+      const plainUtf8 = ZlibCodec.decompress(compressed.value);
       if (!plainUtf8.ok) return Result.err(plainUtf8.error);
       const plain = new TextDecoder().decode(plainUtf8.value);
       decodedContentCache.set(contentHash, plain);
@@ -117,13 +117,13 @@ export class SqliteVfsContentStore implements VfsContentStore {
       return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${contentHash}`, contentHash }));
     }
     const member = memberRows[0]!;
-    const packBytes = asUint8Array(member.bytes, "vfs_content_pack.bytes");
+    const packBytes = ZlibCodec.asUint8Array(member.bytes, "vfs_content_pack.bytes");
     if (!packBytes.ok) return Result.err(packBytes.error);
-    const decoded = decodePackMembers(String(member.format), packBytes.value, [{ offset: Number(member.offset), length: Number(member.length) }]);
+    const decoded = PackCodec.decodeMembers(String(member.format), packBytes.value, [{ offset: Number(member.offset), length: Number(member.length) }]);
     if (!decoded.ok) return Result.err(decoded.error);
     const plainUtf8 = decoded.value[0]!;
     const plain = new TextDecoder().decode(plainUtf8);
-    // member 的 content_hash 与 blob 同一个键空间（hashContent(明文)），
+    // member 的 content_hash 与 blob 同一个键空间（ContentHash.hash(明文)），
     // 解码产物同样进进程内缓存层。
     decodedContentCache.set(contentHash, plain);
     return Result.ok(plain);
@@ -155,9 +155,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
       const rows = await this.conn.query<{ content_hash: string; encoding: string; bytes: SqlValue }>(`SELECT content_hash, encoding, bytes FROM vfs_content_blob WHERE content_hash IN (${placeholders})`, chunk);
       for (const row of rows) {
         const encoding = String(row.encoding);
-        const compressed = decodeCompressedBytes(encoding, row.bytes, "vfs_content_blob.bytes");
+        const compressed = ZlibCodec.decodeCompressedBytes(encoding, row.bytes, "vfs_content_blob.bytes");
         if (!compressed.ok) return Result.err(compressed.error);
-        const plainUtf8 = decompressZlib(compressed.value);
+        const plainUtf8 = ZlibCodec.decompress(compressed.value);
         if (!plainUtf8.ok) return Result.err(plainUtf8.error);
         const plain = new TextDecoder().decode(plainUtf8.value);
         const contentHash = String(row.content_hash);
@@ -199,10 +199,10 @@ export class SqliteVfsContentStore implements VfsContentStore {
             if (pack == null) {
               return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, packId }));
             }
-            const packBytes = asUint8Array(pack.bytes, "vfs_content_pack.bytes");
+            const packBytes = ZlibCodec.asUint8Array(pack.bytes, "vfs_content_pack.bytes");
             if (!packBytes.ok) return Result.err(packBytes.error);
             const spans = members.map((member) => member.span);
-            const decoded = decodePackMembers(pack.format, packBytes.value, spans);
+            const decoded = PackCodec.decodeMembers(pack.format, packBytes.value, spans);
             if (!decoded.ok) return Result.err(decoded.error);
             const plains = decoded.value;
             members.forEach((member, index) => {

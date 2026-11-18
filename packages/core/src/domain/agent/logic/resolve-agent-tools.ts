@@ -4,7 +4,7 @@
  * @module domain/agent/logic/resolve-agent-tools
  */
 
-import { normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
+import { FileTools } from "@/domain/tool/builtin/vfs-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 
@@ -26,11 +26,11 @@ export function resolveAgentToolRegistry<Ctx>(baseRegistry: ToolRegistry<Ctx>, d
   if (definition.tools?.allow != null) {
     allowed.clear();
     for (const name of definition.tools.allow) {
-      allowed.add(normalizeAgentToolPolicyName(name));
+      allowed.add(FileTools.normalizeAgentToolPolicyName(name));
     }
   } else if (definition.tools?.deny != null && definition.tools.deny.length > 0) {
     for (const name of definition.tools.deny) {
-      allowed.delete(normalizeAgentToolPolicyName(name));
+      allowed.delete(FileTools.normalizeAgentToolPolicyName(name));
     }
   }
   if (definition.mode === "subagent" || (options?.depth ?? 0) >= 2) {

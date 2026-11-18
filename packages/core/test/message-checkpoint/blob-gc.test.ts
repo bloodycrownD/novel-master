@@ -1,5 +1,5 @@
 /**
- * T-GC1 / T-GC2：sweep + runDeferredBlobGc 全库 blob gc（唯一算法入口）。
+ * T-GC1 / T-GC2：sweep + DeferredBlobGc.run 全库 blob gc（唯一算法入口）。
  *
  * 「blob 行已被回收」的观测面在 2026-09-30 换过一次：此前直接拿
  * `contentStore.get(hash)` 必抛当证据，但 vfs content-store 已接入进程内
@@ -13,10 +13,10 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
@@ -77,7 +77,7 @@ describe("sweepSessionRevisions + blob gc", () => {
       sessionId: session.id,
     };
     const physical = LogicalPath.toPhysical(scope, "/gc1.md");
-    const orphanHash = hashContent("orphan-mid");
+    const orphanHash = ContentHash.hash("orphan-mid");
 
     // 确认 orphan-mid revision 存在且 blob 在
     const midKeys = await revisions.listKeysUnderScope(
@@ -90,7 +90,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     assert.equal(unwrap(await contentStore.get(orphanHash)), "orphan-mid");
 
     await sweepSessionRevisions(revisions, project.id, session.id);
-    await runDeferredBlobGc(ctx.conn);
+    await DeferredBlobGc.run(ctx.conn);
 
     const afterKeys = await revisions.listKeysUnderScope(
       LogicalPath.scopeKey(scope),
@@ -124,12 +124,12 @@ describe("sweepSessionRevisions + blob gc", () => {
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const contentStore = new SqliteVfsContentStore(ctx.conn);
 
-    const onlyAHash = hashContent(onlyA);
-    const sharedHash = hashContent(sharedPlain);
+    const onlyAHash = ContentHash.hash(onlyA);
+    const sharedHash = ContentHash.hash(sharedPlain);
 
     // A 的 v1(onlyA) 在 live 已是 sharedPlain 且无 checkpoint → sweep A 应删 onlyA revision+blob
     await sweepSessionRevisions(revisions, project.id, sessionA.id);
-    await runDeferredBlobGc(ctx.conn);
+    await DeferredBlobGc.run(ctx.conn);
 
     assert.equal(await blobRowCount(ctx.conn, onlyAHash), 0, "无引用 blob 行已被 gc");
     await assertColdReadRejects(contentStore, onlyAHash);

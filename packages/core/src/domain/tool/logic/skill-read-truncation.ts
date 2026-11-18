@@ -16,7 +16,7 @@
  * @module domain/tool/logic/skill-read-truncation
  */
 
-import { capUtf8Bytes, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, truncateLine } from "./tool-output-limits.js";
+import { ToolOutputLimits, TOOL_OUTPUT_MAX_LINES } from "./tool-output-limits.js";
 
 /** skill read 截断管线的全部派生量（content 已截断到预算内，可直接进 wire）。 */
 interface SkillReadTruncation {
@@ -29,79 +29,81 @@ interface SkillReadTruncation {
   readonly nextOffset?: number;
 }
 
-/**
- * 以明文全文 + 分页参数推导 skill read 的截断结果。
- *
- * 与 `skill-tool` read 分支的推导逐行同参同序：同样的
- * `split("\n")` → `sliceLinesFromOffset(lines, offset, limit)` → 逐行
- * `truncateLine`（2000 字符）→ `capUtf8Bytes`（50KB 整行丢弃）→ 同样
- * 的 truncated / nextOffset 三分支。
- *
- * `offset > totalLines`（越界）在内部短路：不跑截断推导，返回空正文 /
- * returnedLines=0 但**照常给出 totalLines**——调用方据此抛越界错误，文案与
- * 「推导前先判定」逐字一致。
- *
- * @param plain 该次读取的完整明文
- * @param offset 1-based 起始行号（与工具输入同参）
- * @param limit 最多返回行数（与工具输入同参）
- */
-export function deriveSkillReadTruncation(plain: string, offset: number, limit: number = TOOL_OUTPUT_MAX_LINES): SkillReadTruncation {
-  const lines = plain.split("\n");
-  const totalLines = lines.length;
-  // 越界 offset（offset > totalLines）：**内部短路**，跳过切行 / truncateLine /
-  // capUtf8Bytes 全套推导——这条路径的唯一出路是被调用方拒绝（skill-tool read
-  // 分支据此抛 INVALID_ARGUMENT），跑完推导的结果必被丢弃，白跑一次。
-  // 「越界即错」因此收进本单源函数，调用方不必再各自重复判定。
-  // 返回的 totalLines 仍照常给出：报错文案要用它（与推导前判定逐字一致）。
-  if (offset > totalLines) {
-    return { content: "", returnedLines: 0, totalLines, truncated: false };
-  }
-  const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(lines, offset, limit);
-  const truncatedLines = slice.map((line) => truncateLine(line).line);
-  const byteCapped = capUtf8Bytes(truncatedLines);
-  const content = byteCapped.lines.join("\n");
-  const returnedLines = byteCapped.lines.length;
-  // 三条截断路径任一命中：字节预算（末行装不下被整行丢弃）、行数帽
-  // （limit 截断且文件还有剩余行）。
-  const truncated = byteCapped.truncated || returnedLines < slice.length || (lineNextOffset != null && returnedLines >= limit);
-  let nextOffset: number | undefined;
-  if (truncated) {
-    if (byteCapped.truncated && returnedLines > 0) {
-      nextOffset = offset + returnedLines;
-    } else if (lineNextOffset != null) {
-      nextOffset = lineNextOffset;
-    }
-  }
-  return {
-    content,
-    returnedLines,
-    totalLines,
-    truncated,
-    ...(nextOffset != null ? { nextOffset } : {}),
-  };
-}
-
 /** skill load 的截断推导结果（load 无分页参数，从第 1 行起）。 */
 interface SkillLoadTruncation {
   readonly content: string;
   readonly truncated: boolean;
 }
 
-/**
- * 以明文全文推导 skill load 的截断结果。
- *
- * load 恒从第 1 行起、取 {@link TOOL_OUTPUT_MAX_LINES} 行（无 offset/limit
- * 入参），截断判定 = 字节预算命中 或 行数帽命中（`byteCapped.lines.length <
- * lines.length`）。load 输出**不带** totalLines/returnedLines（wire 侧
- * `formatToolOutputForLlm` 的 skill load 分支只吃 path/content/truncated/files），故这里也不返回。
- */
-export function deriveSkillLoadTruncation(plain: string): SkillLoadTruncation {
-  const lines = plain.split("\n");
-  const { slice } = sliceLinesFromOffset(lines, 1, TOOL_OUTPUT_MAX_LINES);
-  const truncatedLines = slice.map((line) => truncateLine(line).line);
-  const byteCapped = capUtf8Bytes(truncatedLines);
-  return {
-    content: byteCapped.lines.join("\n"),
-    truncated: byteCapped.truncated || byteCapped.lines.length < lines.length,
-  };
-}
+export const SkillTruncation = {
+  /**
+   * 以明文全文 + 分页参数推导 skill read 的截断结果。
+   *
+   * 与 `skill-tool` read 分支的推导逐行同参同序：同样的
+   * `split("\n")` → `sliceLinesFromOffset(lines, offset, limit)` → 逐行
+   * `truncateLine`（2000 字符）→ `capUtf8Bytes`（50KB 整行丢弃）→ 同样
+   * 的 truncated / nextOffset 三分支。
+   *
+   * `offset > totalLines`（越界）在内部短路：不跑截断推导，返回空正文 /
+   * returnedLines=0 但**照常给出 totalLines**——调用方据此抛越界错误，文案与
+   * 「推导前先判定」逐字一致。
+   *
+   * @param plain 该次读取的完整明文
+   * @param offset 1-based 起始行号（与工具输入同参）
+   * @param limit 最多返回行数（与工具输入同参）
+   */
+  deriveRead(plain: string, offset: number, limit: number = TOOL_OUTPUT_MAX_LINES): SkillReadTruncation {
+    const lines = plain.split("\n");
+    const totalLines = lines.length;
+    // 越界 offset（offset > totalLines）：**内部短路**，跳过切行 / truncateLine /
+    // capUtf8Bytes 全套推导——这条路径的唯一出路是被调用方拒绝（skill-tool read
+    // 分支据此抛 INVALID_ARGUMENT），跑完推导的结果必被丢弃，白跑一次。
+    // 「越界即错」因此收进本单源函数，调用方不必再各自重复判定。
+    // 返回的 totalLines 仍照常给出：报错文案要用它（与推导前判定逐字一致）。
+    if (offset > totalLines) {
+      return { content: "", returnedLines: 0, totalLines, truncated: false };
+    }
+    const { slice, nextOffset: lineNextOffset } = ToolOutputLimits.sliceLinesFromOffset(lines, offset, limit);
+    const truncatedLines = slice.map((line) => ToolOutputLimits.truncateLine(line).line);
+    const byteCapped = ToolOutputLimits.capUtf8Bytes(truncatedLines);
+    const content = byteCapped.lines.join("\n");
+    const returnedLines = byteCapped.lines.length;
+    // 三条截断路径任一命中：字节预算（末行装不下被整行丢弃）、行数帽
+    // （limit 截断且文件还有剩余行）。
+    const truncated = byteCapped.truncated || returnedLines < slice.length || (lineNextOffset != null && returnedLines >= limit);
+    let nextOffset: number | undefined;
+    if (truncated) {
+      if (byteCapped.truncated && returnedLines > 0) {
+        nextOffset = offset + returnedLines;
+      } else if (lineNextOffset != null) {
+        nextOffset = lineNextOffset;
+      }
+    }
+    return {
+      content,
+      returnedLines,
+      totalLines,
+      truncated,
+      ...(nextOffset != null ? { nextOffset } : {}),
+    };
+  },
+
+  /**
+   * 以明文全文推导 skill load 的截断结果。
+   *
+   * load 恒从第 1 行起、取 {@link TOOL_OUTPUT_MAX_LINES} 行（无 offset/limit
+   * 入参），截断判定 = 字节预算命中 或 行数帽命中（`byteCapped.lines.length <
+   * lines.length`）。load 输出**不带** totalLines/returnedLines（wire 侧
+   * `ToolOutput.formatForLlm` 的 skill load 分支只吃 path/content/truncated/files），故这里也不返回。
+   */
+  deriveLoad(plain: string): SkillLoadTruncation {
+    const lines = plain.split("\n");
+    const { slice } = ToolOutputLimits.sliceLinesFromOffset(lines, 1, TOOL_OUTPUT_MAX_LINES);
+    const truncatedLines = slice.map((line) => ToolOutputLimits.truncateLine(line).line);
+    const byteCapped = ToolOutputLimits.capUtf8Bytes(truncatedLines);
+    return {
+      content: byteCapped.lines.join("\n"),
+      truncated: byteCapped.truncated || byteCapped.lines.length < lines.length,
+    };
+  },
+} as const;

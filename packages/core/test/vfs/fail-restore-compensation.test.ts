@@ -6,13 +6,10 @@ import { isAppError } from "../../src/errors/app-error.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  captureMutatingPathHeadSnapshots,
-  restoreMutatingPathHeads,
-} from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
+import { MutatingPathHeads } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
 import { sweepSessionRevisions } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
-import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { DeferredBlobGc } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
+import { ContentHash } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
@@ -82,14 +79,14 @@ describe("fail restore compensation (sessionVfs)", () => {
     const sk = scopeKey(project.id, session.id);
 
     await vfs.write("/base.md", "before", { versionCheck: false });
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/base.md"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/base.md"]));
     const revAfterCapture = await countRevisions(ctx.conn, sk, "/base.md");
 
     await vfs.write("/base.md", "mutated", { versionCheck: false });
     const revAfterMutate = await countRevisions(ctx.conn, sk, "/base.md");
     assert.equal(revAfterMutate, revAfterCapture + 1);
 
-    unwrap(await restoreMutatingPathHeads(vfs, snapshots, ["/base.md"]));
+    unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/base.md"]));
 
     const read = unwrap(await vfs.read("/base.md"));
     assert.equal(read.content, "before");
@@ -105,13 +102,13 @@ describe("fail restore compensation (sessionVfs)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/new.md"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/new.md"]));
     assert.equal(snapshots.get("/new.md")?.kind, "absent");
 
     await vfs.write("/new.md", "created", { versionCheck: false });
     assert.equal(await countDeletedRevisions(ctx.conn, sk, "/new.md"), 0);
 
-    unwrap(await restoreMutatingPathHeads(vfs, snapshots, ["/new.md"]));
+    unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/new.md"]));
 
     await rejectsErr(() => vfs.read("/new.md"), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_NOT_FOUND"));
@@ -127,13 +124,13 @@ describe("fail restore compensation (sessionVfs)", () => {
     const sk = scopeKey(project.id, session.id);
 
     await vfs.write("/gone.md", "snap-body", { versionCheck: false });
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/gone.md"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/gone.md"]));
 
     // 改写文件后再拨回；补偿不得净增写回 revision
     await vfs.write("/gone.md", "mutated-body", { versionCheck: false });
     const revAfterMutate = await countRevisions(ctx.conn, sk, "/gone.md");
 
-    unwrap(await restoreMutatingPathHeads(vfs, snapshots, ["/gone.md"]));
+    unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/gone.md"]));
 
     const read = unwrap(await vfs.read("/gone.md"));
     assert.equal(read.content, "snap-body");
@@ -150,14 +147,14 @@ describe("fail restore compensation (sessionVfs)", () => {
 
     unwrap(await vfs.mkdir("/d"));
     await vfs.write("/d/a.md", "A0", { versionCheck: false });
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/d"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/d"]));
     const revAAfterCapture = await countRevisions(ctx.conn, sk, "/d/a.md");
 
     await vfs.write("/d/a.md", "A1", { versionCheck: false });
     await vfs.write("/d/b.md", "B-new", { versionCheck: false });
     const revAAfterMutate = await countRevisions(ctx.conn, sk, "/d/a.md");
 
-    unwrap(await restoreMutatingPathHeads(vfs, snapshots, ["/d"]));
+    unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/d"]));
 
     await rejectsErr(() => vfs.read("/d/b.md"), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_NOT_FOUND"));
@@ -187,7 +184,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     assert.equal(xRows.length, 1);
     const xEntryId = xRows[0]!.entry_id;
 
-    // 先调 adjustRef 减 ref_count，再删 entry（模拟 hardDelete 语义）
+    // 先调 RevisionRefCount.adjust 减 ref_count，再删 entry（模拟 hardDelete 语义）
     await revisions.adjustRefCount(xEntryId, 1, -1);
     await ctx.conn.execute(
       `DELETE FROM vfs_entry WHERE scope_key = ? AND (path = ? OR path LIKE ?)`,
@@ -225,14 +222,14 @@ describe("fail restore compensation (sessionVfs)", () => {
     unwrap(await vfs.mkdir("/d"));
     await vfs.write("/d/a.md", "A0", { versionCheck: false });
     await vfs.write("/d/b.md", "B0", { versionCheck: false });
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/d"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/d"]));
 
     await vfs.write("/d/a.md", "A1", { versionCheck: false });
     await vfs.write("/d/b.md", "B1", { versionCheck: false });
     const revAAfter = await countRevisions(ctx.conn, sk, "/d/a.md");
     const revBAfter = await countRevisions(ctx.conn, sk, "/d/b.md");
 
-    unwrap(await restoreMutatingPathHeads(vfs, snapshots, ["/d"]));
+    unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/d"]));
 
     const a = unwrap(await vfs.read("/d/a.md"));
     const b = unwrap(await vfs.read("/d/b.md"));
@@ -253,7 +250,7 @@ describe("fail restore compensation (sessionVfs)", () => {
 
     unwrap(await vfs.mkdir("/d"));
     await vfs.write("/d/a.md", "keep", { versionCheck: false });
-    const snapshots = unwrap(await captureMutatingPathHeadSnapshots(vfs, ["/d"]));
+    const snapshots = unwrap(await MutatingPathHeads.captureSnapshots(vfs, ["/d"]));
     const aBefore = unwrap(await vfs.read("/d/a.md"));
     const revABeforeRestore = await countRevisions(ctx.conn, sk, "/d/a.md");
 
@@ -263,7 +260,7 @@ describe("fail restore compensation (sessionVfs)", () => {
       expectedVersion: aBefore.version,
     }));
 
-    unwrap(await restoreMutatingPathHeads(vfs, snapshots, ["/d"]));
+    unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/d"]));
 
     await rejectsErr(() => vfs.read("/d/sub/new.md"), (e: unknown) => {
       assert.ok(isAppError(e, "VFS_NOT_FOUND"));

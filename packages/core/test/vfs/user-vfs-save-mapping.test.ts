@@ -4,20 +4,16 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildUserVfsSaveEditActionXml,
-  buildUserVfsSaveWriteActionXml,
-  mapUserSaveToToolUses,
-} from "../../src/domain/vfs/logic/user-vfs-save-mapping.js";
+import { UserVfsSaveMapping } from "../../src/domain/vfs/logic/user-vfs-save-mapping.js";
 
-describe("mapUserSaveToToolUses", () => {
+describe("UserVfsSaveMapping.mapToToolUses", () => {
   it("内容相等时返回 noop", () => {
-    const result = mapUserSaveToToolUses("hello", "hello", "a.md", "hello");
+    const result = UserVfsSaveMapping.mapToToolUses("hello", "hello", "a.md", "hello");
     assert.equal(result.kind, "noop");
   });
 
   it("新文件返回 write", () => {
-    const result = mapUserSaveToToolUses(null, "new", "new.md", "new");
+    const result = UserVfsSaveMapping.mapToToolUses(null, "new", "new.md", "new");
     assert.equal(result.kind, "write");
     if (result.kind === "write") {
       assert.equal(result.path, "new.md");
@@ -29,7 +25,7 @@ describe("mapUserSaveToToolUses", () => {
   it("小改锚点 edit", () => {
     const baseline = "line1\nline2\nline3";
     const saved = "line1\nLINE2\nline3";
-    const result = mapUserSaveToToolUses(baseline, saved, "ch.md", saved);
+    const result = UserVfsSaveMapping.mapToToolUses(baseline, saved, "ch.md", saved);
     assert.equal(result.kind, "edit");
     if (result.kind === "edit") {
       assert.equal(result.toolUses.length, 1);
@@ -42,7 +38,7 @@ describe("mapUserSaveToToolUses", () => {
   it("锚点不唯一时 fallback write", () => {
     const baseline = "aa\naa";
     const saved = "AA\naa";
-    const result = mapUserSaveToToolUses(baseline, saved, "x.md", saved);
+    const result = UserVfsSaveMapping.mapToToolUses(baseline, saved, "x.md", saved);
     assert.equal(result.kind, "write");
     if (result.kind === "write") {
       assert.equal(result.reason, "anchor-not-unique");
@@ -52,7 +48,7 @@ describe("mapUserSaveToToolUses", () => {
   it("多 hunk 生成多个 edit tool_use", () => {
     const baseline = "aaa\nsep\nbbb\nsep\nccc";
     const saved = "AAA\nsep\nbbb\nsep\nCCC";
-    const result = mapUserSaveToToolUses(baseline, saved, "multi.md", saved);
+    const result = UserVfsSaveMapping.mapToToolUses(baseline, saved, "multi.md", saved);
     assert.equal(result.kind, "edit");
     if (result.kind === "edit") {
       assert.equal(result.toolUses.length, 2);
@@ -63,7 +59,7 @@ describe("mapUserSaveToToolUses", () => {
 
 describe("buildUserVfsSaveActionXml", () => {
   it("生成 edit action XML", () => {
-    const xml = buildUserVfsSaveEditActionXml("a.md", [
+    const xml = UserVfsSaveMapping.buildEditActionXml("a.md", [
       { index: 1, oldString: "old", newString: "new" },
     ]);
     assert.ok(xml.includes('<action name="edit">'));
@@ -72,7 +68,7 @@ describe("buildUserVfsSaveActionXml", () => {
   });
 
   it("生成 write action XML（JSON 正文）", () => {
-    const xml = buildUserVfsSaveWriteActionXml(
+    const xml = UserVfsSaveMapping.buildWriteActionXml(
       "a.md",
       "anchor-not-unique",
       "full body",

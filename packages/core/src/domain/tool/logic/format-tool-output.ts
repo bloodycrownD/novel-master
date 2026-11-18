@@ -2,7 +2,7 @@
  * Human-readable tool output for LLM history and prompt preview.
  *
  * @remarks
- * `formatToolOutputForLlm` 的 read / skill load 输出自 v1.5.30 起**不再是冻结契约**。
+ * `ToolOutput.formatForLlm` 的 read / skill load 输出自 v1.5.30 起**不再是冻结契约**。
  * v1.5.29 曾把它们标为「冻结、演进需版本化」，原因是读/skill tool_result
  * 改存引用块、wire 需按冻结 formatter 逐字节重放还原；unref 回迁后写侧恒存
  * 这些函数的产物本身（全文直出），仓内不再有任何重放方，wire 就是这份输
@@ -11,7 +11,7 @@
  * @module domain/tool/logic/format-tool-output
  */
 
-import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
+import { VfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { isAppError } from "@/errors/app-error.js";
 import { inDomain, isVfsError } from "@/errors/guards.js";
@@ -35,38 +35,38 @@ type SearchResultShape = {
   readonly snippet: string;
 };
 
-/** Formats read output with 6-digit right-aligned line numbers. */
-function formatReadOutput(rec: Record<string, unknown>): string {
-  const content = rec.content as string;
-  const offset = typeof rec.offset === "number" ? rec.offset : 1;
-  const lines = content.split("\n");
-  const numbered = lines.map((line, index) => `${String(offset + index).padStart(6, " ")}|${line}`);
-  const parts = [numbered.join("\n")];
-
-  if (rec.truncated === true) {
-    const hints: string[] = ["Output truncated."];
-    if (rec.lastLineTruncated === true) {
-      hints.push("Last line was cut at the 50KB byte budget; its tail is not resumable (continue from the next line).");
-    }
-    if (typeof rec.totalLines === "number") {
-      hints.push(`Total lines: ${rec.totalLines}.`);
-    }
-    if (typeof rec.nextOffset === "number") {
-      hints.push(`Continue with offset=${rec.nextOffset}.`);
-    }
-    parts.push(hints.join(" "));
-  }
-
-  return parts.join("\n\n");
-}
-
 /**
- * Tool output shape guards.
+ * Tool output shape guards + LLM 侧格式化（本文件裸函数统一收口于此）。
  *
- * 分派顺序即 {@link formatToolOutputForLlm} 的守卫顺序：read → grep → glob →
+ * 守卫分派顺序即 {@link ToolOutput.formatForLlm} 的守卫顺序：read → grep → glob →
  * search → curl。测试文件直接 import 本命名空间锁输出形态。
  */
 export const ToolOutput = {
+  /** Formats read output with 6-digit right-aligned line numbers. */
+  formatReadOutput: (rec: Record<string, unknown>): string => {
+    const content = rec.content as string;
+    const offset = typeof rec.offset === "number" ? rec.offset : 1;
+    const lines = content.split("\n");
+    const numbered = lines.map((line, index) => `${String(offset + index).padStart(6, " ")}|${line}`);
+    const parts = [numbered.join("\n")];
+
+    if (rec.truncated === true) {
+      const hints: string[] = ["Output truncated."];
+      if (rec.lastLineTruncated === true) {
+        hints.push("Last line was cut at the 50KB byte budget; its tail is not resumable (continue from the next line).");
+      }
+      if (typeof rec.totalLines === "number") {
+        hints.push(`Total lines: ${rec.totalLines}.`);
+      }
+      if (typeof rec.nextOffset === "number") {
+        hints.push(`Continue with offset=${rec.nextOffset}.`);
+      }
+      parts.push(hints.join(" "));
+    }
+
+    return parts.join("\n\n");
+  },
+
   /** Detects read tool output (including truncated). */
   isRead: (rec: Record<string, unknown>): boolean => typeof rec.path === "string" && typeof rec.content === "string" && typeof rec.totalLines === "number" && typeof rec.returnedLines === "number" && typeof rec.truncated === "boolean",
 
@@ -104,7 +104,7 @@ export const ToolOutput = {
    * （模板引擎透传形态：提取结果的 JSON 文本，attempts 仍可叠加）；
    * 落盘形态（overflow-sink Step 6 接线后出现）：`savedPath` + `message` +
    * `engine`。未配置提示是纯字符串输出，不经过本守卫
-   * （formatToolOutputForLlm 对 string 直通）。
+   * （formatForLlm 对 string 直通）。
    */
   isSearch: (rec: Record<string, unknown>): boolean => {
     if (typeof rec.engine !== "string") {
@@ -140,212 +140,212 @@ export const ToolOutput = {
    * method 不入守卫（curl 升级前的历史输出无该字段，formatter 缺省 GET）。
    */
   isCurl: (rec: Record<string, unknown>): boolean => typeof rec.url === "string" && typeof rec.finalUrl === "string" && typeof rec.status === "number" && typeof rec.body === "string" && typeof rec.truncated === "boolean",
-} as const;
 
-/**
- * Compact tool success text for the model (e.g. write → `ok`).
- *
- * 守卫顺序即分派顺序：read → entries 列表（fs ls / skill list / agent list）→
- * grep → glob → search → curl → skill load → mutation 回执 → 泛化 version 形态。
- */
-export function formatToolOutputForLlm(out: unknown): string {
-  if (typeof out === "string") {
-    return out;
-  }
-  if (out != null && typeof out === "object" && !Array.isArray(out)) {
-    const rec = out as Record<string, unknown>;
-    const keys = Object.keys(rec);
-
-    if (ToolOutput.isRead(rec)) {
-      return formatReadOutput(rec);
+  /**
+   * Compact tool success text for the model (e.g. write → `ok`).
+   *
+   * 守卫顺序即分派顺序：read → entries 列表（fs ls / skill list / agent list）→
+   * grep → glob → search → curl → skill load → mutation 回执 → 泛化 version 形态。
+   */
+  formatForLlm: (out: unknown): string => {
+    if (typeof out === "string") {
+      return out;
     }
+    if (out != null && typeof out === "object" && !Array.isArray(out)) {
+      const rec = out as Record<string, unknown>;
+      const keys = Object.keys(rec);
 
-    // fs ls / skill list / agent list 共用的 entries+total 形态：条目字段自适应。
-    // （历史教训：按 fs 字段硬拼会把 name/description 条目拼成字面 undefined 进 tool_result 落库。）
-    if (Array.isArray(rec.entries) && typeof rec.total === "number") {
-      const entries = rec.entries as Array<Record<string, unknown>>;
-      const lines = entries.map((entry) => {
-        if (typeof entry.path === "string") {
-          return typeof entry.kind === "string" ? `${entry.path}\t${entry.kind}` : entry.path;
+      if (ToolOutput.isRead(rec)) {
+        return ToolOutput.formatReadOutput(rec);
+      }
+
+      // fs ls / skill list / agent list 共用的 entries+total 形态：条目字段自适应。
+      // （历史教训：按 fs 字段硬拼会把 name/description 条目拼成字面 undefined 进 tool_result 落库。）
+      if (Array.isArray(rec.entries) && typeof rec.total === "number") {
+        const entries = rec.entries as Array<Record<string, unknown>>;
+        const lines = entries.map((entry) => {
+          if (typeof entry.path === "string") {
+            return typeof entry.kind === "string" ? `${entry.path}\t${entry.kind}` : entry.path;
+          }
+          const name = typeof entry.name === "string" && entry.name !== "" ? entry.name : "(未命名)";
+          const description = typeof entry.description === "string" ? entry.description.trim() : "";
+          return description !== "" ? `${name}\t${description}` : name;
+        });
+        let out = lines.join("\n");
+        if (rec.truncated === true) {
+          const omitted = typeof rec.omitted === "number" ? rec.omitted : typeof rec.total === "number" ? rec.total - entries.length : 0;
+          out += `\n\nOutput truncated (${omitted} entries omitted; total ${rec.total}).`;
         }
-        const name = typeof entry.name === "string" && entry.name !== "" ? entry.name : "(未命名)";
-        const description = typeof entry.description === "string" ? entry.description.trim() : "";
-        return description !== "" ? `${name}\t${description}` : name;
-      });
-      let out = lines.join("\n");
-      if (rec.truncated === true) {
-        const omitted = typeof rec.omitted === "number" ? rec.omitted : typeof rec.total === "number" ? rec.total - entries.length : 0;
-        out += `\n\nOutput truncated (${omitted} entries omitted; total ${rec.total}).`;
+        return out;
       }
-      return out;
-    }
 
-    if (ToolOutput.isGrep(rec)) {
-      const matches = rec.matches as readonly GrepMatchShape[];
-      let out = matches.map((match) => `${match.path}:${match.line}:${match.column}: ${match.excerpt}`).join("\n");
-      if (rec.truncated === true) {
-        const omitted = typeof rec.total === "number" ? rec.total - matches.length : undefined;
-        const hint = omitted != null && omitted > 0 ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).` : `\n\nOutput truncated (total ${rec.total}).`;
-        out += hint;
+      if (ToolOutput.isGrep(rec)) {
+        const matches = rec.matches as readonly GrepMatchShape[];
+        let out = matches.map((match) => `${match.path}:${match.line}:${match.column}: ${match.excerpt}`).join("\n");
+        if (rec.truncated === true) {
+          const omitted = typeof rec.total === "number" ? rec.total - matches.length : undefined;
+          const hint = omitted != null && omitted > 0 ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).` : `\n\nOutput truncated (total ${rec.total}).`;
+          out += hint;
+        }
+        return out;
       }
-      return out;
-    }
 
-    if (ToolOutput.isGlob(rec)) {
-      const paths = rec.paths as readonly string[];
-      let out = paths.join("\n");
-      if (rec.truncated === true) {
-        const omitted = typeof rec.total === "number" ? rec.total - paths.length : undefined;
-        const hint = omitted != null && omitted > 0 ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).` : `\n\nOutput truncated (total ${rec.total}).`;
-        out += hint;
+      if (ToolOutput.isGlob(rec)) {
+        const paths = rec.paths as readonly string[];
+        let out = paths.join("\n");
+        if (rec.truncated === true) {
+          const omitted = typeof rec.total === "number" ? rec.total - paths.length : undefined;
+          const hint = omitted != null && omitted > 0 ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).` : `\n\nOutput truncated (total ${rec.total}).`;
+          out += hint;
+        }
+        return out;
       }
-      return out;
-    }
 
-    if (ToolOutput.isSearch(rec)) {
-      // 落盘形态显示「已落盘路径」；正常形态是「引擎名 + 条数抬头」，
-      // 串行降级时下一行展示尝试轨迹，tavily 原生回答紧随其后。
-      if (typeof rec.savedPath === "string") {
-        const message = typeof rec.message === "string" && rec.message.length > 0 ? `\n${rec.message}` : "";
-        return `已落盘 ${rec.savedPath}${message}`;
-      }
-      const engine = rec.engine as string;
-      // 模板引擎透传形态：results 是提取结果的 JSON 文本，原样文本块输出
-      // （截断由上游预算负责：模板侧 50KB 内截断 + 工具层整体序列化落盘保险丝）。
-      if (typeof rec.results === "string") {
-        const parts: string[] = [`search ${engine} · 响应文本`];
+      if (ToolOutput.isSearch(rec)) {
+        // 落盘形态显示「已落盘路径」；正常形态是「引擎名 + 条数抬头」，
+        // 串行降级时下一行展示尝试轨迹，tavily 原生回答紧随其后。
+        if (typeof rec.savedPath === "string") {
+          const message = typeof rec.message === "string" && rec.message.length > 0 ? `\n${rec.message}` : "";
+          return `已落盘 ${rec.savedPath}${message}`;
+        }
+        const engine = rec.engine as string;
+        // 模板引擎透传形态：results 是提取结果的 JSON 文本，原样文本块输出
+        // （截断由上游预算负责：模板侧 50KB 内截断 + 工具层整体序列化落盘保险丝）。
+        if (typeof rec.results === "string") {
+          const parts: string[] = [`search ${engine} · 响应文本`];
+          if (typeof rec.attempts === "string" && rec.attempts.length > 0) {
+            parts.push(`尝试轨迹: ${rec.attempts}`);
+          }
+          parts.push(rec.results);
+          return parts.join("\n");
+        }
+        const results = rec.results as ReadonlyArray<SearchResultShape>;
+        const parts: string[] = [`search ${engine} · ${results.length} 条结果`];
         if (typeof rec.attempts === "string" && rec.attempts.length > 0) {
           parts.push(`尝试轨迹: ${rec.attempts}`);
         }
-        parts.push(rec.results);
+        if (typeof rec.answer === "string" && rec.answer.length > 0) {
+          parts.push("", rec.answer);
+        }
+        for (const item of results) {
+          parts.push(`- ${item.title} — ${item.url} — ${item.snippet}`);
+        }
         return parts.join("\n");
       }
-      const results = rec.results as ReadonlyArray<SearchResultShape>;
-      const parts: string[] = [`search ${engine} · ${results.length} 条结果`];
-      if (typeof rec.attempts === "string" && rec.attempts.length > 0) {
-        parts.push(`尝试轨迹: ${rec.attempts}`);
-      }
-      if (typeof rec.answer === "string" && rec.answer.length > 0) {
-        parts.push("", rec.answer);
-      }
-      for (const item of results) {
-        parts.push(`- ${item.title} — ${item.url} — ${item.snippet}`);
-      }
-      return parts.join("\n");
-    }
 
-    if (ToolOutput.isCurl(rec)) {
-      const url = rec.url as string;
-      const finalUrl = rec.finalUrl as string;
-      const method = typeof rec.method === "string" && rec.method.length > 0 ? (rec.method as string) : "GET";
-      const contentType = typeof rec.contentType === "string" ? (rec.contentType as string) : "";
-      const requestLine = finalUrl !== url ? `curl ${method} ${url} → ${finalUrl}` : `curl ${method} ${url}`;
-      const statusLine = contentType.length > 0 ? `Status: ${rec.status} · ${contentType}` : `Status: ${rec.status}`;
-      // 超预算落盘形态（savedPath）空行后显示已落盘路径与说明（body 为空串占位）；
-      // 降级截断的标注行由工具本体附在 body 末尾，这里不重复追加。
-      if (typeof rec.savedPath === "string") {
-        const message = typeof rec.message === "string" && rec.message.length > 0 ? `\n${rec.message}` : "";
-        return `${requestLine}\n${statusLine}\n\n已落盘 ${rec.savedPath}${message}`;
-      }
-      return `${requestLine}\n${statusLine}\n\n${rec.body}`;
-    }
-
-    // skill load：read 同款行号 + 附属文件清单；alreadyReferenced 短提示
-    // （本请求已注入过全文）直接返回提示文本，不加行号；截断时提示续读走
-    // skill read 的 offset/limit。
-    if (rec.action === "load" && typeof rec.content === "string" && typeof rec.version === "number") {
-      if (rec.alreadyReferenced === true) {
-        return rec.content as string;
-      }
-      let out = formatReadOutput(rec);
-      if (rec.truncated === true) {
-        out += "\n续读请用 skill read 的 offset/limit。";
-      }
-      const files = Array.isArray(rec.files) ? rec.files.filter((f) => typeof f === "string") : [];
-      if (files.length > 0) {
-        out += `\n\n附属文件（相对技能目录）：${files.join("、")}`;
-      }
-      return out;
-    }
-
-    // mutation-ack（skill write/edit、agent create/update）：保存回执对模型无
-    // 后续决策价值，写入成功即 ok，与 vfs write/edit、fs 变更类的快速通道对齐。
-    // 带 content 的输出（load/read 类）不会被误命中。
-    const action = rec.action;
-    const isSkillMutationAck = (action === "write" || action === "edit") && typeof rec.version === "number" && typeof rec.content !== "string";
-    const isAgentMutationAck = (action === "create" || action === "update") && typeof rec.name === "string" && typeof rec.agentId === "string" && typeof rec.content !== "string";
-    if (isSkillMutationAck || isAgentMutationAck) {
-      return "ok";
-    }
-
-    if (keys.length === 1 && typeof rec.version === "number") {
-      return "ok";
-    }
-    if (keys.length === 2 && typeof rec.version === "number" && typeof rec.replacements === "number") {
-      return "ok";
-    }
-    if (keys.length === 1 && rec.ok === true) {
-      return "ok";
-    }
-  }
-  return JSON.stringify(out, null, 2);
-}
-
-/**
- * Formats tool execution failures for LLM `tool_result` content.
- *
- * @remarks Unwraps `TOOL_FAILED` 等 ToolError 形态错误的 `cause`（如 VFS 域 AppError）so the model sees actionable detail.
- */
-// nm-style: keep-public — 两个测试文件直接 import（本片禁改测试）；且是 tool_result 错误文案的统一出口，内联进 buildToolResultBlock 会把 13 处测试锁定的格式搬进另一模块。
-export function formatToolErrorForLlm(error: unknown, options?: FormatToolErrorForLlmOptions): string {
-  // 取消是控制流信号不是错误（TOOL_CANCELLED）：文案不带 `Error:` 前缀，
-  // buildToolResultBlock 因此不产出 summary，UI 卡片不弹错误文案。
-  if (isAppError(error, "TOOL_CANCELLED")) return "工具调用已取消";
-  let message: string;
-  if (inDomain(error, "TOOL")) {
-    if (error.key === "TOOL_INVALID_ARGUMENT" && error.details != null && "issues" in error.details) {
-      const issues = error.details.issues as readonly ZodIssue[];
-      const summary = issues.map((i) => i.message).join("; ");
-      message = summary.length > 0 ? summary : error.message;
-    } else {
-      const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
-      if (cause != null) {
-        // TdbcError 可能层层包裹 VFS 失败：先剥到最内层 cause 找 VFS 分类；
-        // 找不到时仍按**外层** cause 归类（AppError → VFS 文案，裸 Error → message）。
-        // VFS 失败经 service 端口出的是 AppError，按 code 域段判别（isVfsError 内部即 inDomain 域判定）。
-        let unwrapped: unknown = cause;
-        while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
-          unwrapped = unwrapped.cause;
+      if (ToolOutput.isCurl(rec)) {
+        const url = rec.url as string;
+        const finalUrl = rec.finalUrl as string;
+        const method = typeof rec.method === "string" && rec.method.length > 0 ? (rec.method as string) : "GET";
+        const contentType = typeof rec.contentType === "string" ? (rec.contentType as string) : "";
+        const requestLine = finalUrl !== url ? `curl ${method} ${url} → ${finalUrl}` : `curl ${method} ${url}`;
+        const statusLine = contentType.length > 0 ? `Status: ${rec.status} · ${contentType}` : `Status: ${rec.status}`;
+        // 超预算落盘形态（savedPath）空行后显示已落盘路径与说明（body 为空串占位）；
+        // 降级截断的标注行由工具本体附在 body 末尾，这里不重复追加。
+        if (typeof rec.savedPath === "string") {
+          const message = typeof rec.message === "string" && rec.message.length > 0 ? `\n${rec.message}` : "";
+          return `${requestLine}\n${statusLine}\n\n已落盘 ${rec.savedPath}${message}`;
         }
-        const vfsError = isVfsError(unwrapped) ? unwrapped : isVfsError(cause) ? cause : undefined;
-        if (vfsError != null) {
-          message = formatVfsErrorForLlm(vfsError, options?.vfsScope);
-        } else if (isAppError(cause)) {
-          message = formatVfsErrorForLlm(cause, options?.vfsScope);
-        } else {
-          message = cause instanceof Error ? cause.message : String(cause);
+        return `${requestLine}\n${statusLine}\n\n${rec.body}`;
+      }
+
+      // skill load：read 同款行号 + 附属文件清单；alreadyReferenced 短提示
+      // （本请求已注入过全文）直接返回提示文本，不加行号；截断时提示续读走
+      // skill read 的 offset/limit。
+      if (rec.action === "load" && typeof rec.content === "string" && typeof rec.version === "number") {
+        if (rec.alreadyReferenced === true) {
+          return rec.content as string;
         }
+        let out = ToolOutput.formatReadOutput(rec);
+        if (rec.truncated === true) {
+          out += "\n续读请用 skill read 的 offset/limit。";
+        }
+        const files = Array.isArray(rec.files) ? rec.files.filter((f) => typeof f === "string") : [];
+        if (files.length > 0) {
+          out += `\n\n附属文件（相对技能目录）：${files.join("、")}`;
+        }
+        return out;
+      }
+
+      // mutation-ack（skill write/edit、agent create/update）：保存回执对模型无
+      // 后续决策价值，写入成功即 ok，与 vfs write/edit、fs 变更类的快速通道对齐。
+      // 带 content 的输出（load/read 类）不会被误命中。
+      const action = rec.action;
+      const isSkillMutationAck = (action === "write" || action === "edit") && typeof rec.version === "number" && typeof rec.content !== "string";
+      const isAgentMutationAck = (action === "create" || action === "update") && typeof rec.name === "string" && typeof rec.agentId === "string" && typeof rec.content !== "string";
+      if (isSkillMutationAck || isAgentMutationAck) {
+        return "ok";
+      }
+
+      if (keys.length === 1 && typeof rec.version === "number") {
+        return "ok";
+      }
+      if (keys.length === 2 && typeof rec.version === "number" && typeof rec.replacements === "number") {
+        return "ok";
+      }
+      if (keys.length === 1 && rec.ok === true) {
+        return "ok";
+      }
+    }
+    return JSON.stringify(out, null, 2);
+  },
+
+  /**
+   * Formats tool execution failures for LLM `tool_result` content.
+   *
+   * @remarks Unwraps `TOOL_FAILED` 等 ToolError 形态错误的 `cause`（如 VFS 域 AppError）so the model sees actionable detail.
+   */
+  // nm-style: keep-public — 两个测试文件直接消费；且是 tool_result 错误文案的统一出口，内联进 ToolResultBlock.build 会把 13 处测试锁定的格式搬进装配器。
+  formatErrorForLlm: (error: unknown, options?: FormatToolErrorForLlmOptions): string => {
+    // 取消是控制流信号不是错误（TOOL_CANCELLED）：文案不带 `Error:` 前缀，
+    // ToolResultBlock.build 因此不产出 summary，UI 卡片不弹错误文案。
+    if (isAppError(error, "TOOL_CANCELLED")) return "工具调用已取消";
+    let message: string;
+    if (inDomain(error, "TOOL")) {
+      if (error.key === "TOOL_INVALID_ARGUMENT" && error.details != null && "issues" in error.details) {
+        const issues = error.details.issues as readonly ZodIssue[];
+        const summary = issues.map((i) => i.message).join("; ");
+        message = summary.length > 0 ? summary : error.message;
       } else {
-        message = error.message;
+        const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
+        if (cause != null) {
+          // TdbcError 可能层层包裹 VFS 失败：先剥到最内层 cause 找 VFS 分类；
+          // 找不到时仍按**外层** cause 归类（AppError → VFS 文案，裸 Error → message）。
+          // VFS 失败经 service 端口出的是 AppError，按 code 域段判别（isVfsError 内部即 inDomain 域判定）。
+          let unwrapped: unknown = cause;
+          while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
+            unwrapped = unwrapped.cause;
+          }
+          const vfsError = isVfsError(unwrapped) ? unwrapped : isVfsError(cause) ? cause : undefined;
+          if (vfsError != null) {
+            message = VfsErrorForLlm.format(vfsError, options?.vfsScope);
+          } else if (isAppError(cause)) {
+            message = VfsErrorForLlm.format(cause, options?.vfsScope);
+          } else {
+            message = cause instanceof Error ? cause.message : String(cause);
+          }
+        } else {
+          message = error.message;
+        }
       }
+    } else if (error instanceof Error) {
+      message = error.message;
+    } else {
+      message = String(error);
     }
-  } else if (error instanceof Error) {
-    message = error.message;
-  } else {
-    message = String(error);
-  }
-  return `Error: ${message}`;
-}
+    return `Error: ${message}`;
+  },
 
-/** Prettify stored tool_result bodies (legacy rows may still be JSON). */
-export function formatToolResultContentForDisplay(content: string): string {
-  const trimmed = content.trim();
-  if (trimmed.startsWith("Error:")) {
-    return content;
-  }
-  try {
-    return formatToolOutputForLlm(JSON.parse(trimmed) as unknown);
-  } catch {
-    return content;
-  }
-}
+  /** Prettify stored tool_result bodies (legacy rows may still be JSON). */
+  formatContentForDisplay: (content: string): string => {
+    const trimmed = content.trim();
+    if (trimmed.startsWith("Error:")) {
+      return content;
+    }
+    try {
+      return ToolOutput.formatForLlm(JSON.parse(trimmed) as unknown);
+    } catch {
+      return content;
+    }
+  },
+} as const;

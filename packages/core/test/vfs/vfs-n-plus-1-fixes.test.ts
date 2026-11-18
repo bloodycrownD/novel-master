@@ -16,8 +16,8 @@ import {
 } from "../helpers/sql-counting-connection.js";
 
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { unwrap } from "../helpers/result-unwrap.js";
@@ -100,7 +100,7 @@ describe("T-DEL2 deleteVfsPrefix 批量删", () => {
     const repo = new SqliteVfsEntryRepository(c.conn);
 
     c.counter.clear();
-    await deleteVfsPrefix(repo, sk, "/tree");
+    await VfsTreeCopy.deletePrefix(repo, sk, "/tree");
 
     const entryDeletes = c.counter.countBySubstring("DELETE FROM vfs_entry");
     assert.equal(
@@ -123,7 +123,7 @@ describe("T-DEL2 deleteVfsPrefix 批量删", () => {
 
     // 该 project 还没写过任何文件，prefix 下为空，不应抛 vfsNotFound。
     c.counter.clear();
-    await assert.doesNotReject(() => deleteVfsPrefix(repo, sk, "/none"));
+    await assert.doesNotReject(() => VfsTreeCopy.deletePrefix(repo, sk, "/none"));
     // 空探测不应发 DELETE。
     assert.equal(c.counter.countBySubstring("DELETE FROM vfs_entry"), 0);
   });
@@ -145,7 +145,7 @@ describe("T-GC2 blob GC 单条 DELETE", () => {
     }
 
     c.counter.clear();
-    const deleted = await runDeferredBlobGc(c.conn);
+    const deleted = await DeferredBlobGc.run(c.conn);
 
     assert.equal(
       deleted,
@@ -163,7 +163,7 @@ describe("T-GC2 blob GC 单条 DELETE", () => {
       `DELETE FROM vfs_content_blob 次数应为 1，实际 ${blobDeletes}`,
     );
 
-    // cr-p1-2 删掉 collectAllReferencedHashes 后，runDeferredBlobGc 不再独立发出
+    // cr-p1-2 删掉 collectAllReferencedHashes 后，DeferredBlobGc.run 不再独立发出
     // 「扫 entry / revision 引用集」的 SELECT——gc 的 NOT IN 子查询嵌在同一条 DELETE
     // 语句里，不会单独成为 query 记录。这里双保险：断言 entry 和 revision 两条引用集
     // SELECT 都没有作为独立语句发出。

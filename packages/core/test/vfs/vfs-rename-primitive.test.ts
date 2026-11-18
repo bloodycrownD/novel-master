@@ -168,7 +168,7 @@ describe("vfs rename primitive", () => {
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
 
     const scopeKey = `session:${project.id}:${session.id}`;
-    // %/_ 是 LIKE 通配字符：renamePrefix 依赖 escapeLike + ESCAPE '\'
+    // %/_ 是 LIKE 通配字符：renamePrefix 依赖 ScopePrefix.escapeLike + ESCAPE '\'
     // 做子项前缀匹配，路径含它们时不能把 `a_b` 误当 `a%b` 之类的模式，
     // 也不能因转义遗漏漏迁子项。这里用固定后缀隔离，避免子项 LIKE
     // 误匹配到其它用例的路径。

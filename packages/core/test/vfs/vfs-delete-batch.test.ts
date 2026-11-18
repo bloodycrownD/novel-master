@@ -2,7 +2,7 @@
  * T-DEL1：vfs.delete 递归删大目录的 SQL 次数回归（→ Step 4 / 发现 8）。
  *
  * 改造前 `appendDeletedRevisionsForSubtree` 对每个子文件走 `scanContents` +
- * 逐条 `findByPath` + `adjustRef` + `append` + `adjustRef`，删 100 文件要发
+ * 逐条 `findByPath` + `RevisionRefCount.adjust` + `append` + `RevisionRefCount.adjust`，删 100 文件要发
  * ~302 条业务 SQL。改成 `listFileHeadsUnderPrefix` + `batchAdjustRefCount` +
  * `batchAppendWithRefCount` 后应压到个位数。这里给一个 ≤ 20 的保守上限断言，
  * 同时校验墓碑数量、ref_count、可见性这些正确性不变量。

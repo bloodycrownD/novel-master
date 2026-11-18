@@ -9,11 +9,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { previewSkillZip } from "../../src/domain/skills/logic/preview-skill-zip.js";
 
 function zipOf(files: Record<string, string>, dirs: string[] = []): Uint8Array {
-  return buildVfsZip(new Map(Object.entries(files)), dirs);
+  return VfsZipBuild.build(new Map(Object.entries(files)), dirs);
 }
 
 /** 预检成功路径；失败时把 AppError 抛给测试（测试是边界）。 */

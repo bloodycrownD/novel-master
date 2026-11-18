@@ -4,7 +4,7 @@
  * @module domain/chat/content/message-body-text
  */
 
-import { formatToolResultContentForDisplay } from "@/domain/tool/logic/format-tool-output.js";
+import { ToolOutput } from "@/domain/tool/logic/format-tool-output.js";
 import type { ContentBlock } from "../model/content-block.js";
 import type { ChatMessageData } from "../model/message.js";
 
@@ -24,7 +24,7 @@ function blockBodyText(block: ContentBlock): string | null {
     }
     case "tool_result": {
       const head = `[tool_result id=${block.toolUseId}]`;
-      const body = formatToolResultContentForDisplay(block.content);
+      const body = ToolOutput.formatContentForDisplay(block.content);
       return body === "" ? head : `${head}\n\n${body}`;
     }
     case "thinking":
@@ -61,7 +61,7 @@ export function formatChatMessageForCliPreview(message: ChatMessageData, options
 
   for (const block of message.content.blocks) {
     if (block.type === "tool_result") {
-      const body = formatToolResultContentForDisplay(block.content);
+      const body = ToolOutput.formatContentForDisplay(block.content);
       if (body !== "") {
         toolResultBodies.push(body);
       }

@@ -1742,34 +1742,6 @@
       "decompressZlib",
       "tightBytes"
     ],
-    "packages/core/src/domain/vfs/logic/action-xml-to-tool-uses.ts": [
-      "actionXmlToToolUses"
-    ],
-    "packages/core/src/domain/vfs/logic/compute-replace-not-found-error.ts": [
-      "buildReplaceNotFoundError"
-    ],
-    "packages/core/src/domain/vfs/logic/compute-replace-result.ts": [
-      "computeReplaceResult"
-    ],
-    "packages/core/src/domain/vfs/logic/deferred-blob-gc.ts": [
-      "runDeferredBlobGc"
-    ],
-    "packages/core/src/domain/vfs/logic/ensure-parent-dirs.ts": [
-      "ensureParentDirectories"
-    ],
-    "packages/core/src/domain/vfs/logic/entry-sequence-repair.ts": [
-      "createVfsEntrySequenceRepairOperation"
-    ],
-    "packages/core/src/domain/vfs/logic/extract-mutating-paths.ts": [
-      "collectMutatingPathsFromCalls",
-      "extractMutatingPaths"
-    ],
-    "packages/core/src/domain/vfs/logic/format-vfs-error-for-llm.ts": [
-      "formatVfsErrorForLlm"
-    ],
-    "packages/core/src/domain/vfs/logic/format-vfs-error-for-user.ts": [
-      "vfsUserMessage"
-    ],
     "packages/core/src/domain/vfs/logic/normalize-for-match.ts": [
       "normalizeForMatch"
     ],

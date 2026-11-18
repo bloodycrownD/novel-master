@@ -1,5 +1,5 @@
 /**
- * T-SC1/SC2/SC3：writeWithRevision 同文短路与 last-write-wins 行为。
+ * T-SC1/SC2/SC3：WriteWithRevision.write 同文短路与 last-write-wins 行为。
  */
 
 import assert from "node:assert/strict";
@@ -25,7 +25,7 @@ async function countRevisions(
   return Number(rows[0]!.n);
 }
 
-describe("writeWithRevision same-content shortcircuit", () => {
+describe("WriteWithRevision.write same-content shortcircuit", () => {
   const GLOBAL_SCOPE = "global";
 
   async function entryIdForPath(

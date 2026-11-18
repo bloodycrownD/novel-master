@@ -20,7 +20,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { backfillMissingRevisionIfNeeded } from "./backfill-missing-revision.js";
 import { reviveDeletedEntryForRestore } from "./revive-deleted-entry.js";
@@ -93,7 +93,7 @@ export async function restorePathToRevision(deps: RestorePathDeps, params: Resto
 
   // 轻量 meta：先判 deleted / 再比 content_hash，避免无谓解压。
   if (entryRepo != null && entryId != null) {
-    const meta = prefetch?.revisionMetaByKey != null ? prefetch.revisionMetaByKey.get(revisionPairKey(entryId, version)) ?? null : await revisionRepo.findMetaByEntryAndVersion(entryId, version);
+    const meta = prefetch?.revisionMetaByKey != null ? prefetch.revisionMetaByKey.get(RevisionPairKey.build(entryId, version)) ?? null : await revisionRepo.findMetaByEntryAndVersion(entryId, version);
     if (meta == null) {
       return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
     }

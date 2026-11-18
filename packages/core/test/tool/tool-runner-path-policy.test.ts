@@ -7,12 +7,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import {
-  extractInputPaths,
-  findDisallowedPath,
-  isPathAllowed,
-  readAllowedPaths,
-} from "../../src/domain/tool/logic/tool-path-policy.js";
+import { ToolPathPolicy } from "../../src/domain/tool/logic/tool-path-policy.js";
 import { Path } from "../../src/common/path.js";
 
 /**
@@ -44,21 +39,21 @@ describe("A-14 tool path policy", () => {
     });
 
     it("allowedPaths undefined 表示不限制", () => {
-      assert.equal(isPathAllowed("/etc/passwd"), true);
-      assert.equal(isPathAllowed("/etc/passwd", undefined), true);
+      assert.equal(ToolPathPolicy.isPathAllowed("/etc/passwd"), true);
+      assert.equal(ToolPathPolicy.isPathAllowed("/etc/passwd", undefined), true);
     });
 
     it("allowedPaths 非空时落在任一前缀下放行", () => {
-      assert.equal(isPathAllowed("src/a.ts", ["docs", "src"]), true);
-      assert.equal(isPathAllowed("docs/notes.md", ["docs", "src"]), true);
-      assert.equal(isPathAllowed("secrets/key.txt", ["docs", "src"]), false);
+      assert.equal(ToolPathPolicy.isPathAllowed("src/a.ts", ["docs", "src"]), true);
+      assert.equal(ToolPathPolicy.isPathAllowed("docs/notes.md", ["docs", "src"]), true);
+      assert.equal(ToolPathPolicy.isPathAllowed("secrets/key.txt", ["docs", "src"]), false);
     });
   });
 
   describe("extractInputPaths", () => {
     it("抽取约定字段 path / filePath / from / to，跳过空串与非字符串", () => {
       assert.deepEqual(
-        extractInputPaths({
+        ToolPathPolicy.extractInputPaths({
           path: "a/b.ts",
           filePath: "c/d.ts",
           from: "x",
@@ -73,7 +68,7 @@ describe("A-14 tool path policy", () => {
 
     it("fileAttachment 数组逐元素展开参与校验（task 附件面不得成唯一旁路）", () => {
       assert.deepEqual(
-        extractInputPaths({
+        ToolPathPolicy.extractInputPaths({
           description: "d",
           prompt: "p",
           subagentName: "general",
@@ -82,51 +77,51 @@ describe("A-14 tool path policy", () => {
         ["notes/a.md", "设定/b.md"],
       );
       // 非数组 / 非字符串元素跳过，不炸
-      assert.deepEqual(extractInputPaths({ fileAttachment: "notes/a.md" }), []);
-      assert.deepEqual(extractInputPaths({ fileAttachment: [1, null, "ok.md"] }), [
+      assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: "notes/a.md" }), []);
+      assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: [1, null, "ok.md"] }), [
         "ok.md",
       ]);
-      assert.deepEqual(extractInputPaths({ fileAttachment: undefined }), []);
+      assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: undefined }), []);
     });
 
     it("非对象 input 返回空数组", () => {
-      assert.deepEqual(extractInputPaths(null), []);
-      assert.deepEqual(extractInputPaths(undefined), []);
-      assert.deepEqual(extractInputPaths("not an object"), []);
+      assert.deepEqual(ToolPathPolicy.extractInputPaths(null), []);
+      assert.deepEqual(ToolPathPolicy.extractInputPaths(undefined), []);
+      assert.deepEqual(ToolPathPolicy.extractInputPaths("not an object"), []);
     });
   });
 
   describe("readAllowedPaths", () => {
     it("鸭子读 ctx.allowedPaths；缺失或非数组时返回 undefined", () => {
-      assert.deepEqual(readAllowedPaths({}), undefined);
-      assert.deepEqual(readAllowedPaths({ allowedPaths: undefined }), undefined);
+      assert.deepEqual(ToolPathPolicy.readAllowedPaths({}), undefined);
+      assert.deepEqual(ToolPathPolicy.readAllowedPaths({ allowedPaths: undefined }), undefined);
       assert.deepEqual(
-        readAllowedPaths({ allowedPaths: ["src"] }),
+        ToolPathPolicy.readAllowedPaths({ allowedPaths: ["src"] }),
         ["src"],
       );
       assert.deepEqual(
-        readAllowedPaths({ allowedPaths: "not-array" }),
+        ToolPathPolicy.readAllowedPaths({ allowedPaths: "not-array" }),
         undefined,
       );
-      assert.deepEqual(readAllowedPaths(null), undefined);
-      assert.deepEqual(readAllowedPaths("str"), undefined);
+      assert.deepEqual(ToolPathPolicy.readAllowedPaths(null), undefined);
+      assert.deepEqual(ToolPathPolicy.readAllowedPaths("str"), undefined);
     });
   });
 
   describe("findDisallowedPath", () => {
     it("全部放行返回 null；任一越界返回第一条越界路径", () => {
       assert.equal(
-        findDisallowedPath(["src/a.ts", "src/b.ts"], ["src"]),
+        ToolPathPolicy.findDisallowedPath(["src/a.ts", "src/b.ts"], ["src"]),
         null,
       );
       assert.equal(
-        findDisallowedPath(["src/a.ts", "secret/k.txt"], ["src"]),
+        ToolPathPolicy.findDisallowedPath(["src/a.ts", "secret/k.txt"], ["src"]),
         "secret/k.txt",
       );
     });
 
     it("allowedPaths undefined 时一律返回 null", () => {
-      assert.equal(findDisallowedPath(["/etc/shadow"], undefined), null);
+      assert.equal(ToolPathPolicy.findDisallowedPath(["/etc/shadow"], undefined), null);
     });
   });
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
+import { RevisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -57,7 +57,7 @@ describe("revision GC", () => {
 
     const head = unwrap(await svfs.read("/gc.md")).version;
     assert.notEqual(head, v2);
-    assert.equal(revisionPairKey(entry.entryId, v1).includes(String(entry.entryId)), true);
+    assert.equal(RevisionPairKey.build(entry.entryId, v1).includes(String(entry.entryId)), true);
   });
 
   it("sweep drops intermediate revisions not referenced by checkpoint or live head", async () => {
