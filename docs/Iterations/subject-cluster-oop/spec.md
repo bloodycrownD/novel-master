@@ -29,6 +29,31 @@
 
 **误报过滤**（写进检测器）：React 组件名（首词大写名词：`AgentEditorScreen`）、`ByXxx` 查找器（主体在 `By` 前面：`findById`）、分层对（repo 层与 service 层同名族，见 §二 B 类）。
 
+### 1.1 更根本的信号：顶层裸函数本身就是异常态
+
+即使构不成 ≥3 动词的族，**顶层裸 export 函数也不该是默认形态**。作用范围应由结构（namespace / class）表达，而不是由文件位置 + 名字后缀表达。仓库已有正面先例：`common/` 的 25 个函数在 p12 收成了 `Coerce` / `Guards` / `Json` / `Text` / `Number` / `Encoding` / `Xml` / `Hash` / `Errors` / `Release` / `TokenFormat` 11 个 namespace——其中很多就是单函数或小函数族。**同一个仓库两种风格并存，正是「糟糕」的来源**：`common/` 里是 `Text.decodeHtmlEntities`，`domain/vfs/logic/` 里却是裸的 `resolveLogicalPath`。
+
+基线实测（`all-signatures-p24.txt`，3162 签名）：
+
+```
+顶层裸 function    2124 个      ← 绝对主导形态
+顶层裸 const/let    294 个
+已有归属（方法）     少数（SSE parser 的 namespace 成员、类方法）
+纯裸文件（裸 ≥3、无方法）  291 个
+```
+
+裸函数最多的文件本身就是天然的 namespace 边界：
+
+```
+37 裸  apps/mobile/src/web/composer-input/webview/runtime/editor.ts
+26 裸  apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts
+24 裸  packages/core/src/domain/abort/logic/create-abort-scope.ts
+21 裸  apps/desktop/src/main/ipc/handlers/agent.ts
+21 裸  apps/mobile/src/components/chat/message-blocks.ts
+```
+
+**落地必须分层，一次改 2124 个是灾难**：规则层立即生效（拦新增），存量层按域渐进（本 spec 只做试点，铺开另行排期）。
+
 ## 二、调研结果（基线 `all-signatures-p24.txt`，3162 签名）
 
 同主体 ≥3 动词共 **35 族**，逐族定性如下。
@@ -99,28 +124,31 @@
 
 ## 四、执行步骤
 
-1. **写检测器** `scripts/list-subject-clusters.mjs`（复用 `list-all-signatures.mjs` 的 AST 提取，加 camelCase 主体拆分与三类视图：同主体族 / 修饰词复读 / 长名榜；误报过滤规则照 §一）。`--gate` 模式 + baseline JSON，**只拦新增族**。
-2. **A 类 11 族逐族收口**，每族一个独立 commit：建 namespace → 改调用点 → 删空文件 → 跑该组消费方编译。
-3. **A′ 类 2 族**：先并文件再 namespace。
-4. **C 类 5 族判定**：每族产出「处置 + 证据（file:line）」，判「收」的当场做，判「跳过」的写进 notes。**判定不出的先跳过，不许硬改。**
-5. **FromLayout 6 别名复核**（p22 判据）。
-6. **收敛**：根 typecheck + core/desktop/mobile 全量 + `check-style --all` 三段 + dup-gate + 新门。
-7. **SKILL.md 补 §9.4 名词族的机械化信号**（检测器已实现，skill 引用命令即可）。
-8. 打 tag `p24-subject-cluster` / `p24-subject-cluster-partial`。
+1. **写检测器** `scripts/list-subject-clusters.mjs`（复用 `list-all-signatures.mjs` 的 AST 提取，四类视图：同主体族 / 修饰词复读 / 长名榜 / **裸函数榜**；误报过滤规则照 §一）。`--gate` 模式 + baseline JSON，**只拦新增族与新增裸导出**。
+2. **规则层（波 0，先于一切改码）**：SKILL.md 写入统一判据——「概念单元该拥有它的全部操作；顶层裸 export function 需要理由，默认挂 namespace（文件即天然 namespace，文件名即 namespace 名）」。`check-style.mjs` 加第四段 `bare-exports`：`--changed` 模式只报本次改动新增的顶层裸 export（存量 2124 不拦，防全仓反弹）。React 组件、`.tsx` 文件、test helpers 豁免。
+3. **A 类 11 族逐族收口**，每族一个独立 commit：建 namespace → 改调用点 → 删空文件 → 跑该组消费方编译。
+4. **A′ 类 2 族**：先并文件再 namespace。
+5. **C 类 5 族判定**：每族产出「处置 + 证据（file:line）」，判「收」的当场做，判「跳过」的写进 notes。**判定不出的先跳过，不许硬改。**
+6. **FromLayout 6 别名复核**（p22 判据）。
+7. **裸函数存量试点（3 个文件，不铺开）**：`editor.ts`（37 函数）、`stream.ts`（26）、`create-abort-scope.ts`（24）。每文件收成一个 object namespace（文件名即 namespace 名），目的是**实测单位成本**（改码量 / 调用点数 / 测试影响），产出「剩余 288 个纯裸文件的排期表」，不在本 spec 内铺开。
+8. **收敛**：根 typecheck + core/desktop/mobile 全量 + `check-style --all` 四段（含新 bare-exports，存量豁免） + dup-gate + 新门。
+9. **SKILL.md 补 §9.4 名词族的机械化信号**（检测器已实现，skill 引用命令即可；统一判据已在波 0 写入）。
+10. 打 tag `p24-subject-cluster` / `p24-subject-cluster-partial`。
 
-**分片提示**：A 类 11 族分布在 core 4 / mobile 7，可按文件分 3-4 片并行（零交集）；C 类判定是只读可并行，改代码串行在判定之后。
+**分片提示**：A 类 11 族分布在 core 4 / mobile 7，可按文件分 3-4 片并行（零交集）；C 类判定是只读可并行，改代码串行在判定之后；3 个试点文件分属 mobile×2 / core×1，可并行。
 
 ## 五、验收
 
 ```
 1. 根 typecheck                        exit 0（14 workspace）
 2. core / desktop / mobile 全量测试     exit 0
-3. check-style 三段                     signatures / inline / methods PASS
+3. check-style 四段                     signatures / inline / methods PASS；bare-exports 新增 0（存量豁免）
 4. dup-gate                             新增 0（注意：namespace 化会产生「同方法名」新组——如 SSE parser 的 feed/drain 先例——逐个登记 baseline 并写理由，不算新增违规）
-5. list-subject-clusters --gate         新增族 0
+5. list-subject-clusters --gate         新增族 0、新增裸导出 0
 6. A 类 11 族的原顶层函数名全仓 grep     0 残留（如 invalidateSessionApiPromptTokenEntry 等旧名）
 7. C 类 5 族                            每族一条明确结论（收/跳过 + 证据），不允许「未判定」
 8. FromLayout 别名                      按复核结论删，残留的每个带 keep 理由
+9. 3 个试点文件                         旧顶层函数名 0 残留；排期表产出（剩余纯裸文件按「函数数 × 消费方数」排序）
 ```
 
 ## 六、风险
@@ -141,9 +169,10 @@ node scripts/list-subject-clusters.mjs <repo> --gate           # 与 baseline JS
 node scripts/list-subject-clusters.mjs <repo> --gate --write-baseline
 ```
 
-输出三种视图：
+输出四种视图：
 1. **同主体族**：主体 | 动词×次数 | 文件列表 | 同文件/跨文件/跨端标注
 2. **修饰词复读**：ForTests / After* / FromLayout / InTransaction / With* / By* 计数与清单
 3. **长名榜**：≥32 字符，按长度排序
+4. **裸函数榜**：按文件聚合的顶层裸 export 函数计数（纯裸文件优先排序），`--gate` 拦新增
 
-过滤规则内置：组件名（首词大写）、`ByXxx` 查找器、`Class.method` 与 `Obj.method` 形态（已是方法）、test 目录可选 `--include-tests`。
+过滤规则内置：组件名（首词大写）、`ByXxx` 查找器、`Class.method` 与 `Obj.method` 形态（已是方法）、React 组件与 `.tsx` 文件豁免裸函数判定、test 目录可选 `--include-tests`。
