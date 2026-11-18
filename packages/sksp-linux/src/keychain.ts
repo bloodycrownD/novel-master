@@ -1,13 +1,13 @@
 /**
  * Linux Secret Service master key storage.
  *
- * 读写流程在 core 的 {@link createKeyringMasterKey}；这里只注入本平台的
+ * 读写流程在 core 的 {@link SkspNodeFactory.createKeyringMasterKey}；这里只注入本平台的
  * service 名、文案素材与钥匙串打开方式。
  *
  * @module keychain
  */
 
-import { createKeyringMasterKey } from "@novel-master/core/sksp-node";
+import { SkspNodeFactory } from "@novel-master/core/sksp-node";
 
 const keyringOptions = {
   service: "novel-master-linux",
@@ -20,7 +20,7 @@ const keyringOptions = {
   },
 };
 
-const keyring = createKeyringMasterKey(keyringOptions);
+const keyring = SkspNodeFactory.createKeyringMasterKey(keyringOptions);
 
 /** Test hook: bypass Secret Service with a fixed in-memory master key. @internal */
 export const setLinuxKeychainTestPassthrough = keyring.setTestPassthrough;

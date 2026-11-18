@@ -12,5 +12,4 @@
 
 export { AesGcm } from "./logic/aes-gcm.js";
 export { SkspRowBinary } from "./logic/row-binary.js";
-export { createAesGcmStrategy } from "./impl/aes-gcm-strategy.js";
-export { createKeyringMasterKey } from "./impl/keyring-master-key.js";
+export { SkspNodeFactory } from "./impl/sksp-node-factory.js";
