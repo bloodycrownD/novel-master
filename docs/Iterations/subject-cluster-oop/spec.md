@@ -6,7 +6,20 @@
 
 ## 一、判据
 
-**函数名 = 动词 + 主体（+ 修饰）**。同一主体出现 ≥3 种动词，说明「主体」是事实上的概念单元，但没有归属——上下文全靠名字自解释，于是名字越写越长。终态是主体进 namespace / class，方法名只留动词。
+**统一原则：概念单元该拥有它的全部操作。** 名字里的主体词是「缺归属」的症状——主体没有归属时，每次操作都得把主体写进名字，于是名字越写越长；归属到位后，主体进 namespace / class，方法名只留动词。
+
+`create*` 与本 spec 的其他动词族是**同一原则的两面**：
+
+| 视角 | p23（create-factory） | 本 spec |
+|---|---|---|
+| 名字结构 | `create` + 主体（`createVfsService`） | 其他动词 + 主体（`readSessionApiPromptTokenEntry`） |
+| 信号方向 | 同一动词（create）、多主体 → 各主体自己的 Factory | 同一主体、多种动词 → 主体 namespace |
+| 终态形态 | `VfsServiceFactory.create(...)` | `SessionApiPromptTokenEntry.read(...)` |
+| 本质 | 「VfsService 装配」这个概念单元拥有它的全部装配动作 | 「Entry 编解码」这个概念单元拥有它的全部操作 |
+
+终态形态完全一致（object namespace / object with methods），只是主体类型不同（装配主体 vs 数据/流程主体）。**执行层面两期分开**（函数集零交集、p23 已在跑），方法论在 SKILL.md 收口时写成一条统一判据（见 §四 步骤 7）。
+
+**本 spec 的具体判据**：同一主体出现 ≥3 种动词（不含 create——create 族归 p23），说明主体是事实上的概念单元但没有归属。
 
 三个可机械化的信号（执行者跑检测器复核，不要信本 spec 的数字）：
 
