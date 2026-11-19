@@ -4,8 +4,7 @@
  *
  * @module services/map-cloud-sync-sdk-error
  */
-import {AppError, isAppError} from '@novel-master/core/errors';
-import {domainOf} from '@novel-master/core/errors';
+import {AppError, AppErrorOps, ErrorGuards} from '@novel-master/core/errors';
 
 const AUTH_MESSAGE = '云存储凭据无效或权限不足';
 const BUCKET_MESSAGE = '无法访问该存储桶，请检查 Bucket 名称';
@@ -30,7 +29,7 @@ function isPathStyleForbiddenError(name: string, lowerMessage: string): boolean 
  * 已有 `CLOUD_SYNC_*` AppError（如 `CLOUD_SYNC_NOT_CONFIGURED`）原样透传。
  */
 export function mapCloudSyncSdkError(error: unknown): AppError {
-  if (isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC') {
+  if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC') {
     return error;
   }
 

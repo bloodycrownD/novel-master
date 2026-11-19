@@ -1,5 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
+import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 import {AppError} from '@novel-master/core/errors';
 import {
   isAgentDeleted,
@@ -9,9 +9,8 @@ import {
   type ChatAgentMeta,
 } from '@/services/chat-agent-meta';
 
-const globalDefinition = buildDefaultAgentDefinitionPreservingName('全局助手');
-const sessionAgentDefinition =
-  buildDefaultAgentDefinitionPreservingName('会话引用助手');
+const globalDefinition = DefaultAgentDefinition.build('全局助手');
+const sessionAgentDefinition = DefaultAgentDefinition.build('会话引用助手');
 
 // core 移除 workspace 回退层后，SessionAgentConfig = { agentId, modelId? }。
 const DEFAULT_SESSION_CONFIG = {agentId: 'default'};
@@ -89,7 +88,7 @@ describe('loadChatAgentMeta', () => {
   });
 
   it('modelSource=agent-pin：agent definition 自带 model 压制一切', async () => {
-    const pinned = buildDefaultAgentDefinitionPreservingName('带 pin 助手');
+    const pinned = DefaultAgentDefinition.build('带 pin 助手');
     pinned.model = 'openai:pinned-model';
     const loaded = await loadChatAgentMeta(
       mockRuntime({

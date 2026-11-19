@@ -782,7 +782,7 @@ export type AgentRunRequest = {
   readonly allowResumeWithoutInput?: boolean;
   /** Composer 附件；当前仅 `source===attach` 生效（Core 发送时再扫描合并 `@path`）。workplace/user_ops 为历史只读兼容。 */
   readonly attachments?: readonly MessageAttachmentDto[];
-  /** 本轮未发送批注草稿；main 透传至 Core `runAgentTurn`。 */
+  /** 本轮未发送批注草稿；main 透传至 Core `AgentTurnRunner.run`。 */
   readonly annotateDrafts?: readonly AnnotateDraftDto[];
 };
 
@@ -890,7 +890,7 @@ export type PromptToolGroupDto = {
   /** 美化 JSON（`JSON.stringify(input, null, 2)`）；空 input 退化为 `[tool_use name=… id=…]` 单行。 */
   readonly inputJson: string;
   /**
-   * 保结构截大 key 的预览形态（main 侧 `formatToolUsePreviewJson` 算好下发，
+   * 保结构截大 key 的预览形态（main 侧 `PromptPreviewTurns.formatToolUsePreviewJson` 算好下发，
    * renderer 只读不引 core 运行时）。全屏正文仍走 `inputJson` 原文。
    */
   readonly inputPreview: string;
@@ -1207,7 +1207,7 @@ export type MessageAttachmentDto = {
   readonly action?: MessageAttachmentActionDto;
 };
 
-/** 与 Core `AnnotateDraft` 对齐（App → main → runAgentTurn）。 */
+/** 与 Core `AnnotateDraft` 对齐（App → main → AgentTurnRunner.run）。 */
 type AnnotateDraftDto = {
   readonly id: string;
   readonly path: string;

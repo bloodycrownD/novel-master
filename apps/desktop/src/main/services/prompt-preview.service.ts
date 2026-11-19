@@ -6,15 +6,15 @@
  * assistant 轮正文已在 `body` 一份字符串里。
  */
 import {
+  PreviewThinkingContext,
   PromptBuilder,
-  applyThinkingContextForLlm,
-  resolvePreviewThinkingContext,
+  ThinkingContext,
   type PromptPreviewTurn,
   type PromptRenderContext,
   type PromptSkillIndexEntry,
 } from "@novel-master/core/prompt";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { resolveAgentForProject, resolveAgentToolRegistry } from "@novel-master/core/agent";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
+import { AgentProjectResolver, AgentTools } from "@novel-master/core/agent";
 import { type AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -33,8 +33,8 @@ const SKILL_TOOL_NAME = "skill";
  * `PromptBuilder.previewTurns`；失败沿用 core 的 `Result` 通道。
  */
 export async function buildRealPromptPreviewTurnsAdapter(runtime: DesktopNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
-  // 错误通道迁移五期：resolveAgentForProject 沿 Result 回传，Err 并进本函数通道。
-  const resolvedAgent = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
+  // 错误通道迁移五期：AgentProjectResolver.resolve 沿 Result 回传，Err 并进本函数通道。
+  const resolvedAgent = await AgentProjectResolver.resolve(runtime, scope.projectId, scope.sessionId);
   if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
   const definition = resolvedAgent.value.definition;
   const built = await buildSessionPromptInputAdapter(runtime, scope, definition);
@@ -45,8 +45,8 @@ export async function buildRealPromptPreviewTurnsAdapter(runtime: DesktopNovelMa
   // D4 联动：resolve 后 registry 不含 skill（policy 禁用）时保持 undefined，
   // 预览不出现技能索引段——工具与索引同进退。
   const probe = new ToolRegistry();
-  registerBuiltinTools(probe);
-  const toolRegistry = resolveAgentToolRegistry(probe, definition);
+  BuiltinTools.register(probe);
+  const toolRegistry = AgentTools.resolveRegistry(probe, definition);
   let skillsIndex: readonly PromptSkillIndexEntry[] | undefined;
   if (toolRegistry.list().includes(SKILL_TOOL_NAME)) {
     const effective = await runtime.skills().effectiveSkills(scope.projectId);
@@ -58,12 +58,12 @@ export async function buildRealPromptPreviewTurnsAdapter(runtime: DesktopNovelMa
     skillsIndex = effective.value.filter((s) => s.effective).map((s) => ({ name: s.name, description: s.description ?? "", domain: s.domain }));
   }
   // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 容量 1 保留单点在 core 纯函数）；
-  // 判定链已下沉 core（resolvePreviewThinkingContext），本地不再持有副本。
+  // 判定链已下沉 core（PreviewThinkingContext.resolve），本地不再持有副本。
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
   // 已知失败沿 Result 返回（错误通道迁移四期）：唯一调用方 handlePromptRealPreview
   // 转 `ipcErr(formatIpcError(...))`；本函数其余 await 链仍是未知 throw 面。
   if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-  // 错误通道迁移五期：resolvePreviewThinkingContext 沿 Result 回传。
+  // 错误通道迁移五期：PreviewThinkingContext.resolve 沿 Result 回传。
   const thinkingPreferences = {
     preferences: runtime.preferences,
     savedModels: runtime.savedModelRepo,
@@ -71,12 +71,12 @@ export async function buildRealPromptPreviewTurnsAdapter(runtime: DesktopNovelMa
     agentModelId: definition.model,
     sessionModelId: sessionConfig.value.modelId,
   };
-  const thinkingResult = await resolvePreviewThinkingContext(thinkingPreferences);
+  const thinkingResult = await PreviewThinkingContext.resolve(thinkingPreferences);
   if (!thinkingResult.ok) return Result.err(thinkingResult.error);
   const thinking = thinkingResult.value;
   // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
   // 判定代码与 wire 侧同一段，两侧保留集合一致（T-PV2）。
-  const filteredMessages = applyThinkingContextForLlm(ctx.messages, {
+  const filteredMessages = ThinkingContext.applyForLlm(ctx.messages, {
     enabled: thinking.enabled,
     protocol: thinking.protocol,
     retainProtocolMinimum: false,

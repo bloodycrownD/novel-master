@@ -1,5 +1,5 @@
 /**
- * 手动压缩 IPC —— 直调 runCompaction（hide-message + kkv 清理 + token cache 失效）。
+ * 手动压缩 IPC —— 直调 Compaction.run（hide-message + kkv 清理 + token cache 失效）。
  *
  * 成功后触发 composer status 刷新（置位/压缩同口径：project∪annotate）。
  *
@@ -21,10 +21,7 @@
  */
 import { ABORT_KEY, type AbortScope, type LongTaskHooks } from "@novel-master/core/abort";
 import { AppError, type Outcome } from "@novel-master/core/errors";
-import {
-  runCompaction,
-  type RunCompactionDeps,
-} from "@novel-master/core/compaction";
+import { Compaction, type RunCompactionDeps } from "@novel-master/core/compaction";
 import type {
   CompactionManualRequest,
   IpcResult,
@@ -39,7 +36,7 @@ import { isDesktopSessionRunInFlight } from "./agent.js";
 
 /**
  * 手动压缩 IPC（signal-abort-scope §五）：timeout 180s；入口检查点 + hide 前
- * 检查点（经 `hooks` 穿透到 `runCompaction`）。`hide → token cache 失效 →
+ * 检查点（经 `hooks` 穿透到 `Compaction.run`）。`hide → token cache 失效 →
  * KKV 清理` 与批量 `hideRange`/`showRange` 是**不可中断尾段**——中途抛错会
  * 留下「消息已隐藏、缓存未清」的半应用态，所以取消只承诺「真正开始前可取消」。
  */
@@ -74,6 +71,7 @@ export async function handleCompactionManual(req: CompactionManualRequest): Prom
 }
 
 /** 可中断的压缩段：入口 + hide 前检查点，尾段交给不可中断契约。 */
+// nm-style: keep-local — run-abort-scope.test 直引断言取消/完成分支；内联会破坏测试锁名。
 export async function doCompactionManual(rt: DesktopNovelMasterRuntime, req: CompactionManualRequest, scope: AbortScope): Promise<Outcome<{ ok: boolean }>> {
   const stopped = outcomeIfAborted(scope);
   if (stopped != null) return stopped;
@@ -88,13 +86,13 @@ export async function doCompactionManual(rt: DesktopNovelMasterRuntime, req: Com
   // 提示词（发送或预览）时 workplace 块按当前工作区重评估。自动压缩不传、
   // 缺省 auto，不清（保住「回合内前缀冻结」）。
   const hooks: LongTaskHooks = { checkpoint: () => scope.checkpoint() };
-  const params: Parameters<typeof runCompaction>[1] & { readonly hooks: LongTaskHooks } = {
+  const params: Parameters<typeof Compaction.run>[1] & { readonly hooks: LongTaskHooks } = {
     sessionId: req.sessionId,
     hideStartDepth,
     trigger: "manual",
     hooks,
   };
-  const result = await runCompaction(deps, params);
+  const result = await Compaction.run(deps, params);
   // hooks 命中时 core 返回 cancelled 形态（`ok:false` 分不出取消与真失败）。
   if ("cancelled" in result && result.cancelled === true) {
     return { kind: "cancelled", reason: scope.reason ?? "user-stop" };

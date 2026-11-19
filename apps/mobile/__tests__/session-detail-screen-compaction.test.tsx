@@ -19,7 +19,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
-import {ABORT_KEY, createAbortRegistry} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortRegistryFactory} from '@novel-master/core/abort';
 
 const mockSessionsGet = jest.fn(async () => ({
   ok: true as const,
@@ -39,12 +39,12 @@ const mockGetHideStartDepth = jest.fn();
 const mockRunCompaction = jest.fn();
 
 jest.mock('@novel-master/core/compaction', () => ({
-  runCompaction: (...args: unknown[]) => mockRunCompaction(...args),
+  Compaction: {run: (...args: unknown[]) => mockRunCompaction(...args)},
 }));
 
 const mockRuntime = {
   // 真实注册表：断言取消确实派发到 runManualCompaction 注册的 scope。
-  abortRegistry: createAbortRegistry(),
+  abortRegistry: AbortRegistryFactory.create(),
   compactionConditionEvaluator: {getHideStartDepth: (...args: unknown[]) => mockGetHideStartDepth(...args)},
   sessionKkv: {get: jest.fn(), set: jest.fn(), delete: jest.fn()},
   messages: {listBySession: jest.fn()},
@@ -227,7 +227,7 @@ describe('SessionDetailScreen 手动压缩取消入口（T-S14）', () => {
     expect(abortSpy).toHaveBeenCalledWith(ABORT_KEY.compaction('s1'));
     expect(scope!.reason).toBe('user-stop');
 
-    // 深度读回 → beforeHide 检查点命中取消 → 边界 throw createAbortError()。
+    // 深度读回 → beforeHide 检查点命中取消 → 边界 throw AbortError.create()。
     await act(async () => {
       depth.resolve({ok: true, value: 3});
       await flushPromises();

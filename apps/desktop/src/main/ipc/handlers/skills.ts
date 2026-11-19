@@ -19,7 +19,7 @@ import type {
   SkillsUpdateInfoRequest,
   SkillsWriteRequest,
 } from "../../../../shared/ipc-types.js";
-import { Result, matchOutcome, type AppError } from "@novel-master/core/errors";
+import { Outcome, Result, type AppError } from "@novel-master/core/errors";
 import { AssertionError } from "@novel-master/core/common";
 import type { SkillListItem, SkillListScope, SkillLocation } from "@novel-master/core/skills";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
@@ -45,7 +45,7 @@ export async function handleSkillsList(req: SkillsListRequest): Promise<IpcResul
     // cancelled/replaced 不可达，命中即不变量破坏（断言而非取消语义）。
     // 显式标注 R（与 core skill-tool 同款）：否则轮询式推断会把 completed 分支的
     // `Result<T, never>` 当成唯一候选，failed 分支被误判为不可赋值。
-    const listed = matchOutcome<SkillListItem[], Result<SkillListItem[], AppError>>(await rt.skills().listSkills(scope), {
+    const listed = Outcome.match<SkillListItem[], Result<SkillListItem[], AppError>>(await rt.skills().listSkills(scope), {
       completed: (items) => Result.ok(items),
       cancelled: () => { throw new AssertionError("handleSkillsList 未注入 hooks，listSkills 不应产生 cancelled"); },
       replaced: () => { throw new AssertionError("handleSkillsList 未注入 hooks，listSkills 不应产生 replaced"); },

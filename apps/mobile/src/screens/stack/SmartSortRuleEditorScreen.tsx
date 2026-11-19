@@ -1,7 +1,7 @@
 /**
  * Create/edit smart sort rule (spec smart-filename-sort Step 13,
  * fix-preview-redesign 重构)。
- * 正则输入支持 /pattern/flags 字面量风格（core parsePatternInput 单源）：
+ * 正则输入支持 /pattern/flags 字面量风格（core PatternInput.parse 单源）：
  * 输入框绑定原始文本 patternInput，解析结果同步进 draft.pattern/flags，
  * 测试/保存均消费解析值；正则不进全屏编辑（fix ②：正则没那么长），
  * 改为自适应高度的多行输入（textarea 式，内容增高、封顶后内部滚动）。
@@ -9,7 +9,7 @@
  * 测试预览为正则匹配测试（fix ②：替代旧排序测试）：输入一段文本，
  * 点「测试」按钮手动触发（非实时联动），下方 monospace 区高亮渲染
  * 原文（匹配段 primary 变色，按 matches.index 切分——core 单源
- * splitSmartSortHighlightSegments，fix-desc-and-highlight）
+ * SmartSortHighlight.splitSegments，fix-desc-and-highlight）
  * + 每处匹配的提取元组小字（D13：tuple 文案，null 显「无序号」）
  * + 底部匹配计数；测试文本/正则/捕获档位任一变化即清空结果
  * （结果只属于上次点击「测试」时的输入快照，dtcli/B-1）。
@@ -25,14 +25,13 @@ import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
-  formatPatternInput,
-  matchSmartSortPattern,
-  parsePatternInput,
-  splitSmartSortHighlightSegments,
-  validateSmartSortRuleDraft,
+  PatternInput,
+  SmartSortHighlight,
+  SmartSortPattern,
+  SmartSortRule,
+  SmartSortRuleCompiler,
   type MatchSmartSortPatternResult,
   type SmartSortCaptureKind,
-  type SmartSortRule,
 } from '@novel-master/core/smart-sort-rule';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
@@ -62,7 +61,7 @@ interface DraftFields {
   name: string;
   /** 正则输入框原始文本（可能是 /pattern/flags 字面量风格）。 */
   patternInput: string;
-  /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
+  /** PatternInput.parse(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
   /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵最前 / fixed_max 沉底。 */
@@ -198,7 +197,7 @@ export function SmartSortRuleEditorScreen() {
   // 正则变了旧结果就不再属于当前输入，照 changeTestText 范式一并清空
   // （dtcli/B-1：结果只属于上次点击「测试」时的输入快照）。
   const applyPatternInput = useCallback((text: string) => {
-    setDraft(prev => ({...prev, patternInput: text, ...parsePatternInput(text)}));
+    setDraft(prev => ({...prev, patternInput: text, ...PatternInput.parse(text)}));
     setTestOutcome(IDLE_OUTCOME);
   }, []);
 
@@ -242,7 +241,7 @@ export function SmartSortRuleEditorScreen() {
       return null;
     }
     // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
-    const parsed = parsePatternInput(draft.patternInput.trim());
+    const parsed = PatternInput.parse(draft.patternInput.trim());
     return {
       ...draft,
       name: draft.name.trim(),
@@ -268,10 +267,10 @@ export function SmartSortRuleEditorScreen() {
     }
     // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前
     // 捕获数字选择传入（fixed 档 tuple 显哨兵文案，D13）。
-    const parsed = parsePatternInput(draft.patternInput.trim());
+    const parsed = PatternInput.parse(draft.patternInput.trim());
     setTestOutcome({
       kind: 'ok',
-      result: matchSmartSortPattern(parsed.pattern, parsed.flags, testText, draft.captureKind),
+      result: SmartSortPattern.match(parsed.pattern, parsed.flags, testText, draft.captureKind),
     });
   }, [draft.patternInput, draft.captureKind, testText]);
 
@@ -282,7 +281,7 @@ export function SmartSortRuleEditorScreen() {
     }
     // 保存前走同一校验（非法正则/flags/捕获组——smart 档才强制捕获组），
     // 提示语与测试一致；校验失败走 Result 收口（错误通道迁移四期）。
-    const draftCheck = validateSmartSortRuleDraft({
+    const draftCheck = SmartSortRuleCompiler.validateDraft({
       name: fields.name,
       pattern: fields.pattern,
       flags: fields.flags,
@@ -418,11 +417,11 @@ export function SmartSortRuleEditorScreen() {
             ) : testOutcome.result.ok ? (
               <>
                 {/* 高亮渲染（fix-desc-and-highlight）：core 单源切分
-                    （splitSmartSortHighlightSegments）按匹配偏移把原文切
+                    （SmartSortHighlight.splitSegments）按匹配偏移把原文切
                     成普通段/匹配段，嵌套 Text 继承 monospace 样式；多行
                     文本在 Text 内自然换行。 */}
                 <Text style={[styles.resultText, {color: tokens.text}]}>
-                  {splitSmartSortHighlightSegments(testText, testOutcome.result.matches).map((seg, i) =>
+                  {SmartSortHighlight.splitSegments(testText, testOutcome.result.matches).map((seg, i) =>
                     seg.matched ? (
                       <Text key={i} style={{color: tokens.primary}}>
                         {seg.text}
@@ -497,7 +496,7 @@ function toDraft(rule: SmartSortRule): DraftFields {
     name: rule.name,
     // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则 /pattern/），
     // 再解析回同一 pattern/flags（core 单测保障 round-trip）。
-    patternInput: formatPatternInput(rule.pattern, rule.flags),
+    patternInput: PatternInput.format(rule.pattern, rule.flags),
     pattern: rule.pattern,
     flags: rule.flags,
     captureKind: rule.captureKind,

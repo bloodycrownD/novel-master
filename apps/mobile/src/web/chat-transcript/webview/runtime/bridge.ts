@@ -21,7 +21,7 @@ import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscr
 import {createBoundPost} from '@web/shared/post';
 import {matchHostMessage} from '@web/shared/host-message-channel';
 import {applyHostTheme} from '@web/shared/host-theme';
-import {flagsEqual, renderRows} from './render/row-logic';
+import {renderRows} from './render/row-logic';
 import {resolveLabels} from '../ui/labels';
 
 // HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
@@ -93,7 +93,9 @@ export function handleHostMessage(raw: unknown): void {
           richText: !!p.flags.richText,
           menuDisabled: !!p.flags.menuDisabled,
         };
-        if (flagsEqual(state.flags, nextFlags)) {
+        const richSame = state.flags.richText === nextFlags.richText;
+        const menuSame = state.flags.menuDisabled === nextFlags.menuDisabled;
+        if (richSame && menuSame) {
           break;
         }
         const richToggledOn = !state.flags.richText && nextFlags.richText;

@@ -68,9 +68,8 @@ import {
   ipcSmartSortRuleYamlExport,
   ipcSmartSortRuleYamlImport,
 } from "@/ipc/client";
-import { formatPatternInput } from "@shared/logic/smart-sort";
-import { parsePatternInput } from "@shared/logic/smart-sort";
-import { splitSmartSortHighlightSegments as splitHighlightSegments } from "@shared/logic/smart-sort";
+import { PatternInput } from "@shared/logic/smart-sort";
+import { SmartSortHighlight } from "@shared/logic/smart-sort";
 import { agentModeMatchesTab } from "@shared/config-forms/agent";
 import type { AgentSettingsTab } from "@shared/config-forms/agent";
 import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
@@ -2250,14 +2249,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   );
 }
 
-/** 正则输入支持 /pattern/flags 字面量风格（core parsePatternInput 单源，
+/** 正则输入支持 /pattern/flags 字面量风格（core PatternInput.parse 单源，
  * 与 mobile 同源）：输入框绑定原始文本 patternInput，解析结果同步进
  * draft.pattern/flags，测试/保存均消费解析值；无独立 flags UI。 */
 type SmartSortRuleDraft = {
   name: string;
   /** 正则输入框原始文本（可能是 /pattern/flags 字面量风格）。 */
   patternInput: string;
-  /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
+  /** PatternInput.parse(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
   /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵最前 / fixed_max 沉底。 */
@@ -2313,7 +2312,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             name: rule.name,
             // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则
             // /pattern/），再解析回同一 pattern/flags（core 单测保障 round-trip）。
-            patternInput: formatPatternInput(rule.pattern, rule.flags),
+            patternInput: PatternInput.format(rule.pattern, rule.flags),
             pattern: rule.pattern,
             flags: rule.flags,
             captureKind: rule.captureKind,
@@ -2368,7 +2367,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
     // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前
     // 捕获数字选择传入（fixed 档 tuple 显哨兵文案，D13）。
-    const parsed = parsePatternInput(draft.patternInput.trim());
+    const parsed = PatternInput.parse(draft.patternInput.trim());
     const payload = {
       pattern: parsed.pattern,
       flags: parsed.flags,
@@ -2398,7 +2397,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
     const description = draft.description.trim() || null;
     // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
-    const parsed = parsePatternInput(draft.patternInput.trim());
+    const parsed = PatternInput.parse(draft.patternInput.trim());
     const payload = {
       name,
       pattern: parsed.pattern,
@@ -2430,7 +2429,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
    *  （匹配段 --primary 变色）+ 底部匹配计数；错误/非法正则照旧文案。 */
   const matchCount = matchResult?.ok ? matchResult.matches.length : 0;
   const matches = matchResult?.ok ? matchResult.matches : null;
-  const segments = matches && splitHighlightSegments(testText, matches);
+  const segments = matches && SmartSortHighlight.splitSegments(testText, matches);
 
   const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
 
@@ -2468,7 +2467,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
                 setDraft({
                   ...draft,
                   patternInput: e.target.value,
-                  ...parsePatternInput(e.target.value),
+                  ...PatternInput.parse(e.target.value),
                 });
                 invalidateMatchResult();
               }}

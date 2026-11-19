@@ -11,7 +11,7 @@ import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/toke
 import { MessageBodyText } from "@novel-master/core/prompt";
 
 import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/tokenizer";
-import { countWebTokenizerMessages, wrapSerializedPromptAsSystemMessage } from "../logic/count-openai-style-message.js";
+import { OpenAiStyleMessageCount } from "../logic/count-openai-style-message.js";
 import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
@@ -113,8 +113,8 @@ export class WebTokenizerCounter implements TokenCounter {
     if (instance == null) {
       return fallbackCount(serialized);
     }
-    const wrapped = wrapSerializedPromptAsSystemMessage(serialized);
-    return countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
+    const wrapped = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage(serialized);
+    return OpenAiStyleMessageCount.countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
   }
 
   /** Whether the last load attempt failed (for `estimated` flag). */
@@ -123,6 +123,12 @@ export class WebTokenizerCounter implements TokenCounter {
   }
 }
 
+/**
+ * nm-style: keep-public — WEB 家族计数入口，与 `countSentencePieceFamilyPrompt`（SP）构成同形
+ * 家族工厂对（`family, serialized → {count, estimated}`，fallback-caliber 契约）：把 counter 生命
+ * 周期（构造一次、`failedLoad` 读一次）封装成结果快照，fallback-count.test 的 F1/F2 成对锁名。
+ * 内联单个会把 counter 构造细节漏进调用方、与 SP 分支形成深浅不一的两层。
+ */
 export async function countWebFamilyPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
   const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
   const count = await counter.countSerializedPrompt(serialized);

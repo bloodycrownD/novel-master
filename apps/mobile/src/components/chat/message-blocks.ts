@@ -2,9 +2,9 @@
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
 import {type ChatMessageData, type ContentBlock, type MessageAttachment, type ToolResultBlock, type ToolUseBlock} from '@novel-master/core/chat';
-import {resolveToolResultOk} from '@novel-master/core';
+import {ToolResultBlock as CoreToolResultBlock} from '@novel-master/core';
 
-import {skillToolRefResolver, resolveVfsToolFilePath} from '@novel-master/core/chat';
+import {skillToolRefResolver, VfsToolFilePath} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import {Text} from '@novel-master/core/common';
 import type {TranscriptRow} from './ChatTranscriptBridge';
@@ -235,7 +235,7 @@ export function toolCallViewFromUse(use: ToolUseBlock, results: ReadonlyMap<stri
     toolUseId: use.id,
     name: use.name,
     input: use.input,
-    status: resolveToolResultOk(result) ? 'success' : 'error',
+    status: CoreToolResultBlock.resolveOk(result) ? 'success' : 'error',
     resultContent: result.content,
     ...(result.summary != null ? {summary: result.summary} : {}),
     ...(typeof subagentSessionId === 'string' && subagentSessionId.length > 0
@@ -247,7 +247,7 @@ export function toolCallViewFromUse(use: ToolUseBlock, results: ReadonlyMap<stri
 
 /** 工具卡片可打开的逻辑文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
-  return resolveVfsToolFilePath(tool.name, tool.input);
+  return VfsToolFilePath.resolve(tool.name, tool.input);
 }
 
 /**
@@ -261,8 +261,8 @@ export function skillToolRef(tool: ToolCallView, projectId?: string): SkillToolR
   return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
 
-// nm-style: keep-public — 工具卡片摘要单源在 core（`presentation/chat/tool-summary.ts`），本文件只保留入口名给 ToolCallCard。
-export {toolCallSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
+// nm-style: keep-public — 工具卡片摘要单源在 core（`presentation/chat/tool-summary.ts` 的 ToolSummary），本文件只保留入口名给 ToolCallCard。
+export {ToolSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
 
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 // prettier-ignore

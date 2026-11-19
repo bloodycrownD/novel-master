@@ -4,7 +4,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
-import {skillToolRef, toolCallSummary, vfsToolFilePath, type ToolCallView} from './message-blocks';
+import {skillToolRef, ToolSummary, vfsToolFilePath, type ToolCallView} from './message-blocks';
 import type {SkillToolRef} from '@novel-master/core/chat';
 
 type Props = {
@@ -42,7 +42,7 @@ export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFil
   const canOpenSkill = skillRef != null && onOpenSkillDetail != null;
   const canOpen = canOpenFile || canOpenSubagent || canOpenSkill;
   // prettier-ignore
-  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : toolCallSummary(tool);
+  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : ToolSummary.callSummary(tool);
   const statusMeta = STATUS_META[tool.status];
   // prettier-ignore
   const openHint = canOpenSubagent ? '点击查看 · 子会话' : canOpenSkill ? '点击查看 · 技能' : '点击查看 · 聊天工作区';

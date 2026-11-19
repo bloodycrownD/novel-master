@@ -27,6 +27,7 @@ const WHITELIST_BASELINE: Readonly<Record<string, number>> = {
 const BUSINESS_BASELINE: Readonly<Record<string, number>> = {
   'src/components/chat/useChatComposerController.ts': 1,
   'src/db/connection.ts': 2,
+  'src/runtime/setup-llm-fetch.ts': 1,
   'src/runtime/novel-master-context.tsx': 1,
   'src/screens/stack/ProviderCreateScreen.tsx': 1,
   'src/screens/tabs/chat-tab/useChatTabMessageActions.ts': 1,
@@ -34,7 +35,6 @@ const BUSINESS_BASELINE: Readonly<Record<string, number>> = {
   'src/services/chat-prompt-tokens.service.ts': 10,
   'src/services/chat-transcript-telemetry.ts': 1,
   'src/services/cloud-sync-progress-log.ts': 1,
-  'src/services/llm-native-fetch-shim.ts': 1,
   'src/services/run-state-writethrough.ts': 1,
   'src/services/session-prompt-input.service.ts': 5,
   'src/services/vfs-operations.service.ts': 1,

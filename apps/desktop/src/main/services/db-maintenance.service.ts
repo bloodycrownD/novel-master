@@ -4,9 +4,9 @@
  * @module services/db-maintenance
  */
 import { stat } from "node:fs/promises";
-import { createDbMaintenanceService } from "@novel-master/core";
+import { DbMaintenance } from "@novel-master/core";
 import { AppError } from "@novel-master/core/errors";
-import { Result, type Interrupt, type Outcome } from "@novel-master/core/errors";
+import { Result, Outcome, type Interrupt } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { agentActivity } from "../runtime/agent-activity.js";
@@ -23,7 +23,7 @@ export async function getDbMaintenanceStats(): Promise<
   if (!built.ok) return Result.err(built.error);
   const runtime = built.value;
   const fileInfo = await stat(resolveDbPath());
-  const maintenance = createDbMaintenanceService(runtime.conn);
+  const maintenance = DbMaintenance.create(runtime.conn);
   const storage = await maintenance.getStorageStats();
   return Result.ok({
     fileBytes: fileInfo.size,
@@ -66,7 +66,7 @@ export async function runDbMaintenance(options?: { readonly checkpoint?: () => I
     const runtime = built.value;
     const dbPath = resolveDbPath();
     const beforeInfo = await stat(dbPath);
-    await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
+    await DbMaintenance.create(runtime.conn).runDatabaseMaintenance();
     const afterInfo = await stat(dbPath);
     return {
       kind: "completed",

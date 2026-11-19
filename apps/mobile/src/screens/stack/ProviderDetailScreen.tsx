@@ -6,7 +6,7 @@ import {ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleShee
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import {formatSavedModelDisplayName, savedModelSampling} from '@novel-master/core/provider';
+import {SavedModelDisplayName, SavedModelSettings} from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
@@ -89,10 +89,10 @@ export function ProviderDetailScreen() {
         nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
       }
       return saved.value.map(model => {
-        const sampling = savedModelSampling(model.settings);
+        const sampling = SavedModelSettings.sampling(model.settings);
         const hasSampling = Boolean(sampling.enabled && sampling.params);
         const duplicate = (nameCounts.get(ModelKey.name(model.providerId, model.modelName)) ?? 0) > 1;
-        const label = formatSavedModelDisplayName(provider.displayName, model.modelName);
+        const label = SavedModelDisplayName.format(provider.displayName, model.modelName);
         const subtitleParts = [duplicate ? model.vendorModelId : undefined, hasSampling ? '已配采样' : undefined].filter(Boolean);
         return {
           savedModelId: model.id,

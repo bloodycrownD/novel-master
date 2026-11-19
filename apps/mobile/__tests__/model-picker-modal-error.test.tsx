@@ -46,8 +46,10 @@ jest.mock('@novel-master/core/provider', () => {
   const actual = jest.requireActual('@novel-master/core/provider');
   return {
     ...actual,
-    formatSavedModelDisplayName: (provider: string, model: string) =>
-      `${provider} / ${model}`,
+    SavedModelDisplayName: {
+      ...actual.SavedModelDisplayName,
+      format: (provider: string, model: string) => `${provider} / ${model}`,
+    },
   };
 });
 

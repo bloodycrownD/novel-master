@@ -135,7 +135,6 @@ import {
   handleVfsMkdir,
   handleVfsRead,
   handleVfsRename,
-  handleVfsStartDrag,
   handleVfsWrite,
   handleVfsCharacterCardImport,
   handleVfsZipExport,
@@ -143,7 +142,12 @@ import {
   handleVfsZipPick,
   handleVfsZipImportBytes,
 } from "./handlers/vfs.js";
-import type { VfsStartDragRequest } from "../../../shared/ipc-types.js";
+import { startDragExport } from "../services/vfs-batch.service.js";
+import { formatIpcError } from "./format-ipc-error.js";
+import { LogFactory } from "@novel-master/core/log";
+import type { VfsStartDragFailedPayload, VfsStartDragRequest } from "../../../shared/ipc-types.js";
+
+const dragLog = LogFactory.create("desktop.ipc.vfs");
 import { handleWorkplaceBuildListRows, handleWorkplaceGetDirRule, handleWorkplaceSetDirRule, handleWorkplaceSetFileRule } from "./handlers/workplace.js";
 
 type NoArgHandler = () => unknown;
@@ -215,8 +219,28 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
   bindReq(IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING, handleVfsBatchClearStaging);
   // startDrag 须在 drag 流程中同步触发，使用 send 而非 invoke；失败经 VFS_START_DRAG_FAILED 回传
+  // （原 handleVfsStartDrag 内联：preload 经 ipcRenderer.send 触发，失败推回 renderer toast）
   ipcMain.on(IPC_CHANNELS.VFS_START_DRAG, (event, req: VfsStartDragRequest) => {
-    handleVfsStartDrag(event, req);
+    try {
+      const dragResult = startDragExport(event.sender, req.filePaths ?? []);
+      if (!dragResult.ok) {
+        dragLog.error("vfs-batch startDrag failed", { error: dragResult.error });
+        const payload: VfsStartDragFailedPayload = {
+          message: formatIpcError(dragResult.error).message || "拖出失败",
+        };
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
+        }
+      }
+    } catch (err) {
+      dragLog.error("vfs-batch startDrag failed", { error: err });
+      const payload: VfsStartDragFailedPayload = {
+        message: formatIpcError(err).message || "拖出失败",
+      };
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
+      }
+    }
   });
 
   bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, handleWorkplaceBuildListRows);

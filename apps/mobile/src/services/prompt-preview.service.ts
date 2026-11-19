@@ -1,12 +1,12 @@
 /**
  * Real prompt preview: agent prompts + structured turns.
  */
-import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
-import {resolveAgentForProject, resolveAgentToolRegistry, type AgentDefinition} from '@novel-master/core/agent';
+import {BuiltinTools, ToolRegistry} from '@novel-master/core';
+import {AgentProjectResolver, AgentTools, type AgentDefinition} from '@novel-master/core/agent';
 import {
+  PreviewThinkingContext,
   PromptBuilder,
-  applyThinkingContextForLlm,
-  resolvePreviewThinkingContext,
+  ThinkingContext,
   type PromptPreviewTurn,
   type PromptRenderContext,
   type PromptSkillIndexEntry,
@@ -31,8 +31,8 @@ const SKILL_TOOL_NAME = 'skill';
  */
 async function budgetSkillsIndex(runtime: MobileNovelMasterRuntime, projectId: string, definition: AgentDefinition): Promise<readonly PromptSkillIndexEntry[] | undefined> {
   const probe = new ToolRegistry();
-  registerBuiltinTools(probe);
-  const registry = resolveAgentToolRegistry(probe, definition);
+  BuiltinTools.register(probe);
+  const registry = AgentTools.resolveRegistry(probe, definition);
   if (!registry.list().includes(SKILL_TOOL_NAME)) {
     return undefined;
   }
@@ -58,7 +58,7 @@ async function budgetSkillsIndex(runtime: MobileNovelMasterRuntime, projectId: s
  * 失败沿 `Result.err` 接力（错误通道迁移四期），调用方屏幕收口 formatError。
  */
 export async function buildRealPromptPreviewTurnsAdapter(runtime: MobileNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
-  const resolved = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
+  const resolved = await AgentProjectResolver.resolve(runtime, scope.projectId, scope.sessionId);
   if (!resolved.ok) return Result.err(resolved.error);
   const {definition} = resolved.value;
   const built = await buildSessionPromptInputAdapter(runtime, scope, definition);
@@ -66,7 +66,7 @@ export async function buildRealPromptPreviewTurnsAdapter(runtime: MobileNovelMas
   const {layout, ctx} = built.value;
   const skillsIndex = await budgetSkillsIndex(runtime, scope.projectId, definition);
   // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 容量 1 保留单点在 core 纯函数）；
-  // 判定链已下沉 core（resolvePreviewThinkingContext），本地不再持有副本。
+  // 判定链已下沉 core（PreviewThinkingContext.resolve），本地不再持有副本。
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
   if (!sessionConfig.ok) return Result.err(sessionConfig.error);
   const thinkingContext = {
@@ -76,12 +76,12 @@ export async function buildRealPromptPreviewTurnsAdapter(runtime: MobileNovelMas
     agentModelId: definition.model,
     sessionModelId: sessionConfig.value.modelId,
   };
-  const thinking = await resolvePreviewThinkingContext(thinkingContext);
+  const thinking = await PreviewThinkingContext.resolve(thinkingContext);
   if (!thinking.ok) return Result.err(thinking.error);
   const {enabled, protocol, requestThinkingEnabled} = thinking.value;
   // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
   // 判定代码与 wire 侧同一段，两侧保留集合一致（T-PV2）。
-  const filteredMessages = applyThinkingContextForLlm(ctx.messages, {
+  const filteredMessages = ThinkingContext.applyForLlm(ctx.messages, {
     enabled,
     protocol,
     retainProtocolMinimum: false,

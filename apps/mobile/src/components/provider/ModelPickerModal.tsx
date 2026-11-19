@@ -8,7 +8,7 @@
  */
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {formatSavedModelDisplayName} from '@novel-master/core/provider';
+import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {Result, AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import {toastMessage} from '../../errors/toast-message';
@@ -85,7 +85,7 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
       const providerDisplayName = nameById.get(model.providerId) ?? '未知服务商';
       return {
         savedModelId: model.id,
-        label: formatSavedModelDisplayName(providerDisplayName, model.modelName),
+        label: SavedModelDisplayName.format(providerDisplayName, model.modelName),
         subtitle: duplicate ? model.vendorModelId : undefined,
       };
     });

@@ -13,14 +13,14 @@
  * （bgSecondary 灰底），组头 40 高（blockHeader）、工具名 15·600（blockName）；
  * 格子回到白底浮起（最内层）。
  *
- * tool use 预览走 core `formatToolUsePreviewJson`（保结构截大 key：超长字符串
+ * tool use 预览走 core `PromptPreviewTurns.formatToolUsePreviewJson`（保结构截大 key：超长字符串
  * 值截断、超长数组截项），不直接腰斩 pretty JSON——结构可读性优先；全屏仍看
  * `inputJson` 原文。
  */
 import React, {useCallback, useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {PromptToolGroupCardData} from '@novel-master/core/prompt';
-import {formatToolUsePreviewJson} from '@novel-master/core/prompt';
+import {PromptPreviewTurns} from '@novel-master/core/prompt';
 import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -49,7 +49,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
   const {tokens} = useTheme();
   const openDetail = useOpenPromptDetail();
   // 解析+收缩是纯函数重活（大 JSON 实测 ~90ms 量级），memo 住防展开态重渲染重跑。
-  const usePreviewJson = useMemo(() => formatToolUsePreviewJson(card.inputJson), [card.inputJson]);
+  const usePreviewJson = useMemo(() => PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson), [card.inputJson]);
 
   const handleToggle = useCallback(() => {
     onToggle(card.id);

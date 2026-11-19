@@ -38,10 +38,13 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
 
 jest.mock('@novel-master/core', () => ({
   CHARACTERS_PER_TOKEN_RATIO: 3.35,
-  resolveTokenizerFamily: () => mockResolveFamily,
-  mapVendorModelIdToTiktokenModel: () => 'gpt-4o',
   serializePromptLlmInput: () => '',
 }));
+
+// family 判定（mockResolveFamily）已随 core 收敛失效：driver 改从
+// '@novel-master/core/tokenizer' 子路径 import TokenizerFamilyResolver，
+// 主入口 mock 拦不住；本套件按真实 resolver 的输入口径断言（vendorModelId
+// 显式给 claude/gemma 家族串，真实判定与原 mock 同值）。
 
 // 兜底路径（原生不可用 / family=heuristic / 未知家族）现在走驱动自己的 cl100k
 // 编码表，而不是 app 侧或 driver 侧的字符折算。这里给一份**真 ranks**：
@@ -659,9 +662,9 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
     );
     expect(second.counterKind).toBe('tiktoken');
 
-    const {splitTextIntoChunks, chunkHash16} = require('@novel-master/core/tokenizer');
-    const hashesA = splitTextIntoChunks(baseText).map((c: string) => chunkHash16(c));
-    const hashesB = splitTextIntoChunks(editedText).map((c: string) => chunkHash16(c));
+    const {ChunkSplitter, TokenChunkCache} = require('@novel-master/core/tokenizer');
+    const hashesA = ChunkSplitter.splitText(baseText).map((c: string) => TokenChunkCache.chunkHash16(c));
+    const hashesB = ChunkSplitter.splitText(editedText).map((c: string) => TokenChunkCache.chunkHash16(c));
     expect(hashesA.length).toBe(hashesB.length);
     let changedChunks = 0;
     for (let i = 0; i < hashesA.length; i += 1) {

@@ -8,18 +8,17 @@ import { type AgentPromptLayout, type PromptRenderContext } from "@novel-master/
 
 import {
   CHARACTERS_PER_TOKEN_RATIO,
-  chunkHash16,
-  countOpenAiStyleMessages,
-  countPromptLlmInput,
-  countTextWithIncrementalTokenizer,
-  createDefaultTokenCounterRegistry,
+  ChunkSplitter,
+  ContextWindow,
+  DefaultTokenCounterRegistry,
+  OpenAiStyleMessageCount,
+  PromptLlmInputCount,
   promptWholeCache,
-  resolveContextWindowTokens,
   serializePromptLlmInput,
-  serializeToolsForTokenCount,
-  splitTextIntoChunks,
+  TokenChunkCache,
+  TokenCountTools,
+  TokenizerTextCount,
   tokenChunkCache,
-  wrapSerializedPromptAsSystemMessage,
 } from "@novel-master/core/tokenizer";
 import {
   __setNodeEncodingFactoryForTests,
@@ -47,9 +46,9 @@ function chunkedExpectation(
   serialized: string,
   tiktokenModel: string,
 ): number {
-  const overhead = countOpenAiStyleMessages(
+  const overhead = OpenAiStyleMessageCount.count(
     encoding,
-    [wrapSerializedPromptAsSystemMessage("")],
+    [OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage("")],
     tiktokenModel,
   );
   return overhead + chunkedTextSum(encoding, serialized);
@@ -64,8 +63,8 @@ function chunkedTextSum(
   serialized: string,
 ): number {
   let chunkSum = 0;
-  for (const chunk of splitTextIntoChunks(serialized)) {
-    chunkSum += countTextWithIncrementalTokenizer(
+  for (const chunk of ChunkSplitter.splitText(serialized)) {
+    chunkSum += TokenizerTextCount.count(
       (text) => encoding.encode(text).length,
       chunk,
     );
@@ -124,17 +123,17 @@ describe("countPromptLlmInput", () => {
     tokenChunkCache.clearForTests();
   });
 
-  const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+  const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
   it("C1: stable count for same input and model", async () => {
     const { layout, ctx } = fixtureParams();
-    const a = (await countPromptLlmInput({
+    const a = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/gpt-4o",
       registry,
     })).value;
-    const b = (await countPromptLlmInput({
+    const b = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/gpt-4o",
@@ -145,12 +144,12 @@ describe("countPromptLlmInput", () => {
   });
 
   it("C2: larger system increases token count", async () => {
-    const base = (await countPromptLlmInput({
+    const base = (await PromptLlmInputCount.count({
       ...fixtureParams(),
       savedModelId: "openai/gpt-4o",
       registry,
     })).value;
-    const larger = (await countPromptLlmInput({
+    const larger = (await PromptLlmInputCount.count({
       ...fixtureParams({ systemContent: "You are helpful. ".repeat(20) }),
       savedModelId: "openai/gpt-4o",
       registry,
@@ -159,7 +158,7 @@ describe("countPromptLlmInput", () => {
   });
 
   it("claude model on openai provider uses claude family", async () => {
-    const result = (await countPromptLlmInput({
+    const result = (await PromptLlmInputCount.count({
       ...fixtureParams(),
       savedModelId: "openai/claude-3-5-sonnet",
       registry,
@@ -193,7 +192,7 @@ describe("countPromptLlmInput", () => {
     });
     const serialized =
       ((await serializePromptLlmInput(layout, ctx)).value) +
-      serializeToolsForTokenCount(undefined);
+      TokenCountTools.serialize(undefined);
     const o200k = getNodeEncodingByName("o200k_base");
     const cl100k = getNodeEncodingByName("cl100k_base");
     assert.notEqual(o200k, null);
@@ -205,7 +204,7 @@ describe("countPromptLlmInput", () => {
       "夹具在 o200k / cl100k 下计数应不同，请更换夹具文本",
     );
 
-    const result = (await countPromptLlmInput({
+    const result = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/gpt-4o",
@@ -224,7 +223,7 @@ describe("countPromptLlmInput", () => {
 
   it("unknown model uses heuristic", async () => {
     const { layout, ctx } = fixtureParams();
-    const result = (await countPromptLlmInput({
+    const result = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/my-custom/foo",
@@ -241,7 +240,7 @@ describe("countPromptLlmInput", () => {
     // 分块 vs 整串差 1 token，10 vs 9）。
     const serialized =
       ((await serializePromptLlmInput(layout, ctx)).value) +
-      serializeToolsForTokenCount(undefined);
+      TokenCountTools.serialize(undefined);
     const real = countTextWithDefaultEncoding(serialized);
     assert.notEqual(real, null);
     const defaultEncoding = getDefaultNodeEncoding();
@@ -261,7 +260,7 @@ describe("countPromptLlmInput", () => {
       20,
     );
     const { layout, ctx } = fixtureParams({ systemContent: cn });
-    const result = (await countPromptLlmInput({
+    const result = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/my-custom/foo",
@@ -269,7 +268,7 @@ describe("countPromptLlmInput", () => {
     })).value;
     const serialized =
       ((await serializePromptLlmInput(layout, ctx)).value) +
-      serializeToolsForTokenCount(undefined);
+      TokenCountTools.serialize(undefined);
     const charRatio = Math.ceil(serialized.length / CHARACTERS_PER_TOKEN_RATIO);
 
     assert.equal(result.counterKind, "heuristic");
@@ -292,7 +291,7 @@ describe("countPromptLlmInput", () => {
 
 describe("resolveContextWindowTokens", () => {
   it("W1: claude-3-5-sonnet → 200000", () => {
-    assert.equal(resolveContextWindowTokens("claude-3-5-sonnet"), 200_000);
+    assert.equal(ContextWindow.resolve("claude-3-5-sonnet"), 200_000);
   });
 });
 
@@ -311,7 +310,7 @@ describe("resolveContextWindowTokens", () => {
  */
 describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
   const badAssetsRoot = join(tmpdir(), "nm-no-such-tokenizer-assets");
-  const registry = createDefaultTokenCounterRegistry({} as Record<string, never>);
+  const registry = DefaultTokenCounterRegistry.create({} as Record<string, never>);
 
   before(() => {
     registerTokenizerNodeDriverForTests();
@@ -328,7 +327,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
     registerTokenizerNodeDriverForTests(badAssetsRoot);
     try {
       const { layout, ctx } = fixtureParams();
-      const result = (await countPromptLlmInput({
+      const result = (await PromptLlmInputCount.count({
         layout,
         ctx,
         savedModelId: "openai/claude-3-5-sonnet",
@@ -340,7 +339,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
       assert.equal(result.estimated, true);
       const serialized =
         ((await serializePromptLlmInput(layout, ctx)).value) +
-        serializeToolsForTokenCount(undefined);
+        TokenCountTools.serialize(undefined);
       // 两级降级的第一级：真 cl100k 读数（非字符折算）。
       assert.equal(result.tokenCount, countTextWithDefaultEncoding(serialized));
     } finally {
@@ -352,7 +351,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
     registerTokenizerNodeDriverForTests(badAssetsRoot);
     try {
       const { layout, ctx } = fixtureParams();
-      const result = (await countPromptLlmInput({
+      const result = (await PromptLlmInputCount.count({
         layout,
         ctx,
         savedModelId: "openai/mistral-7b-instruct",
@@ -363,7 +362,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
       assert.equal(result.estimated, true);
       const serialized =
         ((await serializePromptLlmInput(layout, ctx)).value) +
-        serializeToolsForTokenCount(undefined);
+        TokenCountTools.serialize(undefined);
       assert.equal(result.tokenCount, countTextWithDefaultEncoding(serialized));
     } finally {
       registerTokenizerNodeDriverForTests();
@@ -380,7 +379,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
  * 断言）。
  */
 describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
-  const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+  const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
   before(() => {
     registerTokenizerNodeDriverForTests();
@@ -421,12 +420,12 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
     });
     const params = { layout, ctx, savedModelId: "openai/gpt-4o", registry };
 
-    const first = (await countPromptLlmInput(params)).value;
+    const first = (await PromptLlmInputCount.count(params)).value;
     assert.equal(first.counterKind, "tiktoken");
     const callsAfterFirst = recording.calls();
     assert.ok(callsAfterFirst > 0, "夹具自检：首次计数必须真的调过 baseEncode");
 
-    const second = (await countPromptLlmInput(params)).value;
+    const second = (await PromptLlmInputCount.count(params)).value;
     assert.equal(second.tokenCount, first.tokenCount);
     assert.equal(second.counterKind, first.counterKind);
     assert.equal(second.estimated, first.estimated);
@@ -449,7 +448,7 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
       systemContent: baseText,
       messages: [msg("user", baseText)],
     });
-    const first = (await countPromptLlmInput({
+    const first = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/gpt-4o",
@@ -464,12 +463,12 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
     const ctxB = { ...ctx, messages: [msg("user", editedText)] };
     const serializedA =
       ((await serializePromptLlmInput(layout, ctx)).value) +
-      serializeToolsForTokenCount(undefined);
+      TokenCountTools.serialize(undefined);
     const serializedB =
       ((await serializePromptLlmInput(layout, ctxB)).value) +
-      serializeToolsForTokenCount(undefined);
-    const hashesA = splitTextIntoChunks(serializedA).map((c) => chunkHash16(c));
-    const hashesB = splitTextIntoChunks(serializedB).map((c) => chunkHash16(c));
+      TokenCountTools.serialize(undefined);
+    const hashesA = ChunkSplitter.splitText(serializedA).map((c) => TokenChunkCache.chunkHash16(c));
+    const hashesB = ChunkSplitter.splitText(serializedB).map((c) => TokenChunkCache.chunkHash16(c));
     assert.equal(hashesA.length, hashesB.length, "夹具自检：等长替换不改变块数");
     let changedChunks = 0;
     for (let i = 0; i < hashesA.length; i += 1) {
@@ -480,7 +479,7 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
     assert.equal(changedChunks, 1, "夹具自检：等长替换只应变化 1 块");
 
     const callsAfterFirst = recording.calls();
-    const second = (await countPromptLlmInput({
+    const second = (await PromptLlmInputCount.count({
       layout,
       ctx: ctxB,
       savedModelId: "openai/gpt-4o",
@@ -519,12 +518,12 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
         savedModelId: "openai/claude-3-5-sonnet",
         registry,
       };
-      const first = (await countPromptLlmInput(params)).value;
+      const first = (await PromptLlmInputCount.count(params)).value;
       assert.equal(first.counterKind, "claude");
       const readsAfterFirst = readJsonCalls;
       assert.ok(readsAfterFirst > 0, "夹具自检：首次 WEB 档计数必须真实加载过资产");
 
-      const second = (await countPromptLlmInput(params)).value;
+      const second = (await PromptLlmInputCount.count(params)).value;
       assert.equal(second.tokenCount, first.tokenCount);
       assert.equal(second.counterKind, first.counterKind);
       assert.equal(
@@ -549,7 +548,7 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
  * 档的约束被绕过）。
  */
 describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
-  const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+  const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
   before(() => {
     registerTokenizerNodeDriverForTests();
@@ -562,7 +561,7 @@ describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
 
   it("WEB 家族（glm）+ tokenizerOverride:tiktoken → estimated:true + counterKind:tiktoken", async () => {
     const { layout, ctx } = fixtureParams();
-    const result = (await countPromptLlmInput({
+    const result = (await PromptLlmInputCount.count({
       layout,
       ctx,
       // 无 savedModels 注入时 savedModelId 即 vendorModelId：auto 下解析为
@@ -582,7 +581,7 @@ describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
 
   it("gpt 系 + 无 override → estimated:false（防回归：真 tiktoken 精确档不受影响）", async () => {
     const { layout, ctx } = fixtureParams();
-    const result = (await countPromptLlmInput({
+    const result = (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/gpt-4o",
@@ -610,7 +609,7 @@ describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
     } as never;
 
     const { layout, ctx } = fixtureParams();
-    (await countPromptLlmInput({
+    (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "zai/glm-4.6",
@@ -626,7 +625,7 @@ describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
 
     // 对照组：同夹具下 gpt-4o 精确档（est:false）必须照常进队列落库——
     // 若 record 侧被改成「一律不持久化」，这里必红。
-    (await countPromptLlmInput({
+    (await PromptLlmInputCount.count({
       layout,
       ctx,
       savedModelId: "openai/gpt-4o",

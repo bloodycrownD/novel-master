@@ -1,7 +1,7 @@
 /**
  * 桌面端文件 sink：把 core 日志落到 `app.getPath("logs")`。
  *
- * 轮转策略由 core 的 `planLogFileWrite` 决定（按天切 / 2MB / 留 5 份），本文件
+ * 轮转策略由 core 的 `LogFilePolicy.planWrite` 决定（按天切 / 2MB / 留 5 份），本文件
  * 只负责「写到哪」与维护内存里的字节数。main 进程写入量小，用同步 appendFileSync
  * 保证退出前不丢、也不会和别的写入交错。
  *
@@ -13,7 +13,7 @@
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { app } from "electron";
-import { addLogSink, planLogFileWrite, type LogFileEntry, type LogLevel, type LogRecord } from "@novel-master/core/log";
+import { LogFactory, LogFilePolicy, type LogFileEntry, type LogLevel, type LogRecord } from "@novel-master/core/log";
 import { Number } from "@novel-master/core/common";
 import { isDesktopLlmDebug } from "./llm-debug-flag.js";
 
@@ -48,7 +48,7 @@ export function installDesktopLogSink(options: { readonly logsDir?: string } = {
   }
 
   let warned = false;
-  return addLogSink({
+  return LogFactory.addSink({
     write(record: LogRecord): void {
       if (LEVEL_ORDER.indexOf(record.level) < LEVEL_ORDER.indexOf(minLevel)) return;
       try {
@@ -56,7 +56,7 @@ export function installDesktopLogSink(options: { readonly logsDir?: string } = {
         const baseName = `nm-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}`;
         const line = `${now.toISOString()}\t${record.level}\t${record.scope}\t${record.message}\t${JSON.stringify(record.detail) ?? ""}\n`;
         const appendBytes = Buffer.byteLength(line);
-        const plan = planLogFileWrite({
+        const plan = LogFilePolicy.planWrite({
           now,
           existing: [...entries.values()].filter((entry) => entry.name.startsWith(`${baseName}.`)),
           appendBytes,

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 
 import {
-  bootstrapNovelMaster,
-  open,
+  NovelMasterBootstrap,
+  TdbcOpen,
 } from "@novel-master/core";
 import type { TdbcConnection } from "@novel-master/core/tdbc";
 import {
@@ -55,11 +55,11 @@ describe("AndroidSecretStore", () => {
 
   it("set/get 来回一致，且 SELECT 现在能带出 version 列（与 mac/windows 对齐）", async () => {
     installSkspStub();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     try {
       const store = createAndroidSecretStore(conn);
       const ref = "provider/test/apiKey";
@@ -91,11 +91,11 @@ describe("AndroidSecretStore", () => {
   // 这条用例专门钉住 Android 的 SELECT 已把 version 列读出来。
   it("version=2 时 get() 仍能读出明文（T-DS6 回归保护）", async () => {
     installSkspStub();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     try {
       const ref = "provider/v2/apiKey";
       const plain = "sk-v2-plain";
@@ -125,11 +125,11 @@ describe("AndroidSecretStore", () => {
 
   it("拒绝 algo 不匹配的行", async () => {
     installSkspStub();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     try {
       const ref = "provider/wrong/algo";
       await conn.execute(

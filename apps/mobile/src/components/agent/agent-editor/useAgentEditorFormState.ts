@@ -25,10 +25,10 @@ import {
   type AgentEditorFormInput,
 } from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
-import {formatSavedModelDisplayName} from '@novel-master/core/provider';
+import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {type AppError, Result} from '@novel-master/core/errors';
 
-import {useRuntime} from '../../../hooks/useRuntime';
+import {useRuntime} from '@/hooks/useRuntime';
 
 type MobileRuntime = ReturnType<typeof useRuntime>;
 
@@ -141,6 +141,7 @@ export function agentDisplayNameFromWire(raw: unknown, id: string): string {
  * 导出 hook（4 参：id/runtime/toast/可选定义）。
  * `initialDefinition` 为出厂定义直填（内置 general 只读详情）：同步初始化、无加载态。
  */
+// nm-style: keep-public — React hook 状态边界（300 行表单状态机，comp-rest/C-3 有意拆分的独立状态容器；内联会把 AgentEditorForm 推回拆分前的巨石组件）
 export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime, showToast: (message: string) => void, initialDefinition?: AgentDefinition) {
   const [form, setForm] = useState<AgentEditorFormState>(() => (initialDefinition ? formStateFromDefinition(initialDefinition) : createInitialFormState()));
   const [providers, setProviders] = useState<SavedProviderOption[]>([]);
@@ -286,7 +287,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
         setLoadError(`未找到 Agent：${agentId}`);
         return;
       }
-      const health = storedConfig.assessAgentDefinitionWire(raw);
+      const health = storedConfig.AgentDefinitionWire.assess(raw);
       if (health.status === 'invalid') {
         setDisplayName(agentDisplayNameFromWire(raw, agentId));
         setInvalidConfig({code: health.code, message: health.message});
@@ -369,7 +370,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
         const providerLabel = found?.label ?? '未知服务商';
         return {
           value: m.id,
-          label: formatSavedModelDisplayName(providerLabel, m.modelName),
+          label: SavedModelDisplayName.format(providerLabel, m.modelName),
           subtitle: (modelNameCounts.get(`${m.providerId}\0${m.modelName}`) ?? 0) > 1 ? m.vendorModelId : undefined,
         };
       })

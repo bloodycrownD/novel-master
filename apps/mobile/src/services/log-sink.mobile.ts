@@ -5,14 +5,14 @@
  * Jest 里是 `/documents`），行格式与 desktop / CLI 对齐：
  * `${ISO时间}\t${level}\t${scope}\t${message}\t${detailJSON}`。
  *
- * 轮转策略在 core（`planLogFileWrite`），本文件只负责「写到哪 + 每份文件已写
+ * 轮转策略在 core（`LogFilePolicy.planWrite`），本文件只负责「写到哪 + 每份文件已写
  * 字节数的内存维护」——策略是纯函数、不回写 existing，不累加就永远不会切段。
  *
  * WHY 本文件允许裸 `console.warn`：文件 sink 的失败兜底不能回调 logger
  * （logger → sink → 失败 → logger 会无限递归），no-raw-console 守卫把它列为
  * 唯一白名单。
  */
-import {addLogSink, createLogger, planLogFileWrite} from '@novel-master/core/log';
+import {LogFilePolicy, LogFactory} from '@novel-master/core/log';
 import type {LogLevel} from '@novel-master/core/log';
 import {Encoding} from '@novel-master/core/common';
 import {blobFs} from './rn-file-io';
@@ -42,7 +42,7 @@ export async function installMobileLogSink(): Promise<() => void> {
   }
   let chain: Promise<void> = Promise.resolve();
   let warned = false;
-  return addLogSink({
+  return LogFactory.addSink({
     write(record) {
       if (LEVEL_RANK[record.level] < LEVEL_RANK[minLevel]) {
         return;
@@ -52,7 +52,7 @@ export async function installMobileLogSink(): Promise<() => void> {
         .then(async () => {
           const now = new Date();
           const dateKey = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-          const plan = planLogFileWrite({
+          const plan = LogFilePolicy.planWrite({
             now,
             existing: [...files].map(([name, entry]) => ({name, ...entry})),
             appendBytes: Encoding.utf8ByteLength(line),
@@ -79,7 +79,7 @@ export async function installMobileLogSink(): Promise<() => void> {
   });
 }
 
-const crashLog = createLogger('crash');
+const crashLog = LogFactory.create('crash');
 
 /**
  * 安装 JS 全局崩溃钩子：先记 `uncaught_js_error`，再链式调用旧处理器。

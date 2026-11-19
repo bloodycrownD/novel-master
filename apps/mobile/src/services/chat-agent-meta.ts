@@ -7,8 +7,8 @@
  * 项目智能体已下线：会话始终独立持有 agentId（必填），
  * 可选 modelId 覆盖 agent pin。meta 这里只把 core 的解析结果翻译成 UI 标签。
  */
-import {isAppError} from '@novel-master/core/errors';
-import {AGENT_RUN_RESOLVE_KEYS, resolveAgentForProject} from '@novel-master/core/agent';
+import {AppErrorOps} from '@novel-master/core/errors';
+import {AGENT_RUN_RESOLVE_KEYS, AgentProjectResolver} from '@novel-master/core/agent';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from './model-display-label';
@@ -56,12 +56,12 @@ export async function loadChatAgentMeta(runtime: MobileNovelMasterRuntime, proje
     // rethrow）时，本路在途的拒绝不会变成 unhandled rejection；
     // 真正的错误仍在下方 await 按原语义抛出。
     sessionConfigPromise.catch(() => undefined);
-    const resolved = await resolveAgentForProject(runtime, projectId, sessionId);
+    const resolved = await AgentProjectResolver.resolve(runtime, projectId, sessionId);
     if (!resolved.ok) {
       // 归一口径与下方 catch 同款（错误通道迁移四期：不再借 throw 进 catch）：
       // RESOLVE_KEYS 内的 agent 解析失败收成待重选 none meta，其余已知失败
       // 沿 Result.err 接力给调用方（两个调用方对 !ok 与未知异常同终端）。
-      if (isAppError(resolved.error) && AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
+      if (AppErrorOps.is(resolved.error) && AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
         return Result.ok({
           source: 'none',
           agentId: undefined,
@@ -105,7 +105,7 @@ export async function loadChatAgentMeta(runtime: MobileNovelMasterRuntime, proje
     // 归一为 source='none' 的待重选 meta；其它失败走 Err / 未知异常原样
     // reject，由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充
     // 「已被删除」。
-    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
+    if (AppErrorOps.is(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
       return Result.ok({
         source: 'none',
         agentId: undefined,
@@ -153,6 +153,7 @@ export function isAgentLocked(meta: ChatAgentMeta | undefined): boolean {
  *
  * 该态下智能体卡不锁定：可点击弹 picker，选中存在的智能体后悬空解除。
  */
+// nm-style: keep-public — chat-agent-meta.test.ts 直接 import 断言；session-detail-screen 两测试经它渲染分支
 export function isAgentDeleted(meta: ChatAgentMeta | undefined): boolean {
   return meta != null && meta.source === 'none';
 }

@@ -1,5 +1,5 @@
 import {Platform} from 'react-native';
-import {zipBaseNameFromPath} from '@novel-master/core/vfs';
+import {VfsZipPath} from '@novel-master/core/vfs';
 import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
 
 const mockExport = jest.fn();
@@ -13,7 +13,6 @@ const mockReadFile = jest.fn();
 const mockExists = jest.fn();
 const mockStat = jest.fn();
 const mockUnlink = jest.fn();
-const mockParseVfsZip = jest.fn();
 const mockProjectsGet = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
@@ -22,7 +21,6 @@ jest.mock('@novel-master/core/vfs', () => ({
     createZipIo: (...args: unknown[]) =>
       mockCreateVfsZipIoService(...args),
   },
-  parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
@@ -90,7 +88,6 @@ describe('vfs-zip.service', () => {
     mockExists.mockReset();
     mockStat.mockReset();
     mockUnlink.mockReset();
-    mockParseVfsZip.mockReset();
     // 错误通道迁移二期后 projects.get 走 Result（服务侧 `!ok` 即 throw → 回退 workspace.zip）。
     mockProjectsGet
       .mockReset()
@@ -106,7 +103,6 @@ describe('vfs-zip.service', () => {
     mockWriteFile.mockResolvedValue(undefined);
     mockStat.mockResolvedValue({size: 5});
     mockUnlink.mockResolvedValue(undefined);
-    mockParseVfsZip.mockReturnValue(new Map([['a.md', new Uint8Array([97])]]));
     mockKeepLocalCopy.mockResolvedValue([
       {
         status: 'success',
@@ -275,15 +271,15 @@ describe('vfs-zip.service', () => {
     );
   });
 
-  it('zipBaseNameFromPath：根→null，子目录→末段，文件→文件名', () => {
-    expect(zipBaseNameFromPath('/')).toBeNull();
-    expect(zipBaseNameFromPath('')).toBeNull();
-    expect(zipBaseNameFromPath('/设定集')).toBe('设定集');
-    expect(zipBaseNameFromPath('/设定集/大纲')).toBe('大纲');
+  it('VfsZipPath.baseNameFromPath：根→null，子目录→末段，文件→文件名', () => {
+    expect(VfsZipPath.baseNameFromPath('/')).toBeNull();
+    expect(VfsZipPath.baseNameFromPath('')).toBeNull();
+    expect(VfsZipPath.baseNameFromPath('/设定集')).toBe('设定集');
+    expect(VfsZipPath.baseNameFromPath('/设定集/大纲')).toBe('大纲');
     // 文件目标口径：末段即文件名，追加 .zip
-    expect(zipBaseNameFromPath('/notes/资料.md')).toBe('资料.md');
+    expect(VfsZipPath.baseNameFromPath('/notes/资料.md')).toBe('资料.md');
     // 尾斜杠归一化到目录名
-    expect(zipBaseNameFromPath('/设定集/')).toBe('设定集');
+    expect(VfsZipPath.baseNameFromPath('/设定集/')).toBe('设定集');
   });
 
   it('skips import when picker cancelled', async () => {

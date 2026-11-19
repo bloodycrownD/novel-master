@@ -16,7 +16,7 @@ export type {
 export type { LlmProtocolKind } from "@novel-master/core/llm-protocol";
 export type { TokenizerOverride } from "@novel-master/core/tokenizer";
 
-export { mergeSamplingWithDefaults } from "@novel-master/core/provider";
+export { ProtocolSamplingDefaults } from "@novel-master/core/provider";
 export { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/tokenizer";
 
 export const THINKING_LEVEL_SELECT_OPTIONS = CORE_THINKING_LEVEL_OPTIONS.map((option) => ({ ...option, label: coreT(option.label) }));

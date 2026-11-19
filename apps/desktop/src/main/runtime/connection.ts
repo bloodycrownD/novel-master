@@ -5,7 +5,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
-import { bootstrapNovelMaster, open, registerZlibCodecAccelerator, type TdbcConnection } from "@novel-master/core";
+import { NovelMasterBootstrap, TdbcOpen, ZlibAccelerator, type TdbcConnection } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
 import { registerPlatformSkspDriver } from "./register-platform-drivers.js";
@@ -35,13 +35,13 @@ export async function getDesktopConnection(): Promise<TdbcConnection> {
         // 由 desktop main（唯一跑解压的进程；renderer 不引 core 解压路径）注册。
         // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给
         // 将来 level 透传预留的；保持它是因为加速器契约里 level 是可选形参。
-        registerZlibCodecAccelerator({ deflate: (data, level) => (level === undefined ? deflateSync(data) : deflateSync(data, { level })), inflate: (data) => inflateSync(data) });
+        ZlibAccelerator.register({ deflate: (data, level) => (level === undefined ? deflateSync(data) : deflateSync(data, { level })), inflate: (data) => inflateSync(data) });
         registered = true;
       }
       const dbPath = resolve(resolveDbPath());
       await mkdir(dirname(dbPath), { recursive: true });
-      const c = await open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
-      await bootstrapNovelMaster(c);
+      const c = await TdbcOpen.open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
+      await NovelMasterBootstrap.bootstrap(c);
       conn = c;
       return c;
     })();

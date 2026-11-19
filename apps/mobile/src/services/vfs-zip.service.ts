@@ -10,9 +10,8 @@ import {types} from '@react-native-documents/picker';
 import {AppError} from '@novel-master/core/errors';
 import {
   VfsServiceFactory,
-  assertZipArchive,
-  resolveZipDirectoryPath,
-  zipBaseNameFromPath,
+  VfsZipArchive,
+  VfsZipPath,
   type VfsScope,
   type VfsZipImportOptions,
 } from '@novel-master/core/vfs';
@@ -54,25 +53,24 @@ type ExportVfsZipOptions = {
 };
 
 export async function exportVfsZip(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: ExportVfsZipOptions = {}): Promise<Result<'saved' | 'cancelled', AppError>> {
-  const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+  const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
   const directoryPath = directoryPathResult.value;
   const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
   const exported = await zipSvc.export(scope, {directoryPath});
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
-  const archiveCheck = assertZipArchive(bytes, 'complete');
+  const archiveCheck = VfsZipArchive.assert(bytes, 'complete');
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
 
-  const base = zipBaseNameFromPath(directoryPath);
+  const base = VfsZipPath.baseNameFromPath(directoryPath);
   const zipName = options.fileName ?? (base != null ? `${base}.zip` : await resolveWorkspaceZipName(runtime, scope));
 
-  const exportResult = await exportBytesViaDocumentPicker({
+  return Result.ok(await exportBytesViaDocumentPicker({
     fileName: zipName,
     mimeType: 'application/zip',
     write: tmpPath => blobFs().writeFile(tmpPath, Encoding.bytesToBase64(bytes), 'base64'),
-  });
-  return Result.ok(exportResult);
+  }));
 }
 
 /** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null（`Result.ok(null)`）。 */
@@ -87,7 +85,7 @@ export async function pickZipFileBytes(): Promise<Result<Uint8Array | null, AppE
   if (bytes == null) {
     return Result.ok(null);
   }
-  const archiveCheck = assertZipArchive(bytes, 'complete');
+  const archiveCheck = VfsZipArchive.assert(bytes, 'complete');
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
   return Result.ok(bytes);
 }
@@ -96,6 +94,7 @@ type ImportVfsZipOptions = Pick<VfsZipImportOptions, 'confirmed'> & {
   readonly directoryPath?: string;
 };
 
+// nm-style: keep-public — vfs-zip.service.test.ts 多用例直接 import 断言；4 个 file-manager 集成测试 mock 模块接缝，测试锁名
 export async function importVfsZip(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: ImportVfsZipOptions): Promise<Result<void, AppError>> {
   const picked = await pickZipFileBytes();
   if (!picked.ok) return Result.err(picked.error);
@@ -104,7 +103,7 @@ export async function importVfsZip(runtime: MobileNovelMasterRuntime, scope: Vfs
   }
   const zipBytes = picked.value;
 
-  const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+  const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
   const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
   return zipSvc.import(scope, zipBytes, {

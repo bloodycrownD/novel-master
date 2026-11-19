@@ -10,7 +10,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import {BUILTIN_SKILL_NAMES, validateSkillName, type SkillDomain} from '@novel-master/core/skills';
+import {BUILTIN_SKILL_NAMES, SkillName, type SkillDomain} from '@novel-master/core/skills';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -61,8 +61,8 @@ export function SkillInfoEditModal({visible, target, currentDescription, onClose
   const trimmedDesc = description.trim();
   const nameChanged = !builtin && trimmedName !== target.name;
   const descChanged = trimmedDesc !== (currentDescription ?? '');
-  // validateSkillName 的 descriptor 经 coreT 渲染成 string（nameIssue 只做展示与空判定）
-  const nameReason = nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
+  // SkillName.validate 的 descriptor 经 coreT 渲染成 string（nameIssue 只做展示与空判定）
+  const nameReason = nameChanged && name.length > 0 ? SkillName.validate(trimmedName) : null;
   const nameIssue = nameReason == null ? null : coreT(nameReason);
   const canSubmit = (nameChanged || descChanged) && nameIssue == null && name.length > 0 && !saving;
 

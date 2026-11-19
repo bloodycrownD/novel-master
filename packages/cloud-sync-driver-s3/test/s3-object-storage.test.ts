@@ -7,7 +7,7 @@ import {
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
-import { isAppError } from "@novel-master/core/errors";
+import { AppErrorOps } from "@novel-master/core/errors";
 import { createS3ObjectStorage, isAliyunOssEndpoint } from "../src/create-s3-object-storage.js";
 import type { S3StorageConfig } from "../src/s3-config.js";
 
@@ -116,7 +116,7 @@ describe("createS3ObjectStorage", () => {
     // 错误通道迁移五期 + 三期：失败走 Result 通道，收敛为 AppError + 码表 key。
     assert.ok(!result.ok, "If-Match 冲突应走 Err 通道");
     if (!result.ok) {
-      assert.ok(isAppError(result.error, "CLOUD_SYNC_LOCK_CONTENTION"));
+      assert.ok(AppErrorOps.is(result.error, "CLOUD_SYNC_LOCK_CONTENTION"));
     }
   });
 
@@ -173,7 +173,7 @@ describe("createS3ObjectStorage", () => {
     // 错误通道迁移五期 + 三期：失败走 Result 通道，收敛为 AppError + 码表 key。
     assert.ok(!result.ok, "If-Match 不一致应走 Err 通道");
     if (!result.ok) {
-      assert.ok(isAppError(result.error, "CLOUD_SYNC_LOCK_CONTENTION"));
+      assert.ok(AppErrorOps.is(result.error, "CLOUD_SYNC_LOCK_CONTENTION"));
     }
     assert.equal(putCalls, 0);
   });

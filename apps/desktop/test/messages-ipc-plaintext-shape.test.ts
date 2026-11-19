@@ -17,7 +17,7 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { handleMessagesList } from "../src/main/ipc/handlers/messages.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
@@ -102,8 +102,8 @@ describe("messages 列表 DTO 恒为明文（T-MP-P0b）", () => {
     const secondBody = `第二条正文 · ${"逐字节等值校验。".repeat(40)}`;
 
     // 两条明文行：走生产写路径（append）。
-    await rt.messages.append(sessionId, "user", textBlocks(firstBody));
-    await rt.messages.append(sessionId, "assistant", textBlocks(secondBody));
+    await rt.messages.append(sessionId, "user", TextBlocks.of(firstBody));
+    await rt.messages.append(sessionId, "assistant", TextBlocks.of(secondBody));
 
     const res = await handleMessagesList({ sessionId });
     assert.equal(

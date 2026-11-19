@@ -1,7 +1,7 @@
 /**
  * 消息附件组：样式对齐 ToolCallGroupCard（可折叠 summary + 卡片列表）。
  */
-import { formatStatusChipLabelFromAttachment } from '@shared/logic/chat';
+import { AttachmentChip } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 type MessageAttachmentGroupCardProps = {
@@ -21,15 +21,16 @@ function sourceLabel(a: MessageAttachmentDto): string {
 
 /**
  * 消息气泡附件文案（与 Composer 状态 chip 同口径）：
- * - workplace / user_ops / annotate → Core `formatStatusChipLabelFromAttachment`
+ * - workplace / user_ops / annotate → Core `AttachmentChip.formatStatusLabelFromAttachment`
  * - attach → `@${path}`（不进状态 chip，气泡仍可展示）
  */
+// nm-style: keep-local — message-attachment-group-card.test 直引断言气泡文案口径（6 个调用点）；内联会破坏测试锁名。
 export function formatMessageAttachmentLabel(a: MessageAttachmentDto): string {
   if (a.source === 'attach') {
     const path = a.path ?? a.name;
     return path.startsWith('@') ? path : `@${path}`;
   }
-  return formatStatusChipLabelFromAttachment(a);
+  return AttachmentChip.formatStatusLabelFromAttachment(a);
 }
 
 export function MessageAttachmentGroupCard({

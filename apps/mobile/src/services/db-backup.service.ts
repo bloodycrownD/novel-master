@@ -12,11 +12,10 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {assertSqliteBackupHeader, DatabaseReplacedError, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, ProviderTableSnapshotIo} from '@novel-master/core';
+import {DatabaseBackupExport, DatabaseReplacedError, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen} from '@novel-master/core';
 import {AppError} from '@novel-master/core/errors';
-import {type Interrupt} from '@novel-master/core/errors';
-import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
-import {Result} from '@novel-master/core/errors';
+import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
+import {Result, type Interrupt} from '@novel-master/core/errors';
 import {checkpointMobileDatabase, closeMobileConnection, getMobileConnection, registerMobileOpSqliteDriver} from '../db/connection';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {agentActivity} from '../runtime/agent-activity';
@@ -50,7 +49,7 @@ function errorDetail(error: unknown): string {
 
 /**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商表），无分享对话框。
- * 调用方负责 Agent 守卫与目标路径管理；共享链路在 core（{@link exportDatabaseBackupToPathCore}），
+ * 调用方负责 Agent 守卫与目标路径管理；共享链路在 core（{@link DatabaseBackupExport.toPath}），
  * 本壳只保留 mobile 的 busy 计数与平台注入点（异步路径解析 / blobFs.cp）。
  *
  * busy 互斥在此底层置位（计数/令牌配对）：云同步等直调路径不经上层包装
@@ -59,7 +58,7 @@ function errorDetail(error: unknown): string {
 export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
   maintenanceBusy.acquire();
   try {
-    await exportDatabaseBackupToPathCore(runtime.conn, destPath, {checkpointDatabase: checkpointMobileDatabase, resolveDbPath: resolveMobileDatabaseFilePath, copyFile: async (from, to) => { await blobFs().cp(from, to); }}, checkpoint);
+    await DatabaseBackupExport.toPath(runtime.conn, destPath, {checkpointDatabase: checkpointMobileDatabase, resolveDbPath: resolveMobileDatabaseFilePath, copyFile: async (from, to) => { await blobFs().cp(from, to); }}, checkpoint);
   } finally {
     maintenanceBusy.release();
   }
@@ -115,7 +114,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
       // 无参的 registerOpSqliteDriver() 会把带后台探测的版本覆盖掉。
       // 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
       registerMobileOpSqliteDriver();
-      const restoreConn = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
+      const restoreConn = await TdbcOpen.open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
       try {
         await ProviderTableSnapshotIo.restore(restoreConn, providerSnapshot);
       } finally {
@@ -155,9 +154,10 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
  * busy 互斥由内部 `importDatabaseBackupFromPath` 的底层 acquire/release
  * 覆盖（含落盘窗口），本函数无需再叠加。
  */
+// nm-style: keep-public — db-backup.service.test.ts / cloud-sync.service.test.ts 直接 import 断言（pull 链路集成），测试锁名
 export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<Result<DbImportOutcome, AppError>> {
   // 内存态校验（魔数 + 体积，与 desktop 同源）：失败沿 Result.err（与 FromPath 同口径）。
-  const checked = assertSqliteBackupHeader(bytes);
+  const checked = SqliteBackupHeader.assert(bytes);
   if (!checked.ok) return Result.err(checked.error);
 
   const fs = blobFs();
@@ -186,6 +186,7 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
  * 导出全量应用数据库为可分享的 `.nmbackup` 文件（副本不含服务商表）。
  * @returns `'saved'` 用户完成分享；`'cancelled'` 用户取消选择器。
  */
+// nm-style: keep-public — db-backup.service.test.ts 直接 import 断言；storage-config-cancel 测试经它驱动
 export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): Promise<Result<'saved' | 'cancelled', AppError>> {
   if (agentActivity.isActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'}));
@@ -193,11 +194,11 @@ export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): P
 
   // 任务级取消 scope（spec §五移动表：backup("local")，入口 + copyFile 前）。
   // 取消只抛出 AbortError（T-S16 边界形态）；选择器自身取消仍是 Result.ok('cancelled')。
-  const abortScope = createAbortScope();
+  const abortScope = AbortScopeFactory.create();
   runtime.abortRegistry.register(ABORT_KEY.backup('local'), abortScope);
   try {
     if (abortScope.checkpoint() != null) {
-      throw createAbortError();
+      throw AbortError.create();
     }
     // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
     // 互斥——底层 exportDatabaseBackupToPath 内部另有一层自平衡的
@@ -233,11 +234,11 @@ export async function importDatabaseBackup(runtime: MobileNovelMasterRuntime, on
 
   // 任务级取消 scope（spec §五移动表：backup("local")，**仅入口**）。
   // `close → cp → restore` 整段不可中断，禁止 race 早 settle。
-  const abortScope = createAbortScope();
+  const abortScope = AbortScopeFactory.create();
   runtime.abortRegistry.register(ABORT_KEY.backup('local'), abortScope);
   try {
     if (abortScope.checkpoint() != null) {
-      throw createAbortError();
+      throw AbortError.create();
     }
     // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整
     // 链路纳入互斥——底层 importDatabaseBackupFromPath 内部的

@@ -28,21 +28,20 @@
 import { app } from "electron";
 import { ChatPromptBuildBailedError } from "@novel-master/core";
 import type { ChatMessageData } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { MessageBodyText } from "@novel-master/core/prompt";
 import { type AppError } from "@novel-master/core/errors";
-import { Result } from "@novel-master/core/errors";
+import { Result, type Interrupt } from "@novel-master/core/errors";
 import { TokenFormat } from "@novel-master/core/common";
 
-import { resolveTokenCounterModeForModel } from "@novel-master/core/provider";
+import { TokenCounterMode } from "@novel-master/core/provider";
 import {
-  countPromptLlmInputHeuristicOnly,
-  resolvePromptTokensWithBackfill,
+  PromptLlmInputCount,
+  PromptTokens,
   serializePromptLlmInput,
   type TokenCounterRegistry,
 } from "@novel-master/core/tokenizer";
-import { type Interrupt } from "@novel-master/core/errors";
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import { PromptChatTokenUpdatedForwarder } from "../ipc/forward-prompt-chat-token-updated.js";
 import { isDesktopSessionRunInFlight, setRunFinishedTokenStatsRefresh } from "../ipc/handlers/agent.js";
@@ -50,7 +49,7 @@ import { getDesktopRuntimeOrThrow } from "../runtime/desktop-runtime-singleton.j
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { buildSessionPromptInputAdapter, type SessionPromptInputBundle, type SessionPromptScope } from "./session-prompt-input.service.js";
 
-const log = createLogger("desktop.chat-prompt-tokens");
+const log = LogFactory.create("desktop.chat-prompt-tokens");
 
 /**
  * chip 读口中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError，
@@ -100,10 +99,11 @@ function countFallbackTokens(runtime: DesktopNovelMasterRuntime, serialized: str
  * 而**编译期零告警**。所以这里必须**逐个显式转发**。
  *
  * ⚠️ **别把这层当过度防御删掉**：今天没炸，只因 core 的
- * `countPromptLlmInputHeuristicOnly` 恰好**只读 `registry.heuristic`**、没碰另外两个方法；
+ * `PromptLlmInputCount.countHeuristicOnly` 恰好**只读 `registry.heuristic`**、没碰另外两个方法；
  * 一旦 core 那条兜底开始调 `forVendorModel(...)`，这里就会抛
  * `forVendorModel is not a function`——而这是 desktop 的**最后一道兜底**，抛错就没有下一层了。
  */
+// nm-style: keep-local — chat-prompt-tokens.test 直引断言兜底计数器装配形态；内联会破坏测试锁名。
 export function withRealFallbackCounter(runtime: DesktopNovelMasterRuntime): TokenCounterRegistry {
   const base = runtime.tokenCounters;
   return {
@@ -113,7 +113,7 @@ export function withRealFallbackCounter(runtime: DesktopNovelMasterRuntime): Tok
     forSavedModel: (id, o) => base.forSavedModel(id, o),
     forVendorModel: (id, o) => base.forVendorModel(id, o),
     // 把 countFallbackTokens 包成 `TokenCounter` 适配器：core 的
-    // `countPromptLlmInputHeuristicOnly`（异常兜底路径）只认 `registry.heuristic`
+    // `PromptLlmInputCount.countHeuristicOnly`（异常兜底路径）只认 `registry.heuristic`
     // 这个**同步 port**，而 core 本身不该依赖任何分词器实现。读数口径变真，
     // 其余行为（counterKind 仍为 `heuristic`、`estimated: true`）完全不变。
     heuristic: {
@@ -123,7 +123,7 @@ export function withRealFallbackCounter(runtime: DesktopNovelMasterRuntime): Tok
       countText: (text: string) => countFallbackTokens(runtime, text),
       // 拼成一整串再计数：按消息逐条计数会丢掉相邻消息之间的合并，拼接口径与
       // 序列化提示词时「合成一串再数」一致。
-      countMessages: (messages: readonly ChatMessageData[]) => countFallbackTokens(runtime, messages.map((m) => messageBodyTextFromBlocks(m.content.blocks)).join("\n\n")),
+      countMessages: (messages: readonly ChatMessageData[]) => countFallbackTokens(runtime, messages.map((m) => MessageBodyText.fromBlocks(m.content.blocks)).join("\n\n")),
     },
   };
 }
@@ -180,7 +180,7 @@ async function computeChatPromptTokenStats(runtime: DesktopNovelMasterRuntime, s
 
   // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
   // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
-  // getSessionAgentConfig、模型解析、resolveTokenCounterModeForModel 三次
+  // getSessionAgentConfig、模型解析、TokenCounterMode.resolveForModel 三次
   // IO——run 起步的窗口正落在这里。命中即由上层 catch 收成 null 哨兵（保留旧标签），
   // 绝不放行到 resolve。
   if (shouldBail?.() === true) {
@@ -370,7 +370,7 @@ async function loadChatPromptTokenStatsNow(runtime: DesktopNovelMasterRuntime, s
     // savedModels 三件套）：首帧 resolve 与紧随其后的后台暖机**复用同一份 params**
     // （暖机不重新组装）——口径漂移（比如漏传 `tokenizerOverride`）会让 L1 写入的
     // scope 键对不上，暖过的缓存没人命中，升级推送「偶发失效」。
-    const mode = await resolveTokenCounterModeForModel(runtime.providerModels, savedModelId);
+    const mode = await TokenCounterMode.resolveForModel(runtime.providerModels, savedModelId);
     // 已知失败沿 Result 上行（错误通道迁移七期），由 countFn 的 Result 通道收口。
     if (!mode.ok) return Result.err(mode.error);
     const params = { layout, ctx, savedModelId, registry: runtime.tokenCounters, tokenizerOverride: mode.value, savedModels: runtime.savedModelRepo };
@@ -378,7 +378,7 @@ async function loadChatPromptTokenStatsNow(runtime: DesktopNovelMasterRuntime, s
     // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
     // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
     // 与压缩评估同一读口、同一口径。
-    const outcome = await resolvePromptTokensWithBackfill(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: bailInterrupt });
+    const outcome = await PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: bailInterrupt });
     if (outcome.kind === "failed") {
       // core 读口的已知失败（现无产出路径）：沿 Result 上行（错误通道迁移
       // 四期），不吞成弃权，由 resilient 收口降级。
@@ -401,7 +401,7 @@ async function loadChatPromptTokenStatsNow(runtime: DesktopNovelMasterRuntime, s
       !shouldBail()
     ) {
       readWarmInflight.add(scope.sessionId);
-      void resolvePromptTokensWithBackfill(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: bailInterrupt })
+      void PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: bailInterrupt })
         .then(async (precise) => {
           if (precise.kind !== "completed") {
             // 中途弃权（run 起步，错误通道迁移二期沿返回值到达）：没有更
@@ -575,7 +575,7 @@ export function chatPromptTokenDebounceExecCountForTests(sessionId: string): num
 /**
  * 异常兜底：主路径（真 tokenizer / API 占用）抛异常时的降级读数。
  *
- * 仍然用 core 的 `countPromptLlmInputHeuristicOnly`（序列化 + 家族解析口径不重复
+ * 仍然用 core 的 `PromptLlmInputCount.countHeuristicOnly`（序列化 + 家族解析口径不重复
  * 造轮子），但传入的 registry 里的 `heuristic` 计数器已换成**真 cl100k 适配器**，
  * 所以这条路径的读数也不再是字符折算。
  */
@@ -584,7 +584,7 @@ async function loadChatPromptTokenStatsFallback(runtime: DesktopNovelMasterRunti
   // （与旧链路「fallback 再抛 → handler catch」同一终点、同一载荷）。
   return computeChatPromptTokenStats(runtime, scope, async (args) => {
     const { layout, ctx, savedModelId } = args;
-    const result = await countPromptLlmInputHeuristicOnly({ layout, ctx, savedModelId, registry: withRealFallbackCounter(runtime), savedModels: runtime.savedModelRepo });
+    const result = await PromptLlmInputCount.countHeuristicOnly({ layout, ctx, savedModelId, registry: withRealFallbackCounter(runtime), savedModels: runtime.savedModelRepo });
     if (!result.ok) return Result.err(result.error);
 
     // contextWindow 读失败（已知失败）按缺省收（错误通道迁移七期，与旧
@@ -610,6 +610,7 @@ async function loadChatPromptTokenStatsFallback(runtime: DesktopNovelMasterRunti
  * ——弃权错误一旦漏到这里，不仅没省下任何算力，还白跑一次全量装配。所以先判哨兵
  * 错误直接回 null（保留旧标签），只有真异常才降级。与 mobile 侧同款防陷阱注释。
  */
+// nm-style: keep-local — chat-prompt-tokens-run-suppression.test 直引断言降级读数（3 个调用点）；内联会破坏测试锁名。
 export async function loadChatPromptTokenStatsResilient(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
   try {
     const r = await loadChatPromptTokenStats(runtime, scope);

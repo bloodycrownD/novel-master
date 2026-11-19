@@ -16,18 +16,15 @@
  */
 import {
   CHARACTERS_PER_TOKEN_RATIO,
-  buildCounterScope,
-  chunkHash16,
-  countTextWithIncrementalTokenizer,
-  resolveTokenizerFamily,
-  mapVendorModelIdToTiktokenModel,
+  ChunkSplitter,
+  OpenAiStyleMessageCount,
   promptWholeCache,
   serializePromptLlmInput,
-  serializeToolsForTokenCount,
-  splitTextIntoChunks,
+  TokenChunkCache,
+  TokenCountTools,
+  TokenizerFamilyResolver,
+  TokenizerTextCount,
   tokenChunkCache,
-  countOpenAiStyleMessages,
-  wrapSerializedPromptAsSystemMessage,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
   type TokenCounterKind,
@@ -145,8 +142,8 @@ function probeLog(message: string): void {
  */
 function countChunksWithL2({ text, scope, encodeText, probe }: ChunkCountArgs): number {
   let total = 0;
-  for (const chunk of splitTextIntoChunks(text)) {
-    const hash = chunkHash16(chunk);
+  for (const chunk of ChunkSplitter.splitText(text)) {
+    const hash = TokenChunkCache.chunkHash16(chunk);
     if (probe != null) {
       probe.chunkTotal += 1;
     }
@@ -158,7 +155,7 @@ function countChunksWithL2({ text, scope, encodeText, probe }: ChunkCountArgs): 
     if (probe != null) {
       probe.chunkMisses += 1;
     }
-    const count = countTextWithIncrementalTokenizer(encodeText, chunk);
+    const count = TokenizerTextCount.count(encodeText, chunk);
     tokenChunkCache.record(hash, scope, count);
     total += count;
   }
@@ -240,7 +237,7 @@ function resolveRnEncodingName(id: string, model: string): RnEncodingOrNull {
     return null;
   }
   const direct = tryResolveEncodingName(trimmed);
-  if (direct === undefined && resolveTokenizerFamily(trimmed, "auto") === "tiktoken") {
+  if (direct === undefined && TokenizerFamilyResolver.resolve(trimmed, "auto") === "tiktoken") {
     const mapped = tryResolveEncodingName(model);
     if (mapped !== undefined) {
       return mapped;
@@ -263,7 +260,7 @@ function resolveEncoding(name: RnEncodingName): RnTokenEncoding | null {
 
 // nm-style: keep-local — 表源解析、overhead 公式与 L2 分块计数共享 encoding/probe，内联会拆散精确档三段回退和探针状态。
 async function countTiktoken({ serialized, vendorModelId, scope, probe }: CountTiktokenArgs): Promise<SerializedCountResult> {
-  const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
+  const tiktokenModel = TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(vendorModelId);
   const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
   // 取到的是共享单例句柄（impl/encoding-cache → registry）：绝不 free()，
   // 生命周期由缓存层统一持有。
@@ -285,8 +282,8 @@ async function countTiktoken({ serialized, vendorModelId, scope, probe }: CountT
     // perMessage + w(role) + tail，与 node 侧 tiktoken 精确档同一
     // 组装），content 部分按 splitTextIntoChunks 块求和过 L2。数值与整串
     // 口径差 ≤1%（T-TC5）。
-    const msg = wrapSerializedPromptAsSystemMessage("");
-    const overhead = countOpenAiStyleMessages(encoding, [msg], tiktokenModel);
+    const msg = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage("");
+    const overhead = OpenAiStyleMessageCount.count(encoding, [msg], tiktokenModel);
     const encodeText = (text: string) => encoding.encode(text).length;
     const chunks = countChunksWithL2({
       text: serialized,
@@ -322,7 +319,7 @@ async function countGptViaNative({ serialized, vendorModelId, sessionId, probe }
   if (!isNativeTokenizerAvailable()) {
     return null;
   }
-  const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
+  const tiktokenModel = TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(vendorModelId);
   const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
   if (encName == null) {
     return null;
@@ -339,8 +336,8 @@ async function countGptViaNative({ serialized, vendorModelId, sessionId, probe }
     // encode('system')=1 + tail，两条 parity 断言锁死）留作后续迭代。
     return null;
   }
-  const msg = wrapSerializedPromptAsSystemMessage("");
-  const overhead = countOpenAiStyleMessages(encoding, [msg], tiktokenModel);
+  const msg = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage("");
+  const overhead = OpenAiStyleMessageCount.count(encoding, [msg], tiktokenModel);
   try {
     // vendorModelId 槽在 gpt 档承载编码名（Kotlin 侧 family=="tiktoken" 时
     // 解释为编码名选词表，见 TokenizerModule.encodingNameFor）。
@@ -449,7 +446,7 @@ async function countSerializedImpl({ family, serialized, vendorModelId, chunkSco
   // L2 计数器身份：入口（countPromptLlmInputRn）会传入含 override 的完整
   // scope；直接调用（测试钩子）缺省时按 (模型, 家族, rn 驱动) 拼——两套键
   // 各自独立、语义一致，不会互串。
-  const defaultScope = buildCounterScope({
+  const defaultScope = TokenChunkCache.buildCounterScope({
     vendorModelId,
     tokenizerFamily: family,
     driverName: DRIVER_NAME,
@@ -598,7 +595,7 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
   if (override == null) {
     override = (await registry.getTokenizerOverride?.()) ?? "auto";
   }
-  const family = resolveTokenizerFamily(vendorModelId, override);
+  const family = TokenizerFamilyResolver.resolve(vendorModelId, override);
   // tools 段与提示词同串计数（空 tools 时拼接为恒等）：RN 侧同样交给
   // 原生 bridge / js-tiktoken / heuristic 处理同一个串，口径与 Node 端一致。
 
@@ -609,7 +606,7 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
   // sessionId 段的会话语义由读口层决定，驱动不越层。
   // （取消链路的 sessionId 是**另一条通路**：它不进缓存键，只随过桥请求
   // 下发给桥做 in-flight 登记与取消归属，见 countSerialized 第 5 位。）
-  const scope = buildCounterScope({
+  const scope = TokenChunkCache.buildCounterScope({
     vendorModelId,
     tokenizerOverride: override,
     tokenizerFamily: family,
@@ -617,8 +614,8 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
   });
   const promptText = await serializePromptLlmInput(layout, ctx);
   if (!promptText.ok) return Result.err(promptText.error);
-  const serialized = promptText.value + serializeToolsForTokenCount(params.tools);
-  const contentHash = chunkHash16(serialized);
+  const serialized = promptText.value + TokenCountTools.serialize(params.tools);
+  const contentHash = TokenChunkCache.chunkHash16(serialized);
   const cached = promptWholeCache.lookup("", scope, contentHash);
   if (cached != null) {
     return Result.ok({

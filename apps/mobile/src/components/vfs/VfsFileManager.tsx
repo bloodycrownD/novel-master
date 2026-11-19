@@ -15,7 +15,6 @@ import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
   isDirectChild,
-  dirRuleStateFromEnabled,
   mapVfsListEntry,
   mapWorktreeRow,
   parentLogicalPath,
@@ -27,7 +26,7 @@ import {
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 
-import {isAppError} from '@novel-master/core/errors';
+import {AppErrorOps} from '@novel-master/core/errors';
 import {Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
 import {formatVfsErrorForUser} from '../../errors/format-error';
@@ -508,7 +507,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           const renameOpts = useUserVfsTurn ? {skipComposerStatusRefresh: true as const} : undefined;
           const moveFailed = (err: unknown): void => {
             skipped += 1;
-            if (isAppError(err, 'VFS_ALREADY_EXISTS')) {
+            if (AppErrorOps.is(err, 'VFS_ALREADY_EXISTS')) {
               showToast('目标已存在同名项，已跳过');
             } else {
               showToast(toastMessage('移动失败', err));
@@ -552,7 +551,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           moved += 1;
         } catch (err) {
           skipped += 1;
-          if (isAppError(err, 'VFS_ALREADY_EXISTS')) {
+          if (AppErrorOps.is(err, 'VFS_ALREADY_EXISTS')) {
             showToast('目标已存在同名项，已跳过');
           } else {
             showToast(toastMessage('移动失败', err));
@@ -668,7 +667,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           }
           const nextEnabled = nextEnabledResult.value;
           showToast(nextEnabled ? '目录规则已开启' : '目录规则已关闭');
-          setWorktreeRows(prev => prev.map(row => (row.path === menuPath && row.kind === 'dir' ? {...row, ruleState: dirRuleStateFromEnabled(nextEnabled)} : row)));
+          setWorktreeRows(prev => prev.map(row => (row.path === menuPath && row.kind === 'dir' ? {...row, ruleState: nextEnabled ? 'rule_on' : 'rule_off'} : row)));
           setRows(prev => prev.map(row => (row.path === menuPath ? patchDirRuleRow(row, nextEnabled) : row)));
           // WHY: child file inclusion/display only changes inside the toggled dir.
           if (currentPath === menuPath || currentPath.startsWith(`${menuPath}/`)) {

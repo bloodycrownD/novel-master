@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAgentDefinitionFromForm, countEffectiveFormPromptSources, countFormPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistTextBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, withWorkplaceToggle } from "../../shared/config-forms/agent-editor-state.js";
 import { buildToolsPolicyFromSelection, toolsSelectionFromDefinition } from "../../shared/config-forms/agent-tool-catalog.js";
-import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, validateAgentPromptLayout } from "@novel-master/core/prompt";
+import { AgentPromptLayoutValidate, DEFAULT_WORKPLACE_ASSISTANT_TEXT } from "@novel-master/core/prompt";
 
 test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
   assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
@@ -1048,7 +1048,7 @@ test("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
   assert.equal(clearedThenOn.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 });
 
-test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
+test("layoutFromFormInput output passes AgentPromptLayoutValidate.validate", () => {
   const layout = layoutFromFormInput({
     systemEnabled: true,
     systemContent: "sys",
@@ -1062,7 +1062,7 @@ test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
       { name: "d2", type: "text", role: "user", content: "b" },
     ],
   });
-  const validated = validateAgentPromptLayout(layout);
+  const validated = AgentPromptLayoutValidate.validate(layout);
   assert.ok(validated.ok, validated.ok ? "" : validated.error.message);
 });
 

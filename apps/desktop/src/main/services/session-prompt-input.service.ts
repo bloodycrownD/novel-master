@@ -1,14 +1,13 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
+import { AgentProjectResolver, type AgentDefinition } from "@novel-master/core/agent";
 import { type AppError } from "@novel-master/core/errors";
 import { ChatPromptBuildBailedError } from "@novel-master/core";
-import { Result } from "@novel-master/core/errors";
+import { Result, type Interrupt } from "@novel-master/core/errors";
 import { promptAssembler } from "@novel-master/core/chat";
 import { PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
-import { type Interrupt } from "@novel-master/core/errors";
+import { WorkplaceDisplayAssembler } from "@novel-master/core/workplace";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
@@ -29,7 +28,7 @@ export interface SessionPromptInputBundle {
   readonly input: PromptLlmInput;
   /**
    * 可见消息列表（SQL 层已滤 hidden）：读口本地重算（
-   * `resolveCurrentPromptTokens`）直接消费，避免再开一次查询；resolve 侧
+   * `CurrentPromptTokens.resolve`）直接消费，避免再开一次查询；resolve 侧
    * 的回填参数已废弃，可见口径不影响任何消费方。
    */
   readonly rawMessages: readonly ChatMessageData[];
@@ -53,13 +52,13 @@ export async function buildSessionPromptInputAdapter(runtime: DesktopNovelMaster
     }
   };
 
-  // 错误通道迁移四期：resolveAgentForProject 沿 Result 回传，Err 直接并进本
+  // 错误通道迁移四期：AgentProjectResolver.resolve 沿 Result 回传，Err 直接并进本
   // 函数的 Result 通道（token 读口已有 resilient 降级、预览侧有 ipcErr 收口）。
   let resolved: AgentDefinition;
   if (definition != null) {
     resolved = definition;
   } else {
-    const resolvedAgent = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
+    const resolvedAgent = await AgentProjectResolver.resolve(runtime, scope.projectId, scope.sessionId);
     if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
     resolved = resolvedAgent.value.definition;
   }
@@ -91,7 +90,7 @@ export async function buildSessionPromptInputAdapter(runtime: DesktopNovelMaster
   // 重复序列化/计数。
   const workplaceArgs = { sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts };
   const assembleOptions = { checkpoint: (): Interrupt | null => (shouldBail?.() === true ? { kind: "replaced" } : null) };
-  const assembled = await assembleWorkplaceDisplay(wtScope, workplaceArgs, assembleOptions);
+  const assembled = await WorkplaceDisplayAssembler.assemble(wtScope, workplaceArgs, assembleOptions);
   if (assembled.kind === "failed") {
     // 组装内的已知失败（如路径解析）沿 Result 返回（错误通道迁移四期），
     // 不吞成弃权；收口在 token 读口的 resilient（err → fallback 降级）与

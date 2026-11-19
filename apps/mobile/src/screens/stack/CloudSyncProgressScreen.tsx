@@ -5,7 +5,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, BackHandler, StyleSheet, View} from 'react-native';
 import {type RouteProp, useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {isAbortLikeError} from '@novel-master/core/llm-protocol';
+import {RequestAbort} from '@novel-master/core/llm-protocol';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import {CloudSyncProgressPanel} from '@/components/chrome/CloudSyncProgressPanel';
 import {SecondaryButton} from '@/components/ui/Buttons';
@@ -18,7 +18,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {initialCloudSyncProgressUi, pullCloudSync, pushCloudSync, type CloudSyncProgressUiState} from '@/services/cloud-sync.service';
 import {mapCloudSyncProgressEvent} from '@/services/cloud-sync-progress-ui';
-import {isAppError} from '@novel-master/core/errors';
+import {AppErrorOps} from '@novel-master/core/errors';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Route = RouteProp<RootStackParamList, 'CloudSyncProgress'>;
@@ -114,7 +114,7 @@ export function CloudSyncProgressScreen() {
         if (!active) {
           return;
         }
-        if (isAbortLikeError(error)) {
+        if (RequestAbort.isAbortLikeError(error)) {
           // 取消是控制流信号，不是失败：进度走取消终态、按钮消失、不弹错误
           // 提示。service 已通过 onProgress 推过 *_cancelled；这里再兜一次，
           // 覆盖取消早于首帧进度回调的窗口。留在本页看终态，不自动返回。
@@ -124,7 +124,7 @@ export function CloudSyncProgressScreen() {
           setProgress(mapCloudSyncProgressEvent(op, `${op}_cancelled`) ?? initialCloudSyncProgressUi(op));
           return;
         }
-        if (op === 'push' && isAppError(error, 'CLOUD_SYNC_NEED_PULL_FIRST') && !forceOverwriteRemote) {
+        if (op === 'push' && AppErrorOps.is(error, 'CLOUD_SYNC_NEED_PULL_FIRST') && !forceOverwriteRemote) {
           runningRef.current = false;
           handleNeedPullFirst();
           return;

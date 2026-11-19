@@ -9,7 +9,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { open } from "@novel-master/core";
+import { TdbcOpen } from "@novel-master/core";
 import {
   registerBetterSqlite3Driver,
   BETTER_SQLITE3_DRIVER_NAME,
@@ -38,7 +38,7 @@ const SETUP_SQL: readonly string[] = [
 registerBetterSqlite3Driver();
 
 async function openConnection() {
-  return open("tdbc:sqlite:file::memory:", {
+  return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });

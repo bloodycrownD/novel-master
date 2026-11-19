@@ -7,7 +7,10 @@ import React, {useCallback, useState} from 'react';
 import {ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Switch, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {isBuiltinSmartSortRuleId, type SmartSortRule} from '@novel-master/core/smart-sort-rule';
+import {SmartSortRule} from '@novel-master/core/smart-sort-rule';
+import {SerializationParseText, SerializationStringifyText} from '@novel-master/core';
+import {Errors} from '@novel-master/core/common';
+import {Result} from '@novel-master/core/errors';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
@@ -22,7 +25,7 @@ import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
-import {exportSmartSortRuleYaml, importSmartSortRuleYaml} from '@/services/smart-sort-rule-yaml.service';
+import {exportYamlWithDialog, importYamlWithDialog} from '@/services/yaml-shared';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -148,7 +151,7 @@ export function SmartSortRulesScreen() {
 
   const runBatchDelete = useCallback(() => {
     const ids = Array.from(batch.selectedIds);
-    if (ids.some(id => isBuiltinSmartSortRuleId(id))) {
+    if (ids.some(id => SmartSortRule.isBuiltinId(id))) {
       showToast('内置规则不可删除，请取消勾选后再删除');
       return;
     }
@@ -185,17 +188,33 @@ export function SmartSortRulesScreen() {
             {
               text: '导入',
               onPress: () => {
-                importSmartSortRuleYaml(runtime)
+                // 替换式导入（spec D10）：schema/decode 单源在 core
+                // `smart-sort-rule-io`；存储/事务类故障原样上抛、其余照旧套
+                // 「YAML 无效」前缀——判据与前缀都在 core 的
+                // `Errors.normalizeSmartSortImport` 里（desktop 侧调同一个函数）。
+                let importedCount: number | null = null;
+                importYamlWithDialog(async yaml => {
+                  try {
+                    const raw = SerializationParseText.parse(yaml, 'yaml');
+                    const rules = await runtime.smartSortRule.importRules(raw);
+                    if (!rules.ok) return Result.err(Errors.normalizeSmartSortImport(rules.error));
+                    importedCount = rules.value.length;
+                    return Result.ok(undefined);
+                  } catch (error) {
+                    // 存储/事务类故障原样上抛、其余照旧套「YAML 无效」前缀——判据在 core。
+                    throw Errors.normalizeSmartSortImport(error);
+                  }
+                })
                   .then(async imported => {
                     if (!imported.ok) {
                       showToast(toastMessage('导入失败', imported.error));
                       return;
                     }
-                    if (imported.value == null) {
+                    if (importedCount == null) {
                       return;
                     }
                     await reload({silent: true});
-                    showToast(`已导入 ${imported.value} 条规则`);
+                    showToast(`已导入 ${importedCount} 条规则`);
                   })
                   .catch(error => showToast(toastMessage('导入失败', error)));
               },
@@ -203,7 +222,10 @@ export function SmartSortRulesScreen() {
           ]);
           break;
         case 'export':
-          exportSmartSortRuleYaml(runtime)
+          // YAML 导出（spec smart-filename-sort Step 13 / D10）；文本序列化单源在 core。
+          runtime.smartSortRule
+            .exportRules()
+            .then(doc => exportYamlWithDialog(SerializationStringifyText.stringify(doc, 'yaml'), 'smart-sort-rules.yaml'))
             .then(result => {
               if (result === 'saved') {
                 showToast('已导出规则');
@@ -244,7 +266,7 @@ export function SmartSortRulesScreen() {
       {label: '下移', action: 'down'},
       {label: '置底', action: 'bottom'},
       // 内置规则仅可禁用不可删除（spec D3）。
-      ...(isBuiltinSmartSortRuleId(menuRule.ruleId) ? [] : [{label: '删除', action: 'delete', danger: true}]),
+      ...(SmartSortRule.isBuiltinId(menuRule.ruleId) ? [] : [{label: '删除', action: 'delete', danger: true}]),
     ];
   }
 
@@ -301,7 +323,7 @@ export function SmartSortRulesScreen() {
                 )
               }
               title={item.name}
-              subtitle={`${isBuiltinSmartSortRuleId(item.ruleId) ? '内置 · ' : ''}${item.description ?? '—'}`}
+              subtitle={`${SmartSortRule.isBuiltinId(item.ruleId) ? '内置 · ' : ''}${item.description ?? '—'}`}
               onMenuPress={batch.active ? undefined : () => setMenuRule(item)}
               showChevron={!batch.active}
             />

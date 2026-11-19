@@ -5,7 +5,7 @@ import {
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
 } from '@/services/db-backup.service';
-import {createAbortRegistry} from '@novel-master/core/abort';
+import {AbortRegistryFactory} from '@novel-master/core/abort';
 import {maintenanceBusy} from '@/services/db-maintenance-busy';
 
 const mockCheckpoint = jest.fn();
@@ -37,19 +37,19 @@ const restoreConn = {close: mockRestoreConnClose};
 
 jest.mock('@novel-master/core', () => ({
   // 头校验是下沉 core 的纯函数：走真实实现，测试覆盖「拒绝非 SQLite 字节」的真实分支。
-  assertSqliteBackupHeader: jest.requireActual(
+  SqliteBackupHeader: jest.requireActual(
     '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js',
-  ).assertSqliteBackupHeader,
+  ).SqliteBackupHeader,
   // 导出链路已下沉 core：走真实实现（平台注入点仍由本测试的 mock 接管）。
-  exportDatabaseBackupToPath: jest.requireActual(
+  DatabaseBackupExport: jest.requireActual(
     '../../../packages/core/dist/infra/db-backup/export-database-backup.js',
-  ).exportDatabaseBackupToPath,
+  ).DatabaseBackupExport,
   ProviderTableSnapshotIo: {
     dump: (...args: unknown[]) => mockDumpSnapshot(...args),
     scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
     restore: (...args: unknown[]) => mockRestoreSnapshot(...args),
   },
-  open: (...args: unknown[]) => mockOpen(...args),
+  TdbcOpen: {open: (...args: unknown[]) => mockOpen(...args)},
 }));
 
 // core 导出实现按相对路径 import 本模块；mock 掉同一 dist 文件，让 scrub
@@ -117,7 +117,7 @@ const emptySnapshot = {
 describe('db-backup.service', () => {
   // signal-abort-scope Step 11：export/import 会建 scope 并登记 backup("local")，
   // 测试桩必须提供泛化 registry。
-  const runtime = {conn: liveConn, abortRegistry: createAbortRegistry()} as never;
+  const runtime = {conn: liveConn, abortRegistry: AbortRegistryFactory.create()} as never;
   const onRebootstrap = jest.fn();
 
   beforeEach(() => {

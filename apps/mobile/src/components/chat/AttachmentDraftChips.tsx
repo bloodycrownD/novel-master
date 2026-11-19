@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import {composerChips, type MessageAttachment} from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -18,11 +18,11 @@ type AttachmentDraftChipsProps = {
 };
 
 /**
- * Chip 文案：中文二字 + `:` + path（Core `formatStatusChipLabelFromAttachment`）。
+ * Chip 文案：中文二字 + `:` + path（Core `AttachmentChip.formatStatusLabelFromAttachment`）。
  */
-// nm-style: keep-public — chip 文案契约：core formatStatusChipLabelFromAttachment 的命名收口
+// nm-style: keep-public — chip 文案契约：core AttachmentChip.formatStatusLabelFromAttachment 的命名收口
 export function formatAttachmentChipLabel(a: MessageAttachment): string {
-  return formatStatusChipLabelFromAttachment(a);
+  return AttachmentChip.formatStatusLabelFromAttachment(a);
 }
 
 function AttachmentDraftChips({attachments, disabled, accessibilityLabel, transparentRow = false}: AttachmentDraftChipsProps) {

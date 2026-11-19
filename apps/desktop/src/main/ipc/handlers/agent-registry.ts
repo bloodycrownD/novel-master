@@ -1,10 +1,13 @@
 /**
  * Agent registry CRUD IPC handlers.
  */
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { BuiltinTools, ToolRegistry } from "@novel-master/core";
+import { AgentDefinitionValidator, AgentYamlCodec } from "@novel-master/core/agent";
+import { Errors } from "@novel-master/core/common";
+import { Result } from "@novel-master/core/errors";
 import type { TdbcConnection } from "@novel-master/core";
 import * as configForms from "../../../../shared/config-forms/agent.js";
-import { assessAgentDefinitionWire } from "@novel-master/core/stored-config-validity";
+import { AgentDefinitionWire } from "@novel-master/core/stored-config-validity";
 import type {
   AgentRegistryCreateBlankRequest,
   AgentRegistryDeleteRequest,
@@ -18,7 +21,7 @@ import type {
   IpcResult,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import * as yamlIo from "../../services/agent-yaml.service.js";
+import { exportYamlWithDialog, importYamlWithDialog } from "../../services/yaml-shared.js";
 import { formatIpcError } from "../ipc-error.js";
 import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
@@ -63,7 +66,7 @@ export async function handleAgentRegistryList(): Promise<
       if (raw == null) {
         continue;
       }
-      const health = assessAgentDefinitionWire(raw);
+      const health = AgentDefinitionWire.assess(raw);
       const fallback = readAgentNameFromWire(raw, agentId);
       const valid = health.status === "valid";
       const name = valid ? health.value.name?.trim() || agentId : fallback;
@@ -112,7 +115,7 @@ export async function handleAgentRegistryGet(req: AgentRegistryGetRequest): Prom
         },
       };
     }
-    const health = toStoredConfigHealthDto(assessAgentDefinitionWire(raw));
+    const health = toStoredConfigHealthDto(AgentDefinitionWire.assess(raw));
     return { ok: true, data: { ...health, wire: raw } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -126,7 +129,7 @@ export async function handleAgentRegistryUpsert(req: AgentRegistryUpsertRequest)
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
     const probe = new ToolRegistry();
-    registerBuiltinTools(probe);
+    BuiltinTools.register(probe);
     const def = req.definition as Parameters<typeof rt.agentRegistry.upsert>[1];
     const opts = { registeredToolNames: probe.list() };
     return toIpcResult(await rt.agentRegistry.upsert(req.agentId, def, opts));
@@ -142,7 +145,7 @@ export async function handleAgentRegistryUpdate(req: AgentRegistryUpdateRequest)
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
     const probe = new ToolRegistry();
-    registerBuiltinTools(probe);
+    BuiltinTools.register(probe);
     const patch = req.patch as Parameters<typeof rt.agentRegistry.update>[1];
     const opts = { registeredToolNames: probe.list() };
     const updated = await rt.agentRegistry.update(req.agentId, patch, opts);
@@ -175,7 +178,7 @@ export async function handleAgentRegistryCreateBlank(req?: AgentRegistryCreateBl
     const rt = built.value;
     const agentId = `agent-${Date.now()}`;
     const probe = new ToolRegistry();
-    registerBuiltinTools(probe);
+    BuiltinTools.register(probe);
     const defaultPrompts = configForms.createDefaultAgentEditorPrompts();
     const slots = [];
     for (const id of await rt.agentRegistry.listAgentIds()) {
@@ -184,7 +187,7 @@ export async function handleAgentRegistryCreateBlank(req?: AgentRegistryCreateBl
         slots.push({ id, name: id });
         continue;
       }
-      const health = assessAgentDefinitionWire(raw);
+      const health = AgentDefinitionWire.assess(raw);
       const fallback = readAgentNameFromWire(raw, id);
       const name = health.status === "valid" ? health.value.name : fallback;
       slots.push({ id, name });
@@ -212,8 +215,14 @@ export async function handleAgentYamlExport(req: AgentYamlExportRequest): Promis
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
-    const win = BrowserWindow.getFocusedWindow();
-    const result = await yamlIo.exportAgentYamlWithDialog(rt, req.agentId, win);
+    // 原 exportAgentYamlWithDialog 内联：导出调用方只有 throw 通道，registry
+    // 已知失败转 throw 由本 catch 收口。
+    const def = await rt.agentRegistry.get(req.agentId);
+    if (!def.ok) {
+      throw def.error;
+    }
+    const yaml = AgentYamlCodec.encode(def.value);
+    const result = await exportYamlWithDialog(yaml, `${req.agentId}.agent.yaml`, BrowserWindow.getFocusedWindow());
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -226,8 +235,29 @@ export async function handleAgentYamlImport(req: AgentYamlImportRequest): Promis
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
+    // 原 importAgentYamlWithDialog 内联：consume 回调与 mobile 同通道（Result），
+    // 已知失败过 Errors.normalizeYaml 贴标签回传。
+    // nm-style: keep-local — 具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参跨行（check-signatures ARGS），规则互斥（同 llm-sse-transport 先例）。
+    const importAgentFromYaml = async (yaml: string) => {
+      try {
+        const defR = AgentYamlCodec.decode(yaml);
+        if (!defR.ok) return Result.err(Errors.normalizeYaml(defR.error, "Agent YAML 无效"));
+        const def = defR.value;
+        const probe = new ToolRegistry();
+        BuiltinTools.register(probe);
+        const validation = await AgentDefinitionValidator.validate(def, { registeredToolNames: probe.list() });
+        if (!validation.ok) return Result.err(Errors.normalizeYaml(validation.error, "Agent YAML 无效"));
+        const saved = await rt.agentRegistry.upsert(req.agentId, def, { registeredToolNames: probe.list() });
+        if (!saved.ok) return Result.err(Errors.normalizeYaml(saved.error, "Agent YAML 无效"));
+        return Result.ok(undefined);
+      } catch (error) {
+        // registry/校验链的意外抛出同样贴标签后走 Result；已贴标签的产物不会二次进入本分支
+        // （本回调不再 throw 已知失败），故无需旧的「前缀已存在则放行」守卫。
+        return Result.err(Errors.normalizeYaml(error, "Agent YAML 无效"));
+      }
+    };
     const win = BrowserWindow.getFocusedWindow();
-    const result = await yamlIo.importAgentYamlWithDialog(rt, req.agentId, win);
+    const result = await importYamlWithDialog(importAgentFromYaml, win);
     // import 通道与 mobile 一致走 Result：已知失败就地转码，未知异常仍由 catch 兜。
     if (!result.ok) return { ok: false, error: formatIpcError(result.error) };
     return { ok: true, data: result.value };

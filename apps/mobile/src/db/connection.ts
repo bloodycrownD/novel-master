@@ -2,7 +2,7 @@
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
 import {AppState} from 'react-native';
-import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
+import {NovelMasterBootstrap, TdbcOpen, type TdbcConnection} from '@novel-master/core';
 import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
 import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
@@ -58,13 +58,13 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
       registerTokenizerRnDriver();
       let c: TdbcConnection;
       try {
-        c = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
+        c = await TdbcOpen.open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
       } catch (openErr: unknown) {
         logCauseChain('open', openErr);
         throw openErr;
       }
       try {
-        await bootstrapNovelMaster(c);
+        await NovelMasterBootstrap.bootstrap(c);
       } catch (bootErr: unknown) {
         logCauseChain('bootstrap', bootErr);
         // 此时 conn 还没赋值，closeMobileConnection() 里的 conn?.close()

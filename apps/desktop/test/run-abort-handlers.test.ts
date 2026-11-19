@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 import { afterEach, describe, it } from "node:test";
 
-import { ABORT_KEY, createAbortRegistry, createAbortScope, type AbortScope } from "@novel-master/core/abort";
+import { ABORT_KEY, AbortRegistryFactory, AbortScopeFactory, type AbortScope } from "@novel-master/core/abort";
 import { AppError, Result } from "@novel-master/core/errors";
 import { IPC_CHANNELS, type IpcChannel } from "../shared/ipc-types.js";
 
@@ -29,7 +29,7 @@ const { handleUsageStatsQuery, doUsageStatsQuery } = await import("../src/main/i
 const { handleProviderModelsFetch, doProviderModelsFetch } = await import("../src/main/ipc/handlers/provider-models.js");
 const { runAbortable } = await import("../src/main/ipc/run-scope.js");
 
-type AbortRegistryLike = ReturnType<typeof createAbortRegistry>;
+type AbortRegistryLike = ReturnType<typeof AbortRegistryFactory.create>;
 
 type StubRuntime = {
   abortRegistry: AbortRegistryLike;
@@ -50,7 +50,7 @@ const SUMMARY = {
 };
 
 function installRuntime(overrides: Partial<StubRuntime> = {}): StubRuntime {
-  const rt: StubRuntime = { abortRegistry: createAbortRegistry(), usageStats: {}, providerModels: {}, ...overrides };
+  const rt: StubRuntime = { abortRegistry: AbortRegistryFactory.create(), usageStats: {}, providerModels: {}, ...overrides };
   (globalThis as unknown as { __runAbortTestRuntime?: StubRuntime }).__runAbortTestRuntime = rt;
   return rt;
 }
@@ -72,7 +72,7 @@ function tick(): Promise<void> {
 }
 
 function abortedScope(): AbortScope {
-  const scope = createAbortScope();
+  const scope = AbortScopeFactory.create();
   scope.abort("user-stop");
   return scope;
 }
@@ -101,7 +101,7 @@ describe("nm:run/abort（T-S21）", () => {
 
   it("id 缺省 / 空串 / 不存在：静默 ok 且不取消任何任务", async () => {
     const rt = installRuntime();
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     rt.abortRegistry.register(ABORT_KEY.backup("r1"), scope);
 
     for (const req of [
@@ -116,7 +116,7 @@ describe("nm:run/abort（T-S21）", () => {
 
   it("合法 { kind, id } 取消对应 key（backup）", async () => {
     const rt = installRuntime();
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     rt.abortRegistry.register(ABORT_KEY.backup("r1"), scope);
 
     const res = await handleRunAbort({ kind: "backup", id: "r1" });
@@ -137,7 +137,7 @@ describe("nm:run/abort（T-S21）", () => {
       ["compaction", "x5", ABORT_KEY.compaction("x5")],
     ] as const;
     for (const [kind, id, key] of cases) {
-      const scope = createAbortScope();
+      const scope = AbortScopeFactory.create();
       rt.abortRegistry.register(key, scope);
       const res = await handleRunAbort({ kind, id });
       assert.equal(res.ok, true);
@@ -148,8 +148,8 @@ describe("nm:run/abort（T-S21）", () => {
 
   it("nm:agent/abort 转发别名：只取消 agent:<sessionId>，不碰裸 sessionId", async () => {
     const rt = installRuntime();
-    const agentScope = createAbortScope();
-    const bareScope = createAbortScope();
+    const agentScope = AbortScopeFactory.create();
+    const bareScope = AbortScopeFactory.create();
     rt.abortRegistry.register(ABORT_KEY.agent("s1"), agentScope);
     rt.abortRegistry.register("s1", bareScope);
 
@@ -162,7 +162,7 @@ describe("nm:run/abort（T-S21）", () => {
 
 describe("runAbortable 边界三分派（T-S15 骨架）", () => {
   it("completed → ipcOk；failed → formatIpcError；cancelled / replaced → IPC_ABORTED；finally 释放登记", async () => {
-    const registry = createAbortRegistry();
+    const registry = AbortRegistryFactory.create();
 
     const completed = await runAbortable({ registry, key: "k-completed" }, async () => ({ kind: "completed", value: 42 }));
     assert.deepEqual(completed, { ok: true, data: 42 });
@@ -188,7 +188,7 @@ describe("runAbortable 边界三分派（T-S15 骨架）", () => {
   });
 
   it("key 为 null（runId 缺省）：不触碰 registry，仍按 deadline 建 scope", async () => {
-    const registry = createAbortRegistry();
+    const registry = AbortRegistryFactory.create();
     const result = await runAbortable({ registry, key: null, timeoutMs: 60_000 }, async (scope) => {
       assert.ok(scope.deadlineAt != null);
       return { kind: "completed", value: "ok" };

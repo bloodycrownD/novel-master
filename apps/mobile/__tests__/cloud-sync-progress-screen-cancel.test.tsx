@@ -14,7 +14,7 @@ import {readFileSync} from 'fs';
 import {join} from 'path';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ABORT_KEY, createAbortError} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortError} from '@novel-master/core/abort';
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {CloudSyncProgressScreen} from '@/screens/stack/CloudSyncProgressScreen';
 
@@ -136,7 +136,7 @@ describe('CloudSyncProgressScreen 取消入口 — Step 14', () => {
 
     await act(async () => {
       onPress();
-      mockRejectRun?.(createAbortError());
+      mockRejectRun?.(AbortError.create());
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -162,7 +162,7 @@ describe('CloudSyncProgressScreen 取消入口 — Step 14', () => {
 
     await act(async () => {
       onPress();
-      mockRejectRun?.(createAbortError());
+      mockRejectRun?.(AbortError.create());
       await Promise.resolve();
       await Promise.resolve();
     });

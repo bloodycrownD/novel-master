@@ -128,7 +128,7 @@ export function AgentList({onCreate}: Props) {
         if (raw == null) {
           continue;
         }
-        const health = storedConfig.assessAgentDefinitionWire(raw);
+        const health = storedConfig.AgentDefinitionWire.assess(raw);
         if (health.status === 'valid') {
           const def = health.value;
           let meta: string;
@@ -155,7 +155,7 @@ export function AgentList({onCreate}: Props) {
             id,
             name: agentDisplayNameFromWire(raw, id),
             configInvalid: true,
-            meta: coreT(storedConfig.storedConfigInvalidReason(health.code)),
+            meta: coreT(storedConfig.StoredConfigLabels.invalidReason(health.code)),
           });
         }
       }

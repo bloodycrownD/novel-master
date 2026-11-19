@@ -117,7 +117,7 @@ import {
   TRANSCRIPT_READY_VERSION,
   transcriptCapabilitiesInclude,
 } from '@/web/chat-transcript/transcript-capabilities';
-import {createLogger} from '@novel-master/core/log';
+import {LogFactory} from '@novel-master/core/log';
 import {coreT} from '@/i18n/core';
 import {buildTranscriptLabels} from './transcript-labels';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
@@ -127,7 +127,7 @@ import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
 export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
-const log = createLogger('chat.transcript-host');
+const log = LogFactory.create('chat.transcript-host');
 
 /**
  * 宿主句柄 = 转录三命令（`ChatTranscriptWebViewHandle` 逐字复用，方法面不变）。

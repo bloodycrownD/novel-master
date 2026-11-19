@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { textBlocks, chatAnnotateDraftStore } from "@novel-master/core/chat";
+import { TextBlocks, chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { handleMessagesRollback } from "../src/main/ipc/handlers/messages.js";
@@ -66,7 +66,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     const appended = await rt.messages.append(
       sessionId,
       "user",
-      textBlocks("请看看"),
+      TextBlocks.of("请看看"),
       {
         attachments: [
           {
@@ -129,12 +129,12 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     const userMsg = await rt.messages.append(
       sessionId,
       "user",
-      textBlocks("问一下")
+      TextBlocks.of("问一下")
     );
     const assistantAppend = await rt.messages.append(
       sessionId,
       "assistant",
-      textBlocks("答一下")
+      TextBlocks.of("答一下")
     );
     if (!assistantAppend.ok) throw assistantAppend.error;
     const assistant = assistantAppend.value;

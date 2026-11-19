@@ -4,23 +4,23 @@
  * @module runtime/create-mobile-runtime
  */
 
-import {ABORT_KEY, createAbortRegistry, scopeFromController} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortRegistryFactory, AbortScopeFactory} from '@novel-master/core/abort';
 import {AgentServiceFactory, type AgentAbortRegistry} from '@novel-master/core/agent';
 import {CompactionFactory, type CompactionConditionEvaluator} from '@novel-master/core/compaction';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {ChatServiceFactory} from '@novel-master/core/chat';
-import {createPersistentPreferences, createPersistentState, createSearchConfigStore} from '@novel-master/core';
+import {createPersistentPreferences, PersistentStateFactory, SearchConfig} from '@novel-master/core';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
-import {createDefaultTokenCounterRegistry} from '@novel-master/core/tokenizer';
+import {DefaultTokenCounterRegistry} from '@novel-master/core/tokenizer';
 import {ProviderServiceFactory} from '@novel-master/core/provider';
-import {createSmartSortRuleService} from '@novel-master/core/smart-sort-rule';
+import {SmartSortRuleServiceFactory} from '@novel-master/core/smart-sort-rule';
 import {MessageCheckpointFactory} from '@novel-master/core/message-checkpoint';
-import {createSessionFsService} from '@novel-master/core/session-fs';
+import {SessionFsServiceFactory} from '@novel-master/core/session-fs';
 import {VfsServiceFactory, type VfsScope} from '@novel-master/core/vfs';
-import {createWorkplaceService} from '@novel-master/core/workplace';
+import {WorkplaceServiceFactory} from '@novel-master/core/workplace';
 import {createKkvService} from '@novel-master/core/kkv';
-import {createSessionKkvService} from '@novel-master/core/session-kkv';
-import {createSkillsService} from '@novel-master/core/skills';
+import {SessionKkvServiceFactory} from '@novel-master/core/session-kkv';
+import {SkillsServiceFactory} from '@novel-master/core/skills';
 import {SkspFactory, SkspRegistry} from '@novel-master/core/sksp';
 import {getMobileConnection} from '../db/connection';
 import {Result, AppError} from '@novel-master/core/errors';
@@ -55,27 +55,28 @@ function mobileRollbackProbe(label: string, detail?: Record<string, number | str
  * 失败通道（错误通道迁移四期）：装配期的已知失败（偏好读取）沿 `Result.err`
  * 接力给 bootstrap；连接/驱动等平台异常仍走 reject（bootstrap catch 统一收口）。
  */
+// nm-style: keep-public — 115 行 runtime 装配 IO 管线（DB 连接 + 20+ core 服务接线 + lazy evaluator + fetch 装配调度）；模块即装配层，内联会把管线塞进 React provider
 export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRuntimeCore, AppError>> {
   const conn = await getMobileConnection();
 
-  const state = createPersistentState(conn);
+  const state = PersistentStateFactory.create(conn);
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
   const unifiedTurnPref = await preferences.getUserVfsUnifiedToolTurn();
   if (!unifiedTurnPref.ok) return Result.err(unifiedTurnPref.error);
   userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
 
-  const smartSortRule = createSmartSortRuleService(conn);
+  const smartSortRule = SmartSortRuleServiceFactory.create(conn);
   const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
-  const abortRegistry = createAbortRegistry();
+  const abortRegistry = AbortRegistryFactory.create();
   // Agent 门面：把 core 的 `(sessionId, AbortController)` 契约适配到泛化 registry
-  // 的 `agent:` 命名空间。scope 经 `scopeFromController` 取——与 run 根 scope 共用
+  // 的 `agent:` 命名空间。scope 经 `AbortScopeFactory.fromController` 取——与 run 根 scope 共用
   // 同一 WeakMap memoize 实例，不另建缓存 Map（spec §二）。
   const agentAbortRegistry: AgentAbortRegistry = {
-    register: (sessionId, controller) => abortRegistry.register(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
-    tryRegister: (sessionId, controller) => abortRegistry.tryRegister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    register: (sessionId, controller) => abortRegistry.register(ABORT_KEY.agent(sessionId), AbortScopeFactory.fromController(controller)),
+    tryRegister: (sessionId, controller) => abortRegistry.tryRegister(ABORT_KEY.agent(sessionId), AbortScopeFactory.fromController(controller)),
     abort: sessionId => abortRegistry.abort(ABORT_KEY.agent(sessionId)),
-    unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), AbortScopeFactory.fromController(controller)),
     has: sessionId => abortRegistry.has(ABORT_KEY.agent(sessionId)),
   };
   const streamRegistry = AgentServiceFactory.createStreamRegistry();
@@ -84,9 +85,9 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
     db: SkspRegistry.resolve(mobileSkspDriverName()).createStore(conn),
   });
   const providerBundle = ProviderServiceFactory.create(conn, secretStore);
-  const tokenCounters = createDefaultTokenCounterRegistry({});
+  const tokenCounters = DefaultTokenCounterRegistry.create({});
   // search 配置依赖 kkv + secretStore，在两者之后装配。
-  const searchConfig = createSearchConfigStore({kkv, secretStore});
+  const searchConfig = SearchConfig.createStore({kkv, secretStore});
 
   const eventBus = new SimpleEventBus();
   const compactionConditions = CompactionFactory.createConditionsStore(conn);
@@ -101,7 +102,7 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
   const {projects, sessions, messages, usageStats} = chat;
 
   const messageTranscriptEffects = ChatServiceFactory.createMessageTranscriptEffects(conn);
-  const sessionKkv = createSessionKkvService(conn);
+  const sessionKkv = SessionKkvServiceFactory.create(conn);
   const {userVfsTurn} = ChatServiceFactory.createUserVfsTurnBundle(conn);
 
   let compactionConditionEvaluator: CompactionConditionEvaluator | undefined;
@@ -147,7 +148,7 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
     messages,
     usageStats,
     messageTranscriptEffects,
-    sessionFs: createSessionFsService(conn, {
+    sessionFs: SessionFsServiceFactory.create(conn, {
       yieldFn: messageParseYield,
       ...(typeof __DEV__ !== 'undefined' && __DEV__ ? {probe: mobileRollbackProbe} : {}),
     }),
@@ -159,8 +160,8 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
     globalMetaVfs: () => VfsServiceFactory.createScoped(conn, {kind: 'global-meta'}),
     projectMetaVfs: projectId => VfsServiceFactory.createScoped(conn, {kind: 'project-meta', projectId}),
     physicalVfs: () => VfsServiceFactory.createPhysical(conn),
-    workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
-    skills: () => createSkillsService(conn),
+    workplace: (scope: VfsScope) => WorkplaceServiceFactory.create(conn, scope),
+    skills: () => SkillsServiceFactory.create(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

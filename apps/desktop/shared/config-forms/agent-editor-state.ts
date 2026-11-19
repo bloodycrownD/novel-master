@@ -1,8 +1,8 @@
 import type { AgentDefinition } from "@novel-master/core/agent";
-import type { AgentPromptLayout, DynamicPromptBlock, PersistPromptBlock as EditorPersistPromptBlock, PersistTextPromptBlock } from "@novel-master/core/prompt";
-import { DEFAULT_SKILLS_INDEX_PREFIX, DEFAULT_WORKPLACE_ASSISTANT_TEXT, layoutHasCustomAttach, layoutHasWorkplace, validateAgentPromptLayout } from "@novel-master/core/prompt";
-import { userMessageOf } from "@novel-master/core/i18n";
-import { isSavedModelUuidFormat } from "@novel-master/core/provider";
+import type { DynamicPromptBlock, PersistPromptBlock as EditorPersistPromptBlock, PersistTextPromptBlock } from "@novel-master/core/prompt";
+import { AgentPromptLayout, AgentPromptLayoutValidate, DEFAULT_SKILLS_INDEX_PREFIX, DEFAULT_WORKPLACE_ASSISTANT_TEXT } from "@novel-master/core/prompt";
+import { ErrorMessage } from "@novel-master/core/i18n";
+import { SavedModelUuid } from "@novel-master/core/provider";
 import { coreT } from "../logic/core-i18n.js";
 import { buildToolsPolicyFromSelection } from "./agent-tool-catalog.js";
 
@@ -260,9 +260,9 @@ export function definitionToForm(def: AgentDefinition): Pick<AgentEditorFormInpu
     systemContent: def.prompts.system ?? "",
     persistEnabled: def.prompts.persistEnabled ?? false,
     dynamicEnabled: def.prompts.dynamicEnabled ?? false,
-    workplaceEnabled: layoutHasWorkplace(def.prompts),
+    workplaceEnabled: AgentPromptLayout.hasWorkplace(def.prompts),
     workplaceAssistantText: workplaceText,
-    customAttachEnabled: layoutHasCustomAttach(def.prompts),
+    customAttachEnabled: AgentPromptLayout.hasCustomAttach(def.prompts),
     customAttachText,
     skillsEnabled: def.prompts.skillsEnabled ?? true,
     skillsPrefixText: def.prompts.skillsPrefix ?? DEFAULT_SKILLS_INDEX_PREFIX,
@@ -343,10 +343,10 @@ export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok:
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
   const layout = layoutFromFormInput(input);
-  const validated = validateAgentPromptLayout(layout);
+  const validated = AgentPromptLayoutValidate.validate(layout);
   if (!validated.ok) {
     // AppError 在 descriptor 模式下 message 是英文 desc；toast 给用户前在边界解析回中文。
-    const layoutError = userMessageOf(validated.error);
+    const layoutError = ErrorMessage.userOf(validated.error);
     return { ok: false, message: layoutError != null ? coreT(layoutError) : validated.error.message };
   }
   const validatedLayout = validated.value;
@@ -355,7 +355,7 @@ export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok:
   let modelPin: string | undefined;
   if (input.modelEnabled && input.savedModelId.trim()) {
     const trimmed = input.savedModelId.trim();
-    if (!isSavedModelUuidFormat(trimmed)) {
+    if (!SavedModelUuid.isFormat(trimmed)) {
       return { ok: false, message: "专属模型须为已保存模型的 UUID" };
     }
     modelPin = trimmed;

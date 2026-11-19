@@ -11,7 +11,7 @@
  *   库已换代时 rebootstrap 无条件执行，成功即按自然终态返回。
  */
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
-import { isAbortLikeError } from "@novel-master/core/llm-protocol";
+import { RequestAbort } from "@novel-master/core/llm-protocol";
 import type { Outcome } from "@novel-master/core/errors";
 import { BrowserWindow } from "electron";
 import type { BackupExportResult, BackupImportResult, IpcResult } from "../../../../shared/ipc-types.js";
@@ -42,6 +42,7 @@ export async function handleBackupExport(req?: BackupRunRequest): Promise<IpcRes
 }
 
 /** 可被中断的备份导出段（对话框已 resolve，只剩 copyFile）；检查点命中返回 `Outcome.cancelled`。 */
+// nm-style: keep-local — run-abort-scope.test 直引断言取消/完成分支；内联会破坏测试锁名。
 export async function doBackupExport(rt: DesktopNovelMasterRuntime, destPath: string, scope: AbortScope): Promise<Outcome<BackupExportResult>> {
   const stopped = outcomeIfAborted(scope);
   if (stopped != null) return stopped;
@@ -50,7 +51,7 @@ export async function doBackupExport(rt: DesktopNovelMasterRuntime, destPath: st
     return { kind: "completed", value: "saved" };
   } catch (err) {
     // copyFile 前 checkpoint 命中：service 抛 AbortError，这里转回控制流 Outcome。
-    if (isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
+    if (RequestAbort.isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
     throw err;
   }
 }
@@ -75,6 +76,7 @@ export async function handleBackupImport(req?: BackupRunRequest): Promise<IpcRes
  * 备份导入段：`close → 覆盖 → restore` 不可中断，因此**只有入口检查点**，
  * 完成之后不再判取消——库已换代却回 `IPC_ABORTED` 会让用户以为没导入。
  */
+// nm-style: keep-local — run-abort-scope.test 直引断言导入段取消语义；内联会破坏测试锁名。
 export async function doBackupImport(scope: AbortScope): Promise<Outcome<BackupImportResult>> {
   const stopped = outcomeIfAborted(scope);
   if (stopped != null) return stopped;

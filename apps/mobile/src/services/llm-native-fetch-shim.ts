@@ -1,6 +1,6 @@
 /**
  * 非流式 LLM 请求的 fetch shim：以 llm-sse-native 的 `request`（请求-响应
- * 形态）为底座实现标准 fetch 形状，经 `configureLlmFetch` 注入后让
+ * 形态）为底座实现标准 fetch 形状，经 `Registry.configureLlmFetch` 注入后让
  * `listModels` / `chatNonStream` 等一切非流式调用零改动获得整调用
  * callTimeout 与 native 连接池（spec llm-stream-native §4 非流式收编）。
  *
@@ -9,7 +9,7 @@
  *   一旦被流式消费误用（postSse 的 fetch 分支取 body 流），会命中 core 既有
  *   的「Empty streaming response body」防御抛明确 ProviderError，不静默挂起。
  * - 本模块是纯传输适配，零日志组合逻辑；dev 日志由装配层
- *   `createLoggingFetch(shim)` 在最外层统一包装（setup-llm-fetch.ts）。
+ *   `DebugFetch.createLoggingFetch(shim)` 在最外层统一包装（setup-llm-fetch.ts）。
  * - 取消：读 `init.signal`——已取消立刻以 AbortError 拒绝（native 请求不发出）；
  *   请求途中取消先调 native `requestAbort(requestId)`（OkHttp `Call.cancel()`
  *   真断连），再本地立刻 reject，不等 native 返回。旧 native 构建缺
@@ -19,7 +19,6 @@
  * @module services/llm-native-fetch-shim
  */
 
-import {NativeModules} from 'react-native';
 import {NativeSseAbortError, NativeSseTransportError, flattenRequestHeaders} from '@novel-master/llm-sse-native';
 import type {LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
 
@@ -245,31 +244,4 @@ export function createNativeRequestFetch(deps: LlmNativeRequestDeps): FetchLike 
   };
   // 结构形状已对齐 Response 消费面；ShimResponse → fetch Response 的收口转换。
   return fetchLike as unknown as FetchLike;
-}
-
-let fallbackWarned = false;
-
-/**
- * 装配工厂：native request 可用（Android 且已 autolink）→ 以它为底座的
- * fetch shim；不可用（iOS 工程 / Jest 环境）→ 回落 `globalThis.fetch`——
- * 发布面仅 Android，iOS 只是开发调试面，缺 native 不应炸掉全部非流式请求。
- *
- * 回落是传输底座选择，不是日志组合：装配层无条件把本工厂产物注册进
- * `configureLlmFetch`（生产/开发统一），__DEV__ 的 logging 仍在最外层。
- */
-export function createMobileLlmFetch(): FetchLike {
-  // 读取 native request 底座（调用时求值，测试可先 mock NativeModules 再装配）。
-  const module = NativeModules.LlmSseNative as LlmSseNativeModule | undefined;
-  const request = module == null || typeof module.request !== 'function' ? null : module.request.bind(module);
-  // requestAbort 缺失（旧 native 构建）不阻塞装配：退化为仅本地取消，仍保留
-  // native 连接池与整调用 callTimeout，比回落 globalThis.fetch 更接近生产行为。
-  const requestAbort = module == null || typeof module.requestAbort !== 'function' ? null : module.requestAbort.bind(module);
-  if (request != null) {
-    return createNativeRequestFetch(requestAbort == null ? {request} : {request, requestAbort});
-  }
-  if (!fallbackWarned) {
-    fallbackWarned = true;
-    console.warn('[nm-llm] LlmSseNative request 底座不可用，非流式请求回落 globalThis.fetch');
-  }
-  return globalThis.fetch;
 }

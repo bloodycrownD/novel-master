@@ -12,9 +12,9 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
-import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/stored-config-validity";
-import { serializeRuleSnapshot } from "@novel-master/core/workplace";
+import { TextBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
+import { DefaultAgentDefinition } from "@novel-master/core/stored-config-validity";
+import { RuleSnapshotCodec } from "@novel-master/core/workplace";
 import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
@@ -79,7 +79,7 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
     const rtR = await getDesktopRuntime();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
-    await rt.messages.append(sessionId, "user", textBlocks("你好，请记住附加信息"));
+    await rt.messages.append(sessionId, "user", TextBlocks.of("你好，请记住附加信息"));
   });
 
   after(async () => {
@@ -90,7 +90,7 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
     const rtR = await getDesktopRuntime();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
-    const definition = buildDefaultAgentDefinitionPreservingName("extra-info-agent");
+    const definition = DefaultAgentDefinition.build("extra-info-agent");
     // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
     definition.prompts = {
       ...definition.prompts,
@@ -173,7 +173,7 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
     // file_cache miss → vfs.read 这条路。
     await rt.sessionVfs(projectId, sessionId).write(HUGE_PATH, OVER_BUDGET_BODY);
     // content: null ⇒ prepare 不走「已是 action XML」旁路，预算判据真的生效。
-    await rt.messages.append(sessionId, "user", textBlocks("帮我看看这个附件"), {
+    await rt.messages.append(sessionId, "user", TextBlocks.of("帮我看看这个附件"), {
       attachments: [
         {
           name: HUGE_PATH,
@@ -257,7 +257,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     const rtR = await getDesktopRuntime();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
-    await rt.messages.append(sessionId, "user", textBlocks("他把伞收了"));
+    await rt.messages.append(sessionId, "user", TextBlocks.of("他把伞收了"));
   });
 
   after(async () => {
@@ -431,7 +431,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
       sessionId,
       "rule_snapshot",
       "canon",
-      serializeRuleSnapshot([
+      RuleSnapshotCodec.serialize([
         { path: "/a.md", status: "full" },
         { path: "/b.md", status: "full" },
       ]),
@@ -457,7 +457,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     };
     rt.sessionVfs = wrapped;
     try {
-      const definition = buildDefaultAgentDefinitionPreservingName("wp-bail");
+      const definition = DefaultAgentDefinition.build("wp-bail");
       definition.prompts = {
         ...definition.prompts,
         persist: [],

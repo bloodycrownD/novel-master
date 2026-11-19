@@ -1,7 +1,7 @@
 /**
  * Saved model label helpers for workspace currentModelId (UUID).
  */
-import {formatSavedModelDisplayName} from '@novel-master/core/provider';
+import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {type AppError, Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
@@ -14,5 +14,5 @@ export async function resolveModelDisplayLabel(runtime: MobileNovelMasterRuntime
   }
   const provider = await runtime.providers.get(saved.value.providerId);
   if (!provider.ok) return Result.err(provider.error);
-  return Result.ok(formatSavedModelDisplayName(provider.value.displayName, saved.value.modelName));
+  return Result.ok(SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName));
 }

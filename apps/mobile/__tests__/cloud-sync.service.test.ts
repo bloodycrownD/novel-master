@@ -1,6 +1,6 @@
 import {AppError, DatabaseReplacedError, Result} from '@novel-master/core';
-import {isAbortLikeError} from '@novel-master/core/llm-protocol';
-import {ABORT_KEY, createAbortError, createAbortRegistry} from '@novel-master/core/abort';
+import {RequestAbort} from '@novel-master/core/llm-protocol';
+import {ABORT_KEY, AbortError, AbortRegistryFactory} from '@novel-master/core/abort';
 import {
   pullCloudSync,
   pushCloudSync,
@@ -104,7 +104,7 @@ const runtime = {
   },
   conn: {},
   // 泛化取消注册表（signal-abort-scope Step 11）：云同步任务级 scope 登记处。
-  abortRegistry: createAbortRegistry(),
+  abortRegistry: AbortRegistryFactory.create(),
 } as never;
 
 const storage = {
@@ -431,13 +431,13 @@ describe('云同步任务级取消（T-S16）', () => {
       // 协调器在真实阶段边界命中：先由用户取消，再问 checkpoint。
       runtime.abortRegistry.abort(cancelKey);
       expect(options.checkpoint?.()).toEqual({kind: 'cancelled', reason: 'user-stop'});
-      throw createAbortError();
+      throw AbortError.create();
     });
 
     const error = await captureRejection(pullCloudSync(runtime, jest.fn(), {onProgress}));
 
     // 原样上抛：不得被 mapCloudSyncSdkError 包成 CLOUD_SYNC_NETWORK。
-    expect(isAbortLikeError(error)).toBe(true);
+    expect(RequestAbort.isAbortLikeError(error)).toBe(true);
     expect(error).not.toMatchObject({key: 'CLOUD_SYNC_NETWORK'});
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,
@@ -459,12 +459,12 @@ describe('云同步任务级取消（T-S16）', () => {
     mockCoordinatorPush.mockImplementation(async (options: {checkpoint?: () => unknown}) => {
       runtime.abortRegistry.abort(cancelKey, 'timeout');
       expect(options.checkpoint?.()).toEqual({kind: 'cancelled', reason: 'timeout'});
-      throw createAbortError();
+      throw AbortError.create();
     });
 
     const error = await captureRejection(pushCloudSync(runtime, {onProgress}));
 
-    expect(isAbortLikeError(error)).toBe(true);
+    expect(RequestAbort.isAbortLikeError(error)).toBe(true);
     expect(error).not.toMatchObject({key: 'CLOUD_SYNC_NETWORK'});
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,

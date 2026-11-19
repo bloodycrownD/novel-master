@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@jest/globals";
 import { buildAgentDefinitionFromForm, countEffectiveFormPromptSources, countFormPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistTextBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, withWorkplaceToggle } from "@/config-forms/agent/agent-editor-state";
 import { buildToolsPolicyFromSelection, toolsSelectionFromDefinition } from "@/config-forms/agent/agent-tool-catalog";
-import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, validateAgentPromptLayout } from "@novel-master/core/prompt";
+import { AgentPromptLayoutValidate, DEFAULT_WORKPLACE_ASSISTANT_TEXT } from "@novel-master/core/prompt";
 
 it("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
   assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
@@ -842,7 +842,7 @@ it("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败",
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    // 边界经 userMessageOf + coreT 解析回中文（agent-editor-state 的 toast 边界）。
+    // 边界经 ErrorMessage.userOf + coreT 解析回中文（agent-editor-state 的 toast 边界）。
     assert.equal(result.message, "启用持久区时最后一个块须为助手角色");
   }
 });
@@ -1049,7 +1049,7 @@ it("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
   assert.equal(clearedThenOn.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 });
 
-it("layoutFromFormInput output passes validateAgentPromptLayout", () => {
+it("layoutFromFormInput output passes AgentPromptLayoutValidate.validate", () => {
   const layout = layoutFromFormInput({
     systemEnabled: true,
     systemContent: "sys",
@@ -1063,7 +1063,7 @@ it("layoutFromFormInput output passes validateAgentPromptLayout", () => {
       { name: "d2", type: "text", role: "user", content: "b" },
     ],
   });
-  const validated = validateAgentPromptLayout(layout);
+  const validated = AgentPromptLayoutValidate.validate(layout);
   assert.ok(validated.ok, validated.ok ? "" : validated.error.message);
 });
 

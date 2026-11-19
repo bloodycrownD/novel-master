@@ -1,17 +1,18 @@
 /**
  * Agent YAML import/export via document picker.
  *
- * 文本编解码单源在 core（`@novel-master/core/agent` 的 `decodeAgentYamlText` /
- * `encodeAgentYamlText`）；本模块只保留选择器编排与 registry 落库。
+ * 文本编解码单源在 core（`@novel-master/core/agent` 的 `AgentYamlCodec.decode` /
+ * `AgentYamlCodec.encode`）；本模块只保留选择器编排与 registry 落库。
  */
-import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
-import {decodeAgentYamlText, encodeAgentYamlText, validateAgentDefinition} from '@novel-master/core/agent';
+import {BuiltinTools, ToolRegistry} from '@novel-master/core';
+import {AgentDefinitionValidator, AgentYamlCodec} from '@novel-master/core/agent';
 import {Errors} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {exportYamlWithDialog, importYamlWithDialog} from './yaml-shared';
 
+// nm-style: keep-public — agent-yaml.service.test.ts / agent-editor-form 两测试直接 import 与 mock 该模块接缝，测试锁名
 export async function exportAgentYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<'saved' | 'cancelled'> {
   const def = await runtime.agentRegistry.get(agentId);
   if (!def.ok) {
@@ -19,22 +20,23 @@ export async function exportAgentYaml(runtime: MobileNovelMasterRuntime, agentId
     const failure = def.error;
     throw failure;
   }
-  const yaml = encodeAgentYamlText(def.value);
+  const yaml = AgentYamlCodec.encode(def.value);
   return exportYamlWithDialog(yaml, `${agentId}.agent.yaml`);
 }
 
 /** 校验失败套「YAML 无效」前缀沿 Result 接力；decode/upsert 的平台异常仍走 reject。 */
+// nm-style: keep-public — agent-yaml.service.test.ts 多用例直接 import 断言校验管线；agent-editor-form 测试 mock 接缝，测试锁名
 export async function importAgentYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<Result<void, Error>> {
   return importYamlWithDialog(async yaml => {
     try {
-      const decoded = decodeAgentYamlText(yaml);
+      const decoded = AgentYamlCodec.decode(yaml);
       if (!decoded.ok) {
         return Result.err(Errors.normalizeYaml(decoded.error, 'Agent YAML 无效'));
       }
       const def = decoded.value;
       const probe = new ToolRegistry();
-      registerBuiltinTools(probe);
-      const validation = await validateAgentDefinition(def, {registeredToolNames: probe.list()});
+      BuiltinTools.register(probe);
+      const validation = await AgentDefinitionValidator.validate(def, {registeredToolNames: probe.list()});
       if (!validation.ok) {
         return Result.err(Errors.normalizeYaml(validation.error, 'Agent YAML 无效'));
       }

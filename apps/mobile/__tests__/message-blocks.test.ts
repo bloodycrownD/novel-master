@@ -713,7 +713,7 @@ describe('message-blocks', () => {
   });
 
   it('Bug1: vfsToolFilePath 兼容 file_path 字段名（透传到 core 兑底）', () => {
-    // 某些 LLM 会用 file_path 而非标准的 path，core resolveVfsToolFilePath 已加兼容。
+    // 某些 LLM 会用 file_path 而非标准的 path，core VfsToolFilePath.resolve 已加兼容。
     expect(
       vfsToolFilePath({
         toolUseId: 't5',

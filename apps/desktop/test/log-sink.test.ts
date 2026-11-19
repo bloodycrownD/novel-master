@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { createLogger, restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import { installDesktopLogSink } from "../src/main/log/desktop-log-sink.js";
 
 function pad2(value: number): string {
@@ -22,11 +22,11 @@ function todayBaseName(now: Date): string {
 
 function withTempDir(run: (dir: string) => void): void {
   const dir = mkdtempSync(path.join(os.tmpdir(), "nm-desktop-log-sink-"));
-  setDefaultLogSink(null);
+  LogFactory.setDefaultSink(null);
   try {
     run(dir);
   } finally {
-    restoreDefaultLogSink();
+    LogFactory.restoreDefaultSink();
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -35,7 +35,7 @@ describe("installDesktopLogSink", () => {
   it("按 ISO\\tlevel\\tscope\\tmessage\\tdetail 写当日文件", () => {
     withTempDir((dir) => {
       const detach = installDesktopLogSink({ logsDir: dir });
-      createLogger("test.scope").info("hello", { sessionId: "abc" });
+      LogFactory.create("test.scope").info("hello", { sessionId: "abc" });
       detach();
 
       const content = readFileSync(path.join(dir, `${todayBaseName(new Date())}.log`), "utf8");
@@ -55,7 +55,7 @@ describe("installDesktopLogSink", () => {
       writeFileSync(path.join(dir, `${baseName}.log`), "x".repeat(2 * 1024 * 1024 + 1));
 
       const detach = installDesktopLogSink({ logsDir: dir });
-      createLogger("test.rotation").warn("rotated");
+      LogFactory.create("test.rotation").warn("rotated");
       detach();
 
       const rotated = readFileSync(path.join(dir, `${baseName}.1.log`), "utf8");
@@ -75,7 +75,7 @@ describe("installDesktopLogSink", () => {
     try {
       withTempDir((dir) => {
         const detach = installDesktopLogSink({ logsDir: dir });
-        const log = createLogger("test.level");
+        const log = LogFactory.create("test.level");
         log.debug("hidden-debug");
         log.info("shown-info");
         detach();

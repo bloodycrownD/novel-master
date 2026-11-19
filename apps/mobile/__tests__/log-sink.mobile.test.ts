@@ -1,4 +1,4 @@
-import {addLogSink, createLogger, restoreDefaultLogSink, setDefaultLogSink} from '@novel-master/core/log';
+import {LogFactory} from '@novel-master/core/log';
 import type {LogRecord} from '@novel-master/core/log';
 import {installJsCrashHandler, installMobileLogSink} from '@/services/log-sink.mobile';
 import {fs as mockFs, MOCK_DIRS} from '../test-utils/react-native-blob-util-mock';
@@ -21,7 +21,7 @@ describe('installMobileLogSink', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    setDefaultLogSink(null);
+    LogFactory.setDefaultSink(null);
     (mockFs.mkdir as jest.Mock).mockResolvedValue(undefined);
     (mockFs.ls as jest.Mock).mockResolvedValue([]);
     (mockFs.stat as jest.Mock).mockResolvedValue({size: 0, lastModified: 0});
@@ -32,13 +32,13 @@ describe('installMobileLogSink', () => {
   afterEach(() => {
     remove?.();
     remove = null;
-    restoreDefaultLogSink();
+    LogFactory.restoreDefaultSink();
   });
 
   it('把 logger 记录追加到 DocumentDir/logs/nm-<日期>.log', async () => {
     remove = await installMobileLogSink();
 
-    createLogger('test.scope').info('hello', {tokenCount: 3});
+    LogFactory.create('test.scope').info('hello', {tokenCount: 3});
     await flushWrites();
 
     expect(mockFs.appendFile).toHaveBeenCalledTimes(1);
@@ -57,7 +57,7 @@ describe('installMobileLogSink', () => {
     (mockFs.stat as jest.Mock).mockResolvedValue({size: 2 * 1024 * 1024, lastModified: 1});
     remove = await installMobileLogSink();
 
-    createLogger('test.scope').warn('rollover');
+    LogFactory.create('test.scope').warn('rollover');
     await flushWrites();
 
     expect((mockFs.appendFile as jest.Mock).mock.calls[0][0]).toBe(`${LOG_DIR}/nm-${todayKey()}.1.log`);
@@ -70,7 +70,7 @@ describe('installMobileLogSink', () => {
     (mockFs.stat as jest.Mock).mockImplementation((path: string) => Promise.resolve({size: 10, lastModified: mtimes.get(path) ?? 0}));
     remove = await installMobileLogSink();
 
-    createLogger('test.scope').info('prune');
+    LogFactory.create('test.scope').info('prune');
     await flushWrites();
 
     expect(mockFs.unlink).toHaveBeenCalledTimes(1);
@@ -81,12 +81,12 @@ describe('installMobileLogSink', () => {
 describe('installJsCrashHandler', () => {
   afterEach(() => {
     jest.restoreAllMocks();
-    restoreDefaultLogSink();
+    LogFactory.restoreDefaultSink();
   });
 
   it('新处理器先记 crash 日志、再链式调用旧处理器', () => {
     const records: LogRecord[] = [];
-    const remove = addLogSink({write: record => records.push(record)});
+    const remove = LogFactory.addSink({write: record => records.push(record)});
     const previous = jest.fn();
     jest.spyOn(ErrorUtils, 'getGlobalHandler').mockReturnValue(previous);
     const setGlobalHandler = jest.spyOn(ErrorUtils, 'setGlobalHandler').mockImplementation(() => undefined);

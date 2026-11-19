@@ -12,12 +12,12 @@
  * 调标签函数——chip 分支被删掉即红。
  *
  * 形态取自 core 侧 `attachmentsFromPaths` 的落库口径（`source:"attach"` +
- * `action:"userAttach"` + `type:"text"` + `content:null` + `name = attachmentStorageName(path)`），
+ * `action:"userAttach"` + `type:"text"` + `content:null` + `name = MessageAttachmentSchema.storageName(path)`），
  * 与 T-TA1 牙齿同源：name 写成 basename 会被落库硬 parse 拒掉。
  */
 import type {VNode} from 'preact';
 import {
-  attachmentStorageName,
+  MessageAttachmentSchema,
   type ChatMessageData,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -29,7 +29,7 @@ import type {AttachmentChip} from '@/web/chat-transcript/webview/runtime/state/s
 /** 子会话屏里 task 挂上来的文本附件（与 core `attachmentsFromPaths` 出口同形）。 */
 function userAttachAttachment(path: string): MessageAttachment {
   return {
-    name: attachmentStorageName(path),
+    name: MessageAttachmentSchema.storageName(path),
     source: 'attach',
     type: 'text',
     content: null,
@@ -156,7 +156,7 @@ describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => 
       action: 'userAttach',
       path,
     });
-    expect(chips[0]!.name).toBe(attachmentStorageName(path));
+    expect(chips[0]!.name).toBe(MessageAttachmentSchema.storageName(path));
     expect(chips[0]!.name).not.toBe('setting.md');
 
     // 行渲染：user 行挂 AttachGroup → chip 文案走 row-logic 的 attachmentChipLabel。
@@ -200,7 +200,7 @@ describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => 
     const path = '/assets/cover.png';
     const atts: AttachmentChip[] = [
       {
-        name: attachmentStorageName(path),
+        name: MessageAttachmentSchema.storageName(path),
         source: 'attach',
         type: 'image',
         content: null,

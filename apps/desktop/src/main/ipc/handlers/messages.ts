@@ -3,11 +3,11 @@
  */
 import {
   chatAnnotateDraftStore,
-  readMessageMetadata,
-  textBlocks,
+  MessageMetadata,
+  TextBlocks,
   type ChatMessageData,
 } from '@novel-master/core/chat';
-import { messageBodyTextFromBlocks } from '@novel-master/core/prompt';
+import { MessageBodyText } from '@novel-master/core/prompt';
 import { type ContentBlock } from '@novel-master/core/chat';
 import { Result } from "@novel-master/core/errors";
 import { assert } from "@novel-master/core/common";
@@ -35,7 +35,7 @@ import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
 import { refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
 
 function toDto(msg: ChatMessageData): ChatMessageDto {
-  const metadata = readMessageMetadata(msg.raw);
+  const metadata = MessageMetadata.read(msg.raw);
   return {
     id: msg.id,
     sessionId: msg.sessionId,
@@ -43,7 +43,7 @@ function toDto(msg: ChatMessageData): ChatMessageDto {
     hidden: msg.hidden,
     seq: msg.seq,
     createdAtMs: msg.createdAtMs,
-    bodyText: messageBodyTextFromBlocks(msg.content.blocks),
+    bodyText: MessageBodyText.fromBlocks(msg.content.blocks),
     contentBlocks: (msg.content.blocks ?? []).map((block): ContentBlockDto | null => {
       switch (block.type) {
         case 'text':
@@ -90,7 +90,7 @@ export function handleMessagesAppend(req: MessagesAppendRequest): Promise<IpcRes
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const msg = await rt.messages.append(req.sessionId, req.role, textBlocks(req.text));
+    const msg = await rt.messages.append(req.sessionId, req.role, TextBlocks.of(req.text));
     return msg.map(toDto);
   });
 }

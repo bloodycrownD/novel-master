@@ -12,10 +12,10 @@ import { before, describe, it } from "node:test";
 
 import {
   CHARACTERS_PER_TOKEN_RATIO,
-  countPromptLlmInput,
-  createDefaultTokenCounterRegistry,
+  DefaultTokenCounterRegistry,
+  PromptLlmInputCount,
   serializePromptLlmInput,
-  serializeToolsForTokenCount,
+  TokenCountTools,
   type TokenizerFamily,
 } from "@novel-master/core/tokenizer";
 import {
@@ -78,15 +78,15 @@ describe("兜底计数口径", () => {
 
       const layout = { system: CHINESE, persist: [], dynamic: [] };
       const ctx = { workplaceDisplay: "", messages: [] };
-      const result = (await countPromptLlmInput({
+      const result = (await PromptLlmInputCount.count({
         layout,
         ctx,
         savedModelId: "openai/my-custom/foo",
-        registry: createDefaultTokenCounterRegistry({} as Record<string, never>),
+        registry: DefaultTokenCounterRegistry.create({} as Record<string, never>),
       })).value;
       const serialized =
         (await serializePromptLlmInput(layout, ctx)).value +
-        serializeToolsForTokenCount(undefined);
+        TokenCountTools.serialize(undefined);
 
       assert.equal(result.counterKind, "heuristic");
       assert.equal(result.estimated, true);

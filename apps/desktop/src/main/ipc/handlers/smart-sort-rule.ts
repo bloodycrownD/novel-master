@@ -3,8 +3,8 @@
  *
  * 各 handler 收成 `toIpcResult` 的 thunk 形态并转调 `rt.smartSortRule`
  * （core `SmartSortRuleService`）；已知失败沿 `Result` 到达、未知异常
- * 就地转码（错误通道迁移四期）。YAML 导入导出经
- * `smart-sort-rule-yaml.service` 走系统对话框。
+ * 就地转码（错误通道迁移四期）。YAML 导入导出走系统对话框
+ * （encode/decode 单源在 core `smart-sort-rule-io.ts`）。
  */
 import type {
   IpcResult,
@@ -23,16 +23,18 @@ import type {
   SmartSortRuleYamlImportResult,
 } from "../../../../shared/ipc-types.js";
 import { BrowserWindow } from "electron";
-import { matchSmartSortPattern } from "@novel-master/core/smart-sort-rule";
+import { SerializationParseText, SerializationStringifyText } from "@novel-master/core";
+import { Errors } from "@novel-master/core/common";
+import { SmartSortPattern } from "@novel-master/core/smart-sort-rule";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import {
-  exportSmartSortRuleYamlWithDialog,
-  importSmartSortRuleYamlWithDialog,
-} from "../../services/smart-sort-rule-yaml.service.js";
+import { exportYamlWithDialog, importYamlWithDialog } from "../../services/yaml-shared.js";
 import { toIpcResult } from "../ipc-result.js";
+
+/** 根目录导出的备用名：项目已删除或域无 projectId 时使用（原 smart-sort-rule-yaml.service 内联携带）。 */
+const EXPORT_FILE_NAME = "smart-sort-rules.yaml";
 
 export async function handleSmartSortRuleList(): Promise<IpcResult<SmartSortRuleDto[]>> {
   return toIpcResult(async () => {
@@ -157,7 +159,7 @@ export async function handleSmartSortRuleResetDefaults(): Promise<IpcResult<void
  */
 export async function handleSmartSortRuleMatch(req: SmartSortRuleMatchRequest): Promise<IpcResult<SmartSortRuleMatchResultDto>> {
   return toIpcResult(async (): Promise<Result<SmartSortRuleMatchResultDto, AppError>> => {
-    const result = matchSmartSortPattern(req.pattern, req.flags, req.text, req.captureKind ?? "smart");
+    const result = SmartSortPattern.match(req.pattern, req.flags, req.text, req.captureKind ?? "smart");
     if (!result.ok) return Result.ok({ ok: false as const, error: result.error });
     return Result.ok({
       ok: true as const,
@@ -172,7 +174,10 @@ export async function handleSmartSortRuleYamlExport(): Promise<IpcResult<SmartSo
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    return Result.ok(await exportSmartSortRuleYamlWithDialog(rt, BrowserWindow.getFocusedWindow()));
+    // 原 exportSmartSortRuleYamlWithDialog 内联：导出规则 → yaml → 保存框（导入为替换式，确认在 renderer 前置）。
+    const doc = await rt.smartSortRule.exportRules();
+    const yaml = SerializationStringifyText.stringify(doc, "yaml");
+    return Result.ok(await exportYamlWithDialog(yaml, EXPORT_FILE_NAME, BrowserWindow.getFocusedWindow()));
   });
 }
 
@@ -181,7 +186,22 @@ export async function handleSmartSortRuleYamlImport(): Promise<IpcResult<SmartSo
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
-    const imported = await importSmartSortRuleYamlWithDialog(built.value, BrowserWindow.getFocusedWindow());
+    // 原 importSmartSortRuleYamlWithDialog 内联：service.importRules 内部走
+    // core 单源 decode（含 zod 校验）。
+    // nm-style: keep-local — 具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参跨行（check-signatures ARGS），规则互斥（同 llm-sse-transport 先例）。
+    const importRulesFromYaml = async (yaml: string) => {
+      try {
+        // ⚠️ 既有口径：返回值未检查（known-failure 也只当成功）——本轮只改通道形状，不动语义。
+        await built.value.smartSortRule.importRules(SerializationParseText.parse(yaml, "yaml"));
+        return Result.ok(undefined);
+      } catch (error) {
+        // 存储/事务类故障原样上抛、其余套「YAML 无效」前缀——判据与前缀都在
+        // core 的 Errors.normalizeSmartSortImport 里（mobile 侧调同一个函数）。
+        return Result.err(Errors.normalizeSmartSortImport(error));
+      }
+    };
+    const win = BrowserWindow.getFocusedWindow();
+    const imported = await importYamlWithDialog(importRulesFromYaml, win);
     // import 通道与 mobile 一致走 Result；载荷是 YAML 归一层的 Error，转码口径同旧 catch。
     if (!imported.ok) return { ok: false, error: formatIpcError(imported.error) };
     return { ok: true, data: imported.value };

@@ -2,7 +2,7 @@
  * mobile 侧实时 token 估算器绑定（stream-metrics-native ②）。
  *
  * 把 `SessionStreamUnit` 的实时 token 估算从 `ceil(chars/3.35)` 启发式升级为
- * 真 BPE 尾窗增量计数（core 的 `createIncrementalTokenCounter`）：
+ * 真 BPE 尾窗增量计数（core 的 `IncrementalTokenCounter.create`）：
  * - 用 `js-tiktoken/lite` 的真编码表（mobile 既有依赖，Metro 已重定向
  *   `tiktoken` shim，离线可用、零新增包体）；
  * - **编码表惰性单例 + 按编码名缓存**（stream-metrics-native ④ 起下沉到
@@ -18,7 +18,7 @@
  *
  * 编码名解析（best-effort）：sessionId → 会话 agent 配置 modelId（缺省回退
  * agent pin）→ saved model → `vendorModelId` → core 的
- * `resolveTokenizerFamily` / `mapVendorModelIdToTiktokenModel` +
+ * `TokenizerFamilyResolver.resolve` / `TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel` +
  * js-tiktoken 的 `getEncodingNameForModel` → `o200k_base`（gpt-4o/o1/o3/o4/
  * gpt-4.1/gpt-4.5/gpt-5）否则 `cl100k_base`。
  * - **非 tiktoken 家族（claude/qwen/glm…）本轮也用 cl100k 估算**：这些模型
@@ -32,8 +32,7 @@
  * @module services/stream-token-estimator
  */
 
-import {createIncrementalTokenCounter, type IncrementalTokenCounter} from '@novel-master/core/tokenizer';
-import {mapVendorModelIdToTiktokenModel, resolveTokenizerFamily} from '@novel-master/core/tokenizer';
+import {IncrementalTokenCounter, TokenizerFamilyResolver} from '@novel-master/core/tokenizer';
 
 /** core Result 的线上结构（`Result` 本体尚未进 public 面，三期收口时换真类型）。 */
 type ResultWire<T> = {readonly ok: true; readonly value: T} | {readonly ok: false; readonly error: unknown};
@@ -106,8 +105,8 @@ export function resolveStreamTokenEncodingName(vendorModelId: string | null | un
   if (direct != null) {
     return direct;
   }
-  if (resolveTokenizerFamily(id, 'auto') === 'tiktoken') {
-    const mapped = asO200k(mapVendorModelIdToTiktokenModel(id));
+  if (TokenizerFamilyResolver.resolve(id, 'auto') === 'tiktoken') {
+    const mapped = asO200k(TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(id));
     if (mapped != null) {
       return mapped;
     }
@@ -119,18 +118,20 @@ export function resolveStreamTokenEncodingName(vendorModelId: string | null | un
  * 建一条实时 token 估算器（尾窗增量计数）；编码表不可用时返回 null，
  * 调用方（SessionStreamUnit）回退启发式。
  */
+// nm-style: keep-public — stream-token-estimator.test.ts 直接 import 多用例断言（null 回退/计数口径），测试锁名
 export function createStreamTokenEstimator(options?: {readonly vendorModelId?: string | null | undefined}): IncrementalTokenCounter | null {
   const encodingName = resolveStreamTokenEncodingName(options?.vendorModelId ?? null);
   const encoding = getRnEncoding(encodingName);
   if (encoding == null) {
     return null;
   }
-  return createIncrementalTokenCounter({
+  return IncrementalTokenCounter.create({
     encode: text => encoding.encode(text).length,
   });
 }
 
 /** 解析会话的 vendor model id（失败/缺配置 → null，不抛）。 */
+// nm-style: keep-public — stream-token-estimator.test.ts 直接 import 断言，测试锁名
 export async function resolveStreamTokenVendorModelId(runtime: StreamTokenModelHintRuntime, sessionId: string): Promise<string | null> {
   try {
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
@@ -205,6 +206,7 @@ export function primeStreamTokenModelHint(runtime: StreamTokenModelHintRuntime, 
  * 说明：编码在估算器创建时**一次定死**，run 中途不切换（换编码会让累计值
  * 跳变、污染速率窗口）；要换编码只能等下一个 run。
  */
+// nm-style: keep-public — stream-token-estimator.test.ts 直接 import 断言 hint 缓存/TTL 语义，测试锁名
 export function createSessionStreamTokenEstimator(runtime: StreamTokenModelHintRuntime, sessionId: string): IncrementalTokenCounter | null {
   // 读会话级 vendor model id（命中即返；未解析或已过期返回 undefined）。
   // **过期即淘汰**：判定过期时直接 `delete`，让 prime 的 `has` 早退守卫放行、

@@ -4,23 +4,23 @@
  *
  * @module runtime/create-desktop-runtime
  */
-import { ABORT_KEY, createAbortRegistry, scopeFromController } from "@novel-master/core/abort";
+import { ABORT_KEY, AbortRegistryFactory, AbortScopeFactory } from "@novel-master/core/abort";
 import { AgentServiceFactory, type AgentAbortRegistry } from "@novel-master/core/agent";
 import { CompactionFactory } from "@novel-master/core/compaction";
 import { ProviderServiceFactory } from "@novel-master/core/provider";
-import { createDefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
+import { DefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { ChatServiceFactory } from "@novel-master/core/chat";
-import { createPersistentPreferences, createPersistentState, createSearchConfigStore } from "@novel-master/core";
+import { PersistentStateFactory, SearchConfig, createPersistentPreferences } from "@novel-master/core";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
-import { createSmartSortRuleService } from "@novel-master/core/smart-sort-rule";
+import { SmartSortRuleServiceFactory } from "@novel-master/core/smart-sort-rule";
 import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
-import { createSessionFsService } from "@novel-master/core/session-fs";
+import { SessionFsServiceFactory } from "@novel-master/core/session-fs";
 import { VfsServiceFactory, type VfsScope } from "@novel-master/core/vfs";
-import { createWorkplaceService } from "@novel-master/core/workplace";
+import { WorkplaceServiceFactory } from "@novel-master/core/workplace";
 import { createKkvService } from "@novel-master/core/kkv";
-import { createSessionKkvService } from "@novel-master/core/session-kkv";
-import { createSkillsService } from "@novel-master/core/skills";
+import { SessionKkvServiceFactory } from "@novel-master/core/session-kkv";
+import { SkillsServiceFactory } from "@novel-master/core/skills";
 import { SkspFactory, SkspRegistry } from "@novel-master/core/sksp";
 import { getDesktopConnection } from "./connection.js";
 import { getPlatformSkspName } from "./register-platform-drivers.js";
@@ -34,12 +34,13 @@ import type { DesktopNovelMasterRuntime } from "./types.js";
 /**
  * Opens the app DB once and returns service handles aligned with CLI/mobile runtime.
  */
+// nm-style: keep-local — runtime.test / agent-registry-handlers / agent-run-saved-model-session 等多测试直引构造 runtime（8 个调用点）；进程级装配入口不随调用点搬移。
 export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopNovelMasterRuntime, AppError>> {
   ensureLlmFetchConfigured();
   const conn = await getDesktopConnection();
   const dbPath = resolveDbPath();
 
-  const state = createPersistentState(conn);
+  const state = PersistentStateFactory.create(conn);
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
   const unifiedTurnPref = await preferences.getUserVfsUnifiedToolTurn();
@@ -47,7 +48,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   // 由各 IPC 消费方经 toIpcResult / formatIpcError 收口，不再走 throw。
   if (!unifiedTurnPref.ok) return Result.err(unifiedTurnPref.error);
   userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
-  const smartSortRule = createSmartSortRuleService(conn);
+  const smartSortRule = SmartSortRuleServiceFactory.create(conn);
 
   const skspName = getPlatformSkspName();
   if (!skspName.ok) return Result.err(skspName.error);
@@ -58,10 +59,10 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
     env: envStore,
   });
   // search 工具配置：KKV `nm-search` 模块 + SKSP key ref（与 mobile 同构，core 工厂统一逻辑）
-  const searchConfig = createSearchConfigStore({ kkv, secretStore });
+  const searchConfig = SearchConfig.createStore({ kkv, secretStore });
 
   const providerBundle = ProviderServiceFactory.create(conn, secretStore);
-  const tokenCounters = createDefaultTokenCounterRegistry({
+  const tokenCounters = DefaultTokenCounterRegistry.create({
     savedModels: providerBundle.savedModelRepo,
   });
 
@@ -70,14 +71,14 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   // 泛化 registry + Agent 门面（spec §二「实例拓扑」）：门面把 core 的
   // `(sessionId, AbortController)` 契约适配到 `agent:` 命名空间，scope 经
-  // `scopeFromController` 取——与 run 根 scope 共用同一 WeakMap memoize 实例，
+  // `AbortScopeFactory.fromController` 取——与 run 根 scope 共用同一 WeakMap memoize 实例，
   // 不另建缓存 Map。两者必须同实例，否则停止按钮与 run 注册各说各话。
-  const abortRegistry = createAbortRegistry();
+  const abortRegistry = AbortRegistryFactory.create();
   const agentAbortRegistry: AgentAbortRegistry = {
-    register: (sessionId, controller) => abortRegistry.register(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
-    tryRegister: (sessionId, controller) => abortRegistry.tryRegister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    register: (sessionId, controller) => abortRegistry.register(ABORT_KEY.agent(sessionId), AbortScopeFactory.fromController(controller)),
+    tryRegister: (sessionId, controller) => abortRegistry.tryRegister(ABORT_KEY.agent(sessionId), AbortScopeFactory.fromController(controller)),
     abort: (sessionId) => abortRegistry.abort(ABORT_KEY.agent(sessionId)),
-    unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), AbortScopeFactory.fromController(controller)),
     has: (sessionId) => abortRegistry.has(ABORT_KEY.agent(sessionId)),
   };
   const streamRegistry = AgentServiceFactory.createStreamRegistry();
@@ -90,7 +91,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   const chat = ChatServiceFactory.createBundle(conn, { state, agentRegistry }, { yieldFn: () => new Promise((resolve) => setTimeout(resolve, 0)) });
   const { projects, sessions, messages, usageStats } = chat;
   const messageTranscriptEffects = ChatServiceFactory.createMessageTranscriptEffects(conn);
-  const sessionKkv = createSessionKkvService(conn);
+  const sessionKkv = SessionKkvServiceFactory.create(conn);
   const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(conn);
 
   const compactionConditionEvaluator = CompactionFactory.createEvaluator({
@@ -134,7 +135,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
     messages,
     usageStats,
     messageTranscriptEffects,
-    sessionFs: createSessionFsService(conn),
+    sessionFs: SessionFsServiceFactory.create(conn),
     messageCheckpoint: MessageCheckpointFactory.create(conn),
     sessionKkv,
     globalVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global" }),
@@ -148,8 +149,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
     globalMetaVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global-meta" }),
     projectMetaVfs: (projectId) => VfsServiceFactory.createScoped(conn, { kind: "project-meta", projectId }),
     physicalVfs: () => VfsServiceFactory.createPhysical(conn),
-    workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
-    skills: () => createSkillsService(conn),
+    workplace: (scope: VfsScope) => WorkplaceServiceFactory.create(conn, scope),
+    skills: () => SkillsServiceFactory.create(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

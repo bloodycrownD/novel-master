@@ -11,7 +11,7 @@
 import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
-import { assertSqliteBackupHeader, DatabaseReplacedError, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, ProviderTableSnapshotIo, type ProviderTableSnapshot } from "@novel-master/core";
+import { DatabaseBackupExport, DatabaseReplacedError, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
@@ -22,9 +22,9 @@ import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { agentActivity } from "../runtime/agent-activity.js";
 import { maintenanceBusy } from "./db-maintenance-busy.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 
-const log = createLogger("desktop.db-backup");
+const log = LogFactory.create("desktop.db-backup");
 
 const SQLITE_HEADER_BYTES = 16;
 
@@ -68,7 +68,7 @@ export function __setDbBackupFsOpsForTest(ops: Partial<typeof fsOps> | null): vo
 
 /**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
- * 调用方负责 Agent 守卫与目标路径管理；共享链路在 core（{@link exportDatabaseBackupToPathCore}），
+ * 调用方负责 Agent 守卫与目标路径管理；共享链路在 core（{@link DatabaseBackupExport.toPath}），
  * 本壳只保留 desktop 的 busy 计数与平台注入点。
  *
  * ic-20：busy 为计数/令牌配对——底层入口 acquire、出口 finally release
@@ -79,7 +79,7 @@ export function __setDbBackupFsOpsForTest(ops: Partial<typeof fsOps> | null): vo
 export async function exportDatabaseBackupToPath(runtime: DesktopNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
   maintenanceBusy.acquire();
   try {
-    await exportDatabaseBackupToPathCore(runtime.conn, destPath, { checkpointDatabase: checkpointDesktopDatabase, resolveDbPath, copyFile }, checkpoint);
+    await DatabaseBackupExport.toPath(runtime.conn, destPath, { checkpointDatabase: checkpointDesktopDatabase, resolveDbPath, copyFile }, checkpoint);
   } finally {
     maintenanceBusy.release();
   }
@@ -136,7 +136,7 @@ async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, p
     // 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
     registerBetterSqlite3Driver();
     const restoreDbPath = resolve(resolveDbPath());
-    const restoreConn = await open(`tdbc:sqlite:file:${restoreDbPath}`, { driver: "better-sqlite3" });
+    const restoreConn = await TdbcOpen.open(`tdbc:sqlite:file:${restoreDbPath}`, { driver: "better-sqlite3" });
     try {
       await ProviderTableSnapshotIo.restore(restoreConn, providerSnapshot);
     } finally {
@@ -196,7 +196,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
     try {
       const buf = Buffer.alloc(SQLITE_HEADER_BYTES);
       const { bytesRead } = await handle.read(buf, 0, SQLITE_HEADER_BYTES, 0);
-      checked = assertSqliteBackupHeader(new Uint8Array(buf.subarray(0, bytesRead)));
+      checked = SqliteBackupHeader.assert(new Uint8Array(buf.subarray(0, bytesRead)));
     } finally {
       await handle.close();
     }
@@ -218,11 +218,12 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
  *
  * ic-20：busy 为计数/令牌配对——同 {@link importDatabaseBackupFromPath}。
  */
+// nm-style: keep-local — db-backup-busy.test 直引断言字节导入的互斥令牌语义（3 个调用点）；内联会破坏测试锁名。
 export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<Result<DbImportOutcome, AppError>> {
   maintenanceBusy.acquire();
   try {
     // 内存态校验：bytes 已在堆上，不涉及整包读盘。失败沿 Result.err（同 FromPath 口径）。
-    const checked = assertSqliteBackupHeader(bytes);
+    const checked = SqliteBackupHeader.assert(bytes);
     if (!checked.ok) return Result.err(checked.error);
 
     const liveConn = await getDesktopConnection();
@@ -257,6 +258,7 @@ export async function pickDatabaseExportPath(parentWindow?: BrowserWindow | null
   return Result.ok(result.filePath);
 }
 
+// nm-style: keep-local — db-backup-export-dialog.test 直引断言导出对话框编排（3 个调用点）；内联会破坏测试锁名。
 export async function exportDatabaseBackup(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<Result<"saved" | "cancelled", AppError>> {
   const picked = await pickDatabaseExportPath(parentWindow);
   if (!picked.ok) return Result.err(picked.error);

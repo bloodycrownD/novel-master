@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "@novel-master/core/errors";
-import { createAbortError } from "@novel-master/core/abort";
-import { userMessageOf } from "@novel-master/core/i18n";
+import { AbortError } from "@novel-master/core/abort";
+import { ErrorMessage } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";
 import { AssertionError } from "../../../packages/core/src/common/assert.js";
 import { formatIpcError } from "../src/main/ipc/format-ipc-error.js";
@@ -55,7 +55,7 @@ describe("formatIpcError", () => {
       payload.message,
       "回滚所需 revision 缺失，需确认使用最新内容修复：/chapter-1.md, /notes/b.md"
     );
-    const descriptor = userMessageOf(err);
+    const descriptor = ErrorMessage.userOf(err);
     assert.ok(descriptor != null);
     assert.equal(
       coreT(descriptor),
@@ -83,13 +83,13 @@ describe("formatIpcError", () => {
   });
 
   it("AbortError（DOMException / RN Error 两种形态）→ IPC_ABORTED / 已取消", () => {
-    // Node 侧 DOMException 形态（createAbortError 的优先分支）。
-    const dom = formatIpcError(createAbortError());
+    // Node 侧 DOMException 形态（AbortError.create 的优先分支）。
+    const dom = formatIpcError(AbortError.create());
     assert.equal(dom.code, "IPC_ABORTED");
     assert.equal(dom.message, "已取消");
 
-    // Hermes 无 DOMException 时 createAbortError 退化为 Error + name='AbortError'；
-    // 手搓同形对象锁住 isAbortLikeError 的识别口径。
+    // Hermes 无 DOMException 时 AbortError.create 退化为 Error + name='AbortError'；
+    // 手搓同形对象锁住 RequestAbort.isAbortLikeError 的识别口径。
     const rnShaped = new Error("Request aborted");
     rnShaped.name = "AbortError";
     const payload = formatIpcError(rnShaped);

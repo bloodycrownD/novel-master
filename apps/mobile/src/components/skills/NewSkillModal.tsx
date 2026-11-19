@@ -11,11 +11,11 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {ChatProject} from '@novel-master/core/chat';
-import {buildNewSkillDoc, previewSkillZip, validateSkillName, type SkillDomain, type SkillZipPreview} from '@novel-master/core/skills';
+import {NewSkillDoc, SkillName, SkillZip, type SkillDomain, type SkillZipPreview} from '@novel-master/core/skills';
 import {VfsServiceFactory, type VfsScope} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {withSkillFrontMatterValues} from './skill-ui';
+import {SkillFrontMatterValues} from './skill-ui';
 import {pickZipFileBytes} from '@/services/vfs-zip.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -99,7 +99,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
 
   const selectedProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
 
-  const nameReason = name.length > 0 ? validateSkillName(name) : null;
+  const nameReason = name.length > 0 ? SkillName.validate(name) : null;
   const nameIssue = nameReason == null ? null : coreT(nameReason);
   const descriptionIssue = description.length === 0 ? '描述不能为空（进入索引，供模型判断是否使用）' : null;
   const projectIssue = domain === 'project' && projectId == null ? '请选择所属项目' : null;
@@ -122,7 +122,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
         return;
       }
       const bytes = picked.value;
-      const previewResult = previewSkillZip(bytes);
+      const previewResult = SkillZip.preview(bytes);
       if (!previewResult.ok) {
         setError(previewResult.error.message);
         return;
@@ -178,11 +178,11 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
           directoryPath: `/meta/skills/${name}`,
         });
         if (imported.preview.name !== name || imported.preview.description !== description) {
-          const skillDoc = withSkillFrontMatterValues(imported.preview.skillMd!, {name, description});
+          const skillDoc = SkillFrontMatterValues.rewrite(imported.preview.skillMd!, {name, description});
           await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', skillDoc, domain === 'project' ? projectId : undefined);
         }
       } else {
-        await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', buildNewSkillDoc(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
+        await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', NewSkillDoc.build(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
       }
       onCreated({
         domain,

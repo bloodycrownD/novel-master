@@ -6,7 +6,7 @@
  */
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 
-import {ABORT_KEY, createAbortRegistry} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortRegistryFactory} from '@novel-master/core/abort';
 import {runManualCompaction} from '@/services/manual-compaction.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -14,13 +14,13 @@ const mockRunCompaction = jest.fn();
 const mockGetHideStartDepth = jest.fn();
 
 jest.mock('@novel-master/core/compaction', () => ({
-  runCompaction: (...args: unknown[]) => mockRunCompaction(...args),
+  Compaction: {run: (...args: unknown[]) => mockRunCompaction(...args)},
 }));
 
 function stubRuntime(): MobileNovelMasterRuntime {
   return {
     // 泛化取消注册表（signal-abort-scope Step 11）：手动压缩任务级 scope 登记处。
-    abortRegistry: createAbortRegistry(),
+    abortRegistry: AbortRegistryFactory.create(),
     compactionConditionEvaluator: {
       getHideStartDepth: (...args: unknown[]) =>
         mockGetHideStartDepth(...args),

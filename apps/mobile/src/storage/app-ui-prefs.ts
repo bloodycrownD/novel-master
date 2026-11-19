@@ -4,8 +4,7 @@
  * @module storage/app-ui-prefs
  */
 
-import {isAppError} from '@novel-master/core/errors';
-import {Result, AppError} from '@novel-master/core/errors';
+import {AppErrorOps, Result, AppError} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {APP_UI_DEFAULTS, APP_UI_KKV_MODULE} from './app-ui-keys';
 
@@ -24,6 +23,7 @@ export interface AppUiPreferences {
  * readEnumPref/readBoolPref（app-ui-pref-io）失败回退默认值；写路径调用方
  * （AboutScreen 等）保留可见失败。
  */
+// nm-style: keep-public — app-ui-prefs.test.ts describe 直接 import 构造；chat-rich-text-pref / message-notification-pref 消费同一工厂，测试锁名
 export function createAppUiPreferences(kkv: KkvService): AppUiPreferences {
   const defaults = APP_UI_DEFAULTS as Record<string, string>;
 
@@ -33,7 +33,7 @@ export function createAppUiPreferences(kkv: KkvService): AppUiPreferences {
       if (raw.ok) {
         return Result.ok(raw.value);
       }
-      if (isAppError(raw.error, 'KKV_NOT_FOUND')) {
+      if (AppErrorOps.is(raw.error, 'KKV_NOT_FOUND')) {
         return Result.ok(key in defaults ? defaults[key] : undefined);
       }
       return Result.err(raw.error);

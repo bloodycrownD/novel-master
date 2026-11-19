@@ -1,7 +1,7 @@
 /**
  * Workplace rule toggles for VFS file manager row actions.
  */
-import {type InclusionMode, type SetDirRuleInput, type WorkplaceDirRule, type WorkplaceService, workplaceRootLogicalPath} from '@novel-master/core/workplace';
+import {type InclusionMode, type SetDirRuleInput, type WorkplaceDirRule, type WorkplaceService, WorkplaceScope} from '@novel-master/core/workplace';
 import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
 import {AppError} from '@novel-master/core/errors';
 import {Result} from '@novel-master/core/errors';
@@ -10,6 +10,7 @@ import {normalizeFillPolicyForMobile} from './fill-policy-mobile';
 const INCLUSION_CYCLE: InclusionMode[] = ['auto', 'show', 'hide'];
 
 /** Cycle file inclusion auto → show → hide. */
+// nm-style: keep-public — 3 个 vfs-file-manager 集成测试以模块接缝 mock（cycleFileInclusion: jest.fn），锁名
 export async function cycleFileInclusion(workplace: WorkplaceService, logicalPath: string, currentMode: InclusionMode): Promise<InclusionMode> {
   const next = INCLUSION_CYCLE[(INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length];
   await workplace.setFileRule({logicalPath, inclusionMode: next});
@@ -18,7 +19,7 @@ export async function cycleFileInclusion(workplace: WorkplaceService, logicalPat
 
 /** Set directory rule enabled; root cannot be disabled（守卫沿 Result.err 上行，五期）. */
 export async function setDirRuleEnabled(workplace: WorkplaceService, logicalPath: string, enabled: boolean): Promise<Result<void, AppError>> {
-  if (!enabled && logicalPath === workplaceRootLogicalPath(workplace.scope)) {
+  if (!enabled && logicalPath === WorkplaceScope.rootLogicalPath(workplace.scope)) {
     return Result.err(new AppError('WORKPLACE_ROOT_RULE_LOCKED', {detail: '根目录规则不可关闭'}));
   }
   return workplace.setDirRule({
@@ -28,6 +29,7 @@ export async function setDirRuleEnabled(workplace: WorkplaceService, logicalPath
 }
 
 /** Toggle directory rule on/off; root directory cannot be disabled. */
+// nm-style: keep-public — 3 个 vfs-file-manager 集成测试以模块接缝 mock，测试锁名
 export async function toggleDirRuleEnabled(workplace: WorkplaceService, logicalPath: string, currentlyEnabled: boolean): Promise<Result<boolean, AppError>> {
   const nextEnabled = !currentlyEnabled;
   const ruled = await setDirRuleEnabled(workplace, logicalPath, nextEnabled);
@@ -64,6 +66,7 @@ export async function batchSetDirRulesEnabled(workplace: WorkplaceService, paths
 }
 
 /** Map persisted directory rule to sheet form input. */
+// nm-style: keep-public — fill-policy-mobile.test.ts / vfs-file-manager.breadcrumb 测试直接 import 断言（fillPolicy 归一化口径），测试锁名
 export function dirRuleToForm(rule: WorkplaceDirRule): SetDirRuleInput {
   return {
     logicalPath: rule.logicalPath,
@@ -77,6 +80,7 @@ export function dirRuleToForm(rule: WorkplaceDirRule): SetDirRuleInput {
 }
 
 /** Default form values for new directory creation (Core merge semantics). */
+// nm-style: keep-public — fill-policy-mobile.test.ts / vfs-file-manager.breadcrumb 测试直接 import 断言，测试锁名
 export function defaultDirRuleForm(logicalPath: string) {
   return {
     logicalPath,
@@ -90,6 +94,7 @@ export function defaultDirRuleForm(logicalPath: string) {
 }
 
 /** 无持久化规则记录时弹窗展示的表单初值（规则关闭，其余字段同 Core 默认）。 */
+// nm-style: keep-public — fill-policy-mobile.test.ts / vfs-file-manager.breadcrumb 测试直接 import 断言，测试锁名
 export function emptyDirRuleForm(logicalPath: string) {
   return {
     logicalPath,
@@ -105,7 +110,7 @@ export function emptyDirRuleForm(logicalPath: string) {
 /** Scope root path for navigation (unified logical `/` for all domains). */
 // nm-style: keep-public — VFS 根路径解析公开入口（VfsFileManager 消费）
 export function vfsScopeRootPath(scope: WorkplaceService['scope']): string {
-  return workplaceRootLogicalPath(scope);
+  return WorkplaceScope.rootLogicalPath(scope);
 }
 
 /**

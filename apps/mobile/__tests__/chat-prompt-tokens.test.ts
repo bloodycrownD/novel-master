@@ -62,19 +62,22 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
 
 // badge/label 走 `@novel-master/core/common` 取 core 真实现（不被本 mock 覆盖），
 // 因此本套件断言的标签字符串与 desktop 测试同源对拍（token-source-label T-TL4）。
-// p22 public-surface-ownership：resolvePromptTokensWithBackfill / serializePromptLlmInput
-// 迁到 tokenizer 直映出口，resolveTokenCounterModeForModel 留在 provider——mock 随归属拆开。
+// p22 public-surface-ownership：PromptTokens.resolve / serializePromptLlmInput
+// 迁到 tokenizer 直映出口，TokenCounterMode.resolveForModel 留在 provider——mock 随归属拆开。
 jest.mock('@novel-master/core/tokenizer', () => ({
   ...jest.requireActual('@novel-master/core/tokenizer'),
   // 错误通道迁移二期：core 读口改走 Outcome（completed/failed/cancelled/replaced），
   // 不再抛弃权哨兵（PromptTokenResolveBailedError 随之退役，无需在 mock 里复刻）。
   // 桩仍按裸结果配置，这里统一包成 completed——弃权/失败用 kind 直返或 reject 表达。
-  resolvePromptTokensWithBackfill: async (...args: unknown[]) => {
-    const value = await mockResolvePromptTokensWithBackfill(...args);
-    if (value != null && typeof value === 'object' && 'tokenCount' in value) {
-      return {kind: 'completed' as const, value};
-    }
-    return value;
+  PromptTokens: {
+    ...jest.requireActual('@novel-master/core/tokenizer').PromptTokens,
+    resolve: async (...args: unknown[]) => {
+      const value = await mockResolvePromptTokensWithBackfill(...args);
+      if (value != null && typeof value === 'object' && 'tokenCount' in value) {
+        return {kind: 'completed' as const, value};
+      }
+      return value;
+    },
   },
   serializePromptLlmInput: async (...args: unknown[]) => ({
     ok: true as const,
@@ -82,16 +85,24 @@ jest.mock('@novel-master/core/tokenizer', () => ({
   }),
 }));
 jest.mock('@novel-master/core/provider', () => ({
+  ...jest.requireActual('@novel-master/core/provider'),
   // 端口走 Result 通道（错误通道迁移）：桩仍按裸结果配置，出口统一包成
   // ok——被测服务的 `!counterMode.ok` / `!serialized.ok` 解包面保持原样。
-  resolveTokenCounterModeForModel: async (...args: unknown[]) => ({
-    ok: true as const,
-    value: await mockResolveTokenCounterModeForModel(...args),
-  }),
+  TokenCounterMode: {
+    ...jest.requireActual('@novel-master/core/provider').TokenCounterMode,
+    resolveForModel: async (...args: unknown[]) => ({
+      ok: true as const,
+      value: await mockResolveTokenCounterModeForModel(...args),
+    }),
+  },
 }));
 
 jest.mock('@novel-master/core/prompt', () => ({
-  messageBodyTextFromBlocks: () => 'hello',
+  ...jest.requireActual('@novel-master/core/prompt'),
+  MessageBodyText: {
+    ...jest.requireActual('@novel-master/core/prompt').MessageBodyText,
+    fromBlocks: () => 'hello',
+  },
 }));
 
 jest.mock('@/services/session-prompt-input.service', () => ({

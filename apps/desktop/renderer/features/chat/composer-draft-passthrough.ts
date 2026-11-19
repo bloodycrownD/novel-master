@@ -15,7 +15,7 @@ export type HydratedComposerDraft = {
   readonly tokenRanges?: readonly ComposerDraftTokenRange[];
 };
 
-/** 写回 payload（`serializeComposerDraftJson` 的入参；draft attach 恒空）。 */
+/** 写回 payload（`ComposerDraftSchema.serializeJson` 的入参；draft attach 恒空）。 */
 type ComposerDraftPersistPayload = {
   readonly text: string;
   readonly attachments: readonly [];
@@ -30,6 +30,7 @@ type ComposerDraftPersistPayload = {
  * 三种情况都省略该字段；其中 `undefined` 表示「允许 mobile 兜底扫描」，
  * 不能被写成 `[]`（`[]` 表示确认无胶囊、禁止扫描）。
  */
+// nm-style: keep-local — composer-draft-passthrough.test 直引断言透传/省略语义（8 个调用点）；内联会破坏测试锁名。
 export function resolveComposerDraftPersistPayload(
   hydrated: HydratedComposerDraft | null,
   composerText: string,

@@ -1,13 +1,10 @@
 /**
  * Prompt IPC handlers — real prompt preview turns, chat token label, agent meta.
  */
-import {
-  AGENT_RUN_RESOLVE_KEYS,
-  resolveAgentForProject,
-} from "@novel-master/core/agent";
+import { AgentProjectResolver, AGENT_RUN_RESOLVE_KEYS } from "@novel-master/core/agent";
 import { type AppError } from "@novel-master/core/errors";
-import { savedModelDisplayName } from "@novel-master/core/provider";
-import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
+import { SavedModelDisplayName } from "@novel-master/core/provider";
+import { PromptPreviewTurns } from "@novel-master/core/prompt";
 import { Result } from "@novel-master/core/errors";
 import type {
   IpcResult,
@@ -50,7 +47,7 @@ export function handlePromptRealPreview(req: PromptScopeRequest): Promise<IpcRes
               inputJson: card.inputJson,
               // 保结构截大 key 的预览在 main 侧算好下发（renderer 不引
               // core 运行时——这条 import 会把 zod 等整图拖进沙箱 bundle）。
-              inputPreview: formatToolUsePreviewJson(card.inputJson),
+              inputPreview: PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson),
               result: card.result,
               status: card.status,
               parallel: card.parallel,
@@ -95,7 +92,7 @@ export function handlePromptAgentMeta(req: PromptScopeRequest): Promise<IpcResul
     const built = await getDesktopRuntime();
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const resolved = await resolveAgentForProject(rt, req.projectId, req.sessionId);
+    const resolved = await AgentProjectResolver.resolve(rt, req.projectId, req.sessionId);
     // resolve 已知失败沿 Result 到达（错误通道迁移四期），就地归一（错误通道
     // 迁移七期）：resolve keys → source:'none'（T-C2 口径不变），其余沿 Result
     // 上行交 toIpcResult 转码。
@@ -123,7 +120,7 @@ export function handlePromptAgentMeta(req: PromptScopeRequest): Promise<IpcResul
       if (saved.value != null) {
         const provider = await rt.providers.get(saved.value.providerId);
         if (!provider.ok) return Result.err(provider.error);
-        modelLabel = savedModelDisplayName(saved.value, provider.value.displayName);
+        modelLabel = SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName);
       } else {
         modelLabel = savedModelId;
       }

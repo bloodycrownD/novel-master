@@ -1,14 +1,13 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import {type AgentDefinition, resolveAgentForProject} from '@novel-master/core/agent';
+import {type AgentDefinition, AgentProjectResolver} from '@novel-master/core/agent';
 import {ChatPromptBuildBailedError} from '@novel-master/core';
 
 import {promptAssembler, type ChatMessageData} from '@novel-master/core/chat';
 import {PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
-import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
-import type {Interrupt} from '@novel-master/core/errors';
-import {Result, AppError} from '@novel-master/core/errors';
+import {WorkplaceDisplayAssembler} from '@novel-master/core/workplace';
+import {Result, AppError, type Interrupt} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime as MobileRuntime} from '@/runtime/types';
 
 export interface SessionPromptScope {
@@ -59,7 +58,7 @@ export async function buildSessionPromptInputAdapter(runtime: MobileRuntime, sco
   if (definition != null) {
     resolved = definition;
   } else {
-    const r = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
+    const r = await AgentProjectResolver.resolve(runtime, scope.projectId, scope.sessionId);
     if (!r.ok) return Result.err(r.error);
     resolved = r.value.definition;
   }
@@ -97,7 +96,7 @@ export async function buildSessionPromptInputAdapter(runtime: MobileRuntime, sco
   // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉重复序列化/计数。
   const workplaceContext = {sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts};
   const stopOptions = {checkpoint: (): Interrupt | null => (shouldBail?.() === true ? {kind: 'replaced'} : null)};
-  const assembled = await assembleWorkplaceDisplay(wtScope, workplaceContext, stopOptions);
+  const assembled = await WorkplaceDisplayAssembler.assemble(wtScope, workplaceContext, stopOptions);
   if (assembled.kind === 'failed') {
     // 组装内的已知失败（如路径解析）：沿 Result 通道接力，不吞成弃权。
     return Result.err(assembled.error);

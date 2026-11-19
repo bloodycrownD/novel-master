@@ -1,9 +1,8 @@
 /**
- * 技能管理共享 UI 基础：域徽标文案、SKILL.md 新建模板、技能名校验。
+ * 技能管理共享 UI 基础：域徽标文案、SKILL.md 新建模板、技能定位。
  *
  * 会话技能面板（SessionDetailDrawer 内）与设置·技能管理页共用。
  */
-import { SKILL_NAME_PATTERN } from "@shared/logic/skills";
 import type { SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
 
 /** 域徽标文案：项目副本覆盖同名全局技能时标「项目 · 覆盖全局」。 */
@@ -18,17 +17,12 @@ export function skillDomainLabel(
 }
 
 /** 新建技能的 SKILL.md 模板：front matter（name/description）+ 辅助文件引导。 */
-// 新建模板与 front matter 重写都已回收为 core 单源（见 buildNewSkillDoc 的模块注释：
+// 新建模板与 front matter 重写都已回收为 core 单源（见 NewSkillDoc.build 的模块注释：
 // 裸插值会让 description 里的半角 `": "` 把 YAML 解析成嵌套 map ⇒ 技能一建出来就是「无效技能」）。
-export { buildNewSkillDoc } from "@shared/logic/skills";
+export { NewSkillDoc } from "@shared/logic/skills";
 
-// front matter 重写（withSkillFrontMatterValues）已回收为 core 单源，
+// front matter 重写（SkillFrontMatterValues.rewrite）已回收为 core 单源，
 // 经 @shared/logic/skills 再导出，本文件不再持有私有实现。
-
-/** 技能名展示校验（与 core SKILL_NAME_PATTERN 同口径：禁空白与 `/`、不以 `.` 开头、非保留名）。 */
-export function isValidSkillNameInput(name: string): boolean {
-  return name.length > 0 && SKILL_NAME_PATTERN.test(name);
-}
 
 /** 技能定位（跳详情用）：project 域带 projectId，global 域缺省。 */
 export function toSkillRef(
@@ -41,31 +35,6 @@ export function toSkillRef(
     ...(domain === "project" && projectId != null ? { projectId } : {}),
     name,
   };
-}
-
-
-/** 批量选择/列表 key：`global/{name}` 或 `project/{projectId}/{name}`。 */
-export function skillKey(ref: SkillRefDto): string {
-  return ref.domain === "global"
-    ? `global/${ref.name}`
-    : `project/${ref.projectId ?? ""}/${ref.name}`;
-}
-
-/** 与 skillKey 互逆；无法解析时返回 undefined。 */
-export function parseSkillKey(key: string): SkillRefDto | undefined {
-  const parts = key.split("/");
-  if (parts[0] === "global" && parts.length === 2 && parts[1]) {
-    return { domain: "global", name: parts[1]! };
-  }
-  if (
-    parts[0] === "project" &&
-    parts.length === 3 &&
-    parts[1] &&
-    parts[2]
-  ) {
-    return { domain: "project", projectId: parts[1], name: parts[2]! };
-  }
-  return undefined;
 }
 
 /**

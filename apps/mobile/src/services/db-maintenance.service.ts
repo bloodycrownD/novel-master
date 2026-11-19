@@ -1,7 +1,7 @@
 /**
  * 数据库维护（数据清理）mobile 服务：库体积/可回收量统计与清理执行入口。
  *
- * 清理执行链在 core `createDbMaintenanceService`（缓存 GC → 防御性
+ * 清理执行链在 core `DbMaintenance.create`（缓存 GC → 防御性
  * checkpoint → VACUUM，事务外、驱动层互斥串行）；本服务只补 mobile 侧
  * 事情——Agent 运行守卫与数据库文件体积采样（blob-util stat）。
  * 错误口径：Agent 运行中守卫沿 `Result.err` 上行（错误通道迁移五期）；
@@ -12,9 +12,9 @@
  *
  * @module services/db-maintenance.service
  */
-import {createDbMaintenanceService} from '@novel-master/core';
+import {DbMaintenance} from '@novel-master/core';
 import {AppError} from '@novel-master/core/errors';
-import {ABORT_KEY, createAbortScope} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortScopeFactory} from '@novel-master/core/abort';
 import {assert} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
@@ -39,7 +39,7 @@ export async function getDbMaintenanceStats(runtime: MobileNovelMasterRuntime): 
   if (agentActivity.isActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
-  const [fileBytes, stats] = await Promise.all([statDatabaseFileBytes(), createDbMaintenanceService(runtime.conn).getStorageStats()]);
+  const [fileBytes, stats] = await Promise.all([statDatabaseFileBytes(), DbMaintenance.create(runtime.conn).getStorageStats()]);
   return Result.ok({
     fileBytes,
     reclaimableBytes: stats.reclaimableBytes,
@@ -57,7 +57,7 @@ export async function runDbMaintenance(runtime: MobileNovelMasterRuntime): Promi
   }
   // 任务级取消 scope（spec §五移动表：dbMaintenance("local")，**仅入口**；
   // VACUUM / checkpoint 同步段不可中断，UI 不提供取消按钮）。
-  const abortScope = createAbortScope();
+  const abortScope = AbortScopeFactory.buildScope({});
   runtime.abortRegistry.register(ABORT_KEY.dbMaintenance('local'), abortScope);
   try {
     // 本入口没有任何取消来源（UI 不提供取消按钮，registry 也没人 abort）；
@@ -66,7 +66,7 @@ export async function runDbMaintenance(runtime: MobileNovelMasterRuntime): Promi
     maintenanceBusy.acquire();
     try {
       const beforeBytes = await statDatabaseFileBytes();
-      await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
+      await DbMaintenance.create(runtime.conn).runDatabaseMaintenance();
       const afterBytes = await statDatabaseFileBytes();
       return Result.ok({beforeBytes, afterBytes});
     } finally {

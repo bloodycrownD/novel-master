@@ -4,7 +4,7 @@
  * 就地展开该文件的预览卡（块内正文预览）；点预览卡才开全屏原文 Modal——
  * 用户拍板的层级：轮 → 文件列表 → 预览 → 全屏（不再嵌 workplace 组）。
  *
- * 数据源是 main 侧下发的 `files`（core 从 `assembleWorkplaceDisplay` 的 kkv
+ * 数据源是 main 侧下发的 `files`（core 从 `WorkplaceDisplayAssembler.assemble` 的 kkv
  * 规则快照源头直通，不从展示串反解）。
  *
  * **纯展示组件**：文件级展开态由父级（`RealPromptPanel` 的 expanded map）下发，

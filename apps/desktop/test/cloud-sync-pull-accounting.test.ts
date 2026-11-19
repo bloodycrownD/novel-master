@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { snapshotKey, statusKey, type ObjectStoragePort } from "@novel-master/core";
+import { CloudSyncPaths, type ObjectStoragePort } from "@novel-master/core";
 import { Path } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import {
@@ -49,7 +49,7 @@ function createMemoryRemote(initial: {
   const status: Record<string, unknown> = {
     schemaVersion: 1,
     rev: initial.rev,
-    snapshotKey: snapshotKey(PREFIX, initial.rev),
+    snapshotKey: CloudSyncPaths.snapshotKey(PREFIX, initial.rev),
     snapshotSha256: initial.sha256,
     snapshotBytes: initial.snapshot.length,
     lock: null,
@@ -59,13 +59,13 @@ function createMemoryRemote(initial: {
     new TextEncoder().encode(JSON.stringify(status));
   return {
     async head(key: string) {
-      if (key === statusKey(PREFIX)) {
+      if (key === CloudSyncPaths.statusKey(PREFIX)) {
         return { exists: true, etag, bytes: encode().length };
       }
       return { exists: false };
     },
     async get(key: string) {
-      if (key === statusKey(PREFIX)) {
+      if (key === CloudSyncPaths.statusKey(PREFIX)) {
         return { body: encode(), etag };
       }
       return { body: initial.snapshot, etag: "snap-1" };

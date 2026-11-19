@@ -20,7 +20,7 @@ jest.mock('react-native', () => ({
   NativeEventEmitter: class {},
 }));
 
-import {postSse, registerSseTransport} from '../../../packages/core/dist/infra/llm-protocol/logic/llm-sse-transport.js';
+import {LlmSseTransport} from '../../../packages/core/dist/infra/llm-protocol/logic/llm-sse-transport.js';
 import {createNativeSseTransportFromBridge} from '@novel-master/llm-sse-native';
 
 interface Recorded {
@@ -60,14 +60,14 @@ function makeMockBridge(recorded: Recorded) {
 }
 
 describe('stop-button 复现：native 分支挂死 + abort 传导', () => {
-  it('挂死中 abort → bridge.sseAbort 被调 + postSse reject AbortError', async () => {
+  it('挂死中 abort → bridge.sseAbort 被调 + LlmSseTransport.post reject AbortError', async () => {
     const recorded: Recorded = {connects: [], aborts: []};
     const {bridge} = makeMockBridge(recorded);
-    registerSseTransport(createNativeSseTransportFromBridge(bridge as never));
+    LlmSseTransport.register(createNativeSseTransportFromBridge(bridge as never));
 
     const controller = new AbortController();
     let rejection: unknown;
-    const p = postSse(
+    const p = LlmSseTransport.post(
       'http://mock-dead/chat/completions',
       {method: 'POST', headers: {}, body: '{}'},
       () => undefined,
@@ -88,7 +88,7 @@ describe('stop-button 复现：native 分支挂死 + abort 传导', () => {
 
     // 断言一：连接被客户端主动关闭（sseAbort 到达 native 侧）
     expect(recorded.aborts).toEqual(recorded.connects);
-    // 断言二：postSse 以 AbortError 形态 reject（run 收敛而非悬死）
+    // 断言二：LlmSseTransport.post 以 AbortError 形态 reject（run 收敛而非悬死）
     await p;
     expect((rejection as {name?: string})?.name).toBe('AbortError');
   });

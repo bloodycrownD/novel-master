@@ -13,11 +13,11 @@ import {
   EVENT_AGENT_STREAM_USAGE,
   type SimpleEventBus,
 } from "@novel-master/core/events";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
 import { createEventForwarder } from "./event-forwarder.js";
 
-const log = createLogger("desktop.ipc.event-bus");
+const log = LogFactory.create("desktop.ipc.event-bus");
 
 const FORWARDED_EVENTS = [
   EVENT_AGENT_STREAM_TEXT_DELTA,

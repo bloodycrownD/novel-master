@@ -6,8 +6,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {splitMarkdownFrontMatter} from '@novel-master/core/common';
-import {parseFrontMatterFields, Text as CommonText} from '@novel-master/core/common';
+import {FrontMatter, Text as CommonText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -36,7 +35,7 @@ export function isMarkdownPreviewPath(path: string): boolean {
  * - `txt`：文本档（也是非 md 文件的兜底），纯文本铺开可长按复制；
  * - `rich`：富文本直读档（提示词轮/叶子全屏用）。**跳过 front-matter 拆分与
  *   扩展名判定**，直接进 WebView 富文本管线——刻意不做「伪 .md 路径」那条路：
- *   `splitMarkdownFrontMatter` 会把 `---` 开头的正文误当 YAML，
+ *   `FrontMatter.splitMarkdown` 会把 `---` 开头的正文误当 YAML，
  *   markdown-it 的 linkify 又会把 `[段名]` 渲染成坏链。
  */
 export type PreviewRenderKind = 'markdown' | 'txt' | 'rich';
@@ -72,23 +71,6 @@ function PreviewScrollWrap({previewFill, children}: {previewFill: boolean; child
       {children}
     </ScrollView>
   );
-}
-
-/** 仅成对 renderStart/renderEnd 的草稿可投影（R8）。 */
-export function pathDraftsToRecogitoMarks(drafts: readonly AnnotateDraft[]): RichDocumentAnnotationMark[] {
-  const out: RichDocumentAnnotationMark[] = [];
-  for (const d of drafts) {
-    if (typeof d.renderStart !== 'number' || typeof d.renderEnd !== 'number' || d.renderStart < 0 || d.renderEnd <= d.renderStart) {
-      continue;
-    }
-    out.push({
-      id: d.id,
-      originalText: d.originalText,
-      renderStart: d.renderStart,
-      renderEnd: d.renderEnd,
-    });
-  }
-  return out;
 }
 
 export function FileMarkdownPreview({path, content, tokens, previewFill = false, renderKind = 'markdown', annotateEnabled = false, sessionId}: FileMarkdownPreviewProps) {
@@ -130,7 +112,22 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
     return chatAnnotateDraftStore.list(sessionId).filter(d => d.path === path);
   }, [annotateEnabled, sessionId, path, draftTick]);
 
-  const recogitoMarks = useMemo(() => pathDraftsToRecogitoMarks(pathDrafts), [pathDrafts]);
+  // 仅成对 renderStart/renderEnd 的草稿可投影（R8）。
+  const recogitoMarks = useMemo((): RichDocumentAnnotationMark[] => {
+    const out: RichDocumentAnnotationMark[] = [];
+    for (const d of pathDrafts) {
+      if (typeof d.renderStart !== 'number' || typeof d.renderEnd !== 'number' || d.renderStart < 0 || d.renderEnd <= d.renderStart) {
+        continue;
+      }
+      out.push({
+        id: d.id,
+        originalText: d.originalText,
+        renderStart: d.renderStart,
+        renderEnd: d.renderEnd,
+      });
+    }
+    return out;
+  }, [pathDrafts]);
 
   useEffect(() => {
     if (!annotateEnabled || sessionId == null || sessionId === '') {
@@ -229,11 +226,11 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
   );
 
   const isMdPath = isMarkdownPreviewPath(path);
-  const split = useMemo(() => (isMdPath ? splitMarkdownFrontMatter(content) : null), [content, isMdPath]);
+  const split = useMemo(() => (isMdPath ? FrontMatter.splitMarkdown(content) : null), [content, isMdPath]);
 
   const fmLines = split?.frontMatterLines ?? null;
   const showFrontMatter = isMdPath && fmLines !== null;
-  const fmFields = showFrontMatter ? parseFrontMatterFields(fmLines) : [];
+  const fmFields = showFrontMatter ? FrontMatter.parseFields(fmLines) : [];
 
   /** 干净 MD 正文（禁止源串插锚注再渲染）。 */
   const mdBody = useMemo(() => {

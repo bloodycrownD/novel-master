@@ -14,7 +14,7 @@ import {readFileSync} from 'fs';
 import {join} from 'path';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ABORT_KEY, createAbortError} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortError} from '@novel-master/core/abort';
 import {StorageConfigScreen} from '@/screens/stack/StorageConfigScreen';
 
 const mockShowToast = jest.fn();
@@ -163,7 +163,7 @@ describe('StorageConfigScreen 长任务取消入口 — Step 14', () => {
     expect(mockAbort).toHaveBeenCalledWith(ABORT_KEY.backup('local'));
 
     await act(async () => {
-      rejectExport(createAbortError());
+      rejectExport(AbortError.create());
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -195,7 +195,7 @@ describe('StorageConfigScreen 长任务取消入口 — Step 14', () => {
     expect(mockAbort).toHaveBeenCalledWith(ABORT_KEY.backup('local'));
 
     await act(async () => {
-      rejectImport(createAbortError());
+      rejectImport(AbortError.create());
       await Promise.resolve();
       await Promise.resolve();
     });

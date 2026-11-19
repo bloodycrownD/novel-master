@@ -1,8 +1,8 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bootstrapNovelMaster,
-  open,
+  NovelMasterBootstrap,
+  TdbcOpen,
 } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
@@ -22,11 +22,11 @@ describe("SqliteSecretStore", () => {
   });
 
   it("round-trips set/get and stores non-plaintext ciphertext", async () => {
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     const store = createWindowsSecretStore(conn);
     const ref = "provider/test/apiKey";
     await store.set(ref, "sk-secret-123");

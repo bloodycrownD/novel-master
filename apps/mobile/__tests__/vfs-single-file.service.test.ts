@@ -63,7 +63,7 @@ import {
   importVfsSingleFile,
 } from '@/services/vfs-single-file.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {isAppError} from '@novel-master/core/errors';
+import {AppErrorOps} from '@novel-master/core/errors';
 import {formatError} from '@/errors/format-error';
 
 /** 选中文件在 blob 层的 base64 载荷（btoa 只吃 Latin-1，用 ASCII 内容）。 */
@@ -226,7 +226,7 @@ describe('vfs-single-file.service', () => {
       (err: unknown) => err,
     );
 
-    expect(isAppError(error, 'VFS_SINGLE_FILE_TOO_LARGE')).toBe(true);
+    expect(AppErrorOps.is(error, 'VFS_SINGLE_FILE_TOO_LARGE')).toBe(true);
     // 文案经 formatError → messageKey 模板渲染，与原内联 message 逐字一致。
     const message = formatError(error);
     expect(message).toContain(`${oversize} 字节`);
@@ -308,7 +308,7 @@ describe('vfs-single-file.service', () => {
     const exported = await exportVfsSingleFile(runtime, scope, '/角色');
     expect(exported.ok).toBe(false);
     const failure = exported.ok ? undefined : exported.error;
-    expect(isAppError(failure, 'VFS_SINGLE_FILE_EXPORT_TARGET_INVALID')).toBe(true);
+    expect(AppErrorOps.is(failure, 'VFS_SINGLE_FILE_EXPORT_TARGET_INVALID')).toBe(true);
     expect(formatError(failure)).toContain('/角色');
     expect(mockWriteFile).not.toHaveBeenCalled();
     expect(mockSaveDocuments).not.toHaveBeenCalled();

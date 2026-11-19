@@ -11,10 +11,10 @@
  * 多个调用方嵌套（如上层备份流程包住底层导出）不会互相提前清位；
  * `> 0` 即 busy。
  *
- * 计数实现收在 `@novel-master/core/common` 的 createBusyFlag（desktop 同名
+ * 计数实现收在 `@novel-master/core/common` 的 Concurrency.createBusyFlag（desktop 同名
  * 模块共用同一份）；本模块只负责移动端实例化。
  */
 
-import {createBusyFlag} from '@novel-master/core/common';
+import {Concurrency} from '@novel-master/core/common';
 
-export const maintenanceBusy: ReturnType<typeof createBusyFlag> = createBusyFlag();
+export const maintenanceBusy: ReturnType<typeof Concurrency.createBusyFlag> = Concurrency.createBusyFlag();

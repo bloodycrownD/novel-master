@@ -12,13 +12,13 @@
  */
 import { ABORT_KEY } from "@novel-master/core/abort";
 import { AppError } from "@novel-master/core/errors";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import type { AgentAbortRequest, IpcResult, RunAbortRequest, RunAbortResponse } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr, ipcOk } from "../ipc-result.js";
 
-const log = createLogger("desktop.ipc.run-abort");
+const log = LogFactory.create("desktop.ipc.run-abort");
 
 /** kind → `ABORT_KEY` 工厂；键集合与 shared `RunAbortRequest.kind` 一一对应。 */
 const ABORT_KEY_BY_KIND = {
@@ -35,8 +35,8 @@ type RunAbortKind = keyof typeof ABORT_KEY_BY_KIND;
 /**
  * 按完整 key 取消；key 未注册、或 runtime 尚未就位时静默 no-op。
  *
- * 与 `abortAgentRun` 同口径：runtime 未就绪时无在途任务可中断，留痕后返回，
- * 不让取消按钮把错误弹给用户。
+ * 与 `handleAgentAbort`（agent.ts，原 abortAgentRun）同口径：runtime 未就绪时
+ * 无在途任务可中断，留痕后返回，不让取消按钮把错误弹给用户。
  */
 async function abortRegisteredKey(key: string): Promise<void> {
   const built = await getDesktopRuntime();

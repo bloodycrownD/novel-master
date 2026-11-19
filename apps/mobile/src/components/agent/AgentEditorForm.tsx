@@ -14,8 +14,8 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 // prettier 必拆回；按可读性保留拆行。
 import {buildAgentDefinitionFromForm} from '@/config-forms/agent';
 import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
-import {STORED_CONFIG_LABELS, buildDefaultAgentDefinitionPreservingName, storedConfigInvalidReason} from '@novel-master/core/stored-config-validity';
-import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
+import {DefaultAgentDefinition, STORED_CONFIG_LABELS, StoredConfigLabels} from '@novel-master/core/stored-config-validity';
+import {BuiltinTools, ToolRegistry} from '@novel-master/core';
 
 import {FormField} from '../form/FormField';
 import {FormSectionCard} from '../form/FormSectionCard';
@@ -143,9 +143,9 @@ export function AgentEditorForm(props: Props) {
               const raw = await runtime.agentRegistry.getRawWire(agentId);
               const displayName = agentDisplayNameFromWire(raw, agentId);
               const baseName = displayName.trim() || agentId;
-              const def = buildDefaultAgentDefinitionPreservingName(baseName);
+              const def = DefaultAgentDefinition.build(baseName);
               const probe = new ToolRegistry();
-              registerBuiltinTools(probe);
+              BuiltinTools.register(probe);
               await runtime.agentRegistry.upsert(agentId, def, {
                 registeredToolNames: probe.list(),
               });
@@ -182,7 +182,7 @@ export function AgentEditorForm(props: Props) {
     setSaving(true);
     try {
       const probe = new ToolRegistry();
-      registerBuiltinTools(probe);
+      BuiltinTools.register(probe);
       await runtime.agentRegistry.upsert(agentId, def, {
         registeredToolNames: probe.list(),
       });
@@ -256,7 +256,7 @@ export function AgentEditorForm(props: Props) {
     const title = invalidConfig != null ? coreT(STORED_CONFIG_LABELS.invalidTitle) : '加载失败';
     let reason = loadError ?? '';
     if (invalidConfig != null) {
-      reason = coreT(storedConfigInvalidReason(invalidConfig.code));
+      reason = coreT(StoredConfigLabels.invalidReason(invalidConfig.code));
     }
     const detail = invalidConfig?.message ?? '';
     return (

@@ -10,4 +10,4 @@
 
 export type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
 
-export { PRESET_ENGINE_TEMPLATES, parseCurlCommand, validateSearchEngineTemplate } from "@novel-master/core";
+export { PRESET_ENGINE_TEMPLATES, CurlImport, SearchEngine } from "@novel-master/core";

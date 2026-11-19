@@ -11,8 +11,14 @@ import type {
   Row,
   TdbcConnection,
 } from "@novel-master/core";
-import { AsyncMutex, TdbcError, normalizeBindings } from "@novel-master/core/tdbc";
+import { AsyncMutex, TdbcBindings, TdbcError } from "@novel-master/core/tdbc";
 import { mapRow } from "./row-mapper.js";
+
+/** 单条语句的绑定参数集（与 core `TdbcConnection` 契约同构的类型别名，只为签名一行写完）。 */
+type SqlParams = readonly unknown[];
+
+/** batch 的参数集列表（同上，类型别名只为签名一行写完）。 */
+type BindingsList = readonly (readonly unknown[])[];
 
 export class BetterSqlite3Connection implements TdbcConnection {
   private closed = false;
@@ -21,25 +27,16 @@ export class BetterSqlite3Connection implements TdbcConnection {
 
   constructor(private readonly db: Database.Database) {}
 
-  execute(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<ExecuteResult> {
-    return this.mutex.run(() => this.executeSync(sql, parameters));
+  execute(sql: string, params?: SqlParams): Promise<ExecuteResult> {
+    return this.mutex.run(() => this.executeSync(sql, params));
   }
 
-  query<T extends Row = Row>(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<T[]> {
-    return this.mutex.run(() => this.querySync<T>(sql, parameters));
+  query<T extends Row = Row>(sql: string, params?: SqlParams): Promise<T[]> {
+    return this.mutex.run(() => this.querySync<T>(sql, params));
   }
 
-  batch(
-    sql: string,
-    parametersList: readonly (readonly unknown[])[],
-  ): Promise<BatchResult> {
-    return this.mutex.run(() => this.batchSync(sql, parametersList));
+  batch(sql: string, paramsList: BindingsList): Promise<BatchResult> {
+    return this.mutex.run(() => this.batchSync(sql, paramsList));
   }
 
   transaction<T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
@@ -84,14 +81,11 @@ export class BetterSqlite3Connection implements TdbcConnection {
   }
 
   /** Runs execute without mutex (caller holds the lock or is on tx surface). */
-  executeSync(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): ExecuteResult {
+  executeSync(sql: string, params?: SqlParams): ExecuteResult {
     this.assertOpen();
     try {
       const stmt = this.db.prepare(sql);
-      const result = stmt.run(...(normalizeBindings(parameters) ?? []));
+      const result = stmt.run(...(TdbcBindings.normalize(params) ?? []));
       return {
         changes: result.changes,
         lastInsertRowid: result.lastInsertRowid,
@@ -101,29 +95,21 @@ export class BetterSqlite3Connection implements TdbcConnection {
     }
   }
 
-  querySync<T extends Row = Row>(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): T[] {
+  querySync<T extends Row = Row>(sql: string, params?: SqlParams): T[] {
     this.assertOpen();
     try {
       const stmt = this.db.prepare(sql);
-      const rows = stmt.all(...(normalizeBindings(parameters) ?? [])) as Record<
-        string,
-        unknown
-      >[];
-      return rows.map((r) => mapRow(r) as T);
+      const args = TdbcBindings.normalize(params) ?? [];
+      const rawRows = stmt.all(...args) as Record<string, unknown>[];
+      return rawRows.map((r) => mapRow(r) as T);
     } catch (cause) {
       throw this.wrapSqlite(cause);
     }
   }
 
-  batchSync(
-    sql: string,
-    parametersList: readonly (readonly unknown[])[],
-  ): BatchResult {
+  batchSync(sql: string, paramsList: BindingsList): BatchResult {
     this.assertOpen();
-    if (parametersList.length === 0) {
+    if (paramsList.length === 0) {
       return { totalChanges: 0, count: 0 };
     }
 
@@ -132,15 +118,15 @@ export class BetterSqlite3Connection implements TdbcConnection {
 
     // --- batch boundary: single SQLite transaction, all-or-nothing ---
     const runBatch = this.db.transaction(() => {
-      for (const params of parametersList) {
-        const result = stmt.run(...(normalizeBindings(params) ?? []));
+      for (const params of paramsList) {
+        const result = stmt.run(...(TdbcBindings.normalize(params) ?? []));
         totalChanges += result.changes;
       }
     });
 
     try {
       runBatch();
-      return { totalChanges, count: parametersList.length };
+      return { totalChanges, count: paramsList.length };
     } catch (cause) {
       throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
         driver: "better-sqlite3",
@@ -179,25 +165,19 @@ export class BetterSqlite3Connection implements TdbcConnection {
 class TransactionalConnection implements TdbcConnection {
   constructor(private readonly parent: BetterSqlite3Connection) {}
 
-  async execute(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<ExecuteResult> {
-    return this.parent.executeSync(sql, parameters);
+  async execute(sql: string, params?: SqlParams): Promise<ExecuteResult> {
+    return this.parent.executeSync(sql, params);
   }
 
   async query<T extends Row = Row>(
     sql: string,
-    parameters?: readonly unknown[],
+    params?: SqlParams,
   ): Promise<T[]> {
-    return this.parent.querySync<T>(sql, parameters);
+    return this.parent.querySync<T>(sql, params);
   }
 
-  async batch(
-    sql: string,
-    parametersList: readonly (readonly unknown[])[],
-  ): Promise<BatchResult> {
-    return this.parent.batchSync(sql, parametersList);
+  async batch(sql: string, paramsList: BindingsList): Promise<BatchResult> {
+    return this.parent.batchSync(sql, paramsList);
   }
 
   transaction<T>(_fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {

@@ -33,8 +33,7 @@ import {agentActivity} from '@/runtime/agent-activity';
 import {HeuristicTokenCounter} from '@novel-master/core/tokenizer';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
-import {createIncrementalTokenCounter} from '@novel-master/core/tokenizer';
-import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 
 /** 与单元实现同值的 ingress 合并窗口（32ms）。 */
@@ -1361,7 +1360,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
     // 足够长的段落让该段跨过固化阈值进入固化路径。
     const h = createHarness({
       tokenEstimatorFactory: () =>
-        createIncrementalTokenCounter({
+        IncrementalTokenCounter.create({
           encode: text => {
             if (text.includes('§')) {
               throw new Error('special token text');
@@ -1399,7 +1398,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
   it('C-1: 构造时不同步建估算器——水合单元零次，真实 run 在 begin() 建两次', () => {
     // 首建 tiktoken 编码表 180–420ms。放在构造函数里的话，「启动水合 / 子
     // 会话懒建」这类**根本不会发起 run** 的路径也要白付一次启动卡顿。
-    const factory = jest.fn(() => createIncrementalTokenCounter({
+    const factory = jest.fn(() => IncrementalTokenCounter.create({
       encode: text => text.length,
     }));
     const h = createHarness({tokenEstimatorFactory: factory});

@@ -21,7 +21,7 @@ const mockNavigate = jest.fn();
 const mockOnToggle = jest.fn();
 
 jest.mock('@novel-master/core/prompt', () => ({
-  formatToolUsePreviewJson: (s: string) => `shrink:${s}`,
+  PromptPreviewTurns: {formatToolUsePreviewJson: (s: string) => `shrink:${s}`},
 }));
 
 jest.mock('@react-navigation/native', () => ({
@@ -303,7 +303,7 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     ).toBeInstanceOf(Function);
   });
 
-  it('T-MP2-8 use 格预览走 formatToolUsePreviewJson（保结构截大 key），全屏仍原文', () => {
+  it('T-MP2-8 use 格预览走 PromptPreviewTurns.formatToolUsePreviewJson（保结构截大 key），全屏仍原文', () => {
     const tree = renderGroup(OK_CARD, true);
     // 桩带标记：预览确实经过收缩函数（契约），全屏载荷不受影响（T-MP4-4 原文）。
     expect(

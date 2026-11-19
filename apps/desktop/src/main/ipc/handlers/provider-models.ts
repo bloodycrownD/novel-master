@@ -1,7 +1,7 @@
 /**
  * Provider model IPC handlers — fetch, save, sampling settings.
  */
-import { savedModelDisplayName } from "@novel-master/core/provider";
+import { SavedModelDisplayName } from "@novel-master/core/provider";
 import type { SavedModel } from "@novel-master/core/provider";
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
 import { type AppError, Result, type Outcome } from "@novel-master/core/errors";
@@ -31,7 +31,7 @@ function toSavedDetailDto(model: SavedModel, providerDisplayName: string): Provi
     providerId: model.providerId,
     vendorModelId: model.vendorModelId,
     modelName: model.modelName,
-    displayName: savedModelDisplayName(model, providerDisplayName),
+    displayName: SavedModelDisplayName.format(providerDisplayName, model.modelName),
     settings: model.settings,
     createdAtMs: model.createdAtMs,
     updatedAtMs: model.updatedAtMs,
@@ -60,7 +60,7 @@ export async function handleProviderModelsSavedList(req: ProviderModelsSavedList
         id: model.id,
         vendorModelId: model.vendorModelId,
         modelName: model.modelName,
-        displayName: savedModelDisplayName(model, providerDisplayName.value),
+        displayName: SavedModelDisplayName.format(providerDisplayName.value, model.modelName),
       })),
     };
   } catch (err) {
@@ -87,6 +87,7 @@ export async function handleProviderModelsFetch(req: ProviderModelsFetchRequest)
 }
 
 /** 可中断的模型拉取段：请求前与请求后（写回建议表之前）各一个检查点。 */
+// nm-style: keep-local — run-abort-handlers.test 动态 import 解构直引并调用（断言中止 scope 行为）；内联会破坏测试锁名。
 export async function doProviderModelsFetch(rt: DesktopNovelMasterRuntime, providerId: string, scope: AbortScope): Promise<Outcome<void>> {
   const stopped = outcomeIfAborted(scope);
   if (stopped != null) return stopped;

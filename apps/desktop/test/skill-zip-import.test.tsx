@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildVfsZip } from "@novel-master/core/vfs";
+import { VfsZipBuild } from "@novel-master/core/vfs";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import {
   handleSkillsAssertCreateName,
@@ -25,7 +25,7 @@ import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
-import { withSkillFrontMatterValues } from "@shared/logic/skills";
+import { SkillFrontMatterValues } from "@shared/logic/skills";
 import { NewSkillModal } from "@/features/skills/NewSkillModal";
 import { SkillInfoEditModal } from "@/features/skills/SkillInfoEditModal";
 
@@ -40,7 +40,7 @@ function skillZipBytes(
     ],
     ["references/notes.md", "附属文件内容。\n"],
   ]);
-  return buildVfsZip(files, ["references"]);
+  return VfsZipBuild.build(files, ["references"]);
 }
 
 describe("VFS zipImportBytes handler（技能整包落盘）", () => {
@@ -138,11 +138,11 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
   });
 });
 
-describe("withSkillFrontMatterValues（表单值重写 front matter，core 单源）", () => {
+describe("SkillFrontMatterValues.rewrite（表单值重写 front matter，core 单源）", () => {
   it("替换既有 name/description，保留其余键与正文", () => {
     const source =
       "---\nname: old-name\ndescription: 旧描述\nextra: 保留\n---\n\n正文。\n";
-    const out = withSkillFrontMatterValues(source, {
+    const out = SkillFrontMatterValues.rewrite(source, {
       name: "new-name",
       description: "含: 冒号的描述",
     });
@@ -151,7 +151,7 @@ describe("withSkillFrontMatterValues（表单值重写 front matter，core 单�
 
   it("缺失 name/description 键时补全", () => {
     const source = "---\nname: old\n---\n\n正文。\n";
-    const out = withSkillFrontMatterValues(source, {
+    const out = SkillFrontMatterValues.rewrite(source, {
       name: "old",
       description: "新描述",
     });
@@ -160,7 +160,7 @@ describe("withSkillFrontMatterValues（表单值重写 front matter，core 单�
   });
 
   it("无 front matter 块时前置补一个", () => {
-    const out = withSkillFrontMatterValues("只有正文。\n", {
+    const out = SkillFrontMatterValues.rewrite("只有正文。\n", {
       name: "n",
       description: "d",
     });

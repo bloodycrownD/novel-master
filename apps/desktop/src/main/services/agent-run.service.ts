@@ -1,14 +1,12 @@
 /**
  * Desktop agent run adapter — 平台薄壳：把 desktop 的日志钩子挂到 core
- * {@link coreRunAgentTurn} 上，返回值通道（`Result`）与 core 对齐。
+ * {@link AgentTurnRunner.run} 上，返回值通道（`Result`）与 core 对齐。
  *
  * @module services/agent-run
  */
 import {
-  mapResolveError,
-  resolveApplicationModelIdForRun,
-  resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
-  runAgentTurn as coreRunAgentTurn,
+  AgentRunShared,
+  AgentTurnRunner,
   type AgentDefinition,
   type AgentRunResult,
   type AgentTurnScope,
@@ -17,21 +15,21 @@ import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
 
 import type { AppError } from "@novel-master/core/errors";
 import type { Result } from "@novel-master/core/errors";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import { isDesktopLlmDebug } from "../log/llm-debug-flag.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
-const log = createLogger("desktop.agent-run");
+const log = LogFactory.create("desktop.agent-run");
 
 export type AgentRunScope = AgentTurnScope;
 
 /**
  * resolve 链失败转码（错误通道迁移五期跨片收口）：core 的 resolve 系沿
- * `Result.err` 回传已知失败（不再 throw），转码统一走 core 的 `mapResolveError`——
- * 失败原样抛 `AppError`（自带 key / messageKey），对 desktop 消费方保持旧的
- * throw 契约。
+ * `Result.err` 回传已知失败（不再 throw），转码统一走 core 的
+ * `AgentTurnRunner.mapResolveError`——失败原样抛 `AppError`（自带 key /
+ * messageKey），对 desktop 消费方保持旧的 throw 契约。
  *
- * `resolveCurrentAgentId` 的转码面为空（core 该函数只可能回传 infra 读失败，
+ * `AgentRunShared.resolveCurrentId` 的转码面为空（core 该函数只可能回传 infra 读失败，
  * 不会产 resolve key），属薄壳，已删；调用点直接用 core 的 `Result` 通道。
  *
  * 本文件这两个 resolve 壳**不是**历史残留（十七期第2轮签名审计 R2 组6 反证）：
@@ -43,12 +41,13 @@ export type AgentRunScope = AgentTurnScope;
  * 防止后来者把它当裸值 getter 用。
  */
 export async function resolveCurrentAgentDefinitionOrThrow(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
-  return mapResolveError(() => resolveCoreAgentDefinition(runtime));
+  return AgentTurnRunner.mapResolveError(() => AgentRunShared.resolveCurrentDefinition(runtime));
 }
 
 /** {@link resolveCurrentAgentDefinitionOrThrow} 的模型侧同款：失败原样抛 `AppError`，其余不变。 */
+// nm-style: keep-local — agent-run-saved-model-session.test 与 agent-prelude-terminal / agent-run-early-exit 的 mock 装置直引断言模型解析抛错通道；内联会破坏测试锁名。
 export async function resolveDesktopSavedModelIdOrThrow(runtime: DesktopNovelMasterRuntime, definition: AgentDefinition, sessionId: string): Promise<{ savedModelId: string; workspaceModelId: string }> {
-  return mapResolveError(() => resolveApplicationModelIdForRun(runtime, definition, sessionId));
+  return AgentTurnRunner.mapResolveError(() => AgentRunShared.resolveApplicationModelIdForRun(runtime, definition, sessionId));
 }
 
 type RunAgentTurnOptions = {
@@ -61,7 +60,7 @@ type RunAgentTurnOptions = {
 };
 
 export async function runAgentTurnAdapter(runtime: DesktopNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: RunAgentTurnOptions): Promise<Result<AgentRunResult, AppError>> {
-  return coreRunAgentTurn(runtime, scope, userContent, {
+  return AgentTurnRunner.run(runtime, scope, userContent, {
     ...options,
     onAfterResolveModel: async (ctx) => {
       if (!isDesktopLlmDebug()) {

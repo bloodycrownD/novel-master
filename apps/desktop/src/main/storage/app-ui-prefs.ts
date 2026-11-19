@@ -3,7 +3,7 @@
  *
  * @module storage/app-ui-prefs
  */
-import { isAppError, type AppError } from "@novel-master/core/errors";
+import { AppErrorOps, type AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 
@@ -33,7 +33,7 @@ export function createDesktopAppUiPreferences(kkv: KkvService): DesktopAppUiPref
     async get(key: string): Promise<Result<string | undefined, AppError>> {
       const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
       if (!raw.ok) {
-        if (isAppError(raw.error, "KKV_NOT_FOUND")) {
+        if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
           return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
         }
         return raw;

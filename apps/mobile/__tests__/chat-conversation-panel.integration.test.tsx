@@ -156,8 +156,8 @@ import {
   clearChatComposerDraft,
   readChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
-import {serializeComposerDraftJson} from '@novel-master/core/chat';
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {ComposerDraftSchema} from '@novel-master/core/chat';
+import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 
 /**
  * 灌一个够 controller 跑起来的 mock runtime（草稿水化 + 发送决策）。
@@ -867,7 +867,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     expect(readChatComposerDraftState('s1').text).toBe('');
   });
 
-  it('chipLabels 由状态条附件经 core formatStatusChipLabelFromAttachment 派生', async () => {
+  it('chipLabels 由状态条附件经 core AttachmentChip.formatStatusLabelFromAttachment 派生', async () => {
     await act(async () => {
       tree = TestRenderer.create(<TestHost />);
       await flushPromises();
@@ -888,7 +888,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     });
 
     expect(lastComposerProps().chipLabels).toEqual([
-      formatStatusChipLabelFromAttachment(attachment),
+      AttachmentChip.formatStatusLabelFromAttachment(attachment),
     ]);
   });
 
@@ -898,7 +898,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // ready），composer 链照常完成水化——两链并行、无握手依赖的直接证据。
     mockRuntime.sessions.getComposerDraftJson = jest.fn(async () => ({
       ok: true as const,
-      value: serializeComposerDraftJson({text: '草稿正文', attachments: []}),
+      value: ComposerDraftSchema.serializeJson({text: '草稿正文', attachments: []}),
     }));
 
     await act(async () => {
@@ -920,7 +920,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // 绕过面板箭头、抓不到丢参缺陷，所以必须在这里断言。
     mockRuntime.sessions.getComposerDraftJson = jest.fn(async () => ({
       ok: true as const,
-      value: serializeComposerDraftJson({
+      value: ComposerDraftSchema.serializeJson({
         text: '$技能$尾追',
         attachments: [],
         tokenRanges: [{start: 0, end: 4}],
@@ -946,7 +946,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     mockRuntime.sessions.setComposerDraftJson = draftWrite;
     mockRuntime.sessions.getComposerDraftJson = jest.fn(async () => ({
       ok: true as const,
-      value: serializeComposerDraftJson({
+      value: ComposerDraftSchema.serializeJson({
         text: '$技能尾追',
         attachments: [],
         tokenRanges: [{start: 0, end: 3}],

@@ -12,10 +12,10 @@
  * 已替换、连接仍处重建窗口」的完整互斥。计数 >0 即 busy，多个调用方嵌套
  * 不会互相提前清位（旧的纯布尔置位会被嵌套调用的外层复位提前解锁）。
  *
- * 计数实现收在 `@novel-master/core/common` 的 createBusyFlag（mobile 同名
- * 模块共用同一份）；本模块只负责桌面端实例化。
+ * 计数实现收在 `@novel-master/core/common` 的 Concurrency.createBusyFlag（mobile
+ * 同名模块共用同一份）；本模块只负责桌面端实例化。
  */
 
-import {createBusyFlag} from "@novel-master/core/common";
+import { Concurrency } from "@novel-master/core/common";
 
-export const maintenanceBusy: ReturnType<typeof createBusyFlag> = createBusyFlag();
+export const maintenanceBusy: ReturnType<typeof Concurrency.createBusyFlag> = Concurrency.createBusyFlag();

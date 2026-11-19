@@ -9,7 +9,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {isAbortLikeError} from '@novel-master/core/llm-protocol';
+import {RequestAbort} from '@novel-master/core/llm-protocol';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import {Number, STORAGE_BYTES} from '@novel-master/core/common';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
@@ -158,7 +158,7 @@ export function StorageConfigScreen() {
             })
             .catch(err => {
               // 取消是控制流不是失败：不弹错误 toast（与桌面 IPC_ABORTED 同口径）。
-              if (isAbortLikeError(err)) {
+              if (RequestAbort.isAbortLikeError(err)) {
                 return;
               }
               showToast(toastMessage('导出失败', err));
@@ -217,7 +217,7 @@ export function StorageConfigScreen() {
                   })
                   .catch(err => {
                     // 取消是控制流不是失败：不弹错误 toast（与桌面 IPC_ABORTED 同口径）。
-                    if (isAbortLikeError(err)) {
+                    if (RequestAbort.isAbortLikeError(err)) {
                       return;
                     }
                     showToast(toastMessage('导入失败', err));

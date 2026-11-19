@@ -21,7 +21,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {parseStreamFinalRateSnapshot} from '@novel-master/core/format';
+import {StreamFinalRate} from '@novel-master/core/format';
 import {
   SESSION_KKV_DOMAIN_STREAM_METRICS,
   STREAM_METRICS_FINAL_RATE_KEY,
@@ -329,7 +329,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     finishRun(h.eventBus);
 
     const raw = kkv.read('s1');
-    const parsed = parseStreamFinalRateSnapshot(raw ?? null);
+    const parsed = StreamFinalRate.parseSnapshot(raw ?? null);
     const projection = h.manager.getSettledProjection('s1');
     expect(parsed).not.toBeNull();
     expect(parsed!.rate).toBe(projection!.rateTokensPerSecond);
@@ -504,7 +504,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     );
 
     // 编解码侧：缺 runId 的旧值照常解析成功（不因缺字段判坏数据）。
-    const parsedLegacy = parseStreamFinalRateSnapshot(legacyRaw);
+    const parsedLegacy = StreamFinalRate.parseSnapshot(legacyRaw);
     expect(parsedLegacy).not.toBeNull();
     expect(parsedLegacy!.rate).toBe(42.5);
     expect(parsedLegacy!.runId).toBeUndefined();
@@ -530,7 +530,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     driveRun(first.eventBus, first.manager);
     finishRun(first.eventBus);
     const rawAfterFirst = kkv.read('s1');
-    expect(parseStreamFinalRateSnapshot(rawAfterFirst ?? null)!.runId).toBe('r1');
+    expect(StreamFinalRate.parseSnapshot(rawAfterFirst ?? null)!.runId).toBe('r1');
     expect(
       first.manager.getSettledProjection('s1')!.rateTokensPerSecond,
     ).not.toBeNull();

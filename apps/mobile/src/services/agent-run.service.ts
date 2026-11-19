@@ -1,7 +1,7 @@
 /**
- * Mobile agent run adapter — thin wrapper over core `runAgentTurn`.
+ * Mobile agent run adapter — thin wrapper over core `AgentTurnRunner.run`.
  */
-import {runAgentTurn as coreRunAgentTurn, type AgentRunResult, type AgentTurnScope} from '@novel-master/core/agent';
+import {AgentTurnRunner, type AgentRunResult, type AgentTurnScope} from '@novel-master/core/agent';
 import type {AppError, Result} from '@novel-master/core/errors';
 import type {ComposerDraftTokenRange, MessageAttachment, SendAnnotateDraft} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
@@ -20,7 +20,7 @@ export type AgentRunOptions = {
 
 /** Appends a user message and runs the agent loop (streaming via event bus). */
 export async function runAgentTurnAdapter(runtime: MobileNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
-  return coreRunAgentTurn(runtime, scope, userContent, {
+  return AgentTurnRunner.run(runtime, scope, userContent, {
     ...options,
     onRunFailed: ctx => {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {

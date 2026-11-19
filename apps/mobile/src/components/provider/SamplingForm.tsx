@@ -4,7 +4,7 @@
 import React, {useMemo} from 'react';
 import {StyleSheet, View} from 'react-native';
 import {type LlmProtocolKind} from '@novel-master/core/llm-protocol';
-import {mergeSamplingWithDefaults, type ModelSamplingParams} from '@novel-master/core/provider';
+import {ProtocolSamplingDefaults, type ModelSamplingParams} from '@novel-master/core/provider';
 import {FormField} from '@/components/form/FormField';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import type {ThemeTokens} from '@/theme/tokens';
@@ -62,7 +62,7 @@ function patchGemini(prev: ModelSamplingParams | undefined, patch: Record<string
 }
 
 export function SamplingForm({tokens, protocol, params, onChange}: Props) {
-  const effective = useMemo(() => mergeSamplingWithDefaults(protocol, params), [protocol, params]);
+  const effective = useMemo(() => ProtocolSamplingDefaults.mergeSamplingWithDefaults(protocol, params), [protocol, params]);
   const openai = effective.protocol === 'openai' ? effective.openai : {};
   const anthropic = effective.protocol === 'anthropic' ? effective.anthropic : {};
   const gemini = effective.protocol === 'gemini' ? effective.gemini : {};

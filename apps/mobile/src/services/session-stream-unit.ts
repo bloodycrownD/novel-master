@@ -47,16 +47,12 @@
 import type {ChatMessageData} from '@novel-master/core/chat';
 import type {Outcome} from '@novel-master/core/errors';
 import type {AgentStepCommittedPhase} from '@novel-master/core/events';
-import {
-  composeStreamTokens,
-  createTokenRateSampler,
-  reanchorStreamTokenBase,
-} from '@novel-master/core/format';
+import {SlidingTokenRate, StreamTokenAnchor} from '@novel-master/core/format';
 import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
 import type {StreamTokenSource} from '@novel-master/core/session-run-state';
 import type {TokenRateSampler} from '@novel-master/core/format';
 import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/tokenizer';
-import {createLogger} from '@novel-master/core/log';
+import {LogFactory} from '@novel-master/core/log';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
 import {createStreamApplyBuffer} from './stream-apply-buffer';
@@ -71,7 +67,7 @@ import {
 import {prependOlderMessages} from './message-paging';
 
 /** 单元侧日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
-const log = createLogger('chat.stream-unit');
+const log = LogFactory.create('chat.stream-unit');
 
 /** settled(finished|failed) 后的默认宽限销毁时长（毫秒）；构造参数可覆盖。 */
 const SESSION_STREAM_SETTLED_GRACE_PERIOD_MS = 30_000;
@@ -404,7 +400,7 @@ export class SessionStreamUnit {
    * 末值速率（窗口以最后样本时刻收尾，不受收尾前停顿影响）。单元自持而
    * 非组件持有——冻结值要与实时值同源，且须跨单元存活/水合后的读取。
    */
-  private readonly rateSampler: TokenRateSampler = createTokenRateSampler();
+  private readonly rateSampler: TokenRateSampler = SlidingTokenRate.createSampler();
   private startedAtMsValue = 0;
   private elapsedMsValue: number | null = null;
   /**
@@ -785,8 +781,8 @@ export class SessionStreamUnit {
    */
   private reanchorBase(value: number): void {
     const increment = this.estimateIncrementTokens();
-    this.baseTokens = reanchorStreamTokenBase(value, increment);
-    this.metricsAcc.completionTokens = composeStreamTokens(value, 0);
+    this.baseTokens = StreamTokenAnchor.reanchorBase(value, increment);
+    this.metricsAcc.completionTokens = StreamTokenAnchor.composeTokens(value, 0);
   }
 
   /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle/streamRows/streamRowIds 字段返回内部引用——见字段注释的引用稳定契约）。 */
@@ -1470,7 +1466,7 @@ export class SessionStreamUnit {
     // 行为严格一致）。usage 真值成为基线后增量继续叠加——数字持续增长，
     // 不再停在上一条 usage 的累计值上（多步 run 冻结缺陷的修复点）。
     const increment = this.estimateIncrementTokens();
-    const tokens = composeStreamTokens(this.baseTokens, increment);
+    const tokens = StreamTokenAnchor.composeTokens(this.baseTokens, increment);
     this.metricsAcc.completionTokens = tokens;
     this.sampleRate();
     appendWireChunk(this.ingressQueue, {kind, delta: text});

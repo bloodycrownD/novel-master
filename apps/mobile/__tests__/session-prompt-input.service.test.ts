@@ -25,8 +25,8 @@
  *   `visiblePaths`（全量档），prepare 段照常 hydrate 附件。
  */
 import {describe, expect, it, jest} from '@jest/globals';
-import {textBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
-import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
+import {TextBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
+import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 
 import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {buildSessionPromptInputAdapter} from '@/services/session-prompt-input.service';
@@ -105,7 +105,7 @@ function makeStubRuntime(options?: {
       id: 'm1',
       sessionId: 's1',
       role: 'user',
-      content: textBlocks('你好，请记住附加信息'),
+      content: TextBlocks.of('你好，请记住附加信息'),
       attachments: [],
       hidden: false,
     },
@@ -151,7 +151,7 @@ describe('buildSessionPromptInputAdapter (T-CA5 mobile)', () => {
   it('definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块', async () => {
     const runtime = makeStubRuntime();
     const definition =
-      buildDefaultAgentDefinitionPreservingName('extra-info-agent');
+      DefaultAgentDefinition.build('extra-info-agent');
     // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
     definition.prompts = {
       ...definition.prompts,
@@ -197,7 +197,7 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
     makeStubRuntime({workplaceFiles: WORKPLACE_FILES});
 
   const makeBailDefinition = () => {
-    const definition = buildDefaultAgentDefinitionPreservingName('bail-agent');
+    const definition = DefaultAgentDefinition.build('bail-agent');
     // 显式开 workplace 块：不这样的话组装短路、检查点只剩 build 的 4 道，
     // 断言含义就跟着 fixture 形态跑了（r4-app-3）。
     definition.prompts = {...definition.prompts, workplace: '【工作区】'};
@@ -293,7 +293,7 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
 
   it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {
     const runtime = makeStubRuntime();
-    const definition = buildDefaultAgentDefinitionPreservingName('plain-agent');
+    const definition = DefaultAgentDefinition.build('plain-agent');
     const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
@@ -347,7 +347,7 @@ describe('buildSessionPromptInputAdapter 附件预算降级 parity（T-A8）', (
           id: 'm1',
           sessionId: 's1',
           role: 'user',
-          content: textBlocks('帮我看看这个附件'),
+          content: TextBlocks.of('帮我看看这个附件'),
           hidden: false,
           // content: null ⇒ prepare 走 file_cache miss → 读 vfs 的首次全文路径。
           attachments: [
@@ -363,7 +363,7 @@ describe('buildSessionPromptInputAdapter 附件预算降级 parity（T-A8）', (
       ],
       vfsBodies: {[HUGE_PATH]: OVER_BUDGET_BODY},
     });
-    const definition = buildDefaultAgentDefinitionPreservingName('budget-agent');
+    const definition = DefaultAgentDefinition.build('budget-agent');
 
     const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
@@ -401,7 +401,7 @@ describe('buildSessionPromptInputAdapter S0 双读接线（d-s0/G-1）', () => {
           id: 'wp1',
           sessionId: 's1',
           role: 'user',
-          content: textBlocks('历史 workplace 附件'),
+          content: TextBlocks.of('历史 workplace 附件'),
           hidden: false,
           attachments: [
             {
@@ -417,7 +417,7 @@ describe('buildSessionPromptInputAdapter S0 双读接线（d-s0/G-1）', () => {
           id: 'at1',
           sessionId: 's1',
           role: 'user',
-          content: textBlocks('再引一次'),
+          content: TextBlocks.of('再引一次'),
           hidden: false,
           attachments: [
             {
@@ -432,7 +432,7 @@ describe('buildSessionPromptInputAdapter S0 双读接线（d-s0/G-1）', () => {
       ],
       vfsBodies: {[HEADER_PATH]: 'HEADER-BODY'},
     });
-    const definition = buildDefaultAgentDefinitionPreservingName('s0-agent');
+    const definition = DefaultAgentDefinition.build('s0-agent');
     // 显式开 workplace 块：不开则组装短路，两集合恒为 []，本用例没有牙齿。
     definition.prompts = {...definition.prompts, workplace: '【工作区】'};
 

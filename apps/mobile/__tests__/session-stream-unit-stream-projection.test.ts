@@ -21,7 +21,7 @@ import {
   SimpleEventBus,
 } from '@novel-master/core/events';
 import {agentActivity} from '@/runtime/agent-activity';
-import {addLogSink} from '@novel-master/core/log';
+import {LogFactory} from '@novel-master/core/log';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
@@ -458,7 +458,7 @@ describe('DB 接管映射（T-SP17）', () => {
 
   it('待接管记录配不到新增 assistant 时记 warn（spec §2.1.3 规则 5 / S1）', async () => {
     const warnings: string[] = [];
-    const removeSink = addLogSink({
+    const removeSink = LogFactory.addSink({
       write: record => {
         if (record.level === 'warn') {
           warnings.push(record.message);

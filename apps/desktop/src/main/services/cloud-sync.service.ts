@@ -8,14 +8,13 @@ import { createReadStream } from "node:fs";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CloudSyncCoordinator, DatabaseReplacedError, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
-import { AppError, isAppError } from "@novel-master/core/errors";
-import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
+import { CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, DatabaseReplacedError, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
+import { AppError, AppErrorOps, ErrorGuards, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import { HeadBucketCommand, ListObjectsV2Command, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { createBusyFlag, Path } from "@novel-master/core/common";
+import { Concurrency, Path } from "@novel-master/core/common";
 import { agentActivity } from "../runtime/agent-activity.js";
 import { maintenanceBusy } from "./db-maintenance-busy.js";
 import { createCloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncConfigStore, type CloudSyncLocalMeta } from "./cloud-sync-config.store.js";
@@ -42,7 +41,7 @@ export type CloudSyncLocalStatusDto = {
  * 单实例计数与旧布尔等价：`if (syncBusy.isBusy())` 守卫保证不会嵌套 acquire。
  */
 /** 云同步（pull/push）是否进行中：供数据清理等数据库操作的入口守卫使用。 */
-export const syncBusy: ReturnType<typeof createBusyFlag> = createBusyFlag();
+export const syncBusy: ReturnType<typeof Concurrency.createBusyFlag> = Concurrency.createBusyFlag();
 
 class DesktopCloudSyncService {
   /**
@@ -118,7 +117,7 @@ class DesktopCloudSyncService {
         // 存储侧故障（未知通道，core CloudSyncError 体系）原样抛给 handler catch；
         // 错误映射内联自原 mapStorageError。
         const error = listError ?? headError;
-        if (isAppError(error) && domainOf(error.code) === "CLOUD_SYNC") throw error;
+        if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === "CLOUD_SYNC") throw error;
         const message = error instanceof Error ? error.message : String(error);
         const lower = message.toLowerCase();
         if (lower.includes("access denied") || lower.includes("invalidaccesskeyid") || lower.includes("signaturedoesnotmatch") || lower.includes("403")) {
@@ -162,14 +161,14 @@ class DesktopCloudSyncService {
               forcePathStyle: publicConfig.value.forcePathStyle,
             };
             const storage = createS3ObjectStorage(storageConfig);
-            const key = statusKey(publicConfig.value.pathPrefix);
+            const key = CloudSyncPaths.statusKey(publicConfig.value.pathPrefix);
             const head = await storage.head(key);
             if (!head.exists) {
               remoteRev = 0;
             } else {
               const { body } = await storage.get(key);
               const parsed = JSON.parse(new TextDecoder().decode(body));
-              const status = parseCloudSyncStatus(parsed);
+              const status = CloudSyncStatusParser.parse(parsed);
               remoteRev = status.ok ? status.value.rev : 0;
             }
           }
@@ -244,7 +243,7 @@ class DesktopCloudSyncService {
       // 走下方 catch 分支的同款记账（「已是最新」+ 不换代）；其余 Err 原样上抛给
       // handler 的 catch（formatIpcError 收口），不重复记账。
       if (!pulled.ok) {
-        if (isAppError(pulled.error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
+        if (AppErrorOps.is(pulled.error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
           await this.configStore.recordPull(true, "已是最新");
           return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });
         }
@@ -256,7 +255,7 @@ class DesktopCloudSyncService {
       }
       return Result.ok(pulled.value);
     } catch (error) {
-      if (isAppError(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
+      if (AppErrorOps.is(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
         // 兼容 coordinator 侧仍走 throw 通道的路径：此时 meta 必已赋值。
         await this.configStore.recordPull(true, "已是最新");
         return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });

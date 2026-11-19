@@ -5,7 +5,7 @@
  */
 
 import { describe } from "node:test";
-import { open } from "@novel-master/core";
+import { TdbcOpen } from "@novel-master/core";
 import { runNestedBatchParityTests } from "@novel-master/tdbc-conformance";
 import {
   registerBetterSqlite3Driver,
@@ -16,7 +16,7 @@ registerBetterSqlite3Driver();
 
 runNestedBatchParityTests({
   createConnection: async () =>
-    open("tdbc:sqlite:file::memory:", {
+    TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     }),

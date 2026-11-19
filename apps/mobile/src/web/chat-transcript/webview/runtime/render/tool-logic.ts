@@ -3,9 +3,9 @@ import type {ToolCallRow} from '../state/state';
 /**
  * 工具调用摘要与状态标签（非 JSX）。
  * 工具组 UI 由 ui/render/ToolGroup 渲染；本文件仅供其复用的纯逻辑。
- * `toolCallSummary` 单源在 core（RN 同用），这里只保留 webview 的入口名。
+ * `ToolSummary.callSummary` 单源在 core（RN 同用），这里只保留 webview 的入口名。
  */
-export {toolCallSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
+export {ToolSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
 
 /**
  * 解析工具卡片「结果阅读」的可读正文：resultContent 非空（trim 口径）

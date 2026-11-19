@@ -1,9 +1,9 @@
 /**
  * Maps {@link WorkplaceListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import {parentDirOrNull as parentLogicalPath, type VfsListEntry} from '@novel-master/core/vfs';
+import {ParentDir, type VfsListEntry} from '@novel-master/core/vfs';
 import {Path} from '@novel-master/core/common';
-import {displayStateLabel, inclusionModeLabel, type RuleState, type WorkplaceListRow} from '@novel-master/core/workplace';
+import {WorkplaceLabels, type WorkplaceListRow} from '@novel-master/core/workplace';
 import {coreT} from '../../i18n/core';
 
 type VfsBadgeTone = 'in' | 'follow' | 'muted';
@@ -25,10 +25,10 @@ export interface MappedVfsRow {
 
 /**
  * Parent logical path; session root `/` → `null`（无父目录）。
- * 单源：core `domain/vfs/logic/parent-dir.ts` 的 `parentDirOrNull`（含 normalizePath
+ * 单源：core `domain/vfs/logic/parent-dir.ts` 的 `ParentDir.orNull`（含 normalizePath
  * 校验：非法路径也返回 `null`，不再对裸相对路径伪造 `/`）。
  */
-export {parentLogicalPath};
+export const parentLogicalPath = ParentDir.orNull;
 
 /** Whether `childPath` is an immediate child of `dirPath`. */
 export function isDirectChild(dirPath: string, childPath: string): boolean {
@@ -41,6 +41,7 @@ export function isDirectChild(dirPath: string, childPath: string): boolean {
  * @remarks labelByPath 由导航过程中每次 list 的合成目录行携带（label 字段），
  * 查不到的段回退原文；只影响展示，不改导航与逻辑路径。
  */
+// nm-style: keep-public — vfs-row-mapper.test.ts 直接 import 断言面包屑逐段替换，测试锁名
 export function pathWithLabels(path: string, labelByPath: ReadonlyMap<string, string>): string {
   if (path === '/') {
     return '/';
@@ -68,16 +69,12 @@ export function dirRuleBadge(ruleEnabled: boolean): VfsRowBadge {
 }
 
 /** Patch one directory row after rule enabled toggles (no list reload). */
+// nm-style: keep-public — vfs-row-mapper.test.ts 直接 import 断言，测试锁名
 export function patchDirRuleRow(row: MappedVfsRow, ruleEnabled: boolean): MappedVfsRow {
   if (row.kind !== 'dir') {
     return row;
   }
   return {...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled)};
-}
-
-/** Worktree list row enum after directory rule enabled toggles. */
-export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
-  return ruleEnabled ? 'rule_on' : 'rule_off';
 }
 
 /** Map a worktree row to vfs-fm subtitle + badge. */
@@ -96,8 +93,8 @@ export function mapWorktreeRow(row: WorkplaceListRow, childFileCount?: number): 
     };
   }
 
-  const inclusionText = coreT(inclusionModeLabel(row.inclusionMode));
-  const displayText = coreT(displayStateLabel(row.displayState));
+  const inclusionText = coreT(WorkplaceLabels.inclusionModeLabel(row.inclusionMode));
+  const displayText = coreT(WorkplaceLabels.displayStateLabel(row.displayState));
   const subtitle = `${inclusionText}·${displayText}`;
   const mode = row.inclusionMode;
   const badge: VfsRowBadge = mode === 'hide' ? {label: '隐藏', tone: 'muted'} : mode === 'show' ? {label: '展示', tone: 'in'} : {label: '跟随', tone: 'follow'};
@@ -140,6 +137,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
  * Re-map direct children of `parentPath` from fresh worktree metadata.
  * Keeps list order stable; updates badges/subtitles after inclusion toggles.
  */
+// nm-style: keep-public — vfs-row-mapper.test.ts 直接 import 断言，测试锁名
 export function remapDirectChildRows(rows: readonly MappedVfsRow[], parentPath: string, allRows: readonly WorkplaceListRow[]): MappedVfsRow[] {
   const metaByPath = new Map(allRows.map(r => [r.path, r]));
   return rows.map(row => {

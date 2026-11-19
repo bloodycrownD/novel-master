@@ -1,33 +1,25 @@
 /**
- * Desktop VFS 批量导入/导出：读本机路径 → Core plan/apply；export 物化临时目录；startDrag。
+ * Desktop VFS 批量导出 staging 与 startDrag（drag-icon 管线、TTL 回收、路径护栏）。
+ * 批量导入/单文件选路径/单文件导出/ZIP 导入导出的编排已内联进 `ipc/handlers/vfs.ts`。
  *
  * @module services/vfs-batch
  */
 import {
   VfsServiceFactory,
-  buildUserVfsCreateFileOp,
-  buildUserVfsMkdirOp,
-  buildUserVfsSaveOp,
-  readUserVfsSaveBaseline,
-  type BatchApplyReport,
-  type BatchIngestRawEntry,
-  type BatchIngestWriter,
   type BatchExportSkip,
   type VfsScope,
 } from "@novel-master/core/vfs";
-import { AppError, isAppError } from "@novel-master/core/errors";
+import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
-import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
-import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";
+import { app, nativeImage, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { resolveAppIconPath } from "../runtime/resolve-app-icon.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { executeSessionUserVfsOp, LogicalPath } from "./user-vfs-turn-execute.service.js";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 
-const log = createLogger("desktop.vfs-batch");
+const log = LogFactory.create("desktop.vfs-batch");
 
 /**
  * Windows 上 `nativeImage.createEmpty()` + `startDrag` 会硬崩主进程（try/catch 拦不住）。
@@ -62,215 +54,12 @@ function resolveDragIcon(): Electron.NativeImage {
 }
 
 /**
- * 将本机路径树展开为 ingest 原始条目。
- * 顶层文件 → basename；顶层目录 → 以目录名为根保留相对结构；空目录显式 directory。
- */
-export async function collectHostPathEntries(hostPaths: readonly string[]): Promise<BatchIngestRawEntry[]> {
-  const entries: BatchIngestRawEntry[] = [];
-
-  /** nm-style: keep-local — entries 是整棵树遍历共享的累积状态；自递归调用是必需的第二调用点，内联消除不掉递归结构。 */
-  async function walkDir(absDir: string, relativePrefix: string): Promise<void> {
-    const children = await readdir(absDir, { withFileTypes: true });
-    if (children.length === 0) {
-      entries.push({ relativePath: relativePrefix, kind: "directory" });
-      return;
-    }
-    let hasFileOrNonEmpty = false;
-    for (const child of children) {
-      const childAbs = join(absDir, child.name);
-      const childRel = relativePrefix ? `${relativePrefix}/${child.name}` : child.name;
-      if (child.isDirectory()) {
-        await walkDir(childAbs, childRel);
-        hasFileOrNonEmpty = true;
-      } else if (child.isFile()) {
-        const bytes = new Uint8Array(await readFile(childAbs));
-        entries.push({ relativePath: childRel, kind: "file", bytes });
-        hasFileOrNonEmpty = true;
-      }
-    }
-    if (!hasFileOrNonEmpty) {
-      entries.push({ relativePath: relativePrefix, kind: "directory" });
-    }
-  }
-
-  for (const hostPath of hostPaths) {
-    const info = await stat(hostPath);
-    const topName = basename(hostPath);
-    if (info.isDirectory()) {
-      await walkDir(hostPath, topName);
-    } else if (info.isFile()) {
-      const bytes = new Uint8Array(await readFile(hostPath));
-      entries.push({ relativePath: topName, kind: "file", bytes });
-    }
-  }
-
-  return entries;
-}
-
-/**
  * `executeSessionUserVfsOp` 的错误侧是 `unknown`（user-vfs-turn port 的异构
  * 形态），writer 端口契约是 `Result<void, AppError>`——在此归一：AppError 原样
  * 透传，其余包 INFRA_UNEXPECTED_ERROR（与 formatIpcError 的未知分支同款）。
+ * （原 ingestVfsFromHostPaths / collectHostPathEntries / pickHostFileWithDialog /
+ * exportVfsFileWithDialog 已内联进 ipc/handlers/vfs.ts 的对应 handler。）
  */
-function toWriterResult(r: Result<void, unknown>): Result<void, AppError> {
-  if (r.ok) return Result.ok(undefined);
-  return Result.err(isAppError(r.error) ? r.error : new AppError("INFRA_UNEXPECTED_ERROR", { detail: r.error instanceof Error ? r.error.message : String(r.error) }, { cause: r.error }));
-}
-
-type BatchIngestFromPathsOutcome =
-  | {
-      readonly status: "needs_confirm";
-      readonly conflicts: ReadonlyArray<{
-        readonly logicalPath: string;
-        readonly reason: "exists";
-      }>;
-      readonly skippedBinary: readonly string[];
-    }
-  | {
-      readonly status: "applied";
-      readonly report: BatchApplyReport;
-      readonly skippedBinary: readonly string[];
-    };
-
-type IngestFromHostPathsOptions = {
-  readonly targetDir: string;
-  readonly hostPaths: readonly string[];
-  readonly overwriteConfirmed: boolean;
-};
-
-export async function ingestVfsFromHostPaths(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: IngestFromHostPathsOptions): Promise<Result<BatchIngestFromPathsOutcome, AppError>> {
-  const targetDir = options.targetDir == null || options.targetDir.trim() === "" ? "/" : options.targetDir;
-  if (options.hostPaths.length === 0) {
-    return Result.ok({
-      status: "applied",
-      report: { written: [], skipped: [], failed: [] },
-      skippedBinary: [],
-    });
-  }
-
-  const rawEntries = await collectHostPathEntries(options.hostPaths);
-  const batch = VfsServiceFactory.createBatchIo(runtime.conn);
-  const planned = await batch.planBatchIngest(scope, targetDir, rawEntries);
-  // 失败沿 Result 返回，由唯一调用方 handleVfsBatchIngestFromPaths 转码。
-  if (!planned.ok) return Result.err(planned.error);
-  const plan = planned.value;
-
-  if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
-    return Result.ok({
-      status: "needs_confirm",
-      conflicts: plan.conflicts.map((c) => ({
-        logicalPath: c.logicalPath,
-        reason: c.reason,
-      })),
-      skippedBinary: [...plan.skippedBinary],
-    });
-  }
-
-  const applyOptions = { overwriteConfirmed: options.overwriteConfirmed };
-  let report: BatchApplyReport;
-
-  if (LogicalPath.isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
-    const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-    // BatchIngestWriter 适配器（core port，`domain/vfs/ports/vfs-batch-io.port.ts`）：
-    // writer 端口已知失败沿 `Result.err` 回传，由 `applyBatchIngestWithWriter` 逐项聚合进
-    // `Report.failed`（Result 契约之外的未知异常仍按 catch 落表，不整批 err）。
-    const writer: BatchIngestWriter = {
-      async mkdir(logicalPath: string): Promise<Result<void, AppError>> {
-        return toWriterResult(await executeSessionUserVfsOp(runtime, scope.sessionId, buildUserVfsMkdirOp(logicalPath)));
-      },
-      async writeFile(logicalPath: string, content: string): Promise<Result<void, AppError>> {
-        const baselineResult = await readUserVfsSaveBaseline(vfs, logicalPath);
-        if (!baselineResult.ok) return Result.err(baselineResult.error);
-        const baseline = baselineResult.value;
-        if (baseline == null) return toWriterResult(await executeSessionUserVfsOp(runtime, scope.sessionId, buildUserVfsCreateFileOp(logicalPath, content)));
-        const op = buildUserVfsSaveOp(baseline, content, logicalPath, content);
-        if (op == null) return Result.ok(undefined);
-        return toWriterResult(await executeSessionUserVfsOp(runtime, scope.sessionId, op));
-      },
-    };
-    const appliedWithWriter = await batch.applyBatchIngestWithWriter(scope, targetDir, plan, applyOptions, writer);
-    if (!appliedWithWriter.ok) return Result.err(appliedWithWriter.error);
-    report = appliedWithWriter.value;
-  } else {
-    const applied = await batch.applyBatchIngest(scope, targetDir, plan, applyOptions);
-    if (!applied.ok) return Result.err(applied.error);
-    report = applied.value;
-  }
-
-  return Result.ok({
-    status: "applied",
-    report,
-    skippedBinary: [...plan.skippedBinary],
-  });
-}
-
-/**
- * 弹框选择单个本机文件，只回绝对路径（不读字节）。
- *
- * ⚠️ **刻意不传 filters**：VFS 内容既不限扩展名（`.md`/`.txt`/`.yaml`…）也不限格式，
- * 白名单只会把无扩展名文件挡在门外。非 UTF-8 的把关在 core 的
- * `planBatchIngest`（`skippedBinary`），UI 层明示「跳过 N 个非 UTF-8 文件」——
- * 选择阶段拦比事后解释更省事（用户仍可自选，错了有 toast）。
- *
- * 取消 / 未选任何文件返回 null。
- */
-export async function pickHostFileWithDialog(parentWindow?: BrowserWindow | null): Promise<string | null> {
-  const win = parentWindow ?? undefined;
-  const dialogOpts = { properties: ["openFile" as const] };
-  const result = win ? await dialog.showOpenDialog(win, dialogOpts) : await dialog.showOpenDialog(dialogOpts);
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-  return result.filePaths[0] ?? null;
-}
-
-/**
- * 单文件「另存为」导出：plan 单条目 → 校验恰好一条 → 保存框（默认名 = 文件名）→
- * utf8 写盘。取消保存框返回 `cancelled`。
- *
- * ⚠️ `files.length === 1` 的校验是**安全闸**不是可选加固：`planBatchExport` 收到目录
- * 路径时会递归整棵子树且不报错，**多文件目录**只取 `files[0]` 会静默把「导出一个目录」
- * 降级成「导出该目录下的某个文件」。校验放在 showSaveDialog **之前**，免得误传时先弹框
- * 再报错。
- *
- * 闸的边界说实话：**恰好只含一个文件的目录仍会过闸**并被同样静默降级（core 侧
- * planBatchExport 不区分锚点是文件还是目录，本函数也就不判 entryKind，避免扩到 core）。
- * 不变量靠调用方保证——只把**文件行**的路径传进来（见 workspace-actions 的
- * `exportWorkspaceTarget`：文件行走单文件导出、目录行走 ZIP 分支）。
- *
- * 导出无库变更，故不经 `pushWorkspaceMutated`（调用方无需刷新 Explorer）。
- */
-type ExportVfsFileOptions = { readonly logicalPath: string };
-type ExportFileResult = Result<"saved" | "cancelled", AppError>;
-
-export async function exportVfsFileWithDialog(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: ExportVfsFileOptions, parentWindow?: BrowserWindow | null): Promise<ExportFileResult> {
-  const batch = VfsServiceFactory.createBatchIo(runtime.conn);
-  const planned = await batch.planBatchExport(scope, [options.logicalPath]);
-  // 失败沿 Result 返回，由唯一调用方 handleVfsFileExport 转码。
-  if (!planned.ok) return Result.err(planned.error);
-  const plan = planned.value;
-  if (plan.files.length !== 1) {
-    return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: `只能导出单个文件（收到 ${plan.files.length} 个条目）：${options.logicalPath}` }));
-  }
-  const file = plan.files[0]!;
-  // 逻辑路径 → 末段文件名（`/a/b.md` → `b.md`；根路径返回 null）。与 `vfs-zip.service.ts`
-  // 的 `zipBaseNameFromPath`（:15-22）同款语义，刻意**平移**而非 import：那条 import 会让本
-  // 服务多出一条 main→main 依赖边，在 renderer tsconfig 下多出一条 TS6307 诊断（棘轮按
-  // 「新增诊断必须为零」判红）。两处都是几行纯字符串逻辑，各自有测试锁住，比多一条依赖边划算。
-  const normalizedExportPath = options.logicalPath.replace(/\/+$/, "");
-  const base = normalizedExportPath === "" || normalizedExportPath === "/" ? null : normalizedExportPath.slice(normalizedExportPath.lastIndexOf("/") + 1) || null;
-  if (base == null) {
-    return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: `无法解析导出文件名：${options.logicalPath}` }));
-  }
-
-  const win = parentWindow ?? undefined;
-  const result = win ? await dialog.showSaveDialog(win, { defaultPath: base }) : await dialog.showSaveDialog({ defaultPath: base });
-  if (result.canceled || result.filePath == null) {
-    return Result.ok("cancelled");
-  }
-  await writeFile(result.filePath, file.content, "utf8");
-  return Result.ok("saved");
-}
 
 type ExportStageResult = {
   readonly stagingRoot: string;
@@ -299,6 +88,7 @@ function vfsBatchStagingBase(): string {
 }
 
 /** 删除 export staging 临时目录；dragEnd / 取消 / 失败 / TTL 到期时调用。 */
+// nm-style: keep-local — vfs-batch-staging.test 直引断言 S-D-02 路径包含护栏与 TTL 清理（7 个调用点）；内联会破坏测试锁名。
 export async function clearVfsBatchExportStaging(stagingRoot: string): Promise<void> {
   if (stagingRoot.trim() === "") {
     return;
@@ -327,6 +117,7 @@ export function stagingTtlCountForTest(): number {
 }
 
 /** 将逻辑路径导出物化到 userData 临时目录，返回 startDrag 顶层路径。 */
+// nm-style: keep-local — 与 clearVfsBatchExportStaging / stagingTtlCountForTest 共享模块级 stagingTtlTimers 的 TTL 生命周期（测试锁名）；内联进 handler 需跨模块外泄状态。
 export async function stageVfsBatchExport(runtime: DesktopNovelMasterRuntime, scope: VfsScope, logicalPaths: readonly string[]): Promise<Result<ExportStageResult, AppError>> {
   if (logicalPaths.length === 0) {
     return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "没有可导出的路径" }));
@@ -399,7 +190,8 @@ export async function stageVfsBatchExport(runtime: DesktopNovelMasterRuntime, sc
   }
 }
 
-/** 调用 webContents.startDrag；已知失败沿 `Result.err` 返回，由 handleVfsStartDrag 转码 toast。 */
+/** 调用 webContents.startDrag；已知失败沿 `Result.err` 返回，由 handler 转码 toast。 */
+// nm-style: keep-local — 依赖同文件私有 drag-icon 管线（resolveDragIcon + FALLBACK_DRAG_ICON_PNG，测试经 resolveDragIconForTest 锁住「禁止 createEmpty」）；内联进 handler 需把 resolveDragIcon 升为导出。
 export function startDragExport(webContents: WebContents, filePaths: readonly string[]): Result<void, AppError> {
   if (filePaths.length === 0) {
     return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "没有可拖出的文件" }));

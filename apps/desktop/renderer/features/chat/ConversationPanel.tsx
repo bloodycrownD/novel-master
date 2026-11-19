@@ -1,8 +1,7 @@
 import {
   ChatMessage,
-  parseComposerDraftJson,
+  ComposerDraftSchema,
   rollbackConfirm,
-  serializeComposerDraftJson,
   type RollbackMode,
 } from '@shared/logic/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -333,9 +332,7 @@ export function ConversationPanel({
       if (cancelled) {
         return;
       }
-      const draft = parseComposerDraftJson(
-        draftRes.ok ? draftRes.data : null,
-      );
+      const draft = ComposerDraftSchema.parseJson(draftRes.ok ? draftRes.data : null);
       const status = statusRes.ok ? statusRes.data : [];
       // D6：快照连同 tokenRanges 一起存 ref（desktop 无胶囊 UI，读侧渲染语义不变）；
       // 写回时用它判断正文是否被编辑，未编辑才原样透传。
@@ -348,9 +345,7 @@ export function ConversationPanel({
       setComposerText(draft.text);
       // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
       // 投影直接作状态条，再 ∪ annotate（切会话回来 store 未清则 chip 仍在）
-      setComposerAttachments(
-        unionComposerStatusWithAnnotate(status, sessionId),
-      );
+      setComposerAttachments(unionComposerStatusWithAnnotate(status, sessionId));
       composerDraftHydratedRef.current = true;
     })();
 
@@ -369,21 +364,16 @@ export function ConversationPanel({
     }
     // draft attach 恒空；仅持久正文（含 `@路径`）。D6：正文未编辑时原样透传 tokenRanges，
     // 已编辑则省略字段（undefined ≠ []，交给 mobile 侧兜底扫描）。
-    const draftJson = serializeComposerDraftJson(
-      resolveComposerDraftPersistPayload(
-        composerDraftSnapshotRef.current,
-        composerText,
-      ),
-    );
+    const draftSnapshot = composerDraftSnapshotRef.current;
+    const payload = resolveComposerDraftPersistPayload(draftSnapshot, composerText);
+    const draftJson = ComposerDraftSchema.serializeJson(payload);
     void ipcSessionsSetComposerDraft({ sessionId, draftJson });
   }, [sessionId, composerText, composerAttachments, readOnly]);
 
   useEffect(() => {
     ipcAppUiGet('chatRichText')
       .then(res =>
-        setChatRichText(
-          res.ok && res.data != null ? res.data !== 'false' : true,
-        ),
+        setChatRichText(res.ok && res.data != null ? res.data !== 'false' : true),
       )
       .catch(() => undefined);
   }, []);
@@ -785,9 +775,7 @@ export function ConversationPanel({
         );
         return next.text;
       });
-      showToast(
-        options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
-      );
+      showToast(options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功');
     },
     [projectId, sessionId, reloadMessages, notifyWorkspaceMutated, onStreamReset],
   );
@@ -1110,6 +1098,7 @@ export function ConversationPanel({
 }
 
 /** 手动压缩：成功后派发 session-compacted 事件，让 ConversationPanel 重新拉取消息列表。 */
+// nm-style: keep-local — session-detail-drawer.test 以源码正则锁名（runCompaction…new CustomEvent('context-changed',）与 compaction-handler.test 的注释链都指名本函数；内联/改名会破坏测试锁名。
 export async function runCompaction(
   projectId: string,
   sessionId: string,

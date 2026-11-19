@@ -3,7 +3,7 @@
  * 内存 Map 作 UI 缓存；`composer_draft_json`（text+tokenRanges，attach 恒空）为权威。
  */
 
-import {chatAnnotateDraftStore, parseComposerDraftJson, serializeComposerDraftJson, type ComposerDraftTokenRange, type MessageAttachment} from '@novel-master/core/chat';
+import {chatAnnotateDraftStore, ComposerDraftSchema, type ComposerDraftTokenRange, type MessageAttachment} from '@novel-master/core/chat';
 import {Result, AppError} from '@novel-master/core/errors';
 
 type ChatComposerDraft = {
@@ -38,6 +38,7 @@ function warnPersistFailure(error: unknown): void {
 }
 
 /** 订阅草稿变更（attachments 合并等）；返回取消订阅。 */
+// nm-style: keep-public — listeners Set 模块级共享状态：订阅/通知两端读写同一 Set，导出面外无法触达
 export function subscribeChatComposerDraft(listener: DraftListener): () => void {
   listeners.add(listener);
   return () => {
@@ -70,7 +71,7 @@ type ComposerDraftPersistence = {
  */
 async function persistAttachTextDraft(sessions: ComposerDraftPersistence, sessionId: string, draft: ChatComposerDraft): Promise<Result<void, AppError>> {
   // draft attach 恒空；仅持久正文（含 `@路径`）+ 确认胶囊区间。
-  const json = serializeComposerDraftJson({
+  const json = ComposerDraftSchema.serializeJson({
     text: draft.text,
     attachments: [],
     // D1：undefined 原样透传（序列化侧不写字段），不臆造 `[]` 默认值。
@@ -89,6 +90,7 @@ async function persistAttachTextDraft(sessions: ComposerDraftPersistence, sessio
  * 不扫正文、不臆造 `[]`，让下一次水化走兜底扫描一次（旧草稿语义）。
  * 现有三参调用零改动。
  */
+// nm-style: keep-public — chat-composer-draft.test.ts / use-chat-composer-controller.test.tsx / rollback 测试直接 import 断言，测试锁名
 export function writeChatComposerDraft(sessionId: string | undefined, text: string, sessions?: ComposerDraftPersistence, tokenRanges?: readonly ComposerDraftTokenRange[]): void {
   if (sessionId == null || sessionId === '') {
     return;
@@ -145,6 +147,7 @@ export function writeChatComposerDraftState(sessionId: string | undefined, draft
 }
 
 /** 清空会话草稿（发送成功后）。 */
+// nm-style: keep-public — chat-composer-draft.test.ts / use-chat-composer-controller.test.tsx 等 4 个测试直接 import，测试锁名
 export function clearChatComposerDraft(sessionId: string | undefined, sessions?: ComposerDraftPersistence): void {
   if (sessionId == null || sessionId === '') {
     return;
@@ -169,10 +172,11 @@ export function clearChatComposerDraft(sessionId: string | undefined, sessions?:
  * tokenRanges 缺失/非法（core parse 已降级为 undefined）→ 缓存条目同样不带该键，
  * 由 controller 走「旧草稿兜底扫描一次」。
  */
+// nm-style: keep-public — chat-composer-draft.test.ts / use-chat-composer-controller.test.tsx 直接 import 断言水化链，测试锁名
 export async function hydrateChatComposerDraftFromDb(sessionId: string, sessions: ComposerDraftPersistence): Promise<Result<ChatComposerDraft, AppError>> {
   const raw = await sessions.getComposerDraftJson(sessionId);
   if (!raw.ok) return Result.err(raw.error);
-  const parsed = parseComposerDraftJson(raw.value);
+  const parsed = ComposerDraftSchema.parseJson(raw.value);
   const prev = bySession.get(sessionId);
   const statusOnly = prev?.attachments.filter(a => a.source === 'workplace' || a.source === 'user_ops') ?? [];
   // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`

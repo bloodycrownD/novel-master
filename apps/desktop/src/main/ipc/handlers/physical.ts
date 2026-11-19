@@ -14,10 +14,10 @@ import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getPhysicalVfs } from "../resolve-vfs-scope.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
-import { isAppError } from "@novel-master/core/errors";
-import { createLogger } from "@novel-master/core/log";
+import { AppErrorOps } from "@novel-master/core/errors";
+import { LogFactory } from "@novel-master/core/log";
 
-const log = createLogger("desktop.ipc.physical");
+const log = LogFactory.create("desktop.ipc.physical");
 
 /** 物理树行 DTO：规则类字段对物理树无意义，恒为缺省值。 */
 function toPhysicalRow(entry: {
@@ -76,7 +76,7 @@ export async function handlePhysicalList(req: PhysicalListRequest): Promise<IpcR
       if (!listed.ok) {
         // vfsNotFound：子树已不存在（如项目被并发删除）→ 跳过该子树；
         // 其他失败同样降级跳过（不中断整树），留 warn 便于排查。
-        if (!isAppError(listed.error, "VFS_NOT_FOUND")) {
+        if (!AppErrorOps.is(listed.error, "VFS_NOT_FOUND")) {
           log.warn("physical-list 子树拉取失败，已跳过", { scopeDir, error: listed.error });
         }
         continue;

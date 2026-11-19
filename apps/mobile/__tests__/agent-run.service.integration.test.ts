@@ -1,6 +1,6 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {isAppError} from '@novel-master/core/errors';
-import {userMessageOf} from '@novel-master/core/i18n';
+import {AppErrorOps} from '@novel-master/core/errors';
+import {ErrorMessage} from '@novel-master/core/i18n';
 
 import {coreT} from '@/i18n/core';
 import {runAgentTurnAdapter} from '@/services/agent-run.service';
@@ -116,8 +116,8 @@ describe('runAgentTurnAdapter integration', () => {
     );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('预期 Err（空输入必须被拦截）');
-    expect(isAppError(result.error, 'AGENT_MESSAGE_EMPTY')).toBe(true);
-    const descriptor = userMessageOf(result.error);
+    expect(AppErrorOps.is(result.error, 'AGENT_MESSAGE_EMPTY')).toBe(true);
+    const descriptor = ErrorMessage.userOf(result.error);
     expect(descriptor).not.toBeNull();
     expect(coreT(descriptor!)).toBe('消息不能为空');
   });

@@ -25,7 +25,7 @@
  *
  * @module tokenizer-driver-rn/impl/encoding-cache
  */
-import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/tokenizer";
+import { EncodingRegistry, TokenizerTextCount } from "@novel-master/core/tokenizer";
 import { Tiktoken } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
 import * as o200kRanksModule from "js-tiktoken/ranks/o200k_base";
@@ -62,7 +62,7 @@ function unwrapRanksModule(mod: unknown): unknown {
 
 /** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
 export function getRnEncoding(name: RnEncodingName): RnTokenEncoding | null {
-  return getEncoding(name, () => {
+  return EncodingRegistry.get(name, () => {
     const ranks = name === "o200k_base" ? unwrapRanksModule(o200kRanksModule) : unwrapRanksModule(cl100kRanksModule);
     return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
   });
@@ -90,7 +90,7 @@ export function countTextWithDefaultEncoding(text: string): number | null {
   if (encoding == null) {
     return null;
   }
-  return countTextWithIncrementalTokenizer((chunk) => encoding.encode(chunk).length, text);
+  return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
 }
 
 /**
@@ -99,7 +99,7 @@ export function countTextWithDefaultEncoding(text: string): number | null {
  * 注意这里**不 `free()`**（js-tiktoken 实例本就没有该方法，句柄由 registry 持有）。
  */
 export function __resetRnEncodingCacheForTests(): void {
-  clearForTests();
+  EncodingRegistry.clearForTests();
 }
 
 /**
@@ -109,5 +109,5 @@ export function __resetRnEncodingCacheForTests(): void {
 export function __setRnEncodingFactoryForTests(factory: ((name: RnEncodingName) => RnTokenEncoding) | null): void {
   // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
   // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
-  setFactoryForTests(factory == null ? null : (encodingName: string) => factory(encodingName as RnEncodingName));
+  EncodingRegistry.setFactoryForTests(factory == null ? null : (encodingName: string) => factory(encodingName as RnEncodingName));
 }

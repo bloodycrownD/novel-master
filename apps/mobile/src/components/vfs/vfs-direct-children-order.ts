@@ -3,7 +3,7 @@
  */
 import type {WorkplaceDirRule, WorkplaceListRow} from '@novel-master/core/workplace';
 import type {CompiledSmartSortRule} from '@novel-master/core/smart-sort-rule';
-import {sortDirPaths, sortFilesForDir} from '@novel-master/core/workplace';
+import {WorkplaceEval} from '@novel-master/core/workplace';
 import {isDirectChild} from './vfs-row-mapper';
 
 type OrderedDirectChildPathsParams = {
@@ -23,8 +23,9 @@ type OrderedDirectChildPathsParams = {
  * Returns direct child paths under `parentPath` in the same order as
  * {@link WorkplaceService.buildListRows} DFS (dirs before files at each level).
  * Paths only in `extraPaths` are appended after row-derived order, sorted with core
- * `sortDirPaths` / `sortFilesForDir` so directory rule changes affect orphans too.
+ * `WorkplaceEval.sortDirPaths` / `WorkplaceEval.sortFilesForDir` so directory rule changes affect orphans too.
  */
+// nm-style: keep-public — vfs-direct-children-order.test.ts 专文件直接 import 7 用例断言 DFS/orphan 排序契约，测试锁名
 export function orderedDirectChildPaths(params: OrderedDirectChildPathsParams): string[] {
   const {parentPath, rows, extraPaths, dirRule, mtimeByPath, smartRules, kindByPath} = params;
 
@@ -56,9 +57,9 @@ export function orderedDirectChildPaths(params: OrderedDirectChildPathsParams): 
     }
   }
 
-  const sortedDirs = sortDirPaths(orphanDirs, dirRule, {smartRules});
+  const sortedDirs = WorkplaceEval.sortDirPaths(orphanDirs, dirRule, {smartRules});
   const orphanFileEntries = orphanFiles.map(logicalPath => ({logicalPath, mtimeMs: mtimeByPath?.get(logicalPath) ?? 0}));
-  const sortedFiles = sortFilesForDir(orphanFileEntries, dirRule, {smartRules}).map(f => f.logicalPath);
+  const sortedFiles = WorkplaceEval.sortFilesForDir(orphanFileEntries, dirRule, {smartRules}).map(f => f.logicalPath);
 
   return [...ordered, ...sortedDirs, ...sortedFiles];
 }

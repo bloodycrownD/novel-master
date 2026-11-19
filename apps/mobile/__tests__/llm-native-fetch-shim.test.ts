@@ -11,7 +11,7 @@
  * - native 请求契约（T-S20 的 JS 侧）：每请求独立 requestId（与流式路径不同
  *   命名空间，重复 id 不可能由 shim 生成）；native 的 `invalid` reject 原样上抛
  * - json()（shim-3）：非法 body 走 rejected Promise，不同步抛
- * - shim 被流式误用：body 为 null，postSse fetch 分支消费路径命中
+ * - shim 被流式误用：body 为 null，LlmSseTransport.post fetch 分支消费路径命中
  *   core「Empty streaming response body」防御抛 ProviderError
  * - dev logging（shim-2）：body=null 的成功非流式响应不再误报
  *   「streaming may fail on RN」；真实流式请求 body 缺失仍告警
@@ -24,20 +24,22 @@ import {
   type LlmNativeRequestFn,
 } from '../src/services/llm-native-fetch-shim';
 
-// core 不公开 postSse / 分支强制位；Empty body 防御的集成断言必须经真实
-// postSse fetch 分支消费路径，这里 deep-import dist 产物（与 moduleNameMapper
+// core 不公开 LlmSseTransport.post / 分支强制位；Empty body 防御的集成断言必须经真实
+// post fetch 分支消费路径，这里 deep-import dist 产物（与 moduleNameMapper
 // 指向的 dist 同一文件实例，模块级注册位共享）。
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const sseTransport = require('../../../packages/core/dist/infra/llm-protocol/logic/llm-sse-transport.js') as {
-  postSse: (
-    url: string,
-    init: RequestInit,
-    onChunk: (chunk: string) => void,
-    providerId?: string,
-    options?: {fetchFn?: typeof globalThis.fetch},
-  ) => Promise<{status: number; contentType: string | null}>;
-  setShouldUseXhrForSseOverrideForTests: (value: boolean | undefined) => void;
-  resetShouldUseXhrForSseCacheForTests: () => void;
+  LlmSseTransport: {
+    post: (
+      url: string,
+      init: RequestInit,
+      onChunk: (chunk: string) => void,
+      providerId?: string,
+      options?: {fetchFn?: typeof globalThis.fetch},
+    ) => Promise<{status: number; contentType: string | null}>;
+    setShouldUseXhrOverrideForTests: (value: boolean | undefined) => void;
+    resetShouldUseXhrCacheForTests: () => void;
+  };
 };
 
 /** native request 迟到 settle 用的 deferred（测取消时序）。 */
@@ -65,7 +67,7 @@ function createMockRequest(
 
 describe('llm-native-fetch-shim (T-N4)', () => {
   afterEach(() => {
-    sseTransport.resetShouldUseXhrForSseCacheForTests();
+    sseTransport.LlmSseTransport.resetShouldUseXhrCacheForTests();
   });
 
   describe('method 分发与参数转发', () => {
@@ -412,10 +414,10 @@ describe('llm-native-fetch-shim (T-N4)', () => {
   });
 
   describe('流式误用边界（spec §4：body 置 null 命中 Empty body 防御）', () => {
-    it('postSse fetch 分支消费 shim → 抛 Empty streaming response body ProviderError', async () => {
+    it('LlmSseTransport.post fetch 分支消费 shim → 抛 Empty streaming response body ProviderError', async () => {
       // 强制 fetch 分支（绕过 XHR 择优），fetchFn 注入 shim——复现
-      // configureLlmFetch 的 fn 经 options.fetchFn 流入 fetch 分支的路径。
-      sseTransport.setShouldUseXhrForSseOverrideForTests(false);
+      // Registry.configureLlmFetch 的 fn 经 options.fetchFn 流入 fetch 分支的路径。
+      sseTransport.LlmSseTransport.setShouldUseXhrOverrideForTests(false);
       const request = createMockRequest({
         status: 200,
         contentType: 'text/event-stream',
@@ -425,7 +427,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
 
       const chunks: string[] = [];
       await expect(
-        sseTransport.postSse(
+        sseTransport.LlmSseTransport.post(
           'https://api.example.com/v1/chat/completions',
           {method: 'POST', headers: {Authorization: 'Bearer sk'}, body: '{}'},
           chunk => chunks.push(chunk),
@@ -444,10 +446,12 @@ describe('llm-native-fetch-shim (T-N4)', () => {
     // 产物做黑盒断言（与上方 llm-sse-transport deep-import 同一口径；dist 重建
     // 后本组即该判据的护栏）。
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const {createLoggingFetch: createLoggingFetchFromDist} = require('../../../packages/core/dist/infra/llm-protocol/logic/debug-fetch.js') as {
-      createLoggingFetch: (
-        base: typeof globalThis.fetch,
-      ) => typeof globalThis.fetch;
+    const {DebugFetch} = require('../../../packages/core/dist/infra/llm-protocol/logic/debug-fetch.js') as {
+      DebugFetch: {
+        createLoggingFetch: (
+          base: typeof globalThis.fetch,
+        ) => typeof globalThis.fetch;
+      };
     };
 
     const originalDev = (globalThis as {__DEV__?: boolean}).__DEV__;
@@ -478,7 +482,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'application/json',
         body: '{"data":[]}',
       });
-      const logged = createLoggingFetchFromDist(
+      const logged = DebugFetch.createLoggingFetch(
         createNativeRequestFetch({request}) as unknown as typeof globalThis.fetch,
       );
 
@@ -501,7 +505,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'text/event-stream',
         body: 'data: {}\n\n',
       });
-      const logged = createLoggingFetchFromDist(
+      const logged = DebugFetch.createLoggingFetch(
         createNativeRequestFetch({request}) as unknown as typeof globalThis.fetch,
       );
 
@@ -520,7 +524,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'text/event-stream',
         body: 'data: {}\n\n',
       });
-      const logged = createLoggingFetchFromDist(
+      const logged = DebugFetch.createLoggingFetch(
         createNativeRequestFetch({request}) as unknown as typeof globalThis.fetch,
       );
 

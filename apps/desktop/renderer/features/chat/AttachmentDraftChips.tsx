@@ -4,7 +4,7 @@
  * 判定 / partition 单点：`@shared/logic/chat`。
  */
 import {
-  formatStatusChipLabelFromAttachment,
+  AttachmentChip,
   composerChips,
 } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
@@ -24,13 +24,15 @@ type AttachmentDraftChipsProps = {
 };
 
 /**
- * Chip 文案：中文二字 + `:` + path（Core `formatStatusChipLabelFromAttachment`）。
+ * Chip 文案：中文二字 + `:` + path（Core `AttachmentChip.formatStatusLabelFromAttachment`）。
  */
+// nm-style: keep-local — attachment-draft-chips.test 直引断言文案口径（10 个调用点）；内联会破坏测试锁名。
 export function formatAttachmentChipLabel(a: MessageAttachmentDto): string {
-  return formatStatusChipLabelFromAttachment(a);
+  return AttachmentChip.formatStatusLabelFromAttachment(a);
 }
 
 /** chip 根 class（T-UI2：目录不再带 warning 色类）。 */
+// nm-style: keep-local — attachment-draft-chips.test 直引断言 chip 根 class；内联会破坏测试锁名。
 export function attachmentChipClassName(): string {
   return 'chat-composer__chip';
 }

@@ -22,16 +22,14 @@
  */
 
 import {
+  ChunkSplitter,
   HeuristicTokenCounter,
-  buildCounterScope,
-  chunkHash16,
-  countTextWithIncrementalTokenizer,
-  mapVendorModelIdToTiktokenModel,
+  TokenChunkCache,
+  TokenCountTools,
+  TokenizerFamilyResolver,
+  TokenizerTextCount,
   promptWholeCache,
-  resolveTokenizerFamily,
   serializePromptLlmInput,
-  serializeToolsForTokenCount,
-  splitTextIntoChunks,
   tokenChunkCache,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
@@ -42,7 +40,7 @@ import { Result, type AppError } from "@novel-master/core/errors";
 import { getDefaultNodeEncoding, getNodeEncodingForModel } from "./impl/encoding-cache.js";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";
 import { countWebFamilyPrompt } from "./impl/web-tokenizer-counter.js";
-import { countOpenAiStyleMessages, wrapSerializedPromptAsSystemMessage } from "./logic/count-openai-style-message.js";
+import { OpenAiStyleMessageCount } from "./logic/count-openai-style-message.js";
 
 /** 与 `register.ts` 的 NODE_DRIVER_NAME 同值（L2 计数器身份段；import 会成环，故就地重复）。 */
 const DRIVER_NAME = "node";
@@ -65,14 +63,14 @@ const charRatioCounter = new HeuristicTokenCounter();
  */
 function countChunksWithL2(text: string, scope: string, encodeText: (text: string) => number): number {
   let total = 0;
-  for (const chunk of splitTextIntoChunks(text)) {
-    const hash = chunkHash16(chunk);
+  for (const chunk of ChunkSplitter.splitText(text)) {
+    const hash = TokenChunkCache.chunkHash16(chunk);
     const hit = tokenChunkCache.lookup(hash, scope);
     if (hit !== undefined) {
       total += hit;
       continue;
     }
-    const count = countTextWithIncrementalTokenizer(encodeText, chunk);
+    const count = TokenizerTextCount.count(encodeText, chunk);
     tokenChunkCache.record(hash, scope, count);
     total += count;
   }
@@ -103,12 +101,12 @@ export async function countPromptLlmInput(params: CountPromptLlmInputParams): Pr
   const saved = params.savedModels == null ? null : await params.savedModels.findById(params.savedModelId.trim());
   const vendorModelId = saved != null && saved.ok && saved.value != null ? saved.value.vendorModelId : params.savedModelId;
   const override = params.tokenizerOverride ?? (await registry.getTokenizerOverride?.()) ?? "auto";
-  const family = resolveTokenizerFamily(vendorModelId, override);
+  const family = TokenizerFamilyResolver.resolve(vendorModelId, override);
   // tools 段与提示词同串计数：本地估算含 tools 才与 API 的 promptTokens
   // （本身就含 tools）可比。空 tools 时拼接为恒等（helper 返回空串）。
   const promptText = await serializePromptLlmInput(layout, ctx);
   if (!promptText.ok) return Result.err(promptText.error);
-  const serialized = promptText.value + serializeToolsForTokenCount(params.tools);
+  const serialized = promptText.value + TokenCountTools.serialize(params.tools);
 
   // ---- L1 整串缓存（message-token-cache Step 3）----
   // 键 = 内容指纹（hashContent(整串+tools 串) 前 16 hex，与 L2 块键同口径——
@@ -116,13 +114,13 @@ export async function countPromptLlmInput(params: CountPromptLlmInputParams): Pr
   // hashContent 导出）× 计数器身份（模型/override/家族/驱动，任一变化换键）。
   // 驱动内部查 L1 传**空 sessionId**：键已含内容指纹，跨会话共享安全；sessionId
   // 段的会话语义由读口层（resolve-current-prompt-tokens）决定，驱动不越层。
-  const scope = buildCounterScope({
+  const scope = TokenChunkCache.buildCounterScope({
     vendorModelId,
     tokenizerOverride: override,
     tokenizerFamily: family,
     driverName: DRIVER_NAME,
   });
-  const contentHash = chunkHash16(serialized);
+  const contentHash = TokenChunkCache.chunkHash16(serialized);
   const cached = promptWholeCache.lookup("", scope, contentHash);
   if (cached != null) {
     // L1 命中：内容与计数器身份都没变，口径三件套原样返回，不进任何计数路径。
@@ -140,7 +138,7 @@ export async function countPromptLlmInput(params: CountPromptLlmInputParams): Pr
       counterKind = "heuristic";
       estimated = true;
     } else if (family === "tiktoken" || family === "gpt2") {
-      const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
+      const tiktokenModel = TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(vendorModelId);
       // 编码表是**进程级单例**（encoding-cache）：不再每次 new + free，避免每次
       // 刷新 meta bar 都重建一整张 BPE ranks 表。代价是取到的表是共享句柄，
       // 因此这里（以及任何持有方）都不能再 `free()`。
@@ -166,7 +164,7 @@ export async function countPromptLlmInput(params: CountPromptLlmInputParams): Pr
         // overhead 恰好等于 perMessage + w(role) + tail——公式零复刻、零漂移（将来
         // core 公式变这里自动跟）；content 部分从 `w(serialized)` 换成块求和，正是
         // spec 计数流程第 3 步。数值与整串口径差 ≤1%（T-TC5 对拍）。
-        const overhead = countOpenAiStyleMessages(encoding, [wrapSerializedPromptAsSystemMessage("")], tiktokenModel);
+        const overhead = OpenAiStyleMessageCount.count(encoding, [OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage("")], tiktokenModel);
         tokenCount = overhead + countChunksWithL2(serialized, scope, (chunk) => encoding.encode(chunk).length);
         // 精确档：真 tiktoken 家族读数，counterKind 如实报 `tiktoken`。
         counterKind = "tiktoken";
@@ -178,7 +176,7 @@ export async function countPromptLlmInput(params: CountPromptLlmInputParams): Pr
         // 落 KKV（promptWholeCache 只收精确档的约束被绕过）。判定口径：auto
         // 下模型自身解析不出 tiktoken 家族 ⇒ 身份来自强制。gpt 系模型（auto
         // 即 tiktoken）不受影响，仍为精确档 est:false。
-        if (family === "tiktoken" && resolveTokenizerFamily(vendorModelId, "auto") !== "tiktoken") {
+        if (family === "tiktoken" && TokenizerFamilyResolver.resolve(vendorModelId, "auto") !== "tiktoken") {
           estimated = true;
         }
       }

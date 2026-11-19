@@ -26,8 +26,10 @@ jest.mock('react-native-blob-util', () => ({
 }));
 
 jest.mock('@novel-master/core', () => ({
-  open: (...args: unknown[]) => mockOpen(...args),
-  bootstrapNovelMaster: (...args: unknown[]) => mockBootstrap(...args),
+  TdbcOpen: {open: (...args: unknown[]) => mockOpen(...args)},
+  NovelMasterBootstrap: {
+    bootstrap: (...args: unknown[]) => mockBootstrap(...args),
+  },
 }));
 
 jest.mock('@novel-master/tdbc-driver-op-sqlite/native', () => ({

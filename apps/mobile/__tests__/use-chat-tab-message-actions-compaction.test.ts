@@ -22,7 +22,7 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 
-import {ABORT_KEY, createAbortRegistry} from '@novel-master/core/abort';
+import {ABORT_KEY, AbortRegistryFactory} from '@novel-master/core/abort';
 import {useChatTabMessageActions} from '@/screens/tabs/chat-tab/useChatTabMessageActions';
 
 const mockRunCompaction = jest.fn();
@@ -32,7 +32,7 @@ const mockRefreshChatTokenLabel = jest.fn();
 const mockShowToast = jest.fn();
 
 jest.mock('@novel-master/core/compaction', () => ({
-  runCompaction: (...args: unknown[]) => mockRunCompaction(...args),
+  Compaction: {run: (...args: unknown[]) => mockRunCompaction(...args)},
 }));
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
@@ -79,7 +79,7 @@ function flushPromises(): Promise<void> {
 function makeRuntime() {
   return {
     // 真实注册表：断言取消确实派发到 runManualCompaction 注册的 scope。
-    abortRegistry: createAbortRegistry(),
+    abortRegistry: AbortRegistryFactory.create(),
     compactionConditionEvaluator: {getHideStartDepth: (...args: unknown[]) => mockGetHideStartDepth(...args)},
     sessionKkv: {get: jest.fn(), set: jest.fn(), delete: jest.fn()},
     messages: {listBySession: jest.fn()},
@@ -147,7 +147,7 @@ describe('useChatTabMessageActions 手动压缩取消入口（T-S14）', () => {
     expect(abortSpy).toHaveBeenCalledWith(ABORT_KEY.compaction('s1'));
     expect(scope!.reason).toBe('user-stop');
 
-    // 深度读回 → beforeHide 检查点命中取消 → 边界 throw createAbortError()。
+    // 深度读回 → beforeHide 检查点命中取消 → 边界 throw AbortError.create()。
     await act(async () => {
       depth.resolve({ok: true, value: 3});
       await flushPromises();

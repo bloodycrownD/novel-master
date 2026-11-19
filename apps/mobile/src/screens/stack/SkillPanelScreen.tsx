@@ -24,7 +24,7 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {isAppError} from '@novel-master/core/errors';
+import {AppErrorOps} from '@novel-master/core/errors';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {
   skillDomainBadgeColor,
@@ -65,7 +65,7 @@ export function SkillPanelScreen() {
       const list = await runtime.skills().effectiveSkills(projectId);
       if (!list.ok) {
         // 与服务层向 NOT_FOUND 语义对齐：技能根目录不存在 = 空列表
-        if (isAppError(list.error, 'VFS_NOT_FOUND')) {
+        if (AppErrorOps.is(list.error, 'VFS_NOT_FOUND')) {
           return [];
         }
         throw list.error;

@@ -2,11 +2,11 @@
  * Application menu (accelerators + popup submenus for in-window menubar on Windows/Linux).
  */
 import { app, BrowserWindow, Menu, dialog, type MenuItemConstructorOptions } from "electron";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import type { ShellMenuId } from "../../shared/ipc-types.js";
 import { createDesktopDiagnosticsSeams, exportDiagnostics, openLogsDirectory } from "./log/desktop-diagnostics.js";
 
-const log = createLogger("desktop.shell-menu");
+const log = LogFactory.create("desktop.shell-menu");
 
 const isDev = !app.isPackaged;
 
@@ -30,7 +30,7 @@ export function titleBarOverlayOptions(theme: "light" | "dark" = "light") {
 }
 
 /** 菜单模板的外部动作；抽成纯函数是为了不碰 electron 就能断言结构与点击接线。 */
-// nm-style: keep-public — spec 4.6 要求的 deps 契约：buildApplicationMenu 与模板测试共用同一份形状。
+// nm-style: keep-public — spec 4.6 要求的 deps 契约：installApplicationMenu 装配与模板测试共用同一份形状。
 export interface ShellMenuDeps {
   readonly isDev: boolean;
   readonly onAbout: () => void;
@@ -90,8 +90,10 @@ export function buildMenuTemplate(deps: ShellMenuDeps): MenuItemConstructorOptio
   ];
 }
 
-export function buildApplicationMenu(): Menu {
-  appMenu = Menu.buildFromTemplate(buildMenuTemplate({
+// nm-style: keep-public — shell-menu 模块状态 appMenu 的唯一写入方（popupShellSubmenu 读取）；内联进 main.ts 需把模块状态外泄出本文件。
+export function installApplicationMenu(): void {
+  // 原 buildApplicationMenu 内联：模板 + 模块状态 appMenu 的唯一写入点。
+  const menu = Menu.buildFromTemplate(buildMenuTemplate({
     isDev,
     onAbout: () => {
       const win = BrowserWindow.getFocusedWindow();
@@ -110,32 +112,14 @@ export function buildApplicationMenu(): Menu {
       void exportDiagnostics(createDesktopDiagnosticsSeams()).catch((error: unknown) => log.error("export diagnostics failed", { error }));
     },
   }));
-  return appMenu;
+  appMenu = menu;
+  Menu.setApplicationMenu(menu);
 }
 
-export function installApplicationMenu(): void {
-  Menu.setApplicationMenu(buildApplicationMenu());
-}
-
+// nm-style: keep-public — appMenu 模块状态的读取方（与 installApplicationMenu 写入配对）；内联进 IPC handler 需跨模块外泄状态。
 export function popupShellSubmenu(menuId: ShellMenuId, window: BrowserWindow, x: number, y: number): void {
   const item = appMenu?.getMenuItemById(menuId);
   const submenu = item?.submenu;
   if (!submenu) return;
   submenu.popup({ window, x: Math.round(x), y: Math.round(y) });
-}
-
-export function configureWindowChrome(window: BrowserWindow): void {
-  window.setTitle("");
-  if (process.platform === "win32" || process.platform === "linux") {
-    window.setMenuBarVisibility(false);
-  }
-}
-
-export function syncTitleBarOverlay(window: BrowserWindow, theme: "light" | "dark"): void {
-  if (process.platform !== "win32" || window.isDestroyed()) return;
-  try {
-    window.setTitleBarOverlay(titleBarOverlayOptions(theme));
-  } catch (error) {
-    log.warn("titleBarOverlay update skipped", { error });
-  }
 }

@@ -10,7 +10,7 @@ import type {SkillDomain} from '@novel-master/core/skills';
 // core 单源，经此处再导出供 mobile 各组件消费。
 // ⚠️ 这条 export 必须保持独立成句：__tests__/skill-info-edit-modal-contract.test.ts
 //    用正则锁死了它的精确形态，合并成 `export {a, b} from ...` 会把那条测试打红。
-export {withSkillFrontMatterValues} from '@novel-master/core/skills';
+export {SkillFrontMatterValues} from '@novel-master/core/skills';
 
 /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
 export function skillDomainBadgeLabel(domain: SkillDomain, overridden: boolean): string {

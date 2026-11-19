@@ -26,8 +26,7 @@ import {
 import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/tokenizer";
 import type { AgentStreamMetricsView } from "@/hooks/useAgentStreamMetrics";
 import type { UseAgentStreamCallbacks } from "@/hooks/useAgentStream";
-import { createIncrementalTokenCounter } from "@shared/logic/format";
-import type { IncrementalTokenCounter } from "@shared/logic/format";
+import { IncrementalTokenCounter } from "@shared/logic/format";
 import type { ReactTestRenderer } from "react-test-renderer";
 
 // 见文件头：先注册解析钩子，再动态导入 react 家族与 hook（整棵依赖树统一根副本）。
@@ -395,7 +394,7 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
     // 对应真机上 js-tiktoken 遇特殊 token 文本（disallowedSpecial="all"）。
     // 计数器跨过固化阈值时该段进入固化路径。
     const h = createMetricsHarness(() =>
-      createIncrementalTokenCounter({
+      IncrementalTokenCounter.create({
         encode: text => {
           if (text.includes("!")) {
             throw new Error("special token text");

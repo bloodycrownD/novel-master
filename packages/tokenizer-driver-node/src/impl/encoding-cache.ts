@@ -35,7 +35,7 @@
  * @module tokenizer-driver-node/impl/encoding-cache
  */
 
-import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/tokenizer";
+import { EncodingRegistry, TokenizerTextCount } from "@novel-master/core/tokenizer";
 import { get_encoding, get_encoding_name_for_model, type Tiktoken, type TiktokenEncoding, type TiktokenModel } from "tiktoken";
 
 /**
@@ -76,12 +76,19 @@ export function getNodeEncodingForModel(tiktokenModel: TiktokenModel | string): 
     console.warn(`[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`, err);
     return null;
   }
-  return getEncoding(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
+  return EncodingRegistry.get(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
 }
 
-/** 按**编码名**取（单例）编码表；失败返回 `null`（TTL 内不重试，见模块头注释）。 */
+/**
+ * 按**编码名**取（单例）编码表；失败返回 `null`（TTL 内不重试，见模块头注释）。
+ *
+ * nm-style: keep-public — 「按编码名取表」语义入口，与 {@link getNodeEncodingForModel}（按模型名取）
+ * 构成 `enc:` 单键空间的成对取表口（包 barrel 公开）；6 处测试以它为探针验证「精确档与兜底档
+ * 共享同一张表」的不变量，该验证无等价替代入口——唯一生产调用方 {@link getDefaultNodeEncoding}
+ * 只是 cl100k 特化，own 不了「按任意编码名取」的语义。
+ */
 export function getNodeEncodingByName(name: TiktokenEncoding | string): Tiktoken | null {
-  return getEncoding(name, () => get_encoding(name as TiktokenEncoding));
+  return EncodingRegistry.get(name, () => get_encoding(name as TiktokenEncoding));
 }
 
 /** 默认（cl100k）编码表取用口。 */
@@ -101,7 +108,7 @@ export function countTextWithDefaultEncoding(text: string): number | null {
   if (encoding == null) {
     return null;
   }
-  return countTextWithIncrementalTokenizer((chunk) => encoding.encode(chunk).length, text);
+  return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
 }
 
 /**
@@ -110,7 +117,7 @@ export function countTextWithDefaultEncoding(text: string): number | null {
  * 注意这里**不 `free()`**（见模块头「free 生命周期」）。
  */
 export function clearNodeEncodingCacheForTests(): void {
-  clearForTests();
+  EncodingRegistry.clearForTests();
 }
 
 /**
@@ -118,5 +125,5 @@ export function clearNodeEncodingCacheForTests(): void {
  * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
  */
 export function __setNodeEncodingFactoryForTests(factory: NodeEncodingFactory | null): void {
-  setFactoryForTests(factory);
+  EncodingRegistry.setFactoryForTests(factory);
 }

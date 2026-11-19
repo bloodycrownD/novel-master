@@ -18,10 +18,9 @@
  * @module services/manual-compaction
  */
 
-import {runCompaction} from '@novel-master/core/compaction';
-import {type Interrupt} from '@novel-master/core/errors';
-import {ABORT_KEY, createAbortScope} from '@novel-master/core/abort';
-import type {Outcome} from '@novel-master/core/errors';
+import {Compaction} from '@novel-master/core/compaction';
+import {ABORT_KEY, AbortScopeFactory} from '@novel-master/core/abort';
+import type {Interrupt, Outcome} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /**
@@ -71,7 +70,7 @@ function interruptedOutcome(hit: Interrupt): Outcome<never> {
 export async function runManualCompaction(runtime: MobileNovelMasterRuntime, scope: {readonly projectId: string; readonly sessionId: string}, hooks: ManualCompactionHooks = {}): Promise<Outcome<void>> {
   const {sessionId} = scope;
   // AbortScope 与业务参数 `scope` 撞名：按 spec 约定命名为 abortScope。
-  const abortScope = createAbortScope();
+  const abortScope = AbortScopeFactory.create();
   runtime.abortRegistry.register(ABORT_KEY.compaction(sessionId), abortScope);
   let work: Outcome<boolean> | null = null;
   // `null` 表示「压缩本体明确返回失败」（无错误详情）；`{error}` 表示抛错。
@@ -101,7 +100,7 @@ export async function runManualCompaction(runtime: MobileNovelMasterRuntime, sco
           // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
           // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
           const compactionOptions = {sessionId, hideStartDepth: hiddenDepth.value, trigger: 'manual' as const};
-          const result = await runCompaction(compactionDeps, compactionOptions);
+          const result = await Compaction.run(compactionDeps, compactionOptions);
           // `completed.value` 是压缩本体自己的 `ok`——「明确返回失败」仍是
           // 完成态的一部分（不是 failed，保留 `onFailed(undefined)` 的既有语义）。
           work = {kind: 'completed', value: result.ok};

@@ -9,7 +9,7 @@
  * renderer 消费点零改动（UI 拿 string，行为不变）。
  */
 
-import { AGENT_LIST_LABELS as CORE_AGENT_LIST_LABELS, STORED_CONFIG_LABELS as CORE_STORED_CONFIG_LABELS, storedConfigInvalidReason as coreStoredConfigInvalidReason } from "@novel-master/core/stored-config-validity";
+import { AGENT_LIST_LABELS as CORE_AGENT_LIST_LABELS, STORED_CONFIG_LABELS as CORE_STORED_CONFIG_LABELS, StoredConfigLabels } from "@novel-master/core/stored-config-validity";
 import { coreT } from "./core-i18n.js";
 
 export type { StoredConfigHealth } from "@novel-master/core/stored-config-validity";
@@ -32,8 +32,8 @@ export const AGENT_LIST_LABELS = {
   configInvalid: coreT(CORE_AGENT_LIST_LABELS.configInvalid),
 } as const;
 
-export function storedConfigInvalidReason(code: Parameters<typeof coreStoredConfigInvalidReason>[0]): string {
-  return coreT(coreStoredConfigInvalidReason(code));
+export function storedConfigInvalidReason(code: Parameters<typeof StoredConfigLabels.invalidReason>[0]): string {
+  return coreT(StoredConfigLabels.invalidReason(code));
 }
 
-export { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/stored-config-validity";
+export { DefaultAgentDefinition } from "@novel-master/core/stored-config-validity";

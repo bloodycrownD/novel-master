@@ -18,10 +18,9 @@
  * @module renderer/hooks/stream-token-estimator
  */
 import {
-  createIncrementalTokenCounter,
-  type IncrementalTokenCounter,
+  IncrementalTokenCounter,
 } from "@shared/logic/format";
-import { getEncoding, type EncodingHandle } from "@shared/logic/encoding";
+import { EncodingRegistry, type EncodingHandle } from "@shared/logic/encoding";
 import { Tiktoken } from "js-tiktoken/lite";
 import cl100kRanks from "js-tiktoken/ranks/cl100k_base";
 
@@ -31,7 +30,7 @@ import cl100kRanks from "js-tiktoken/ranks/cl100k_base";
  * 允许重试）。返回共享句柄，不得 `free()`。
  */
 function getCl100kEncoding(): EncodingHandle | null {
-  return getEncoding("cl100k_base", () => new Tiktoken(cl100kRanks));
+  return EncodingRegistry.get("cl100k_base", () => new Tiktoken(cl100kRanks));
 }
 
 /**
@@ -43,7 +42,7 @@ export function createDesktopStreamTokenEstimator(): IncrementalTokenCounter | n
   if (encoding == null) {
     return null;
   }
-  return createIncrementalTokenCounter({
+  return IncrementalTokenCounter.create({
     encode: text => encoding.encode(text).length,
   });
 }

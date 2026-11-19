@@ -20,9 +20,9 @@ import { maintenanceBusy } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
 import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { outcomeIfAborted, runAbortable } from "../run-scope.js";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 
-const log = createLogger("desktop.ipc.cloud-sync");
+const log = LogFactory.create("desktop.ipc.cloud-sync");
 
 export async function handleCloudSyncGetConfig(): Promise<
   IpcResult<CloudSyncConfigDto>
@@ -129,6 +129,7 @@ export async function handleCloudSyncPull(): Promise<
 }
 
 /** 可中断的 pull 段：入口检查点 + 未换代时的阶段边界检查点。 */
+// nm-style: keep-local — run-abort-scope.test 直引断言 pull 段取消/换代语义；内联会破坏测试锁名。
 export async function doCloudSyncPull(scope: AbortScope): Promise<Outcome<CloudSyncPullResult>> {
   const stopped = outcomeIfAborted(scope);
   if (stopped != null) return stopped;
@@ -189,6 +190,7 @@ export async function handleCloudSyncPush(req?: CloudSyncPushRequest): Promise<I
 }
 
 /** 可中断的 push 段：仅入口检查点（上传完成即自然终态，不把已推送翻成取消）。 */
+// nm-style: keep-local — run-abort-scope.test 直引断言 push 段取消语义；内联会破坏测试锁名。
 export async function doCloudSyncPush(req: CloudSyncPushRequest | undefined, scope: AbortScope): Promise<Outcome<CloudSyncPushResult>> {
   const stopped = outcomeIfAborted(scope);
   if (stopped != null) return stopped;

@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { ABORT_KEY, createAbortScope, type AbortScope } from "@novel-master/core/abort";
+import { ABORT_KEY, AbortScopeFactory, type AbortScope } from "@novel-master/core/abort";
 import { doBackupExport, doBackupImport } from "../src/main/ipc/handlers/backup.js";
 import { doCloudSyncPull, doCloudSyncPush } from "../src/main/ipc/handlers/cloud-sync.js";
 import { doCompactionManual } from "../src/main/ipc/handlers/compaction.js";
@@ -23,7 +23,7 @@ import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
 import { setupDesktopDbTestEnv, teardownDesktopDbTestEnv } from "./desktop-db-test-env.js";
 
 function abortedScope(): AbortScope {
-  const scope = createAbortScope();
+  const scope = AbortScopeFactory.create();
   scope.abort("user-stop");
   return scope;
 }

@@ -4,7 +4,7 @@
 import type {ToolCallRow} from '../../runtime/state/state';
 import {
   readableToolResult,
-  toolCallSummary,
+  ToolSummary,
   toolStatusClass,
   toolStatusLabel,
 } from '../../runtime/render/tool-logic';
@@ -73,7 +73,7 @@ export function ToolGroup({
         const hasResult = filePath == null && !hasSkill && readableToolResult(tool) != null;
         // prettier-ignore
         const canOpen = filePath != null || hasSubagent || hasSkill || hasResult;
-        const summary = toolCallSummary(tool);
+        const summary = ToolSummary.callSummary(tool);
         const statusClass = toolStatusClass(tool.status);
         const statusInner = toolStatusLabel(tool.status);
         // prettier-ignore

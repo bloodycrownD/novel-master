@@ -3,11 +3,11 @@
  *
  * @module services/cloud-sync.service
  */
-import {CloudSyncCoordinator, DatabaseReplacedError, parseCloudSyncStatus, statusKey} from '@novel-master/core';
+import {CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, DatabaseReplacedError} from '@novel-master/core';
 import {Path} from '@novel-master/core/common';
-import {isAbortLikeError} from '@novel-master/core/llm-protocol';
-import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
-import {AppError, isAppError} from '@novel-master/core/errors';
+import {RequestAbort} from '@novel-master/core/llm-protocol';
+import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
+import {AppError, AppErrorOps} from '@novel-master/core/errors';
 import {Result} from '@novel-master/core/errors';
 import {mapCloudSyncSdkError} from './map-cloud-sync-sdk-error';
 import {createCloudSyncProgress, withCloudSyncStorageProgress} from './cloud-sync-progress-log';
@@ -89,7 +89,7 @@ async function readRemoteRev(runtime: MobileNovelMasterRuntime, s3Config?: S3Sto
   });
   const publicConfig = await getCloudSyncConfig(runtime);
   if (!publicConfig.ok) return Result.err(publicConfig.error);
-  const key = statusKey(publicConfig.value.pathPrefix);
+  const key = CloudSyncPaths.statusKey(publicConfig.value.pathPrefix);
   const head = await storage.head(key);
   if (!head.exists) {
     return Result.ok(0);
@@ -105,7 +105,7 @@ async function readRemoteRev(runtime: MobileNovelMasterRuntime, s3Config?: S3Sto
         text += String.fromCharCode(body[i]!);
       }
     }
-    const parsedStatus = parseCloudSyncStatus(JSON.parse(text));
+    const parsedStatus = CloudSyncStatusParser.parse(JSON.parse(text));
     if (!parsedStatus.ok) return Result.err(parsedStatus.error);
     return Result.ok(parsedStatus.value.rev);
   } catch (error) {
@@ -212,6 +212,7 @@ async function createCoordinator(runtime: MobileNovelMasterRuntime, s3Config?: S
 }
 
 /** 读取本机状态与云端 rev，供 Profile 展示。已知失败沿 `Result.err` 上行；云端 rev 读不到按缺省 0 收（旧 catch 同路径）。 */
+// nm-style: keep-public — cloud-sync-storage-screen-source.test.ts 以源码正则锁名；config 集成测试直接调用
 export async function getCloudSyncStatusView(runtime: MobileNovelMasterRuntime): Promise<Result<CloudSyncStatusView, AppError>> {
   const local = await getCloudSyncLocalStatus(runtime);
   if (!local.ok) return Result.err(local.error);
@@ -232,6 +233,7 @@ export async function getCloudSyncStatusView(runtime: MobileNovelMasterRuntime):
 }
 
 /** 测试 S3 连接（HeadBucket 或 ListObjectsV2，不读写 status.json）。配置类失败沿 `Result.err` 上行，存储侧故障保持异常（屏幕 catch 提示）。 */
+// nm-style: keep-public — cloud-sync.service.test.ts describe('testCloudSyncConnection') 直接 import 断言，测试锁名
 export async function testCloudSyncConnection(runtime: MobileNovelMasterRuntime, input?: CloudSyncConfigInput): Promise<Result<void, AppError>> {
   const s3Config = await buildS3StorageConfig(runtime, input);
   if (!s3Config.ok) return Result.err(s3Config.error);
@@ -290,6 +292,7 @@ let syncBusy = false;
  * ——acquire 与 try 之间不允许出现任何可抛表达式。对照 desktop
  * `cloud-sync.service.ts` 的 getLocalMeta 搬移注释，这正是它当初被写下来的原因。
  */
+// nm-style: keep-public — cloud-sync.service.test.ts describe('pullCloudSync') 多用例直接 import；progress-cancel 测试经它驱动
 export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onRebootstrap: Rebootstrap, options?: CloudSyncPullOptions): Promise<Result<CloudSyncPullOutcome, AppError>> {
   const local = await getCloudSyncLocalStatus(runtime);
   if (!local.ok) return Result.err(local.error);
@@ -303,7 +306,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
   syncBusy = true;
   // 任务级取消作用域：key 固定 `sync:local`（S3 配置无 provider 概念，
   // syncBusy 全局互斥）。pull/push 各自建 scope 并登记，finally 反注册 + dispose。
-  const abortScope = createAbortScope();
+  const abortScope = AbortScopeFactory.create();
   runtime.abortRegistry.register(ABORT_KEY.cloudSync('local'), abortScope);
 
   // 外层 acquire（计数/令牌配对）：底层导入函数的 acquire/release 只
@@ -340,7 +343,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     });
     progress.step('start', {lastSyncedRev: local.value.lastSyncedRev});
     // 入口检查点：登记之后、进入协调器之前（UI 取消与启动的竞态窗口）。
-    if (abortScope.checkpoint() != null) throw createAbortError();
+    if (abortScope.checkpoint() != null) throw AbortError.create();
     const created = await createCoordinator(runtime, undefined, progress);
     if (!created.ok) return Result.err(created.error);
     coordinator = created.value.coordinator;
@@ -350,7 +353,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     progress.step('coordinator_pull_start', {});
     const pulled = await coordinator.pull({lastSyncedRev: local.value.lastSyncedRev, checkpoint: () => abortScope.checkpoint()});
     if (!pulled.ok) {
-      if (isAppError(pulled.error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
+      if (AppErrorOps.is(pulled.error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
         // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
         // 本行在失败分支内部，记账一旦抛错会**从分支里再抛**出去 ⇒ 直接跳过
         // 下面的 `progress?.done`，把「已是最新」这个正常语义换成一个裸错误
@@ -394,7 +397,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     progress.done({rev: result.rev});
     return Result.ok({rev: result.rev, alreadyUpToDate: false});
   } catch (error) {
-    if (isAbortLikeError(error)) {
+    if (RequestAbort.isAbortLikeError(error)) {
       // 取消不是错误：账本记 cancelled（不记 error）、进度走取消终态，
       // AbortError 原样上抛——绝不能进 mapCloudSyncSdkError 被包成 NETWORK。
       await patchCloudSyncLocalStatus(accountingRuntime, {
@@ -436,6 +439,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
 }
 
 /** 推送本机快照到云端（不触发 rebootstrap）。 */
+// nm-style: keep-public — cloud-sync.service.test.ts / cloud-sync-progress-screen-cancel.test.tsx 直接 import 断言，测试锁名
 export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: CloudSyncPushOptions | undefined): Promise<Result<{rev: number}, AppError>> {
   const local = await getCloudSyncLocalStatus(runtime);
   if (!local.ok) return Result.err(local.error);
@@ -449,7 +453,7 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
   syncBusy = true;
   // 任务级取消作用域：与 pull 共用 `sync:local`（syncBusy 全局互斥，同一时刻
   // 只有一个云同步任务在册）。
-  const abortScope = createAbortScope();
+  const abortScope = AbortScopeFactory.create();
   runtime.abortRegistry.register(ABORT_KEY.cloudSync('local'), abortScope);
 
   const progress = createCloudSyncProgress('push', {
@@ -463,7 +467,7 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
   const now = new Date().toISOString();
   try {
     // 入口检查点：登记之后、进入协调器之前（UI 取消与启动的竞态窗口）。
-    if (abortScope.checkpoint() != null) throw createAbortError();
+    if (abortScope.checkpoint() != null) throw AbortError.create();
     const created = await createCoordinator(runtime, undefined, progress);
     if (!created.ok) {
       progress.fail(created.error);
@@ -493,7 +497,7 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
       progress.done({rev: result.rev});
       return Result.ok(result);
     } catch (error) {
-      if (isAbortLikeError(error)) {
+      if (RequestAbort.isAbortLikeError(error)) {
         // 取消不在这里记账：交给外层 catch 统一收口（入口取消与协调器阶段
         // 边界取消走同一条），且绝不能被下面的 mapCloudSyncSdkError 包成 NETWORK。
         throw error;
@@ -510,7 +514,7 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
       }
     }
   } catch (error) {
-    if (isAbortLikeError(error)) {
+    if (RequestAbort.isAbortLikeError(error)) {
       // 取消不是错误：账本记 cancelled（不记 error）、进度走取消终态，
       // AbortError 原样上抛（不得被 mapCloudSyncSdkError 包成 NETWORK）。
       await patchCloudSyncLocalStatus(runtime, {

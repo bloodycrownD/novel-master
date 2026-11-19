@@ -1,6 +1,6 @@
 /**
  * mobile build 的 workplace 段内中止转换（2026-09-30「停止要等 14 秒」治本）：
- * core 的 assembleWorkplaceDisplay 在文件粒度检查点中止（错误通道迁移二期起
+ * core 的 WorkplaceDisplayAssembler.assemble 在文件粒度检查点中止（错误通道迁移二期起
  * 沿 Outcome.cancelled/replaced 返回，不再抛 WorkplaceAssemblyAbortedError），
  * build 把它转抛成统一的 ChatPromptBuildBailedError（读口 catch 的判定不变），
  * 且 shouldBail 判据要真正透传进 assemble（run 起步后组装在第一个文件边界
@@ -10,17 +10,20 @@
  * assemble-abort-fingerprint.test.ts 锁定，这里只钉「接线与转换」。
  */
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
-import {textBlocks} from '@novel-master/core/chat';
-import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
+import {TextBlocks} from '@novel-master/core/chat';
+import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 
 const mockAssemble = jest.fn();
 
 jest.mock('@novel-master/core/workplace', () => {
-  // 真模块整体保留，只把 assembleWorkplaceDisplay 换成可控桩。
+  // 真模块整体保留，只把 WorkplaceDisplayAssembler.assemble 换成可控桩。
   const actual = jest.requireActual('@novel-master/core/workplace');
   return {
     ...actual,
-    assembleWorkplaceDisplay: (...args: unknown[]) => mockAssemble(...args),
+    WorkplaceDisplayAssembler: {
+      ...actual.WorkplaceDisplayAssembler,
+      assemble: (...args: unknown[]) => mockAssemble(...args),
+    },
   };
 });
 
@@ -38,7 +41,7 @@ function makeStubRuntime(): MobileNovelMasterRuntime {
             id: 'm1',
             sessionId: 's1',
             role: 'user',
-            content: textBlocks('你好'),
+            content: TextBlocks.of('你好'),
             attachments: [],
             hidden: false,
           },
@@ -60,7 +63,7 @@ function makeStubRuntime(): MobileNovelMasterRuntime {
 }
 
 function workplaceDefinition() {
-  const definition = buildDefaultAgentDefinitionPreservingName('wp-agent');
+  const definition = DefaultAgentDefinition.build('wp-agent');
   definition.prompts = {
     ...definition.prompts,
     persist: [],

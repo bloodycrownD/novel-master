@@ -96,7 +96,7 @@ export interface DesktopNovelMasterRuntime {
   /**
    * Agent 门面：按 sessionId 索引 in-flight run 的 controller，供停止按钮 /
    * core run 端口消费。与 {@link abortRegistry} 是**同一个泛化实例**（内部走
-   * `ABORT_KEY.agent` + `scopeFromController`），字段名刻意不同——core 若沿
+   * `ABORT_KEY.agent` + `AbortScopeFactory.fromController`），字段名刻意不同——core 若沿
    * 同名 `abortRegistry` 取用会拿到泛化实例，裸 sessionId 派发永远 miss。
    */
   readonly agentAbortRegistry: AgentAbortRegistry;

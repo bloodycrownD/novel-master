@@ -4,7 +4,7 @@
  * @module services/chat-prompt-tokens
  *
  * Boundary: per-model counter mode comes from
- * {@link resolveTokenCounterModeForModel} → `resolveCurrentPromptTokens`（API 优先，否则本地）。
+ * {@link TokenCounterMode.resolveForModel} → `CurrentPromptTokens.resolve`（API 优先，否则本地）。
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInputAdapter} reports
  * `Result.err`（错误通道迁移四期；bail 哨兵仍走 throw，见同文件 isChipBailError）。
@@ -17,24 +17,23 @@
  */
 
 import {ABORT_KEY} from '@novel-master/core/abort';
-import {messageBodyTextFromBlocks} from '@novel-master/core/prompt';
+import {MessageBodyText} from '@novel-master/core/prompt';
 
-import {resolvePromptTokensWithBackfill, serializePromptLlmInput, type CountPromptLlmInputParams} from '@novel-master/core/tokenizer';
-import {type Interrupt} from '@novel-master/core/errors';
-import {resolveTokenCounterModeForModel} from '@novel-master/core/provider';
+import {PromptTokens, serializePromptLlmInput, type CountPromptLlmInputParams} from '@novel-master/core/tokenizer';
+import {TokenCounterMode} from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 // 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
 // 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。
 // nm-style: keep-local — 三条具名导入（tokenizer 驱动子路径 / core 符号名较长）
 // 单行化后均超 80 列，prettier 必拆回；按可读性保留拆行。
 import {cancelSessionNativeCounts, PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
-import {Result, AppError} from '@novel-master/core/errors';
+import {Result, AppError, type Interrupt} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
 // jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
 // 对拍 core 真实现而非 mock 行为）。
 import {TokenFormat} from '@novel-master/core/common';
-import {createLogger} from '@novel-master/core/log';
+import {LogFactory} from '@novel-master/core/log';
 import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {buildSessionPromptInputAdapter} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
@@ -172,7 +171,7 @@ async function loadChatTokenLabelWithFlag(runtime: MobileNovelMasterRuntime, sco
     });
   }
   const models = runtime.providerModels;
-  const counterMode = await resolveTokenCounterModeForModel(models, savedModelId);
+  const counterMode = await TokenCounterMode.resolveForModel(models, savedModelId);
   // 已知失败沿 Result 接力（错误通道迁移四期）：首帧轮由 resilient 的 !ok
   // 分支回落 fallback（与旧异常通道同终端），升级轮由 runPreciseUpgrade 的
   // !ok 分支留痕返回。
@@ -197,7 +196,7 @@ async function loadChatTokenLabelWithFlag(runtime: MobileNovelMasterRuntime, sco
         },
       },
     };
-    const resolveOptions: Parameters<typeof resolvePromptTokensWithBackfill>[3] = {
+    const resolveOptions: Parameters<typeof PromptTokens.resolve>[3] = {
       sessionKkv: runtime.sessionKkv,
       ...(preferEstimate ? {preferEstimate: true} : {}),
       // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
@@ -205,7 +204,7 @@ async function loadChatTokenLabelWithFlag(runtime: MobileNovelMasterRuntime, sco
       // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
       shouldBail: resolveBail,
     };
-    const resultPromise = resolvePromptTokensWithBackfill(scope.sessionId, rawMessages, resolveRequest, resolveOptions);
+    const resultPromise = PromptTokens.resolve(scope.sessionId, rawMessages, resolveRequest, resolveOptions);
     const outcome = await resultPromise;
     if (outcome.kind === 'failed') {
       // core 读口的已知失败（现无产出路径）：沿 Result 通道上抛，不吞成弃权。
@@ -259,7 +258,7 @@ async function loadChatTokenLabelWithFlag(runtime: MobileNovelMasterRuntime, sco
 const preciseUpgradeInflight = new Map<string, {round: number; savedModelId: string}>();
 
 /** 读数链路开发期留痕（错误通道迁移四期新增两处 Result 失败留痕走 logger，不占裸 console 基线）。 */
-const upgradeLog = createLogger('chat.prompt-tokens');
+const upgradeLog = LogFactory.create('chat.prompt-tokens');
 
 /** 轮次号自增源：只在 `loadChatPromptTokenLabelResilient` 构造请求时消费。 */
 let preciseUpgradeRoundSeq = 0;
@@ -523,6 +522,7 @@ export type TokenLabelOptions = {
   readonly shouldBailPrecise?: BailCheck;
 };
 
+// nm-style: keep-public — chat-prompt-tokens.test.ts 直接 import 断言（含 Parameters<typeof> 类型引用与 5 个 scope 测试 mock 注入）
 export async function loadChatPromptTokenLabelResilient(runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, options?: TokenLabelOptions): Promise<Result<string, AppError>> {
   let first: Result<TokenLabelFrame, AppError>;
   const bail = options?.shouldBail;
@@ -612,7 +612,7 @@ async function loadChatPromptTokenLabelFallback(runtime: MobileNovelMasterRuntim
   if (allOutcome.kind !== 'completed') return Result.ok('');
   const all = allOutcome.value;
   const visible = all.filter(m => !m.hidden);
-  const bodyText = messageBodyTextFromBlocks;
+  const bodyText = MessageBodyText.fromBlocks;
   const lines = visible.map(m => `${m.role}: ${bodyText(m.content.blocks)}`);
   const serialized = lines.join('\n\n');
   const count = countFallback(runtime, serialized);

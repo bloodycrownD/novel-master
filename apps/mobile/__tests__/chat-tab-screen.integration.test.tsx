@@ -216,7 +216,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@novel-master/core', () => ({
-  textBlocks: (text: string) => ({blocks: [{type: 'text', text}]}),
+  TextBlocks: {of: (text: string) => ({blocks: [{type: 'text', text}]})},
 }));
 
 jest.mock('../src/hooks/useRuntime', () => ({

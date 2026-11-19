@@ -5,7 +5,7 @@ import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatLinkResolver } from "@novel-master/core/chat";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import { installDesktopLogSink } from "./log/desktop-log-sink.js";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
@@ -18,16 +18,12 @@ import { PromptChatTokenUpdatedForwarder } from "./ipc/forward-prompt-chat-token
 import { UserMessageAppendedForwarder } from "./ipc/forward-user-message-appended.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
-import {
-  configureWindowChrome,
-  installApplicationMenu,
-  titleBarOverlayOptions,
-} from "./shell-menu.js";
+import { installApplicationMenu, titleBarOverlayOptions } from "./shell-menu.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = "http://localhost:5173";
 const isDev = !app.isPackaged;
-const log = createLogger("desktop.main");
+const log = LogFactory.create("desktop.main");
 
 // 文件 sink 必须在 app.whenReady() 之前装好：启动早期的失败也要留痕。
 installDesktopLogSink();
@@ -65,7 +61,11 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  configureWindowChrome(window);
+  // 原 configureWindowChrome 内联：置空标题 + Windows/Linux 隐藏菜单栏。
+  window.setTitle("");
+  if (process.platform === "win32" || process.platform === "linux") {
+    window.setMenuBarVisibility(false);
+  }
 
   window.webContents.on("preload-error", (_event, preloadPath, err) => {
     log.error("preload failed", { preloadPath, error: err });

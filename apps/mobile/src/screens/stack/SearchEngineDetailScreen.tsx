@@ -10,7 +10,7 @@
  * 模板表单照 FormField/FormTextInput 骨架（v2 透传口径：响应侧零映射配置，
  * 字段止于 paramHint；请求头不出现在表单里，保存时按「认证方式 + 请求头名称」
  * 重建认证头、出厂非认证头原样保留），保存前统一走 core 的
- * `validateSearchEngineTemplate`。保存/清除/恢复默认的回读
+ * `SearchEngine.validateTemplate`。保存/清除/恢复默认的回读
  * 走静默分支（不闪全屏 loading）。已知 id 判定查 `readConfig()` 动态清单
  * （预置 ∪ DDG ∪ 自定义实例）。凭证安全口径同列表页：只显配置状态标签，
  * 不回显 key 明文。
@@ -19,7 +19,7 @@ import {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {validateSearchEngineTemplate, type SearchConfigPublic, type SearchEngineTemplate} from '@novel-master/core';
+import {SearchEngine, type SearchConfigPublic, type SearchEngineTemplate} from '@novel-master/core';
 import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
@@ -247,7 +247,7 @@ export function SearchEngineDetailScreen() {
     } else if (draft.authStyle === 'header' && authName.length > 0) {
       baseHeaders[authName] = '{{apiKey}}';
     }
-    const validated = validateSearchEngineTemplate({
+    const validated = SearchEngine.validateTemplate({
       name: draft.name,
       method: draft.method,
       url: draft.url,

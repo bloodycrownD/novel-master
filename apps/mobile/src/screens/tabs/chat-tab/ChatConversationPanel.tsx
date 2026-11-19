@@ -31,7 +31,7 @@
 import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {Platform, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
@@ -188,12 +188,12 @@ function ChatConversationWebSurface(props: {
   );
 
   /**
-   * chip 文案表（I 组）：core `formatStatusChipLabelFromAttachment` 单一真源，
+   * chip 文案表（I 组）：core `AttachmentChip.formatStatusLabelFromAttachment` 单一真源，
    * 与 web dock 的 resolveChipLabels 同口径；chips 引用稳定时文案引用随稳。
    */
   const chipLabels = useMemo(
     // 显式单参回调：core 该函数第二参是 chip 口径 options，直接当 map 回调会把 index 当 options。
-    () => composer.composerState.chips.map(a => formatStatusChipLabelFromAttachment(a)),
+    () => composer.composerState.chips.map(a => AttachmentChip.formatStatusLabelFromAttachment(a)),
     [composer.composerState.chips],
   );
 

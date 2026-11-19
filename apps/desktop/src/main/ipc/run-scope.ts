@@ -1,9 +1,9 @@
 /**
  * 桌面长任务取消作用域的 IPC 边界骨架（signal-abort-scope §五）。
  *
- * 统一形态：`createAbortScope({ controller, timeoutMs })` →（可选）登记进
- * `AbortRegistry` → `doWork(scope)` 返回 `Outcome<T>` → 边界按 `matchOutcome`
- * 三分派：`cancelled`/`replaced` 转 `throw createAbortError()`（再经
+ * 统一形态：`AbortScopeFactory.create({ controller, timeoutMs })` →（可选）登记进
+ * `AbortRegistry` → `doWork(scope)` 返回 `Outcome<T>` → 边界按 `Outcome.match`
+ * 三分派：`cancelled`/`replaced` 转 `throw AbortError.create()`（再经
  * `formatIpcError` 映射 `IPC_ABORTED`）、`failed` 转 `throw e`、`completed` 正常
  * 返回；`finally` 反注册 + `dispose`。
  *
@@ -15,14 +15,14 @@
  *
  * @module ipc/run-scope
  */
-import { createAbortError, createAbortScope, type AbortRegistry, type AbortScope } from "@novel-master/core/abort";
-import { AppError, matchOutcome, type Outcome } from "@novel-master/core/errors";
-import { createLogger } from "@novel-master/core/log";
+import { AbortError, AbortScopeFactory, type AbortRegistry, type AbortScope } from "@novel-master/core/abort";
+import { AppError, Outcome } from "@novel-master/core/errors";
+import { LogFactory } from "@novel-master/core/log";
 import type { IpcResult } from "../../../shared/ipc-types.js";
 import { formatIpcError } from "./format-ipc-error.js";
 import { ipcErr, ipcOk } from "./ipc-result.js";
 
-const log = createLogger("desktop.ipc.run-scope");
+const log = LogFactory.create("desktop.ipc.run-scope");
 
 /** `runAbortable` 的登记参数。 */
 export interface AbortableRunOptions {
@@ -71,7 +71,7 @@ export function outcomeIfAborted(scope: AbortScope): Outcome<never> | null {
  */
 export async function runAbortable<T>(opts: AbortableRunOptions, doWork: (scope: AbortScope) => Promise<Outcome<T>>): Promise<IpcResult<T>> {
   const controller = new AbortController();
-  const scope = createAbortScope({ controller, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) });
+  const scope = AbortScopeFactory.create({ controller, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) });
   const key = opts.key;
   if (key != null) {
     if (opts.exclusive === true) {
@@ -87,15 +87,15 @@ export async function runAbortable<T>(opts: AbortableRunOptions, doWork: (scope:
     const outcome = await doWork(scope);
     // 控制流在 handler 边界转异常：取消/替换 → AbortError、业务失败 → throw e。
     // 两者都交给统一错误出口 formatIpcError（取消映射 IPC_ABORTED）。
-    return matchOutcome(outcome, {
+    return Outcome.match(outcome, {
       completed: (value) => ipcOk(value),
       cancelled: (reason) => {
         log.info("run aborted", { key, reason, phase: "handler" });
-        throw createAbortError();
+        throw AbortError.create();
       },
       replaced: () => {
         log.info("run replaced", { key, phase: "handler" });
-        throw createAbortError();
+        throw AbortError.create();
       },
       failed: (error) => {
         throw error;

@@ -4,11 +4,8 @@
  * @module ipc/handlers/agent
  */
 
-import {
-  assertSavedModelUuid,
-  savedModelDisplayName,
-} from "@novel-master/core/provider";
-import { resolveCurrentAgentId } from "@novel-master/core/agent";
+import { SavedModelDisplayName, SavedModelUuid } from "@novel-master/core/provider";
+import { AgentRunShared } from "@novel-master/core/agent";
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -33,13 +30,13 @@ import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { resolveCurrentAgentDefinitionOrThrow, resolveDesktopSavedModelIdOrThrow, runAgentTurnAdapter } from "../../services/agent-run.service.js";
 import { agentActivity } from "../../runtime/agent-activity.js";
-import { createLogger } from "@novel-master/core/log";
+import { LogFactory } from "@novel-master/core/log";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { formatIpcError } from "../format-ipc-error.js";
 import { toIpcResult } from "../ipc-result.js";
 import { UserMessageAppendedForwarder } from "../forward-user-message-appended.js";
 
-const log = createLogger("desktop.ipc.agent");
+const log = LogFactory.create("desktop.ipc.agent");
 
 async function resolveModelLabel(rt: DesktopNovelMasterRuntime, savedModelId: string): Promise<Result<string, AppError>> {
   const saved = await rt.providerModels.getSavedById(savedModelId);
@@ -49,7 +46,7 @@ async function resolveModelLabel(rt: DesktopNovelMasterRuntime, savedModelId: st
   }
   const provider = await rt.providers.get(saved.value.providerId);
   if (!provider.ok) return Result.err(provider.error);
-  return Result.ok(savedModelDisplayName(saved.value, provider.value.displayName));
+  return Result.ok(SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName));
 }
 
 export function handleAgentResolveCurrent(): Promise<IpcResult<AgentResolveCurrentResponse>> {
@@ -58,7 +55,7 @@ export function handleAgentResolveCurrent(): Promise<IpcResult<AgentResolveCurre
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const resolvedId = await resolveCurrentAgentId(rt);
+    const resolvedId = await AgentRunShared.resolveCurrentId(rt);
     // 错误通道迁移：core 沿 Result 回传，已知失败就地并进本 handler 的 Result 通道。
     if (!resolvedId.ok) return Result.err(resolvedId.error);
     const agentId = resolvedId.value;
@@ -133,7 +130,7 @@ export function handleModelListPicker(): Promise<IpcResult<ModelListPickerRespon
       if (!saved.ok) return Result.err(saved.error);
       for (const model of saved.value) {
         const savedModelId = model.id;
-        let label = savedModelDisplayName(model, provider.displayName);
+        let label = SavedModelDisplayName.format(provider.displayName, model.modelName);
         const resolved = await resolveModelLabel(rt, savedModelId);
         if (resolved.ok) {
           label = resolved.value;
@@ -152,7 +149,7 @@ export function handleModelSetCurrent(req: ModelSetCurrentRequest): Promise<IpcR
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const saved = await assertSavedModelUuid(req.savedModelId, rt.savedModelRepo);
+    const saved = await SavedModelUuid.assert(req.savedModelId, rt.savedModelRepo);
     if (!saved.ok) return Result.err(saved.error);
     return rt.state.setCurrentModelId(saved.value.id);
   });
@@ -228,6 +225,7 @@ export function onCoreRunFinished({
 }
 
 /** RUN_FAILED 时清理 run 登记。 */
+// nm-style: keep-local — agent-prelude-terminal.test / chat-prompt-tokens-run-suppression.test 直引断言前奏终态清理；内联会破坏测试锁名。
 export function onCoreRunFailed({
   sessionId,
   projectId,
@@ -246,7 +244,7 @@ export function onCoreRunFailed({
  * 判据写死 `rt.agentAbortRegistry.has(sessionId)`，不用上面的 `activeRuns`：
  * - `activeRuns` 只在 desktop 自己的 `handleAgentRun` 入口登记，靠终态事件
  *   清理，是 **refcount 影子**，语义上「desktop 认为有 run 在跑」；
- * - `agentAbortRegistry` 在 core `runAgentTurn` **函数入口**注册（受理即在途），
+ * - `agentAbortRegistry` 在 core `AgentTurnRunner.run` **函数入口**注册（受理即在途），
  *   由 core 自己的 finally 反注册，额外覆盖子 run，且不依赖终态事件到没到
  *   ——前奏期抛错/取消那些「refcount 已被回收、core 却还在跑」的窗口，它照样
  *   判真。`handleAgentRunIsActive` 早就是这条判据，本函数是它的同步版。
@@ -275,6 +273,7 @@ type RunFinishedTokenStatsRefresh = (payload: {
 let runFinishedTokenStatsRefresh: RunFinishedTokenStatsRefresh | null = null;
 
 /** 注册/注销 run 结束后的读口补跑（读口 service 在模块加载时注册自己）。 */
+// nm-style: keep-local — 注入槽：写的是本模块私有状态 runFinishedTokenStatsRefresh，为避免 chat-prompt-tokens.service ↔ agent.ts 依赖环而设计（见上方注释）；内联需把模块状态外泄给读口 service。
 export function setRunFinishedTokenStatsRefresh(refresh: RunFinishedTokenStatsRefresh | null): void {
   runFinishedTokenStatsRefresh = refresh;
 }
@@ -321,6 +320,7 @@ function detachAgentRunLifecycleListeners(): void {
  * 订阅 core run 生命周期事件，与 handleAgentRun 同模块维护 activeRuns / agentActive。
  * 返回 cleanup 供 rebootstrap / quit。
  */
+// nm-style: keep-local — agent-run-lifecycle.test 直引断言订阅与 cleanup 契约；内联会破坏测试锁名。
 export function attachAgentRunLifecycleListeners(eventBus: SimpleEventBus): () => void {
   detachAgentRunLifecycleListeners();
 
@@ -336,7 +336,17 @@ export function attachAgentRunLifecycleListeners(eventBus: SimpleEventBus): () =
 }
 
 export async function handleAgentAbort(req: AgentAbortRequest): Promise<IpcResult<void>> {
-  await abortAgentRun(req.sessionId);
+  // 原 abortAgentRun 内联（Phase 3 Step 24(a)）：改调 core registry
+  // （rt.agentAbortRegistry.abort），不再依赖 activeRuns 里的 controller。
+  // refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
+  const built = await getDesktopRuntime();
+  // runtime 未就位时无在途 run 可中断（错误通道迁移七期：不抛，留痕后返回）。
+  if (!built.ok) {
+    log.warn("abort before runtime ready", { sessionId: req.sessionId, error: built.error });
+    return { ok: true, data: undefined };
+  }
+  built.value.agentAbortRegistry.abort(req.sessionId);
+  // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
   return { ok: true, data: undefined };
 }
 
@@ -381,7 +391,7 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
     await resolveDesktopSavedModelIdOrThrow(rt, (await resolveCurrentAgentDefinitionOrThrow(rt)).definition, req.sessionId);
     const { sessionId } = req;
     // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
-    // core runAgentTurn 内部自建 internalController 注册到 rt.agentAbortRegistry，
+    // core AgentTurnRunner.run 内部自建 internalController 注册到 rt.agentAbortRegistry，
     // 停止按钮经 ipcAgentAbort → rt.agentAbortRegistry.abort(sessionId) 中断。
     // activeRuns 退化为 refcount 影子——只跟 RUN_STARTED/FINISHED/FAILED 与
     // runId 比对 + finishTrackedRun 的 agentActivity.decrement()。
@@ -449,24 +459,6 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
     agentActivity.decrement();
     return { ok: false, error: formatIpcError(err) };
   }
-}
-
-/**
- * 中断指定 sessionId 的当前 run——Phase 3 Step 24(a)。
- *
- * 改调 core registry（rt.agentAbortRegistry.abort），不再依赖 activeRuns 里的
- * controller。refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
- */
-export async function abortAgentRun(sessionId: string): Promise<void> {
-  const built = await getDesktopRuntime();
-  // runtime 未就位时无在途 run 可中断（错误通道迁移七期：不抛，留痕后返回）。
-  if (!built.ok) {
-    log.warn("abort before runtime ready", { sessionId, error: built.error });
-    return;
-  }
-  const rt = built.value;
-  rt.agentAbortRegistry.abort(sessionId);
-  // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
 }
 
 /**

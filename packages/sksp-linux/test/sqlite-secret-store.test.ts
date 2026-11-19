@@ -1,8 +1,8 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bootstrapNovelMaster,
-  open,
+  NovelMasterBootstrap,
+  TdbcOpen,
 } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
@@ -27,11 +27,11 @@ describe("LinuxSqliteSecretStore", () => {
   });
 
   it("round-trips set/get and stores non-plaintext ciphertext with iv", async () => {
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     const store = createLinuxSecretStore(conn);
     const ref = "provider/test/apiKey";
     const plain = "sk-secret-123";
@@ -57,11 +57,11 @@ describe("LinuxSqliteSecretStore", () => {
   });
 
   it("rejects rows with unsupported algo", async () => {
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     const store = createLinuxSecretStore(conn);
     const ref = "provider/wrong/algo";
     await conn.execute(

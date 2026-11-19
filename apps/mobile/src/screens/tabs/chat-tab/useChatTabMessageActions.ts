@@ -14,7 +14,7 @@ import {formatError} from '@/errors/format-error';
 import {chatTranslator} from '@/i18n/chat';
 import {toastMessage} from '@/errors/toast-message';
 import {applyTextEditToMessage, editableTextFromMessage} from '@/components/chat/message-edit';
-import {isRollbackRevisionBackfillRequiredError, isRollbackVfsDegradableError, readRollbackRevisionBackfillMissingPaths} from '@novel-master/core/message-checkpoint';
+import {RollbackErrorGuards} from '@novel-master/core/message-checkpoint';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 import {applyComposerStatusAttachmentsReplace, writeChatComposerDraftState} from '@/storage/chat-composer-draft';
 import {projectComposerStatusForSession, refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared} from '@/services/project-composer-status.service';
@@ -55,6 +55,7 @@ type UseChatTabMessageActionsParams = {
   setMessageEditPrompt: (prompt: {messageId: string; initialText: string} | undefined) => void;
 };
 
+// nm-style: keep-public — React hook 状态边界；4 个 use-chat-tab-message-actions-* 测试直接 import 驱动，raw-console-baseline 锁文件路径，测试锁名
 export function useChatTabMessageActions({
   runtime,
   projectId,
@@ -246,8 +247,8 @@ export function useChatTabMessageActions({
         // 到达，走同一套 backfill / 降级 / toast 分流；后段未知异常仍由下方
         // catch 进同一入口，两条通道终端一致。
         const onRollbackFailure = (error: unknown): void => {
-          if (!options?.skipVfsReconcile && !options?.revisionHeadBackfill && isRollbackRevisionBackfillRequiredError(error)) {
-            const missingPaths = readRollbackRevisionBackfillMissingPaths(error);
+          if (!options?.skipVfsReconcile && !options?.revisionHeadBackfill && RollbackErrorGuards.isRevisionBackfillRequired(error)) {
+            const missingPaths = RollbackErrorGuards.readRevisionBackfillMissingPaths(error);
             Alert.alert('快照丢失', chatTranslator(rollbackConfirm.descriptor(mode, 'backfill', {missingPaths})), [
               {text: '取消', style: 'cancel'},
               {
@@ -264,7 +265,7 @@ export function useChatTabMessageActions({
             ]);
             return;
           }
-          if (!options?.skipVfsReconcile && isRollbackVfsDegradableError(error)) {
+          if (!options?.skipVfsReconcile && RollbackErrorGuards.isVfsDegradable(error)) {
             const errorMessage = formatError(error);
             const confirmMessage = chatTranslator(rollbackConfirm.descriptor(mode, 'degraded'));
             Alert.alert('无法恢复工作区', `${errorMessage}\n\n${confirmMessage}`, [

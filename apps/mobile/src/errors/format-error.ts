@@ -6,15 +6,14 @@
  * mobile 无该分支（T-A4 镜像门对此条豁免）。本函数只产文案字符串，不产 code。
  */
 import {TdbcError} from '@novel-master/core';
-import {isAppError} from '@novel-master/core/errors';
+import {AppErrorOps, ErrorGuards} from '@novel-master/core/errors';
 import {Errors} from '@novel-master/core/common';
-import {domainOf} from '@novel-master/core/errors';
-import {vfsUserMessage} from '@novel-master/core/vfs';
+import {VfsErrorForUser} from '@novel-master/core/vfs';
 import {coreT} from '@/i18n/core';
 
-/** core vfsUserMessage（descriptor）→ 中文 string。 */
-export function formatVfsErrorForUser(error: unknown, scope?: Parameters<typeof vfsUserMessage>[1]): string {
-  return coreT(vfsUserMessage(error, scope));
+/** core VfsErrorForUser.format（descriptor）→ 中文 string。 */
+export function formatVfsErrorForUser(error: unknown, scope?: Parameters<typeof VfsErrorForUser.format>[1]): string {
+  return coreT(VfsErrorForUser.format(error, scope));
 }
 
 function readCause(error: Error): unknown {
@@ -26,29 +25,29 @@ export function formatError(error: unknown): string {
   // 1. VFS_*：AppError 且 code 落 VFS 域段（102 VFS + 103 VFS_CHARACTER_CARD），
   //    域判定走 domainOf（spec-3 §3.7），不依赖 key 命名约定。core service 已直抛
   //    AppError（三期 Step 6 删 legacy mapper），不设历史对象兜底。
-  if (isAppError(error) && (domainOf(error.code) === 'VFS' || domainOf(error.code) === 'VFS_CHARACTER_CARD')) {
+  if (AppErrorOps.is(error) && (ErrorGuards.domainOf(error.code) === 'VFS' || ErrorGuards.domainOf(error.code) === 'VFS_CHARACTER_CARD')) {
     return formatVfsErrorForUser(error);
   }
   // 2. PROVIDER_*：文案走码表 messageKey + coreT（原两条硬编码中文已进 catalog）。
-  if (isAppError(error) && domainOf(error.code) === 'PROVIDER') {
+  if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'PROVIDER') {
     return Errors.visibleMessage(error, error.message, coreT);
   }
   // 3. CLOUD_SYNC_*：文案走码表 messageKey / 构造点 descriptor。
-  if (isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC') {
+  if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC') {
     return Errors.visibleMessage(error, error.message, coreT);
   }
   // 4. 旧 ToolError 的 VFS cause 解包：类已退役，等价判 TOOL_FAILED；cause 双写在
   //    Error.cause 与 details.cause（一期 spec §2.5）。VFS cause 透传 vfs 文案。
-  if (isAppError(error, 'TOOL_FAILED')) {
+  if (AppErrorOps.is(error, 'TOOL_FAILED')) {
     const cause = readCause(error) ?? (error.details as {cause?: unknown} | undefined)?.cause;
-    if (isAppError(cause) && (domainOf(cause.code) === 'VFS' || domainOf(cause.code) === 'VFS_CHARACTER_CARD')) {
+    if (AppErrorOps.is(cause) && (ErrorGuards.domainOf(cause.code) === 'VFS' || ErrorGuards.domainOf(cause.code) === 'VFS_CHARACTER_CARD')) {
       return formatVfsErrorForUser(cause);
     }
     const fallback = cause instanceof Error ? cause.message : error.message;
     return Errors.visibleMessage(error, fallback, coreT);
   }
-  // 5. 其余 AppError 通配 → userMessageOf + coreT，未覆盖回退原 message。
-  if (isAppError(error)) {
+  // 5. 其余 AppError 通配 → ErrorMessage.userOf + coreT，未覆盖回退原 message。
+  if (AppErrorOps.is(error)) {
     return Errors.visibleMessage(error, error.message, coreT);
   }
   // 6. TdbcError：message + cause。

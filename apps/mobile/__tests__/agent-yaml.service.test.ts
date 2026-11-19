@@ -1,11 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
 
-const mockDecode = jest.fn(() => {
-  throw new Error('decode failed');
-});
-// 四期签名：parseText 沿 Result 回传——默认实现按 Ok 形态给出。
-const mockParseText = jest.fn(() => ({ok: true as const, value: {}}));
-const mockStringifyText = jest.fn(() => 'yaml');
 const mockValidateAgentDefinition = jest.fn(async () => ({
   ok: true,
   value: undefined,
@@ -18,30 +12,25 @@ const mockUnlink = jest.fn(async () => undefined);
 const mockReadFile = jest.fn(async () => '');
 
 jest.mock('@novel-master/core', () => ({
-  agentDefinitionSchema: {toWire: (x: any) => x},
-  encode: (value: unknown, schema: {toWire: (v: unknown) => unknown}) =>
-    schema.toWire(value),
-  decode: (...args: any[]) => mockDecode(...args),
-  parseText: (...args: any[]) => mockParseText(...args),
-  registerBuiltinTools: () => undefined,
-  stringifyText: (...args: any[]) => mockStringifyText(...args),
+  BuiltinTools: {register: () => undefined},
   ToolRegistry: class ToolRegistry {
     list() {
       return [];
     }
   },
-  validateAgentDefinition: (...args: any[]) =>
-    mockValidateAgentDefinition(...args),
 }));
 
-// 实现从 @novel-master/core/agent 子路径导入 schema/校验（jest moduleNameMapper 指向真实 dist），
-// 须单独 mock，根入口 mock 拦不住子路径导入。requireActual 展开保住
-// AppError 等真实导出（错误通道迁移后 yaml-document-pick 会构造 AppError）。
+// 实现从 @novel-master/core/agent 子路径导入编解码/校验（jest moduleNameMapper
+// 指向真实 dist），须单独 mock，根入口 mock 拦不住子路径导入。requireActual
+// 展开保住 AppError 等真实导出与 AgentYamlCodec 真编解码（错误通道迁移后
+// yaml-document-pick 会构造 AppError）。
 jest.mock('@novel-master/core/agent', () => ({
   ...jest.requireActual('@novel-master/core/agent'),
-  agentDefinitionSchema: {toWire: (x: any) => x},
-  validateAgentDefinition: (...args: any[]) =>
-    mockValidateAgentDefinition(...args),
+  AgentDefinitionValidator: {
+    ...jest.requireActual('@novel-master/core/agent')
+      .AgentDefinitionValidator,
+    validate: (...args: any[]) => mockValidateAgentDefinition(...args),
+  },
 }));
 
 jest.mock('react-native-blob-util', () => ({
@@ -67,7 +56,7 @@ import {
   exportAgentYaml,
   importAgentYaml,
 } from '@/services/agent-yaml.service';
-import {decodeAgentYamlText} from '@novel-master/core/agent';
+import {AgentYamlCodec} from '@novel-master/core/agent';
 
 describe('agent-yaml.service', () => {
   it('exports yaml via temp file + picker save flow', async () => {
@@ -131,7 +120,7 @@ describe('agent-yaml.service', () => {
 
   it('rejects invalid yaml text', () => {
     // 编解码单源在 core：parseText 失败沿 Result.err 回传（AppError 通道，不再抛错）。
-    const decoded = decodeAgentYamlText('name: [oops');
+    const decoded = AgentYamlCodec.decode('name: [oops');
     expect(decoded.ok).toBe(false);
     if (decoded.ok) return;
     expect(decoded.error.key).toBe('CONFIG_DECODE_INVALID_SCHEMA');
@@ -147,7 +136,7 @@ prompts:
       type: text
       role: system
 `;
-    const decoded = decodeAgentYamlText(yaml);
+    const decoded = AgentYamlCodec.decode(yaml);
     expect(decoded.ok).toBe(false);
     if (decoded.ok) return;
     // schema 的 superRefine 把域 AppError 挂在 issue params 上原样带出，key 是 AGENT_INVALID_SCHEMA。

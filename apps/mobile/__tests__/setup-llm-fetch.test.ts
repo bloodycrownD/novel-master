@@ -2,11 +2,11 @@
  * T-N4 装配面（spec llm-stream-native §4 / 变更点 #4）：
  *
  * - `ensureLlmFetchConfigured` 生产/开发统一注册 shim（无条件
- *   `configureLlmFetch(shim)`），native 底座可用时非流式流量走 native request
- * - `__DEV__` 下组合顺序写死 logging 最外层包 shim（`createLoggingFetch(shim)`）；
+ *   `Registry.configureLlmFetch(shim)`），native 底座可用时非流式流量走 native request
+ * - `__DEV__` 下组合顺序写死 logging 最外层包 shim（`DebugFetch.createLoggingFetch(shim)`）；
  *   生产构建 logging 不参与
  * - runtime 初始化处注册 native transport：`registerNativeSseTransportWith(
- *   registerSseTransport)`，native 缺位返回 false 不炸启动
+ *   LlmSseTransport.register)`，native 缺位返回 false 不炸启动
  * - native 缺位（iOS / Jest）时 shim 工厂回落 `globalThis.fetch`，装配仍成立
  */
 
@@ -16,11 +16,12 @@ const mockRegisterSseTransport = jest.fn();
 const mockRegisterNativeSseTransportWith = jest.fn();
 
 // p22 public-surface-ownership：这三个符号从 provider 门面迁到 llm-protocol
-// 直映出口，mock 路径随迁，否则拦截不到被测装配的真实导入。
+// 直映出口（namespace 成员形态：Registry / DebugFetch / LlmSseTransport），
+// mock 路径随迁，否则拦截不到被测装配的真实导入。
 jest.mock('@novel-master/core/llm-protocol', () => ({
-  configureLlmFetch: mockConfigureLlmFetch,
-  createLoggingFetch: mockCreateLoggingFetch,
-  registerSseTransport: mockRegisterSseTransport,
+  Registry: {configureLlmFetch: mockConfigureLlmFetch},
+  DebugFetch: {createLoggingFetch: mockCreateLoggingFetch},
+  LlmSseTransport: {register: mockRegisterSseTransport},
 }));
 
 jest.mock('@novel-master/llm-sse-native/native', () => ({
@@ -59,7 +60,7 @@ function installNativeRequest(): jest.Mock {
   return request;
 }
 
-/** createLoggingFetch 的最小替身：返回带标记的透传包装，便于断言组合顺序。 */
+/** DebugFetch.createLoggingFetch 的最小替身：返回带标记的透传包装，便于断言组合顺序。 */
 function installLoggingMock(): void {
   mockCreateLoggingFetch.mockImplementation(
     (base: (input: unknown, init?: unknown) => unknown) => {
@@ -138,7 +139,7 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
     );
   });
 
-  it('runtime 注册 native transport：registerNativeSseTransportWith 收到 core 的 registerSseTransport', () => {
+  it('runtime 注册 native transport：registerNativeSseTransportWith 收到 core 的 LlmSseTransport.register', () => {
     const {ensureLlmFetchConfigured} = loadSetupModule(true);
     ensureLlmFetchConfigured();
 

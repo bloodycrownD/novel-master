@@ -5,8 +5,7 @@
  * @module services/cloud-sync-progress-log
  */
 import {type ObjectStoragePort} from '@novel-master/core';
-import {isAppError} from '@novel-master/core/errors';
-import {domainOf} from '@novel-master/core/errors';
+import {AppErrorOps, ErrorGuards} from '@novel-master/core/errors';
 import {mapCloudSyncProgressEvent, type CloudSyncProgressListener} from './cloud-sync-progress-ui';
 
 const LOG_TAG = '[cloud-sync]';
@@ -66,7 +65,7 @@ export function createCloudSyncProgress(op: CloudSyncProgressOp, options?: Cloud
   const fail = (error: unknown, detail?: Record<string, unknown>): void => {
     step(`${op}_failed`, {
       error: error instanceof Error ? error.message : String(error),
-      key: isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC' ? error.key : undefined,
+      key: AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC' ? error.key : undefined,
       ...detail,
     });
   };
@@ -75,6 +74,7 @@ export function createCloudSyncProgress(op: CloudSyncProgressOp, options?: Cloud
 }
 
 /** 包装 ObjectStoragePort，记录 head/get/put/putFile/getToPath 各阶段。 */
+// nm-style: keep-public — cloud-sync-progress-log.test.ts 直接 import 断言各阶段日志，测试锁名
 export function withCloudSyncStorageProgress(storage: ObjectStoragePort, progress: CloudSyncProgress): ObjectStoragePort {
   const wrapped: ObjectStoragePort = {
     async head(key) {

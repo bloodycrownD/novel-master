@@ -1,7 +1,7 @@
+import { ToolSummary } from "@shared/logic/chat";
 import type { ToolCallView } from "./message-blocks";
 import {
   skillToolRef,
-  toolCallSummary,
   vfsToolFilePath,
 } from "./message-blocks";
 import { dispatchOpenSettingsView } from "@/features/skills/skill-ui";
@@ -60,7 +60,24 @@ export function ToolCallCard({
   const resultView = toolResultViewFor(tool);
   const canOpen =
     canOpenFile || canOpenSubagent || canOpenSkill || resultView != null;
-  const summary = toolCallSummary(tool);
+  // 工具卡摘要（原 toolCallSummary 内联）：失败取首行截断；否则 core 输入摘要；再退 resultContent 截断。
+  const summary = (() => {
+    if (tool.status === "error" && tool.summary) {
+      // 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情），
+      // 超长按与成功摘要同档截断，卡片不被整段报错撑开。
+      const firstLine = tool.summary.split("\n")[0]?.trim() ?? "";
+      return firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
+    }
+    const fromInput = ToolSummary.summarizeInput(tool.name, tool.input);
+    if (fromInput) {
+      return fromInput;
+    }
+    if (tool.resultContent) {
+      const t = tool.resultContent.trim();
+      return t.length > 120 ? `${t.slice(0, 117)}…` : t;
+    }
+    return "";
+  })();
   const detail = showFullParams
     ? JSON.stringify(tool.input, null, 2)
     : summary;

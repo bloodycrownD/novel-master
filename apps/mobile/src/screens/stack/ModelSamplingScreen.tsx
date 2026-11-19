@@ -7,10 +7,7 @@ import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {type LlmProtocolKind} from '@novel-master/core/llm-protocol';
 import {
-  savedModelContextWindowTokens,
-  savedModelSampling,
-  savedModelThinkingLevel,
-  savedModelTokenCounterMode,
+  SavedModelSettings,
   THINKING_LEVEL_SELECT_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
   type ModelSamplingParams,
@@ -90,12 +87,12 @@ export function ModelSamplingScreen() {
       setInitialModelName(saved.modelName);
       setVendorModelId(saved.vendorModelId);
       setModelSubtitle(buildModelSubtitle(saved.modelName, saved.vendorModelId));
-      setContextWindowTokens(String(savedModelContextWindowTokens(saved.settings)));
-      setTokenCounterMode(savedModelTokenCounterMode(saved.settings));
-      const sampling = savedModelSampling(saved.settings);
+      setContextWindowTokens(String(SavedModelSettings.contextWindowTokens(saved.settings)));
+      setTokenCounterMode(SavedModelSettings.tokenCounterMode(saved.settings));
+      const sampling = SavedModelSettings.sampling(saved.settings);
       const stored = sampling.enabled && sampling.params != null ? sampling.params : undefined;
       setParams(stored);
-      setThinkingLevel(savedModelThinkingLevel(saved.settings));
+      setThinkingLevel(SavedModelSettings.thinkingLevel(saved.settings));
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
@@ -166,7 +163,7 @@ export function ModelSamplingScreen() {
       if (!updated.ok) throw updated.error;
       const cleared = await runtime.providerModels.updateSettings(savedModelId, {sampling: {enabled: false}});
       if (!cleared.ok) throw cleared.error;
-      setContextWindowTokens(String(savedModelContextWindowTokens(updated.value.settings)));
+      setContextWindowTokens(String(SavedModelSettings.contextWindowTokens(updated.value.settings)));
       setParams(undefined);
       showToast('已恢复默认采样参数');
     } catch (error) {

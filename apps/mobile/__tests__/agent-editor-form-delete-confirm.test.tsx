@@ -35,7 +35,7 @@ const mockRuntime = {
 };
 
 jest.mock('@novel-master/core', () => ({
-  registerBuiltinTools: jest.fn(),
+  BuiltinTools: {register: jest.fn()},
   ToolRegistry: class {
     list() {
       return ['read'];

@@ -7,7 +7,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {
   attachmentXmlCodec,
   chatAnnotateDraftStore,
-  parseAttachmentsJson,
+  MessageAttachmentSchema,
   type ChatMessageData,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -564,7 +564,7 @@ describe('useChatTabMessageActions rollback', () => {
         legacyUnknownKey: 'x',
       },
     ]);
-    const parsedAttachments = parseAttachmentsJson(raw);
+    const parsedAttachments = MessageAttachmentSchema.parseJson(raw);
     // 逐条降级：合法那条保序存活，非法那条被丢弃。
     expect(parsedAttachments).toHaveLength(1);
     expect(parsedAttachments?.[0]).toMatchObject({

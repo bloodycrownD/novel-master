@@ -100,7 +100,7 @@ import type {
 } from '@novel-master/core/events';
 import type {ChatMessageData, ComposerDraftTokenRange, MessageAttachment, SendAnnotateDraft} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
-import {parseStreamFinalRateSnapshot, serializeStreamFinalRateSnapshot} from '@novel-master/core/format';
+import {StreamFinalRate} from '@novel-master/core/format';
 import {SESSION_KKV_DOMAIN_STREAM_METRICS as METRICS_DOMAIN, STREAM_METRICS_FINAL_RATE_KEY as FINAL_RATE_KEY} from '@novel-master/core/session-kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SessionRunState, SessionRunStateSettleInput, SessionRunStatus} from '@novel-master/core/session-run-state';
@@ -126,7 +126,7 @@ import {getSessionViewCache, hydrateWindowFromCache, sessionViewCacheKey, setSes
 import {createLruMap, type LruMap} from '@/services/scope-key-cache';
 import {prependOlderMessages} from '@/services/message-paging';
 import {createQuantumYield} from '@/services/yield-quantum';
-import {createLogger} from '@novel-master/core/log';
+import {LogFactory} from '@novel-master/core/log';
 import {AppState} from 'react-native';
 
 /**
@@ -145,7 +145,7 @@ type RunOutcome = {
 };
 
 /** 编排器日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
-const log = createLogger('chat.stream-manager');
+const log = LogFactory.create('chat.stream-manager');
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
@@ -789,7 +789,7 @@ export class SessionStreamUnitManager {
         // 快照没带 runId（旧格式/身份未知）→ 兼容采用；带 runId 但与 settled
         // 行不一致（settled 行被新 run 覆盖、KKV 还留着上一轮残留的竞态窗口）
         // → 视为缺值，不把上一轮的速度拼到本轮「上次生成」上。
-        const rateSnapshot = parseStreamFinalRateSnapshot(rawRate);
+        const rateSnapshot = StreamFinalRate.parseSnapshot(rawRate);
         const snapshotRunId = rateSnapshot?.runId;
         const mismatch = snapshotRunId != null && snapshotRunId !== row.runId;
         let finalRate: number | null = null;
@@ -1649,7 +1649,7 @@ export class SessionStreamUnitManager {
           ? {runId: snap.runId}
           : {}),
       };
-      const serialized = serializeStreamFinalRateSnapshot(payload);
+      const serialized = StreamFinalRate.serializeSnapshot(payload);
       // prettier-ignore
       const write = kkv.set(sessionId, METRICS_DOMAIN, FINAL_RATE_KEY, serialized);
       void write.catch(err =>
