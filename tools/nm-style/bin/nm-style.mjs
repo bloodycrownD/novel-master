@@ -77,36 +77,47 @@ function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+// 返回退出码：0=构建成功（或无需构建）；3=构建失败。不直接 process.exit——锁的释放统一由调用方 finally 负责，
+// 否则 exit(3) 会跳过锁清理、把 .build-lock 留给下一位等 120s 陈锁强占。
 function build() {
   const tscBin = findTscBin(pkgRoot);
   if (tscBin == null) {
     console.error("nm-style: 沿目录向上找不到 node_modules/typescript/bin/tsc；请先在仓库根执行 npm install。");
-    process.exit(3);
+    return 3;
   }
   // 无锁状态下的半成品临时目录只可能是上次崩溃的残留，直接清掉重编。
   rmSync(distTmp, { recursive: true, force: true });
-  const res = spawnSync(process.execPath, [tscBin, "-p", tsconfig, "--outDir", distTmp], { stdio: "inherit" });
-  if (res.status !== 0) {
+  let res = spawnSync(process.execPath, [tscBin, "-p", tsconfig, "--outDir", distTmp], { stdio: "inherit" });
+  if (res.error != null) {
+    // spawn 自身失败（status=null）与编译失败不同：多为瞬时资源问题，重试一次再定论。
+    console.error(`nm-style: tsc 启动失败（${res.error.code ?? "unknown"}）：${res.error.message}`);
+    res = spawnSync(process.execPath, [tscBin, "-p", tsconfig, "--outDir", distTmp], { stdio: "inherit" });
+  }
+  if (res.error != null || res.status !== 0) {
     rmSync(distTmp, { recursive: true, force: true });
-    console.error("nm-style: 编译失败。");
-    process.exit(3);
+    if (res.error != null) console.error(`nm-style: tsc 启动重试仍失败（${res.error.code ?? "unknown"}）：${res.error.message}`);
+    else console.error("nm-style: 编译失败。");
+    return 3;
   }
   rmSync(distOld, { recursive: true, force: true });
   if (existsSync(distDir)) renameSync(distDir, distOld);
   renameSync(distTmp, distDir);
   rmSync(distOld, { recursive: true, force: true });
+  return 0;
 }
 
+/** 返回构建退出码（0=无需或完成，3=失败）；无论成败都释放锁。 */
 function ensureFreshBuild() {
   // 拿不到锁说明有并发启动器在编译：等它完工（或强占陈锁），拿到锁后复检——可能等锁期间对方已建好。
   while (!tryAcquireLock()) {
-    if (!isStale()) return;
+    if (!isStale()) return 0;
     if (!existsSync(lockFile)) continue;
     if (stealStaleLock()) continue;
     sleep(200);
   }
   try {
-    if (isStale()) build();
+    if (isStale()) return build();
+    return 0;
   } finally {
     try {
       unlinkSync(lockFile);
@@ -121,5 +132,8 @@ function run() {
   return res.status ?? 1;
 }
 
-if (isStale()) ensureFreshBuild();
+if (isStale()) {
+  const buildExit = ensureFreshBuild();
+  if (buildExit !== 0) process.exit(buildExit);
+}
 process.exit(run());
