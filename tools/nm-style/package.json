@@ -1,0 +1,13 @@
+{
+  "name": "nm-style",
+  "version": "0.1.0",
+  "private": true,
+  "description": "nm-code-style 检测器工具链：symbol-index 形态无关符号表 + CLI（check/gate/list/baseline/index）",
+  "type": "module",
+  "bin": {
+    "nm-style": "./bin/nm-style.mjs"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}
