@@ -1,5 +1,7 @@
 {
-  "note": "签名重复基线。新增重复组会让 --gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。",
+  "note": "签名重复基线 v2。新增重复组会让 gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。judged 段=人工裁决的有意保留组，键消失时由下次 write 警告丢弃。",
+  "toolVersion": "0.1.0",
+  "generatedAt": "2026-11-19T21:22:01.352Z",
   "namedGroups": 66,
   "shapedGroups": 176,
   "named": {
@@ -2188,5 +2190,25 @@
       "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:257",
       "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:64"
     ]
+  },
+  "judged": {
+    "named": {
+      "runAgentTurnAdapter": "双端镜像：desktop runtime=DesktopNovelMasterRuntime / mobile=MobileNovelMasterRuntime，core runAgentTurn 是唯一实现，适配器只注入日志钩子。C6 主动统一加 Adapter 后缀（原名 mobile 与 core 同名）。",
+      "getDbMaintenanceStats": "双端镜像：desktop 无参走单例 / mobile 穿 runtime。C9 主动统一命名（mobile 原名 getDatabaseMaintenanceStats）。",
+      "runDbMaintenance": "双端镜像：同上，C9 统一 Db 短形。",
+      "refreshComposerStatusAfterSessionKkvCleared": "双端镜像：C9 统一动词（desktop 原名 notify...）+ 统一参数形状为 scope 对象，runtime 类型仍不同。",
+      "refreshComposerStatusAfterFloorOrCompaction": "双端镜像：同上。",
+      "buildRealPromptPreviewTurnsAdapter": "双端镜像：平台适配器（runtime 类型不同、通道已对齐 core Result），C6 主动加 Adapter 后缀。",
+      "buildSessionPromptInputAdapter": "双端镜像：同上。",
+      "exportYamlWithDialog": "双端镜像 + 平台差异：desktop 用 Electron dialog / mobile 用 document picker，C2 主动统一命名（mobile 原名 exportYamlFile）。",
+      "importYamlWithDialog": "双端镜像：同上，C2 还把 mobile 的裸 Error 通道改成 AppError。",
+      "feed": "三协议 SSE parser 的 namespace 成员：anthropic/gemini/openai 状态机不同构（V1 已核实「不能硬造统一 parser」），C5 把 feedXxxSseChunk 收进各 parser 对象后成员名统一为 feed。三份是设计使然。",
+      "finishPartial": "同上：三协议 finishPartial 收进 parser 对象后同名，语义各按协议。"
+    },
+    "shaped": {
+      "(: BooleanPrefName)": "C3 配置表产物：get/set/resetBooleanPref 三个方法同签名但操作不同维度（读 / 写 / 删），不是复制粘贴。",
+      "(: StateKey)": "C3 配置表产物：get/set/resetPointer 三个方法同签名，同上。",
+      "(: {readonly : string; readonly : string})": "十八期 C7 按 R1 组4 的方法删掉 refreshComposerStatusAfter* / projectComposerStatusForSession 的死首参（双端 `_rt`/`_runtime` 都没用过），签名统一成 scope 对象 `{projectId, sessionId}` 后同文件两个触发点与 mobile 镜像变成同形态。desktop notify-composer-status-after-kkv-clear.ts:28（推空条）/ :40（推实际 attachments）是两个不同触发点，mobile project-composer-status.service.ts:21 是双端镜像；三个函数体都只剩「调 forwarder / 取 attachments」两行，无可抽公共体。"
+    }
   }
 }
