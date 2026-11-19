@@ -8,7 +8,7 @@ import {useLayoutEffect, useRef, useState} from 'preact/hooks';
 import type {JSX} from 'preact';
 import {ANCHORED_MENU_ITEM_LAYOUT_HEIGHT, MESSAGE_ACTION_MENU_ITEM_COUNT} from '@web/shared/constants';
 import type {MenuAnchor, MenuItem} from '../../runtime/state/state';
-import {computeContextMenuWidth, layoutContextMenu, type ContextMenuLayout} from '../../runtime/menu/menu';
+import {Menu, type ContextMenuLayout} from '../../runtime/menu/menu';
 import {ContextMenu} from './ContextMenu';
 
 type MenuOverlayProps = {
@@ -19,7 +19,7 @@ type MenuOverlayProps = {
 
 export function MenuOverlay({messageId, items, anchor}: MenuOverlayProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const menuWidth = computeContextMenuWidth(items);
+  const menuWidth = Menu.computeWidth(items);
   /** null = 仍隐藏待测；非 null = 已定位，由 state 驱动最终 style/className */
   const [layout, setLayout] = useState<ContextMenuLayout | null>(null);
 
@@ -36,7 +36,7 @@ export function MenuOverlay({messageId, items, anchor}: MenuOverlayProps) {
     // 只读 measure；结果经 setLayout，不写 menuEl.style / className
     const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
     const contentHeight = measuredHeight > 0 ? measuredHeight : items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
-    let next = layoutContextMenu(anchor, contentHeight, menuWidth);
+    let next = Menu.layout(anchor, contentHeight, menuWidth);
     if (items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
       next = {
         left: next.left,

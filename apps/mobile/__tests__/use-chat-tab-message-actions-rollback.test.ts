@@ -12,11 +12,7 @@ import {
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import {Alert} from 'react-native';
-import {
-  readChatComposerDraftState,
-  writeChatComposerDraft,
-  writeChatComposerDraftState,
-} from '../src/storage/chat-composer-draft';
+import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
 import {useChatTabMessageActions} from '../src/screens/tabs/chat-tab/useChatTabMessageActions';
 
 const mockRollbackToMessage = jest.fn();
@@ -147,7 +143,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-M2/T-TX2: undo_send 成功后写 draft 原文（含 @路径）；无 attach chip', async () => {
-    writeChatComposerDraftState('s1', {text: 'old draft', attachments: []});
+    ChatComposerDraft.writeState('s1', {text: 'old draft', attachments: []});
     const anchorText = '请看 @/a.md';
     const attachments = [
       {
@@ -175,9 +171,9 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(readChatComposerDraftState('s1').text).toBe(anchorText);
-    expect(readChatComposerDraftState('s1').text).toContain('@/a.md');
-    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    expect(ChatComposerDraft.readState('s1').text).toBe(anchorText);
+    expect(ChatComposerDraft.readState('s1').text).toContain('@/a.md');
+    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
     expect(draftAttachments).toEqual([]);
     expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
     expect(mockSetDraftRestoreToken).toHaveBeenCalled();
@@ -185,7 +181,7 @@ describe('useChatTabMessageActions rollback', () => {
 
   it('T-CA8: undo_send 恢复不带 tokenRanges（undefined 而非 []），允许下次水化兜底一次', async () => {
     // 预置旧草稿带区间：恢复必须把它清成「无字段」，不能被旧区间沿用。
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: 'old draft',
       attachments: [],
       tokenRanges: [{start: 0, end: 3}],
@@ -207,7 +203,7 @@ describe('useChatTabMessageActions rollback', () => {
         await Promise.resolve();
       });
 
-      const draft = readChatComposerDraftState('s1');
+      const draft = ChatComposerDraft.readState('s1');
       expect(draft.text).toBe('继续写 $技能');
       // 缓存对象无自有键（不是 tokenRanges: undefined / []）。
       expect(Object.prototype.hasOwnProperty.call(draft, 'tokenRanges')).toBe(
@@ -243,7 +239,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-TX2: 编辑打开弹窗不污染 Composer draft；仅 undo_send 回填正文', async () => {
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: 'keep-me',
       attachments: [
         {
@@ -308,7 +304,7 @@ describe('useChatTabMessageActions rollback', () => {
       messageId: target.id,
       initialText: editText,
     });
-    const draft = readChatComposerDraftState('s1');
+    const draft = ChatComposerDraft.readState('s1');
     expect(draft.text).toBe('keep-me');
     expect(draft.attachments).toEqual([
       {
@@ -330,7 +326,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-M3: assistant 回滚不写 draft', async () => {
-    writeChatComposerDraft('s1', 'unchanged');
+    ChatComposerDraft.write('s1', 'unchanged');
     const api = mountActions([plainUserMessage('u'), assistantMessage()]);
 
     await act(async () => {
@@ -340,7 +336,7 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(readChatComposerDraftState('s1').text).toBe('unchanged');
+    expect(ChatComposerDraft.readState('s1').text).toBe('unchanged');
     expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
   });
 
@@ -367,7 +363,7 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(readChatComposerDraftState('s1').text).toBe('请看批注');
+    expect(ChatComposerDraft.readState('s1').text).toBe('请看批注');
     const drafts = chatAnnotateDraftStore.list('s1');
     expect(drafts).toHaveLength(2);
     expect(
@@ -387,7 +383,7 @@ describe('useChatTabMessageActions rollback', () => {
     expect(
       chips.some(c => c.path === '/keep.md' && c.action === 'annotate'),
     ).toBe(true);
-    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
     expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
     expect(
       draftAttachments.some(
@@ -397,7 +393,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-UD2: undo_send 无 annotate → store 不新增；正文恢复；attachments 仍 []', async () => {
-    writeChatComposerDraftState('s1', {text: 'old', attachments: []});
+    ChatComposerDraft.writeState('s1', {text: 'old', attachments: []});
     const anchor = plainUserMessage('仅正文 @/a.md', [
       {
         name: '/a.md',
@@ -415,10 +411,10 @@ describe('useChatTabMessageActions rollback', () => {
       await Promise.resolve();
     });
 
-    expect(readChatComposerDraftState('s1').text).toBe('仅正文 @/a.md');
+    expect(ChatComposerDraft.readState('s1').text).toBe('仅正文 @/a.md');
     expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
     expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
-    expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
+    expect(ChatComposerDraft.readState('s1').attachments ?? []).toEqual([]);
   });
 
   it('T-UD3: undo_send 伪 path __message__: / /__message__: → 不写入文件批注 store', async () => {
@@ -446,10 +442,10 @@ describe('useChatTabMessageActions rollback', () => {
       await Promise.resolve();
     });
 
-    expect(readChatComposerDraftState('s1').text).toBe('消息批注 Undo');
+    expect(ChatComposerDraft.readState('s1').text).toBe('消息批注 Undo');
     expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
     expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
-    expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
+    expect(ChatComposerDraft.readState('s1').attachments ?? []).toEqual([]);
   });
 
   it('T-UD4/T-UOL7: undo_send 含历史 user_ops 附件 → 无 user_ops chip；正文恢复', async () => {
@@ -473,8 +469,8 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(readChatComposerDraftState('s1').text).toBe('请看手改');
-    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    expect(ChatComposerDraft.readState('s1').text).toBe('请看手改');
+    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
     expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
     expect(
       draftAttachments.some(
@@ -511,7 +507,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-UD6/G-1: rewind 前预置 user_ops chip → 上条清除、无非 annotate user_ops chip', async () => {
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: 'draft',
       attachments: [
         {
@@ -534,7 +530,7 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
     expect(
       draftAttachments.some(
         a => a.source === 'user_ops' && a.action !== 'annotate',
@@ -583,7 +579,7 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(readChatComposerDraftState('s1').text).toBe('请看历史批注');
+    expect(ChatComposerDraft.readState('s1').text).toBe('请看历史批注');
     // 批注草稿确实从存活的那条附件反投影回来了（旧口径下这里是 []）。
     const restored = chatAnnotateDraftStore.list('s1').find(
       d => d.path === '/chapter/a.md',
@@ -598,7 +594,7 @@ describe('useChatTabMessageActions rollback', () => {
         c => c.path === '/chapter/a.md' && c.action === 'annotate',
       ),
     ).toBe(true);
-    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
     expect(
       draftAttachments.some(a => a.path === '/legacy.md'),
     ).toBe(false);

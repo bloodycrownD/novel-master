@@ -31,9 +31,8 @@ import {
   type ChatAgentMeta,
 } from '../src/services/chat-agent-meta';
 import {
-  cancelPreciseUpgrade,
-  cancelPreciseUpgradeDelay,
-  loadChatPromptTokenLabelResilient,
+  ChatPromptTokenLabel,
+  PreciseUpgrade,
 } from '../src/services/chat-prompt-tokens.service';
 
 const HOOK_PATH = join(
@@ -47,20 +46,20 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   // 错误通道迁移四期：读口走 Result（hook 按 `!ok` 清标签），桩按线上结构配置。
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ({
-    ok: true as const,
-    value: '1K tokens · 预估',
-  })),
+  ChatPromptTokenLabel: {
+    loadResilient: jest.fn(async () => ({
+      ok: true as const,
+      value: '1K tokens · 预估',
+    })),
+  },
   // hook 侧换会话/卸载时的精确升级延迟计时收口出口（cr2-E-2）
-  cancelPreciseUpgradeDelay: jest.fn(),
-  // 在途原生精确计数的取消下发出口（tokenizer-native-cancel，与上者同点并调）
-  cancelPreciseUpgrade: jest.fn(),
+  PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
 const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
-const loadLabelMock = loadChatPromptTokenLabelResilient as jest.Mock;
-const cancelDelayMock = cancelPreciseUpgradeDelay as jest.Mock;
-const cancelMock = cancelPreciseUpgrade as jest.Mock;
+const loadLabelMock = ChatPromptTokenLabel.loadResilient as jest.Mock;
+const cancelDelayMock = PreciseUpgrade.cancelDelay as jest.Mock;
+const cancelMock = PreciseUpgrade.cancel as jest.Mock;
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;

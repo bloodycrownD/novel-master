@@ -16,7 +16,7 @@ import * as promptTokens from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // nm-style: keep-local — 三具名 + service 路径单行化超 80 列
-import {clearSessionViewCache, clearSessionViewCachesByProject, sessionViewCacheKey} from '@/services/chat-session-view-cache';
+import {SessionViewCache} from '@/services/chat-session-view-cache';
 import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
 import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
@@ -204,7 +204,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         // 与 tokenLabelSessionRef（当前展示身份）不等即说明已经切走。
         shouldBailPrecise: () => chatSubviewRef.current !== 'conversation' || tokenLabelSessionRef.current !== sessionId,
       };
-      const tokenLabelPromise = promptTokens.loadChatPromptTokenLabelResilient(runtime, {projectId, sessionId}, tokenLabelOptions);
+      const tokenLabelPromise = promptTokens.ChatPromptTokenLabel.loadResilient(runtime, {projectId, sessionId}, tokenLabelOptions);
       const labelResult = await tokenLabelPromise;
       // 真失败（错误通道迁移四期：build/resolve/fallback 的已知失败走
       // Result.err）：清标签同样过闸——旧会话的失败不得抹掉新会话的显示。
@@ -261,11 +261,11 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       // 「发起那一轮」的会话身份，所以在 slot.key 赋值之前读 slot.sessionId
       // ——写在赋值之后读到的是新会话，cancel 会打偏。
       const stale = slot.sessionId;
-      promptTokens.cancelPreciseUpgradeDelay(stale);
+      promptTokens.PreciseUpgrade.cancelDelay(stale);
       // 在途原生计数一并撤掉（tokenizer-native-cancel）：延迟收口只管得到
       // 「还没过桥」的那些，已起跑的那轮是秒级重活，正是堵返回键的元凶。
       // 同用 stale——身份必须取自 slot.key 赋值之前。
-      promptTokens.cancelPreciseUpgrade(stale);
+      promptTokens.PreciseUpgrade.cancel(stale);
       if (slot.timer != null) {
         clearTimeout(slot.timer);
         slot.timer = null;
@@ -343,10 +343,10 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         clearTimeout(slot.timer);
         slot.timer = null;
       }
-      promptTokens.cancelPreciseUpgradeDelay(slot.sessionId);
+      promptTokens.PreciseUpgrade.cancelDelay(slot.sessionId);
       // 在途原生计数一并撤掉（tokenizer-native-cancel）：组件已死，没人消费
       // 升级标签，已过桥的那轮秒级重活纯浪费。
-      promptTokens.cancelPreciseUpgrade(slot.sessionId);
+      promptTokens.PreciseUpgrade.cancel(slot.sessionId);
     },
     [],
   );
@@ -611,8 +611,8 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       // （纯内存同步方法、不抛错，放 delete 成功之后不影响失败语义）。
       runtime.sessionStreamUnitManager.forgetSession(targetSessionId);
       if (projectId != null) {
-        const cacheKey = sessionViewCacheKey(projectId, targetSessionId);
-        clearSessionViewCache(cacheKey);
+        const cacheKey = SessionViewCache.key(projectId, targetSessionId);
+        SessionViewCache.clear(cacheKey);
       }
       if (sessionId === targetSessionId) {
         setSubview('sessions');
@@ -659,7 +659,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         // （中途失败时后面那些根本没删，遗忘它们等于误清活跃会话的状态）。
         runtime.sessionStreamUnitManager.forgetSession(id);
         if (projectId != null) {
-          clearSessionViewCache(sessionViewCacheKey(projectId, id));
+          SessionViewCache.clear(SessionViewCache.key(projectId, id));
         }
       }
       // 无论删除是否中途失败，都退出批选态，让用户可以重试剩余未删项。
@@ -705,7 +705,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         runtime.sessionStreamUnitManager.forgetSession(s.id);
       }
       // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
-      clearSessionViewCachesByProject(id);
+      SessionViewCache.clearByProject(id);
       clearScrollSnapshotsByProject(id);
       clearTranscriptScrollSnapshotsByProject(id);
     }

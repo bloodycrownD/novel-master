@@ -42,11 +42,8 @@ import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.s
 import {SESSION_STREAM_MESSAGES_PAGE_SIZE} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {
-  clearAllSessionViewCaches,
-  getSessionViewCache,
   SESSION_VIEW_HYDRATE_WINDOW,
-  sessionViewCacheKey,
-  setSessionViewCache,
+  SessionViewCache,
 } from '@/services/chat-session-view-cache';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 import * as finishedNotification from '@/services/agent-finished-notification';
@@ -273,7 +270,7 @@ beforeEach(() => {
   agentActivity.setActive(false);
   jest.clearAllMocks();
   resetKeepAliveStateForTests();
-  clearAllSessionViewCaches();
+  SessionViewCache.clearAll();
   jest.useFakeTimers();
   jest.setSystemTime(CLOCK_START_MS);
 });
@@ -282,7 +279,7 @@ afterEach(() => {
   jest.useRealTimers();
   agentActivity.setActive(false);
   resetKeepAliveStateForTests();
-  clearAllSessionViewCaches();
+  SessionViewCache.clearAll();
 });
 
 describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
@@ -312,8 +309,8 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     expect(snapB?.messages.every(m => m.sessionId === 'sess-b')).toBe(true);
 
     // 视图缓存按各自 (projectId, sessionId) 键落盘，只含属主会话的行
-    const cacheA = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
-    const cacheB = getSessionViewCache(sessionViewCacheKey('p2', 'sess-b'));
+    const cacheA = SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'));
+    const cacheB = SessionViewCache.get(SessionViewCache.key('p2', 'sess-b'));
     expect(cacheA?.messages.every(m => m.sessionId === 'sess-a')).toBe(true);
     expect(cacheB?.messages.every(m => m.sessionId === 'sess-b')).toBe(true);
 
@@ -329,7 +326,7 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
   it('hydrate 语义：缓存命中不回源 DB；miss 回源并写缓存', async () => {
     const h = createHarness();
     // 预置 A 的视图缓存（会话切换水合命中路径）
-    setSessionViewCache(sessionViewCacheKey('p1', 'sess-a'), {
+    SessionViewCache.set(SessionViewCache.key('p1', 'sess-a'), {
       messages: [makeMessage('sess-a', 9, 'assistant')],
       hasMoreMessages: false,
     });
@@ -350,7 +347,7 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
       limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
     expect(h.messages.listBySessionPage).not.toHaveBeenCalled();
-    const cacheB = getSessionViewCache(sessionViewCacheKey('p1', 'sess-b'));
+    const cacheB = SessionViewCache.get(SessionViewCache.key('p1', 'sess-b'));
     expect(cacheB?.messages).toHaveLength(2);
     expect(cacheB?.hasMoreMessages).toBe(false); // 单查询：不足一页即无更多
   });
@@ -378,7 +375,7 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     expect(snap?.loadingMoreMessages).toBe(false); // 防重入标志复位
 
     // 分页结果同步写视图缓存（重进水合到完整 50 行）
-    const cache = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
+    const cache = SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'));
     expect(cache?.messages).toHaveLength(50);
     expect(cache?.hasMoreMessages).toBe(false);
   });
@@ -405,7 +402,7 @@ describe('T-U5: 后台收尾缓存刷新（消息丢失回归）', () => {
     expect(settled?.messages[1].role).toBe('assistant');
 
     // 无 attach 也照常刷视图缓存——重进水合即最新
-    const cacheB = getSessionViewCache(sessionViewCacheKey('p2', 'sess-b'));
+    const cacheB = SessionViewCache.get(SessionViewCache.key('p2', 'sess-b'));
     expect(cacheB?.messages).toHaveLength(2);
     expect(cacheB?.messages.some(m => m.role === 'assistant')).toBe(true);
 
@@ -437,7 +434,7 @@ describe('step 级 reload：STEP_COMMITTED 后落库行进消息面与缓存', (
     expect(snap?.partialText).toBe(''); // 冲刷后 partial 清零（管线语义）
     expect(snap?.messages).toHaveLength(2);
     expect(snap?.messages[1].role).toBe('assistant');
-    expect(getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages)
+    expect(SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages)
       .toHaveLength(2);
   });
 });
@@ -574,7 +571,7 @@ describe('cr2-E-1: 缓存水合的窗口化只限冷启动', () => {
     expect(grown).toBeGreaterThan(SESSION_STREAM_MESSAGES_PAGE_SIZE);
     expect(snap?.messages[0].seq).toBe(total - grown + 1);
     expect(snap?.hasMoreMessages).toBe(true);
-    expect(getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages)
+    expect(SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages)
       .toHaveLength(grown);
 
     // 非 force 重进/切会话：缓存命中水合——面已非空，必须整面收下
@@ -644,7 +641,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
     const view = h.manager.readMessagesSnapshot('sess-a');
     expect(view?.hasMoreMessages).toBe(true);
     expect(view?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
-    const cache = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
+    const cache = SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'));
     expect(cache?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
     expect(cache?.messages[0].seq).toBe(11);
     expect(cache?.hasMoreMessages).toBe(true);
@@ -664,7 +661,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
       false,
     );
     expect(
-      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.hasMoreMessages,
+      SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.hasMoreMessages,
     ).toBe(false);
   });
 
@@ -685,7 +682,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
     expect(view?.messages[0].seq).toBe(1);
     expect(view?.hasMoreMessages).toBe(false); // 不足一整页 → 无更多
     expect(
-      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages,
+      SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages,
     ).toHaveLength(50);
   });
 
@@ -804,7 +801,7 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
     expect(view?.hasMoreMessages).toBe(false);
     expect(view?.loadingMoreMessages).toBe(false); // 标记已复位
     expect(
-      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages,
+      SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages,
     ).toHaveLength(50);
   });
 

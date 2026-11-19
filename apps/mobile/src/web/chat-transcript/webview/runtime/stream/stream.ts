@@ -8,10 +8,9 @@ import {
   pruneFinishedStreamRowSignatures,
   reconcileFinishedStreamingRows,
 } from '../render/finished-stream-row-dom';
-import {resetRowWindowForSnapshot} from '../render/row-windowing';
+import {RowWindow} from '../render/row-windowing';
 import {scheduleMermaidScan} from '../mermaid';
-import {clearStreamRichUpgrade} from './stream-markdown';
-import {scheduleStreamRichUpgrade} from './stream-markdown';
+import {StreamRichUpgrade} from './stream-markdown';
 import {streamRichUpgrade} from './stream-markdown';
 import {decideStreamDelta} from './stream-checkpoint';
 import {post} from '../bridge';
@@ -307,7 +306,7 @@ function fallbackStreamBubble(tail: Element, kind: StreamKind): void {
       syncStreamBodiesFromState(bubble);
     }
   }
-  scheduleStreamRichUpgrade(kind);
+  StreamRichUpgrade.schedule(kind);
 }
 
 export function ensureStreamTextBody(bubble: Element): HTMLElement {
@@ -375,7 +374,7 @@ export function appendStreamDeltaIncremental(tail: Element, kind: StreamKind, de
         return false;
       }
       if (!streamRichUpgrade.plainMode.thinking) {
-        scheduleStreamRichUpgrade(kind);
+        StreamRichUpgrade.schedule(kind);
         return true;
       }
       appendEscapedDelta(target, delta);
@@ -387,7 +386,7 @@ export function appendStreamDeltaIncremental(tail: Element, kind: StreamKind, de
     } else {
       return false;
     }
-    scheduleStreamRichUpgrade(kind);
+    StreamRichUpgrade.schedule(kind);
     return true;
   }
   if (kind === 'thinking') {
@@ -765,12 +764,12 @@ export type StreamStatusPayload = {
 
 /**
  * 行被移除后按当前 rows 重定位行窗口（P2-8）：否则 win.end 可能超过 total，
- * RowList 渲染 clamp 后的窗口、measureRowWindow 却按未 clamp 的计数做分母，
+ * RowList 渲染 clamp 后的窗口、RowWindow.measure 却按未 clamp 的计数做分母，
  * 平均槽高被系统性低估。距底偏移取删除当刻的视口读位。
  */
 function retargetRowWindowAfterRowsRemoved(): void {
   const scroller = document.getElementById('scroller');
-  resetRowWindowForSnapshot(state.rows.length, {
+  RowWindow.resetForSnapshot(state.rows.length, {
     kind: 'fromBottom',
     offsetFromBottom: scroller ? offsetFromBottom(scroller) : 0,
     clientHeight: scroller ? scroller.clientHeight : 0,
@@ -850,7 +849,7 @@ export function applyStreamStatus(payload: StreamStatusPayload): void {
     state.fullReplaceOnly = null;
     state.appliedBlockKeys = new Set();
     resetStreamBlockRenderState();
-    clearStreamRichUpgrade();
+    StreamRichUpgrade.clear();
     retargetRowWindowAfterRowsRemoved();
     renderRows();
     return;
@@ -863,7 +862,7 @@ export function applyStreamStatus(payload: StreamStatusPayload): void {
       seq: cp.seq,
       status: 'finished',
     };
-    clearStreamRichUpgrade();
+    StreamRichUpgrade.clear();
   }
   renderRows(); // 壳重渲：bar 消失/菜单行出现；body host 不更新
   reconcileFinishedStreamingRows();
@@ -910,7 +909,7 @@ export function applyStreamReset(payload: StreamResetPayload): void {
   state.appliedBlockKeys = new Set();
   state.resyncPending = null;
   resetStreamBlockRenderState();
-  clearStreamRichUpgrade();
+  StreamRichUpgrade.clear();
   pruneFinishedStreamRowSignatures();
   // 删行后窗口按当前 rows 重定位（P2-8）：win.end 超过 total 会让测量分母失真。
   retargetRowWindowAfterRowsRemoved();

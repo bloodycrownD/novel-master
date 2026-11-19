@@ -7,9 +7,7 @@ import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
 import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
-import {clearMobileDatabaseFilePathCache, probeAndCacheMobileDatabaseFilePath} from './db-file-path';
-
-export {getMobileDatabaseFilePath, probeAndCacheMobileDatabaseFilePath} from './db-file-path';
+import {MobileDatabaseFilePath} from './db-file-path';
 
 let conn: TdbcConnection | undefined;
 let initPromise: Promise<TdbcConnection> | undefined;
@@ -75,7 +73,7 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
         await c.close().catch(() => {});
         throw bootErr;
       }
-      await probeAndCacheMobileDatabaseFilePath();
+      await MobileDatabaseFilePath.probeAndCache();
       conn = c;
       return c;
     })();
@@ -88,7 +86,7 @@ export async function closeMobileConnection(): Promise<void> {
   await conn?.close();
   conn = undefined;
   initPromise = undefined;
-  clearMobileDatabaseFilePathCache();
+  MobileDatabaseFilePath.clearCache();
 }
 
 /** WAL checkpoint before file-level copy (export backup). */

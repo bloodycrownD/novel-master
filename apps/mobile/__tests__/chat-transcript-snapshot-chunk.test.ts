@@ -25,7 +25,7 @@ jest.mock('../src/web/chat-transcript/webview/runtime/stream/stream', () => ({
   resetStreamBlockRenderState: jest.fn(),
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  closeContextMenu: jest.fn(),
+  Menu: {close: jest.fn()},
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
   post: jest.fn(),

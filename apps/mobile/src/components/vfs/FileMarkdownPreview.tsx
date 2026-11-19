@@ -12,7 +12,7 @@ import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {defaultVfsMarkdownPreviewEngine, readVfsMarkdownPreviewEngine, type VfsMarkdownPreviewEngine} from '../../storage/vfs-markdown-preview-engine';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
-import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
+import {ChatComposerDraft} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
 import {isRichContentOverLimit, isWebViewDocumentOverLimit} from '../rich-content/rich-content-limits';
@@ -172,7 +172,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
             }
           : {}),
       });
-      refreshComposerAnnotateChips(sessionId);
+      ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
       setPendingRenderRange(null);
     },
     [annotateEnabled, sessionId, path, pendingOriginalText, pendingRenderRange],
@@ -199,7 +199,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       return;
     }
     chatAnnotateDraftStore.remove(sessionId, detailDraft.id);
-    refreshComposerAnnotateChips(sessionId);
+    ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
     setDetailVisible(false);
     setDetailDraft(null);
   }, [sessionId, detailDraft]);
@@ -219,7 +219,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
         return;
       }
       chatAnnotateDraftStore.update(sessionId, editingDraft.id, {userAnnotation});
-      refreshComposerAnnotateChips(sessionId);
+      ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
       setEditingDraft(null);
     },
     [sessionId, editingDraft],

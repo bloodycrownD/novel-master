@@ -48,99 +48,314 @@ function clamp(v: number, lo: number, hi: number): number {
   return v;
 }
 
-/** RowList 渲染取窗口：对当前 rows 总数做防御性 clamp。 */
-export function getRowWindowRange(total: number): RowWindowRange {
-  const end = clamp(win.end, 0, Math.max(0, total));
-  const start = clamp(win.start, 0, end);
-  return {start, end};
-}
+export const RowWindow = {
+  /** RowList 渲染取窗口：对当前 rows 总数做防御性 clamp。 */
+  getRange: (total: number): RowWindowRange => {
+    const end = clamp(win.end, 0, Math.max(0, total));
+    const start = clamp(win.start, 0, end);
+    return {start, end};
+  },
 
-/**
- * RowList 渲染取上下占位高度（未渲染行数 × 实测平均槽高）。
- * `pinnedTail`（spec C19）：流式行被窗口滚出后钉在下占位之后单独渲染，下占位
- * 必须少算这 1 行——它的真实高度由 DOM 自己贡献，不能被估算重复计算。
- *
- * nm-style: keep-public — 跨层唯一读出口（ui/render/RowList）；avgSlotPx 是
- * 本模块私有渲染态，ui 层不能直读，内联会把状态估算搬到 ui。
- */
-export function getRowWindowSpacerHeights(total: number, pinnedTail = false) {
-  const range = getRowWindowRange(total);
-  const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
-  return {
-    top: Math.round(range.start * avgSlotPx),
-    bottom: Math.round(bottomRows * avgSlotPx),
-  };
-}
+  /**
+   * RowList 渲染取上下占位高度（未渲染行数 × 实测平均槽高）。
+   * `pinnedTail`（spec C19）：流式行被窗口滚出后钉在下占位之后单独渲染，下占位
+   * 必须少算这 1 行——它的真实高度由 DOM 自己贡献，不能被估算重复计算。
+   *
+   * nm-style: keep-public — 跨层唯一读出口（ui/render/RowList）；avgSlotPx 是
+   * 本模块私有渲染态，ui 层不能直读，内联会把状态估算搬到 ui。
+   */
+  getSpacerHeights: (total: number, pinnedTail = false) => {
+    const range = RowWindow.getRange(total);
+    const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
+    return {
+      top: Math.round(range.start * avgSlotPx),
+      bottom: Math.round(bottomRows * avgSlotPx),
+    };
+  },
 
-/**
- * 测试 / 调试窥视当前平均槽高估算。
- *
- * nm-style: keep-public — 测试支持 API：window 测试经 isolateModules 直接
- * 断言 EWMA 收敛；生产无读取入口，也不该把私有 avgSlotPx 直接暴露成字段。
- */
-export function getRowWindowAvgSlotPx(): number {
-  return avgSlotPx;
-}
+  /**
+   * 测试 / 调试窥视当前平均槽高估算。
+   *
+   * nm-style: keep-public — 测试支持 API：window 测试经 isolateModules 直接
+   * 断言 EWMA 收敛；生产无读取入口，也不该把私有 avgSlotPx 直接暴露成字段。
+   */
+  getAvgSlotPx: (): number => {
+    return avgSlotPx;
+  },
 
-/** 目标窗口（纯函数）：视口行 ± 缓冲，clamp 到 [0, total]。 */
-function desiredRowWindow(total: number, first: number): RowWindowRange {
-  const bufferRows = ROW_WINDOW_BUFFER_ROWS;
-  const steadyRows = ROW_WINDOW_ROWS + 2 * bufferRows;
-  // 短列表（总行数不足一个稳态窗口）始终全量渲染：不留上占位，
-  // 也避免短会话中间出现占位空段。
-  const maxStart = Math.max(0, total - steadyRows);
-  const start = clamp(Math.floor(first) - bufferRows, 0, maxStart);
-  const end = clamp(Math.ceil(first) + steadyRows - bufferRows, 0, total);
-  return {start, end};
-}
+  /** 目标窗口（纯函数）：视口行 ± 缓冲，clamp 到 [0, total]。 */
+  desired: (total: number, first: number): RowWindowRange => {
+    const bufferRows = ROW_WINDOW_BUFFER_ROWS;
+    const steadyRows = ROW_WINDOW_ROWS + 2 * bufferRows;
+    // 短列表（总行数不足一个稳态窗口）始终全量渲染：不留上占位，
+    // 也避免短会话中间出现占位空段。
+    const maxStart = Math.max(0, total - steadyRows);
+    const start = clamp(Math.floor(first) - bufferRows, 0, maxStart);
+    const end = clamp(Math.ceil(first) + steadyRows - bufferRows, 0, total);
+    return {start, end};
+  },
+
+  /**
+   * 窗口移动计划（纯函数）：对两端分别判扩 / 缩（缩带滞回），
+   * 无移动返回 null。一次计划允许两端同时动——上端动由调用方做
+   * scrollHeight 差值补偿，下端动不影响视口上方内容（文档流性质）无需补偿。
+   *
+   * nm-style: keep-public — 测试支持 API：窗口策略（扩/缩/滞回）由 window
+   * 测试直接钉边界；内联进 handleScroll 会把这些策略断言改写成
+   * 整表滚动集成用例，失去策略级覆盖。
+   */
+  // nm style 要求签名单行；四参签名超过 prettier 默认宽度，用忽略标记保留单行。
+  // prettier-ignore
+  planMove: (total: number, start: number, end: number, v: number): RowWindowMove | null => {
+    if (total <= 0) return null;
+    const desired = RowWindow.desired(total, v);
+    let startDelta = 0;
+    let endDelta = 0;
+    if (desired.start < start) {
+      startDelta = desired.start - start;
+    } else if (desired.start > start + ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
+      startDelta = desired.start - start;
+    }
+    if (desired.end > end) {
+      endDelta = desired.end - end;
+    } else if (desired.end < end - ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
+      endDelta = desired.end - end;
+    }
+    if (startDelta === 0 && endDelta === 0) return null;
+    return {startDelta, endDelta};
+  },
+
+  /** 窗口首行的文档纵坐标（上占位底缘；无占位时取首个消息行顶缘）。 */
+  windowTopPxInDocument: (): number | null => {
+    const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+    if (topSpacer) return topSpacer.offsetTop + topSpacer.offsetHeight;
+    const first = RowWindow.firstOrLastRowEl(false);
+    if (first) return first.offsetTop;
+    return null;
+  },
+
+  /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
+  retarget: (total: number, firstRow: number): void => {
+    win = RowWindow.desired(total, firstRow);
+    // 窗口内容大换血：下次 render 后必须重测平均槽高。
+    lastMeasuredWin = null;
+  },
+
+  /**
+   * applySnapshot 全量替换 rows 后的窗口重置：
+   * stick 贴尾；restore / preserve 按距底偏移从底反推视口行。
+   * 无 scroller（clientHeight 未知）时退化为贴尾。
+   */
+  // nm style 要求签名单行；签名超过 prettier 默认宽度，用忽略标记保留单行。
+  // prettier-ignore
+  resetForSnapshot: (total: number, positioning: RowWindowPositioning): void => {
+    if (positioning.kind === 'tail' || positioning.clientHeight <= 0) {
+      RowWindow.retarget(total, total);
+      return;
+    }
+    const offsetBottom = Math.max(0, positioning.offsetFromBottom);
+    const v = total - (offsetBottom + positioning.clientHeight) / avgSlotPx;
+    RowWindow.retarget(total, v);
+  },
+
+  /**
+   * prependPage 头部插入行后的窗口重定位（渲染前调用）：
+   * 上占位清零（新行全部进窗口）、下占位行数保持不变——这样渲染后的
+   * scrollHeight 差值恰为窗口内新行的真实总高（上下占位零变化），
+   * 既有差值补偿精确成立。窗口超稳态的部分由补偿后的
+   * handleScroll 收敛（下端收缩不动 scrollTop）。
+   *
+   * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPage）：
+   * 直接改写模块私有 win/lastMeasuredWin，调用方不能 own 这份状态。
+   */
+  retargetForPrepend: (prependedRows: number): void => {
+    const total = state.rows.length;
+    const oldTotal = Math.max(0, total - prependedRows);
+    const bottomRows = Math.max(0, oldTotal - win.end);
+    win = {start: 0, end: clamp(total - bottomRows, 0, total)};
+    lastMeasuredWin = null;
+  },
+
+  /**
+   * 滚动驱动的窗口维护（onScroll / 快照读位设定后调用，幂等）：
+   * 估算视口行 → 计划移动 → 应用（含渲染与读位补偿）。
+   * 返回是否发生窗口移动。
+   *
+   * 上端移动的读位锚定用「行坐标线性重映射」：渲染前把视口顶折算成
+   * 全局行坐标（窗口外按平均槽高线性折算），渲染后按新窗口锚反算回
+   * scrollTop。为什么不用 scrollHeight 差值补偿：扩窗会把视口下方的
+   * 占位估算行换成真实行，差值里混入视口下方的高度差，污染补偿量；
+   * 行坐标重映射的折算/反算共用同一平均槽高，估算误差一阶抵消，
+   * 残余误差仅在窗口内行高分布不均（±1 平均行高容差内）。
+   * 下端移动不影响视口上方内容（文档流性质），scrollTop 原地不动。
+   */
+  handleScroll: (): boolean => {
+    const total = state.rows.length;
+    const scroller = document.getElementById('scroller');
+    if (!scroller) return false;
+    const top = RowWindow.windowTopPxInDocument();
+    if (top == null) return false;
+    const v = win.start + (scroller.scrollTop - top) / avgSlotPx;
+    if (!isFinite(v)) return false;
+    const firstRow = clamp(v, 0, Math.max(0, total - 1));
+    const move = RowWindow.planMove(total, win.start, win.end, firstRow);
+    if (!move) return false;
+    // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
+    // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
+    // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
+    // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
+    // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
+    if (move.startDelta > 0 && win.end >= total) {
+      return false;
+    }
+    // 两端分步：先上端（渲染 + 读位重映射），后下端（渲染，不动 scrollTop）。
+    if (move.startDelta !== 0) {
+      const topBefore = RowWindow.windowTopPxInDocument();
+      let rowBefore: number | null = null;
+      if (topBefore != null) {
+        rowBefore = win.start + (scroller.scrollTop - topBefore) / avgSlotPx;
+      }
+      const nextStart = clamp(win.start + move.startDelta, 0, win.end);
+      win = {start: nextStart, end: win.end};
+      renderRows();
+      if (rowBefore != null && isFinite(rowBefore)) {
+        const topAfter = RowWindow.windowTopPxInDocument();
+        if (topAfter != null) {
+          scroller.scrollTop = topAfter + (rowBefore - win.start) * avgSlotPx;
+        }
+      }
+    }
+    if (move.endDelta !== 0) {
+      const nextEnd = clamp(win.end + move.endDelta, win.start, total);
+      if (nextEnd !== win.end) {
+        win = {start: win.start, end: nextEnd};
+        renderRows();
+      }
+    }
+    return true;
+  },
+
+  /**
+   * renderRows 后的实测钩子（main 装配点回调）：
+   * 以上 / 下占位边界量出窗口行实际占高（含行间 gap），EWMA 更新平均槽高。
+   * 窗口未变时跳过——流式期间高频 renderRows 不产生额外 reflow。
+   *
+   * 贴底且最后一行是 streaming（spec C19）：RowList 不渲染下占位，测量下缘会
+   * 落到不断长高的流式行。测量上界必须收到流式行之前：下缘取流式行 offsetTop、
+   * count 减 1（只减 count 不减 measuredPx 会把流式行高度留在分子、分母少 1，
+   * 估算反而偏大）。窗口外钉住的流式行在下占位之后，天然不进测量。
+   *
+   * nm-style: keep-public — renderRows 后唯一装配回调（runtime/factory 挂点）：
+   * 直接更新模块私有 avgSlotPx/lastMeasuredWin，调用方无法持有这份渲染态。
+   */
+  measure: (): void => {
+    // 删行后 win.end 可能仍大于当前 rows 总数（RowList 渲染用 clamp 后的窗口）：
+    // 计数必须同口径 clamp，否则分母偏大、平均槽高被系统性低估（P2-8）。
+    const range = RowWindow.getRange(state.rows.length);
+    const count = range.end - range.start;
+    if (count <= 0) return;
+    if (
+      lastMeasuredWin != null &&
+      lastMeasuredWin.start === range.start &&
+      lastMeasuredWin.end === range.end
+    ) {
+      return;
+    }
+    const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+    const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
+    let topPx: number | null = null;
+    let bottomPx: number | null = null;
+    let effectiveCount = count;
+    if (topSpacer) {
+      topPx = topSpacer.offsetTop + topSpacer.offsetHeight;
+    } else {
+      const first = RowWindow.firstOrLastRowEl(false);
+      if (first) topPx = first.offsetTop;
+    }
+    if (bottomSpacer) {
+      bottomPx = bottomSpacer.offsetTop;
+    } else {
+      let streamingTail: LayoutBox | null = null;
+      if (
+        typeof document !== 'undefined' &&
+        typeof document.getElementById === 'function'
+      ) {
+        const el = document.getElementById('stream-tail');
+        streamingTail = el == null ? null : (el as unknown as LayoutBox);
+      }
+      if (streamingTail != null && range.end >= state.rows.length) {
+        // 贴底流式行：测量区间收到它之前，槽高不含流式行高度。
+        bottomPx = streamingTail.offsetTop;
+        effectiveCount = count - 1;
+      } else {
+        const lastRow = RowWindow.firstOrLastRowEl(true);
+        if (lastRow) bottomPx = lastRow.offsetTop + lastRow.offsetHeight;
+      }
+    }
+    if (topPx == null || bottomPx == null || effectiveCount <= 0) return;
+    const measuredPx = bottomPx - topPx;
+    if (!(measuredPx > 0)) return;
+    const measuredSlot = measuredPx / effectiveCount;
+    avgSlotPx += (measuredSlot - avgSlotPx) * ROW_WINDOW_AVG_ALPHA;
+    lastMeasuredWin = {start: range.start, end: range.end};
+  },
+
+  firstOrLastRowEl: (last: boolean): LayoutBox | null => {
+    const rows = document.getElementById('rows');
+    if (!rows || typeof rows.querySelectorAll !== 'function') return null;
+    const list = rows.querySelectorAll('[data-id]');
+    if (!list || list.length === 0) return null;
+    const el = list[last ? list.length - 1 : 0];
+    return el as unknown as LayoutBox;
+  },
+
+  /**
+   * 当前上下占位的像素总高（无占位元素按 0 计）：prepend 差值采样时
+   * 扣除占位漂移用（DOM 真值，不受 avg 实测更新与渲染先后差影响）。
+   */
+  getSpacerPxTotal: (): number => {
+    let total = 0;
+    const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+    if (topSpacer) total += topSpacer.offsetHeight;
+    const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
+    if (bottomSpacer) total += bottomSpacer.offsetHeight;
+    return total;
+  },
+
+  /**
+   * prepend 后的占位估算校正（任务点：按 scrollHeight 差值校正一次）：
+   * 差值折算到新行的平均高度，并入 EWMA 样本——新行未全进窗口时
+   * （差值里混有占位估算），measure 覆盖不到的部分由此兜底收敛。
+   *
+   * 前提修正（web/C-1）：retargetForPrepend 会把上占位清零并让
+   * 原上占位区行换进窗口（估算高→真实高），「差值恰为新行真实总高」仅在
+   * prepend 前窗口 start=0（上占位本就为零）时成立。start>0 时差值混入
+   * 占位置换差；上下占位高度还可能因 avg 实测更新在前后两次渲染间漂移。
+   * topSpacerBefore 由调用方在 retarget 前捕获（窗口 start + 占位 DOM 真值）：
+   * 采样时扣除占位漂移、分母并入被置换行数，样本恢复为「窗口新增行的
+   * 真实平均高」。缺省时保持旧行为（不扣除、分母仅新行数）。
+   *
+   * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPageNow）：
+   * 把差值样本并入模块私有 avgSlotPx 的 EWMA，不能搬进调用方。
+   */
+  // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
+  // prettier-ignore
+  notePrependHeightDelta: (heightDeltaPx: number, prependedRows: number, topSpacerBefore?: SpacerBefore): void => {
+    const displacedRows = topSpacerBefore?.rows ?? 0;
+    const beforePx = topSpacerBefore?.spacerPx ?? RowWindow.getSpacerPxTotal();
+    const sampledRows = prependedRows + displacedRows;
+    if (prependedRows <= 0 || sampledRows <= 0) {
+      return;
+    }
+    const spacerDelta = RowWindow.getSpacerPxTotal() - beforePx;
+    const per = (heightDeltaPx - spacerDelta) / sampledRows;
+    if (!(per > 0)) return;
+    const keep = 1 - ROW_WINDOW_AVG_ALPHA;
+    avgSlotPx = avgSlotPx * keep + per * ROW_WINDOW_AVG_ALPHA;
+  },
+} as const;
 
 type RowWindowMove = {startDelta: number; endDelta: number};
-
-/**
- * 窗口移动计划（纯函数）：对两端分别判扩 / 缩（缩带滞回），
- * 无移动返回 null。一次计划允许两端同时动——上端动由调用方做
- * scrollHeight 差值补偿，下端动不影响视口上方内容（文档流性质）无需补偿。
- *
- * nm-style: keep-public — 测试支持 API：窗口策略（扩/缩/滞回）由 window
- * 测试直接钉边界；内联进 handleRowWindowScroll 会把这些策略断言改写成
- * 整表滚动集成用例，失去策略级覆盖。
- */
-// nm style 要求签名单行；四参签名超过 prettier 默认宽度，用忽略标记保留单行。
-// prettier-ignore
-export function planRowWindowMove(total: number, start: number, end: number, v: number): RowWindowMove | null {
-  if (total <= 0) return null;
-  const desired = desiredRowWindow(total, v);
-  let startDelta = 0;
-  let endDelta = 0;
-  if (desired.start < start) {
-    startDelta = desired.start - start;
-  } else if (desired.start > start + ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
-    startDelta = desired.start - start;
-  }
-  if (desired.end > end) {
-    endDelta = desired.end - end;
-  } else if (desired.end < end - ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
-    endDelta = desired.end - end;
-  }
-  if (startDelta === 0 && endDelta === 0) return null;
-  return {startDelta, endDelta};
-}
-
-/** 窗口首行的文档纵坐标（上占位底缘；无占位时取首个消息行顶缘）。 */
-function windowTopPxInDocument(): number | null {
-  const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
-  if (topSpacer) return topSpacer.offsetTop + topSpacer.offsetHeight;
-  const first = firstOrLastRowEl(false);
-  if (first) return first.offsetTop;
-  return null;
-}
-
-/** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
-export function retargetRowWindow(total: number, firstRow: number): void {
-  win = desiredRowWindow(total, firstRow);
-  // 窗口内容大换血：下次 render 后必须重测平均槽高。
-  lastMeasuredWin = null;
-}
 
 /** applySnapshot 的窗口预定位口径。 */
 export type RowWindowPositioning =
@@ -151,217 +366,4 @@ export type RowWindowPositioning =
       clientHeight: number;
     };
 
-/**
- * applySnapshot 全量替换 rows 后的窗口重置：
- * stick 贴尾；restore / preserve 按距底偏移从底反推视口行。
- * 无 scroller（clientHeight 未知）时退化为贴尾。
- */
-// nm style 要求签名单行；签名超过 prettier 默认宽度，用忽略标记保留单行。
-// prettier-ignore
-export function resetRowWindowForSnapshot(total: number, positioning: RowWindowPositioning): void {
-  if (positioning.kind === 'tail' || positioning.clientHeight <= 0) {
-    retargetRowWindow(total, total);
-    return;
-  }
-  const offsetBottom = Math.max(0, positioning.offsetFromBottom);
-  const v = total - (offsetBottom + positioning.clientHeight) / avgSlotPx;
-  retargetRowWindow(total, v);
-}
-
-/**
- * prependPage 头部插入行后的窗口重定位（渲染前调用）：
- * 上占位清零（新行全部进窗口）、下占位行数保持不变——这样渲染后的
- * scrollHeight 差值恰为窗口内新行的真实总高（上下占位零变化），
- * 既有差值补偿精确成立。窗口超稳态的部分由补偿后的
- * handleRowWindowScroll 收敛（下端收缩不动 scrollTop）。
- *
- * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPage）：
- * 直接改写模块私有 win/lastMeasuredWin，调用方不能 own 这份状态。
- */
-export function retargetRowWindowForPrepend(prependedRows: number): void {
-  const total = state.rows.length;
-  const oldTotal = Math.max(0, total - prependedRows);
-  const bottomRows = Math.max(0, oldTotal - win.end);
-  win = {start: 0, end: clamp(total - bottomRows, 0, total)};
-  lastMeasuredWin = null;
-}
-
-/**
- * 滚动驱动的窗口维护（onScroll / 快照读位设定后调用，幂等）：
- * 估算视口行 → 计划移动 → 应用（含渲染与读位补偿）。
- * 返回是否发生窗口移动。
- *
- * 上端移动的读位锚定用「行坐标线性重映射」：渲染前把视口顶折算成
- * 全局行坐标（窗口外按平均槽高线性折算），渲染后按新窗口锚反算回
- * scrollTop。为什么不用 scrollHeight 差值补偿：扩窗会把视口下方的
- * 占位估算行换成真实行，差值里混入视口下方的高度差，污染补偿量；
- * 行坐标重映射的折算/反算共用同一平均槽高，估算误差一阶抵消，
- * 残余误差仅在窗口内行高分布不均（±1 平均行高容差内）。
- * 下端移动不影响视口上方内容（文档流性质），scrollTop 原地不动。
- */
-export function handleRowWindowScroll(): boolean {
-  const total = state.rows.length;
-  const scroller = document.getElementById('scroller');
-  if (!scroller) return false;
-  const top = windowTopPxInDocument();
-  if (top == null) return false;
-  const v = win.start + (scroller.scrollTop - top) / avgSlotPx;
-  if (!isFinite(v)) return false;
-  const firstRow = clamp(v, 0, Math.max(0, total - 1));
-  const move = planRowWindowMove(total, win.start, win.end, firstRow);
-  if (!move) return false;
-  // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
-  // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
-  // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
-  // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
-  // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
-  if (move.startDelta > 0 && win.end >= total) {
-    return false;
-  }
-  // 两端分步：先上端（渲染 + 读位重映射），后下端（渲染，不动 scrollTop）。
-  if (move.startDelta !== 0) {
-    const topBefore = windowTopPxInDocument();
-    let rowBefore: number | null = null;
-    if (topBefore != null) {
-      rowBefore = win.start + (scroller.scrollTop - topBefore) / avgSlotPx;
-    }
-    const nextStart = clamp(win.start + move.startDelta, 0, win.end);
-    win = {start: nextStart, end: win.end};
-    renderRows();
-    if (rowBefore != null && isFinite(rowBefore)) {
-      const topAfter = windowTopPxInDocument();
-      if (topAfter != null) {
-        scroller.scrollTop = topAfter + (rowBefore - win.start) * avgSlotPx;
-      }
-    }
-  }
-  if (move.endDelta !== 0) {
-    const nextEnd = clamp(win.end + move.endDelta, win.start, total);
-    if (nextEnd !== win.end) {
-      win = {start: win.start, end: nextEnd};
-      renderRows();
-    }
-  }
-  return true;
-}
-
-/**
- * renderRows 后的实测钩子（main 装配点回调）：
- * 以上 / 下占位边界量出窗口行实际占高（含行间 gap），EWMA 更新平均槽高。
- * 窗口未变时跳过——流式期间高频 renderRows 不产生额外 reflow。
- *
- * 贴底且最后一行是 streaming（spec C19）：RowList 不渲染下占位，测量下缘会
- * 落到不断长高的流式行。测量上界必须收到流式行之前：下缘取流式行 offsetTop、
- * count 减 1（只减 count 不减 measuredPx 会把流式行高度留在分子、分母少 1，
- * 估算反而偏大）。窗口外钉住的流式行在下占位之后，天然不进测量。
- *
- * nm-style: keep-public — renderRows 后唯一装配回调（runtime/factory 挂点）：
- * 直接更新模块私有 avgSlotPx/lastMeasuredWin，调用方无法持有这份渲染态。
- */
-export function measureRowWindow(): void {
-  // 删行后 win.end 可能仍大于当前 rows 总数（RowList 渲染用 clamp 后的窗口）：
-  // 计数必须同口径 clamp，否则分母偏大、平均槽高被系统性低估（P2-8）。
-  const range = getRowWindowRange(state.rows.length);
-  const count = range.end - range.start;
-  if (count <= 0) return;
-  if (
-    lastMeasuredWin != null &&
-    lastMeasuredWin.start === range.start &&
-    lastMeasuredWin.end === range.end
-  ) {
-    return;
-  }
-  const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
-  const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
-  let topPx: number | null = null;
-  let bottomPx: number | null = null;
-  let effectiveCount = count;
-  if (topSpacer) {
-    topPx = topSpacer.offsetTop + topSpacer.offsetHeight;
-  } else {
-    const first = firstOrLastRowEl(false);
-    if (first) topPx = first.offsetTop;
-  }
-  if (bottomSpacer) {
-    bottomPx = bottomSpacer.offsetTop;
-  } else {
-    let streamingTail: LayoutBox | null = null;
-    if (
-      typeof document !== 'undefined' &&
-      typeof document.getElementById === 'function'
-    ) {
-      const el = document.getElementById('stream-tail');
-      streamingTail = el == null ? null : (el as unknown as LayoutBox);
-    }
-    if (streamingTail != null && range.end >= state.rows.length) {
-      // 贴底流式行：测量区间收到它之前，槽高不含流式行高度。
-      bottomPx = streamingTail.offsetTop;
-      effectiveCount = count - 1;
-    } else {
-      const lastRow = firstOrLastRowEl(true);
-      if (lastRow) bottomPx = lastRow.offsetTop + lastRow.offsetHeight;
-    }
-  }
-  if (topPx == null || bottomPx == null || effectiveCount <= 0) return;
-  const measuredPx = bottomPx - topPx;
-  if (!(measuredPx > 0)) return;
-  const measuredSlot = measuredPx / effectiveCount;
-  avgSlotPx += (measuredSlot - avgSlotPx) * ROW_WINDOW_AVG_ALPHA;
-  lastMeasuredWin = {start: range.start, end: range.end};
-}
-
-function firstOrLastRowEl(last: boolean): LayoutBox | null {
-  const rows = document.getElementById('rows');
-  if (!rows || typeof rows.querySelectorAll !== 'function') return null;
-  const list = rows.querySelectorAll('[data-id]');
-  if (!list || list.length === 0) return null;
-  const el = list[last ? list.length - 1 : 0];
-  return el as unknown as LayoutBox;
-}
-
-/**
- * 当前上下占位的像素总高（无占位元素按 0 计）：prepend 差值采样时
- * 扣除占位漂移用（DOM 真值，不受 avg 实测更新与渲染先后差影响）。
- */
-export function getRowWindowSpacerPxTotal(): number {
-  let total = 0;
-  const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
-  if (topSpacer) total += topSpacer.offsetHeight;
-  const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
-  if (bottomSpacer) total += bottomSpacer.offsetHeight;
-  return total;
-}
-
 type SpacerBefore = {rows: number; spacerPx: number};
-
-/**
- * prepend 后的占位估算校正（任务点：按 scrollHeight 差值校正一次）：
- * 差值折算到新行的平均高度，并入 EWMA 样本——新行未全进窗口时
- * （差值里混有占位估算），measure 覆盖不到的部分由此兜底收敛。
- *
- * 前提修正（web/C-1）：retargetRowWindowForPrepend 会把上占位清零并让
- * 原上占位区行换进窗口（估算高→真实高），「差值恰为新行真实总高」仅在
- * prepend 前窗口 start=0（上占位本就为零）时成立。start>0 时差值混入
- * 占位置换差；上下占位高度还可能因 avg 实测更新在前后两次渲染间漂移。
- * topSpacerBefore 由调用方在 retarget 前捕获（窗口 start + 占位 DOM 真值）：
- * 采样时扣除占位漂移、分母并入被置换行数，样本恢复为「窗口新增行的
- * 真实平均高」。缺省时保持旧行为（不扣除、分母仅新行数）。
- *
- * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPageNow）：
- * 把差值样本并入模块私有 avgSlotPx 的 EWMA，不能搬进调用方。
- */
-// nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
-// prettier-ignore
-export function notePrependHeightDelta(heightDeltaPx: number, prependedRows: number, topSpacerBefore?: SpacerBefore): void {
-  const displacedRows = topSpacerBefore?.rows ?? 0;
-  const beforePx = topSpacerBefore?.spacerPx ?? getRowWindowSpacerPxTotal();
-  const sampledRows = prependedRows + displacedRows;
-  if (prependedRows <= 0 || sampledRows <= 0) {
-    return;
-  }
-  const spacerDelta = getRowWindowSpacerPxTotal() - beforePx;
-  const per = (heightDeltaPx - spacerDelta) / sampledRows;
-  if (!(per > 0)) return;
-  const keep = 1 - ROW_WINDOW_AVG_ALPHA;
-  avgSlotPx = avgSlotPx * keep + per * ROW_WINDOW_AVG_ALPHA;
-}

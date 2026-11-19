@@ -151,11 +151,7 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 
 import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
 import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
-import {
-  applyComposerStatusAttachmentsReplace,
-  clearChatComposerDraft,
-  readChatComposerDraftState,
-} from '../src/storage/chat-composer-draft';
+import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
 import {ComposerDraftSchema} from '@novel-master/core/chat';
 import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 
@@ -351,7 +347,7 @@ function flushPromises(): Promise<void> {
 
 beforeEach(() => {
   installMockRuntime();
-  clearChatComposerDraft('s1');
+  ChatComposerDraft.clear('s1');
   mockVfsLifecycle.length = 0;
   mockSessionId = 's1';
   mockWebViewPropsList.length = 0;
@@ -826,7 +822,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
       lastComposerProps().onComposerChangeText('hello');
     });
 
-    expect(readChatComposerDraftState('s1').text).toBe('hello');
+    expect(ChatComposerDraft.readState('s1').text).toBe('hello');
     expect(lastComposerProps().value).toBe('hello');
   });
 
@@ -864,7 +860,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // 清空走 M7 命令式通道（clearComposerNow → ref.setText('', 0)）；面板
     // 回调恒三参透传（D4），未给 ranges 时第三参为 undefined。
     expect(mockComposerSetText).toHaveBeenCalledWith('', 0, undefined);
-    expect(readChatComposerDraftState('s1').text).toBe('');
+    expect(ChatComposerDraft.readState('s1').text).toBe('');
   });
 
   it('chipLabels 由状态条附件经 core AttachmentChip.formatStatusLabelFromAttachment 派生', async () => {
@@ -880,7 +876,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
       label: '工作区文件',
     } as never;
     await act(async () => {
-      applyComposerStatusAttachmentsReplace({
+      ChatComposerDraft.applyComposerStatusAttachmentsReplace({
         sessionId: 's1',
         attachments: [attachment],
       });

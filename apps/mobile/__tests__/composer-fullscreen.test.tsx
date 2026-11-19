@@ -234,10 +234,9 @@ jest.mock('@/services/chat-agent-meta', () => {
 });
 
 jest.mock('@/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
-  cancelPreciseUpgradeDelay: jest.fn(),
-  cancelPreciseUpgrade: jest.fn(),
+  PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
 jest.mock('@/storage/app-ui-pref-io', () => ({
@@ -295,11 +294,7 @@ jest.mock('@/components/skills/SkillPicker', () => ({
 (global as any).__DEV__ = false;
 
 import {ChatTabScreen} from '@/screens/tabs/ChatTabScreen';
-import {
-  readChatComposerDraftState,
-  writeChatComposerDraftState,
-  clearChatComposerDraft,
-} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 
 /**
@@ -413,7 +408,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     mockGoBack.mockClear();
     mockBeforeRemoveHandlers.length = 0;
     mockDraftJsonBySession.clear();
-    clearChatComposerDraft('s1');
+    ChatComposerDraft.clear('s1');
     resetMockCalls();
     // 模块级回调不留残留（各用例自行 set）。
     promptEditorOnSavedSlot.take();
@@ -467,7 +462,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 否则 remap 会因「编辑区相交」直接摘空，断的就不是这道 filter 了。
     typeComposerText(tree.root, '$技能尾追');
     await flush();
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: '$技能尾追',
       attachments: [],
       tokenRanges: [{start: 0, end: 5}],
@@ -486,7 +481,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     typeComposerText(tree.root, '$技能$');
     await flush();
     // 旧草稿多一个前缀字符 → remap 把 [{1,5}] 平移到 [{0,4}]，在 payload.text 上合法。
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: 'x$技能$',
       attachments: [],
       tokenRanges: [{start: 1, end: 5}],
@@ -517,7 +512,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     });
     await flush();
 
-    expect(readChatComposerDraftState('s1').text).toBe('全屏改完的文本');
+    expect(ChatComposerDraft.readState('s1').text).toBe('全屏改完的文本');
     // controller 从草稿重读（draftRestoreToken bump → 水化链）→ 外部文本真变 →
     // M7 命令式通道 ref.setText → 输入组件 setValue（合成 markdown；无 token 时
     // 与明文同形）。旧「宿主下行 setText」桥消息已随 D4b 退役，断言面换到
@@ -561,8 +556,8 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     );
     const tree = await mountConversation();
     await flush();
-    expect(readChatComposerDraftState('s1').text).toBe('$技能$');
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s1').text).toBe('$技能$');
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([
       {start: 0, end: 4},
     ]);
 
@@ -588,7 +583,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     };
     expect(payload.text).toBe('前缀$技能$');
     expect(payload.tokenRanges).toEqual([{start: 2, end: 6}]);
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([
       {start: 2, end: 6},
     ]);
   });
@@ -621,7 +616,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     expect(written.length).toBeGreaterThan(0);
     expect(written[0]!.tokenRanges).toEqual([{start: 0, end: 4}]);
 
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([
       {start: 0, end: 4},
     ]);
     expect(
@@ -649,7 +644,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 回填不预处理：水化链随后兜底扫描一次并写回固化；旧格式明文
     // `$技能`（无尾终止符）在新正则下不再命中，扫描结果为 `[]`（确认无胶囊）。
     await flush();
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([]);
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([]);
     expect(
       (JSON.parse(mockDraftJsonBySession.get('s1')!) as {tokenRanges?: unknown})
         .tokenRanges,

@@ -17,7 +17,7 @@ import {AppError} from '@novel-master/core/errors';
 import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
 import {Result, type Interrupt} from '@novel-master/core/errors';
 import {checkpointMobileDatabase, closeMobileConnection, getMobileConnection, registerMobileOpSqliteDriver} from '../db/connection';
-import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
+import {MobileDatabaseFilePath} from '../db/db-file-path';
 import {agentActivity} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
@@ -58,7 +58,7 @@ function errorDetail(error: unknown): string {
 export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
   maintenanceBusy.acquire();
   try {
-    await DatabaseBackupExport.toPath(runtime.conn, destPath, {checkpointDatabase: checkpointMobileDatabase, resolveDbPath: resolveMobileDatabaseFilePath, copyFile: async (from, to) => { await blobFs().cp(from, to); }}, checkpoint);
+    await DatabaseBackupExport.toPath(runtime.conn, destPath, {checkpointDatabase: checkpointMobileDatabase, resolveDbPath: MobileDatabaseFilePath.resolve, copyFile: async (from, to) => { await blobFs().cp(from, to); }}, checkpoint);
   } finally {
     maintenanceBusy.release();
   }
@@ -90,7 +90,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
     const srcInfo = await backupFs.stat(srcPath);
     if (Number(srcInfo.size) < 16) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
 
-    const dbPath = await resolveMobileDatabaseFilePath();
+    const dbPath = await MobileDatabaseFilePath.resolve();
     const bakPath = `${dbPath}.nmbackup.bak`;
 
     const liveConn = await getMobileConnection();

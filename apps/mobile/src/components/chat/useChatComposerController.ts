@@ -42,15 +42,7 @@ import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {formatError} from '@/errors/format-error';
-import {
-  applyComposerStatusAttachmentsReplace,
-  clearChatComposerDraft,
-  hydrateChatComposerDraftFromDb,
-  readChatComposerDraftState,
-  refreshComposerAnnotateChips,
-  subscribeChatComposerDraft,
-  writeChatComposerDraftState,
-} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import {projectComposerStatusForSession} from '@/services/project-composer-status.service';
 import {composerAtPath} from './composer-at-path';
 import {buildTokenInsertion, queryWithinConfirmedRange, statusOnlyComposerAttachments} from './composer-token-insert';
@@ -202,7 +194,7 @@ export function useChatComposerController({
   const runtime = useRuntime();
   const {sessionId} = scope;
 
-  const initial = readChatComposerDraftState(sessionId);
+  const initial = ChatComposerDraft.readState(sessionId);
   const [text, setText] = useState(initial.text);
   /**
    * 胶囊确认区间（语义见 `ChatComposerController.tokenRanges`）。
@@ -294,7 +286,7 @@ export function useChatComposerController({
     (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
       // D1 落库咽喉点：带上当前确认区间（含 `[]` = 确认无胶囊）。
       const draft = {text: nextText, attachments: nextAttachments, tokenRanges: tokenRangesRef.current};
-      writeChatComposerDraftState(sessionId, draft, runtimeRef.current.sessions);
+      ChatComposerDraft.writeState(sessionId, draft, runtimeRef.current.sessions);
     },
     [sessionId],
   );
@@ -314,7 +306,7 @@ export function useChatComposerController({
    * 相等短路，不会用旧 state 覆盖。
    */
   const syncFromDraft = useCallback(() => {
-    const draft = readChatComposerDraftState(sessionId);
+    const draft = ChatComposerDraft.readState(sessionId);
     const textChanged = draft.text !== textRef.current;
     setText(draft.text);
     textRef.current = draft.text;
@@ -402,7 +394,7 @@ export function useChatComposerController({
     void (async () => {
       const rt = runtimeRef.current;
       // 草稿水化失败：沿用内存缓存里的初值，不阻断 dock 渲染
-      const hydrated = await hydrateChatComposerDraftFromDb(sessionId, rt.sessions);
+      const hydrated = await ChatComposerDraft.hydrateFromDb(sessionId, rt.sessions);
       if (!hydrated.ok) {
         return;
       }
@@ -414,7 +406,7 @@ export function useChatComposerController({
         if (cancelled) {
           return;
         }
-        applyComposerStatusAttachmentsReplace({sessionId, attachments: status});
+        ChatComposerDraft.applyComposerStatusAttachmentsReplace({sessionId, attachments: status});
       } catch {
         // 投影失败时仍用已水化的 attach+text
       }
@@ -429,7 +421,7 @@ export function useChatComposerController({
   }, [sessionId, draftRestoreToken, syncFromDraft]);
 
   useEffect(() => {
-    return subscribeChatComposerDraft(changedSessionId => {
+    return ChatComposerDraft.subscribe(changedSessionId => {
       if (changedSessionId !== sessionId) {
         return;
       }
@@ -442,7 +434,7 @@ export function useChatComposerController({
       if (changedSessionId !== sessionId) {
         return;
       }
-      refreshComposerAnnotateChips(sessionId);
+      ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
       setAnnotateEpoch(n => n + 1);
     });
   }, [sessionId]);
@@ -511,7 +503,7 @@ export function useChatComposerController({
           return;
         }
         composerCleared = true;
-        clearChatComposerDraft(sessionId, runtime.sessions);
+        ChatComposerDraft.clear(sessionId, runtime.sessions);
         setText('');
         textRef.current = '';
         tokenRangesRef.current = [];
@@ -564,7 +556,7 @@ export function useChatComposerController({
             // 以投影为准刷新 chip（仅 annotate）
             void projectComposerStatusForSession(sessionId)
               .then(status => {
-                applyComposerStatusAttachmentsReplace({
+                ChatComposerDraft.applyComposerStatusAttachmentsReplace({
                   sessionId,
                   attachments: status,
                 });

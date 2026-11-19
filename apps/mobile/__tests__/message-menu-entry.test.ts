@@ -11,7 +11,7 @@
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {openContextMenuFromAnchor} from '../src/web/chat-transcript/webview/runtime/menu/menu';
+import {Menu} from '../src/web/chat-transcript/webview/runtime/menu/menu';
 import {state} from '../src/web/chat-transcript/webview/runtime/state/state';
 
 const root = join(__dirname, '..');
@@ -53,7 +53,7 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
     expect(menu).not.toMatch(/label:\s*['"]删除/);
   });
 
-  it('T-MN2: MessageRow ⋯ 调用 openContextMenuFromAnchor；bind-shell 无长按开菜单', () => {
+  it('T-MN2: MessageRow ⋯ 调用 Menu.openFromAnchor；bind-shell 无长按开菜单', () => {
     const messageRow = readSrc(
       'src/web/chat-transcript/webview/ui/render/MessageRow.tsx',
     );
@@ -68,12 +68,12 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
     expect(messageRow).toContain('message-role-label');
     expect(messageRow).toContain('用户');
     expect(messageRow).toContain('助手');
-    expect(messageRow).toContain('openContextMenuFromAnchor');
+    expect(messageRow).toContain('Menu.openFromAnchor');
     expect(messageRow).toContain('getBoundingClientRect');
     expect(messageRow).not.toContain('message-menu-toolbar');
     expect(messageRow).not.toContain('bubble--menu-corner');
     expect(messageRow).not.toContain('menuSlot');
-    expect(menu).toContain('export function openContextMenuFromAnchor');
+    expect(menu).toContain('openFromAnchor: (messageId');
     expect(bindShell).not.toContain('onMessagePointerDown');
     expect(bindShell).not.toContain('touchstart');
     expect(bindShell).toContain('onRowsClick');
@@ -82,7 +82,7 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
 
 /**
  * P2-18d：上面的源码契约只能证明「写了 messageId ?? id」，钉不住落点。
- * 这里用真实 `openContextMenuFromAnchor` + fake state/window 跑行为：流式行
+ * 这里用真实 `Menu.openFromAnchor` + fake state/window 跑行为：流式行
  * id 开菜单时，上行 `messageId` 必须是 DB id（C28），退回 `row.id` 会让
  * 回滚/分叉/置位找不到 DB 消息。
  */
@@ -119,7 +119,7 @@ describe('message menu entry · 行为（C28 DB id 落点）', () => {
         text: 'hi',
       },
     ];
-    openContextMenuFromAnchor('st:1', {x: 10, y: 20, width: 30, height: 40});
+    Menu.openFromAnchor('st:1', {x: 10, y: 20, width: 30, height: 40});
     expect(postedEnvelopes()).toEqual([
       {
         v: 1,
@@ -135,7 +135,7 @@ describe('message menu entry · 行为（C28 DB id 落点）', () => {
     state.rows = [
       {kind: 'message', id: 'db-2', role: 'user', hidden: false, text: 'yo'},
     ];
-    openContextMenuFromAnchor('db-2', {x: 0, y: 0, width: 0, height: 0});
+    Menu.openFromAnchor('db-2', {x: 0, y: 0, width: 0, height: 0});
     expect(postedEnvelopes()).toEqual([
       {
         v: 1,
@@ -148,7 +148,7 @@ describe('message menu entry · 行为（C28 DB id 落点）', () => {
 
   it('T-MN5: 行不存在 → 不上行任何消息', () => {
     state.rows = [{kind: 'message', id: 'db-3', role: 'user', hidden: false}];
-    openContextMenuFromAnchor('st-missing', {
+    Menu.openFromAnchor('st-missing', {
       x: 0,
       y: 0,
       width: 0,

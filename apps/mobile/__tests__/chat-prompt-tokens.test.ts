@@ -1,10 +1,7 @@
 import {TokenFormat} from '@novel-master/core/common';
 import {
-  __setPreciseUpgradeDelayForTests,
-  cancelPreciseUpgrade,
-  cancelPreciseUpgradeDelay,
-  loadChatPromptTokenLabel,
-  loadChatPromptTokenLabelResilient,
+  ChatPromptTokenLabel,
+  PreciseUpgrade,
   PRECISE_UPGRADE_START_DELAY_MS,
   type TokenLabelOptions,
 } from '@/services/chat-prompt-tokens.service';
@@ -111,8 +108,8 @@ jest.mock('@/services/session-prompt-input.service', () => ({
 }));
 
 /** 错误通道迁移四期：label 读口已知失败沿 Result 上行；测试断言面保持裸值，err 直接炸出。 */
-async function loadLabelOrThrow(...args: Parameters<typeof loadChatPromptTokenLabel>) {
-  const r = await loadChatPromptTokenLabel(...args);
+async function loadLabelOrThrow(...args: Parameters<typeof ChatPromptTokenLabel.load>) {
+  const r = await ChatPromptTokenLabel.load(...args);
   if (!r.ok) throw r.error;
   return r.value;
 }
@@ -120,12 +117,12 @@ async function loadLabelOrThrow(...args: Parameters<typeof loadChatPromptTokenLa
 // 服务公开签名收成单 options 对象（nm style 收口后的形态）；套件里「升级回调 +
 // 追加弃权判据」沿用分参写法，这里做一次形态映射，被测行为一字不动。
 async function loadResilientOrThrow(
-  runtime: Parameters<typeof loadChatPromptTokenLabelResilient>[0],
-  scope: Parameters<typeof loadChatPromptTokenLabelResilient>[1],
+  runtime: Parameters<typeof ChatPromptTokenLabel.loadResilient>[0],
+  scope: Parameters<typeof ChatPromptTokenLabel.loadResilient>[1],
   onPreciseUpgrade?: (label: string) => void,
   options?: Omit<TokenLabelOptions, 'onPreciseUpgrade'>,
 ) {
-  const r = await loadChatPromptTokenLabelResilient(runtime, scope, {
+  const r = await ChatPromptTokenLabel.loadResilient(runtime, scope, {
     ...options,
     onPreciseUpgrade,
   });
@@ -193,14 +190,14 @@ describe('chat-prompt-tokens.service', () => {
     mockCancelSessionNativeCounts.mockReset();
     // 存量两阶段用例在微任务节奏下断言升级轮：置 0 = 立即启动（旧行为）。
     // 「延迟启动/视图弃权」的专项用例在自己体内还原默认值再调回。
-    __setPreciseUpgradeDelayForTests(0);
+    PreciseUpgrade.setDelayForTests(0);
   });
 
   afterEach(() => {
     // 兜底还原：新用例若因超时被 jest 强杀，try/finally 不保证执行，
     // 假计时器残留会让后续所有用例的 setImmediate 等待挂死（连环超时）。
     jest.useRealTimers();
-    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    PreciseUpgrade.setDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
   });
 
   it('T-TL4 对拍：service 输出与 core 单源（badge + label）重算一致（家族精确档）', () => {
@@ -223,7 +220,7 @@ describe('chat-prompt-tokens.service', () => {
     ).toBe('gemma = 24k / 128k (19%)');
   });
 
-  it('loadChatPromptTokenLabel 家族精确档：gemma = 24k / 128k (19%)', async () => {
+  it('ChatPromptTokenLabel.load 家族精确档：gemma = 24k / 128k (19%)', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
@@ -342,7 +339,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(label).not.toContain('预估');
   });
 
-  it('T7: loadChatPromptTokenLabelResilient 构建失败时兜底也改走真分词器', async () => {
+  it('T7: ChatPromptTokenLabel.loadResilient 构建失败时兜底也改走真分词器', async () => {
     mockBuildSessionPromptInput.mockRejectedValue(
       new Error('prompt build failed'),
     );
@@ -464,7 +461,7 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('升级延迟启动（2026-10-01 侧滑被堵病灶）：首帧后不立刻跑精确计数，越窗才启动', async () => {
-    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    PreciseUpgrade.setDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
       mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
@@ -516,12 +513,12 @@ describe('chat-prompt-tokens.service', () => {
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
     } finally {
       jest.useRealTimers();
-      __setPreciseUpgradeDelayForTests(0);
+      PreciseUpgrade.setDelayForTests(0);
     }
   });
 
   it('延迟到期时视图已切走：shouldBailPrecise 命中，升级重活一行不跑', async () => {
-    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    PreciseUpgrade.setDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
       mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
@@ -571,7 +568,7 @@ describe('chat-prompt-tokens.service', () => {
       expect(upgrades).toEqual([]);
     } finally {
       jest.useRealTimers();
-      __setPreciseUpgradeDelayForTests(0);
+      PreciseUpgrade.setDelayForTests(0);
     }
   });
 
@@ -579,7 +576,7 @@ describe('chat-prompt-tokens.service', () => {
     // 与上一条「视图已切走」互为对照：这里**视图仍在 conversation**，唯一变的是
     // 会话身份（hook 侧 tokenLabelSessionRef 已指到别的会话）。hook 判据升级成
     // 双条件就是为了覆盖这条——只看视图的话旧会话的 2.2s 计数照跑。
-    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    PreciseUpgrade.setDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
       mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
@@ -634,16 +631,16 @@ describe('chat-prompt-tokens.service', () => {
       expect(upgrades).toEqual([]);
     } finally {
       jest.useRealTimers();
-      __setPreciseUpgradeDelayForTests(0);
+      PreciseUpgrade.setDelayForTests(0);
     }
   });
 
   it('cancel 收口回归（cr2-E-2 硬约束）：取消挂起的延迟升级后，同会话下一轮刷新仍真升级', async () => {
     // 收口语义的牙齿：只清 timer 不清 inflight/queued 的朴素实现，会让该会话
-    // 的精确升级**永久楔死在估算档**——timer 被清 ⇒ runPreciseUpgrade 永不
+    // 的精确升级**永久楔死在估算档**——timer 被清 ⇒ PreciseUpgrade.run 永不
     // 执行 ⇒ finally（inflight/queued 的唯一清理点）永不跑 ⇒ 后续升级请求
     // 全被挡进补跑槽、无人排空。本用例的末条断言在那种实现下必红。
-    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    PreciseUpgrade.setDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
       mockTwoPhaseResolve(() =>
@@ -670,7 +667,7 @@ describe('chat-prompt-tokens.service', () => {
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
 
       // 收口（换会话 / 卸载时 service 的正式出口）。
-      cancelPreciseUpgradeDelay('s-cancel');
+      PreciseUpgrade.cancelDelay('s-cancel');
 
       // 同会话再次刷新并越窗：第二轮升级确实发生——计数从 2 次（两次首帧）
       // 走到 3 次（+ 一轮精确），回调拿到精确标签。
@@ -686,17 +683,17 @@ describe('chat-prompt-tokens.service', () => {
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(3);
     } finally {
       jest.useRealTimers();
-      __setPreciseUpgradeDelayForTests(0);
+      PreciseUpgrade.setDelayForTests(0);
     }
   });
 
   it('T-TC4 在途轮取消：撤掉的那轮收口空串、不回调，inflight 清干净后同会话新一轮仍真升级', async () => {
     // 与上面 L568 那条**并存且语义相反**：那条锁「延迟窗口里收口 → 下一轮仍能
     // 升级」，本条锁「已经过了桥、在途中被原生 cancel 撤掉 → 不回调、不楔死」。
-    // 收口的另一半铁律：cancelPreciseUpgrade 只发指令、**不碰生命周期**——
+    // 收口的另一半铁律：PreciseUpgrade.cancel 只发指令、**不碰生命周期**——
     // 那轮自己的 finally 仍是 inflight/补跑槽的唯一清理点。若外部代摘 inflight，
-    // 本条末段的新一轮升级永远进不了 runPreciseUpgrade（必红）。
-    __setPreciseUpgradeDelayForTests(0);
+    // 本条末段的新一轮升级永远进不了 PreciseUpgrade.run（必红）。
+    PreciseUpgrade.setDelayForTests(0);
     mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
@@ -749,7 +746,7 @@ describe('chat-prompt-tokens.service', () => {
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
 
       // hook 侧正式出口（换会话 / 卸载）：向桥下发取消。
-      cancelPreciseUpgrade(scope.sessionId);
+      PreciseUpgrade.cancel(scope.sessionId);
       expect(mockCancelSessionNativeCounts).toHaveBeenCalledWith(
         's-cancel-inflight',
       );
@@ -803,7 +800,7 @@ describe('chat-prompt-tokens.service', () => {
       expect(mockCountTextWithDefaultEncoding).not.toHaveBeenCalled();
 
       // 两阶段轮：升级轮的取消同样被 resolve 段 catch 收口 —— 不回调，且
-      // runPreciseUpgrade 的 catch（:386）一行都没碰，故无失败 warn。
+      // PreciseUpgrade.run 的 catch（:386）一行都没碰，故无失败 warn。
       mockTwoPhaseResolve(() =>
         Promise.reject(new PromptCountCancelledError()),
       );
@@ -960,7 +957,7 @@ describe('chat-prompt-tokens.service', () => {
 
   it('resolve 段弃权不逃逸（r3-chip-1）：Outcome replaced → 空串哨兵，绝不走 fallback', async () => {
     // catch 只认 ChatPromptBuildBailedError 时，这个错误会一路逃到
-    // startPreciseUpgrade 的 catch / 外层 rejection —— 表现为 unhandled
+    // PreciseUpgrade.start 的 catch / 外层 rejection —— 表现为 unhandled
     // rejection，且首帧回落成「重算一遍」的 fallback（恰是要消灭的竞争）。
     mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},

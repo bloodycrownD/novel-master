@@ -19,7 +19,7 @@ import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
 import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 import {remapTokenRanges} from '@/components/chat/native-composer/token-ranges';
 import {isValidTokenRangeText} from '@/components/chat/composer-highlight';
-import {readChatComposerDraftState, writeChatComposerDraft} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
 import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
@@ -152,8 +152,8 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
       // `tokenRanges` 为 undefined → **原样写 undefined**（不传字段、不做扫描
       // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
       promptEditorOnSavedSlot.set(text => {
-        const previous = readChatComposerDraftState(targetSessionId);
-        writeChatComposerDraft(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
+        const previous = ChatComposerDraft.readState(targetSessionId);
+        ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
         setDraftRestoreToken(token => token + 1);
       });
       // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
@@ -161,7 +161,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
       // 草稿区间交过去，避免「已有胶囊贴尾 → 再插一颗」在无守卫时被整颗替换。
       // 正常路径下 payload.text 与草稿文本一致（打字/插入都同步落草稿），
       // remap 只是把「万一不一致」的坐标系对齐，相等时是恒等拷贝。
-      const entryDraft = readChatComposerDraftState(targetSessionId);
+      const entryDraft = ChatComposerDraft.readState(targetSessionId);
       // 水化自愈落点③：区间必须以 **remap 后的 payload.text** 为基准逐条校验
       //（entryDraft.text 与 payload.text 可能不同，用错基准会把合法区间判成越界）。
       // 不合法的（旧格式 / 半截 / 越界）就地丢弃，全屏侧无需额外改动。

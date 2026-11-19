@@ -1,29 +1,22 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {
-  applyComposerStatusAttachmentsReplace,
-  clearChatComposerDraft,
-  hydrateChatComposerDraftFromDb,
-  readChatComposerDraftState,
-  writeChatComposerDraft,
-  writeChatComposerDraftState,
-} from '../src/storage/chat-composer-draft';
+import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 
 describe('chat-composer-draft', () => {
   it('reads and writes per session', () => {
-    writeChatComposerDraft('s1', 'hello');
-    expect(readChatComposerDraftState('s1').text).toBe('hello');
-    expect(readChatComposerDraftState('s2').text).toBe('');
+    ChatComposerDraft.write('s1', 'hello');
+    expect(ChatComposerDraft.readState('s1').text).toBe('hello');
+    expect(ChatComposerDraft.readState('s2').text).toBe('');
   });
 
   it('clears draft when text and attachments are empty', () => {
-    writeChatComposerDraft('s3', 'draft');
-    writeChatComposerDraft('s3', '');
-    expect(readChatComposerDraftState('s3').text).toBe('');
+    ChatComposerDraft.write('s3', 'draft');
+    ChatComposerDraft.write('s3', '');
+    expect(ChatComposerDraft.readState('s3').text).toBe('');
   });
 
   it('整表替换状态条；不保留 attach', () => {
-    writeChatComposerDraftState('s-rd', {
+    ChatComposerDraft.writeState('s-rd', {
       text: 'keep',
       attachments: [
         {
@@ -35,7 +28,7 @@ describe('chat-composer-draft', () => {
         },
       ],
     });
-    applyComposerStatusAttachmentsReplace({
+    ChatComposerDraft.applyComposerStatusAttachmentsReplace({
       sessionId: 's-rd',
       attachments: [
         {
@@ -54,7 +47,7 @@ describe('chat-composer-draft', () => {
         },
       ],
     });
-    applyComposerStatusAttachmentsReplace({
+    ChatComposerDraft.applyComposerStatusAttachmentsReplace({
       sessionId: 's-rd',
       attachments: [
         {
@@ -66,7 +59,7 @@ describe('chat-composer-draft', () => {
         },
       ],
     });
-    const state = readChatComposerDraftState('s-rd');
+    const state = ChatComposerDraft.readState('s-rd');
     expect(state.text).toBe('keep');
     expect(state.attachments.map(a => `${a.source}:${a.path}`)).toEqual([
       'workplace:/b.md',
@@ -89,11 +82,11 @@ describe('chat-composer-draft', () => {
       originalText: 'sel2',
       userAnnotation: 'mark2',
     });
-    writeChatComposerDraftState(sessionId, {
+    ChatComposerDraft.writeState(sessionId, {
       text: '',
       attachments: [],
     });
-    applyComposerStatusAttachmentsReplace({
+    ChatComposerDraft.applyComposerStatusAttachmentsReplace({
       sessionId,
       attachments: [
         {
@@ -106,7 +99,7 @@ describe('chat-composer-draft', () => {
         },
       ],
     });
-    const state = readChatComposerDraftState(sessionId);
+    const state = ChatComposerDraft.readState(sessionId);
     expect(
       state.attachments.map(a => `${a.action ?? a.source}:${a.path}`),
     ).toEqual(['workplaceChange:/w.md', 'annotate:/note.md']);
@@ -145,14 +138,14 @@ describe('chat-composer-draft', () => {
       })),
     };
 
-    const hydratedResult = await hydrateChatComposerDraftFromDb('s-cd5', sessions);
+    const hydratedResult = await ChatComposerDraft.hydrateFromDb('s-cd5', sessions);
     if (!hydratedResult.ok) throw hydratedResult.error;
     const hydrated = hydratedResult.value;
 
     // 断言写成「等于具体那个非空字符串」：写「非空」在返回空串时恒红、
     // 在返回 undefined 时恒绿，两种退化都测不出牙齿。
     expect(hydrated.text).toBe('我写了一半');
-    expect(readChatComposerDraftState('s-cd5').text).toBe('我写了一半');
+    expect(ChatComposerDraft.readState('s-cd5').text).toBe('我写了一半');
     // 非法附件被逐条丢弃；且草稿 attach chip 本就不映回（只保留状态条）。
     expect(hydrated.attachments).toEqual([]);
     expect(sessions.getComposerDraftJson).toHaveBeenCalledWith('s-cd5');
@@ -185,13 +178,13 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
       {start: 8, end: 15},
     ];
 
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's-ca2-storage',
       {text: '$技能 中间 $另一个', attachments: [], tokenRanges: ranges},
       sessions,
     );
 
-    expect(readChatComposerDraftState('s-ca2-storage').tokenRanges).toEqual(
+    expect(ChatComposerDraft.readState('s-ca2-storage').tokenRanges).toEqual(
       ranges,
     );
     await new Promise(resolve => setImmediate(resolve));
@@ -201,13 +194,13 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
       tokenRanges: ranges,
     });
 
-    const hydratedResult = await hydrateChatComposerDraftFromDb(
+    const hydratedResult = await ChatComposerDraft.hydrateFromDb(
       's-ca2-storage',
       sessions,
     );
     if (!hydratedResult.ok) throw hydratedResult.error;
     expect(hydratedResult.value.tokenRanges).toEqual(ranges);
-    expect(readChatComposerDraftState('s-ca2-storage').tokenRanges).toEqual(
+    expect(ChatComposerDraft.readState('s-ca2-storage').tokenRanges).toEqual(
       ranges,
     );
   });
@@ -228,9 +221,9 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
     };
 
     // 三参调用（既有形态，零改动）：undefined 原样透传，不臆造 `[]`。
-    writeChatComposerDraft('s-ca2-undef', '手输 $foo', sessions);
+    ChatComposerDraft.write('s-ca2-undef', '手输 $foo', sessions);
 
-    const cached = readChatComposerDraftState('s-ca2-undef');
+    const cached = ChatComposerDraft.readState('s-ca2-undef');
     expect(Object.prototype.hasOwnProperty.call(cached, 'tokenRanges')).toBe(
       false,
     );
@@ -241,7 +234,7 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
     );
 
     // 旧 JSON 水化：parse 不写自有键，缓存条目同样没有。
-    const undefResult = await hydrateChatComposerDraftFromDb(
+    const undefResult = await ChatComposerDraft.hydrateFromDb(
       's-ca2-undef',
       sessions,
     );
@@ -251,7 +244,7 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
     ).toBe(false);
     expect(
       Object.prototype.hasOwnProperty.call(
-        readChatComposerDraftState('s-ca2-undef'),
+        ChatComposerDraft.readState('s-ca2-undef'),
         'tokenRanges',
       ),
     ).toBe(false);
@@ -272,7 +265,7 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
       ),
     };
 
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's-ca2-empty',
       {text: '手输$foo', attachments: [], tokenRanges: []},
       sessions,
@@ -282,7 +275,7 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
     const payload = JSON.parse(stored!) as Record<string, unknown>;
     expect(payload.tokenRanges).toEqual([]);
 
-    const emptyResult = await hydrateChatComposerDraftFromDb(
+    const emptyResult = await ChatComposerDraft.hydrateFromDb(
       's-ca2-empty',
       sessions,
     );
@@ -293,13 +286,13 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
   it('T-CA2/P0-2: applyComposerStatusAttachmentsReplace 保留 prev.tokenRanges（[] 不被投影链抹掉）', () => {
     // 水化链 hydrate → project → apply：投影重建缓存条目时丢字段会让
     // 「确认无胶囊」退化为 undefined，手输 `$foo` 每次水化被升格。
-    writeChatComposerDraftState('s-ca2-replace', {
+    ChatComposerDraft.writeState('s-ca2-replace', {
       text: '手输$foo',
       attachments: [],
       tokenRanges: [],
     });
 
-    applyComposerStatusAttachmentsReplace({
+    ChatComposerDraft.applyComposerStatusAttachmentsReplace({
       sessionId: 's-ca2-replace',
       attachments: [
         {
@@ -312,37 +305,37 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
       ],
     });
 
-    expect(readChatComposerDraftState('s-ca2-replace').tokenRanges).toEqual([]);
+    expect(ChatComposerDraft.readState('s-ca2-replace').tokenRanges).toEqual([]);
 
     // 有值场景同样保留（引用落文后投影刷新不发丢区间）。
-    writeChatComposerDraftState('s-ca2-replace2', {
+    ChatComposerDraft.writeState('s-ca2-replace2', {
       text: '$技能',
       attachments: [],
       tokenRanges: [{start: 0, end: 3}],
     });
-    applyComposerStatusAttachmentsReplace({
+    ChatComposerDraft.applyComposerStatusAttachmentsReplace({
       sessionId: 's-ca2-replace2',
       attachments: [],
     });
-    expect(readChatComposerDraftState('s-ca2-replace2').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s-ca2-replace2').tokenRanges).toEqual([
       {start: 0, end: 3},
     ]);
   });
 
   it('T-CA2: 第 4 参覆盖写（undefined 明确清掉旧区间，供全屏回填 undefined 口径）', async () => {
-    writeChatComposerDraftState('s-ca2-override', {
+    ChatComposerDraft.writeState('s-ca2-override', {
       text: '$技能',
       attachments: [],
       tokenRanges: [{start: 0, end: 3}],
     });
-    expect(readChatComposerDraftState('s-ca2-override').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s-ca2-override').tokenRanges).toEqual([
       {start: 0, end: 3},
     ]);
 
-    writeChatComposerDraft('s-ca2-override', '改写后的正文');
+    ChatComposerDraft.write('s-ca2-override', '改写后的正文');
     expect(
       Object.prototype.hasOwnProperty.call(
-        readChatComposerDraftState('s-ca2-override'),
+        ChatComposerDraft.readState('s-ca2-override'),
         'tokenRanges',
       ),
     ).toBe(false);
@@ -368,8 +361,8 @@ describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
     };
     try {
       // 覆盖三条 void 落库路径：persistAttachTextDraft、两侧皆空 set null、clear set null。
-      writeChatComposerDraft('s-persist', 'hello', sessions);
-      writeChatComposerDraftState(
+      ChatComposerDraft.write('s-persist', 'hello', sessions);
+      ChatComposerDraft.writeState(
         's-persist',
         {
           text: 'state',
@@ -377,8 +370,8 @@ describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
         },
         sessions,
       );
-      writeChatComposerDraft('s-persist', '', sessions);
-      writeChatComposerDraftState(
+      ChatComposerDraft.write('s-persist', '', sessions);
+      ChatComposerDraft.writeState(
         's-persist',
         {
           text: '',
@@ -386,7 +379,7 @@ describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
         },
         sessions,
       );
-      clearChatComposerDraft('s-persist', sessions);
+      ChatComposerDraft.clear('s-persist', sessions);
       await new Promise(resolve => setImmediate(resolve));
 
       expect(warnSpy).toHaveBeenCalledWith(
@@ -395,7 +388,7 @@ describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
       );
       expect(unhandled).toEqual([]);
       // 落库失败不影响内存缓存语义。
-      expect(readChatComposerDraftState('s-persist').text).toBe('');
+      expect(ChatComposerDraft.readState('s-persist').text).toBe('');
     } finally {
       process.off('unhandledRejection', onUnhandled);
       warnSpy.mockRestore();

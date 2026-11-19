@@ -6,20 +6,12 @@ import {
   stickToBottom,
   emitScrollSnapshot,
 } from '../scroll/scroll';
-import {closeContextMenu} from '../menu/menu';
+import {Menu} from '../menu/menu';
 import {scrollTopForOffsetFromBottom} from '../../../../../webview-host/chat-transcript/scroll';
 import {renderRows} from './row-logic';
-import {
-  getRowWindowRange,
-  getRowWindowSpacerPxTotal,
-  handleRowWindowScroll,
-  notePrependHeightDelta,
-  resetRowWindowForSnapshot,
-  retargetRowWindowForPrepend,
-  type RowWindowPositioning,
-} from './row-windowing';
+import {RowWindow, type RowWindowPositioning} from './row-windowing';
 import {requestResync, resetStreamBlockRenderState} from '../stream/stream';
-import {clearStreamRichUpgrade} from '../stream/stream-markdown';
+import {StreamRichUpgrade} from '../stream/stream-markdown';
 import {mergeCheckpoint} from '../stream/stream-checkpoint';
 import {
   pruneFinishedStreamRowSignatures,
@@ -399,7 +391,7 @@ function applySnapshot(payload: SnapshotPayload): void {
   const seedNeeded = richJustEnabled || contentSeed || seqAdvanced;
   const needsReseed = streamingNow && streamingRow != null && seedNeeded;
   if (idChanged) {
-    clearStreamRichUpgrade();
+    StreamRichUpgrade.clear();
     resetStreamBlockRenderState();
     state.fullReplaceOnly = null;
     state.appliedBlockKeys = new Set();
@@ -407,7 +399,7 @@ function applySnapshot(payload: SnapshotPayload): void {
   if (needsReseed) {
     state.fullReplaceOnly = nextCheckpoint!.id;
     resetStreamBlockRenderState();
-    clearStreamRichUpgrade();
+    StreamRichUpgrade.clear();
   }
 
   // 窗口预定位（Step 7）：stick / restore / preserve 统一按距底偏移从底
@@ -433,8 +425,8 @@ function applySnapshot(payload: SnapshotPayload): void {
       clientHeight: scroller.clientHeight,
     };
   }
-  resetRowWindowForSnapshot(state.rows.length, positioning);
-  if (sessionChanged) closeContextMenu(false);
+  RowWindow.resetForSnapshot(state.rows.length, positioning);
+  if (sessionChanged) Menu.close(false);
   const scrollAfterRender = function () {
     if (!scroller) return;
     if (intent === 'stick') {
@@ -457,7 +449,7 @@ function applySnapshot(payload: SnapshotPayload): void {
     // 读位精确设定后再做一次窗口校正（幂等）：restore / preserve 的预定位
     // 基于平均槽高估算，读位若落在窗口外由此收敛（上端移动自带差值补偿，
     // 不破坏刚设置的读位）。
-    handleRowWindowScroll();
+    RowWindow.handleScroll();
     state.nearBottom = isNearBottom(scroller);
     emitScrollSnapshot();
   };
@@ -569,7 +561,7 @@ function applyAppendTailRowsNow(newRows: TranscriptRow[]): void {
     state.rows = state.rows.concat(newRows);
   }
   // 窗口跟随尾部追加（渲染前）：按追加前距底偏移重定位，新行进窗口。
-  resetRowWindowForSnapshot(state.rows.length, {
+  RowWindow.resetForSnapshot(state.rows.length, {
     kind: 'fromBottom',
     offsetFromBottom: prevOffsetFromBottom,
     clientHeight: scroller ? scroller.clientHeight : 0,
@@ -611,14 +603,14 @@ function applyPrependPageNow(newRows: TranscriptRow[]): void {
   // web/C-1：retarget 前捕获窗口 start 与占位 DOM 真值（retarget 会清零
   // 上占位并把这些行换进窗口），采样时据此扣除占位漂移、并入分母。
   const prependSpacerBefore = {
-    rows: getRowWindowRange(state.rows.length).start,
-    spacerPx: getRowWindowSpacerPxTotal(),
+    rows: RowWindow.getRange(state.rows.length).start,
+    spacerPx: RowWindow.getSpacerPxTotal(),
   };
   state.rows = newRows.concat(state.rows);
   state.loadOlderArmed = true;
   // 窗口按视口读位重定位（渲染前、旧 DOM 旧坐标系）：视口在顶部附近时
   // 新 prepend 行按缓冲带进窗口，其余按估算进上占位。
-  retargetRowWindowForPrepend(newRows.length);
+  RowWindow.retargetForPrepend(newRows.length);
   renderRows();
   scheduleMermaidScan();
   if (scroller) {
@@ -628,10 +620,10 @@ function applyPrependPageNow(newRows: TranscriptRow[]): void {
     // 占位估算校正（Step 7）：新行全进窗口后差值折算为窗口新增行的真实
     // 平均高度（web/C-1：扣除占位置换/漂移），并入 EWMA 后续 prepend /
     // 扩窗估算更准。
-    notePrependHeightDelta(deltaHeight, newRows.length, prependSpacerBefore);
+    RowWindow.notePrependHeightDelta(deltaHeight, newRows.length, prependSpacerBefore);
     // 窗口超稳态的部分收敛（新行全进窗口后窗口变长；下端收缩不动
     // scrollTop，不破坏刚补偿的读位）。
-    handleRowWindowScroll();
+    RowWindow.handleScroll();
     state.nearBottom = isNearBottom(scroller);
   }
   emitScrollSnapshot();

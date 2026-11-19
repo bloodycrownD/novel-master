@@ -6,7 +6,7 @@
 import {type UserVfsTurnOp} from '@novel-master/core/chat';
 
 import {Result} from '@novel-master/core/errors';
-import {applyComposerStatusAttachmentsReplace} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {projectComposerStatusForSession} from './project-composer-status.service';
 
@@ -39,5 +39,5 @@ export async function executeSessionUserVfsOp(runtime: MobileNovelMasterRuntime,
 /** 批次结束后补一次状态条投影（仅 annotate，无净 diff）。 */
 export async function refreshComposerStatusAfterUserVfsOps(sessionId: string): Promise<void> {
   const attachments = await projectComposerStatusForSession(sessionId);
-  applyComposerStatusAttachmentsReplace({sessionId, attachments});
+  ChatComposerDraft.applyComposerStatusAttachmentsReplace({sessionId, attachments});
 }

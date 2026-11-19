@@ -6,7 +6,7 @@
  * 本层只剩投递形态差异（mobile 落 storage，desktop 走 IPC 推送）。
  */
 import {chatAnnotateDraftStore, type MessageAttachment} from '@novel-master/core/chat';
-import {applyComposerStatusAttachmentsReplace} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 
 /** session 真源 → 状态条 attachments（仅 annotate chip）。 */
 export async function projectComposerStatusForSession(sessionId: string): Promise<MessageAttachment[]> {
@@ -19,7 +19,7 @@ export async function projectComposerStatusForSession(sessionId: string): Promis
  * 正文 + `@` attach 由 replace 保留；本函数只清 UI 上条。
  */
 export async function refreshComposerStatusAfterSessionKkvCleared(scope: {readonly projectId: string; readonly sessionId: string}): Promise<void> {
-  applyComposerStatusAttachmentsReplace({
+  ChatComposerDraft.applyComposerStatusAttachmentsReplace({
     sessionId: scope.sessionId,
     attachments: [],
   });
@@ -31,7 +31,7 @@ export async function refreshComposerStatusAfterSessionKkvCleared(scope: {readon
  */
 export async function refreshComposerStatusAfterFloorOrCompaction(scope: {readonly projectId: string; readonly sessionId: string}): Promise<void> {
   const attachments = await projectComposerStatusForSession(scope.sessionId);
-  applyComposerStatusAttachmentsReplace({
+  ChatComposerDraft.applyComposerStatusAttachmentsReplace({
     sessionId: scope.sessionId,
     attachments,
   });

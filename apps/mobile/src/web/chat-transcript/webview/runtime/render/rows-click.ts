@@ -1,7 +1,7 @@
 import {state} from '../state/state';
 import type {ToolCallRow} from '../state/state';
 import {post} from '../bridge';
-import {closeContextMenu} from '../menu/menu';
+import {Menu} from '../menu/menu';
 import {readableToolResult} from './tool-logic';
 import {renderRows} from './row-logic';
 import {requestLoadOlder} from '../scroll/scroll';
@@ -20,13 +20,13 @@ export function onRowsClick(event: MouseEvent): void {
   }
   const action = actionEl.getAttribute('data-action');
   if (action === 'close-menu') {
-    closeContextMenu(true);
+    Menu.close(true);
     return;
   }
   if (action === 'menu-action') {
     const messageId = actionEl.getAttribute('data-message-id');
     const menuAction = actionEl.getAttribute('data-menu-action');
-    closeContextMenu(true);
+    Menu.close(true);
     if (messageId && menuAction) {
       post('messageMenuAction', {messageId: messageId, action: menuAction});
     }

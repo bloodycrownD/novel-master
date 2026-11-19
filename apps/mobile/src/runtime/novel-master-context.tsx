@@ -13,7 +13,7 @@ import {createMobileNovelMasterRuntime} from './create-mobile-runtime';
 import mobilePackage from '../../package.json';
 import {loadMobileScope, setMobileProject, setMobileSession, type MobileScopeSnapshot} from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
-import {armRebootWaiter, rebindRebootWaiterGeneration, settleRebootWaiter, type RebootWaiter} from './reboot-waiter';
+import {RebootWaiter} from './reboot-waiter';
 import {SessionStreamUnitManager, type SessionStreamPrefBridge} from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
 import {createSessionStreamTokenEstimator, primeStreamTokenModelHint} from '@/services/stream-token-estimator';
@@ -137,7 +137,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     // 无参 retry 只推进代号、不新增等待方。若此时槽里正挂着等待方，必须把
     // 它的归属改绑到新代号——否则新一代 effect 兑现时会因代号不符而 no-op，
     // 等待方只能悬到 60s 超时（这是本修复会新引入的丢事件，务必堵死）。
-    rebindRebootWaiterGeneration(rebootWaiterRef, nextGeneration);
+    RebootWaiter.rebindGeneration(rebootWaiterRef, nextGeneration);
     bootTokenRef.current = nextGeneration;
     setBootToken(nextGeneration);
   }, []);
@@ -159,7 +159,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   const retryAndWait = useCallback((): Promise<MobileNovelMasterRuntime> => {
     return new Promise<MobileNovelMasterRuntime>((resolve, reject) => {
       const nextGeneration = bootTokenRef.current + 1;
-      const outcome = armRebootWaiter<MobileNovelMasterRuntime>(rebootWaiterRef, nextGeneration, {resolve, reject});
+      const outcome = RebootWaiter.arm<MobileNovelMasterRuntime>(rebootWaiterRef, nextGeneration, {resolve, reject});
       if (outcome === 'joined') {
         // 槽已被占用：**复用**（挂到既有 waiter 上），绝不覆盖。
         // 覆盖会让先到那个调用方的 promise 彻底失主、只能等超时兜底；
@@ -183,7 +183,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     }
     const {generation} = pending;
     const rebootTimer = setTimeout(() => {
-      settleRebootWaiter(rebootWaiterRef, generation, {
+      RebootWaiter.settle(rebootWaiterRef, generation, {
         kind: 'reject',
         error: new Error('重建 runtime 超时，请重试'),
       });
@@ -199,13 +199,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     setError(undefined);
 
     const resolveRebootWaiter = (rt: MobileNovelMasterRuntime): void => {
-      settleRebootWaiter(rebootWaiterRef, bootToken, {
+      RebootWaiter.settle(rebootWaiterRef, bootToken, {
         kind: 'resolve',
         runtime: rt,
       });
     };
     const rejectRebootWaiter = (err: unknown): void => {
-      settleRebootWaiter(rebootWaiterRef, bootToken, {
+      RebootWaiter.settle(rebootWaiterRef, bootToken, {
         kind: 'reject',
         error: err,
       });

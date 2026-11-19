@@ -13,20 +13,14 @@ import {
   setTranscriptScrollSnapshot,
   transcriptScrollSnapshotCacheSize,
 } from '@/services/chat-transcript-scroll-cache';
-import {
-  clearAllSessionViewCaches,
-  getSessionViewCache,
-  sessionViewCacheKey,
-  sessionViewCacheSize,
-  setSessionViewCache,
-} from '@/services/chat-session-view-cache';
+import {SessionViewCache} from '@/services/chat-session-view-cache';
 
 const CAP = 500;
 
 describe('scope 缓存 LRU 上限启用', () => {
   beforeEach(() => {
     clearAllTranscriptScrollSnapshots();
-    clearAllSessionViewCaches();
+    SessionViewCache.clearAll();
   });
 
   it('chat-transcript-scroll-cache：插入超限后 size 封顶', () => {
@@ -41,14 +35,14 @@ describe('scope 缓存 LRU 上限启用', () => {
   });
 
   it('chat-session-view-cache：插入超限后 size 封顶且最旧淘汰', () => {
-    const firstKey = sessionViewCacheKey('p', 's0');
+    const firstKey = SessionViewCache.key('p', 's0');
     for (let i = 0; i <= CAP; i++) {
-      setSessionViewCache(sessionViewCacheKey('p', `s${i}`), {
+      SessionViewCache.set(SessionViewCache.key('p', `s${i}`), {
         messages: [],
         hasMoreMessages: false,
       });
     }
-    expect(sessionViewCacheSize()).toBe(CAP);
-    expect(getSessionViewCache(firstKey)).toBeUndefined();
+    expect(SessionViewCache.size()).toBe(CAP);
+    expect(SessionViewCache.get(firstKey)).toBeUndefined();
   });
 });

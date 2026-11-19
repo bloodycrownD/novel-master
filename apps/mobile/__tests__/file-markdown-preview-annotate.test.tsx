@@ -5,10 +5,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import { chatAnnotateDraftStore } from '@novel-master/core/chat';
-import {
-  readChatComposerDraftState,
-  refreshComposerAnnotateChips,
-} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
@@ -283,11 +280,11 @@ hello world hello
       originalText: 'alpha',
       userAnnotation: 'ok',
     });
-    refreshComposerAnnotateChips(sessionId);
+    ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
 
     expect(chatAnnotateDraftStore.chips(sessionId)).toHaveLength(1);
     expect(
-      readChatComposerDraftState(sessionId).attachments.some(
+      ChatComposerDraft.readState(sessionId).attachments.some(
         a => a.action === 'annotate' && a.path === path,
       ),
     ).toBe(true);

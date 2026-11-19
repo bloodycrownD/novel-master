@@ -72,7 +72,7 @@ jest.mock('@/db/connection', () => ({
 }));
 
 jest.mock('@/db/db-file-path', () => ({
-  resolveMobileDatabaseFilePath: (...args: unknown[]) => mockGetPath(...args),
+  MobileDatabaseFilePath: {resolve: (...args: unknown[]) => mockGetPath(...args)},
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({

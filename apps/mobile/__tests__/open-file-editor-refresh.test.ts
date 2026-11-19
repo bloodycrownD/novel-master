@@ -27,12 +27,10 @@ jest.mock('@/services/chat-agent-meta', () => ({
 }));
 
 jest.mock('@/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // 防御性补键（tokenizer-native-cancel）：hook 的换 key 分支 / 卸载 cleanup
-  // 也会调 cancelPreciseUpgrade，缺键即 undefined 抛。
-  cancelPreciseUpgrade: jest.fn(),
-  // Part D 新导出（cr2-E-2 同族，换 key 分支首轮必调）。
-  cancelPreciseUpgradeDelay: jest.fn(),
+  // 也会调 PreciseUpgrade.cancel，缺键即 undefined 抛。
+  PreciseUpgrade: {cancel: jest.fn(), cancelDelay: jest.fn()},
 }));
 
 const mockRuntime: any = {

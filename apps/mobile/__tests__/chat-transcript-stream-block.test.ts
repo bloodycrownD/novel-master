@@ -273,7 +273,7 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
   it('块级态复位：streamReset 分支先作废旧代次分片，再清块/升级态', () => {
     const bridgeSrc = bridge();
     expect(bridgeSrc).toMatch(
-      /case 'streamReset':[\s\S]*?clearStreamRichUpgrade\(\);[\s\S]*?resetStreamBlockRenderState\(\);[\s\S]*?invalidateSnapshotPipeline\(generation\);[\s\S]*?applyStreamReset\(p\);/,
+      /case 'streamReset':[\s\S]*?StreamRichUpgrade\.clear\(\);[\s\S]*?resetStreamBlockRenderState\(\);[\s\S]*?invalidateSnapshotPipeline\(generation\);[\s\S]*?applyStreamReset\(p\);/,
     );
   });
 

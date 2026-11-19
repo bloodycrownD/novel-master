@@ -2,7 +2,7 @@ import {NEAR_BOTTOM_THRESHOLD_PX} from '@web/shared/constants';
 import {ScrollMath} from '@web/shared/scroll-math';
 import {state, SCHEMA_V} from '../state/state';
 import {post} from '../bridge';
-import {handleRowWindowScroll} from '../render/row-windowing';
+import {RowWindow} from '../render/row-windowing';
 /**
  * 滚动锚点、贴底与加载更早消息。公式单源：`web/shared/scroll-math.ts`，
  * 本文件只做 DOM「取值 → 调公式 → 写回」。
@@ -90,7 +90,7 @@ export function onScroll(): void {
   state.nearBottom = isNearBottom(scroller);
   // 窗口化（Step 7）：滚动近界扩窗 / 远界收缩（幂等；上端移动自带
   // scrollHeight 差值补偿，不产生读位跳动）。
-  handleRowWindowScroll();
+  RowWindow.handleScroll();
   if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
     requestLoadOlder();
   }

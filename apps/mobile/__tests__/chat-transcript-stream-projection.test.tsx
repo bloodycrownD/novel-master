@@ -26,7 +26,7 @@ jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
   scheduleMermaidScan: jest.fn(),
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  closeContextMenu: jest.fn(),
+  Menu: {close: jest.fn()},
 }));
 jest.mock('@web/shared/mermaid-fullscreen/mermaid-fullscreen', () => ({
   closeMermaidViewer: jest.fn(),
@@ -694,7 +694,7 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
       });
       flushRaf();
       // 收尾前挂起一次 350ms 升级 timer
-      streamMarkdown.scheduleStreamRichUpgrade('text');
+      streamMarkdown.StreamRichUpgrade.schedule('text');
       expect(streamMarkdown.streamRichUpgrade.timer).not.toBeNull();
 
       stream.applyStreamStatus({streamId: 'st:1', status: 'finished'});
@@ -1322,7 +1322,7 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
     resetWriteCounts(doc);
     jest.useFakeTimers();
     try {
-      streamMarkdown.scheduleStreamRichUpgrade('text');
+      streamMarkdown.StreamRichUpgrade.schedule('text');
       jest.advanceTimersByTime(RICH_UPGRADE_MS);
     } finally {
       jest.useRealTimers();
@@ -1899,7 +1899,7 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
       });
       flushRaf();
       state.appliedBlockKeys = new Set(['st:1:text:0']);
-      streamMarkdown.scheduleStreamRichUpgrade('text');
+      streamMarkdown.StreamRichUpgrade.schedule('text');
       expect(streamMarkdown.streamRichUpgrade.timer).not.toBeNull();
 
       stream.applyStreamStatus({streamId: 'st:1', status: 'finished'});

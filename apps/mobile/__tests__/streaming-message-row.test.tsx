@@ -23,8 +23,7 @@ jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
   scheduleMermaidScan: jest.fn(),
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  closeContextMenu: jest.fn(),
-  openContextMenuFromAnchor: jest.fn(),
+  Menu: {close: jest.fn(), openFromAnchor: jest.fn()},
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
   post: jest.fn(),

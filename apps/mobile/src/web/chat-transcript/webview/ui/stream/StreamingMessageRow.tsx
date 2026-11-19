@@ -24,7 +24,7 @@ import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import * as streamRuntime from '../../runtime/stream/stream';
 import {state} from '../../runtime/state/state';
 import type {MessageRow} from '../../runtime/state/state';
-import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
+import {Menu} from '../../runtime/menu/menu';
 import {ToolInvokingBar} from '../render/ToolInvokingBar';
 import {ThinkingSection} from '../render/ThinkingSection';
 import {ToolGroup} from '../render/ToolGroup';
@@ -181,7 +181,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
                   return;
                 }
                 const anchor = btn.getBoundingClientRect();
-                openContextMenuFromAnchor(row.messageId ?? row.id, anchor, btn);
+                Menu.openFromAnchor(row.messageId ?? row.id, anchor, btn);
               }}
             >
               ⋯

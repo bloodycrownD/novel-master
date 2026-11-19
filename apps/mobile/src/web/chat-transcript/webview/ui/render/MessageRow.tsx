@@ -6,7 +6,7 @@
  */
 import type {MessageRow as MessageRowModel} from '../../runtime/state/state';
 import {state} from '../../runtime/state/state';
-import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
+import {Menu} from '../../runtime/menu/menu';
 import {assistantBubbleExtraClasses} from '../../runtime/stream/stream';
 import {AttachGroup} from './AttachGroup';
 import {AssistantBubbleInner} from './AssistantBubble';
@@ -43,7 +43,7 @@ export function MessageRow({row}: MessageRowProps) {
           event.stopPropagation();
           const btn = event.currentTarget as HTMLButtonElement | null;
           if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
-          openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
+          Menu.openFromAnchor(row.id, btn.getBoundingClientRect(), btn);
         }}
       >
         ⋯

@@ -15,8 +15,8 @@ import {
   type StreamDeltaPayload,
   type StreamStatusPayload,
 } from './stream/stream';
-import {clearStreamRichUpgrade} from './stream/stream-markdown';
-import {closeContextMenu} from './menu/menu';
+import {StreamRichUpgrade} from './stream/stream-markdown';
+import {Menu} from './menu/menu';
 import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {createBoundPost} from '@web/shared/post';
 import {matchHostMessage} from '@web/shared/host-message-channel';
@@ -81,7 +81,7 @@ export function handleHostMessage(raw: unknown): void {
     case 'streamReset': {
       // 先作废在途分片（旧代次末片不得复活被清掉的行），再清流。
       const generation = p.generation >= 0 ? p.generation : 0;
-      clearStreamRichUpgrade();
+      StreamRichUpgrade.clear();
       resetStreamBlockRenderState();
       invalidateSnapshotPipeline(generation);
       applyStreamReset(p);
@@ -102,7 +102,7 @@ export function handleHostMessage(raw: unknown): void {
         const richToggledOff = state.flags.richText && !nextFlags.richText;
         state.flags = nextFlags;
         if (state.flags.menuDisabled) {
-          closeContextMenu(true);
+          Menu.close(true);
         }
         if (richToggledOn) {
           // rich 关→开：下一次快照强制 reseed streaming body（P2-7）。
@@ -122,7 +122,7 @@ export function handleHostMessage(raw: unknown): void {
       applyHostTheme(p.theme);
       break;
     case 'closeMenu':
-      closeContextMenu(true);
+      Menu.close(true);
       break;
     // Android 返回键：RN 拦截后下发关闭；关闭后回发 mermaidViewerClosed 复位 RN 态
     case 'closeMermaidViewer':

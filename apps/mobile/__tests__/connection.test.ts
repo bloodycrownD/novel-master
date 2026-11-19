@@ -1,10 +1,4 @@
-import {
-  buildMobileDatabaseFilePathCandidates,
-  clearMobileDatabaseFilePathCache,
-  getMobileDatabaseFilePath,
-  probeAndCacheMobileDatabaseFilePath,
-  QUICK_SQLITE_DEFAULT_LOCATION,
-} from '@/db/db-file-path';
+import {MobileDatabaseFilePath, QUICK_SQLITE_DEFAULT_LOCATION} from '@/db/db-file-path';
 import {closeMobileConnection, getMobileConnection} from '@/db/connection';
 import {MOBILE_VFS_DB_NAME} from '@/vfs/constants';
 
@@ -46,18 +40,18 @@ jest.mock('@novel-master/tokenizer-driver-rn/native', () => ({
 
 describe('mobile database file path', () => {
   beforeEach(() => {
-    clearMobileDatabaseFilePathCache();
+    MobileDatabaseFilePath.clearCache();
     mockExists.mockReset();
   });
 
   it('builds quick-sqlite default layout under DocumentDir', () => {
-    expect(buildMobileDatabaseFilePathCandidates()).toContain(
+    expect(MobileDatabaseFilePath.buildCandidates()).toContain(
       `/data/files/${QUICK_SQLITE_DEFAULT_LOCATION}/${MOBILE_VFS_DB_NAME}`,
     );
-    expect(buildMobileDatabaseFilePathCandidates()).toContain(
+    expect(MobileDatabaseFilePath.buildCandidates()).toContain(
       `/data/files/${QUICK_SQLITE_DEFAULT_LOCATION}/${MOBILE_VFS_DB_NAME}.db`,
     );
-    expect(buildMobileDatabaseFilePathCandidates()).toContain(
+    expect(MobileDatabaseFilePath.buildCandidates()).toContain(
       `/data/files/${MOBILE_VFS_DB_NAME}`,
     );
   });
@@ -65,7 +59,7 @@ describe('mobile database file path', () => {
   it('builds op-sqlite default layout under Android databases dir', () => {
     // Android 上 op-sqlite 默认把库落在 files 的兄弟 databases 目录，
     // 文件名不带 .db 后缀；.db 变体作为候选一并保留。
-    const candidates = buildMobileDatabaseFilePathCandidates();
+    const candidates = MobileDatabaseFilePath.buildCandidates();
     expect(candidates).toContain(`/data/databases/${MOBILE_VFS_DB_NAME}`);
     expect(candidates).toContain(`/data/databases/${MOBILE_VFS_DB_NAME}.db`);
   });
@@ -73,7 +67,7 @@ describe('mobile database file path', () => {
   it('keeps quick-sqlite candidates ahead of op-sqlite ones', () => {
     // 驱动层对旧布局绝对路径优先打开，探测顺序要保持一致，
     // 备份拷贝的目标才不会和驱动实际打开的文件错开。
-    const candidates = buildMobileDatabaseFilePathCandidates();
+    const candidates = MobileDatabaseFilePath.buildCandidates();
     const legacyIndex = candidates.indexOf(
       `/data/files/${QUICK_SQLITE_DEFAULT_LOCATION}/${MOBILE_VFS_DB_NAME}`,
     );
@@ -88,26 +82,26 @@ describe('mobile database file path', () => {
     mockExists.mockImplementation(
       async (path: string) => path === `/data/databases/${MOBILE_VFS_DB_NAME}`,
     );
-    const path = await probeAndCacheMobileDatabaseFilePath();
+    const path = await MobileDatabaseFilePath.probeAndCache();
     expect(path).toBe(`/data/databases/${MOBILE_VFS_DB_NAME}`);
-    expect(getMobileDatabaseFilePath()).toBe(path);
+    expect(MobileDatabaseFilePath.get()).toBe(path);
   });
 
-  it('getMobileDatabaseFilePath uses default layout without DatabasesDir', () => {
-    expect(getMobileDatabaseFilePath()).toBe(
+  it('get uses default layout without DatabasesDir', () => {
+    expect(MobileDatabaseFilePath.get()).toBe(
       `/data/files/${QUICK_SQLITE_DEFAULT_LOCATION}/${MOBILE_VFS_DB_NAME}`,
     );
   });
 
-  it('probeAndCacheMobileDatabaseFilePath picks first existing candidate', async () => {
+  it('probeAndCache picks first existing candidate', async () => {
     mockExists.mockImplementation(async (path: string) =>
       path.endsWith(`${MOBILE_VFS_DB_NAME}.db`),
     );
-    const path = await probeAndCacheMobileDatabaseFilePath();
+    const path = await MobileDatabaseFilePath.probeAndCache();
     expect(path).toBe(
       `/data/files/${QUICK_SQLITE_DEFAULT_LOCATION}/${MOBILE_VFS_DB_NAME}.db`,
     );
-    expect(getMobileDatabaseFilePath()).toBe(path);
+    expect(MobileDatabaseFilePath.get()).toBe(path);
   });
 });
 

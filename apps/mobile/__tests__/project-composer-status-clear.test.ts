@@ -7,8 +7,10 @@ import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 const mockReplace = jest.fn();
 
 jest.mock('@/storage/chat-composer-draft', () => ({
-  applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
-    mockReplace(...args),
+  ChatComposerDraft: {
+    applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
+      mockReplace(...args),
+  },
 }));
 
 import {

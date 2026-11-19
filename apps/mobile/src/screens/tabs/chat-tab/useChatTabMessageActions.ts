@@ -16,7 +16,7 @@ import {toastMessage} from '@/errors/toast-message';
 import {applyTextEditToMessage, editableTextFromMessage} from '@/components/chat/message-edit';
 import {RollbackErrorGuards} from '@novel-master/core/message-checkpoint';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
-import {applyComposerStatusAttachmentsReplace, writeChatComposerDraftState} from '@/storage/chat-composer-draft';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import {projectComposerStatusForSession, refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared} from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
@@ -225,7 +225,7 @@ export function useChatTabMessageActions({
           // 非 `[]`），允许下一次水化兜底扫描一次。恢复的通常是完整历史明文，
           // 扫描升格面与旧行为相同，记入已知限制。
           const restoreDraft = {text: restoreText, attachments: []};
-          writeChatComposerDraftState(sessionId, restoreDraft, runtime.sessions);
+          ChatComposerDraft.writeState(sessionId, restoreDraft, runtime.sessions);
         }
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
@@ -235,7 +235,7 @@ export function useChatTabMessageActions({
           }
         }
         const status = await projectComposerStatusForSession(sessionId);
-        applyComposerStatusAttachmentsReplace({
+        ChatComposerDraft.applyComposerStatusAttachmentsReplace({
           sessionId,
           attachments: status,
         });

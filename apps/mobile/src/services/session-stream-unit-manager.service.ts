@@ -122,7 +122,7 @@ import {createRunStateWritethrough} from '@/services/run-state-writethrough';
 import type {RunStateWritethrough} from '@/services/run-state-writethrough';
 import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
 import {createRunFinishCalibrationProbe, type RunFinishCalibrationProbe} from '@/services/run-finish-calibration-probe';
-import {getSessionViewCache, hydrateWindowFromCache, sessionViewCacheKey, setSessionViewCache, type SessionViewCache} from '@/services/chat-session-view-cache';
+import {SessionViewCache} from '@/services/chat-session-view-cache';
 import {createLruMap, type LruMap} from '@/services/scope-key-cache';
 import {prependOlderMessages} from '@/services/message-paging';
 import {createQuantumYield} from '@/services/yield-quantum';
@@ -1043,17 +1043,17 @@ export class SessionStreamUnitManager {
     const projectId = options?.projectId;
     let cacheKey: string | null = null;
     if (projectId != null) {
-      cacheKey = sessionViewCacheKey(projectId, sessionId);
+      cacheKey = SessionViewCache.key(projectId, sessionId);
     }
     if (cacheKey != null && !forceReload) {
-      const cached = getSessionViewCache(cacheKey);
+      const cached = SessionViewCache.get(cacheKey);
       if (cached != null) {
         // 与单元路径同款守卫：只有冷启动水合才裁窗口。idle 视图已有消息面
         // 时（重进 / idle 分页翻出来的浏览史），整面采纳——截回去等于当着
         // 用户的面把转录塌掉。当前唯一调用方 loadSessionTailMessages 在
         // 重进场景确实会带着非空面进来，守卫不是空转。
         const idleCount = this.idleMessageViews.get(sessionId)?.messages.length ?? 0;
-        const adopted = idleCount === 0 ? hydrateWindowFromCache(cached) : cached;
+        const adopted = idleCount === 0 ? SessionViewCache.hydrateWindowFromCache(cached) : cached;
         this.applyIdleMessages(sessionId, adopted);
         return [...adopted.messages];
       }
@@ -1072,7 +1072,7 @@ export class SessionStreamUnitManager {
     const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
     const list = hasMore ? fetched.slice(1) : fetched;
     if (cacheKey != null) {
-      setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
+      SessionViewCache.set(cacheKey, {messages: list, hasMoreMessages: hasMore});
     }
     this.applyIdleMessages(sessionId, {messages: list, hasMoreMessages: hasMore});
     return [...list];
@@ -1138,8 +1138,8 @@ export class SessionStreamUnitManager {
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
       const next = prependOlderMessages(current.messages, older);
       if (projectId != null) {
-        const cacheKey = sessionViewCacheKey(projectId, sessionId);
-        setSessionViewCache(cacheKey, {messages: next, hasMoreMessages: hasMore});
+        const cacheKey = SessionViewCache.key(projectId, sessionId);
+        SessionViewCache.set(cacheKey, {messages: next, hasMoreMessages: hasMore});
       }
       this.idleLoadingMore.delete(sessionId);
       this.idleMessageViews.set(sessionId, {
@@ -1208,10 +1208,10 @@ export class SessionStreamUnitManager {
     if (this.units.has(sessionId)) {
       return;
     }
-    const cacheKey = sessionViewCacheKey(projectId, sessionId);
-    const cached = getSessionViewCache(cacheKey);
+    const cacheKey = SessionViewCache.key(projectId, sessionId);
+    const cached = SessionViewCache.get(cacheKey);
     if (cached != null) {
-      const windowed = hydrateWindowFromCache(cached);
+      const windowed = SessionViewCache.hydrateWindowFromCache(cached);
       this.idleMessageViews.set(sessionId, {
         messages: [...windowed.messages],
         hasMoreMessages: windowed.hasMoreMessages,

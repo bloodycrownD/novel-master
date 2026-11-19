@@ -10,7 +10,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
 } from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
-import {clearAllSessionViewCaches} from '../src/services/chat-session-view-cache';
+import {SessionViewCache} from '../src/services/chat-session-view-cache';
 import {decodeConversationUpstream} from '../src/components/chat/ChatConversationBridge';
 import {makeTranscriptReadyPayload} from '../test-utils/transcript-ready';
 import {
@@ -276,10 +276,9 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 }));
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
-  cancelPreciseUpgradeDelay: jest.fn(),
-  cancelPreciseUpgrade: jest.fn(),
+  PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
 jest.mock('../src/storage/app-ui-pref-io', () => ({
@@ -462,7 +461,7 @@ describe('ChatTabScreen integration', () => {
     mockHarnessManager = buildHarnessManager();
     mockRuntime.sessionStreamUnitManager = mockHarnessManager;
     // 视图缓存是模块级单例，跨用例残留会干扰「回源 vs 缓存命中」断言。
-    clearAllSessionViewCaches();
+    SessionViewCache.clearAll();
     clearMockWebViewPostMessages();
     mockRuntime.abortRegistry.has.mockImplementation(() => false);
     mockRuntime.streamRegistry.get.mockImplementation(() => undefined);

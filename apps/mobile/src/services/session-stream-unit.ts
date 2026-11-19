@@ -57,13 +57,7 @@ import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
 import {createStreamApplyBuffer} from './stream-apply-buffer';
 import type {StreamApplyBuffer} from './stream-apply-buffer';
-import {
-  getSessionViewCache,
-  hydrateWindowFromCache,
-  sessionViewCacheKey,
-  setSessionViewCache,
-  type SessionViewCache,
-} from './chat-session-view-cache';
+import {SessionViewCache} from './chat-session-view-cache';
 import {prependOlderMessages} from './message-paging';
 
 /** 单元侧日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
@@ -1217,14 +1211,14 @@ export class SessionStreamUnit {
       return this.tailReloadInFlight;
     }
     const task = (async (): Promise<readonly ChatMessageData[]> => {
-      const cacheKey = sessionViewCacheKey(this.projectId, this.sessionId);
+      const cacheKey = SessionViewCache.key(this.projectId, this.sessionId);
       if (!force) {
-        const cached = getSessionViewCache(cacheKey);
+        const cached = SessionViewCache.get(cacheKey);
         if (cached != null) {
           // 只有冷启动水合才裁窗口：已有消息面是用户自己翻出来的（loadOlder
           // 会把整面写回缓存），截回去等于当着用户的面把转录塌掉。
           const cold = this.messagesValue.length === 0;
-          const adopted = cold ? hydrateWindowFromCache(cached) : cached;
+          const adopted = cold ? SessionViewCache.hydrateWindowFromCache(cached) : cached;
           // 非 force 结果不消费待接管队列（缓存/普通 reload 可能是插入前的
           // 旧面，配对会把历史 assistant 错认成本 step 的落库行）。
           this.applyMessages(adopted, false);
@@ -1252,7 +1246,7 @@ export class SessionStreamUnit {
       const list = hasMore ? fetched.slice(1) : fetched;
       // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
       // 守卫点）；键是本会话自己的，天然不串会话。
-      setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
+      SessionViewCache.set(cacheKey, {messages: list, hasMoreMessages: hasMore});
       // 只有 force（step/settle 边界的权威回源）才消费待接管队列。
       this.applyMessages({messages: list, hasMoreMessages: hasMore}, force);
       return [...list];
@@ -1317,7 +1311,7 @@ export class SessionStreamUnit {
       }
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
       const next = prependOlderMessages(this.messagesValue, older);
-      setSessionViewCache(sessionViewCacheKey(this.projectId, this.sessionId), {
+      SessionViewCache.set(SessionViewCache.key(this.projectId, this.sessionId), {
         messages: next,
         hasMoreMessages: hasMore,
       });

@@ -17,7 +17,7 @@ import {AppError} from '@novel-master/core/errors';
 import {ABORT_KEY, AbortScopeFactory} from '@novel-master/core/abort';
 import {assert} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';
-import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
+import {MobileDatabaseFilePath} from '../db/db-file-path';
 import {agentActivity} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {blobFs} from './rn-file-io';
@@ -25,7 +25,7 @@ import {maintenanceBusy} from './db-maintenance-busy';
 
 /** 数据库文件体积采样（blob-util stat 的 size 为字符串，统一转 number）。 */
 async function statDatabaseFileBytes(): Promise<number> {
-  const dbPath = await resolveMobileDatabaseFilePath();
+  const dbPath = await MobileDatabaseFilePath.resolve();
   const info = await blobFs().stat(dbPath);
   return Number(info.size);
 }

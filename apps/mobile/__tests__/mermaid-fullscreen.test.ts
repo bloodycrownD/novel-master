@@ -137,7 +137,7 @@ describe('chat-transcript runtime 工厂装配链（Step 1 工厂化 / Step 8 �
     for (const symbol of [
       'contextMenuViewSlot.register(',
       'rowsViewSlot.register(',
-      'measureRowWindow',
+      'RowWindow.measure',
       'mountMermaidViewerPortal(',
       'attachMermaidViewerDelegation(',
       'startTranscriptBoot(',
