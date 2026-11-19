@@ -2,29 +2,21 @@
  * T-CR8（历史只读兼容）：历史 workplaceChange 气泡「规则:」；
  * 新规则保存不产出规则 chip；prepare 重放旧 workplace 附件不炸。
  */
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
-import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { formatStatusChipLabelFromAttachment } from "../../src/presentation/chat/attachment-chip.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
+import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  AttachmentChip  } from "../../src/presentation/chat/attachment-chip.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
-import {
-  RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { refreshRuleSnapshot } from "../../src/service/workplace/refresh-rule-snapshot.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  RuleSnapshot  } from "../../src/service/workplace/refresh-rule-snapshot.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -50,7 +42,7 @@ function userMsg(
 describe("history workplaceChange compat (T-CR8)", () => {
   it("T-CR8: 历史 workplaceChange / source:workplace 气泡文案仍为「规则:path」", () => {
     assert.equal(
-      formatStatusChipLabelFromAttachment({
+      AttachmentChip.formatStatusLabelFromAttachment({
         action: "workplaceChange",
         path: "/legacy.md",
         name: "/legacy.md",
@@ -61,7 +53,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     );
     // 无 action 的旧落库形态
     assert.equal(
-      formatStatusChipLabelFromAttachment({
+      AttachmentChip.formatStatusLabelFromAttachment({
         source: "workplace",
         name: "/old.md",
         path: "/old.md",
@@ -75,10 +67,10 @@ describe("history workplaceChange compat (T-CR8)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/rule.md", "body");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -91,7 +83,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
       JSON.stringify({ body: "stale", mtimeMs: 1 }),
     );
 
-    await refreshRuleSnapshot(session.id, {
+    await RuleSnapshot.refresh(session.id, {
       sessionKkv: sk,
       workplace: wt,
     });
@@ -117,7 +109,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/hist.md", "hist-body");
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
 
     const prepared = unwrap(await promptAssembler.prepare(
       [

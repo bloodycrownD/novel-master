@@ -24,7 +24,7 @@
 import { applyDelta, getDeltaTargetSize } from "fossil-delta";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { Errors } from "../../../../common/errors.js";
+import { Errors } from "@/common/index.js";
 import { ZlibCodec } from "./zlib-codec.js";
 
 /** 小组 format：明文拼接、单流 zlib。 */

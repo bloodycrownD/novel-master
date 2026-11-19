@@ -3,17 +3,17 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { Result } from "../../src/errors/either.js";
-import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
-import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { BuiltinTools, ToolRegistry } from "@novel-master/core";
-import { type ModelRequestService } from "@novel-master/core/provider";
-import { type LlmChatResult } from "@novel-master/core/llm-protocol";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
+import {  describe, it, mock  } from "node:test";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
 import type { MessageCheckpointService } from "../../src/service/message-checkpoint/message-checkpoint.port.js";
 
 function minimalDefinition(): AgentDefinition {
@@ -27,7 +27,7 @@ const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 
 function runnerDeps(
   deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels"> &

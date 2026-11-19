@@ -14,17 +14,14 @@
  * @module test/vfs/vfs-batch-ingest-revision-alignment
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
 
 function enc(s: string): Uint8Array {
   return new TextEncoder().encode(s);

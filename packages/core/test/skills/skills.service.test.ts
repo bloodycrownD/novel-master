@@ -8,20 +8,16 @@
  * @module test/skills/skills.service
  */
 
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  SqliteVfsContentStore  } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -40,7 +36,7 @@ function entry(name: string, description: string): string {
 describe("SkillService（T-SK5）", () => {
   it("write 新建技能（缺省 SKILL.md）后 listSkills 可见且有效", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `new-skill-${testIsolationSuffix()}`;
 
     unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
@@ -55,7 +51,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("write 对已存在文件：缺省 last-write-wins，版本比对已从底层移除", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `ovw-${testIsolationSuffix()}`;
 
     unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
@@ -85,7 +81,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("T-S10 listSkills 中途 abort：返回 Outcome.cancelled 而非半份清单", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     for (const name of [`abort-a-${suffix}`, `abort-b-${suffix}`, `abort-c-${suffix}`]) {
       unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "中止用例")));
@@ -100,7 +96,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("listSkills：front matter 坏 / 缺 SKILL.md 的技能标无效", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
 
     unwrap(await skills.writeSkillFile(
@@ -129,7 +125,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("write 缺域报错（MISSING_DOMAIN）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
 
     await rejectsErr(
       () =>
@@ -140,13 +136,13 @@ describe("SkillService（T-SK5）", () => {
           VALID_SKILL_MD,
         ),
       (error: unknown) =>
-        isAppError(error, "SKILL_MISSING_DOMAIN"),
+        AppErrorOps.is(error, "SKILL_MISSING_DOMAIN"),
     );
   });
 
   it("read/write 的 `..` 路径拒绝且不得逃逸技能目录", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `path-guard-${testIsolationSuffix()}`;
     unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
 
@@ -154,7 +150,7 @@ describe("SkillService（T-SK5）", () => {
     await rejectsErr(
       () => skills.readSkillFile("global", name, "../other/SKILL.md"),
       (error: unknown) =>
-        isAppError(error, "SKILL_INVALID_PATH"),
+        AppErrorOps.is(error, "SKILL_INVALID_PATH"),
     );
     // write：`..` 会被 PathNormalizer.normalize 静默消化成回溯，必须在这里拦截
     await rejectsErr(
@@ -166,7 +162,7 @@ describe("SkillService（T-SK5）", () => {
           "逃逸内容",
         ),
       (error: unknown) =>
-        isAppError(error, "SKILL_INVALID_PATH"),
+        AppErrorOps.is(error, "SKILL_INVALID_PATH"),
     );
     // edit 同样拒绝
     await rejectsErr(
@@ -176,23 +172,23 @@ describe("SkillService（T-SK5）", () => {
           newString: "b",
         }),
       (error: unknown) =>
-        isAppError(error, "SKILL_INVALID_PATH"),
+        AppErrorOps.is(error, "SKILL_INVALID_PATH"),
     );
     // 隔壁技能目录未被写脏（VFS 读口已改返回 Result，NOT_FOUND 走 Err 通道）
     const victim = await ctx.globalMetaVfs().read("/meta/skills/victim.md");
     assert.ok(!victim.ok, "逃逸路径读口应走 Err 通道");
-    if (!victim.ok) assert.ok(isAppError(victim.error, "VFS_NOT_FOUND"));
+    if (!victim.ok) assert.ok(AppErrorOps.is(victim.error, "VFS_NOT_FOUND"));
   });
 
   it("write 新建技能名须过 SKILL_NAME_PATTERN 校验", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
 
     for (const bad of [".hidden", "has space", "a/b", "SKILL.md"]) {
       await rejectsErr(
         () => skills.writeSkillFile("global", bad, undefined, VALID_SKILL_MD),
         (error: unknown) =>
-          isAppError(error, "SKILL_INVALID_NAME"),
+          AppErrorOps.is(error, "SKILL_INVALID_NAME"),
         `技能名 ${bad} 应被拒绝`,
       );
     }
@@ -200,7 +196,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("read 域缺省按生效副本解析：同名项目副本优先，显式域读原件", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const name = `dual-${suffix}`;
@@ -249,13 +245,13 @@ describe("SkillService（T-SK5）", () => {
       () =>
         skills.readSkillFile(undefined, `missing-${suffix}`, undefined, project.id),
       (error: unknown) =>
-        isAppError(error, "SKILL_NOT_FOUND"),
+        AppErrorOps.is(error, "SKILL_NOT_FOUND"),
     );
   });
 
   it("editSkillFile 局部修改（normalize-for-match 语义）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `edit-${testIsolationSuffix()}`;
     unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
 
@@ -277,7 +273,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("setDisabled + effectiveSkills：落行/删行与合并视图联动", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
@@ -313,7 +309,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("deleteSkill project 域：清目录且只清本项目负清单行", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const p1 = unwrap(await ctx.projects.create(`P1-${suffix}`));
     const p2 = unwrap(await ctx.projects.create(`P2-${suffix}`));
@@ -353,7 +349,7 @@ describe("SkillService（T-SK5）", () => {
     await rejectsErr(
       () => skills.readSkillFile("project", "del-skill", undefined, p1.id),
       (error: unknown) =>
-        isAppError(error, "SKILL_NOT_FOUND"),
+        AppErrorOps.is(error, "SKILL_NOT_FOUND"),
     );
   });
 
@@ -371,7 +367,7 @@ describe("SkillService（T-SK5）", () => {
    */
   it("deleteSkill 后无 ref_count<=0 的 blob 残留行", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const p = unwrap(await ctx.projects.create(`P-delgc-${suffix}`));
     const name = `del-gc-skill`;
@@ -396,7 +392,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("deleteSkill global 域：清所有项目的同名负清单行", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const p1 = unwrap(await ctx.projects.create(`PG1-${suffix}`));
     const p2 = unwrap(await ctx.projects.create(`PG2-${suffix}`));
@@ -419,25 +415,25 @@ describe("SkillService（T-SK5）", () => {
 
   it("project 域操作缺 projectId 报错", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
 
     await rejectsErr(
       () =>
         skills.writeSkillFile("project", "no-pid", undefined, VALID_SKILL_MD),
       (error: unknown) =>
-        isAppError(error, "SKILL_MISSING_PROJECT_ID"),
+        AppErrorOps.is(error, "SKILL_MISSING_PROJECT_ID"),
     );
   });
 
   it("deleteSkill global 域内置名抛 BUILTIN_SKILL（中文 message）且目录仍在（T-AS2）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
 
     // 测试库经 bootstrap 种入，global 域 agent-config 目录存在
     await rejectsErr(
       () => skills.deleteSkill({ domain: "global", name: "agent-config" }),
       (error: unknown) =>
-        isAppError(error, "SKILL_BUILTIN") &&
+        AppErrorOps.is(error, "SKILL_BUILTIN") &&
         renderError(error).includes("内置技能不支持删除：agent-config"),
     );
 
@@ -451,7 +447,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("deleteSkill project 域历史同名副本可正常删（T-AS2）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-AC-${suffix}`));
 
@@ -477,7 +473,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("writeSkillFile 内置保留名：目录已存在编辑放行，目录不存在新建拒绝（T-AS6）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-ACR-${suffix}`));
 
@@ -512,7 +508,7 @@ describe("SkillService（T-SK5）", () => {
           project.id,
         ),
       (error: unknown) =>
-        isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") &&
+        AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") &&
         renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
     );
 
@@ -524,7 +520,7 @@ describe("SkillService（T-SK5）", () => {
       () =>
         skills.writeSkillFile("global", "agent-config", undefined, VALID_SKILL_MD),
       (error: unknown) =>
-        isAppError(error, "SKILL_BUILTIN_NAME_RESERVED"),
+        AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED"),
     );
 
     // 恢复内置目录（builtinSeed 豁免重种）：同文件后续用例
@@ -542,7 +538,7 @@ describe("SkillService（T-SK5）", () => {
 
   it("assertSkillNameNotReservedForCreate：ZIP 新建通道的保留名门（D-1）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-D1-${suffix}`));
 
@@ -563,7 +559,7 @@ describe("SkillService（T-SK5）", () => {
           project.id,
         ),
       (error: unknown) =>
-        isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") &&
+        AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") &&
         renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
     );
 
@@ -571,7 +567,7 @@ describe("SkillService（T-SK5）", () => {
     await rejectsErr(
       () => skills.assertSkillNameNotReservedForCreate("project", "agent-config"),
       (error: unknown) =>
-        isAppError(error, "SKILL_MISSING_PROJECT_ID"),
+        AppErrorOps.is(error, "SKILL_MISSING_PROJECT_ID"),
     );
 
     // builtinSeed 豁免仍仅 seed 通道有效：新入口无豁免参数（同一目录不存在
@@ -595,7 +591,7 @@ describe("SkillService（T-SK5）", () => {
   describe("updateSkillInfo（T-S2 / T-S3）", () => {
     it("① 正常改名：目录迁移 + front matter name 同步 + $新名可解析（T-S3 revision 跟随）", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const oldName = `ren-old-${suffix}`;
       const newName = `ren-new-${suffix}`;
@@ -617,7 +613,7 @@ describe("SkillService（T-SK5）", () => {
       await rejectsErr(
         () => skills.readSkillFile("global", oldName),
         (error: unknown) =>
-          isAppError(error, "SKILL_NOT_FOUND"),
+          AppErrorOps.is(error, "SKILL_NOT_FOUND"),
       );
       const after = unwrap(await skills.readSkillFile("global", newName));
       assert.match(after.content, /name: "ren-new-[^"]*"/);
@@ -647,7 +643,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("② 启停状态保留：改名前禁用，负清单行跟随新名", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const project = unwrap(await ctx.projects.create(`P-DIS-${suffix}`));
       const oldName = `dis-old-${suffix}`;
@@ -687,7 +683,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("③ 域内查重撞名：SKILL_ALREADY_EXISTS（错误码还原不丢）", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const victim = `dup-${suffix}`;
 
@@ -712,7 +708,7 @@ describe("SkillService（T-SK5）", () => {
             { newName: victim },
           ),
         (error: unknown) =>
-          isAppError(error, "SKILL_ALREADY_EXISTS") &&
+          AppErrorOps.is(error, "SKILL_ALREADY_EXISTS") &&
           renderError(error).includes("已存在同名技能"),
       );
       // 拒绝后源技能原样（未半迁移）
@@ -723,7 +719,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("④ global 域内置技能改名拒：BUILTIN_SKILL_RENAME（中文文案）", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
 
       await rejectsErr(
         () =>
@@ -732,7 +728,7 @@ describe("SkillService（T-SK5）", () => {
             { newName: `agent-renamed-${testIsolationSuffix()}` },
           ),
         (error: unknown) =>
-          isAppError(error, "SKILL_BUILTIN_RENAME") &&
+          AppErrorOps.is(error, "SKILL_BUILTIN_RENAME") &&
           renderError(error).includes("内置技能不支持重命名：agent-config"),
       );
 
@@ -745,7 +741,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("⑤ 目标名撞内置保留名拒：BUILTIN_SKILL_NAME_RESERVED", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const src = `to-builtin-${suffix}`;
 
@@ -766,8 +762,8 @@ describe("SkillService（T-SK5）", () => {
             { newName: "agent-config" },
           ),
         (error: unknown) =>
-          isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") ||
-          isAppError(error, "SKILL_ALREADY_EXISTS"),
+          AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") ||
+          AppErrorOps.is(error, "SKILL_ALREADY_EXISTS"),
       );
 
       const project = unwrap(await ctx.projects.create(`P-TB-${suffix}`));
@@ -780,7 +776,7 @@ describe("SkillService（T-SK5）", () => {
         (error: unknown) =>
           // 保留名门先于源目录存在性检查：project 域目标目录不存在
           //（= 新建语义）直接拒，不会走到 NOT_FOUND
-          isAppError(error, "SKILL_BUILTIN_NAME_RESERVED"),
+          AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED"),
       );
 
       // project 域真实存在的技能改名为内置名：目录不存在 → 保留名门拒
@@ -798,13 +794,13 @@ describe("SkillService（T-SK5）", () => {
             { newName: "agent-config" },
           ),
         (error: unknown) =>
-          isAppError(error, "SKILL_BUILTIN_NAME_RESERVED"),
+          AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED"),
       );
     });
 
     it("⑥ global 域改名：负清单全 scope 迁移（镜像 deleteSkill 连带口径）", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const p1 = unwrap(await ctx.projects.create(`PG1-${suffix}`));
       const p2 = unwrap(await ctx.projects.create(`PG2-${suffix}`));
@@ -840,7 +836,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("⑦ invalid 技能改名：目录与负清单迁移、front matter 不动（仍 invalid）", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const project = unwrap(await ctx.projects.create(`P-INV-${suffix}`));
       const oldName = `inv-old-${suffix}`;
@@ -877,7 +873,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("⑧ 仅改描述：无目录迁移、description 更新、revision 递增", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
       const suffix = testIsolationSuffix();
       const name = `desc-only-${suffix}`;
 
@@ -907,7 +903,7 @@ describe("SkillService（T-SK5）", () => {
 
     it("⑨ global 域 builtin 仅改描述：放行且只重写 front matter（防步骤②误拦回归）", async () => {
       const ctx = getNovelMasterTestContext();
-      const skills = createSkillsService(ctx.conn);
+      const skills = SkillsServiceFactory.create(ctx.conn);
 
       const before = unwrap(await skills.readSkillFile("global", "agent-config"));
       const newDescription = `内置技能描述更新-${testIsolationSuffix()}`;

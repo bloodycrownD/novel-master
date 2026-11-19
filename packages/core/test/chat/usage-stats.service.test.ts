@@ -15,26 +15,22 @@
  * 时区相关断言不依赖运行机器时区：统一以「本地今日 0 点 ± 固定偏移」构造时间戳。
  */
 
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { beforeEach, describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
+import {  randomUUID  } from "node:crypto";
+import {  beforeEach, describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteUsageRecordRepository } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
-import { UsageRecord } from "../../src/domain/usage/logic/build-usage-record.js";
-import { DefaultUsageStatsService } from "../../src/service/chat/impl/usage-stats.service.js";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteUsageRecordRepository  } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
+import {  UsageRecord  } from "../../src/domain/usage/logic/build-usage-record.js";
+import {  DefaultUsageStatsService  } from "../../src/service/chat/impl/usage-stats.service.js";
 import type { UsageStatsRange } from "../../src/service/chat/usage-stats.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
-const isChatInvalidArgument = (error: unknown): boolean => isAppError(error, "CHAT_INVALID_ARGUMENT");
+const isChatInvalidArgument = (error: unknown): boolean => AppErrorOps.is(error, "CHAT_INVALID_ARGUMENT");
 
 // G-2 DST：固定日期断言需要可控时区。node:test 每个文件独立进程，在 fixture
 // 初始化前把本地时区固定为带 DST 切换的东部时区；既有用例全部以

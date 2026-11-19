@@ -1,37 +1,37 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { Result } from "../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { z } from "zod";
-import { type BuiltinToolContext, type  TdbcConnection } from "@novel-master/core";
-import { ChatServiceFactory } from "@novel-master/core/chat";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import { DefaultUserVfsTurnService } from "../../src/service/chat/impl/user-vfs-turn.service.js";
-import { DefaultMessageService } from "../../src/service/chat/impl/message.service.js";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { ContentHash } from "../../src/domain/vfs/content-store/logic/hash-content.js";
-import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
-import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  describe, it  } from "node:test";
+import {  z  } from "zod";
+import {  type BuiltinToolContext, type  TdbcConnection  } from "@novel-master/core";
+import {  ChatServiceFactory  } from "@novel-master/core/chat";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  SqliteSessionRepository  } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  DefaultUserVfsTurnService  } from "../../src/service/chat/impl/user-vfs-turn.service.js";
+import {  DefaultMessageService  } from "../../src/service/chat/impl/message.service.js";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteMessageCheckpointRepository as CheckpointRepo  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+import {  LogicalPath  } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import {  UserVfsTurnOps  } from "../../src/service/vfs/build-user-vfs-turn-op.js";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 /** 断言已停写 user_vfs_pending kkv（user ops 拆除后无操作日志半边）。 */
 async function loadPendingQueueJson(conn: TdbcConnection, sessionId: string): Promise<string | null> {
-  return createSessionKkvService(conn).get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY);
+  return SessionKkvServiceFactory.create(conn).get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY);
 }
 
 function makeToolCtx(conn: TdbcConnection, projectId: string, sessionId: string): BuiltinToolContext {
@@ -44,7 +44,7 @@ function makeToolCtx(conn: TdbcConnection, projectId: string, sessionId: string)
     }),
     projectId,
     sessionId,
-    sessionKkv: createSessionKkvService(conn),
+    sessionKkv: SessionKkvServiceFactory.create(conn),
   };
 }
 
@@ -70,7 +70,7 @@ function makeUserVfsTurnDeps(conn: TdbcConnection, overrides: Partial<UserVfsTur
   return {
     conn,
     sessions: sessionRepo,
-    sessionKkv: createSessionKkvService(conn),
+    sessionKkv: SessionKkvServiceFactory.create(conn),
     messages,
     chatMessages: messageRepo,
     checkpoints: checkpointRepo,
@@ -133,7 +133,7 @@ describe("UserVfsTurnService", () => {
 
     // resolveToolCtx 注入了 session scope workplace：
     // 新建文件的父链各层应补上默认 rule_on，与 agent 链路同款
-    const workplace = createWorkplaceService(ctx.conn, {
+    const workplace = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -277,7 +277,7 @@ describe("UserVfsTurnService", () => {
           vfs: failingVfs,
           projectId: project.id,
           sessionId: session.id,
-          sessionKkv: createSessionKkvService(ctx.conn),
+          sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
         }),
       })
     );
@@ -343,7 +343,7 @@ describe("UserVfsTurnService", () => {
     unwrap(await svfs.mkdir("/55"));
     await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
 
-    const result = await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/55", true));
+    const result = await userVfsTurn.executeOp(session.id, UserVfsTurnOps.buildDelete("/55", true));
     assert.equal(result.ok, true);
     await rejectsErr(() => svfs.list("/55"));
   });
@@ -353,7 +353,7 @@ describe("UserVfsTurnService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
 
     const result = await userVfsTurn.executeOp(session.id, writeOp("/asm-fc.md", "from-bundle"));
     assert.equal(result.ok, true);

@@ -14,10 +14,10 @@
  *
  * @module test/workplace/assemble-backfill-no-recompress
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
+import {  describe, it, mock  } from "node:test";
 
 // 1) 先拿真实 codec 引用（mock 注册前的模块缓存，供透传）。
 const realCodec = await import("../../src/domain/session-kkv/logic/file-cache-blob-codec.js");
@@ -43,7 +43,7 @@ mock.module("../../src/domain/session-kkv/logic/file-cache-blob-codec.js", {
 });
 
 // 3) mock 之后再动态 import 被测链路（顺序不可换）。
-const { createSessionKkvService } = await import(
+const { SessionKkvServiceFactory } = await import(
   "../../src/service/session-kkv/create-session-kkv-service.js"
 );
 const { SESSION_KKV_DOMAIN_FILE_CACHE } = await import(
@@ -53,9 +53,9 @@ const { RuleSnapshotCodec } = await import(
   "../../src/domain/workplace/logic/rule-snapshot-codec.js"
 );
 const {
-  assembleWorkplaceDisplay,
+  WorkplaceDisplayAssembler,
 } = await import("../../src/service/workplace/assemble-workplace-display.js");
-const { createWorkplaceService } = await import(
+const { WorkplaceServiceFactory } = await import(
   "../../src/service/workplace/create-workplace-service.js"
 );
 const { FileCache } = await import(
@@ -65,15 +65,15 @@ const { openNovelMasterTestConnection } = await import("../helpers/novel-master.
 
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
-async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
-  return outcomeValue(await assembleWorkplaceDisplay(...args));
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
 }
 
 describe("file_cache 免重压缩（后台化后仍生效）", () => {
   it("T-BF3b blob 已在库：set 侧 hash 比对命中，不再调用压缩", async () => {
     const ctx = await openNovelMasterTestConnection();
     try {
-      const sk = createSessionKkvService(ctx.conn);
+      const sk = SessionKkvServiceFactory.create(ctx.conn);
       const sid = `bf3b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const value = RuleSnapshotCodec.serializeFileCachePayload({ body: `bf3b-body-${sid}`, mtimeMs: 1 });
 
@@ -106,11 +106,11 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
     try {
       const project = unwrap(await ctx.projects.create(`P-bf3c-${Date.now()}`));
       const session = unwrap(await ctx.sessions.create(project.id));
-      const sk = createSessionKkvService(ctx.conn);
+      const sk = SessionKkvServiceFactory.create(ctx.conn);
       const vfs = ctx.sessionVfs(project.id, session.id);
       const body = `bf3c-unique-${Math.random().toString(36).slice(2, 10)}`;
       await vfs.write("/bf3c.md", body);
-      const wt = createWorkplaceService(ctx.conn, {
+      const wt = WorkplaceServiceFactory.create(ctx.conn, {
         kind: "session",
         projectId: project.id,
         sessionId: session.id,

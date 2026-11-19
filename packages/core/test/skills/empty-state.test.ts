@@ -1,21 +1,17 @@
 import assert from "node:assert";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import { BUILTIN_SKILL_NAMES } from "../../src/bootstrap/skills/seed-builtin-skills.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  BUILTIN_SKILL_NAMES  } from "../../src/bootstrap/skills/seed-builtin-skills.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 describe("skill 空态", () => {
   it("全新库零技能时 effectiveSkills 返回空数组而非抛错", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const project = await ctx.projects.create(`P-empty-${testIsolationSuffix()}`);
 
     // bootstrap 会幂等种入内置 agent-config（seed-builtin-skills），

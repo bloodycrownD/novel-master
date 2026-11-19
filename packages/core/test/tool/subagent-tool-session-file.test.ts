@@ -15,22 +15,16 @@
  * @module test/tool/subagent-tool-session-file
  */
 
-import { Result } from "../../src/errors/either.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import {
-  MessageAttachmentSchema,
-  messageAttachmentsSchema,
-} from "@/domain/chat/model/message-attachment.schema.js";
-import {
-  subagentTool,
-  TASK_SESSION_RESUME_MAX_MESSAGES,
-} from "@/domain/tool/builtin/subagent-tool.js";
+import {  MessageAttachmentSchema, messageAttachmentsSchema  } from "@/domain/chat/model/message-attachment.schema.js";
+import {  subagentTool, TASK_SESSION_RESUME_MAX_MESSAGES  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -40,16 +34,12 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attachment/attach-budget.js";
-import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageBodyText  } from "@/domain/chat/content/message-body-text.js";
+import {  ATTACH_PROMPT_CHAR_BUDGET  } from "@/domain/chat/logic/attachment/attach-budget.js";
+import {  promptAssembler  } from "@/domain/chat/logic/prompt/prompt-assembler.js";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -281,7 +271,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /找不到子会话/);
         assert.match(e.message, /去掉 sessionId/);
@@ -336,7 +326,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /不是当前会话派生的子会话/);
         assert.match(e.message, /去掉 sessionId/);
@@ -370,7 +360,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           },
           toolCtx(ctx2)
         ),
-      (e: unknown) => isAppError(e) && e.key.startsWith("TOOL_") && /不是当前会话派生的子会话/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e) && e.key.startsWith("TOOL_") && /不是当前会话派生的子会话/.test(e.message)
     );
     // 反向：项目不同但父相同 → 放行（子代理本就共享父工作区，不按 project 拦）。
     const out = unwrap(await subagentTool.run(
@@ -402,7 +392,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.match(e.message, /正在运行中/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -429,7 +419,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           },
           toolCtx(ctx)
         ),
-      (e: unknown) => isAppError(e) && e.key.startsWith("TOOL_") && /正在运行中/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e) && e.key.startsWith("TOOL_") && /正在运行中/.test(e.message)
     );
   });
 
@@ -464,7 +454,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(overLimit.ctx)
         ),
       (e: unknown) => {
-        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.match(e.message, /已有 \d+ 条消息/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -576,7 +566,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
             toolCtx(ctx)
           ),
         (e: unknown) => {
-          assert.ok(isAppError(e) && e.key.startsWith("TOOL_"), `路径 ${JSON.stringify(bad)} 应抛 ToolError`);
+          assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"), `路径 ${JSON.stringify(bad)} 应抛 ToolError`);
           assert.equal(e.key, "TOOL_FAILED");
           assert.match(e.message, /fileAttachment 路径非法/);
           return true;
@@ -605,7 +595,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"), "路径非法必须是 ToolError，不是裸 VfsError");
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"), "路径非法必须是 ToolError，不是裸 VfsError");
         assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /fileAttachment 路径非法/);
         // 原 message 保留（VfsError 的中文/英文 reason 仍在文案里）
@@ -677,7 +667,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       [childMsg],
       {
         sessionId: session.id,
-        sessionKkv: createSessionKkvService(ctx.conn),
+        sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
         vfs,
       },
     ));

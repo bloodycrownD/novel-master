@@ -11,20 +11,16 @@
  *
  * @module test/message-checkpoint/deferred-revision-orphan-gc
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
-import { DeferredRevisionOrphanGc } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  DeferredRevisionOrphanGc  } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

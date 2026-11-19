@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  blocksToGeminiParts as blocksToGeminiPartsImpl,
-  chatMessagesToGeminiContents as chatMessagesToGeminiContentsImpl,
-  geminiPartsToBlocks,
-} from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
+import {  describe, it  } from "node:test";
+import {  GeminiMapper  } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 // 六期签名适配：两个 mapper 返回 Result，本地同名 wrapper 拆包（失败原样抛出
 // AppError），调用点与断言语义零改动。
 const blocksToGeminiParts = (blocks: Parameters<typeof blocksToGeminiPartsImpl>[0]) => {
-  const result = blocksToGeminiPartsImpl(blocks);
+  const result = GeminiMapper.blocksToParts(blocks);
   if (!result.ok) throw result.error;
   return result.value;
 };
@@ -18,14 +14,14 @@ const chatMessagesToGeminiContents = (
   messages: Parameters<typeof chatMessagesToGeminiContentsImpl>[0],
   options?: Parameters<typeof chatMessagesToGeminiContentsImpl>[1],
 ) => {
-  const result = chatMessagesToGeminiContentsImpl(messages, options);
+  const result = GeminiMapper.chatMessagesToContents(messages, options);
   if (!result.ok) throw result.error;
   return result.value;
 };
 
 describe("gemini thought_signature", () => {
   it("parses thought_signature on thinking parts", () => {
-    const blocks = geminiPartsToBlocks([
+    const blocks = GeminiMapper.partsToBlocks([
       {
         text: "reasoning",
         thought: true,
@@ -41,7 +37,7 @@ describe("gemini thought_signature", () => {
   });
 
   it("parses thought_signature on functionCall parts", () => {
-    const blocks = geminiPartsToBlocks([
+    const blocks = GeminiMapper.partsToBlocks([
       {
         functionCall: { name: "read", args: { path: "/a" }, id: "call_1" },
         thought_signature: "sig-fc-xyz",
@@ -61,7 +57,7 @@ describe("gemini thought_signature", () => {
     assert.equal(parts.length, 1);
     assert.equal(parts[0]?.thought, true);
     assert.equal(parts[0]?.thought_signature, "sig-round");
-    const back = geminiPartsToBlocks(parts);
+    const back = GeminiMapper.partsToBlocks(parts);
     assert.equal(back[0]?.type, "thinking");
     if (back[0]?.type === "thinking") {
       assert.equal(back[0].thinkingSignature, "sig-round");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { FrontMatter, WorkplaceDisplay } from "@novel-master/core/workplace";
-import { splitMarkdownFrontMatter } from "@novel-master/core/common";
+import {  describe, it  } from "node:test";
+import {  FrontMatter, WorkplaceDisplay  } from "@novel-master/core/workplace";
+import {  FrontMatter as MarkdownFrontMatter  } from "@novel-master/core/common";
 
 describe("worktree display", () => {
   it("escapes XML in path attribute", () => {
@@ -22,14 +22,14 @@ describe("worktree display", () => {
   });
 
   it("splits front matter from markdown body", () => {
-    const split = splitMarkdownFrontMatter("---\ntitle: x\n---\n# Hi\n");
+    const split = MarkdownFrontMatter.splitMarkdown("---\ntitle: x\n---\n# Hi\n");
     assert.equal(split.closed, true);
     assert.deepEqual(split.frontMatterLines, ["title: x"]);
     assert.equal(split.body, "# Hi\n");
   });
 
   it("split without front matter returns full body", () => {
-    const split = splitMarkdownFrontMatter("# Only\n");
+    const split = MarkdownFrontMatter.splitMarkdown("# Only\n");
     assert.equal(split.frontMatterLines, null);
     assert.equal(split.body, "# Only\n");
     assert.equal(split.closed, true);
@@ -41,21 +41,21 @@ describe("worktree display", () => {
   });
 
   it("split treats unclosed front matter as no front matter", () => {
-    const split = splitMarkdownFrontMatter("---\na: 1\n# body");
+    const split = MarkdownFrontMatter.splitMarkdown("---\na: 1\n# body");
     assert.equal(split.frontMatterLines, null);
     assert.equal(split.body, "---\na: 1\n# body");
     assert.equal(split.closed, true);
   });
 
   it("split handles single unclosed delimiter line", () => {
-    const split = splitMarkdownFrontMatter("---");
+    const split = MarkdownFrontMatter.splitMarkdown("---");
     assert.equal(split.frontMatterLines, null);
     assert.equal(split.body, "---");
     assert.equal(split.closed, true);
   });
 
   it("split handles empty closed front matter", () => {
-    const split = splitMarkdownFrontMatter("---\n---\n");
+    const split = MarkdownFrontMatter.splitMarkdown("---\n---\n");
     assert.deepEqual(split.frontMatterLines, []);
     assert.equal(split.body, "");
     assert.equal(split.closed, true);

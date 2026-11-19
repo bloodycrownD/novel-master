@@ -80,7 +80,7 @@ export const AgentServiceFactory = {
   /**
    * 创建 SQL 后端的 Agent 注册表服务。（原 createAgentRegistryService）
    *
-   * @param conn - bootstrapNovelMaster 之后已打开的连接
+   * @param conn - NovelMasterBootstrap.bootstrap 之后已打开的连接
    * @param state - 可选；注入时 {@link AgentRegistryService.delete} 会重置当前指针
    */
   createRegistry(conn: TdbcConnection, state?: PersistentState): AgentRegistryService {

@@ -3,18 +3,14 @@
  * 另含 T-BB1 / T-BB2 / T-BB3：写侧恒二进制 + 存量 base64 文本行读兼容。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
-import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { ZlibCodec, VFS_CONTENT_ENCODING_ZLIB } from "@/domain/vfs/content-store/logic/zlib-codec.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  VFS_CONTENT_ENCODING_ZLIB_B64  } from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
+import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import {  ZlibCodec, VFS_CONTENT_ENCODING_ZLIB  } from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 

@@ -6,20 +6,16 @@
  * - 中文名等核心场景照常放行。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { VfsErrorForUser } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
-import { tCore } from "../helpers/core-i18n.js";
-import { LiveHeadRevisionSeeder } from "../../src/domain/vfs/logic/seed-live-head-revisions.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  VfsErrorForUser  } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
+import {  tCore  } from "../helpers/core-i18n.js";
+import {  LiveHeadRevisionSeeder  } from "../../src/domain/vfs/logic/seed-live-head-revisions.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -37,7 +33,7 @@ describe("VFS entry name validation (service)", () => {
     const ctx = getNovelMasterTestContext();
     const vfs = VfsServiceFactory.create(ctx.conn);
     await rejectsErr(() => vfs.write(SCOPE, scoped("/坏\n名.txt"), "x"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_NAME"));
       assert.equal(tCore(VfsErrorForUser.format(e)), "文件名不能包含换行或控制字符");
     });
   });
@@ -46,10 +42,10 @@ describe("VFS entry name validation (service)", () => {
     const ctx = getNovelMasterTestContext();
     const vfs = VfsServiceFactory.create(ctx.conn);
     await rejectsErr(() => vfs.write(SCOPE, scoped("/带\t制表.txt"), "x"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_NAME"));
     });
     await rejectsErr(() => vfs.write(SCOPE, scoped("/ 首空格.txt"), "x"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_NAME"));
       assert.equal(tCore(VfsErrorForUser.format(e)), "文件名不能以空格开头或结尾");
     });
   });
@@ -58,7 +54,7 @@ describe("VFS entry name validation (service)", () => {
     const ctx = getNovelMasterTestContext();
     const vfs = VfsServiceFactory.create(ctx.conn);
     await rejectsErr(() => vfs.mkdir(SCOPE, scoped("/目录\u0007")), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_NAME"));
     });
   });
 
@@ -68,7 +64,7 @@ describe("VFS entry name validation (service)", () => {
     const from = scoped("/可改名.txt");
     unwrap(await vfs.write(SCOPE, from, "x"));
     await rejectsErr(() => vfs.renamePath(SCOPE, from, scoped("/新\n名.txt")), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_NAME"));
     });
   });
 
@@ -79,7 +75,7 @@ describe("VFS entry name validation (service)", () => {
     unwrap(await vfs.mkdir(SCOPE, dir));
     unwrap(await vfs.write(SCOPE, `${dir}/a.txt`, "x"));
     await rejectsErr(() => vfs.renamePrefix(SCOPE, dir, scoped("/　")), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_NAME"));
     });
   });
 

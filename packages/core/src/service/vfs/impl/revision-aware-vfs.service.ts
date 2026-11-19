@@ -24,11 +24,10 @@ import { VfsRenamePrimitive } from "@/domain/vfs/logic/vfs-rename-primitive.js";
 // 本文件的删除路径（appendDeletedRevision → WriteWithRevision.nextVersionFor）必须跟着引用共享实现。
 import { WriteWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
-import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 
 /**
  * 事务回调内的域失败走「抛错回滚」通道，过驱动事务边界后 AppError 被包成
@@ -36,9 +35,9 @@ import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
  * **可容忍**的域失败（VFS_NOT_FOUND）收进 Err；解不出原样上抛。
  */
 function unwrapTxDomainError(cause: unknown): AppError | undefined {
-  if (isAppError(cause)) return cause;
+  if (AppErrorOps.is(cause)) return cause;
   const inner = (cause as { cause?: unknown } | null)?.cause;
-  return isAppError(inner) ? inner : undefined;
+  return AppErrorOps.is(inner) ? inner : undefined;
 }
 
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsContentSize } from "../internal-vfs.port.js";
@@ -69,7 +68,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   }
 
   async write(scopeKey: string, path: string, content: string): Promise<Result<{ version: number }, AppError>> {
-    return runInTransactionOrConn(this.conn, async (tx) => {
+    return TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
       return WriteWithRevision.write(entryRepo, revisionRepo, scopeKey, path, content);
@@ -110,12 +109,12 @@ export class RevisionAwareVfsService implements InternalVfsService {
     // DIRECTORY_NOT_EMPTY 同为已知域失败（rmdir 非空目录），一并收 Err：
     // 域错误都按「已知的走返回值」处置，未识别的（非 AppError）保持 throw。
     try {
-      await runInTransactionOrConn(this.conn, async (tx) => {
+      await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
         const revisionRepo = new SqliteVfsRevisionRepository(tx);
         const recursive = options?.recursive === true;
         // 本回调内的 repo 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-        const entry = unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
+        const entry = TdbcTransaction.unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
         if (entry == null) {
           if (!recursive) {
             throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` });
@@ -126,7 +125,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
             return;
           }
           await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, normalized);
-          unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: true }));
+          TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: true }));
           return;
         }
         if (entry.entryKind === "file") {
@@ -135,15 +134,15 @@ export class RevisionAwareVfsService implements InternalVfsService {
           await revisionRepo.append({ entryId: entry.entryId, version: deletedVersion, content: null, status: "deleted", mtimeMs: Date.now() });
           await RevisionRefCount.adjust(revisionRepo, entry.entryId, deletedVersion, +1);
           await RevisionRefCount.adjust(revisionRepo, entry.entryId, entry.version, -1);
-          unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
+          TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
           return;
         }
         if (recursive) {
           await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, normalized);
-          unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: true }));
+          TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: true }));
           return;
         }
-        unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
+        TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
       });
     } catch (cause) {
       const domain = unwrapTxDomainError(cause);
@@ -162,20 +161,20 @@ export class RevisionAwareVfsService implements InternalVfsService {
     // `!reset.ok` 消费并把失败并进聚合（与 delete/hardDelete 的 RB4b 边界转码同款：
     // 裸 throw 会穿透 restore 的 Result 聚合）。
     try {
-      await runInTransactionOrConn(this.conn, async (tx) => {
+      await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
         const revisionRepo = new SqliteVfsRevisionRepository(tx);
         const contentStore = new SqliteVfsContentStore(tx);
 
         // 本回调内的 repo 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-        const existing = unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
+        const existing = TdbcTransaction.unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
         // entry 缺失（已被 hardDelete 且 revision 无 entry 可挂）时直接抛 NOT_FOUND。
         if (existing == null) {
           throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });
         }
         const entryId = existing.entryId;
 
-        const rev = unwrapOrRollback(await revisionRepo.findByEntryAndVersion(entryId, version));
+        const rev = TdbcTransaction.unwrapOrRollback(await revisionRepo.findByEntryAndVersion(entryId, version));
         if (rev == null || rev.status === "deleted") {
           throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });
         }
@@ -185,9 +184,9 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
         // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
         const contentHash = await contentStore.put(rev.content);
-        unwrapOrRollback(await ParentDirs.ensure(entryRepo, scopeKey, normalized));
+        TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(entryRepo, scopeKey, normalized));
         const oldVersion = existing.entryKind === "file" ? existing.version : null;
-        unwrapOrRollback(await entryRepo.setHeadContentHash(scopeKey, normalized, { version: rev.version, contentHash, mtimeMs: rev.mtimeMs }));
+        TdbcTransaction.unwrapOrRollback(await entryRepo.setHeadContentHash(scopeKey, normalized, { version: rev.version, contentHash, mtimeMs: rev.mtimeMs }));
         if (oldVersion != null && oldVersion !== rev.version) {
           await RevisionRefCount.transferLive(revisionRepo, entryId, oldVersion, rev.version);
         } else if (oldVersion == null) {
@@ -215,7 +214,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     // 容忍目标不存在（与上方 delete 的 RB4b 修复同款：四期迁移时实现侧漏改，
     // 裸 throw 会穿透调用方的容忍分支）。
     try {
-      await runInTransactionOrConn(this.conn, async (tx) => {
+      await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
         const revisionRepo = new SqliteVfsRevisionRepository(tx);
         // 本回调内的 repo 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
@@ -228,7 +227,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
           // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
           await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
         } else {
-          const entry = unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
+          const entry = TdbcTransaction.unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
           if (entry != null && entry.entryKind === "file") {
             await RevisionRefCount.adjust(revisionRepo, entry.entryId, entry.version, -1);
             // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
@@ -236,7 +235,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
           }
         }
         // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
-        unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: options?.recursive === true }));
+        TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: options?.recursive === true }));
       });
     } catch (cause) {
       const domain = unwrapTxDomainError(cause);
@@ -259,7 +258,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     // 边界把域失败收进 Err（vfs-move / skills 的 rename 失败按 Result 消费，
     // 裸 throw 会穿透它们的 Result 通道）。
     try {
-      await runInTransactionOrConn(this.conn, async (tx) => {
+      await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
         await VfsRenamePrimitive.renameEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
       });
@@ -283,7 +282,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     // 事务回调内失败靠抛错回滚（幽灵目录由 repo 抛 VFS_NOT_FOUND）；到方法边界
     // 把域失败收进 Err（同 renamePath：调用方按 Result 消费失败）。
     try {
-      await runInTransactionOrConn(this.conn, async (tx) => {
+      await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
         await VfsRenamePrimitive.renameDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
       });

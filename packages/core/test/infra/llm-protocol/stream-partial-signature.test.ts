@@ -6,9 +6,9 @@
  * 块会被 400。核心断言是**两条路径的 `(type, thinkingSignature)` 序列一致**。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createGeminiSseParser } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
-import { createAnthropicSseParser } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
+import {  describe, it  } from "node:test";
+import {  GeminiSseParser  } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
+import {  AnthropicSseParser  } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
 
 type Block = { type: string; thinkingSignature?: string } & Record<
   string,
@@ -38,9 +38,9 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
         ]),
       );
     };
-    const normal1 = createGeminiSseParser();
+    const normal1 = GeminiSseParser.create();
     feedWithText(normal1);
-    const abort1 = createGeminiSseParser();
+    const abort1 = GeminiSseParser.create();
     feedWithText(abort1);
     assert.deepEqual(
       signatureShape(abort1.finishPartial().blocks),
@@ -61,9 +61,9 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
         ]),
       );
     };
-    const normal2 = createGeminiSseParser();
+    const normal2 = GeminiSseParser.create();
     feedSignatureOnly(normal2);
-    const abort2 = createGeminiSseParser();
+    const abort2 = GeminiSseParser.create();
     feedSignatureOnly(abort2);
     // 这条在「只补字段、不放宽 thinking 守卫」的实现下必红——它就是放宽守卫的牙齿。
     assert.deepEqual(
@@ -97,9 +97,9 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
         .join("\n");
 
     for (const withText of [true, false]) {
-      const normal = createAnthropicSseParser();
+      const normal = AnthropicSseParser.create();
       normal.feed(lines(withText));
-      const abort = createAnthropicSseParser();
+      const abort = AnthropicSseParser.create();
       abort.feed(lines(withText));
       assert.deepEqual(
         signatureShape(abort.finishPartial().blocks),
@@ -110,7 +110,7 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
   });
 
   it("T-SPS3 无签名输入不产生 thinkingSignature 键（严格 deepEqual）", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed(geminiChunk([{ text: "plain" }]));
     const blocks = parser.finishPartial().blocks as Block[];
     for (const b of blocks) {
@@ -125,7 +125,7 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
   it("T-SPS4 流事件 tool-use 不带签名字段", () => {
     const events: Array<Record<string, unknown>> = [];
     const onStream = (ev: unknown) => events.push(ev as Record<string, unknown>);
-    const parser = createGeminiSseParser({ onStream });
+    const parser = GeminiSseParser.create({ onStream });
     parser.feed(
       geminiChunk([
         {

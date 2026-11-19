@@ -7,10 +7,10 @@
  * - 目录标记条目不计入 fileCount。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { SkillZip } from "../../src/domain/skills/logic/preview-skill-zip.js";
+import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import {  SkillZip  } from "../../src/domain/skills/logic/preview-skill-zip.js";
 
 function zipOf(files: Record<string, string>, dirs: string[] = []): Uint8Array {
   return VfsZipBuild.build(new Map(Object.entries(files)), dirs);

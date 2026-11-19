@@ -118,14 +118,19 @@ const INSERT_OR_IGNORE_SMART_SORT_RULE_SQL = `INSERT OR IGNORE INTO ${SMART_SORT
       ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`.trim();
 
 /**
- * 幂等写入内置智能排序规则（按 rule_id 主键 INSERT OR IGNORE，不覆盖存量行）。
- *
- * 错误通道同 `seedBuiltinProviders`：事务内 SQL 级异常靠 throw 回滚，
- * 域内没有可判失败，故不套 `Result`。
+ * 内置智能排序规则 seed 操作族。
  */
-export async function seedBuiltinSmartSortRules(conn: TdbcConnection): Promise<void> {
-  const now = Date.now();
-  for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
-    await conn.execute(INSERT_OR_IGNORE_SMART_SORT_RULE_SQL, [row.ruleId, row.name, row.pattern, row.flags, row.captureKind, row.description, row.sortOrder, now, now]);
-  }
-}
+export const BuiltinSmartSortRules = {
+  /**
+   * 幂等写入内置智能排序规则（按 rule_id 主键 INSERT OR IGNORE，不覆盖存量行）。
+   *
+   * 错误通道同 `BuiltinProviders.seed`：事务内 SQL 级异常靠 throw 回滚，
+   * 域内没有可判失败，故不套 `Result`。
+   */
+  async seed(conn: TdbcConnection): Promise<void> {
+    const now = Date.now();
+    for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
+      await conn.execute(INSERT_OR_IGNORE_SMART_SORT_RULE_SQL, [row.ruleId, row.name, row.pattern, row.flags, row.captureKind, row.description, row.sortOrder, now, now]);
+    }
+  },
+} as const;

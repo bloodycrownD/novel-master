@@ -1,8 +1,8 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { WorkplaceFileTree } from "../../src/domain/workplace/logic/workplace-file-tree.js";
-import { WorkplaceLabels } from "../../src/domain/workplace/logic/workplace-labels.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceFileTree  } from "../../src/domain/workplace/logic/workplace-file-tree.js";
+import {  WorkplaceLabels  } from "../../src/domain/workplace/logic/workplace-labels.js";
 import type { DisplayState } from "../../src/domain/workplace/model/workplace-types.js";
 
 const sessionScope = {

@@ -1,16 +1,16 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { RollbackErrorGuards } from "@novel-master/core/message-checkpoint";
+import {  describe, it  } from "node:test";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  RollbackErrorGuards  } from "@novel-master/core/message-checkpoint";
 // isSessionFsError 已从公开入口撤下（导出面收口注释：测试走 src 路径）。
-import { isSessionFsError } from "../../src/errors/guards.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  isSessionFsError  } from "../../src/errors/guards.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  LogicalPath  } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -75,7 +75,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
         assert.equal(RollbackErrorGuards.isVfsDegradable(error), false);
         assert.equal(
           isSessionFsError(error) &&
-            isAppError(error, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"),
+            AppErrorOps.is(error, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"),
           true,
         );
         assert.equal((error as {messageKey?: string}).messageKey, "error.session_fs.rollback_revision_backfill_required");
@@ -189,7 +189,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       (error: unknown) => {
         assert.equal(
           isSessionFsError(error) &&
-            isAppError(error, "SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND"),
+            AppErrorOps.is(error, "SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND"),
           true,
         );
         assert.equal(RollbackErrorGuards.isVfsDegradable(error), false);

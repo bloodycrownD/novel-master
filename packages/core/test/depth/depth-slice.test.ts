@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { DepthSlice } from "../../src/domain/depth/logic/depth-slice.js";
+import {  describe, it  } from "node:test";
+import {  DepthSlice  } from "../../src/domain/depth/logic/depth-slice.js";
 
 describe("depth slice", () => {
   const ids = ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9"];

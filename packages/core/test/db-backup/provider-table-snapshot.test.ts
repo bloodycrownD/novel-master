@@ -1,27 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open, ProviderTableSnapshotIo, type ProviderTableSnapshot, type TdbcConnection } from "@novel-master/core";
-import { NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { isAppError } from "@novel-master/core/errors";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { userMessageOf } from "../../src/i18n/error-message.js";
-import {
-  execLegacySavedModelTable,
-  seedLegacySavedModelRows,
-} from "../bootstrap/helpers/legacy-db-fixtures.js";
+import {  mkdtemp, rm  } from "node:fs/promises";
+import {  tmpdir  } from "node:os";
+import {  join  } from "node:path";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, ProviderTableSnapshotIo, type ProviderTableSnapshot, type TdbcConnection  } from "@novel-master/core";
+import {  NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  ErrorMessage  } from "../../src/i18n/error-message.js";
+import {  execLegacySavedModelTable, seedLegacySavedModelRows  } from "../bootstrap/helpers/legacy-db-fixtures.js";
 
 const NOW_MS = 1_700_000_000_000;
 
 /** 注册 better-sqlite3 驱动并打开内存库（不 bootstrap）。 */
 async function openRawMemoryDb(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
-  return open("tdbc:sqlite:file::memory:", {
+  return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -36,7 +30,7 @@ async function execBootstrapSchemaDdl(conn: TdbcConnection): Promise<void> {
 /** 注册 better-sqlite3 驱动并打开已 bootstrap 的内存库。 */
 async function openMemoryDb(): Promise<TdbcConnection> {
   const conn = await openRawMemoryDb();
-  await bootstrapNovelMaster(conn);
+  await NovelMasterBootstrap.bootstrap(conn);
   return conn;
 }
 
@@ -205,10 +199,10 @@ describe("provider-table-snapshot", () => {
       await seedTestProviderData(mainConn);
       const mainRowsBefore = await countProviderRows(mainConn);
 
-      const exportConn = await open(`tdbc:sqlite:file:${attachPath}`, {
+      const exportConn = await TdbcOpen.open(`tdbc:sqlite:file:${attachPath}`, {
         driver: BETTER_SQLITE3_DRIVER_NAME,
       });
-      await bootstrapNovelMaster(exportConn);
+      await NovelMasterBootstrap.bootstrap(exportConn);
       await seedTestProviderData(exportConn);
       assert.ok((await countProviderRows(exportConn)) > 0);
       await exportConn.close();
@@ -217,7 +211,7 @@ describe("provider-table-snapshot", () => {
 
       assert.equal(await countProviderRows(mainConn), mainRowsBefore);
 
-      const verifyConn = await open(`tdbc:sqlite:file:${attachPath}`, {
+      const verifyConn = await TdbcOpen.open(`tdbc:sqlite:file:${attachPath}`, {
         driver: BETTER_SQLITE3_DRIVER_NAME,
       });
       assert.equal(await countProviderRows(verifyConn), 0);
@@ -245,9 +239,9 @@ describe("provider-table-snapshot", () => {
       await ProviderTableSnapshotIo.scrub(target);
       await ProviderTableSnapshotIo.restore(target, snapshot);
       await assert.rejects(
-        bootstrapNovelMaster(target),
+        NovelMasterBootstrap.bootstrap(target),
         (err: unknown) => {
-          const descriptor = userMessageOf(err);
+          const descriptor = ErrorMessage.userOf(err);
           return descriptor != null && descriptor.key === "error.infra.baseline_too_old";
         },
         "legacy saved_model 表无 id 列 → 应被 baseline 检查拦下",
@@ -273,7 +267,7 @@ describe("ProviderTableSnapshotIo.restore 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
-          assert.ok(isAppError(err, "DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID"));
+          assert.ok(AppErrorOps.is(err, "DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID"));
           assert.equal(err.details?.["table"], "llm_provider");
           return true;
         },
@@ -294,7 +288,7 @@ describe("ProviderTableSnapshotIo.restore 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
-          assert.ok(isAppError(err, "DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY"));
+          assert.ok(AppErrorOps.is(err, "DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY"));
           return true;
         },
       );
@@ -312,7 +306,7 @@ describe("ProviderTableSnapshotIo.restore 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
-          assert.ok(isAppError(err, "DB_BACKUP_DANGLING_SAVED_MODEL"));
+          assert.ok(AppErrorOps.is(err, "DB_BACKUP_DANGLING_SAVED_MODEL"));
           assert.equal(err.details?.["table"], "llm_saved_model");
           return true;
         },
@@ -330,7 +324,7 @@ describe("ProviderTableSnapshotIo.restore 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
-          assert.ok(isAppError(err, "DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING"));
+          assert.ok(AppErrorOps.is(err, "DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING"));
           return true;
         },
       );

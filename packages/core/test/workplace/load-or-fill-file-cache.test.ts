@@ -6,17 +6,14 @@
  * 的回退与短路行为。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Result } from "../../src/errors/either.js";
-import { FileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
+import {  describe, it  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import {
-  CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES,
-  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
-} from "../../src/domain/character-card/logic/character-card-limits.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES  } from "../../src/domain/character-card/logic/character-card-limits.js";
 
 /** 只实现 read / findContentSize 的探测专用 fake；read 调用即记数。 */
 function fakeVfs(options: {

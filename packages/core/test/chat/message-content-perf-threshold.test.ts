@@ -16,18 +16,14 @@
  * @module test/chat/message-content-perf-threshold
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  randomUUID  } from "node:crypto";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 novelMasterTestFixture();

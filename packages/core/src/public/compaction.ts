@@ -8,6 +8,6 @@ export { compactionConditionsSchema } from "../domain/compaction-conditions/mode
 export type { CompactionConditionsStore } from "../service/compaction-conditions/compaction-conditions-store.port.js";
 export { CompactionFactory, type CompactionConditionEvaluator } from "../service/compaction-conditions/compaction-factory.js";
 export {
-  runCompaction,
+  Compaction,
   type RunCompactionDeps,
 } from "../service/compaction-conditions/run-compaction.js";

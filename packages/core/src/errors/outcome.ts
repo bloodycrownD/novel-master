@@ -31,28 +31,33 @@ export type Outcome<T> =
     | { readonly kind: "replaced" }
     | { readonly kind: "failed"; readonly error: AppError };
 
-/** 成功时变换 value，中断/替换/失败原样透传（同一对象，不换壳）。 */
-export function mapOutcome<T, U>(o: Outcome<T>, fn: (v: T) => U): Outcome<U> {
-    return o.kind === "completed" ? { kind: "completed", value: fn(o.value) } : o;
-}
+/**
+ * Outcome 操作族（与类型 {@link Outcome} 同名双声明）。
+ */
+export const Outcome = {
+    /** 成功时变换 value，中断/替换/失败原样透传（同一对象，不换壳）。 */
+    map<T, U>(o: Outcome<T>, fn: (v: T) => U): Outcome<U> {
+        return o.kind === "completed" ? { kind: "completed", value: fn(o.value) } : o;
+    },
 
-/** 成功时接续下一个会返回 Outcome 的步骤（flatMap）；其余分支短路透传，fn 不被调用。 */
-export function andThenOutcome<T, U>(o: Outcome<T>, fn: (v: T) => Outcome<U>): Outcome<U> {
-    return o.kind === "completed" ? fn(o.value) : o;
-}
+    /** 成功时接续下一个会返回 Outcome 的步骤（flatMap）；其余分支短路透传，fn 不被调用。 */
+    andThen<T, U>(o: Outcome<T>, fn: (v: T) => Outcome<U>): Outcome<U> {
+        return o.kind === "completed" ? fn(o.value) : o;
+    },
 
-/** 四分支穷尽分发：每个分支都必须给值（边界分派与 UI 展示常用）。 */
-export function matchOutcome<T, R>(o: Outcome<T>, on: { completed: (v: T) => R; cancelled: (r: AbortReason) => R; replaced: () => R; failed: (e: AppError) => R }): R {
-    switch (o.kind) {
-        case "completed": return on.completed(o.value);
-        case "cancelled": return on.cancelled(o.reason);
-        case "replaced": return on.replaced();
-        case "failed": return on.failed(o.error);
-    }
-}
+    /** 四分支穷尽分发：每个分支都必须给值（边界分派与 UI 展示常用）。 */
+    match<T, R>(o: Outcome<T>, on: { completed: (v: T) => R; cancelled: (r: AbortReason) => R; replaced: () => R; failed: (e: AppError) => R }): R {
+        switch (o.kind) {
+            case "completed": return on.completed(o.value);
+            case "cancelled": return on.cancelled(o.reason);
+            case "replaced": return on.replaced();
+            case "failed": return on.failed(o.error);
+        }
+    },
 
-/** 从 Outcome 提取中断信号：cancelled / replaced 返回对应 Interrupt，completed / failed 返回 null。 */
-export function interruptOf(o: Outcome<unknown>): Interrupt | null {
-    if (o.kind === "cancelled") return { kind: "cancelled", reason: o.reason };
-    return o.kind === "replaced" ? { kind: "replaced" } : null;
-}
+    /** 从 Outcome 提取中断信号：cancelled / replaced 返回对应 Interrupt，completed / failed 返回 null。 */
+    interruptOf(o: Outcome<unknown>): Interrupt | null {
+        if (o.kind === "cancelled") return { kind: "cancelled", reason: o.reason };
+        return o.kind === "replaced" ? { kind: "replaced" } : null;
+    },
+} as const;

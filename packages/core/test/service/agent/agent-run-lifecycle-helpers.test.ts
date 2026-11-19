@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { RunLifecycle } from '../../../src/service/agent/logic/agent-run-lifecycle-helpers.js';
+import {  describe, it  } from 'node:test';
+import {  RunLifecycle  } from '../../../src/service/agent/logic/agent-run-lifecycle-helpers.js';
 
 describe('RunLifecycle.shouldAccept', () => {
   it('activeRunId 为空时拒绝', () => {

@@ -30,16 +30,18 @@ const NON_CJK_CHARS_PER_TOKEN = 3.35;
  */
 const CJK_CHAR_PATTERN = /[\u2E80-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]/g;
 
-/**
- * 纯字符统计的保守估算：`ceil(CJK 字符数 × 1.64 + 其余字符数 ÷ 3.35)`。
- * 空串返回 0。
- */
-export function estimateTokensCjkAware(text: string): number {
-  if (text.length === 0) {
-    return 0;
-  }
-  const matches = text.match(CJK_CHAR_PATTERN);
-  const cjk = matches == null ? 0 : matches.length;
-  const rest = text.length - cjk;
-  return Math.ceil(cjk * CJK_TOKENS_PER_CHAR + rest / NON_CJK_CHARS_PER_TOKEN);
-}
+export const CjkAwareEstimate = {
+  /**
+   * 纯字符统计的保守估算：`ceil(CJK 字符数 × 1.64 + 其余字符数 ÷ 3.35)`。
+   * 空串返回 0。
+   */
+  estimate(text: string): number {
+    if (text.length === 0) {
+      return 0;
+    }
+    const matches = text.match(CJK_CHAR_PATTERN);
+    const cjk = matches == null ? 0 : matches.length;
+    const rest = text.length - cjk;
+    return Math.ceil(cjk * CJK_TOKENS_PER_CHAR + rest / NON_CJK_CHARS_PER_TOKEN);
+  },
+} as const;

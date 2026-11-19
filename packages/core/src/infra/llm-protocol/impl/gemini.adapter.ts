@@ -7,13 +7,13 @@
 import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter } from "../ports/adapter.port.js";
-import { blocksToGeminiParts, chatMessagesToGeminiContents, geminiPartsToBlocks, toolsToGeminiFunctionDeclarations } from "../logic/gemini-content-mapper.js";
-import { createGeminiSseParser } from "../logic/gemini-sse-parser.js";
-import { fetchJson, joinUrl } from "../logic/http-util.js";
-import { postSse } from "../logic/llm-sse-transport.js";
-import { isRequestAborted } from "../logic/request-abort.js";
-import { applyThinkingToBody } from "../logic/apply-thinking-to-body.js";
-import { parseUsage } from "../logic/usage-parser.js";
+import { GeminiMapper } from "../logic/gemini-content-mapper.js";
+import { GeminiSseParser } from "../logic/gemini-sse-parser.js";
+import { HttpUtil } from "../logic/http-util.js";
+import { LlmSseTransport } from "../logic/llm-sse-transport.js";
+import { RequestAbort } from "../logic/request-abort.js";
+import { ThinkingBody } from "../logic/apply-thinking-to-body.js";
+import { UsageParser } from "../logic/usage-parser.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   readonly kind = "gemini" as const;
@@ -21,8 +21,8 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
-    const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
-    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders }, signal: req.scope?.signal });
+    const url = `${HttpUtil.joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
+    const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders }, signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { models?: Array<{ name?: string; displayName?: string }> };
     const models = (data.models ?? [])
@@ -41,14 +41,14 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     if (req.stream) {
       const url = this.modelUrl(req, "streamGenerateContent");
-      const parser = createGeminiSseParser({ onStream: req.onStream });
+      const parser = GeminiSseParser.create({ onStream: req.onStream });
 
       try {
         const headers = { "Content-Type": "application/json", ...req.extraHeaders };
         const init = { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal };
-        await postSse(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+        await LlmSseTransport.post(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
-        if (!isRequestAborted(error, req.scope?.signal)) {
+        if (!RequestAbort.isAborted(error, req.scope?.signal)) {
           throw error;
         }
       }
@@ -57,7 +57,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       const finishResult = aborted ? parser.finishPartial() : parser.finish();
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
       const assistantText = MessageBodyText.fromBlocks(blocks);
-      const usage = parseUsage("gemini", streamRaw);
+      const usage = UsageParser.parse("gemini", streamRaw);
       const result: LlmChatResult = {
         assistantText,
         blocks,
@@ -71,25 +71,25 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
     const url = this.modelUrl(req, "generateContent");
     const headers = { "Content-Type": "application/json", ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal });
+    const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> };
     const parts = record.candidates?.[0]?.content?.parts ?? [];
-    const blocks = geminiPartsToBlocks(parts);
+    const blocks = GeminiMapper.partsToBlocks(parts);
     const assistantText = MessageBodyText.fromBlocks(blocks);
-    const usage = parseUsage("gemini", raw);
+    const usage = UsageParser.parse("gemini", raw);
     return { assistantText, blocks, raw, usage };
   }
 
   private buildRequestBody(req: LlmChatRequest): Record<string, unknown> {
     let contents: unknown[];
     if (req.history != null && req.history.length > 0) {
-      const mapped = chatMessagesToGeminiContents(req.history, { toolLookupMessages: req.toolUseLookupMessages, knownToolNames: req.tools?.map((t) => t.name) });
+      const mapped = GeminiMapper.chatMessagesToContents(req.history, { toolLookupMessages: req.toolUseLookupMessages, knownToolNames: req.tools?.map((t) => t.name) });
       if (!mapped.ok) throw mapped.error;
       contents = mapped.value;
     } else {
-      const parts = blocksToGeminiParts(TextBlocks.of(req.userContent).blocks);
+      const parts = GeminiMapper.blocksToParts(TextBlocks.of(req.userContent).blocks);
       if (!parts.ok) throw parts.error;
       contents = [{ role: "user", parts: parts.value }];
     }
@@ -98,12 +98,12 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       body.systemInstruction = { parts: [{ text: req.system }] };
     }
     if (req.tools != null && req.tools.length > 0) {
-      body.tools = toolsToGeminiFunctionDeclarations(req.tools);
+      body.tools = GeminiMapper.toolsToFunctionDeclarations(req.tools);
     }
     if (req.sampling?.protocol === "gemini") {
       body.generationConfig = { ...req.sampling.gemini };
     }
-    applyThinkingToBody("gemini", body, req.thinking);
+    ThinkingBody.apply("gemini", body, req.thinking);
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 generationConfig）。
     Object.assign(body, req.extraBody);
     return body;
@@ -111,7 +111,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
   private modelUrl(req: LlmChatRequest, action: "generateContent" | "streamGenerateContent"): string {
     const path = `/models/${encodeURIComponent(req.vendorModelId)}:${action}`;
-    const base = `${joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(req.apiKey)}`;
+    const base = `${HttpUtil.joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(req.apiKey)}`;
     return action === "streamGenerateContent" ? `${base}&alt=sse` : base;
   }
 }

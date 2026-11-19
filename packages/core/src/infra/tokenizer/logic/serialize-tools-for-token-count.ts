@@ -26,17 +26,19 @@
 
 import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.js";
 
-/**
- * 序列化 tools 段；`tools` 为空/未定义时返回空串（可直接拼接）。
- */
-export function serializeToolsForTokenCount(tools?: readonly LlmToolDefinition[]): string {
-  if (tools == null || tools.length === 0) {
-    return "";
-  }
-  const normalized = tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-  }));
-  return `\n${JSON.stringify(normalized)}`;
-}
+export const TokenCountTools = {
+  /**
+   * 序列化 tools 段；`tools` 为空/未定义时返回空串（可直接拼接）。
+   */
+  serialize(tools?: readonly LlmToolDefinition[]): string {
+    if (tools == null || tools.length === 0) {
+      return "";
+    }
+    const normalized = tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }));
+    return `\n${JSON.stringify(normalized)}`;
+  },
+} as const;

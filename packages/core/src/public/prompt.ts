@@ -22,9 +22,9 @@ export { AgentPromptLayoutValidate } from "../domain/prompt/logic/validate-agent
 export { AgentPromptLayoutNormalize } from "../domain/prompt/logic/normalize-agent-prompt-layout.js";
 export { LlmExport } from "../domain/prompt/logic/normalize-for-llm-export.js";
 export type { LlmExportZones } from "../domain/prompt/logic/normalize-for-llm-export.js";
-export { applyThinkingContextForLlm } from "../service/prompt/apply-thinking-context-for-llm.js";
+export { ThinkingContext } from "../service/prompt/apply-thinking-context-for-llm.js";
 export type { ThinkingContextOptions } from "../service/prompt/apply-thinking-context-for-llm.js";
-export { resolvePreviewThinkingContext } from "../service/prompt/resolve-preview-thinking-context.js";
+export { PreviewThinkingContext } from "../service/prompt/resolve-preview-thinking-context.js";
 export type { ResolvePreviewThinkingContextInput } from "../service/prompt/resolve-preview-thinking-context.js";
 export {
   ALLOWED_DYNAMIC_ROOT_MACROS,
@@ -41,7 +41,7 @@ export type {
   PromptWorkplaceCardData,
   PromptWorkplaceFileCardData,
 } from "../service/prompt/render-prompt.js";
-export { formatToolUsePreviewJson } from "../service/prompt/prompt-preview-turns.js";
+export { PromptPreviewTurns } from "../service/prompt/prompt-preview-turns.js";
 export type {
   PromptRenderContext,
   PromptSkillIndexEntry,

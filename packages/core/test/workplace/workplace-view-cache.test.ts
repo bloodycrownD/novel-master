@@ -7,21 +7,17 @@
  * 该计数即「全量评估次数」（命中缓存与采样签名都不触它；采样走
  * computeEntrySignature 的单行聚合 SQL）。
  */
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { DefaultWorkplaceService } from "@/service/workplace/impl/workplace.service.js";
-import { clearAllWorkplaceViewCache } from "@/service/workplace/impl/workplace-view-cache.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  DefaultWorkplaceService  } from "@/service/workplace/impl/workplace.service.js";
+import {  WorkplaceViewCache  } from "@/service/workplace/impl/workplace-view-cache.js";
+import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function createSpyingWorkplaceService(
   conn: import("@novel-master/core").TdbcConnection,
@@ -94,7 +90,7 @@ novelMasterTestFixture();
 
 describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC1：同 scope 连续两次 buildListRows——仅一次全量 metadata 且结果一致", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -115,7 +111,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC2：写同一文件后签名失效——重评估计数增长且新内容可见", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -140,7 +136,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC3：rename 只改 path（count/version 集合语义不变）——path 敏感签名失效，视图路径更新", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -165,7 +161,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC4：规则同数改写（翻转 rule_enabled，行数不变）——规则序列化签名失效", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -209,7 +205,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC5：resetHeadToVersion 写回历史 mtime——按 updated 排序的视图变化可见", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -252,7 +248,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC6：同 conn 两个 service 实例同 scope——第二实例命中（工厂击穿场景）", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -265,7 +261,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
     assert.equal(a.calls.listFileMetaUnderPrefix, 1);
 
     // 实例 B：走生产工厂（runtime.workplace 每次调用 new 新实例的路径）
-    const b = createWorkplaceService(ctx.conn, {
+    const b = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "project",
       projectId: project.id,
     });
@@ -279,11 +275,11 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC7：两个连接同名 scope（global）互不命中——无跨库串缓存", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     await ctx.globalVfs().write("/shared-marker.md", "M");
 
-    const a = createWorkplaceService(ctx.conn, { kind: "global" });
+    const a = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
     const rowsA = unwrap(await a.buildListRows());
     assert.ok(
       rowsA.some((r) => r.path === "/shared-marker.md"),
@@ -293,7 +289,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
     // conn B：独立内存库（core 测试多库同进程场景）
     const secondCtx = await openNovelMasterTestConnection();
     try {
-      const b = createWorkplaceService(secondCtx.conn, { kind: "global" });
+      const b = WorkplaceServiceFactory.create(secondCtx.conn, { kind: "global" });
       const rowsB = unwrap(await b.buildListRows());
       assert.ok(
         !rowsB.some((r) => r.path === "/shared-marker.md"),
@@ -310,7 +306,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC8：mkdir 空目录改变签名——空目录在视图中可见", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -336,7 +332,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   });
 
   it("T-WMC9：600 文件毒库性能哨兵——第二次评估零全量查询且耗时显著低于首次", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);

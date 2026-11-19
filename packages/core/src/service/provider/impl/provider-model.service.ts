@@ -15,7 +15,7 @@ import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { DefaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
 import { SavedModelSettings, type SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
 import { SavedModelSettingsJson } from "@/domain/provider/model/saved-model-settings-from-json.js";
-import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
+import { TokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
@@ -23,7 +23,7 @@ import { SavedModelReferences } from "@/domain/provider/logic/find-saved-model-r
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
+import { Registry } from "@/infra/llm-protocol/logic/registry.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { ApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import type { ProviderModelService } from "../provider-model.port.js";
@@ -69,7 +69,7 @@ export class DefaultProviderModelService implements ProviderModelService {
       return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId }));
     }
     const apiKey = apiKeyResult.value;
-    const adapter = getProtocolAdapter(provider.protocol);
+    const adapter = Registry.getProtocolAdapter(provider.protocol);
     // 缺省 scope = 不可取消（CLI / 旧调用点）；desktop handler 会传入带 deadline 的 scope。
     const result = await adapter.listModels({ baseUrl: provider.baseUrl, apiKey, extraHeaders: provider.headers, scope: scope ?? AbortScopeFactory.create() });
 
@@ -171,7 +171,7 @@ export class DefaultProviderModelService implements ProviderModelService {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: "contextWindowTokens must be a positive integer", modelId: savedModelId, providerId: existing.providerId }));
     }
 
-    if (patch.tokenCounterMode != null && !isValidTokenCounterModePref(patch.tokenCounterMode)) {
+    if (patch.tokenCounterMode != null && !TokenCounterModePref.isValid(patch.tokenCounterMode)) {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, modelId: savedModelId, providerId: existing.providerId }));
     }
 

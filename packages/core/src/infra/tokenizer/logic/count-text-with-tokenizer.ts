@@ -22,7 +22,7 @@
  * 拉回亚秒级，因此它是**唯一**能同时覆盖两类输入的统一实现路径。
  *
  * 附带不变量：增量计数器内部把待编码段按 ≤64 字符切段（见
- * {@link createIncrementalTokenCounter}），所以**本函数的每一次 `encode` 入参
+ * {@link IncrementalTokenCounter.create}），所以**本函数的每一次 `encode` 入参
  * 恒 ≤64 字符**，调用方不必再为「编码器被喂超长串」做防御。
  *
  * 本函数与流式用法的构造口径**故意不同**：这里用
@@ -42,39 +42,41 @@
  * @module infra/tokenizer/logic/count-text-with-tokenizer
  */
 
-import { createIncrementalTokenCounter, type IncrementalTokenCounter } from "./incremental-token-counter.js";
+import { IncrementalTokenCounter } from "./incremental-token-counter.js";
 
-/**
- * 用真分词器（由调用方以 `encode` 注入）计一段文本的 token 数。
- *
- * 「喂整段文本进增量计数器」是这里唯一的实现：既有 `createIncrementalTokenCounter`
- * 的尾窗/边界固化逻辑，也顺带拿到「单次 encode ≤64 字符」的不变量（见模块头）。
- *
- * @param encode 真实编码器（真 tiktoken / js-tiktoken 均可）；抛错表示该段不可
- *   编码，由计数器按 1 字符计 1 token 兜底计入（保证不丢段、读数不倒退；⚠️ 对
- *   中文而言这个 1:1 仍可能**低于**真值，方向是偏保守、**不是上界**）。
- * @param text 待计数文本；空串返回 0。
- * @returns token 数（估算值，误差实测 ≤0.6%）。
- */
-export function countTextWithIncrementalTokenizer(encode: (text: string) => number, text: string): number {
-  if (text.length === 0) {
-    return 0;
-  }
-  // 收紧尾窗到 `normalLimit = tailChars + commitStepChars = 1`：全文逐段走**固化
-  // 路径**，失败段由固化路径「1 字符计 1 token」兜底且**不丢段**（不丢段这一点
-  // 见 `incremental-token-counter.ts` 的 `commitOnce`）。循环结束后尾窗残留 ≤1
-  // 字符——单字符不可能触发特殊 token，**读值路径实际不再可能失败**。
-  const counter: IncrementalTokenCounter = createIncrementalTokenCounter({
-    encode,
-    tailChars: 0,
-    commitStepChars: 1,
-  });
-  counter.push(text);
-  const counted = counter.tokens;
-  // belt-and-braces 兜底（不可达但保留）：一次性调用与流式用法的关键差异是——计数器
-  // 的「尾窗读值失败」分支返回的是**上一次成功读值**（流式下≈累计值，合理），而本
-  // 函数只读一次，那个「上一次」是 0；非空文本读出 0 在计数语义下必然是错，按同一
-  // 条「1 字符计 1 token、不丢段、读数不倒退」的兜底收口。注意它是**保守**方向：
-  // 对中文而言 1:1 只有真值的 0.61×，**不是上界**（模块头有完整口径）。
-  return counted > 0 ? counted : text.length;
-}
+export const TokenizerTextCount = {
+  /**
+   * 用真分词器（由调用方以 `encode` 注入）计一段文本的 token 数。
+   *
+   * 「喂整段文本进增量计数器」是这里唯一的实现：既有 `IncrementalTokenCounter.create`
+   * 的尾窗/边界固化逻辑，也顺带拿到「单次 encode ≤64 字符」的不变量（见模块头）。
+   *
+   * @param encode 真实编码器（真 tiktoken / js-tiktoken 均可）；抛错表示该段不可
+   *   编码，由计数器按 1 字符计 1 token 兜底计入（保证不丢段、读数不倒退；⚠️ 对
+   *   中文而言这个 1:1 仍可能**低于**真值，方向是偏保守、**不是上界**）。
+   * @param text 待计数文本；空串返回 0。
+   * @returns token 数（估算值，误差实测 ≤0.6%）。
+   */
+  count(encode: (text: string) => number, text: string): number {
+    if (text.length === 0) {
+      return 0;
+    }
+    // 收紧尾窗到 `normalLimit = tailChars + commitStepChars = 1`：全文逐段走**固化
+    // 路径**，失败段由固化路径「1 字符计 1 token」兜底且**不丢段**（不丢段这一点
+    // 见 `incremental-token-counter.ts` 的 `commitOnce`）。循环结束后尾窗残留 ≤1
+    // 字符——单字符不可能触发特殊 token，**读值路径实际不再可能失败**。
+    const counter: IncrementalTokenCounter = IncrementalTokenCounter.create({
+      encode,
+      tailChars: 0,
+      commitStepChars: 1,
+    });
+    counter.push(text);
+    const counted = counter.tokens;
+    // belt-and-braces 兜底（不可达但保留）：一次性调用与流式用法的关键差异是——计数器
+    // 的「尾窗读值失败」分支返回的是**上一次成功读值**（流式下≈累计值，合理），而本
+    // 函数只读一次，那个「上一次」是 0；非空文本读出 0 在计数语义下必然是错，按同一
+    // 条「1 字符计 1 token、不丢段、读数不倒退」的兜底收口。注意它是**保守**方向：
+    // 对中文而言 1:1 只有真值的 0.61×，**不是上界**（模块头有完整口径）。
+    return counted > 0 ? counted : text.length;
+  },
+} as const;

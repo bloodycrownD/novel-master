@@ -11,11 +11,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  DecodedContentPool,
-  decodedContentCache,
-} from "@/infra/content-cache/logic/decoded-content-cache.js";
+import {  describe, it  } from "node:test";
+import {  DecodedContentPool, decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
 
 describe("DecodedContentPool", () => {
   it("miss → set → hit；命中刷新 LRU 序（最久未用先逐出）", () => {

@@ -10,7 +10,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import type { VfsBatchIoService } from "@/domain/vfs/ports/vfs-batch-io.port.js";
 import type { VfsZipIoService } from "@/domain/vfs/ports/vfs-zip-io.port.js";
 import type { CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
 import { DefaultVfsService } from "./impl/vfs.service.js";
 import { RevisionAwareVfsService } from "./impl/revision-aware-vfs.service.js";
 import { ScopedVfsService } from "./impl/scoped-vfs.service.js";
@@ -44,7 +44,7 @@ export const VfsServiceFactory = {
    * 返回 core-internal 的 InternalVfsService（按 scopeKey + 逻辑 path 操作）；apps 入口
    * 应改用 {@link VfsServiceFactory.createScoped}，它会把 scope 隐藏在 ScopedVfsService 后面。
    *
-   * @param conn - Open TDBC connection after {@link bootstrapNovelMaster}
+   * @param conn - Open TDBC connection after {@link NovelMasterBootstrap.bootstrap}
    */
   create: (conn: TdbcConnection): InternalVfsService => {
     const entryRepo = new SqliteVfsEntryRepository(conn);
@@ -55,7 +55,7 @@ export const VfsServiceFactory = {
   /**
    * Creates a {@link VfsService} scoped to global, project, or session domain.
    *
-   * @param conn - Open connection after {@link bootstrapNovelMaster}
+   * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    * @param scope - Visibility scope (logical paths only)
    */
   createScoped: (conn: TdbcConnection, scope: VfsScope): VfsService => {
@@ -67,7 +67,7 @@ export const VfsServiceFactory = {
   /**
    * Creates a read-only {@link PhysicalVfsService} for the given connection.
    *
-   * @param conn - Open connection after `bootstrapNovelMaster`
+   * @param conn - Open connection after `NovelMasterBootstrap.bootstrap`
    */
   // nm-style: keep-local — 公共组合根（cli / desktop / mobile 三端从 public/vfs 取用）：
   // 隔离 impl/DefaultPhysicalVfsService，port 层不暴露实现。
@@ -82,7 +82,7 @@ export const VfsServiceFactory = {
       testHook: options.testHook,
       // 对外签名 (conn, options?) 不变；sessionKkv 在工厂内部自建并注入
       // （照 zip / 角色卡工厂的同一模式）。
-      sessionKkv: createSessionKkvService(conn),
+      sessionKkv: SessionKkvServiceFactory.create(conn),
     });
   },
 
@@ -94,7 +94,7 @@ export const VfsServiceFactory = {
     return new DefaultVfsZipIoService(conn, repo, {
       testHook: options.testHook,
       // 对外签名 (conn, options?) 不变；sessionKkv 在工厂内部自建并注入。
-      sessionKkv: createSessionKkvService(conn),
+      sessionKkv: SessionKkvServiceFactory.create(conn),
     });
   },
 
@@ -106,7 +106,7 @@ export const VfsServiceFactory = {
     return new DefaultCharacterCardImportService(conn, repo, {
       testHook: options.testHook,
       // 对外签名 (conn, options?) 不变；sessionKkv 在工厂内部自建并注入。
-      sessionKkv: createSessionKkvService(conn),
+      sessionKkv: SessionKkvServiceFactory.create(conn),
     });
   },
 } as const;

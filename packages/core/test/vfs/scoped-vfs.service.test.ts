@@ -1,9 +1,9 @@
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  LogicalPath  } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 novelMasterTestFixture();
@@ -43,7 +43,7 @@ describe("ScopedVfsService", () => {
   it("rejects legacy /template logical paths", async () => {
     const ctx = getNovelMasterTestContext();
     await rejectsErr(() => ctx.globalVfs().write("/template/legacy.md", "x"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_INVALID_PATH"));
+      assert.ok(AppErrorOps.is(e, "VFS_INVALID_PATH"));
     });
   });
 
@@ -53,7 +53,7 @@ describe("ScopedVfsService", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     unwrap(await ctx.sessionVfs(project.id, session.id).write("/note.md", "n"));
     await rejectsErr(() => ctx.projectVfs(project.id).read("/note.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 

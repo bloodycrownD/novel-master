@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { Duckduckgo } from "../../src/domain/tool/builtin/search/engines/duckduckgo.js";
+import {  Duckduckgo  } from "../../src/domain/tool/builtin/search/engines/duckduckgo.js";
 import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
 
 /** 与实现内联字面量保持同步的请求形状断言基线（实现侧常量已撤 export）。 */

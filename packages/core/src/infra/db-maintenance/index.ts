@@ -11,7 +11,7 @@
  */
 
 export {
-  createDbMaintenanceService,
+  DbMaintenance,
 } from "./impl/db-maintenance.service.js";
 export type {
   DatabaseMaintenanceResult,

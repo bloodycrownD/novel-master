@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../../src/errors/app-error.js";
-import { createGeminiSseParser } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
+import {  GeminiSseParser  } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
 
 describe("gemini-sse-parser", () => {
   it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
@@ -13,7 +13,7 @@ describe("gemini-sse-parser", () => {
         deltas.push(ev.text);
       }
     };
-    const parser = createGeminiSseParser({ onStream });
+    const parser = GeminiSseParser.create({ onStream });
 
     parser.feed('data:{"candidates":[{"content":{"parts":[{"text":"Hi"}]}}]}\n\n');
     const { blocks } = parser.finish();
@@ -24,7 +24,7 @@ describe("gemini-sse-parser", () => {
   });
 
   it("SSE-DATA-NS-02: 有空格形态不回归", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed('data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]}}]}\n\n');
     const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
@@ -33,7 +33,7 @@ describe("gemini-sse-parser", () => {
 
   it("T6: parses incremental text SSE and done", () => {
     const deltas: string[] = [];
-    const parser = createGeminiSseParser({
+    const parser = GeminiSseParser.create({
       onStream: (ev) => {
         if (ev.type === "text-delta") {
           deltas.push(ev.text);
@@ -63,7 +63,7 @@ describe("gemini-sse-parser", () => {
     const onStream = (ev: { type: string; text?: string }) => {
       streamEvents.push(ev);
     };
-    const parser = createGeminiSseParser({ onStream });
+    const parser = GeminiSseParser.create({ onStream });
 
     parser.feed(
       [
@@ -98,7 +98,7 @@ describe("gemini-sse-parser", () => {
   });
 
   it("extracts thought_signature from streamed thinking parts", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed('data: {"candidates":[{"content":{"parts":[{"text":"plan","thought":true,"thought_signature":"sig-stream"}]}}]}\n');
     const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
@@ -109,7 +109,7 @@ describe("gemini-sse-parser", () => {
   });
 
   it("functionCall thought_signature stays on tool_use, not empty thinking block", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed('data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"read","args":{"path":"/a"},"id":"call_1"},"thought_signature":"sig-fc-only"}]}}]}\n');
     const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
@@ -127,7 +127,7 @@ describe("gemini-sse-parser", () => {
         toolUses.push(ev);
       }
     };
-    const parser = createGeminiSseParser({ onStream });
+    const parser = GeminiSseParser.create({ onStream });
 
     parser.feed('data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"write","args":{"path":"/a"},"id":"c1"}}]}}]}\n');
     parser.feed('data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"write","args":{"path":"/a","content":"hello"},"id":"c1"}}]}}]}\n');
@@ -137,26 +137,26 @@ describe("gemini-sse-parser", () => {
   });
 
   it("T7: abort partial keeps thinking without empty text", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed('data: {"candidates":[{"content":{"parts":[{"text":"thought","thought":true}]}}]}\n');
     const { blocks } = parser.finishPartial();
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
   });
   it("SSE-MAL-01: only malformed lines throw on finish", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed("data: {not-json\n\n");
     assert.throws(
       () => parser.finish(),
       (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_MALFORMED_SSE"));
+        assert.ok(AppErrorOps.is(err, "PROVIDER_MALFORMED_SSE"));
         return true;
       },
     );
   });
 
   it("SSE-MAL-02: malformed line with valid text", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed("data: oops\n\n");
     parser.feed("data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"x\"}]}}]}\n\n");
     const { blocks } = parser.finish();
@@ -169,7 +169,7 @@ describe("gemini-sse-parser", () => {
     const onStream = (ev: { type: string }) => {
       if (ev.type === "tool-use") toolUses.push(ev);
     };
-    const parser = createGeminiSseParser({ onStream });
+    const parser = GeminiSseParser.create({ onStream });
     parser.feed("data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"write\",\"args\":{\"path\":\"/a\"},\"id\":\"c1\"}}]}}]}\n");
     assert.equal(toolUses.length, 1);
     parser.feed("data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"write\",\"args\":{\"path\":\"/a\",\"content\":\"hi\"},\"id\":\"c1\"}}]}}]}\n");
@@ -179,7 +179,7 @@ describe("gemini-sse-parser", () => {
   });
 
   it("T-ITA-02 / TU-04: invalid args JSON at finish degrades, no throw", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.state.functionCalls.set("c1", {
       name: "read",
       argsJson: "{bad",
@@ -201,7 +201,7 @@ describe("gemini-sse-parser", () => {
         usageEvents.push(ev.usage ?? {});
       }
     };
-    const parser = createGeminiSseParser({ onStream });
+    const parser = GeminiSseParser.create({ onStream });
 
     parser.feed(
       [
@@ -223,7 +223,7 @@ describe("gemini-sse-parser", () => {
 
   it("T-M2: 无候选内容的 usage-only 收尾块也 emit（streamRaw 存储点先于 candidates 早退）", () => {
     const usageEvents: Array<{ completionTokens?: number }> = [];
-    const parser = createGeminiSseParser({
+    const parser = GeminiSseParser.create({
       onStream: (ev) => {
         if (ev.type === "usage") {
           usageEvents.push(ev.usage ?? {});
@@ -246,7 +246,7 @@ describe("gemini-sse-parser", () => {
 
   it("T-M2: 块缺 usageMetadata 时不 emit 不报错", () => {
     let usageCount = 0;
-    const parser = createGeminiSseParser({
+    const parser = GeminiSseParser.create({
       onStream: (ev) => {
         if (ev.type === "usage") {
           usageCount += 1;

@@ -1,11 +1,11 @@
-import { unwrap } from "../helpers/result-unwrap.js";
-import { Result } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { WorkplaceRuleEngine } from "@/domain/workplace/logic/workplace-rule-engine.js";
-import { WorkplaceMaterializeEngine } from "@/domain/workplace/logic/workplace-materialize-engine.js";
-import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
+import {  WorkplaceRuleEngine  } from "@/domain/workplace/logic/workplace-rule-engine.js";
+import {  WorkplaceMaterializeEngine  } from "@/domain/workplace/logic/workplace-materialize-engine.js";
+import {  DEFAULT_WORKPLACE_DIR_RULE  } from "@/domain/workplace/logic/default-dir-rule.js";
 
 function createSpyVfs(
   contents: ReadonlyMap<string, string>,

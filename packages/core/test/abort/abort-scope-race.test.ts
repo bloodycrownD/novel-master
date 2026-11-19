@@ -8,10 +8,10 @@
  * EventTarget 上的真实 listener 数量。
  */
 import assert from "node:assert/strict";
-import { getEventListeners } from "node:events";
-import { describe, it } from "node:test";
+import {  getEventListeners  } from "node:events";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 /** 收集一个窗口内到达的 unhandledRejection（窗口内必须为 0）。 */
 async function collectUnhandled(ms: number, action: () => Promise<void>): Promise<unknown[]> {

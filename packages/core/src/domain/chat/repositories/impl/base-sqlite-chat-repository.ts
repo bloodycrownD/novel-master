@@ -10,7 +10,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 
 /** 子类差异部分：表名、读列投影、INSERT 语句与两组行/参数映射。 */
@@ -40,7 +40,7 @@ export abstract class BaseSqliteChatRepository<TEntity> {
   }
 
   async findById(id: string): Promise<TEntity | null> {
-    const rows = await queryTemplate(this.conn, this.parser, `SELECT ${this.columns} FROM ${this.table} WHERE id = #{id}`, { id });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ${this.columns} FROM ${this.table} WHERE id = #{id}`, { id });
     return rows.length === 0 ? null : this.entityFromRow(rows[0]!);
   }
 
@@ -49,7 +49,7 @@ export abstract class BaseSqliteChatRepository<TEntity> {
   }
 
   async delete(id: string): Promise<boolean> {
-    const result = await executeTemplate(this.conn, this.parser, `DELETE FROM ${this.table} WHERE id = #{id}`, { id });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${this.table} WHERE id = #{id}`, { id });
     return result.changes > 0;
   }
 }

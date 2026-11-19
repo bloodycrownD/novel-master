@@ -18,7 +18,7 @@
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -100,7 +100,7 @@ export const RestorePath = {
       }
       if (meta.status === "deleted") {
         const removed = await vfs.delete(logicalPath);
-        if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
+        if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
           return Result.err(removed.error);
         }
         return Result.ok("deleted");
@@ -136,7 +136,7 @@ export const RestorePath = {
 
     if (rev.value.status === "deleted") {
       const removed = await vfs.delete(logicalPath);
-      if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
+      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
         return Result.err(removed.error);
       }
       return Result.ok("deleted");

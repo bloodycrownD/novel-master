@@ -10,19 +10,15 @@
  * @module test/service/template/push-session-workspace
  */
 
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import { createTemplatePullService } from "../../../src/service/template/create-template-pull-service.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { isAppError } from "@/errors/app-error.js";
-import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  TemplatePullServiceFactory  } from "../../../src/service/template/create-template-pull-service.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+import {  SessionWorkspacePush  } from "@/service/template/logic/push-session-workspace.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -42,7 +38,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     unwrap(await svfs.write("/b.md", `B-new-${suffix}`));
     unwrap(await svfs.write("/sub/c.md", `C-${suffix}`));
 
-    await createTemplatePullService(ctx.conn).pushSessionTemplate(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pushSessionTemplate(session.id);
 
     // project 树 == session 快照：b'/c 在，a 被删
     const paths = unwrap(await pvfs.list("/", { recursive: true }))
@@ -79,7 +75,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     // create 之后才在 project 侧设独有规则（create 时会把 project 规则镜像进
     // session，放在 create 前就不再是「project 独有」了）。
-    const pwt = createWorkplaceService(ctx.conn, {
+    const pwt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "project",
       projectId: project.id,
     });
@@ -89,7 +85,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     // session 侧规则：/ headCount=5 + /c.md show
     const svfs = ctx.sessionVfs(project.id, session.id);
     unwrap(await svfs.write("/c.md", `C-${suffix}`));
-    const swt = createWorkplaceService(ctx.conn, {
+    const swt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -97,7 +93,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     unwrap(await swt.setDirRule({ logicalPath: "/", ruleEnabled: true, headCount: 5 }));
     unwrap(await swt.setFileRule({ logicalPath: "/c.md", inclusionMode: "show" }));
 
-    await createTemplatePullService(ctx.conn).pushSessionTemplate(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pushSessionTemplate(session.id);
 
     // push 后：project 规则 == session 版本（headCount=5），session 没有的规则被清除
     const projectDirRule = unwrap(await pwt.getDirRule("/"));
@@ -129,7 +125,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     unwrap(await svfs.write("/a.md", `A2-${suffix}`));
     unwrap(await svfs.write("/new.md", `NEW-${suffix}`));
 
-    await createTemplatePullService(ctx.conn).pushSessionTemplate(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pushSessionTemplate(session.id);
 
     assert.equal(
       unwrap(await pvfs.read("/a.md")).content,
@@ -154,10 +150,10 @@ describe("push-session-workspace（session → project 整树推送）", () => {
   it("T-WP4a: 会话不存在走 Err 通道（CHAT_NOT_FOUND）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const pushed = await createTemplatePullService(ctx.conn).pushSessionTemplate(`missing-${suffix}`);
+    const pushed = await TemplatePullServiceFactory.create(ctx.conn).pushSessionTemplate(`missing-${suffix}`);
     assert.ok(!pushed.ok, "会话不存在应走 Err 通道");
     if (!pushed.ok) {
-      assert.ok(isAppError(pushed.error, "CHAT_NOT_FOUND"), "应为 CHAT_NOT_FOUND");
+      assert.ok(AppErrorOps.is(pushed.error, "CHAT_NOT_FOUND"), "应为 CHAT_NOT_FOUND");
     }
   });
 
@@ -175,7 +171,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     // 事务内推送（真在写库），随后人为抛错回滚
     await assert.rejects(
       ctx.conn.transaction(async (tx) => {
-        await pushSessionWorkspace(tx, project.id, session.id);
+        await SessionWorkspacePush.push(tx, project.id, session.id);
         throw new Error("boom");
       }),
       /boom/,

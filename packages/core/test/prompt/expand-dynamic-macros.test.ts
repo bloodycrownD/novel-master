@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { Result } from "../../src/errors/either.js";
-import { DynamicMacrosExpansion } from "@/domain/prompt/logic/expand-dynamic-macros.js";
+import {  describe, it, mock  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  DynamicMacrosExpansion  } from "@/domain/prompt/logic/expand-dynamic-macros.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
 describe("DynamicMacrosExpansion.expand", () => {

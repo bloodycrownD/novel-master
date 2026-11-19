@@ -1,8 +1,8 @@
 [
+  "Compaction",
   "CompactionFactory",
   "DEFAULT_HIDE_START_DEPTH",
   "DepthSlice",
   "HideMessageRange",
-  "compactionConditionsSchema",
-  "runCompaction"
+  "compactionConditionsSchema"
 ]

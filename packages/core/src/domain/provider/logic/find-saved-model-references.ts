@@ -7,7 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import { KEY_CURRENT_MODEL_ID, WORKSPACE_STATE_MODULE } from "@/service/persistent-state/impl/workspace-state-keys.js";
 
 const parser = new SqlTemplateParser();
@@ -55,12 +55,12 @@ export const SavedModelReferences = {
   async find(conn: TdbcConnection, savedModelId: string): Promise<string[]> {
     const refs: string[] = [];
 
-    const kkvRows = await queryTemplate<{ value: string }>(conn, parser, `SELECT value FROM kkv_entry WHERE module = #{module} AND key = #{key}`, { module: WORKSPACE_STATE_MODULE, key: KEY_CURRENT_MODEL_ID });
+    const kkvRows = await TdbcTemplate.query<{ value: string }>(conn, parser, `SELECT value FROM kkv_entry WHERE module = #{module} AND key = #{key}`, { module: WORKSPACE_STATE_MODULE, key: KEY_CURRENT_MODEL_ID });
     if (kkvRows.length > 0 && String(kkvRows[0]!.value).trim() === savedModelId) {
       refs.push("currentModelId");
     }
 
-    const agentRows = await queryTemplate<AgentDefinitionRow>(conn, parser, `SELECT agent_id, prompts_json FROM agent_definition`, {});
+    const agentRows = await TdbcTemplate.query<AgentDefinitionRow>(conn, parser, `SELECT agent_id, prompts_json FROM agent_definition`, {});
     for (const row of agentRows) {
       let wire: Record<string, unknown> | null;
       try {
@@ -74,7 +74,7 @@ export const SavedModelReferences = {
       }
     }
 
-    const projectRows = await queryTemplate<ChatProjectRow>(conn, parser, `SELECT id, agent_config_json FROM chat_project`, {});
+    const projectRows = await TdbcTemplate.query<ChatProjectRow>(conn, parser, `SELECT id, agent_config_json FROM chat_project`, {});
     for (const row of projectRows) {
       const config = SavedModelReferences.safeParseRecord(row.agent_config_json);
       if (config == null) {
@@ -94,7 +94,7 @@ export const SavedModelReferences = {
     // 会话级 modelId 覆盖**只**存在这里：`chat_session` 表**没有** `model_id` 列，
     // 形态是顶层 `{agentId, modelId?}`（`SessionAgentConfig`）——
     // ⚠️ 与 chat_project 的嵌套形态不同，照抄它的取值路径会写成永远命不中的代码。
-    const sessionRows = await queryTemplate<ChatSessionRow>(conn, parser, `SELECT id, agent_config_json FROM chat_session`, {});
+    const sessionRows = await TdbcTemplate.query<ChatSessionRow>(conn, parser, `SELECT id, agent_config_json FROM chat_session`, {});
     for (const row of sessionRows) {
       const config = SavedModelReferences.safeParseRecord(row.agent_config_json);
       if (config == null) {

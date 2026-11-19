@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ToolOutputLimits, TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
-import { Text } from "../../src/common/text.js";
+import {  describe, it  } from "node:test";
+import {  ToolOutputLimits, TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES  } from "../../src/domain/tool/logic/tool-output-limits.js";
+import {  Text  } from "../../src/common/text.js";
 
 /** 逐 code unit 检查字符串不含孤立代理（高代理必须跟低代理、低代理不得单现）。 */
 function assertNoLoneSurrogate(s: string): void {

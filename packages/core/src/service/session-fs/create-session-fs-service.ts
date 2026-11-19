@@ -18,7 +18,7 @@ import { DefaultSessionFsService } from "./impl/session-fs.service.js";
 import type { SessionFsService } from "./session-fs.port.js";
 
 /**
- * {@link createSessionFsService} 可选装配项（均缺省 = 现状行为）。
+ * {@link SessionFsServiceFactory.create} 可选装配项（均缺省 = 现状行为）。
  *
  * 本地定义而非复用 message-checkpoint 的 `MessageRollbackServiceOptions`：
  * session-fs 只透传回滚服务的两个装配项，不必把上一层的 options 类型暴露
@@ -31,37 +31,40 @@ interface SessionFsServiceOptions {
   readonly yieldFn?: () => Promise<void>;
 }
 
-/** 为给定连接创建 {@link SessionFsService}（options 透传给回滚服务装配）。 */
-export function createSessionFsService(conn: TdbcConnection, options?: SessionFsServiceOptions): SessionFsService {
-  return new DefaultSessionFsService({
-    messageRollback: MessageCheckpointFactory.createRollback(conn, {
-      probe: options?.probe,
-      yieldFn: options?.yieldFn,
-    }),
-  });
-}
+/** Session FS 服务工厂 + 会话 FS 数据清理集合。 */
+export const SessionFsServiceFactory = {
+  /** 为给定连接创建 {@link SessionFsService}（options 透传给回滚服务装配）。 */
+  create(conn: TdbcConnection, options?: SessionFsServiceOptions): SessionFsService {
+    return new DefaultSessionFsService({
+      messageRollback: MessageCheckpointFactory.createRollback(conn, {
+        probe: options?.probe,
+        yieldFn: options?.yieldFn,
+      }),
+    });
+  },
 
-/**
- * 删除会话 checkpoint / live ref / revision 打扫（会话删除 / 模板拉取时使用）。
- *
- * 顺序：−checkpoint ref → −live ref → 删 checkpoint 行 → revision 前缀打扫。
- * blob gc 由调用方在事务提交后调度 {@link DeferredBlobGc.run}。
- */
-export async function deleteSessionFsData(conn: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
-  const checkpoints = new SqliteMessageCheckpointRepository(conn);
-  const revisions = new SqliteVfsRevisionRepository(conn);
-  const entries = new SqliteVfsEntryRepository(conn);
-  const sessionScope = {
-    kind: "session" as const,
-    projectId,
-    sessionId,
-  };
-  const sk = LogicalPath.scopeKey(sessionScope);
+  /**
+   * 删除会话 checkpoint / live ref / revision 打扫（会话删除 / 模板拉取时使用）。
+   *
+   * 顺序：−checkpoint ref → −live ref → 删 checkpoint 行 → revision 前缀打扫。
+   * blob gc 由调用方在事务提交后调度 {@link DeferredBlobGc.run}。
+   */
+  async deleteData(conn: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
+    const checkpoints = new SqliteMessageCheckpointRepository(conn);
+    const revisions = new SqliteVfsRevisionRepository(conn);
+    const entries = new SqliteVfsEntryRepository(conn);
+    const sessionScope = {
+      kind: "session" as const,
+      projectId,
+      sessionId,
+    };
+    const sk = LogicalPath.scopeKey(sessionScope);
 
-  await checkpoints.deleteCheckpointsForSession(sessionId);
-  await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
-  await RevisionGc.sweepSession(revisions, projectId, sessionId);
-}
+    await checkpoints.deleteCheckpointsForSession(sessionId);
+    await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
+    await RevisionGc.sweepSession(revisions, projectId, sessionId);
+  },
+} as const;
 
 /** 事务提交后调度全库 blob gc（项目/会话删除批量路径用）。 */
 export { DeferredBlobGc };

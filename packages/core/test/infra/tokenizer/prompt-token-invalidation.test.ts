@@ -15,24 +15,17 @@
  *
  * 压缩（run-compaction）的同类断言在 `compaction-conditions/run-compaction.test.ts`。
  */
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { TextBlocks } from "../../../src/domain/chat/content/text-blocks.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { SessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { ChatServiceFactory } from "../../../src/service/chat/chat-service-factory.js";
-import { clearSessionPromptCaches } from "../../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  TextBlocks  } from "../../../src/domain/chat/content/text-blocks.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  sessionApiPromptTokenCache  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  SessionApiPromptTokenEntry  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  ChatServiceFactory  } from "../../../src/service/chat/chat-service-factory.js";
+import {  SessionPromptCaches  } from "../../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
 import type { SessionKkvService } from "../../../src/service/session-kkv/session-kkv.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -316,7 +309,7 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
     await ctx.sessionKkv.set(session.id, "user_vfs_pending", "queue", "[]");
 
-    await clearSessionPromptCaches(session.id, ctx.sessionKkv);
+    await SessionPromptCaches.clear(session.id, ctx.sessionKkv);
     await assertRowGone(ctx.sessionKkv, session.id);
 
     assert.equal(

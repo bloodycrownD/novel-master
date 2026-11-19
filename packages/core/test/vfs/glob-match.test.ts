@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { matchGlob } from "@/service/vfs/glob-match.js";
+import {  describe, it  } from "node:test";
+import {  GlobMatch  } from "@/service/vfs/glob-match.js";
 
 describe("matchGlob", () => {
   it("matches single-segment wildcards", () => {
-    assert.equal(matchGlob("*.md", "/readme.md"), true);
-    assert.equal(matchGlob("*.md", "/readme.txt"), false);
+    assert.equal(GlobMatch.match("*.md", "/readme.md"), true);
+    assert.equal(GlobMatch.match("*.md", "/readme.txt"), false);
   });
 
   it("matches ** across directories", () => {
-    assert.equal(matchGlob("**/*.md", "/chapters/a/foo.md"), true);
-    assert.equal(matchGlob("**/*.md", "/chapters/a/foo.txt"), false);
+    assert.equal(GlobMatch.match("**/*.md", "/chapters/a/foo.md"), true);
+    assert.equal(GlobMatch.match("**/*.md", "/chapters/a/foo.txt"), false);
   });
 
   it("matches ? for single character", () => {
-    assert.equal(matchGlob("/a?c", "/abc"), true);
-    assert.equal(matchGlob("/a?c", "/abbc"), false);
+    assert.equal(GlobMatch.match("/a?c", "/abc"), true);
+    assert.equal(GlobMatch.match("/a?c", "/abbc"), false);
   });
 });

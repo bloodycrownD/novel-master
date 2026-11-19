@@ -7,7 +7,7 @@
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { resolveCurrentPromptTokens } from "@/infra/tokenizer/logic/resolve-current-prompt-tokens.js";
+import { CurrentPromptTokens } from "@/infra/tokenizer/logic/resolve-current-prompt-tokens.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 import type { CompactionEvaluationContext, CompactionConditionTrigger } from "../ports/compaction-condition-trigger.port.js";
@@ -50,7 +50,7 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
     // 无需改动）。preferEstimate：无统计可用时读口直接 heuristic 折算——压缩
     // 判定**绝不**为本地计数阻塞 run（glm 原生整串大上下文单次 ~5.8s，切模型/
     // 回滚后首个 step 会踩）；heuristic 档自动乘保守系数，方向安全。
-    const tokenRead = await resolveCurrentPromptTokens(evaluation.sessionId, { layout: evaluation.layout, ctx: evaluation.ctx, savedModelId: evaluation.modelContext.savedModelId, registry: this.tokenCounters, tokenizerOverride: tokenizerOverride.value, ...(evaluation.tools != null ? { tools: evaluation.tools } : {}) }, { sessionKkv: evaluation.sessionKkv, preferEstimate: true });
+    const tokenRead = await CurrentPromptTokens.resolve(evaluation.sessionId, { layout: evaluation.layout, ctx: evaluation.ctx, savedModelId: evaluation.modelContext.savedModelId, registry: this.tokenCounters, tokenizerOverride: tokenizerOverride.value, ...(evaluation.tools != null ? { tools: evaluation.tools } : {}) }, { sessionKkv: evaluation.sessionKkv, preferEstimate: true });
     if (tokenRead.kind !== "completed") {
       // 中途弃权沿返回值到达（错误通道迁移二期；本触发器不透传 shouldBail，
       // 恒不到）：不触发压缩，绝不为阈值判定阻塞 run。

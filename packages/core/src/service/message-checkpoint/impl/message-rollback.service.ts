@@ -22,21 +22,21 @@ import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.j
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { isSessionFsError, isVfsError } from "@/errors/guards.js";
-import { userMessageOf } from "@/i18n/error-message.js";
+import { ErrorMessage } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { MessageRollbackService, RollbackOptions, RollbackProbe } from "../message-rollback.port.js";
 
-const log = createLogger("message-checkpoint.rollback");
+const log = LogFactory.create("message-checkpoint.rollback");
 
 /** Dependencies for {@link DefaultMessageRollbackService}（共享仓储底座 + 消息仓储 + 连接）。 */
 interface MessageRollbackServiceDeps extends CheckpointRepoDeps {
@@ -215,9 +215,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 skipped: reconcileStats.skippedSameVersion + reconcileStats.skippedSameContentHash,
               });
             } catch (cause) {
-              // {detail} 取嵌套 descriptor（userMessageOf 命中时），否则退回 message 文本（spec G2 组合站点）
-              const detail = userMessageOf(cause) ?? (isSessionFsError(cause) || isVfsError(cause) || cause instanceof Error ? cause.message : String(cause));
-              // {detail} 可能是嵌套 descriptor（userMessageOf 命中时），translator 递归渲染——走 descriptor 参数通道。
+              // {detail} 取嵌套 descriptor（ErrorMessage.userOf 命中时），否则退回 message 文本（spec G2 组合站点）
+              const detail = ErrorMessage.userOf(cause) ?? (isSessionFsError(cause) || isVfsError(cause) || cause instanceof Error ? cause.message : String(cause));
+              // {detail} 可能是嵌套 descriptor（ErrorMessage.userOf 命中时），translator 递归渲染——走 descriptor 参数通道。
               throw new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", { descriptor: { key: "error.session_fs.vfs_restore_failed", params: { detail } }, sessionId, messageId: anchorMessageId });
             }
           }
@@ -259,11 +259,11 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         break;
       } catch (error) {
         // 仅乐观锁冲突才重试；其他错误（护栏、backfill required、vfs restore failed）直接向上。
-        // 判定走 cause 链：驱动会把事务体内抛出的非 TdbcError 包一层，裸 isAppError
+        // 判定走 cause 链：驱动会把事务体内抛出的非 TdbcError 包一层，裸 AppErrorOps.is
         // 判不中 ⇒ 重试从未生效（T-SC11b / T-RB-FP-R3 / T-RB-FP-R4 暴露）。深度上限 8 防环。
         let conflict = false;
         for (let cur: unknown = error, depth = 0; cur != null && typeof cur === "object" && depth < 8; depth += 1, cur = (cur as { cause?: unknown }).cause) {
-          if (isAppError(cur, "SESSION_FS_ROLLBACK_CONFLICT")) {
+          if (AppErrorOps.is(cur, "SESSION_FS_ROLLBACK_CONFLICT")) {
             conflict = true;
             break;
           }
@@ -272,8 +272,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           // 事务抛出物解包后回返回值通道：驱动把非 TdbcError（含 AppError）包成
           // TdbcError（cause 指向原错误），先解包还原业务错误码；余下未知抛出物
           // 收进 INFRA_UNEXPECTED_ERROR（事务已整体回滚，无半写状态）。
-          if (error instanceof TdbcError && isAppError(error.cause)) return Result.err(error.cause);
-          if (isAppError(error)) return Result.err(error);
+          if (error instanceof TdbcError && AppErrorOps.is(error.cause)) return Result.err(error.cause);
+          if (AppErrorOps.is(error)) return Result.err(error);
           return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
         // 冲突重试前不再做其他事——重新 resolveRollbackPlan 会拉到最新的消息列表。
@@ -283,12 +283,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // 回滚成功后可见 prompt 变了：API 占用双删（进程内热层 + session KKV
     // 行）。本类只持有 conn，就地建一个无状态的 SessionKkvService（删除在
     // `conn.transaction` 块外，已 await，失败只吞 warn）。
-    await SessionApiPromptTokenEntry.invalidate(createSessionKkvService(this.deps.conn), sessionId);
+    await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), sessionId);
     // 回滚物理删尾：工具调用数缓存一并失效（含 hidden 口径下被删的 assistant
     // 行不再计入）。写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：与读口
     // 「现算回填前复核原值」配合防陈旧回写），best-effort 同上。
     try {
-      await createSessionKkvService(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
+      await SessionKkvServiceFactory.create(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
     } catch (error) {
       log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -492,7 +492,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         if (entryId == null) {
           // 事务回调内已知失败升级为 throw 保回滚（总纲 §五例外 2）：解包字收口在 unwrapOrRollback（门⑦）。
           const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
-          entryId = unwrapOrRollback(entry)?.entryId ?? -1;
+          entryId = TdbcTransaction.unwrapOrRollback(entry)?.entryId ?? -1;
         }
         reconcilePairs.push({ logicalPath, entryId, version });
       }
@@ -501,7 +501,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
     const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
     const liveHashes = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
-    const liveHashByPath = unwrapOrRollback(liveHashes);
+    const liveHashByPath = TdbcTransaction.unwrapOrRollback(liveHashes);
     const restorePrefetch = { entryIdByPath, liveHashByPath, checkpointEntryIdByPath };
     const prefetch = { ...restorePrefetch, revisionMetaByKey };
     // backfill 会 append 新 revision 使 meta 变化，沿用 prefetch 的 revisionMetaByKey
@@ -525,8 +525,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       const removed = await vfs.delete(logicalPath);
       // NOT_FOUND 等于已删（幂等）；其它已知失败升级为 throw 保回滚（总纲 §五例外 2），
       // 解包字收口在 unwrapOrRollback（门⑦）。
-      if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
-        unwrapOrRollback(removed);
+      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
+        TdbcTransaction.unwrapOrRollback(removed);
       }
       deleted++;
     }
@@ -542,7 +542,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         } else {
           restoreResult = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo, contentStore }, { scope, logicalPath, version, liveHeadByPath, prefetch: prefetchForRestore, checkpointEntryId });
         }
-        const outcome = unwrapOrRollback(restoreResult);
+        const outcome = TdbcTransaction.unwrapOrRollback(restoreResult);
         if (outcome === "skipped_same_version") {
           skippedSameVersion++;
         } else if (outcome === "skipped_same_content_hash") {

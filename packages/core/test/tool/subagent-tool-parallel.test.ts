@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import {  subagentTool  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { Result } from "@/errors/either.js";
+import {  ToolRunner  } from "@/domain/tool/logic/tool-runner.js";
+import {  ToolRegistry  } from "@/domain/tool/logic/tool-registry.js";
+import {  Result  } from "@/errors/either.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";

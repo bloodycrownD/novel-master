@@ -4,35 +4,22 @@
  * T-T9 覆盖 API 占用的两种载体：进程内热层（Map）与 session KKV（跨重启）。
  * 后者是本轮治本点——「清掉进程 Map = 模拟重启」后仍能读到同一份 API 值。
  */
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
-import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  afterEach, beforeEach, describe, it  } from "node:test";
+import {  registerNodeTokenizerDriverForTests  } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
-import { Result } from "../../../src/errors/either.js";
-import { TokenizerRegistry } from "../../../src/infra/nmtp/index.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  PROMPT_WHOLE_CACHE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-  TOKEN_CHUNKS_CACHE_KEY,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  createDefaultTokenCounterRegistry,
-  pickLastPromptUsage,
-  promptWholeCache,
-  resolveCurrentPromptTokens,
-  sessionApiPromptTokenCache,
-  tokenChunkCache,
-} from "../../../src/infra/tokenizer/index.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  TokenizerRegistry  } from "../../../src/infra/nmtp/index.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  DefaultTokenCounterRegistry, LastPromptUsage, promptWholeCache, CurrentPromptTokens, sessionApiPromptTokenCache, tokenChunkCache  } from "../../../src/infra/tokenizer/index.js";
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
-import { SessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { estimateTokensCjkAware } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
-import { MessageBodyText } from "../../../src/domain/chat/content/message-body-text.js";
-import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
-import { emptyRegistryDeps } from "./registry-test-helpers.js";
+import {  SessionApiPromptTokenEntry  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  CjkAwareEstimate  } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
+import {  MessageBodyText  } from "../../../src/domain/chat/content/message-body-text.js";
+import {  createMemorySessionKkv  } from "../../helpers/prompt-layout-test-helpers.js";
+import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
 
 const SESSION_ID = "sess-token-resolve";
 const RUN_MODEL_ID = "openai/gpt-4o";
@@ -42,8 +29,8 @@ const RUN_MODEL_ID = "openai/gpt-4o";
  * 本文件的用例几乎全部只关心 completed 分支（弃权语义单独在 shouldBail 两个用例
  * 里直判 Outcome.cancelled），统一从这里取 value。
  */
-async function resolveCompleted(sessionId: string, params: Parameters<typeof resolveCurrentPromptTokens>[1], options?: Parameters<typeof resolveCurrentPromptTokens>[2]) {
-  const outcome = await resolveCurrentPromptTokens(sessionId, params, options);
+async function resolveCompleted(sessionId: string, params: Parameters<typeof CurrentPromptTokens.resolve>[1], options?: Parameters<typeof CurrentPromptTokens.resolve>[2]) {
+  const outcome = await CurrentPromptTokens.resolve(sessionId, params, options);
   assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
   return outcome.value;
 }
@@ -63,7 +50,7 @@ function countParams() {
     layout: { persist: [], dynamic: [] },
     ctx: { workplaceDisplay: "", messages: [] },
     savedModelId: RUN_MODEL_ID,
-    registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
   };
 }
 
@@ -83,14 +70,14 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       round({ step: 1, usage: { promptTokens: 250 } }),
       round({ step: 2, usage: { completionTokens: 10 } }),
     ];
-    assert.equal(pickLastPromptUsage(rounds), 250);
+    assert.equal(LastPromptUsage.pick(rounds), 250);
   });
 
   it("T-T2: promptTokens: 0 视为可用", () => {
     const rounds: ModelRoundSummary[] = [
       round({ step: 0, usage: { promptTokens: 0 } }),
     ];
-    assert.equal(pickLastPromptUsage(rounds), 0);
+    assert.equal(LastPromptUsage.pick(rounds), 0);
   });
 
   it("T-T3: usage 全缺 → resolve 走 local", async () => {
@@ -98,7 +85,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       round({ step: 0 }),
       round({ step: 1, usage: { completionTokens: 3 } }),
     ];
-    assert.equal(pickLastPromptUsage(rounds), undefined);
+    assert.equal(LastPromptUsage.pick(rounds), undefined);
 
     const resolved = await resolveCompleted(SESSION_ID, countParams());
     assert.equal(resolved.source, "local");
@@ -305,7 +292,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages },
       savedModelId,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
   }
 
@@ -357,7 +344,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
           .join("\n\n")
       )
       .join("\n\n");
-    const expectedDelta = estimateTokensCjkAware(expectedTail);
+    const expectedDelta = CjkAwareEstimate.estimate(expectedTail);
     assert.ok(expectedDelta > 1, "中文 tail 的 CJK 下限应远大于 heuristic 的 1");
 
     const resolved = await resolveCompleted(SESSION_ID, params);
@@ -515,7 +502,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
     const estimated = await resolveCompleted(
       SESSION_ID,
@@ -551,7 +538,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       layout: { persist: [], dynamic: [], system: "暖机后首帧直读的精确占位" },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
 
     // 冷 L1 首帧：估算档（gpt ≈ 语义）。
@@ -601,7 +588,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
       layout: { persist: [], dynamic: [], system: text },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
   }
 
@@ -816,10 +803,10 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
       layout: { persist: [], dynamic: [], system: "弃权点必须在整串序列化之前" },
       ctx,
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
 
-    const bailed = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const bailed = await CurrentPromptTokens.resolve(SESSION_ID, params, {
       preferEstimate: true,
       shouldBail: () => ({ kind: "cancelled", reason: "user-stop" }),
     });
@@ -872,10 +859,10 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
       layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
       ctx: { workplaceDisplay: "", messages: [] } as unknown as PromptRenderContext,
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
 
-    const bailed = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const bailed = await CurrentPromptTokens.resolve(SESSION_ID, params, {
       sessionKkv,
       shouldBail: () => ({ kind: "cancelled", reason: "user-stop" }),
     });
@@ -891,7 +878,7 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
       layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
       ctx: { workplaceDisplay: "", messages: [] } as unknown as PromptRenderContext,
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
     const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.source, "local");
@@ -923,7 +910,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
       layout: { persist: [], dynamic: [], system: text },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
   }
 

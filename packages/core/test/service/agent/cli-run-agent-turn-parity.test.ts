@@ -1,33 +1,23 @@
 /**
  * CLI ↔ runAgentTurn 行为 parity（T-R2 / T-R2-CLI / T-R2-cont）。
  */
-import { outcomeValue } from "../../helpers/outcome-value.js";
-import { Result } from "../../../src/errors/either.js";
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../../helpers/outcome-value.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import {
-  describe,
-  it } from "node:test";
-import { decode as decodeRaw } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 import type { ZodType } from "zod";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
-import { AgentServiceFactory, agentDefinitionSchema, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
-import {
-  ChatServiceFactory,
-  MessageMetadata,
-  TextBlocks,
-  } from "@novel-master/core/chat";
-import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { createSessionKkvService } from "../../../src/service/session-kkv/create-session-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  AgentServiceFactory, agentDefinitionSchema, AgentTurnRunner, type AgentDefinition, type AgentTurnRuntimePort  } from "@novel-master/core/agent";
+import {  ChatServiceFactory, MessageMetadata, TextBlocks  } from "@novel-master/core/chat";
+import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  SessionKkvServiceFactory  } from "../../../src/service/session-kkv/create-session-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -87,7 +77,7 @@ function makeRuntime(
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator: {} as AgentTurnRuntimePort["eventOrchestrator"],
     userVfsTurn,
-    sessionKkv: createSessionKkvService(ctx.conn),
+    sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
     sessionVfs: (projectId, sessionId) => ctx.sessionVfs(projectId, sessionId),
     workplace: (_scope) =>
       ({
@@ -107,11 +97,11 @@ async function runUntilRunner(
   runtime: AgentTurnRuntimePort,
   scope: { projectId: string; sessionId: string },
   content: string,
-  options?: Parameters<typeof runAgentTurn>[3],
+  options?: Parameters<typeof AgentTurnRunner.run>[3],
 ): Promise<AgentDefinition | undefined> {
   let capturedDefinition: AgentDefinition | undefined;
   try {
-    unwrap(await runAgentTurn(runtime, scope, content, {
+    unwrap(await AgentTurnRunner.run(runtime, scope, content, {
       ...options,
       onAfterResolveModel: async (resolveCtx) => {
         capturedDefinition = resolveCtx.definition;

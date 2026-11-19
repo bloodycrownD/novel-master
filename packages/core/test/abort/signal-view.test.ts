@@ -6,10 +6,10 @@
  * `signal.reason`（RN/Hermes 上可能缺失）。
  */
 import assert from "node:assert/strict";
-import { getEventListeners } from "node:events";
-import { describe, it } from "node:test";
+import {  getEventListeners  } from "node:events";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("signalView：裸 AbortSignal 只读适配（T-S8）", () => {
   it("reason 恒为 null，即使 signal 已中断", () => {

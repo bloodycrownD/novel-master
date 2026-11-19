@@ -5,14 +5,14 @@
  * 置位压缩重置随可见窗口继承 / skills 未接线原样带过 /
  * seen 共享方向 B：assistant 已 load 过的技能，后续 $ 引用走短标记。
  */
-import { Result } from "../../src/errors/either.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attachment/attach-budget.js";
-import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
+import {  ATTACH_PROMPT_CHAR_BUDGET  } from "../../src/domain/chat/logic/attachment/attach-budget.js";
+import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type {
@@ -22,12 +22,8 @@ import type {
   SkillFileContent,
   SkillService,
 } from "../../src/service/skills/skills.port.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -136,7 +132,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -163,7 +159,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -190,7 +186,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["other"] });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -219,7 +215,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: [] });
 
     const runtimeBase = {
@@ -250,7 +246,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const entries: EffectiveSkill[] = [
       {
         name: "broken",
@@ -310,7 +306,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"], readError: true });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -336,7 +332,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
     const runtimeBase = {
       sessionId: session.id,
@@ -369,7 +365,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -393,7 +389,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -423,7 +419,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
     const prepared = unwrap(await promptAssembler.prepare(
@@ -452,7 +448,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
 
     const att = skillAttach("demo");
     const prepared = unwrap(await promptAssembler.prepare(
@@ -472,7 +468,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const runtimeBase = {
       sessionId: session.id,
       sessionKkv: sk,
@@ -526,7 +522,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({
       names: ["demo"],
       content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),

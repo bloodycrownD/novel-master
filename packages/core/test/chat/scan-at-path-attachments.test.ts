@@ -3,10 +3,10 @@
  * attachmentsFromPaths：显式路径列表 → 合规新写入附件（spec D9/D10，Step 10）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
-import { MessageAttachmentSchema, messageAttachmentsSchema, type MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  attachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import {  MessageAttachmentSchema, messageAttachmentsSchema, type MessageAttachment  } from "../../src/domain/chat/model/message-attachment.schema.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {

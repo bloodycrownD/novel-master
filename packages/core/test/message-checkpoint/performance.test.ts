@@ -5,12 +5,12 @@
  * with a 4× CI slack multiplier to reduce flaky failures on slow runners.
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { type VfsService } from "@novel-master/core/vfs";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 const FILE_COUNT = 1000;
 const SAMPLE_RUNS = 8;

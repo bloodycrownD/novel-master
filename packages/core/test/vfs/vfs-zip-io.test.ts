@@ -1,25 +1,24 @@
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { unzipSync, zipSync } from "fflate";
-import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
-import { isAppError } from "@novel-master/core/errors";
-import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
-import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  describe, it  } from "node:test";
+import {  unzipSync, zipSync  } from "fflate";
+import {  VfsServiceFactory, type VfsService  } from "@novel-master/core/vfs";
+import {  CharacterCardToMdTree  } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import {  SqliteVfsContentStore  } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  SqliteWorkplaceRepository  } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
-import { VfsZipValidate } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  VfsZipValidate  } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  sessionApiPromptTokenCache  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  buildGbkFilenameZip  } from "./helpers/gbk-zip-fixture.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
-import { tCore } from "../helpers/core-i18n.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = unwrap(await vfs.list(dir, { recursive: true }));
@@ -74,7 +73,7 @@ describe("VfsZipIoService", () => {
     unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, VfsZipBuild.build(new Map([["new.md", "new"]])), { confirmed: true }));
 
     await rejectsErr(() => vfs.read("/old.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     const read = unwrap(await vfs.read("/new.md"));
     assert.equal(read.content, "new");
@@ -139,7 +138,7 @@ describe("VfsZipIoService", () => {
     });
     await rejectsErr(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8"),
+      (e: unknown) => AppErrorOps.is(e, "VFS_ZIP_INVALID_UTF8"),
     );
 
     const still = unwrap(await vfs.read("/keep.md"));
@@ -173,11 +172,11 @@ describe("VfsZipIoService", () => {
     );
 
     await rejectsErr(() => vfs.read("/new.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
     await rejectsErr(() => vfs.read("/before.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -192,7 +191,7 @@ describe("VfsZipIoService", () => {
     const zipBytes = VfsZipBuild.build(new Map([["other.md", "x"]]));
     await rejectsErr(
       zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
-      (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_NOT_CONFIRMED"))
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "VFS_ZIP_NOT_CONFIRMED"))
     );
     const read = unwrap(await vfs.read("/stay.md"));
     assert.equal(read.content, "stay");
@@ -303,7 +302,7 @@ describe("VfsZipIoService", () => {
     });
     await rejectsErr(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8"),
+      (e: unknown) => AppErrorOps.is(e, "VFS_ZIP_INVALID_UTF8"),
     );
     assert.equal(deleteReached, false);
   });
@@ -325,7 +324,7 @@ describe("VfsZipIoService", () => {
     });
     await rejectsErr(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipWithParent, { confirmed: true }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH"),
+      (e: unknown) => AppErrorOps.is(e, "VFS_ZIP_INVALID_PATH"),
     );
     assert.equal(deleteReached, false);
   });
@@ -423,7 +422,7 @@ describe("VfsZipIoService", () => {
     const paths = await listFilePaths(vfs);
     assert.deepEqual(paths, ["/new.md"]);
     await rejectsErr(() => vfs.read("/old.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.equal((unwrap(await vfs.read("/new.md"))).content, "新内容");
   });
@@ -446,7 +445,7 @@ describe("VfsZipIoService", () => {
     }));
 
     await rejectsErr(() => vfs.read("/old.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.equal((unwrap(await vfs.read("/new.md"))).content, "new");
   });
@@ -492,7 +491,7 @@ describe("VfsZipIoService", () => {
     }));
 
     await rejectsErr(() => vfs.read("/a/old.txt"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.equal((unwrap(await vfs.read("/a/fresh.txt"))).content, "fresh");
     assert.equal((unwrap(await vfs.read("/b/keep.txt"))).content, "keep");
@@ -517,7 +516,7 @@ describe("VfsZipIoService", () => {
         confirmed: false,
         directoryPath: "/a",
       }),
-      (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_NOT_CONFIRMED"))
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "VFS_ZIP_NOT_CONFIRMED"))
     );
 
     const invalidUtf8Zip = zipSync({
@@ -528,7 +527,7 @@ describe("VfsZipIoService", () => {
         confirmed: true,
         directoryPath: "/a",
       }),
-      (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_INVALID_UTF8")),
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "VFS_ZIP_INVALID_UTF8")),
     );
 
     assert.equal((unwrap(await vfs.read("/a/stay.txt"))).content, "stay-a");
@@ -563,7 +562,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH"),
+      (e: unknown) => AppErrorOps.is(e, "VFS_ZIP_INVALID_PATH"),
     );
     assert.equal(deleteReached, false);
     assert.equal((unwrap(await vfs.read("/a/keep.txt"))).content, "keep");
@@ -600,12 +599,12 @@ describe("VfsZipIoService", () => {
           ),
           { confirmed: true, directoryPath: "/a" }
         ),
-      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH"),
+      (e: unknown) => AppErrorOps.is(e, "VFS_ZIP_INVALID_PATH"),
     );
     assert.equal(deleteReached, false);
     assert.equal((unwrap(await vfs.read("/a/keep.txt"))).content, "keep");
     await rejectsErr(() => vfs.read("/a/a/foo.txt"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -623,7 +622,7 @@ describe("VfsZipIoService", () => {
 
     const zipSvc = VfsServiceFactory.createZipIo(ctx.conn);
     // export / import 两分支都直抛 AppError，按 key 断言。
-    const assertInvalidPath = (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH");
+    const assertInvalidPath = (e: unknown) => AppErrorOps.is(e, "VFS_ZIP_INVALID_PATH");
 
     await rejectsErr(() => zipSvc.export(scope, { directoryPath: "/note.md" }), assertInvalidPath);
     await rejectsErr(
@@ -663,7 +662,7 @@ describe("VfsZipIoService", () => {
       "empty ZIP import should retain /a directory row"
     );
     await rejectsErr(() => vfs.read("/a/old.txt"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.equal((unwrap(await vfs.read("/b/sib.txt"))).content, "sib");
   });
@@ -689,7 +688,7 @@ describe("VfsZipIoService", () => {
 
     assert.equal((unwrap(await vfs.read("/a/foo.txt"))).content, "foo");
     await rejectsErr(() => vfs.read("/a/old.txt"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.equal((unwrap(await vfs.read("/b/sib.txt"))).content, "sib");
   });
@@ -818,7 +817,7 @@ describe("VfsZipIoService", () => {
       { confirmed: true, directoryPath: "/角色" }
     ));
 
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     for (const dir of ["/角色", "/角色/设定集", "/角色/世界书", "/角色/世界书/章节", "/角色/世界书/章节/深层"]) {
       const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);
@@ -848,7 +847,7 @@ describe("VfsZipIoService", () => {
     };
 
     // 预置：目标目录自定义 headCount:7；子目录 rule_off
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     unwrap(await wt.setDirRule({
       logicalPath: "/角色",
       sortField: "name",
@@ -896,7 +895,7 @@ describe("VfsZipIoService", () => {
       { confirmed: true, directoryPath: "/" }
     ));
 
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     for (const dir of ["/设定集", "/世界书", "/世界书/章节", "/世界书/章节/深层"]) {
       const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);
@@ -939,12 +938,12 @@ describe("VfsZipIoService", () => {
       },
     });
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       const ruleImport = unwrap(await zipSvc.import(scope, VfsZipBuild.build(new Map([["世界书/章节/深层/设定.md", "深层设定"]])), { confirmed: true, directoryPath: "/角色" }));
       void ruleImport;
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     // 仅失败目录触发一次 warn，导入整体成功
@@ -955,7 +954,7 @@ describe("VfsZipIoService", () => {
     assert.equal((unwrap(await vfs.read("/角色/世界书/章节/深层/设定.md"))).content, "深层设定");
 
     // 失败之前的 /角色 与之后的章节链都有默认启用行，失败目录自身无行
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     for (const dir of ["/角色", "/角色/世界书/章节", "/角色/世界书/章节/深层"]) {
       const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);

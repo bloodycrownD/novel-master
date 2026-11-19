@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
-import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
-import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
-import { ToolRegistry, BuiltinTools } from "@novel-master/core";
+import {  describe, it, mock  } from "node:test";
+import {  AnthropicProtocolAdapter  } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import {  OpenAiProtocolAdapter  } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
+import {  GeminiProtocolAdapter  } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
+import {  ToolRegistry, BuiltinTools  } from "@novel-master/core";
 
-import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
+import {  ToolDefinitions  } from "@novel-master/core/llm-protocol";
 
 describe("ModelRequest tools + stream (adapters)", () => {
   it("Anthropic chat sends tools in request body", async () => {
@@ -228,7 +228,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
   it("toolsFromRegistry produces serializable schemas", () => {
     const registry = new ToolRegistry();
     BuiltinTools.register(registry);
-    const tools = toolsFromRegistry(registry, { subagent: { callableAgents: [{ name: "general" }] } });
+    const tools = ToolDefinitions.fromRegistry(registry, { subagent: { callableAgents: [{ name: "general" }] } });
     assert.ok(tools.length >= 6);
     for (const t of tools) {
       assert.equal(typeof t.name, "string");

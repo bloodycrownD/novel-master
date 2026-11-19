@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { describe, it, mock } from "node:test";
-import { Result } from "../../src/errors/either.js";
-import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it, mock  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  TextBlocks, type ChatMessageData  } from "@novel-master/core/chat";
 
-import {
-  PromptBuilder,
-  MessageBodyText,
-  type AgentPromptLayout,
-} from "@novel-master/core/prompt";
+import {  PromptBuilder, MessageBodyText, type AgentPromptLayout  } from "@novel-master/core/prompt";
 
 import type { WorkplaceService } from "@novel-master/core/workplace";
 

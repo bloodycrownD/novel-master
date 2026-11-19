@@ -16,34 +16,34 @@ import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/age
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner, type ParallelToolOutcome, type ToolCall } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
-import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
-import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
+import { ToolDefinitions } from "@/infra/llm-protocol/logic/tool-definitions.js";
+import { LastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { ModelRequestOptions, ModelRequestService } from "../../provider/model-request.port.js";
 import { PromptBuilder } from "../../prompt/render-prompt.js";
-import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
-import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
+import { OrphanToolResults } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
+import { ThinkingContext } from "../../prompt/apply-thinking-context-for-llm.js";
 import { LlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
 import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { LlmProtocol } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import { createLogger } from "@/infra/log/logger.js";
-import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
+import { LogFactory } from "@/infra/log/logger.js";
+import type { AgentRunOptions, AgentRunner as AgentRunnerPort } from "../agent.port.js";
 import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { assembleWorkplaceDisplay, type AssembleWorkplaceDisplayDeps, type AssembleWorkplaceDisplayOptions } from "@/service/workplace/assemble-workplace-display.js";
+import { WorkplaceDisplayAssembler, type AssembleWorkplaceDisplayDeps, type AssembleWorkplaceDisplayOptions } from "@/service/workplace/assemble-workplace-display.js";
 import type { CompactionEvaluationContext } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
-import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
+import { Compaction } from "@/service/compaction-conditions/run-compaction.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { AgentStreamRegistry } from "../agent-stream-registry.port.js";
 import type { PersistentPreferences } from "../../persistent-preferences/persistent-preferences.port.js";
@@ -61,16 +61,7 @@ import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js"
 import { Random } from "@/common/random.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
-const log = createLogger("agent.runner");
-
-/**
- * Result 失败转异常通道：复用 run() 主 catch 的既有收口（FAILED 事件 /
- * 失败消息落库 / KKV 失效，最后 AppError 分流为 `Result.err`）。主 try 内的
- * 解包一律经此进 catch——直接 `return Result.err` 会跳过收尾，终态事件丢失。
- */
-function raiseRunError(error: unknown): never {
-  throw error;
-}
+const log = LogFactory.create("agent.runner");
 
 interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
@@ -109,7 +100,7 @@ interface DefaultAgentRunnerDeps {
 /**
  * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
  */
-export class DefaultAgentRunner implements AgentRunner {
+export class DefaultAgentRunner implements AgentRunnerPort {
   private readonly toolRunner: ToolRunner<BuiltinToolContext>;
 
   constructor(private readonly deps: DefaultAgentRunnerDeps) {
@@ -161,7 +152,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // 死循环检测器按 run 建一个：跨轮窗口状态收在实例里，runner 不再手动维护。
     const doomLoop = new DoomLoopDetector(options.definition.runtime);
 
-    const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
+    const tools = ToolDefinitions.fromRegistry(this.deps.registry, this.deps.toolCtx);
     // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
     // 回合内技能启停不即时反映）；skill 被 policy 禁用时闭包为空，
     // 索引随之置空（D4：工具与索引同进退）。
@@ -208,7 +199,7 @@ export class DefaultAgentRunner implements AgentRunner {
     if (this.deps.preferences != null) {
       const pref = await this.deps.preferences.getThinkingContextEnabled();
       if (!pref.ok) {
-        if (!isAppError(pref.error, "PREFERENCES_INVALID_VALUE")) {
+        if (!AppErrorOps.is(pref.error, "PREFERENCES_INVALID_VALUE")) {
           return Result.err(pref.error);
         }
         log.error("thinking_context_pref_read_failed", {
@@ -299,7 +290,7 @@ export class DefaultAgentRunner implements AgentRunner {
       let turnFiletree: string | undefined;
       if (wantsTree) {
         const rendered = await wt.renderFileTree();
-        if (!rendered.ok) raiseRunError(rendered.error);
+        if (!rendered.ok) AgentRunner.raiseRunError(rendered.error);
         turnFiletree = rendered.value;
       }
       for (let step = 0; step < maxSteps; step++) {
@@ -342,7 +333,7 @@ export class DefaultAgentRunner implements AgentRunner {
           kkvSessionId: session.kkvScopeSessionId,
           checkpoint: () => (signal?.aborted === true ? { kind: "cancelled", reason: "user-stop" } : null),
         };
-        const assembled = await assembleWorkplaceDisplay(wtScope, assembleDeps, assembleOptions);
+        const assembled = await WorkplaceDisplayAssembler.assemble(wtScope, assembleDeps, assembleOptions);
         if (assembled.kind === "cancelled" || assembled.kind === "replaced") {
           await handleAbort("after_assemble_workplace");
           break;
@@ -350,7 +341,7 @@ export class DefaultAgentRunner implements AgentRunner {
         if (assembled.kind === "failed") {
           // 组装内的已知失败（如路径解析）：与旧 throw 同路径进 run 收尾
           // （FAILED 事件 + Result.err 分流），不吞成中断。
-          raiseRunError(assembled.error);
+          AgentRunner.raiseRunError(assembled.error);
         }
         const { workplaceDisplay, files, prefixPaths, visiblePaths, fingerprint } = assembled.value;
         if (signal?.aborted) {
@@ -377,7 +368,7 @@ export class DefaultAgentRunner implements AgentRunner {
           projectId,
         };
         const prepared = await promptAssembler.prepare(visible, prepareRuntime);
-        if (!prepared.ok) raiseRunError(prepared.error);
+        if (!prepared.ok) AgentRunner.raiseRunError(prepared.error);
         visible = prepared.value;
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
@@ -419,7 +410,7 @@ export class DefaultAgentRunner implements AgentRunner {
           workplaceFingerprint: fingerprint,
         };
         const promptInputBuilt = await PromptBuilder.llmInput(options.definition.prompts, promptRenderCtx, { agentStepIndex: step });
-        if (!promptInputBuilt.ok) raiseRunError(promptInputBuilt.error);
+        if (!promptInputBuilt.ok) AgentRunner.raiseRunError(promptInputBuilt.error);
         const promptInput = promptInputBuilt.value;
 
         if (persistMessages && this.deps.compactionConditions != null) {
@@ -438,7 +429,7 @@ export class DefaultAgentRunner implements AgentRunner {
             visibleMessageCount,
           };
           const evaluated = await this.deps.compactionConditions.shouldRequestCompaction(this.deps.session, compactionEvaluation);
-          if (!evaluated.ok) raiseRunError(evaluated.error);
+          if (!evaluated.ok) AgentRunner.raiseRunError(evaluated.error);
           const shouldCompact = evaluated.value;
           if (signal?.aborted) {
             await handleAbort("after_compaction_eval");
@@ -451,9 +442,9 @@ export class DefaultAgentRunner implements AgentRunner {
             const messages = this.deps.messages;
             assert(messages != null, "compaction requires messages");
             const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
-            if (!hiddenDepth.ok) raiseRunError(hiddenDepth.error);
+            if (!hiddenDepth.ok) AgentRunner.raiseRunError(hiddenDepth.error);
             const hideStartDepth = hiddenDepth.value;
-            await runCompaction({ sessionKkv: this.deps.sessionKkv, messages }, { sessionId, hideStartDepth });
+            await Compaction.run({ sessionKkv: this.deps.sessionKkv, messages }, { sessionId, hideStartDepth });
             stepCompactionEmitted = true;
           }
         }
@@ -469,13 +460,13 @@ export class DefaultAgentRunner implements AgentRunner {
         // 思考上下文剥离：LlmExport.normalize 之后、orphan 归一化之前。
         // 容量 1 判定只看 assistant 消息，与 orphan 归一化顺序无耦合，
         // 此处保持既有插入位置（历史顺序、避免无关行为差异）。
-        const strippedMessages = applyThinkingContextForLlm(exportMessages, {
+        const strippedMessages = ThinkingContext.applyForLlm(exportMessages, {
           enabled: thinkingContextEnabled,
           protocol,
           retainProtocolMinimum: true,
           requestThinkingEnabled,
         });
-        const llmMessages = normalizeOrphanToolResultsForLlm(strippedMessages);
+        const llmMessages = OrphanToolResults.normalizeForLlm(strippedMessages);
 
         // tool_use 查找源：解析出站 tool_result 的函数名（Gemini
         // functionResponse 必须有合法 name）。两个收窄正交叠加：
@@ -520,7 +511,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const streamBusDeps = { streamRegistry: this.deps.streamRegistry, usageBase: runUsageBase };
         let innerOnStream: StreamEventListener | undefined;
         if (options.stream) {
-          innerOnStream = publishRunLifecycle ? wrapStreamForBus(bus, sessionId, runId, streamBusDeps, options.onStream) : options.onStream;
+          innerOnStream = publishRunLifecycle ? AgentRunner.wrapStreamForBus(bus, sessionId, runId, streamBusDeps, options.onStream) : options.onStream;
         }
         // 在 bus 分发层之外再包一层 timing onStream：只记首个内容事件时刻，
         // 不改变事件流向内层回调；wrapStreamForBus 本身不动。
@@ -550,7 +541,7 @@ export class DefaultAgentRunner implements AgentRunner {
             scope,
           };
           const requested = await this.deps.modelRequests.request(options.savedModelId, "", requestOptions);
-          if (!requested.ok) raiseRunError(requested.error);
+          if (!requested.ok) AgentRunner.raiseRunError(requested.error);
           result = requested.value;
         } catch (e: unknown) {
           if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
@@ -630,7 +621,7 @@ export class DefaultAgentRunner implements AgentRunner {
             usage: { ...result.usage, firstTokenMs, durationMs },
           };
           const appended = await session.append("assistant", assistantContent, assistantAppendOptions);
-          if (!appended.ok) raiseRunError(appended.error);
+          if (!appended.ok) AgentRunner.raiseRunError(appended.error);
           assistantMessage = appended.value;
           assistantAppendedInRun = true;
           if (publishRunLifecycle) {
@@ -669,7 +660,7 @@ export class DefaultAgentRunner implements AgentRunner {
         if (persistMessages && !assistantAppendedInRun) {
           try {
             const appended = await session.append("assistant", { blocks: [{ type: "text", text: "（本次生成无内容输出）" }] });
-            if (!appended.ok) raiseRunError(appended.error);
+            if (!appended.ok) AgentRunner.raiseRunError(appended.error);
             assistantAppendedInRun = true;
           } catch (appendError) {
             // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
@@ -709,7 +700,7 @@ export class DefaultAgentRunner implements AgentRunner {
         // 检测器只回报结果（不抛）：run 循环的收口语义仍靠这里沿 catch 收口。
         const doomLoopResult = doomLoop.checkStep(result.blocks);
         if (!doomLoopResult.ok) {
-          raiseRunError(doomLoopResult.error);
+          AgentRunner.raiseRunError(doomLoopResult.error);
         }
 
         if (signal?.aborted) {
@@ -782,7 +773,7 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         const appendedResults = await session.append("user", { blocks: toolResults });
-        if (!appendedResults.ok) raiseRunError(appendedResults.error);
+        if (!appendedResults.ok) AgentRunner.raiseRunError(appendedResults.error);
         // chokepoint ②：tool_results 落库后回锚本 step 的 usage（锚点与
         // usage 对齐到同一批可见消息——纯追加不失效基线，下一步评估走
         // api 档零计数、锚点后增量由读口覆盖）。
@@ -821,7 +812,7 @@ export class DefaultAgentRunner implements AgentRunner {
         if (persistMessages && !assistantAppendedInRun) {
           try {
             const appended = await session.append("assistant", { blocks: [{ type: "text", text: `[生成失败] ${runError}` }] });
-            if (!appended.ok) raiseRunError(appended.error);
+            if (!appended.ok) AgentRunner.raiseRunError(appended.error);
           } catch (appendError) {
             // 错误消息落库失败不掩盖原始错误：记日志后继续发 FAILED 并抛原错。
             log.error("failure_message_append_failed", {
@@ -870,7 +861,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // 终 step usage 缺 promptTokens 而 picked 取自前步时，锚点也是前步的）。
     // persistMessages=false（overlay run）的终值同样不落——锚点口径属持久
     // 会话，与 anchorStepUsage / 失败消息落库同一条豁免，走 else 连旧值失效。
-    const picked = pickLastPromptUsage(rounds);
+    const picked = LastPromptUsage.pick(rounds);
     if (persistMessages && stopReason === "completed" && picked !== undefined) {
       SessionApiPromptTokenEntry.write(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
@@ -906,22 +897,46 @@ interface StreamBusDeps {
 type StreamEventListener = (event: LlmStreamEvent) => void;
 
 /**
- * @internal Exposed for stream-bus deferral unit tests.
+ * agent-runner 模块级 helper 集合的类型面。
  *
- * nm-style: keep-public — 本函数独立承载「单 microtask 合批」状态机
- * （pendingQueue / flushScheduled）与跨批次顺序不变量，6 条 stream-bus 测试
- * 直接钉住该语义；内联进 run() 会把状态机与 step 循环耦合，顺序测试也不得不
- * 驱动整个 runner，故保留模块级导出作为测试支持 API。
- *
- * 这里不再为每个 stream event 各自 `queueMicrotask`：那样 N 个 event 会插进 N 条微任务，
- * 中间可能被其它微任务（订阅者倒序调用、scheduler 等）插入，跨批次顺序不稳。
- *
- * 改成单个"合并刷新"：同一同步批次的全部 stream event 先压进 `pendingQueue`，只调度一次
- * `queueMicrotask(flush)`。flush 里按 FIFO 顺序逐条 publish，保证批次内顺序确定、
- * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
- * 同步执行（避免订阅者中途回访 runner 产生的重入）。
+ * 显式注解整个对象类型是刻意的：TS 只对「对象类型来自显式注解」的属性访问
+ * 调用做 never 返回的不可达收窄——`as const` 推断出的方法类型在
+ * `if (!x.ok) AgentRunner.raiseRunError(x.error); x.value` 这条既有收窄模式下
+ * 会让 `x.value` 报 TS2339（run 主循环内 15 处依赖该收窄）。
  */
-export function wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: string, deps: StreamBusDeps = {}, userOnStream?: StreamEventListener): StreamEventListener | undefined {
+interface AgentRunnerHelpers {
+  raiseRunError(error: unknown): never;
+  wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: string, deps?: StreamBusDeps, userOnStream?: StreamEventListener): StreamEventListener | undefined;
+}
+
+/** agent-runner 模块级 helper 集合（run 主循环外的错误转抛与流式事件合批包装）。 */
+export const AgentRunner: AgentRunnerHelpers = {
+  /**
+   * Result 失败转异常通道：复用 run() 主 catch 的既有收口（FAILED 事件 /
+   * 失败消息落库 / KKV 失效，最后 AppError 分流为 `Result.err`）。主 try 内的
+   * 解包一律经此进 catch——直接 `return Result.err` 会跳过收尾，终态事件丢失。
+   */
+  raiseRunError(error: unknown): never {
+    throw error;
+  },
+
+  /**
+   * @internal Exposed for stream-bus deferral unit tests.
+   *
+   * nm-style: keep-public — 本函数独立承载「单 microtask 合批」状态机
+   * （pendingQueue / flushScheduled）与跨批次顺序不变量，6 条 stream-bus 测试
+   * 直接钉住该语义；内联进 run() 会把状态机与 step 循环耦合，顺序测试也不得不
+   * 驱动整个 runner，故保留模块级导出作为测试支持 API。
+   *
+   * 这里不再为每个 stream event 各自 `queueMicrotask`：那样 N 个 event 会插进 N 条微任务，
+   * 中间可能被其它微任务（订阅者倒序调用、scheduler 等）插入，跨批次顺序不稳。
+   *
+   * 改成单个"合并刷新"：同一同步批次的全部 stream event 先压进 `pendingQueue`，只调度一次
+   * `queueMicrotask(flush)`。flush 里按 FIFO 顺序逐条 publish，保证批次内顺序确定、
+   * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
+   * 同步执行（避免订阅者中途回访 runner 产生的重入）。
+   */
+  wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: string, deps: StreamBusDeps = {}, userOnStream?: StreamEventListener): StreamEventListener | undefined {
   // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
   const pendingQueue: Array<() => void> = [];
   let flushScheduled = false;
@@ -997,4 +1012,5 @@ export function wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: 
     scheduleStreamPublish(ev);
     userOnStream(ev);
   };
-}
+  },
+} as const;

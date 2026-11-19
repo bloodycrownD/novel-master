@@ -4,16 +4,16 @@
  * @module service/vfs/impl/vfs-batch-io.service
  */
 
-import { yieldToEventLoop } from "@/common/concurrency.js";
+import { Concurrency } from "@/common/concurrency.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { VfsBatchPath } from "@/domain/vfs/logic/vfs-batch-path.js";
 import { WriteWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import { SessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -204,10 +204,10 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
           const repoTx = new SqliteVfsEntryRepository(tx);
           for (const dirLogical of plan.mkdirPaths) {
             // 事务回调内解包走 unwrapOrRollback（总纲 §五例外 2）：失败靠抛错回滚。
-            unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${dirLogical}/__vfs_batch_placeholder`));
-            const existing = unwrapOrRollback(await repoTx.findByPath(sk, dirLogical));
+            TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${dirLogical}/__vfs_batch_placeholder`));
+            const existing = TdbcTransaction.unwrapOrRollback(await repoTx.findByPath(sk, dirLogical));
             if (existing == null) {
-              unwrapOrRollback(await repoTx.insertDirectory(sk, dirLogical));
+              TdbcTransaction.unwrapOrRollback(await repoTx.insertDirectory(sk, dirLogical));
             } else if (existing.entryKind === "file") {
               throw new AppError("VFS_NOT_A_DIRECTORY", { detail: `path is a file, not a directory: ${dirLogical}`, path: dirLogical });
             }
@@ -232,7 +232,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
             const revisionTx = new SqliteVfsRevisionRepository(tx);
             for (const write of shard) {
               // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-              const logical = unwrapOrRollback(VfsBatchPath.joinTargetLogicalPath(target, write.relativePath));
+              const logical = TdbcTransaction.unwrapOrRollback(VfsBatchPath.joinTargetLogicalPath(target, write.relativePath));
               if (this.testHook?.throwOnWriteLogical === logical) {
                 // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
                 // nm-throw: keep — 测试故障注入点：故意裸抛模拟事务内未知失败（失败 message 进批次报告），非业务错误。
@@ -240,12 +240,12 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
               }
               // WHY 外面保底父链：WriteWithRevision.write 只在**新建**分支调 ParentDirs.ensure，
               // 而批量 ingest 允许覆盖已有路径 ⇒ 已有路径的父链不由它兜。
-              unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
+              TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
               // skipNameValidation=true：批量 ingest 是 zip 导入的创建通道，输入是**外部
               // 文件名**；`validate-entry-name.ts` 的 JSDoc 明确导入链路不走名校验
               // （外部文件名可先导入再用改名纠正）。传 false 会把「以前能导入的外部文件名」
               // 变成「导入失败」，改变一条已拍板的导入语义。
-              unwrapOrRollback(await WriteWithRevision.write(repoTx, revisionTx, sk, logical, write.content, { skipNameValidation: true }));
+              TdbcTransaction.unwrapOrRollback(await WriteWithRevision.write(repoTx, revisionTx, sk, logical, write.content, { skipNameValidation: true }));
               shardWritten.push(logical);
             }
           });
@@ -259,7 +259,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
           break;
         }
         // 让步只落在片与片之间，绝不落在事务回调内部。
-        await yieldToEventLoop();
+        await Concurrency.yieldToEventLoop();
       }
     }
 
@@ -375,7 +375,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
    */
   private async alignPromptCachesAfterWrite(scope: VfsScope, writtenCount: number): Promise<void> {
     if (writtenCount > 0 && this.sessionKkv && scope.kind === "session") {
-      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
+      await SessionPromptCaches.clear(scope.sessionId, this.sessionKkv);
     }
   }
 

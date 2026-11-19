@@ -15,20 +15,20 @@
  */
 
 import assert from "node:assert/strict";
-import { Result } from "../../src/errors/either.js";
-import { describe, it } from "node:test";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
-import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, SimpleEventBus, type AgentRunFailedPayload, type  AgentRunFinishedPayload } from "@novel-master/core/events";
-import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
-import { type ModelRequestService } from "@novel-master/core/provider";
-import { type LlmChatResult } from "@novel-master/core/llm-protocol";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  describe, it  } from "node:test";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, SimpleEventBus, type AgentRunFailedPayload, type  AgentRunFinishedPayload  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 import type { VfsService } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -268,7 +268,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
           definition: minimalDefinition(),
           ...defaultRunScope,
         }),
-      (e: unknown) => assert.ok(isAppError(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"),
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"),
     );
 
     // 不重试：model 仅调用一次（重试分级由 model-request.service 承接，runner 侧单次上抛）

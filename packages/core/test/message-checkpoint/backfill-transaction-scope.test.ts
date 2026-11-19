@@ -12,28 +12,22 @@
  * @module test/message-checkpoint/backfill-transaction-scope
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import type { WorkplaceDirRule } from "@/domain/workplace/model/workplace-types.js";
-import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import {  MessageCheckpointFactory  } from "@novel-master/core/message-checkpoint";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
-import {
-  probeTransactions,
-  type TransactionProbe,
-} from "../helpers/transaction-probe.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
+import {  probeTransactions, type TransactionProbe  } from "../helpers/transaction-probe.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 function filesMap(count: number, prefix = "f"): Map<string, string> {
@@ -169,7 +163,7 @@ describe("CS-05b backfill 事务边界", () => {
 
     let upsertCalls = 0;
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       const zipSvc = VfsServiceFactory.createZipIo(conn, {
         testHook: {
@@ -199,7 +193,7 @@ describe("CS-05b backfill 事务边界", () => {
         zipSvc.import(scope, VfsZipBuild.build(expected), { confirmed: true })
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     // 牙齿判据①：注入必须真的被触发，否则本条全部断言恒真。
@@ -266,7 +260,7 @@ describe("CS-05b backfill 事务边界", () => {
        BEGIN SELECT RAISE(ABORT, 'backfill blocked'); END`
     );
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       await assert.doesNotReject(() =>
         VfsServiceFactory.createZipIo(conn).import(
@@ -276,7 +270,7 @@ describe("CS-05b backfill 事务边界", () => {
         )
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
       await ctx.conn.execute(`DROP TRIGGER IF EXISTS t_block_backfill_insert`);
     }
 

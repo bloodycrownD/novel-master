@@ -2,19 +2,15 @@
  * message-rollback-execution-redesign must-fix 测例：
  * T-RB-PARTIAL-WRITE / T-RB-SQL-ONCE / T-RB-STABLE-CP
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { RevisionAwareVfsService } from "@/service/vfs/impl/revision-aware-vfs.service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it, mock  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  RevisionAwareVfsService  } from "@/service/vfs/impl/revision-aware-vfs.service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

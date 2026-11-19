@@ -6,9 +6,9 @@
  * 携带最后一次调用的参数（工具调用静默丢失 + 参数串味）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createGeminiSseParser } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
-import { geminiPartsToBlocks } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
+import {  describe, it  } from "node:test";
+import {  GeminiSseParser  } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
+import {  GeminiMapper  } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
 
 type Block = { type: string } & Record<string, unknown>;
 
@@ -24,7 +24,7 @@ function toolUseBlocks(blocks: readonly unknown[]): Block[] {
 
 describe("gemini 并行同名 functionCall", () => {
   it("T-GPSN1 并行两个无 id 同名调用 → 2 条 tool_use、args 不串味、id 互异", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed(
       chunkOf([
         { functionCall: { name: "read_file", args: { path: "a.md" } } },
@@ -41,7 +41,7 @@ describe("gemini 并行同名 functionCall", () => {
   });
 
   it("T-GPSN2 单调用跨 chunk 增长 → 仍 1 条、参数取最后完整快照", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed(chunkOf([{ functionCall: { name: "read_file", args: { path: "a" } } }]));
     parser.feed(chunkOf([{ functionCall: { name: "read_file", args: { path: "a", n: 1 } } }]));
     parser.feed(
@@ -55,7 +55,7 @@ describe("gemini 并行同名 functionCall", () => {
   });
 
   it("T-GPSN3 有 id 时键与修复前逐条一致（不含 #ordinal）", () => {
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed(
       chunkOf([
         { functionCall: { id: "fc-1", name: "read_file", args: { path: "a" } } },
@@ -75,14 +75,14 @@ describe("gemini 并行同名 functionCall", () => {
       { functionCall: { name: "read_file", args: { path: "a.md" } } },
       { functionCall: { name: "read_file", args: { path: "b.md" } } },
     ];
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed(chunkOf(parts));
     const streamed = toolUseBlocks(parser.finish().blocks);
     assert.equal(streamed.length, 2);
     assert.notEqual(streamed[0]!.id, streamed[1]!.id);
 
     // 非流式侧**未被本条触碰**：`${name}-${blocks.length}` 形态原样保留。
-    const nonStreamed = toolUseBlocks(geminiPartsToBlocks(parts));
+    const nonStreamed = toolUseBlocks(GeminiMapper.partsToBlocks(parts));
     assert.deepEqual(
       nonStreamed.map((u) => u.id),
       ["read_file-0", "read_file-1"],
@@ -97,7 +97,7 @@ describe("gemini 并行同名 functionCall", () => {
     // 本用例把该边界**钉成期望并显式标注前提**：它不是「通过了就没事」的锁，
     // 而是「口径换实现前必须先解决」的提醒。生产上若真出现该形态（表现为
     // 并行同名调用少执行一条），修法是改用全局序号 + part 位置。
-    const parser = createGeminiSseParser();
+    const parser = GeminiSseParser.create();
     parser.feed(chunkOf([{ functionCall: { name: "read_file", args: { path: "a.md" } } }]));
     parser.feed(chunkOf([{ functionCall: { name: "read_file", args: { path: "b.md" } } }]));
     const uses = toolUseBlocks(parser.finish().blocks);

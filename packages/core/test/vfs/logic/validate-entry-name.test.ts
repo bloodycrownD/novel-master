@@ -3,8 +3,8 @@
  * 首尾空格、`.`/`..`）与放行用例（中文、中间空格、括号、标点、emoji、全角）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { EntryNameValidator } from "../../../src/domain/vfs/logic/validate-entry-name.js";
+import {  describe, it  } from "node:test";
+import {  EntryNameValidator  } from "../../../src/domain/vfs/logic/validate-entry-name.js";
 
 describe("EntryNameValidator.validate", () => {
   describe("拒绝", () => {

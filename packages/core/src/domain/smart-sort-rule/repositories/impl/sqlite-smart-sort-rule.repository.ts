@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { SmartSortCaptureKind, SmartSortRule } from "../../model/smart-sort-rule.js";
 import type { SmartSortRuleRepository } from "../smart-sort-rule.port.js";
@@ -36,12 +36,12 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async listOrdered(): Promise<SmartSortRule[]> {
-    const rows = await queryTemplate(this.conn, this.parser, `SELECT ${SELECT_COLUMNS} FROM smart_sort_rule ORDER BY sort_order ASC, rule_id ASC`, {});
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ${SELECT_COLUMNS} FROM smart_sort_rule ORDER BY sort_order ASC, rule_id ASC`, {});
     return rows.map(rowToRule);
   }
 
   async find(ruleId: string): Promise<SmartSortRule | null> {
-    const rows = await queryTemplate(this.conn, this.parser, `SELECT ${SELECT_COLUMNS} FROM smart_sort_rule WHERE rule_id = #{ruleId}`, { ruleId });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ${SELECT_COLUMNS} FROM smart_sort_rule WHERE rule_id = #{ruleId}`, { ruleId });
     if (rows.length === 0) {
       return null;
     }
@@ -49,7 +49,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
   }
 
   async insert(rule: SmartSortRule): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order, created_at_ms, updated_at_ms) VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled}, #{sortOrder}, #{createdAtMs}, #{updatedAtMs})`, {
+    await TdbcTemplate.execute(this.conn, this.parser, `INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order, created_at_ms, updated_at_ms) VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled}, #{sortOrder}, #{createdAtMs}, #{updatedAtMs})`, {
       ruleId: rule.ruleId,
       name: rule.name,
       pattern: rule.pattern,
@@ -64,7 +64,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
   }
 
   async update(rule: SmartSortRule): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `UPDATE smart_sort_rule SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind}, description = #{description}, enabled = #{enabled}, sort_order = #{sortOrder}, updated_at_ms = #{updatedAtMs} WHERE rule_id = #{ruleId}`, {
+    await TdbcTemplate.execute(this.conn, this.parser, `UPDATE smart_sort_rule SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind}, description = #{description}, enabled = #{enabled}, sort_order = #{sortOrder}, updated_at_ms = #{updatedAtMs} WHERE rule_id = #{ruleId}`, {
       ruleId: rule.ruleId,
       name: rule.name,
       pattern: rule.pattern,
@@ -107,22 +107,22 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
       const sql = `UPDATE smart_sort_rule SET sort_order = CASE rule_id ${cases.join(" ")} ELSE sort_order END WHERE rule_id IN (${idNames.map((n) => `#{${n}}`).join(", ")})`;
       // 参数按占位符名传：evaluator 按占位符**出现顺序**逐个绑定，同名占位符
       // 出现两次就绑两次 ⇒ CASE 里先绑 rid/ord，WHERE 的 IN 再绑一遍 rid。
-      await executeTemplate(this.conn, this.parser, sql, params);
+      await TdbcTemplate.execute(this.conn, this.parser, sql, params);
     }
   }
 
   async delete(ruleId: string): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `DELETE FROM smart_sort_rule WHERE rule_id = #{ruleId}`, { ruleId });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM smart_sort_rule WHERE rule_id = #{ruleId}`, { ruleId });
   }
 
   /** nm-style: keep-public — 实现 SmartSortRuleRepository.deleteAll 端口方法；内联会把删除 SQL 搬进调用层。 */
   async deleteAll(): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `DELETE FROM smart_sort_rule`, {});
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM smart_sort_rule`, {});
   }
 
   /** nm-style: keep-public — 实现 SmartSortRuleRepository.nextSortOrder 端口方法；内联会把 MAX 查询 SQL 搬进调用层。 */
   async nextSortOrder(): Promise<number> {
-    const rows = await queryTemplate(this.conn, this.parser, `SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM smart_sort_rule`, {});
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM smart_sort_rule`, {});
     const max = Number(rows[0]?.max_sort ?? 0);
     return max + 1;
   }

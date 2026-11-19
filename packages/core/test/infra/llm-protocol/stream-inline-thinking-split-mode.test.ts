@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  openAiStreamAccumulatorsToBlocks,
-  openAiStreamDeltaToEvents,
-} from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
+import {  describe, it  } from "node:test";
+import {  OpenAiMapper  } from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
 import type { LlmStreamEvent } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
 
 function createStreamState() {
@@ -27,7 +24,7 @@ describe("openai stream text passthrough", () => {
   it("T-direct-default: content Hello 发出一条 text-delta", () => {
     const state = createStreamState();
     const events = collectEvents((onStream) => {
-      openAiStreamDeltaToEvents({ content: "Hello" }, state, onStream);
+      OpenAiMapper.streamDeltaToEvents({ content: "Hello" }, state, onStream);
     });
     assert.equal(events.length, 1);
     assert.equal(events[0]!.type, "text-delta");
@@ -42,7 +39,7 @@ describe("openai stream text passthrough", () => {
     const events: LlmStreamEvent[] = [];
 
     for (const chunk of chunks) {
-      openAiStreamDeltaToEvents({ content: chunk }, state, (ev) => events.push(ev));
+      OpenAiMapper.streamDeltaToEvents({ content: chunk }, state, (ev) => events.push(ev));
     }
 
     assert.ok(events.every((ev) => ev.type === "text-delta"));
@@ -54,7 +51,7 @@ describe("openai stream text passthrough", () => {
       "<thought>a</thought>b",
     );
 
-    const { blocks } = openAiStreamAccumulatorsToBlocks(state);
+    const { blocks } = OpenAiMapper.streamAccumulatorsToBlocks(state);
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]!.type, "text");
     if (blocks[0]!.type === "text") {
@@ -68,7 +65,7 @@ describe("openai stream text passthrough", () => {
     const events: LlmStreamEvent[] = [];
 
     for (const chunk of chunks) {
-      openAiStreamDeltaToEvents({ content: chunk }, state, (ev) => events.push(ev));
+      OpenAiMapper.streamDeltaToEvents({ content: chunk }, state, (ev) => events.push(ev));
     }
 
     assert.ok(events.every((ev) => ev.type === "text-delta"));
@@ -80,7 +77,7 @@ describe("openai stream text passthrough", () => {
       "&lt;thought&gt;a&lt;/thought&gt;b",
     );
 
-    const { blocks } = openAiStreamAccumulatorsToBlocks(state);
+    const { blocks } = OpenAiMapper.streamAccumulatorsToBlocks(state);
     assert.equal(blocks.length, 1);
     if (blocks[0]!.type === "text") {
       assert.equal(blocks[0].text, "&lt;thought&gt;a&lt;/thought&gt;b");
@@ -90,7 +87,7 @@ describe("openai stream text passthrough", () => {
   it("T-dual-field: 同 chunk content 先于 reasoning_content", () => {
     const state = createStreamState();
     const events = collectEvents((onStream) => {
-      openAiStreamDeltaToEvents(
+      OpenAiMapper.streamDeltaToEvents(
         { content: "B", reasoning_content: "R" },
         state,
         onStream,
@@ -107,11 +104,11 @@ describe("openai stream text passthrough", () => {
 
   it("T-structured-only: reasoning_content 进入 thinking，content 标签不挖空", () => {
     const state = createStreamState();
-    openAiStreamDeltaToEvents(
+    OpenAiMapper.streamDeltaToEvents(
       { content: "<thought>leak</thought>可见", reasoning_content: "structured" },
       state,
     );
-    const { blocks } = openAiStreamAccumulatorsToBlocks(state);
+    const { blocks } = OpenAiMapper.streamAccumulatorsToBlocks(state);
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]!.type, "thinking");
     assert.equal(blocks[1]!.type, "text");

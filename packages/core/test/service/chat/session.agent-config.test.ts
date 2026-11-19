@@ -1,25 +1,21 @@
-import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
-import { Result } from "../../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../../helpers/result-unwrap.js";
+import {  Result  } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 
 // PersistentState.setCurrentModelId 会校验 UUID，测试里统一用这个常量。
 const TEST_SAVED_MODEL_A = "11111111-1111-4111-8111-111111111111";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { isAppError } from "@novel-master/core/errors";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 function def(name: string) {
   // 四期签名：decode 失败沿 Result.err 回传——upsert 需要裸定义，这里解包。
   return unwrap(
-    decode(
+    SerializationDecode.decode(
       {
         schemaVersion: 1,
         name,
@@ -115,7 +111,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await rejectsErr(
       () => svc.create(project.id, "should-fail"),
       (error: unknown) =>
-        isAppError(error, "CHAT_INVALID_ARGUMENT"),
+        AppErrorOps.is(error, "CHAT_INVALID_ARGUMENT"),
     );
   });
 
@@ -247,7 +243,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await rejectsErr(
       () => ctx.sessions.getSessionAgentConfig(session.id),
       (error: unknown) =>
-        isAppError(error, "CHAT_INVALID_ARGUMENT"),
+        AppErrorOps.is(error, "CHAT_INVALID_ARGUMENT"),
     );
   });
 
@@ -304,7 +300,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await rejectsErr(
       () => ctx.sessions.getSessionAgentConfig("nope-not-exist"),
       (error: unknown) =>
-        isAppError(error, "CHAT_NOT_FOUND"),
+        AppErrorOps.is(error, "CHAT_NOT_FOUND"),
     );
   });
 });

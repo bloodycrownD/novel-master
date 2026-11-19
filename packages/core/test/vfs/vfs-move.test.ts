@@ -1,10 +1,10 @@
-import { isAppError } from "../../src/errors/app-error.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsMove } from "../../src/domain/vfs/logic/vfs-move.js";
-import { Path } from "../../src/common/path.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  VfsMove  } from "../../src/domain/vfs/logic/vfs-move.js";
+import {  Path  } from "../../src/common/path.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -25,7 +25,7 @@ describe("moveVfsPath", () => {
     const read = unwrap(await vfs.read("/new.md"));
     assert.equal(read.content, "content");
     await rejectsErr(() => vfs.read("/old.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -45,7 +45,7 @@ describe("moveVfsPath", () => {
     assert.equal(unwrap(await vfs.read("/dst/a.md")).content, "a");
     assert.equal(unwrap(await vfs.read("/dst/sub/b.md")).content, "b");
     await rejectsErr(() => vfs.read("/src/a.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -63,7 +63,7 @@ describe("moveVfsPath", () => {
     // directory 行的 path 已更新：新路径是空目录（list 成功且为空），旧路径不存在。
     assert.deepEqual(unwrap(await vfs.list("/renamed-dir")), []);
     await rejectsErr(() => vfs.list("/empty-dir"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
 
     // rename 后新目录仍可正常写入子项。
@@ -95,10 +95,10 @@ describe("moveVfsPath", () => {
       true
     );
     await rejectsErr(() => vfs.read(`${oldDir}/child.md`), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     await rejectsErr(() => vfs.list(oldDir), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 

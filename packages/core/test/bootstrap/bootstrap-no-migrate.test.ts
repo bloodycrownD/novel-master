@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { describe, it } from "node:test";
-import { SCHEMA_MIGRATIONS } from "../../src/bootstrap/schema-migrations/index.js";
+import {  readdir, readFile  } from "node:fs/promises";
+import {  join  } from "node:path";
+import {  describe, it  } from "node:test";
+import {  SCHEMA_MIGRATIONS  } from "../../src/bootstrap/schema-migrations/index.js";
 
 const CORE_SRC = join(import.meta.dirname, "../../src");
 const SCHEMA_MIGRATIONS_DIR = join(CORE_SRC, "bootstrap/schema-migrations");

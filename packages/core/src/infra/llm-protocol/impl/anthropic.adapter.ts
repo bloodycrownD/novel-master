@@ -1,7 +1,7 @@
 /**
  * Anthropic protocol adapter (multi-block request/response, tools, streaming).
  *
- * Streaming uses {@link postSse} so RN gets XHR SSE; abort returns partial blocks.
+ * Streaming uses {@link LlmSseTransport.post} so RN gets XHR SSE; abort returns partial blocks.
  *
  * @module infra/llm-protocol/impl/anthropic.adapter
  */
@@ -10,33 +10,35 @@ import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import { ANTHROPIC_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sampling-defaults.js";
 import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter, LlmToolDefinition } from "../ports/adapter.port.js";
-import { anthropicContentToBlocks, blocksToAnthropicContent, chatMessagesToAnthropic } from "../logic/anthropic-content-mapper.js";
-import { createAnthropicSseParser } from "../logic/anthropic-sse-parser.js";
-import { anthropicToolsNeedWireEncoding, createAnthropicToolNameWire, type AnthropicToolNameWire } from "../logic/anthropic-tool-names.js";
+import { AnthropicMapper } from "../logic/anthropic-content-mapper.js";
+import { AnthropicSseParser } from "../logic/anthropic-sse-parser.js";
+import { AnthropicToolNames, type AnthropicToolNameWire } from "../logic/anthropic-tool-names.js";
 import { ANTHROPIC_API_VERSION } from "../logic/anthropic-api-version.js";
-import { fetchJson, joinUrl } from "../logic/http-util.js";
-import { postSse } from "../logic/llm-sse-transport.js";
-import { isRequestAborted } from "../logic/request-abort.js";
-import { applyThinkingToBody } from "../logic/apply-thinking-to-body.js";
-import { parseUsage } from "../logic/usage-parser.js";
+import { HttpUtil } from "../logic/http-util.js";
+import { LlmSseTransport } from "../logic/llm-sse-transport.js";
+import { RequestAbort } from "../logic/request-abort.js";
+import { ThinkingBody } from "../logic/apply-thinking-to-body.js";
+import { UsageParser } from "../logic/usage-parser.js";
 
-function resolveAnthropicToolNameWire(req: LlmChatRequest): AnthropicToolNameWire | undefined {
-  const names = new Set<string>();
-  for (const tool of req.tools ?? []) {
-    names.add(tool.name);
-  }
-  for (const message of req.history ?? []) {
-    for (const block of message.content.blocks) {
-      if (block.type === "tool_use") {
-        names.add(block.name);
+export const AnthropicAdapter = {
+  resolveToolNameWire(req: LlmChatRequest): AnthropicToolNameWire | undefined {
+    const names = new Set<string>();
+    for (const tool of req.tools ?? []) {
+      names.add(tool.name);
+    }
+    for (const message of req.history ?? []) {
+      for (const block of message.content.blocks) {
+        if (block.type === "tool_use") {
+          names.add(block.name);
+        }
       }
     }
-  }
-  if (names.size === 0 || !anthropicToolsNeedWireEncoding([...names])) {
-    return undefined;
-  }
-  return createAnthropicToolNameWire([...names]);
-}
+    if (names.size === 0 || !AnthropicToolNames.toolsNeedWireEncoding([...names])) {
+      return undefined;
+    }
+    return AnthropicToolNames.createWire([...names]);
+  },
+} as const;
 
 export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   readonly kind = "anthropic" as const;
@@ -45,7 +47,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers, signal: req.scope?.signal });
+    const fetched = await HttpUtil.fetchJson(this.fetchFn, HttpUtil.joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers, signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { data?: Array<{ id?: string; display_name?: string }> };
     const models = (data.data ?? [])
@@ -59,16 +61,16 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     if (req.stream) {
-      const toolNames = resolveAnthropicToolNameWire(req);
-      const url = joinUrl(req.baseUrl, "/v1/messages");
-      const parser = createAnthropicSseParser({ onStream: req.onStream, toolNames });
+      const toolNames = AnthropicAdapter.resolveToolNameWire(req);
+      const url = HttpUtil.joinUrl(req.baseUrl, "/v1/messages");
+      const parser = AnthropicSseParser.create({ onStream: req.onStream, toolNames });
 
       try {
         const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
         const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true, toolNames)), signal: req.scope?.signal };
-        await postSse(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+        await LlmSseTransport.post(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
-        if (!isRequestAborted(error, req.scope?.signal)) {
+        if (!RequestAbort.isAborted(error, req.scope?.signal)) {
           throw error;
         }
       }
@@ -77,7 +79,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       const finishResult = aborted ? parser.finishPartial() : parser.finish();
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
       const assistantText = MessageBodyText.fromBlocks(blocks);
-      const usage = parseUsage("anthropic", streamRaw);
+      const usage = UsageParser.parse("anthropic", streamRaw);
       const result: LlmChatResult = {
         assistantText,
         blocks,
@@ -89,25 +91,25 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       return result;
     }
 
-    const toolNames = resolveAnthropicToolNameWire(req);
-    const url = joinUrl(req.baseUrl, "/v1/messages");
+    const toolNames = AnthropicAdapter.resolveToolNameWire(req);
+    const url = HttpUtil.joinUrl(req.baseUrl, "/v1/messages");
     const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.scope?.signal });
+    const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { content?: unknown[] };
-    const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
+    const blocks = AnthropicMapper.contentToBlocks(record.content ?? [], toolNames);
     const assistantText = MessageBodyText.fromBlocks(blocks);
-    const usage = parseUsage("anthropic", raw);
+    const usage = UsageParser.parse("anthropic", raw);
     return { assistantText, blocks, raw, usage };
   }
 
   private buildBody(req: LlmChatRequest, stream: boolean, toolNames?: AnthropicToolNameWire): Record<string, unknown> {
     let messages: unknown[];
     if (req.history != null && req.history.length > 0) {
-      messages = chatMessagesToAnthropic(req.history, toolNames);
+      messages = AnthropicMapper.chatMessagesTo(req.history, toolNames);
     } else {
-      messages = [{ role: "user", content: blocksToAnthropicContent(TextBlocks.of(req.userContent).blocks, toolNames) }];
+      messages = [{ role: "user", content: AnthropicMapper.blocksToContent(TextBlocks.of(req.userContent).blocks, toolNames) }];
     }
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
@@ -133,7 +135,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       if (s.top_k != null) body.top_k = s.top_k;
       if (s.max_tokens != null) body.max_tokens = s.max_tokens;
     }
-    applyThinkingToBody("anthropic", body, req.thinking);
+    ThinkingBody.apply("anthropic", body, req.thinking);
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 sampling / thinking）。
     Object.assign(body, req.extraBody);
     return body;

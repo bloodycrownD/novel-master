@@ -5,9 +5,9 @@
  * 全程不 throw、不产生 Error 实例——中断不是错误，不该占 `Result` 的失败通道。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("checkpoint：两态与不抛错（T-S4）", () => {
   it("未 abort 时严格返回 null（不是 undefined）", () => {

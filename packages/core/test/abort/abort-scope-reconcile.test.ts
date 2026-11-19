@@ -6,9 +6,9 @@
  * `timeoutMs`/`signal` 被忽略，dev 环境下对不一致 opts 打 `console.warn`。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("controller memoize 后向 reconcile（T-S28）", () => {
   it("AbortScopeFactory.fromController 之后 create({controller,parent}) 返回同一引用", () => {

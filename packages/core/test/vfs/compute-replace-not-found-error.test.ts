@@ -3,9 +3,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../src/errors/app-error.js";
-import { ReplaceNotFoundError } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  ReplaceNotFoundError  } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
 
 describe("ReplaceNotFoundError.build", () => {
   it("details 里带上 oldString 和 fileHint 的文本预览", () => {
@@ -15,7 +15,7 @@ describe("ReplaceNotFoundError.build", () => {
     const oldString = "&ldquo;你好世界&rdquo;";
     const err = ReplaceNotFoundError.build("/note.md", fileContent, oldString);
 
-    assert.ok(isAppError(err, "VFS_REPLACE_NOT_FOUND"));
+    assert.ok(AppErrorOps.is(err, "VFS_REPLACE_NOT_FOUND"));
     assert.equal(err.details?.path, "/note.md");
     const details = err.details as {
       oldStringPreview?: string;
@@ -89,7 +89,7 @@ describe("ReplaceNotFoundError.build", () => {
     const err = ReplaceNotFoundError.build("/big.md", fileContent, oldString);
 
     // ① 错误码字面量：降级不得改动对外错误码。
-    assert.ok(isAppError(err, "VFS_REPLACE_NOT_FOUND"), "降级后错误码仍是 REPLACE_NOT_FOUND");
+    assert.ok(AppErrorOps.is(err, "VFS_REPLACE_NOT_FOUND"), "降级后错误码仍是 REPLACE_NOT_FOUND");
     assert.equal(err.key, "VFS_REPLACE_NOT_FOUND");
     assert.equal(err.details?.path, "/big.md");
 

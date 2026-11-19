@@ -9,7 +9,7 @@
  * @module infra/tokenizer/logic/count-tokens
  */
 
-import { isGpt0301TiktokenModel } from "./resolve-tokenizer-family.js";
+import { TokenizerFamilyResolver } from "./resolve-tokenizer-family.js";
 
 /**
  * 注入的编码器：把文本变成 token 数。
@@ -56,51 +56,53 @@ export interface CountTokensOptions {
   readonly tiktokenModel?: string;
 }
 
-/**
- * 按消息列表统计 token，套 OpenAI chat 包装。
- *
- * 三端共用入口：调用方注入 {@link ChatTokenEncoder} 与 {@link ChatTokenCountKind}，
- * 函数本身是纯函数、无副作用、不持有 encoding 资源。
- *
- * nm-style: keep-public — 三端共用入口（文档契约），签名类型随同 keep-public
- */
-export function countTokens(encode: ChatTokenEncoder, messages: readonly ChatTokenMessage[], kind: ChatTokenCountKind, options?: CountTokensOptions): number {
-  if (kind === "heuristic") {
+export const ChatTokenCount = {
+  /**
+   * 按消息列表统计 token，套 OpenAI chat 包装。
+   *
+   * 三端共用入口：调用方注入 {@link ChatTokenEncoder} 与 {@link ChatTokenCountKind}，
+   * 函数本身是纯函数、无副作用、不持有 encoding 资源。
+   *
+   * nm-style: keep-public — 三端共用入口（文档契约），签名类型随同 keep-public
+   */
+  count(encode: ChatTokenEncoder, messages: readonly ChatTokenMessage[], kind: ChatTokenCountKind, options?: CountTokensOptions): number {
+    if (kind === "heuristic") {
+      let numTokens = 0;
+      for (const msg of messages) {
+        numTokens += 3;
+        numTokens += encode(msg.content);
+      }
+      numTokens += 3;
+      return numTokens;
+    }
+    return ChatTokenCount.countPrecise(encode, messages, options?.tiktokenModel);
+  },
+
+  /**
+   * 完整 ST 对齐：每条消息 +perMessage（0301: 4 / 否则 3），
+   * encode role+content+name，name 额外 +tokensPerName（0301: -1 / 否则 1），
+   * 尾部 +3（0301 再 +9）。
+   */
+  // nm-style: keep-local — 完整 ST 包装公式（0301 三处调整 + 尾部 +3/+9）是精确档的独立口径，内联会把两条档位分支揉在一起。
+  countPrecise(encode: ChatTokenEncoder, messages: readonly ChatTokenMessage[], tiktokenModel?: string): number {
+    const is0301 = tiktokenModel != null ? TokenizerFamilyResolver.isGpt0301TiktokenModel(tiktokenModel) : false;
+    const tokensPerMessage = is0301 ? 4 : 3;
+    const tokensPerName = is0301 ? -1 : 1;
+
     let numTokens = 0;
     for (const msg of messages) {
-      numTokens += 3;
+      numTokens += tokensPerMessage;
+      numTokens += encode(msg.role);
       numTokens += encode(msg.content);
+      if (msg.name != null) {
+        numTokens += encode(msg.name);
+        numTokens += tokensPerName;
+      }
     }
     numTokens += 3;
-    return numTokens;
-  }
-  return countPrecise(encode, messages, options?.tiktokenModel);
-}
-
-/**
- * 完整 ST 对齐：每条消息 +perMessage（0301: 4 / 否则 3），
- * encode role+content+name，name 额外 +tokensPerName（0301: -1 / 否则 1），
- * 尾部 +3（0301 再 +9）。
- */
-// nm-style: keep-local — 完整 ST 包装公式（0301 三处调整 + 尾部 +3/+9）是精确档的独立口径，内联会把两条档位分支揉在一起。
-function countPrecise(encode: ChatTokenEncoder, messages: readonly ChatTokenMessage[], tiktokenModel?: string): number {
-  const is0301 = tiktokenModel != null ? isGpt0301TiktokenModel(tiktokenModel) : false;
-  const tokensPerMessage = is0301 ? 4 : 3;
-  const tokensPerName = is0301 ? -1 : 1;
-
-  let numTokens = 0;
-  for (const msg of messages) {
-    numTokens += tokensPerMessage;
-    numTokens += encode(msg.role);
-    numTokens += encode(msg.content);
-    if (msg.name != null) {
-      numTokens += encode(msg.name);
-      numTokens += tokensPerName;
+    if (is0301) {
+      numTokens += 9;
     }
-  }
-  numTokens += 3;
-  if (is0301) {
-    numTokens += 9;
-  }
-  return numTokens;
-}
+    return numTokens;
+  },
+} as const;

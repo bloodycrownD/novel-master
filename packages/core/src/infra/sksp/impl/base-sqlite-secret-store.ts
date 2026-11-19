@@ -12,9 +12,9 @@
  */
 
 import type { TdbcConnection } from "../../tdbc/ports/connection.port.js";
-import { executeTemplate, queryTemplate } from "../../tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "../../tdbc/logic/template-helper.js";
 import { SqlTemplateParser } from "../../sql-template/index.js";
-import { SkspError, assertValidRef } from "../sksp-error.js";
+import { SkspError, SkspRefAssert } from "../sksp-error.js";
 import type { SecretStore } from "../ports/secret-store.port.js";
 import type { SkspCryptoStrategy } from "./sksp-strategy.port.js";
 
@@ -28,8 +28,8 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
   constructor(protected readonly conn: TdbcConnection, protected readonly strategy: SkspCryptoStrategy) {}
 
   async get(ref: string): Promise<string | null> {
-    assertValidRef(ref);
-    const rows = await queryTemplate(this.conn, this.parser, `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`, { ref });
+    SkspRefAssert.validRef(ref);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`, { ref });
     if (rows.length === 0) {
       return null;
     }
@@ -41,13 +41,13 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
   }
 
   async has(ref: string): Promise<boolean> {
-    assertValidRef(ref);
-    const rows = await queryTemplate(this.conn, this.parser, `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`, { ref });
+    SkspRefAssert.validRef(ref);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`, { ref });
     return rows.length > 0;
   }
 
   async set(ref: string, plain: string): Promise<void> {
-    assertValidRef(ref);
+    SkspRefAssert.validRef(ref);
     // strategy 返回的 iv 允许为 null（Windows DPAPI），模板 `#{iv}` 原样绑定。
     const { ciphertext, iv } = await this.strategy.encrypt(ref, plain);
     const now = Date.now();
@@ -62,12 +62,12 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
       "         updated_at_ms = excluded.updated_at_ms",
     ];
     const insertSql = insertSqlParts.join("\n");
-    await executeTemplate(this.conn, this.parser, insertSql, { ref, ciphertext, iv, algo: this.strategy.algo, updatedAtMs: now });
+    await TdbcTemplate.execute(this.conn, this.parser, insertSql, { ref, ciphertext, iv, algo: this.strategy.algo, updatedAtMs: now });
   }
 
   async delete(ref: string): Promise<boolean> {
-    assertValidRef(ref);
-    const result = await executeTemplate(this.conn, this.parser, `DELETE FROM sksp_secrets WHERE ref = #{ref}`, { ref });
+    SkspRefAssert.validRef(ref);
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM sksp_secrets WHERE ref = #{ref}`, { ref });
     return result.changes > 0;
   }
 }

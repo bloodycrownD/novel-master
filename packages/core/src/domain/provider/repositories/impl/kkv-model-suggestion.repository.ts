@@ -4,8 +4,8 @@
  * @module domain/provider/repositories/impl/kkv-model-suggestion.repository
  */
 
-import { decode } from "@/infra/serialization/decode.js";
-import { isAppError, type AppError } from "@/errors/app-error.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { AppErrorOps, type AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { KkvReaderPort } from "@/domain/kkv/ports/kkv-reader.port.js";
 import type { ModelSuggestion } from "../../model/model-suggestion.js";
@@ -63,17 +63,17 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
   /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */
   async deleteByProvider(providerId: string): Promise<Result<void, AppError>> {
     const deleted = await this.kkv.delete(MODULE, providerId);
-    if (!deleted.ok && !isAppError(deleted.error, "KKV_NOT_FOUND")) return deleted;
+    if (!deleted.ok && !AppErrorOps.is(deleted.error, "KKV_NOT_FOUND")) return deleted;
     return Result.ok(undefined);
   }
 
   /** `KKV_NOT_FOUND` 归一为空缓存；其余 KKV 失败与缓存毒行 decode 失败均经 `Result.err` 原样接力。 */
   private async readCache(providerId: string): Promise<Result<ModelSuggestionCache, AppError>> {
     const raw = await this.kkv.get(MODULE, providerId);
-    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    if (!raw.ok && !AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
     if (!raw.ok) return Result.ok({ schemaVersion: 1, models: [] });
     // decode 已 Result 化（错误通道迁移四期）；毒行沿返回值上递给三个公开口。
-    const decoded = decode(JSON.parse(raw.value) as unknown, modelSuggestionCacheSchema);
+    const decoded = SerializationDecode.decode(JSON.parse(raw.value) as unknown, modelSuggestionCacheSchema);
     return decoded;
   }
 

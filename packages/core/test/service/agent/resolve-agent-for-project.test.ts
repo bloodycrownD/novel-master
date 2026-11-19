@@ -1,21 +1,17 @@
-import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 import type { ZodType } from "zod";
-import { AgentServiceFactory, agentDefinitionSchema, resolveAgentForProject } from "@novel-master/core/agent";
-import { isAppError } from "@novel-master/core/errors";
+import {  AgentServiceFactory, agentDefinitionSchema, AgentProjectResolver  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
 import type { AgentDefinition } from "@novel-master/core/agent";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
 
 novelMasterTestFixture();
@@ -66,7 +62,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     };
 
     // 五期门⑦：resolveAgentForProject 沿 Result 回传，测试边界解包。
-    const resolved = unwrap(await resolveAgentForProject(runtime, project.id, session.id));
+    const resolved = unwrap(await AgentProjectResolver.resolve(runtime, project.id, session.id));
     // 项目智能体下线后永远走 session 分支，返回 session 级 definition + agentId。
     assert.equal(resolved.source, "session");
     if (resolved.source === "session") {
@@ -111,7 +107,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
     // 项目智能体下线后，即便 projects.getAgentConfig 返回 custom 缺 definition，
     // resolve 也不再读取它——直接走 session.agentId，不抛错。
-    const resolved = unwrap(await resolveAgentForProject(runtime, project.id, session.id));
+    const resolved = unwrap(await AgentProjectResolver.resolve(runtime, project.id, session.id));
     assert.equal(resolved.source, "session");
     if (resolved.source === "session") {
       assert.equal(resolved.agentId, "global-agent");
@@ -165,7 +161,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const resolved = unwrap(await resolveAgentForProject(
+    const resolved = unwrap(await AgentProjectResolver.resolve(
       runtime,
       project.id,
       session.id,
@@ -218,7 +214,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const resolved = unwrap(await resolveAgentForProject(
+    const resolved = unwrap(await AgentProjectResolver.resolve(
       runtime,
       project.id,
       session.id,
@@ -261,10 +257,10 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     };
 
     await rejectsErr(
-      resolveAgentForProject(runtime, project.id, session.id),
+      AgentProjectResolver.resolve(runtime, project.id, session.id),
       (error: unknown) =>
         assert.ok(
-          isAppError(error, "AGENT_REFERENCED_NOT_FOUND") &&
+          AppErrorOps.is(error, "AGENT_REFERENCED_NOT_FOUND") &&
           error.messageKey === "error.agent.referenced_not_found" &&
           error.messageParams?.agent_id === "ghost-agent" &&
           error.messageParams?.detail != null,
@@ -298,7 +294,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const first = unwrap(await resolveAgentForProject(
+    const first = unwrap(await AgentProjectResolver.resolve(
       runtime,
       project.id,
       session.id,
@@ -320,7 +316,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       ),
     );
 
-    const second = unwrap(await resolveAgentForProject(
+    const second = unwrap(await AgentProjectResolver.resolve(
       runtime,
       project.id,
       session.id,

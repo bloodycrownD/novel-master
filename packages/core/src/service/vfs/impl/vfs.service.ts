@@ -17,7 +17,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 import { ReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
 import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { matchGlob } from "../glob-match.js";
+import { GlobMatch } from "../glob-match.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 import { VfsGrep } from "@/domain/vfs/logic/vfs-grep.js";
@@ -148,7 +148,7 @@ export class DefaultVfsService implements InternalVfsService {
       if (cwd != null && cwd !== "/" && entryPath !== cwd && !entryPath.startsWith(`${cwd}/`)) {
         return false;
       }
-      return matchGlob(pattern, entryPath);
+      return GlobMatch.match(pattern, entryPath);
     });
 
     matched.sort();
@@ -158,7 +158,7 @@ export class DefaultVfsService implements InternalVfsService {
   async grep(scopeKey: string, pattern: string, options?: VfsGrepOptions): Promise<Result<VfsGrepMatch[], AppError>> {
     const rows = await this.repo.scanContents(scopeKey, options?.pathPrefix);
     if (!rows.ok) return Result.err(rows.error);
-    const filtered = options?.pathGlob != null ? rows.value.filter((row) => matchGlob(options.pathGlob!, row.path)) : rows.value;
+    const filtered = options?.pathGlob != null ? rows.value.filter((row) => GlobMatch.match(options.pathGlob!, row.path)) : rows.value;
     const matches = VfsGrep.grepContents(filtered, pattern, options);
     if (!matches.ok) return matches;
     return Result.ok(matches.value);

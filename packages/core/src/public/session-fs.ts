@@ -5,5 +5,5 @@
  * @module public/session-fs
  */
 
-export { createSessionFsService } from "../service/session-fs/create-session-fs-service.js";
+export { SessionFsServiceFactory } from "../service/session-fs/create-session-fs-service.js";
 export type { SessionFsService } from "../service/session-fs/session-fs.port.js";

@@ -1,21 +1,17 @@
 /**
  * T-NULL-DIR：insertDirectory 双 NULL；读路径不解 ContentStore、不泄漏 `"null"`。
  */
-import { isAppError } from "../../src/errors/app-error.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import {  describe, it  } from "node:test";
+import {  readFileSync  } from "node:fs";
+import {  fileURLToPath  } from "node:url";
 import path from "node:path";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
 
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -50,7 +46,7 @@ describe("directory NULL content contract", () => {
 
     const vfs = VfsServiceFactory.create(conn);
     await rejectsErr(() => vfs.read(GLOBAL_SCOPE, dir), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_IS_DIRECTORY"));
+      assert.ok(AppErrorOps.is(e, "VFS_IS_DIRECTORY"));
     });
   });
 

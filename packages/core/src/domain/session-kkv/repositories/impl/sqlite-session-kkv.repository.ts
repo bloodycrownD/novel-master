@@ -12,7 +12,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import type { SessionKkvEntry } from "../../model/session-kkv-entry.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../model/session-kkv-domains.js";
@@ -50,7 +50,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // RuleSnapshotCodec.serializeFileCachePayload 产物，键序固定）。entry 行缺失时回退旧表
       //（退化路径存储位置）；blob 缺失 / 解压失败返回 null（上层当 miss 自愈重读）。
       const entrySql = `SELECT content_hash, mtime_ms FROM session_file_cache_entry WHERE session_id = #{sessionId} AND key = #{key}`;
-      const entries = await queryTemplate<{ content_hash: string; mtime_ms: number }>(this.conn, this.parser, entrySql, { sessionId, key });
+      const entries = await TdbcTemplate.query<{ content_hash: string; mtime_ms: number }>(this.conn, this.parser, entrySql, { sessionId, key });
       if (entries.length === 0) {
         return this.getLegacyEntry(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
       }
@@ -64,7 +64,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
         return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: RuleSnapshotCodec.serializeFileCachePayload({ body: cachedBody, mtimeMs }) };
       }
       const blobSql = `SELECT encoding, bytes FROM session_file_cache_blob WHERE content_hash = #{contentHash}`;
-      const blobs = await queryTemplate<{ encoding: string; bytes: SqlValue }>(this.conn, this.parser, blobSql, { contentHash });
+      const blobs = await TdbcTemplate.query<{ encoding: string; bytes: SqlValue }>(this.conn, this.parser, blobSql, { contentHash });
       if (blobs.length === 0) {
         return null;
       }
@@ -100,7 +100,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
         const chunk = unique.slice(i, i + GET_MANY_CHUNK_SIZE);
         const keyBindings = buildInBindings(chunk, "k");
         const entriesSql = `SELECT key, content_hash, mtime_ms FROM session_file_cache_entry WHERE session_id = #{sessionId} AND key IN (${keyBindings.inList})`;
-        const entries = await queryTemplate<{ key: string; content_hash: string; mtime_ms: number }>(this.conn, this.parser, entriesSql, { sessionId, ...keyBindings.bindings });
+        const entries = await TdbcTemplate.query<{ key: string; content_hash: string; mtime_ms: number }>(this.conn, this.parser, entriesSql, { sessionId, ...keyBindings.bindings });
         if (entries.length === 0) {
           missing.push(...chunk);
           continue;
@@ -134,7 +134,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
         if (hashesToLoad.length > 0) {
           const hashBindings = buildInBindings(hashesToLoad, "h");
           const blobsSql = `SELECT content_hash, encoding, bytes FROM session_file_cache_blob WHERE content_hash IN (${hashBindings.inList})`;
-          const blobs = await queryTemplate<{ content_hash: string; encoding: string; bytes: SqlValue }>(this.conn, this.parser, blobsSql, hashBindings.bindings);
+          const blobs = await TdbcTemplate.query<{ content_hash: string; encoding: string; bytes: SqlValue }>(this.conn, this.parser, blobsSql, hashBindings.bindings);
           const blobByHash = new Map(blobs.map((row) => [String(row.content_hash), row]));
           for (const contentHash of hashesToLoad) {
             const blob = blobByHash.get(contentHash);
@@ -177,7 +177,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       const chunk = keys.slice(i, i + GET_MANY_CHUNK_SIZE);
       const { bindings, inList } = buildInBindings(chunk, "k");
       const rowsSql = `SELECT key, value FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain} AND key IN (${inList})`;
-      const rows = await queryTemplate<{ key: string; value: string }>(this.conn, this.parser, rowsSql, { sessionId, domain, ...bindings });
+      const rows = await TdbcTemplate.query<{ key: string; value: string }>(this.conn, this.parser, rowsSql, { sessionId, domain, ...bindings });
       for (const row of rows) {
         out.set(String(row.key), String(row.value));
       }
@@ -203,14 +203,14 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // INSERT OR IGNORE 幂等：同 hash 已存在则复用原行，不改 encoding/bytes
       //（对齐 SqliteVfsContentStore.put 的复用分支）。
       const blobExistsSql = `SELECT 1 AS hit FROM session_file_cache_blob WHERE content_hash = #{contentHash}`;
-      const existing = await queryTemplate<{ hit: number }>(this.conn, this.parser, blobExistsSql, { contentHash: hashed.contentHash });
+      const existing = await TdbcTemplate.query<{ hit: number }>(this.conn, this.parser, blobExistsSql, { contentHash: hashed.contentHash });
       if (existing.length === 0) {
         const blob = FileCacheBlobCodec.compressBodyForBlob(hashed.body);
         const insertBlobSql = `INSERT OR IGNORE INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`;
-        await executeTemplate(this.conn, this.parser, insertBlobSql, { contentHash: hashed.contentHash, encoding: blob.encoding, bytes: blob.bytes, byteLen: blob.byteLen });
+        await TdbcTemplate.execute(this.conn, this.parser, insertBlobSql, { contentHash: hashed.contentHash, encoding: blob.encoding, bytes: blob.bytes, byteLen: blob.byteLen });
       }
       const upsertEntrySql = `INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (#{sessionId}, #{key}, #{contentHash}, #{mtimeMs}) ON CONFLICT(session_id, key) DO UPDATE SET content_hash = excluded.content_hash, mtime_ms = excluded.mtime_ms`;
-      await executeTemplate(this.conn, this.parser, upsertEntrySql, { sessionId, key, contentHash: hashed.contentHash, mtimeMs: hashed.mtimeMs });
+      await TdbcTemplate.execute(this.conn, this.parser, upsertEntrySql, { sessionId, key, contentHash: hashed.contentHash, mtimeMs: hashed.mtimeMs });
       return;
     }
     await this.setLegacyEntry(sessionId, domain, key, value);
@@ -221,13 +221,13 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // 只删 entry 引用行，blob 留给 DeferredFileCacheGc.run 回收；
       // 旧表行一并防御性删除（覆盖退化路径写入的理论行）。
       const deleteEntrySql = `DELETE FROM session_file_cache_entry WHERE session_id = #{sessionId} AND key = #{key}`;
-      const entryResult = await executeTemplate(this.conn, this.parser, deleteEntrySql, { sessionId, key });
+      const entryResult = await TdbcTemplate.execute(this.conn, this.parser, deleteEntrySql, { sessionId, key });
       const deleteLegacySql = `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain} AND key = #{key}`;
-      const legacyResult = await executeTemplate(this.conn, this.parser, deleteLegacySql, { sessionId, domain, key });
+      const legacyResult = await TdbcTemplate.execute(this.conn, this.parser, deleteLegacySql, { sessionId, domain, key });
       return entryResult.changes + legacyResult.changes > 0;
     }
     const deleteSql = `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain} AND key = #{key}`;
-    const result = await executeTemplate(this.conn, this.parser, deleteSql, { sessionId, domain, key });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, deleteSql, { sessionId, domain, key });
     return result.changes > 0;
   }
 
@@ -236,20 +236,20 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // 只删该会话 entry 引用行，blob 与其他会话 entry 不动（GC 按全库
       // 引用集判定）；旧表行一并防御性删除（退化路径理论行）。
       const clearEntrySql = `DELETE FROM session_file_cache_entry WHERE session_id = #{sessionId}`;
-      await executeTemplate(this.conn, this.parser, clearEntrySql, { sessionId });
+      await TdbcTemplate.execute(this.conn, this.parser, clearEntrySql, { sessionId });
       const clearLegacySql = `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain}`;
-      await executeTemplate(this.conn, this.parser, clearLegacySql, { sessionId, domain });
+      await TdbcTemplate.execute(this.conn, this.parser, clearLegacySql, { sessionId, domain });
       return;
     }
     const clearSql = `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain}`;
-    await executeTemplate(this.conn, this.parser, clearSql, { sessionId, domain });
+    await TdbcTemplate.execute(this.conn, this.parser, clearSql, { sessionId, domain });
   }
 
   async clearSession(sessionId: string): Promise<void> {
     // file_cache 域引用行在新表；旧表 DELETE 原逻辑不动（顺带清掉退化
     // 路径写入的理论行），新表 entry 引用行单独清，blob 留给 GC。
-    await executeTemplate(this.conn, this.parser, `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId}`, { sessionId });
-    await executeTemplate(this.conn, this.parser, `DELETE FROM session_file_cache_entry WHERE session_id = #{sessionId}`, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId}`, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM session_file_cache_entry WHERE session_id = #{sessionId}`, { sessionId });
   }
 
   async listKeys(sessionId: string, domain: string): Promise<string[]> {
@@ -258,18 +258,18 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // 写入旧表的键必须并入——既有调用方对任意字符串 set 后 listKeys
       // 都要能列出（T-CC4/T-IC3 以裸字符串预置缓存），UNION 自带去重。
       const unionSql = `SELECT key FROM session_file_cache_entry WHERE session_id = #{sessionId} UNION SELECT key FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain} ORDER BY key`;
-      const rows = await queryTemplate<{ key: string }>(this.conn, this.parser, unionSql, { sessionId, domain });
+      const rows = await TdbcTemplate.query<{ key: string }>(this.conn, this.parser, unionSql, { sessionId, domain });
       return rows.map((row) => String(row.key));
     }
     const listSql = `SELECT key FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain} ORDER BY key`;
-    const rows = await queryTemplate<{ key: string }>(this.conn, this.parser, listSql, { sessionId, domain });
+    const rows = await TdbcTemplate.query<{ key: string }>(this.conn, this.parser, listSql, { sessionId, domain });
     return rows.map((row) => String(row.key));
   }
 
   /** 原 `session_kkv_entry` 单行查询（分流前的 get 逻辑，原样保留）。 */
   private async getLegacyEntry(sessionId: string, domain: string, key: string): Promise<SessionKkvEntry | null> {
     const legacySql = `SELECT session_id, domain, key, value FROM session_kkv_entry WHERE session_id = #{sessionId} AND domain = #{domain} AND key = #{key}`;
-    const rows = await queryTemplate(this.conn, this.parser, legacySql, { sessionId, domain, key });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, legacySql, { sessionId, domain, key });
     if (rows.length === 0) {
       return null;
     }
@@ -280,6 +280,6 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
   /** 原 `session_kkv_entry` upsert（分流前的 set 逻辑，原样保留）。 */
   private async setLegacyEntry(sessionId: string, domain: string, key: string, value: string): Promise<void> {
     const upsertSql = `INSERT INTO session_kkv_entry (session_id, domain, key, value) VALUES (#{sessionId}, #{domain}, #{key}, #{value}) ON CONFLICT(session_id, domain, key) DO UPDATE SET value = excluded.value`;
-    await executeTemplate(this.conn, this.parser, upsertSql, { sessionId, domain, key, value });
+    await TdbcTemplate.execute(this.conn, this.parser, upsertSql, { sessionId, domain, key, value });
   }
 }

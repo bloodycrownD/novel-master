@@ -5,7 +5,7 @@
  */
 
 import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
@@ -103,7 +103,7 @@ export class DefaultPersistentState implements PersistentState {
   /** `KKV_NOT_FOUND` 归一为 `undefined`，其余 KKV 失败经 `Result.err` 原样接力。 */
   private async getPointer(name: StateKey): Promise<Result<string | undefined, AppError>> {
     const raw = await this.kkv.get(MODULE, STATE_KEYS[name].key);
-    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    if (!raw.ok && !AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
     return Result.ok(raw.ok ? raw.value : undefined);
   }
 
@@ -126,7 +126,7 @@ export class DefaultPersistentState implements PersistentState {
     try {
       await this.kkv.delete(MODULE, STATE_KEYS[name].key);
     } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+      if (AppErrorOps.is(error, "KKV_NOT_FOUND")) {
         return;
       }
       throw error;

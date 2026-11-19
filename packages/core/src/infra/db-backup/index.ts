@@ -10,5 +10,5 @@ export {
   type ProviderTableSnapshot,
 } from "./provider-tables.js";
 export { ProviderTableSnapshotIo } from "./provider-table-snapshot.js";
-export { assertSqliteBackupHeader } from "./sqlite-backup-header.js";
-export { exportDatabaseBackupToPath } from "./export-database-backup.js";
+export { SqliteBackupHeader } from "./sqlite-backup-header.js";
+export { DatabaseBackupExport } from "./export-database-backup.js";

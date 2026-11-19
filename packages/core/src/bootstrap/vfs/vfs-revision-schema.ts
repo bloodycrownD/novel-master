@@ -135,7 +135,7 @@ export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = ["trg_revision_delete_dec_blob_r
  * 也不做「改了触发器却判成没改」的比对。
  *
  * 另一条不可省的配套动作是 **bump `SCHEMA_BOOT_VERSION`**：本组语句与
- * `alignSchemaColumns` 同在慢路径，而 `bootVersion >= SCHEMA_BOOT_VERSION`
+ * `SchemaColumnAlign.align` 同在慢路径，而 `bootVersion >= SCHEMA_BOOT_VERSION`
  * 的存量库会在快路径直接 return ⇒ 不 bump 的话这组语句永远补不上。
  *
  * ⚠️ 这四条**不带尾分号**（CR c2 P2-2 收口）：`NOVEL_MASTER_SCHEMA_STATEMENTS`

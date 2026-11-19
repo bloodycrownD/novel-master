@@ -2,7 +2,7 @@
  * 测试用：手工构造 GBK 文件名的最小 ZIP（无 EFS 标志）。
  */
 
-import { deflateSync } from "fflate";
+import {  deflateSync  } from "fflate";
 import iconv from "iconv-lite";
 
 export interface GbkZipEntrySpec {

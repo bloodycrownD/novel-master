@@ -1,9 +1,9 @@
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsCopy } from "../../src/domain/vfs/logic/vfs-copy.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  VfsCopy  } from "../../src/domain/vfs/logic/vfs-copy.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -54,7 +54,7 @@ describe("copyVfsPath", () => {
     if (!result.ok) assert.equal(result.error.key, "VFS_IS_DIRECTORY");
     assert.equal(unwrap(await vfs.read("/src/x.md")).content, "x");
     await rejectsErr(() => vfs.read("/dst/x.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 });

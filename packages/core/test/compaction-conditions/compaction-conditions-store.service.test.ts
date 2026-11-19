@@ -1,10 +1,10 @@
-import { unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { CompactionFactory } from "@novel-master/core/compaction";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import {  describe, it  } from "node:test";
+import {  CompactionFactory  } from "@novel-master/core/compaction";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
 
 const MODULE = "nm-compaction-conditions";
 const KEY = "policy";
@@ -24,7 +24,7 @@ describe("compaction conditions store integrity", () => {
     await kkv.set(MODULE, KEY, "{invalid json");
     const rejected = await store.getConditions();
     assert.equal(rejected.ok, false);
-    if (!rejected.ok) assert.ok(isAppError(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
+    if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
     await ctx.conn.close();
   });
 
@@ -39,7 +39,7 @@ describe("compaction conditions store integrity", () => {
     );
     const rejected = await store.getConditions();
     assert.equal(rejected.ok, false);
-    if (!rejected.ok) assert.ok(isAppError(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
+    if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
     await ctx.conn.close();
   });
 
@@ -63,7 +63,7 @@ describe("compaction conditions store integrity", () => {
     await assert.rejects(
       () =>
         store.setConditions({ schemaVersion: 4, enabled: true }),
-      (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
+      (error: unknown) => AppErrorOps.is(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
     );
     assert.equal(unwrap(await store.getConditions()), null);
     await ctx.conn.close();

@@ -7,18 +7,14 @@
  * mobile 侧 [nm-rollback] 轴的 __DEV__ 门控断言在 apps/mobile 的
  * rollback-probe-timing.test.ts。
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageCheckpointFactory, type MessageRollbackServiceOptions } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory, type MessageRollbackServiceOptions  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { RollbackProbe } from "../../src/service/message-checkpoint/message-rollback.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

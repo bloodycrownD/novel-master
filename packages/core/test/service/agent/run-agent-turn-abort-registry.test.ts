@@ -9,32 +9,27 @@
  * @module test/service/agent/run-agent-turn-abort-registry.test
  */
 
-import { outcomeValue } from "../../helpers/outcome-value.js";
-import { Result } from "../../../src/errors/either.js";
-import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../../helpers/outcome-value.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { TextBlocks } from "@novel-master/core/chat";
-import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AgentServiceFactory, AgentTurnRunner, type AgentDefinition, type AgentTurnRuntimePort  } from "@novel-master/core/agent";
 import type { LlmChatResult, LlmStreamEvent } from "@novel-master/core/llm-protocol";
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import {
-  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-  RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -380,7 +375,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: () => {} }));
 
     // run 结束后所有 controller 反注册。
     assert.ok(capturedChildSessionId != null, "应捕获到 childSessionId");
@@ -458,7 +453,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     const onStreamEvents: LlmStreamEvent[] = [];
-    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: (e) => onStreamEvents.push(e) }));
+    const result = unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: (e) => onStreamEvents.push(e) }));
 
     // 父级 abort 直接中断了主 run（registry.abort(parentSessionId) → internalController.abort
     // → 主 runner 检测 signal.aborted → stopReason=cancelled）。这证明 registry 到主 run 的
@@ -545,7 +540,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "前奏期间按停止", { stream: false, onStream: () => {} });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "前奏期间按停止", { stream: false, onStream: () => {} });
 
     await entered;
     // 关键不变量（注册前移）：run 被受理即算在途——前奏期间 stopRun 必须能找到
@@ -641,7 +636,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "组装期间按停止", { stream: false, onStream: () => {} });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "组装期间按停止", { stream: false, onStream: () => {} });
 
     await entered;
     assert.equal(abortRegistry.has(session.id), true, "runner 期（组装中）必须判活为真");
@@ -701,7 +696,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     // 入口就带一个已 aborted 的 caller signal（等价于「受理瞬间用户已按停止」）。
-    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, scope: AbortScopeFactory.create({ signal: AbortSignal.abort() }) }));
+    const result = unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, scope: AbortScopeFactory.create({ signal: AbortSignal.abort() }) }));
 
     assert.equal(result.stopReason, "cancelled", "入口已 aborted 必须由检查点⓪兑现为 cancelled");
     assert.equal(backfillCalls, 0, "⓪ 必须在 backfill 之前兑现（backfill 是前奏第一站、大会话秒级）");
@@ -783,7 +778,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "前奏尾段按停止", { stream: false, onStream: () => {} });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "前奏尾段按停止", { stream: false, onStream: () => {} });
 
     await entered;
     // 前奏尾段仍在途时送达停止（真机 2026-09-30 场景：15 次点按全落在这窗口）。
@@ -854,7 +849,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "技能预算期间按停止", { stream: false, onStream: () => {} });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "技能预算期间按停止", { stream: false, onStream: () => {} });
 
     await entered;
     abortRegistry.abort(session.id);
@@ -932,9 +927,9 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       return out;
     };
 
-    let result: Awaited<ReturnType<typeof runAgentTurn>>;
+    let result: Awaited<ReturnType<typeof AgentTurnRunner.run>>;
     try {
-      result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "backfill 中途按停止", { stream: false }));
+      result = unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "backfill 中途按停止", { stream: false }));
     } finally {
       holder.findLastCheckpointedMessageId = originalLookup;
     }
@@ -994,9 +989,9 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
 
     // 错误通道迁移四期：run 内已知失败沿 Result.err 回传（不再 reject）
     await rejectsErr(
-      () => runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "第一次会超时", { stream: false, onStream: () => {} }),
+      () => AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "第一次会超时", { stream: false, onStream: () => {} }),
       (e) => {
-        assert.ok(isAppError(e, "PROVIDER_STREAM_TIMEOUT") && (e as { details?: { phase?: string } }).details?.phase === "idle");
+        assert.ok(AppErrorOps.is(e, "PROVIDER_STREAM_TIMEOUT") && (e as { details?: { phase?: string } }).details?.phase === "idle");
       }
     );
     assert.ok(firstRunSawRegistered, "第一次 run 应已执行到 model 调用");
@@ -1006,7 +1001,7 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
     assert.equal(abortRegistry.has(session.id), false, "超时收敛后 sessionId 应从 registry 反注册");
 
     // 同会话立即再发：正常完成（startRun 门禁放行）
-    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "同会话再发", { stream: false, onStream: () => {} }));
+    const result = unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "同会话再发", { stream: false, onStream: () => {} }));
     assert.equal(result.stopReason, "completed");
     assert.equal(calls, 2);
     assert.equal(abortRegistry.has(session.id), false, "第二次 run 结束后 sessionId 应再次反注册");
@@ -1068,7 +1063,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "前奏尾段按停止", { stream: false });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "前奏尾段按停止", { stream: false });
     await entered;
     abortRegistry.abort(session.id);
     releaseList();
@@ -1132,7 +1127,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "前奏中段按停止", { stream: false });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "前奏中段按停止", { stream: false });
     await entered;
     abortRegistry.abort(session.id);
     releaseCapture();
@@ -1182,7 +1177,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
 
     let onRunFailedCalls = 0;
     await assert.rejects(
-      runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "前奏炸", {
+      AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "前奏炸", {
         stream: false,
         onRunFailed: () => {
           onRunFailedCalls += 1;
@@ -1227,7 +1222,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
 
     let onRunFailedCalls = 0;
     await assert.rejects(
-      runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "跑起来再炸", {
+      AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "跑起来再炸", {
         stream: false,
         onRunFailed: () => {
           onRunFailedCalls += 1;
@@ -1275,7 +1270,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    await assert.rejects(runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "模型查不到", { stream: false }), /savedModel 不存在/);
+    await assert.rejects(AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "模型查不到", { stream: false }), /savedModel 不存在/);
 
     assert.equal(events.started().length, 0, "STARTED 已下移到主 try 紧前：这条窗口抛错不得再发 STARTED");
     assert.equal(events.failed().length, 1, "由入口壳补恰好一条 FAILED('')，终态不缺位");
@@ -1390,7 +1385,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const runPromise = runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "派生子代理并在中途停止", { stream: false });
+    const runPromise = AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "派生子代理并在中途停止", { stream: false });
 
     // 等到子 run 卡在自己的 list 上。
     await gate.entered;
@@ -1496,7 +1491,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "派生子代理并立即停止", { stream: false }));
+    const result = unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: session.id }, "派生子代理并立即停止", { stream: false }));
 
     assert.equal(result.stopReason, "cancelled", "停的是父会话，父 run 收敛为 cancelled");
     assert.equal(modelCalls, 1, "父 run 被取消后不再发第二次模型请求");

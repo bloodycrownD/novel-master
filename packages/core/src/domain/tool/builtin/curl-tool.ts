@@ -38,9 +38,9 @@ import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { OverflowSink, type OversizedSinkResult } from "./overflow-sink.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.curl");
+const log = LogFactory.create("tool.curl");
 
 /** 支持的 HTTP 方法（对齐 curl 常用子集，method 入参枚举来源）。 */
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;

@@ -2,28 +2,18 @@
  * MessageTranscriptEffectsService 单测。
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { TextBlocks } from '@novel-master/core/chat';
-import { ChatServiceFactory } from '../../src/service/chat/chat-service-factory.js';
-import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
-import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
+import {  describe, it  } from 'node:test';
+import {  TextBlocks  } from '@novel-master/core/chat';
+import {  ChatServiceFactory  } from '../../src/service/chat/chat-service-factory.js';
+import {  DefaultMessageTranscriptEffectsService  } from '../../src/service/chat/impl/message-transcript-effects.service.js';
+import {  SessionKkvServiceFactory  } from '../../src/service/session-kkv/create-session-kkv-service.js';
 import type { SessionKkvService } from '../../src/service/session-kkv/session-kkv.port.js';
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  RULE_SNAPSHOT_CANON_KEY,
-  USER_VFS_PENDING_QUEUE_KEY,
-} from '../../src/domain/session-kkv/model/session-kkv-domains.js';
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from '../helpers/novel-master-fixture.js';
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USER_VFS_PENDING, RULE_SNAPSHOT_CANON_KEY, USER_VFS_PENDING_QUEUE_KEY  } from '../../src/domain/session-kkv/model/session-kkv-domains.js';
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from '../helpers/novel-master-fixture.js';
 
 novelMasterTestFixture();
 
@@ -92,7 +82,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     await sk.set(
       session.id,
       SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -257,7 +247,7 @@ describe('MessageTranscriptEffectsService', () => {
     const beforeVisibility = before.map(m => ({ id: m.id, hidden: m.hidden }));
 
     // 包一层 sessionKkv：clearDomain(RULE_SNAPSHOT) 抛错，模拟第 3 步失败
-    const inner = createSessionKkvService(ctx.conn);
+    const inner = SessionKkvServiceFactory.create(ctx.conn);
     const failingKkv: SessionKkvService = {
       get: (s, d, k) => inner.get(s, d, k),
       set: (s, d, k, v) => inner.set(s, d, k, v),
@@ -357,7 +347,7 @@ describe('MessageTranscriptEffectsService', () => {
     const sessionA = unwrap(await ctx.sessions.create(project.id));
     const sessionB = unwrap(await ctx.sessions.create(project.id));
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
 
     // 会话 A：user + assistant 两条（若副作用发生，前缀会被错误 hide）。
     unwrap(await ctx.messages.append(sessionA.id, 'user', TextBlocks.of('a1')));
@@ -392,7 +382,7 @@ describe('MessageTranscriptEffectsService', () => {
       () =>
         effects.setMessageFloorAtMessage(project.id, sessionA.id, anchorB.id),
       (err: unknown) => {
-        assert.ok(isAppError(err, 'CHAT_NOT_FOUND'));
+        assert.ok(AppErrorOps.is(err, 'CHAT_NOT_FOUND'));
         assert.equal(err.details?.sessionId, sessionA.id);
         assert.equal(err.details?.messageId, anchorB.id);
         return true;

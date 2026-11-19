@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  PatternInput,
-} from "../../src/domain/smart-sort-rule/logic/parse-pattern-input.js";
+import {  PatternInput  } from "../../src/domain/smart-sort-rule/logic/parse-pattern-input.js";
 
 describe("parsePatternInput (spec smart-filename-sort: /pattern/flags literal)", () => {
   it("literal with flags: /第(\\d+)章/i splits body and flags", () => {

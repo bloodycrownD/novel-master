@@ -1,12 +1,12 @@
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { KEY_CUSTOM_ENGINES, KEY_ENABLED_ENGINES, KEY_ENGINE_BASE_URLS, KEY_ENGINE_ORDER_V2, KEY_PRESET_OVERRIDES, SEARCH_KKV_MODULE, SearchConfig, type SearchConfigDeps } from "../../src/domain/tool/builtin/search/search-config.js";
-import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { SearchEngine, type SearchEngineTemplate } from "../../src/domain/tool/builtin/search/types.js";
-import { AppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
+import {  KEY_CUSTOM_ENGINES, KEY_ENABLED_ENGINES, KEY_ENGINE_BASE_URLS, KEY_ENGINE_ORDER_V2, KEY_PRESET_OVERRIDES, SEARCH_KKV_MODULE, SearchConfig, type SearchConfigDeps  } from "../../src/domain/tool/builtin/search/search-config.js";
+import {  DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES  } from "../../src/domain/tool/builtin/search/preset-templates.js";
+import {  SearchEngine, type SearchEngineTemplate  } from "../../src/domain/tool/builtin/search/types.js";
+import {  AppError  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 

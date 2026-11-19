@@ -154,44 +154,47 @@ export class IntegrityRepairRegistry {
     const reports: IntegrityRepairReport[] = [];
     for (const op of this.operations.values()) {
       if (!predicate(op)) continue;
-      reports.push(await runIntegrityRepair(op));
+      reports.push(await IntegrityRepair.run(op));
     }
     return reports;
   }
 }
 
-/**
- * 跑单个操作的 detect → repair 流程，返回报告。
- *
- * detect 抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
- * repair 抛错时挂到报告的 `error` 字段，不向上传播。
- */
-export async function runIntegrityRepair(op: IntegrityRepairOperation): Promise<IntegrityRepairReport> {
-  let detection: IntegrityRepairDetection;
-  try {
-    detection = await op.detect();
-  } catch (err) {
-    // detect 本身炸了，保守地尝试 repair，并在报告里挂上 detect 阶段的错误。
-    detection = {
-      needsRepair: true,
-      details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
+/** 完整性修复单操作执行集合（detect → repair 流程）。 */
+export const IntegrityRepair = {
+  /**
+   * 跑单个操作的 detect → repair 流程，返回报告。
+   *
+   * detect 抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
+   * repair 抛错时挂到报告的 `error` 字段，不向上传播。
+   */
+  async run(op: IntegrityRepairOperation): Promise<IntegrityRepairReport> {
+    let detection: IntegrityRepairDetection;
+    try {
+      detection = await op.detect();
+    } catch (err) {
+      // detect 本身炸了，保守地尝试 repair，并在报告里挂上 detect 阶段的错误。
+      detection = {
+        needsRepair: true,
+        details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
 
-  if (!detection.needsRepair) {
-    return { name: op.name, kind: op.kind, detection, repaired: false };
-  }
+    if (!detection.needsRepair) {
+      return { name: op.name, kind: op.kind, detection, repaired: false };
+    }
 
-  try {
-    await op.repair();
-    return { name: op.name, kind: op.kind, detection, repaired: true };
-  } catch (err) {
-    return {
-      name: op.name,
-      kind: op.kind,
-      detection,
-      repaired: false,
-      error: err,
-    };
-  }
-}
+    try {
+      await op.repair();
+      return { name: op.name, kind: op.kind, detection, repaired: true };
+    } catch (err) {
+      return {
+        name: op.name,
+        kind: op.kind,
+        detection,
+        repaired: false,
+        error: err,
+      };
+    }
+  },
+} as const;

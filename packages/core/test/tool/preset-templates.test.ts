@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { unwrap } from "../helpers/result-unwrap.js";
-import { TemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
-import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { SearchEngine, type SearchResponse, type  SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  TemplateEngine  } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
+import {  DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES  } from "../../src/domain/tool/builtin/search/preset-templates.js";
+import {  SearchEngine, type SearchResponse, type  SearchToolOptions  } from "../../src/domain/tool/builtin/search/types.js";
 
 const QUERY = "测试 查询";
 

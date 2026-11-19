@@ -1,14 +1,14 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
 
-import { isSessionFsError } from "../../src/errors/guards.js";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  isSessionFsError  } from "../../src/errors/guards.js";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 novelMasterTestFixture();
@@ -278,7 +278,7 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(unwrap(await svfs.read("/old.md")).content, "v1");
     {
       const r = await svfs.read("/新文件.md");
-      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "导入的新文件应走 Err 且为 VFS_NOT_FOUND");
+      assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "导入的新文件应走 Err 且为 VFS_NOT_FOUND");
     }
     const msgsAfter4 = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3

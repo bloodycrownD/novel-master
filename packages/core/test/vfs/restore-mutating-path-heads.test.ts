@@ -3,16 +3,12 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { MutatingPathHeads } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  MutatingPathHeads  } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -37,7 +33,7 @@ describe("MutatingPathHeads.restore", () => {
 
     assert.equal((unwrap(await vfs.read("/base.md"))).content, "before");
     await rejectsErr(() => vfs.read("/new.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 

@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  MessageContentParse,
-} from "../../src/domain/chat/content/parse-message-content.js";
+import {  describe, it  } from "node:test";
+import {  MessageContentParse  } from "../../src/domain/chat/content/parse-message-content.js";
 
 describe("MessageContentParse.parse", () => {
   it("round-trips all five block types", () => {

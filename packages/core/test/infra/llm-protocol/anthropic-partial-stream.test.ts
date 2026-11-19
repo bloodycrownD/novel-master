@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { createAnthropicSseParser } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
+import {  describe, it, mock  } from "node:test";
+import {  AnthropicProtocolAdapter  } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AnthropicSseParser  } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
 
 describe("anthropic partial stream", () => {
   it("finishAnthropicSsePartial: only thinking → thinking only", () => {
-    const parser = createAnthropicSseParser();
+    const parser = AnthropicSseParser.create();
     parser.feed('data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"partial"}}\n');
     const { blocks } = parser.finishPartial();
     assert.equal(blocks.length, 1);

@@ -12,8 +12,8 @@ export type {
   LlmTokenUsage,
   LlmChatResult,
 } from "./ports/adapter.port.js";
-export { toolsFromRegistry } from "./logic/tool-definitions.js";
-export { configureLlmFetch, getProtocolAdapter } from "./logic/registry.js";
-export { createLoggingFetch, isLlmFetchDebugEnabled } from "./logic/debug-fetch.js";
-export { registerSseTransport, type SseTransport } from "./logic/llm-sse-transport.js";
-export { isAbortLikeError } from "./logic/request-abort.js";
+export { ToolDefinitions } from "./logic/tool-definitions.js";
+export { Registry } from "./logic/registry.js";
+export { DebugFetch } from "./logic/debug-fetch.js";
+export { LlmSseTransport, type SseTransport } from "./logic/llm-sse-transport.js";
+export { RequestAbort } from "./logic/request-abort.js";

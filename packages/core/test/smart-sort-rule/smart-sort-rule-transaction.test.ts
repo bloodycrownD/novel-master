@@ -2,7 +2,7 @@
  * C1-6 / C1-7：smart-sort 多语句写入口的事务化 + `renumber` 批量下沉。
  *
  * 注入缝：直接 `new DefaultSmartSortRuleService({ conn, createRules, builtinSeed })`
- * ——工厂 `createSmartSortRuleService(conn)` 内部自造 deps，无法注入。`createRules`
+ * ——工厂 `SmartSortRuleServiceFactory.create(conn)` 内部自造 deps，无法注入。`createRules`
  * 返回一个装饰仓储：记录「自己是用哪个 conn 造的」（事务内必须是 tx 句柄）、
  * 可按调用序号注入故障。
  *
@@ -13,19 +13,16 @@
  *   的 `SqlCounter.record` 只记 `(sql, kind, via)`，记不了连接身份）；
  * - `update` / `updateSortOrders` 的计数打在 **repository prototype** 上，不在 service 上。
  */
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { BUILTIN_SMART_SORT_RULE_ROWS } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
-import { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
-import { SqliteSmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  BUILTIN_SMART_SORT_RULE_ROWS  } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
+import {  SmartSortRule  } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+import {  SqliteSmartSortRuleRepository  } from "@/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.js";
 import type { SmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/smart-sort-rule.port.js";
-import { DefaultSmartSortRuleService } from "@/service/smart-sort-rule/impl/smart-sort-rule.service.js";
+import {  DefaultSmartSortRuleService  } from "@/service/smart-sort-rule/impl/smart-sort-rule.service.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

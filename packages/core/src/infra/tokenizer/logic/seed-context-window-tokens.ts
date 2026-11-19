@@ -7,17 +7,19 @@
  */
 
 import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "./context-window-map.js";
-import { resolveContextWindowTokens } from "./resolve-context-window.js";
+import { ContextWindow } from "./resolve-context-window.js";
 
-/**
- * Context window for new/backfilled saved models when no user override exists.
- *
- * @param vendorModelId Provider model name.
- *
- * nm-style: keep-local — 新建/回填模型的上下文窗口默认值回落口径
- */
-export function seedContextWindowTokens(vendorModelId: string): number {
-  return (
-    resolveContextWindowTokens(vendorModelId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS
-  );
-}
+export const ContextWindowSeed = {
+  /**
+   * Context window for new/backfilled saved models when no user override exists.
+   *
+   * @param vendorModelId Provider model name.
+   *
+   * nm-style: keep-local — 新建/回填模型的上下文窗口默认值回落口径
+   */
+  seed(vendorModelId: string): number {
+    return (
+      ContextWindow.resolve(vendorModelId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS
+    );
+  },
+} as const;

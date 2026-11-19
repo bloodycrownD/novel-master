@@ -3,12 +3,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  composerDraftSchema,
-  ComposerDraftSchema,
-  type ComposerDraftTokenRange,
-} from "../../src/domain/chat/model/composer-draft.schema.js";
+import {  describe, it  } from "node:test";
+import {  composerDraftSchema, ComposerDraftSchema, type ComposerDraftTokenRange  } from "../../src/domain/chat/model/composer-draft.schema.js";
 
 /** 对象是否**自有**某个键（区分「键存在但值 undefined」与「键不存在」）。 */
 function hasOwn(value: object, key: string): boolean {

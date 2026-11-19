@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Coerce } from "../../src/common/coerce.js";
+import {  describe, it  } from "node:test";
+import {  Coerce  } from "../../src/common/coerce.js";
 
 describe("common/coerce · Coerce.string", () => {
   it("字符串原样返回；非字符串 → 空串", () => {

@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -44,7 +44,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async listByProvider(providerId: string): Promise<Result<SavedModel[], AppError>> {
-    const rows = await queryTemplate(this.conn, this.parser, SELECT_BY_PROVIDER_SQL, { providerId });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, SELECT_BY_PROVIDER_SQL, { providerId });
     const out: SavedModel[] = [];
     for (const row of rows) {
       const saved = rowToSaved(row);
@@ -55,13 +55,13 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
   }
 
   async findById(id: string): Promise<Result<SavedModel | null, AppError>> {
-    const rows = await queryTemplate(this.conn, this.parser, SELECT_BY_ID_SQL, { id });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, SELECT_BY_ID_SQL, { id });
     if (rows.length === 0) return Result.ok(null);
     return rowToSaved(rows[0]!);
   }
 
   async insert(model: SavedModel): Promise<void> {
-    await executeTemplate(this.conn, this.parser, INSERT_SQL, {
+    await TdbcTemplate.execute(this.conn, this.parser, INSERT_SQL, {
       id: model.id,
       providerId: model.providerId,
       vendorModelId: model.vendorModelId,
@@ -73,7 +73,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
   }
 
   async updateById(model: SavedModel): Promise<void> {
-    await executeTemplate(this.conn, this.parser, UPDATE_SQL, {
+    await TdbcTemplate.execute(this.conn, this.parser, UPDATE_SQL, {
       id: model.id,
       modelName: model.modelName,
       settingsJson: JSON.stringify(SavedModelSettingsJson.toJson(model.settings)),
@@ -83,11 +83,11 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
 
   /** nm-style: keep-public — 实现 SavedModelRepository 端口，由 service 经接口注入调用。 */
   async deleteById(id: string): Promise<boolean> {
-    const result = await executeTemplate(this.conn, this.parser, DELETE_BY_ID_SQL, { id });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, DELETE_BY_ID_SQL, { id });
     return result.changes > 0;
   }
 
   async deleteByProvider(providerId: string): Promise<void> {
-    await executeTemplate(this.conn, this.parser, DELETE_BY_PROVIDER_SQL, { providerId });
+    await TdbcTemplate.execute(this.conn, this.parser, DELETE_BY_PROVIDER_SQL, { providerId });
   }
 }

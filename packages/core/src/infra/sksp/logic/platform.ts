@@ -16,22 +16,27 @@ import { Result } from "@/errors/either.js";
 export type PlatformSkspName = "windows" | "macos" | "linux";
 
 /**
- * 把 `process.platform` 风格的字符串解析成 SKSP driver 名称。
- *
- * - `darwin`  → `macos`
- * - `win32`   → `windows`
- * - `linux`   → `linux`
- * - 其它平台 → `Result.err`（INFRA_UNSUPPORTED_PLATFORM）
+ * 平台字符串 → SKSP driver 名称。
  */
-export function resolveSkspNameFromPlatform(platform: string): Result<PlatformSkspName, AppError> {
-  switch (platform) {
-    case "darwin":
-      return Result.ok("macos");
-    case "win32":
-      return Result.ok("windows");
-    case "linux":
-      return Result.ok("linux");
-    default:
-      return Result.err(new AppError("INFRA_UNSUPPORTED_PLATFORM", { detail: `Unsupported SKSP platform: ${platform}（暂无对应的 driver）` }));
-  }
-}
+export const SkspPlatform = {
+  /**
+   * 把 `process.platform` 风格的字符串解析成 SKSP driver 名称。
+   *
+   * - `darwin`  → `macos`
+   * - `win32`   → `windows`
+   * - `linux`   → `linux`
+   * - 其它平台 → `Result.err`（INFRA_UNSUPPORTED_PLATFORM）
+   */
+  resolveName(platform: string): Result<PlatformSkspName, AppError> {
+    switch (platform) {
+      case "darwin":
+        return Result.ok("macos");
+      case "win32":
+        return Result.ok("windows");
+      case "linux":
+        return Result.ok("linux");
+      default:
+        return Result.err(new AppError("INFRA_UNSUPPORTED_PLATFORM", { detail: `Unsupported SKSP platform: ${platform}（暂无对应的 driver）` }));
+    }
+  },
+} as const;

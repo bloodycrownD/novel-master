@@ -8,9 +8,9 @@
  * - dispose 会中止未结束的子 scope，且只级联一次。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("onCancel 与 dispose 生命周期（T-S7）", () => {
   it("deadline 到点自动 abort(\"timeout\") 并通知 onCancel", async () => {

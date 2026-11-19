@@ -4,9 +4,9 @@
  * @module infra/events/simple-event-bus
  */
 
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("events.bus");
+const log = LogFactory.create("events.bus");
 
 type EventHandler<T = unknown> = (payload: T) => void;
 

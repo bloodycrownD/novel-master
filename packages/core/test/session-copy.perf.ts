@@ -8,41 +8,30 @@
  * @module performance/session-copy.perf
  */
 
-import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
-import { performance } from "node:perf_hooks";
-import {
-  bootstrapNovelMaster,
-  createPersistentState,
-  decode,
-  open,
-} from "@novel-master/core";
-import {
-  agentDefinitionSchema,
-  AgentServiceFactory,
-} from "@novel-master/core/agent";
-import { ChatServiceFactory, TextBlocks } from "@novel-master/core/chat";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
-import { DefaultProjectService } from "@/service/chat/impl/project.service.js";
-import { DefaultSessionService } from "@/service/chat/impl/session.service.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
-import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
+import {  randomUUID  } from "node:crypto";
+import {  rmSync  } from "node:fs";
+import {  performance  } from "node:perf_hooks";
+import {  NovelMasterBootstrap, PersistentStateFactory, decode, open  } from "@novel-master/core";
+import {  agentDefinitionSchema, AgentServiceFactory  } from "@novel-master/core/agent";
+import {  ChatServiceFactory, TextBlocks  } from "@novel-master/core/chat";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {  SqliteProjectRepository  } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
+import {  DefaultProjectService  } from "@/service/chat/impl/project.service.js";
+import {  DefaultSessionService  } from "@/service/chat/impl/session.service.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  SqliteMessageRepository  } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteSessionRepository  } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  forkCopySeeder  } from "@/domain/chat/logic/fork-copy-seeder.js";
+import {  SessionFiles  } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  PathNormalizer  } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  WorkplaceScope  } from "@/domain/workplace/logic/workplace-scope.js";
 
 const DB_PATH = "/tmp/nm-session-copy-bench.db";
 
@@ -55,8 +44,8 @@ async function main(): Promise<void> {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: DB_PATH,
   });
-  await bootstrapNovelMaster(conn);
-  const state = createPersistentState(conn);
+  await NovelMasterBootstrap.bootstrap(conn);
+  const state = PersistentStateFactory.create(conn);
   const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   await agentRegistry.upsert(
     "bench-agent",

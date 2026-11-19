@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import {  existsSync  } from "node:fs";
+import {  join  } from "node:path";
+import {  fileURLToPath  } from "node:url";
+import {  describe, it  } from "node:test";
 
 const distRoot = join(fileURLToPath(new URL("..", import.meta.url)), "dist");
 

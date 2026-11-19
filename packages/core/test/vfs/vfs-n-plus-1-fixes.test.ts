@@ -9,18 +9,16 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import {
-  openSqlCountingNovelMasterTestConnection,
-} from "../helpers/sql-counting-connection.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** 带 SQL 计数的测试上下文：conn 是装饰过的，counter 和它一对一。 */
 type CountedCtx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;

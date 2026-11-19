@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { BuiltinTools, ToolRegistry, ToolRunner } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  BuiltinTools, ToolRegistry, ToolRunner  } from "@novel-master/core";
 
-import { AgentTools, AgentDefinitionValidator, AgentToolPolicyValidator, type AgentDefinition, type  AgentToolPolicy } from "@novel-master/core/agent";
-import { AppError, isAppError } from "@novel-master/core/errors";
+import {  AgentTools, AgentDefinitionValidator, AgentToolPolicyValidator, type AgentDefinition, type  AgentToolPolicy  } from "@novel-master/core/agent";
+import {  AppError, AppErrorOps  } from "@novel-master/core/errors";
 
-import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
+import {  ToolDefinitions  } from "@novel-master/core/llm-protocol";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { rejectsErr } from "../helpers/result-unwrap.js";
+import {  rejectsErr  } from "../helpers/result-unwrap.js";
 
 const BASE_DEF: AgentDefinition = {
   name: "test",
@@ -45,7 +45,7 @@ describe("agent tool policy", () => {
     if (result.ok) {
       throw new Error("expected tool policy error");
     }
-    assert.ok(isAppError(result.error, "AGENT_INVALID_TOOL_POLICY"));
+    assert.ok(AppErrorOps.is(result.error, "AGENT_INVALID_TOOL_POLICY"));
     return result.error;
   }
 
@@ -54,7 +54,7 @@ describe("agent tool policy", () => {
     BuiltinTools.register(base);
     const filtered = AgentTools.resolveRegistry(base, BASE_DEF);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
-    assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, vfsRegistryNames().length);
+    assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, vfsRegistryNames().length);
   });
 
   it("T2: allow list restricts LLM tools", () => {
@@ -66,7 +66,7 @@ describe("agent tool policy", () => {
     BuiltinTools.register(base);
     const filtered = AgentTools.resolveRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
-    assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, 2);
+    assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, 2);
     assert.equal(filtered.get("write"), undefined);
   });
 
@@ -79,7 +79,7 @@ describe("agent tool policy", () => {
     BuiltinTools.register(base);
     const filtered = AgentTools.resolveRegistry(base, def);
     assert.deepEqual(filtered.list(), []);
-    assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, 0);
+    assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, 0);
   });
 
   it("T4: deny list removes named tools", () => {
@@ -150,7 +150,7 @@ describe("agent tool policy", () => {
 
     await rejectsErr(
       runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
-      (e: unknown) => assert.ok(isAppError(e, "TOOL_NOT_FOUND"))
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "TOOL_NOT_FOUND"))
     );
   });
 
@@ -177,7 +177,7 @@ describe("agent tool policy", () => {
     assert.ok(filtered.list().includes("task"));
     assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
     // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
-    assert.ok(!toolsFromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill"));
+    assert.ok(!ToolDefinitions.fromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill"));
     // TODO(Step 10)：deny 后 skillsIndex 置空的 D4 联动在提示词预算侧验证；
     // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
   });
@@ -229,7 +229,7 @@ describe("agent tool policy", () => {
     assert.ok(!sub.list().includes("task"));
     assert.ok(sub.list().includes("read"));
     // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
-    assert.ok(!toolsFromRegistry(sub, mockToolCtx).some((t) => t.name === "agent"));
+    assert.ok(!ToolDefinitions.fromRegistry(sub, mockToolCtx).some((t) => t.name === "agent"));
 
     // 孙 agent（depth >= 2，递归上限双保险）：即使 allow 显式含 agent 也移除
     const grandDef: AgentDefinition = {

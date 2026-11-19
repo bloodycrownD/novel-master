@@ -21,15 +21,15 @@
  * @module test/message-checkpoint/rollback-fingerprint-lock
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
-import { isSessionFsError } from "@/errors/guards.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  after, before, describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory  } from "@/service/message-checkpoint/message-checkpoint-factory.js";
+import {  isSessionFsError  } from "@/errors/guards.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import type { Row } from "../../src/infra/tdbc/types.js";
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SlidingTokenRate } from "../../../src/domain/format/sliding-token-rate.js";
+import {  describe, it  } from "node:test";
+import {  SlidingTokenRate  } from "../../../src/domain/format/sliding-token-rate.js";
 
 describe("SlidingTokenRate.rate（T-M9 滑窗速率）", () => {
   it("200 t/s 场景数值稳定：窗口推进下每个时刻的速率都在 200 附近", () => {

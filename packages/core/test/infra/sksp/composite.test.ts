@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { SkspFactory } from "../../../src/infra/sksp/impl/sksp-factory.js";
+import {  SkspFactory  } from "../../../src/infra/sksp/impl/sksp-factory.js";
 import type { SecretStore } from "../../../src/infra/sksp/ports/secret-store.port.js";
 
 function memoryStore(initial?: Record<string, string>): SecretStore {

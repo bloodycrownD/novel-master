@@ -8,15 +8,15 @@
   "ProtocolSamplingDefaults",
   "ProviderModel",
   "ProviderServiceFactory",
-  "THINKING_LEVEL_SELECT_OPTIONS",
-  "TOKEN_COUNTER_MODE_SELECT_OPTIONS",
   "SavedModel",
   "SavedModelDisplayName",
   "SavedModelSettings",
   "SavedModelSettingsJson",
   "SavedModelUuid",
+  "SerializationZodToJsonSchema",
+  "THINKING_LEVEL_SELECT_OPTIONS",
+  "TOKEN_COUNTER_MODE_SELECT_OPTIONS",
   "ThinkingLevelPresets",
   "ThinkingWire",
-  "resolveTokenCounterModeForModel",
-  "zodToJsonSchema"
+  "TokenCounterMode"
 ]

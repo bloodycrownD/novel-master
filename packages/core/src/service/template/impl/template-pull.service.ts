@@ -12,10 +12,10 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
-import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
-import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SessionWorkspaceInit } from "@/service/template/logic/initialize-session-workspace.js";
+import { SessionWorkspacePush } from "@/service/template/logic/push-session-workspace.js";
+import { SessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { TemplatePullService } from "../template-pull.port.js";
 
 /**
@@ -32,7 +32,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
       return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
     await this.conn.transaction(async (tx) => {
-      await initializeSessionWorkspace(tx, session.projectId, sessionId, {
+      await SessionWorkspaceInit.initialize(tx, session.projectId, sessionId, {
         clearCheckpoints: true,
       });
     });
@@ -44,7 +44,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     // <workplace> 前缀会继续注入已被替换掉的旧正文。
     // pushSessionTemplate 不加：push 是会话 → 项目方向，会话侧文件树不变，
     // 自己的 file_cache 依然有效，清了只会让下一 step 无谓重算。
-    await clearSessionPromptCaches(sessionId, createSessionKkvService(this.conn));
+    await SessionPromptCaches.clear(sessionId, SessionKkvServiceFactory.create(this.conn));
     return Result.ok(undefined);
   }
 
@@ -57,7 +57,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
       return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
     await this.conn.transaction(async (tx) => {
-      await pushSessionWorkspace(tx, session.projectId, sessionId);
+      await SessionWorkspacePush.push(tx, session.projectId, sessionId);
     });
     await DeferredBlobGc.run(this.conn);
     return Result.ok(undefined);

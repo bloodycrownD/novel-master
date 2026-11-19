@@ -23,9 +23,9 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("message-checkpoint.revision-gc");
+const log = LogFactory.create("message-checkpoint.revision-gc");
 
 /** 模块级 in-flight 守卫：清扫进行中不重入。 */
 let orphanGcInFlight = false;

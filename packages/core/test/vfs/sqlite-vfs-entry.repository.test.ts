@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "@/errors/app-error.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "@/errors/app-error.js";
 
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  PathNormalizer  } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -34,7 +30,7 @@ describe("PathNormalizer.normalize", () => {
     const result = PathNormalizer.normalize("relative");
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.ok(isAppError(result.error, "VFS_INVALID_PATH"));
+      assert.ok(AppErrorOps.is(result.error, "VFS_INVALID_PATH"));
     }
   });
 });
@@ -160,7 +156,7 @@ describe("SqliteVfsEntryRepository", () => {
     unwrap(await repo.insertDirectory(GLOBAL_SCOPE, tree));
     unwrap(await repo.insert(GLOBAL_SCOPE, `${tree}/leaf`, "leaf"));
     await rejectsErr(() => repo.delete(GLOBAL_SCOPE, tree, { recursive: false }), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_DIRECTORY_NOT_EMPTY"));
+      assert.ok(AppErrorOps.is(e, "VFS_DIRECTORY_NOT_EMPTY"));
     });
   });
 
@@ -193,7 +189,7 @@ describe("SqliteVfsEntryRepository", () => {
     unwrap(await repo.insertDirectory(sk, "/"));
     unwrap(await repo.insert(sk, `/leaf.md`, "leaf"));
     await rejectsErr(() => repo.delete(sk, "/", { recursive: false }), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_DIRECTORY_NOT_EMPTY"));
+      assert.ok(AppErrorOps.is(e, "VFS_DIRECTORY_NOT_EMPTY"));
     });
   });
 

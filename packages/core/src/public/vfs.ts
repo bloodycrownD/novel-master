@@ -9,13 +9,7 @@ export type {
   CharacterCardImportService,
   CharacterCardImportOptions,
 } from "../domain/vfs/ports/character-card-import.port.js";
-export {
-  buildUserVfsCreateFileOp,
-  buildUserVfsDeleteOp,
-  buildUserVfsMkdirOp,
-  buildUserVfsRenameOp,
-  buildUserVfsSaveOp,
-} from "../service/vfs/build-user-vfs-turn-op.js";
+export { UserVfsTurnOps } from "../service/vfs/build-user-vfs-turn-op.js";
 export { VfsZipBuild } from "../domain/vfs/logic/vfs-zip-build.js";
 export { VfsZipParse } from "../domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipPath } from "../domain/vfs/logic/vfs-zip-path.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AppError } from "../../src/errors/app-error.js";
-import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
+import {  describe, it  } from "node:test";
+import {  AppError  } from "../../src/errors/app-error.js";
+import {  ToolResultBlock  } from "../../src/domain/tool/logic/build-tool-result-block.js";
 
 describe("ToolResultBlock.build", () => {
   it("R1: success outcome sets ok true and formats content", () => {

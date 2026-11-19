@@ -39,7 +39,7 @@
  *
  * 池是模块级单例，按**进程**共享，前提是每进程单库单连接（desktop /
  * mobile 现状）。同进程若出现第二个连接或换库，池会继续拿旧库的内容作答，
- * 必须走 `bootstrapNovelMaster` 清池——它已在入口调用
+ * 必须走 `NovelMasterBootstrap.bootstrap` 清池——它已在入口调用
  * {@link decodedContentCache} 的 `clear()`（见 bootstrap 模块头的说明）。
  *
  * ## 只存字符串，不存解析结果

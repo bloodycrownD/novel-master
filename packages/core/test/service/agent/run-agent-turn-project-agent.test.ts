@@ -1,20 +1,16 @@
-import { Result } from "../../../src/errors/either.js";
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 import type { ZodType } from "zod";
-import { AgentServiceFactory, agentDefinitionSchema, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
+import {  AgentServiceFactory, agentDefinitionSchema, AgentTurnRunner, type AgentDefinition, type AgentTurnRuntimePort  } from "@novel-master/core/agent";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
 
 novelMasterTestFixture();
@@ -135,7 +131,7 @@ describe("runAgentTurn project agent config", () => {
     let capturedDefinition: AgentDefinition | undefined;
 
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: project.id, sessionId: session.id },
         "hello",
@@ -211,7 +207,7 @@ describe("runAgentTurn project agent config", () => {
     let capturedDefinition: AgentDefinition | undefined;
     let capturedModel: string | undefined;
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: project.id, sessionId: session.id },
         "hello",

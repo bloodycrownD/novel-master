@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import {  readdirSync, readFileSync  } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import {  fileURLToPath  } from "node:url";
+import {  describe, it  } from "node:test";
 
 /**
  * C1 守卫：core 的 `src/**` 里不得出现裸 console 调用。

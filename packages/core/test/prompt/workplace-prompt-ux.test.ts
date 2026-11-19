@@ -1,26 +1,26 @@
 /**
  * annotate-workplace-ux-fix：常驻工作区 schema / 注入（T-WP1–T-WP6）。
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Result } from "../../src/errors/either.js";
-import { decode as decodeRaw, encode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
 import type { ZodType } from "zod";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
-import { isAppError } from "@novel-master/core/errors";
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, PromptBuilder, MessageBodyText } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay, WorkplaceDisplay } from "@novel-master/core/workplace";
-import { AgentPromptLayoutValidate } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, PromptBuilder, MessageBodyText  } from "@novel-master/core/prompt";
+import {  WorkplaceDisplayAssembler, WorkplaceDisplay  } from "@novel-master/core/workplace";
+import {  AgentPromptLayoutValidate  } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { createMemorySessionKkv, mockWorkplaceService } from "../helpers/prompt-layout-test-helpers.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  createMemorySessionKkv, mockWorkplaceService  } from "../helpers/prompt-layout-test-helpers.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 const emptyPrompts = { persist: {}, dynamic: {} };
@@ -40,8 +40,8 @@ function countTag(haystack: string, tag: string): number {
 
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
-async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
-  return outcomeValue(await assembleWorkplaceDisplay(...args));
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
 }
 
 describe("workplace schema / wire（T-WP1–T-WP3）", () => {
@@ -72,7 +72,7 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
     );
     assert.equal(def.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
     // encode 已改返回 Result（五期签名）：unwrap 解包后取 wire。
-    const wire = unwrap(encode(def, agentDefinitionSchema)) as {
+    const wire = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as {
       prompts: { workplace?: boolean | string };
     };
     assert.equal(wire.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
@@ -92,7 +92,7 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
         ),
       // 空白 workplace 的拒绝统一收进布局校验（PROMPT_INVALID_LAYOUT），与后半段
       // AgentPromptLayoutValidate.validateFromMaps 的断言同一条通道（五期 schema 收敛）。
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT")
+      (e: unknown) => AppErrorOps.is(e, "PROMPT_INVALID_LAYOUT")
     );
     const blank = AgentPromptLayoutValidate.validateFromMaps({}, {}, undefined, {
       workplace: "   ",

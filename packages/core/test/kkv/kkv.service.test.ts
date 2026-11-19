@@ -1,9 +1,9 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../src/errors/app-error.js";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 
@@ -25,7 +25,7 @@ describe("KkvService", () => {
     await rejectsErr(
       () => kkv.delete("mod", "missing"),
       (e: unknown) => {
-        assert.ok(isAppError(e, "KKV_NOT_FOUND"));
+        assert.ok(AppErrorOps.is(e, "KKV_NOT_FOUND"));
         return true;
       },
     );

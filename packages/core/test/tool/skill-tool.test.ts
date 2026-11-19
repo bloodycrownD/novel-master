@@ -1,14 +1,14 @@
-import { Result } from "../../src/errors/either.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { Outcome } from "../../src/errors/outcome.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import { SKILL_TOOL_NAME, skillTool } from "../../src/domain/tool/builtin/skill-tool.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  SKILL_TOOL_NAME, skillTool  } from "../../src/domain/tool/builtin/skill-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type {
   EffectiveSkill,
@@ -17,8 +17,8 @@ import type {
   SkillFileContent,
   SkillService,
 } from "../../src/service/skills/skills.port.js";
-import { assembleSkillsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { AgentTools } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import {  AgentTurnRunner  } from "../../src/service/agent/logic/run-agent-turn.js";
+import {  AgentTools  } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 /** 构造 fake SkillService：实现 skill 工具用到的服务方法，按调用记录断言。 */
@@ -221,7 +221,7 @@ describe("skill 工具", () => {
           { action: "load" },
           skillToolCtx(fakeSkillService()),
         ),
-      (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
+      (e: unknown) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -280,7 +280,7 @@ describe("skill 工具", () => {
           { action: "read", name: "demo", offset: 99 },
           skillToolCtx(fakeSkillService()),
         ),
-      (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
+      (e: unknown) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -309,7 +309,7 @@ describe("skill 工具", () => {
           skillToolCtx(fakeSkillService()),
         ),
       (e: unknown) =>
-        isAppError(e, "TOOL_INVALID_ARGUMENT"),
+        AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -357,7 +357,7 @@ describe("skill 工具", () => {
           skillToolCtx(svc),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         JSON.stringify((e as AppError).details).includes("domain"),
     );
@@ -385,7 +385,7 @@ describe("skill 工具", () => {
       await rejectsErr(
         () => runner.call(SKILL_TOOL_NAME, c.input, skillToolCtx(svc)),
         (e: unknown) =>
-          isAppError(e) && e.key.startsWith("TOOL_") &&
+          AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
           e.key === "TOOL_INVALID_ARGUMENT" &&
           JSON.stringify((e as AppError).details).includes(c.field),
         `输入 ${JSON.stringify(c.input)} 应因缺 ${c.field} 报 INVALID_ARGUMENT`,
@@ -405,7 +405,7 @@ describe("skill 工具", () => {
           skillToolCtx(svc),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         JSON.stringify((e as AppError).details).includes("不得包含 .."),
     );
@@ -460,7 +460,7 @@ describe("skill 工具", () => {
             sessionId: "s",
           },
         ),
-      (e) => isAppError(e, "TOOL_FAILED"),
+      (e) => AppErrorOps.is(e, "TOOL_FAILED"),
     );
   });
 
@@ -520,14 +520,14 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
   }
 
   it("runtime.skills 缺省（未注入）时返回 undefined", async () => {
-    const ctx = await assembleSkillsToolContext({}, "p1", registryWithSkillOpt(false));
+    const ctx = await AgentTurnRunner.assembleSkillsToolContext({}, "p1", registryWithSkillOpt(false));
     assert.equal(ctx, undefined);
   });
 
   it("registry 含 skill 时预算 effective 清单并注入 projectId", async () => {
     const svc = fakeSkillService();
     const runtime = { skills: () => svc as SkillService };
-    const ctx = await assembleSkillsToolContext(
+    const ctx = await AgentTurnRunner.assembleSkillsToolContext(
       runtime,
       "proj-9",
       registryWithSkillOpt(false),
@@ -545,7 +545,7 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
     const runtime = { skills: () => svc as SkillService };
     const registry = registryWithSkillOpt(true);
     assert.ok(!registry.list().includes(SKILL_TOOL_NAME));
-    const ctx = await assembleSkillsToolContext(runtime, "proj-9", registry);
+    const ctx = await AgentTurnRunner.assembleSkillsToolContext(runtime, "proj-9", registry);
     assert.equal(ctx, undefined);
     assert.equal(
       svc.calls.filter((c) => c.method === "effectiveSkills").length,

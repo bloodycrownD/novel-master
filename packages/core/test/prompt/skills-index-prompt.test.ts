@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { describe, it } from "node:test";
-import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks, type ChatMessageData  } from "@novel-master/core/chat";
 
-import {
-  PromptBuilder,
-  type AgentPromptLayout,
-  type PromptSkillIndexEntry,
-} from "@novel-master/core/prompt";
-import { MessageBodyText } from "@novel-master/core/prompt";
+import {  PromptBuilder, type AgentPromptLayout, type PromptSkillIndexEntry  } from "@novel-master/core/prompt";
+import {  MessageBodyText  } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 

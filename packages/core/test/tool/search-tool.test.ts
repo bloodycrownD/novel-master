@@ -1,23 +1,23 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
+import {  describe, it, mock  } from "node:test";
 
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import { SEARCH_TOOL_NAME, searchTool } from "../../src/domain/tool/builtin/search/search-tool.js";
-import { SEARCH_NOT_CONFIGURED_MESSAGE, SearchDispatch } from "../../src/domain/tool/builtin/search/engines/dispatch.js";
-import { assembleSearchToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { SearchConfig, type SearchConfigPublic, type  SearchConfigStore } from "../../src/domain/tool/builtin/search/search-config.js";
-import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  SEARCH_TOOL_NAME, searchTool  } from "../../src/domain/tool/builtin/search/search-tool.js";
+import {  SEARCH_NOT_CONFIGURED_MESSAGE, SearchDispatch  } from "../../src/domain/tool/builtin/search/engines/dispatch.js";
+import {  AgentTurnRunner  } from "../../src/service/agent/logic/run-agent-turn.js";
+import {  SearchConfig, type SearchConfigPublic, type  SearchConfigStore  } from "../../src/domain/tool/builtin/search/search-config.js";
+import {  DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES  } from "../../src/domain/tool/builtin/search/preset-templates.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
-import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
-import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
+import {  ToolOutput  } from "../../src/domain/tool/logic/format-tool-output.js";
+import {  ToolResultBlock  } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import type { ParallelToolOutcome } from "../../src/domain/tool/logic/tool-runner.js";
 
 /** 内存 fake（同 search-config.test.ts，工具 e2e 装配用）。 */
@@ -150,7 +150,7 @@ describe("search 工具：run 基础行为", () => {
       SEARCH_TOOL_NAME,
       { params: { q: "q" } },
       makeCtx({
-        search: await assembleSearchToolContext(SearchConfig.createStore({ kkv, secretStore })),
+        search: await AgentTurnRunner.assembleSearchToolContext(SearchConfig.createStore({ kkv, secretStore })),
         fetchFn,
       })
     ));
@@ -166,7 +166,7 @@ describe("search 工具：run 基础行为", () => {
     unwrap(await store.setEnabled("duckduckgo", false));
 
     const runner = makeRunner();
-    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) })));
     assert.equal(out, SEARCH_NOT_CONFIGURED_MESSAGE);
     // 中性口径：不谎报「未启用任何」，两种到达路径共用一条文案。
     assert.match(SEARCH_NOT_CONFIGURED_MESSAGE, /当前没有可用的已启用搜索引擎/);
@@ -179,7 +179,7 @@ describe("search 工具：run 基础行为", () => {
   it("未装配 search 闭包（CLI / 旧 mock）时报可读 ToolError 而非崩溃", async () => {
     const runner = makeRunner();
     await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx()), (err) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       assert.match(err.message, /search/);
       return true;
@@ -191,13 +191,13 @@ describe("search 工具：run 基础行为", () => {
     const { kkv, secretStore } = fakeStores();
     const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
-    const search = await assembleSearchToolContext(store);
+    const search = await AgentTurnRunner.assembleSearchToolContext(store);
     const fetchFn = (async () => bochaResponse()) as typeof globalThis.fetch;
     const ctx = makeCtx({ search, fetchFn });
 
     // schema 只校验形状（engine/params）；搜索词缺失在 run 内以可读错误拒绝。
     await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { count: 5 } }, ctx), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       const cause = (err as { cause?: unknown }).cause;
       assert.match(String(cause), /params 缺少搜索词/);
       return true;
@@ -243,7 +243,7 @@ describe("search 工具：run 基础行为", () => {
     const { kkv, secretStore } = fakeStores();
     const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "deepseek", "sk-deepseek");
-    const search = await assembleSearchToolContext(store);
+    const search = await AgentTurnRunner.assembleSearchToolContext(store);
 
     const bodies: string[] = [];
     const urls: string[] = [];
@@ -322,7 +322,7 @@ describe("search 工具：run 基础行为", () => {
       SEARCH_TOOL_NAME,
       { params: { q: "q", count: 20 } },
       makeCtx({
-        search: await assembleSearchToolContext(store),
+        search: await AgentTurnRunner.assembleSearchToolContext(store),
         fetchFn,
         vfs,
       })
@@ -389,7 +389,7 @@ describe("search 工具：run 基础行为", () => {
       SEARCH_TOOL_NAME,
       { params: { q: "q", count: 20 } },
       makeCtx({
-        search: await assembleSearchToolContext(store),
+        search: await AgentTurnRunner.assembleSearchToolContext(store),
         fetchFn,
         vfs,
       })
@@ -419,8 +419,8 @@ describe("search 工具：run 基础行为", () => {
       })) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       assert.equal(err.message.includes("sk-bocha-secret"), false);
       return true;
@@ -436,7 +436,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     await enableWithKey(store, "tavily", "sk-tavily");
     unwrap(await store.setEnabled("duckduckgo", false));
 
-    const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
+    const ctx = makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) });
     const description = searchTool.description(ctx);
     const bochaIndex = description.indexOf("- bocha（博查搜索）：");
     const tavilyIndex = description.indexOf("- tavily（Tavily 搜索）：");
@@ -445,7 +445,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     assert.equal(description.includes("duckduckgo"), false, "DDG 关闭后描述无其字样");
 
     unwrap(await store.setEnabled("bocha", false));
-    const afterDisable = searchTool.description(makeCtx({ search: await assembleSearchToolContext(store) }));
+    const afterDisable = searchTool.description(makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) }));
     assert.equal(afterDisable.includes("bocha"), false, "下回合装配后关闭引擎不出现");
     assert.ok(afterDisable.includes("- tavily（Tavily 搜索）："));
   });
@@ -456,7 +456,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     unwrap(await store.setEnabled("brave", true)); // 无 key → 配置不完整
     unwrap(await store.setEnabled("duckduckgo", false));
 
-    const description = searchTool.description(makeCtx({ search: await assembleSearchToolContext(store) }));
+    const description = searchTool.description(makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) }));
     assert.equal(description.includes("brave"), false);
     assert.match(description, /当前没有可用的已启用引擎/);
   });
@@ -464,7 +464,7 @@ describe("search 工具：描述快照（T-D1）", () => {
   it("DDG 启用时描述含 DUCKDUCKGO_ENGINE_META 逐引擎段", async () => {
     const { kkv, secretStore } = fakeStores();
     const store = SearchConfig.createStore({ kkv, secretStore });
-    const description = searchTool.description(makeCtx({ search: await assembleSearchToolContext(store) }));
+    const description = searchTool.description(makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) }));
     assert.ok(description.includes(`- duckduckgo（${DUCKDUCKGO_ENGINE_META.name}）：${DUCKDUCKGO_ENGINE_META.paramHint}`));
   });
 
@@ -491,7 +491,7 @@ describe("search 工具：描述快照（T-D1）", () => {
       ...SearchConfig.createStore(fakeStores()),
       readConfig: async () => Result.ok(config),
     };
-    const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
+    const ctx = makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) });
     assert.equal(ctx.search!.engineSnapshot[0]!.paramHint.length, 600);
     assert.ok(searchTool.description(ctx).includes("x".repeat(600)));
   });
@@ -509,7 +509,7 @@ describe("search 工具：描述快照（T-D1）", () => {
       // 四期门⑦：readConfig 失败沿返回值通道到达（Err），不再 throw。
       readConfig: async () => Result.err(new AppError("KKV_NOT_FOUND", "search config unavailable")),
     };
-    const search = await assembleSearchToolContext(failingStore);
+    const search = await AgentTurnRunner.assembleSearchToolContext(failingStore);
     assert.deepEqual(search.engineSnapshot, []);
     const description = searchTool.description(makeCtx({ search }));
     assert.match(description, /当前没有可用的已启用引擎/);
@@ -523,7 +523,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     unwrap(await store.setEnabled("duckduckgo", false));
-    const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
+    const ctx = makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) });
     assert.ok(searchTool.description(ctx).includes("bocha"));
 
     await enableWithKey(store, "tavily", "sk-tavily");
@@ -555,7 +555,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn })));
     const rec = out as { engine: string; attempts?: string; results: unknown };
     assert.equal(rec.engine, "tavily");
     assert.equal(rec.attempts, "bocha 失败(401) → tavily 成功");
@@ -586,8 +586,8 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
       // 每引擎一行：引擎名前缀 + 各自状态码（链尾 DDG 兜底也失败时同样一行）。
@@ -615,8 +615,8 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "bocha", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "bocha", params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
       // 只含 bocha 一行，无 tavily 摘要（钉死语义，不降级）。
@@ -656,7 +656,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
           SEARCH_TOOL_NAME,
           { params: { q: "q" } },
           makeCtx({
-            search: await assembleSearchToolContext(store),
+            search: await AgentTurnRunner.assembleSearchToolContext(store),
             fetchFn: hangingFetch,
           })
         )
@@ -679,7 +679,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
       // 第五位 DDG 尝试前预算耗尽被拦下。
       const err = (await callPromise) as AppError;
 
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
       // 已收集的四个引擎超时摘要各一行 + 预算耗尽说明。
@@ -721,14 +721,14 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
 
     // 直调 searchTool.run（不经 ToolRunner）：本套件要锁的是工具自身的取消分支
     // （取消沿 Result.err 返回，短路降级链）。
-    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
+    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
     // 等链首请求挂起后再取消（中途时序）。
     await new Promise((resolve) => setImmediate(resolve));
     controller.abort();
     const result = await pending;
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码（不再经 toolFailed 的 cause 文案）");
+      assert.ok(AppErrorOps.is(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码（不再经 toolFailed 的 cause 文案）");
       // 取消短路：不是「串行搜索链全部尝试失败」聚合错误。
       assert.equal(result.error.message.includes("串行搜索链"), false);
     }
@@ -752,9 +752,9 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
       return bochaResponse();
     }) as typeof globalThis.fetch;
 
-    const result = await searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
+    const result = await searchTool.run({ params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
     assert.equal(result.ok, false);
-    if (!result.ok) assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
+    if (!result.ok) assert.ok(AppErrorOps.is(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
     assert.equal(fetchCalls, 0, "取消先于链首请求：任何引擎都不该被请求");
   });
 
@@ -779,7 +779,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
       });
     }) as typeof globalThis.fetch;
 
-    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
+    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
     // 等 bocha 401 处理完、tavily 请求挂起（「首个引擎 401 后」的中途时序）。
     for (let spin = 0; spin < 50 && urls.length < 2; spin += 1) await new Promise((resolve) => setImmediate(resolve));
     assert.equal(urls.length, 2, "前置：bocha 401 已处理、tavily 请求已挂起");
@@ -787,7 +787,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
     const result = await pending;
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
+      assert.ok(AppErrorOps.is(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
       assert.equal(result.error.message.includes("串行搜索链"), false, "取消后不再聚合链错误");
     }
     assert.equal(inFlightSignals[0]?.aborted, true, "在途的 tavily 请求已被同步 abort");
@@ -801,7 +801,7 @@ describe("search 工具：params 条数别名归一（G-1，count / max_results 
     const { kkv, secretStore } = fakeStores();
     const store = SearchConfig.createStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
-    const search = await assembleSearchToolContext(store);
+    const search = await AgentTurnRunner.assembleSearchToolContext(store);
 
     const bodies: string[] = [];
     const fetchFn = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -827,7 +827,7 @@ describe("search 工具：params 条数别名归一（G-1，count / max_results 
     const store = SearchConfig.createStore({ kkv, secretStore });
     const fetchFn = (async () => ddgHtmlWithResults(3)) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
+    const ctx = makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn });
 
     const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", max_results: 2 } }, ctx));
     assert.equal((out as { engine: string }).engine, "duckduckgo");
@@ -849,7 +849,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
       return ddgHtmlResponse();
     }) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "   ", query: "真词" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "   ", query: "真词" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn })));
     assert.equal((out as { engine: string }).engine, "duckduckgo");
     assert.equal(new URL(urls[0]!).searchParams.get("q"), "真词", "全空白 q 应跳过，回退到 query");
   });
@@ -857,7 +857,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
   it("q 非字符串：仅 q:42 报缺搜索词；q:42 与 query 同传回退 query", async () => {
     const { kkv, secretStore } = fakeStores();
     const store = SearchConfig.createStore({ kkv, secretStore });
-    const search = await assembleSearchToolContext(store);
+    const search = await AgentTurnRunner.assembleSearchToolContext(store);
     const urls: string[] = [];
     const fetchFn = (async (url: string | URL | Request) => {
       urls.push(String(url));
@@ -867,7 +867,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
     const ctx = makeCtx({ search, fetchFn });
 
     await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42 } }, ctx), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       const cause = (err as { cause?: unknown }).cause;
       assert.match(String(cause), /params 缺少搜索词/);
       return true;
@@ -881,7 +881,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
     const store = SearchConfig.createStore({ kkv, secretStore });
     const fetchFn = (async () => ddgHtmlWithResults(6)) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
+    const ctx = makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn });
 
     // 现状口径：count:"7" 非 nullish 短路 ?? 链后被 typeof 守卫打回 → SearchEngine.normalizeMaxResults(undefined) = 默认 5；
     // max_results:2 因 ?? 已短路不参与（DDG 完全忽略 params，截断只随归一条数）。若实现改为 typeof 感知回落，需同步更新本断言。
@@ -898,7 +898,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
       return ddgHtmlResponse();
     }) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "A", query: "B" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "A", query: "B" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn })));
     assert.equal((out as { engine: string }).engine, "duckduckgo");
     assert.equal(new URL(urls[0]!).searchParams.get("q"), "A", "q 应优先于 query（调换探测优先级本用例红）");
   });
@@ -913,7 +913,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
       return bochaResponse();
     }) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
+    const ctx = makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store), fetchFn });
     unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 4, maxResults: 9 } }, ctx));
     assert.equal((JSON.parse(bodies[0]!) as Record<string, unknown>).count, 4, "max_results 应优先于 maxResults");
   });
@@ -924,8 +924,8 @@ describe("search 工具：显式未知 engine（钉死未知 id）", () => {
     const { kkv, secretStore } = fakeStores();
     const store = SearchConfig.createStore({ kkv, secretStore });
     const runner = makeRunner();
-    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "google", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "google", params: { q: "q" } }, makeCtx({ search: await AgentTurnRunner.assembleSearchToolContext(store) })), (err: unknown) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const cause = err.cause as AppError;
       assert.ok(cause instanceof AppError);

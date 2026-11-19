@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AppError, firstDescriptorOf, isAppError, toSnakeCase, type ErrorParamsMap } from "../../src/errors/app-error.js";
-import { DOMAIN_RANGES } from "../../src/errors/domain.js";
-import { ErrorCodes } from "../../src/errors/error-codes.js";
-import { CORE_MESSAGE_KEYS, type CoreMessageKey } from "../../src/i18n/keys.js";
-import { CORE_CATALOGS } from "../../src/i18n/generated-catalog.js";
+import {  describe, it  } from "node:test";
+import {  AppError, AppErrorOps, type ErrorParamsMap  } from "../../src/errors/app-error.js";
+import {  DOMAIN_RANGES  } from "../../src/errors/domain.js";
+import {  ErrorCodes  } from "../../src/errors/error-codes.js";
+import {  CORE_MESSAGE_KEYS, type CoreMessageKey  } from "../../src/i18n/keys.js";
+import {  CORE_CATALOGS  } from "../../src/i18n/generated-catalog.js";
 
 /** 取 key 的域：最长已登记前缀 + `_`，覆盖 VFS_CHARACTER_CARD / SMART_SORT_RULE / SESSION_FS 等多段 token；TASK_* 与 PROVIDER_MODELS_IN_FLIGHT（handler 级并发冲突）等控制流码落在 IPC 段。 */
 function domainOf(key: string): string {
@@ -235,9 +235,9 @@ describe("AppError", () => {
 
   it("isAppError 收窄实例，并可按 key 校验", () => {
     const error = new AppError("AGENT_DOOM_LOOP");
-    assert.equal(isAppError(error), true);
-    assert.equal(isAppError(error, "AGENT_DOOM_LOOP"), true);
-    assert.equal(isAppError(new Error("x")), false);
+    assert.equal(AppErrorOps.is(error), true);
+    assert.equal(AppErrorOps.is(error, "AGENT_DOOM_LOOP"), true);
+    assert.equal(AppErrorOps.is(new Error("x")), false);
   });
 
   it("新签名：message 取 params.detail，缺省回退 desc；details 即 params 原样", () => {
@@ -300,16 +300,16 @@ describe("AppError", () => {
 
   it("firstDescriptorOf 契约：descriptor 成员优先，其次第一个 descriptor 形状的顶层成员", () => {
     const descriptor = { key: "error.chat.not_found" as const };
-    assert.equal(firstDescriptorOf(undefined), undefined);
-    assert.equal(firstDescriptorOf({}), undefined);
-    assert.equal(firstDescriptorOf({ kind: "message", id: "1" }), undefined);
-    assert.equal(firstDescriptorOf({ kind: "message", descriptor }), descriptor);
-    assert.equal(firstDescriptorOf({ nested: descriptor, other: 1 }), descriptor);
-    assert.equal(firstDescriptorOf({ key: "not-a-descriptor" }), undefined);
+    assert.equal(AppErrorOps.firstDescriptorOf(undefined), undefined);
+    assert.equal(AppErrorOps.firstDescriptorOf({}), undefined);
+    assert.equal(AppErrorOps.firstDescriptorOf({ kind: "message", id: "1" }), undefined);
+    assert.equal(AppErrorOps.firstDescriptorOf({ kind: "message", descriptor }), descriptor);
+    assert.equal(AppErrorOps.firstDescriptorOf({ nested: descriptor, other: 1 }), descriptor);
+    assert.equal(AppErrorOps.firstDescriptorOf({ key: "not-a-descriptor" }), undefined);
   });
 
   it("toSnakeCase：顶层成员名 camelCase → snake_case，值原样透传", () => {
-    assert.deepEqual(toSnakeCase({ toolName: "read", already_snake: 1, nested: { innerKey: 2 } }), { tool_name: "read", already_snake: 1, nested: { innerKey: 2 } });
+    assert.deepEqual(AppErrorOps.toSnakeCase({ toolName: "read", already_snake: 1, nested: { innerKey: 2 } }), { tool_name: "read", already_snake: 1, nested: { innerKey: 2 } });
   });
 
   it("T-M1: PromptError 4 码退役映射——offset 进 params，detail 覆盖动态文案", () => {
@@ -323,7 +323,7 @@ describe("AppError", () => {
     const unknownField = new AppError("PROMPT_UNKNOWN_FIELD", { detail: "unknown field: .a.b", offset: 3 });
     assert.equal(unknownField.code, 117006);
     assert.equal(unknownField.messageKey, "error.prompt.unknown_field");
-    assert.equal(isAppError(unknownField, "PROMPT_UNKNOWN_FIELD"), true);
+    assert.equal(AppErrorOps.is(unknownField, "PROMPT_UNKNOWN_FIELD"), true);
     const syntax = new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: "unsupported syntax near offset 7", offset: 7 });
     assert.equal(syntax.code, 117007);
     assert.equal(syntax.messageKey, "error.prompt.unsupported_syntax");

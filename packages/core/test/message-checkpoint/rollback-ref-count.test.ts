@@ -3,28 +3,24 @@
  *
  * entry_id 化后 revision 按 entryId 寻址；裸 SQL 改 entry_id 列名。
  */
-import { unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
+import {  describe, it, mock  } from "node:test";
+import {  RevisionGc  } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
 
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
-import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  RevisionPairKey  } from "@/domain/vfs/logic/revision-pair-key.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SessionFsServiceFactory  } from "@/service/session-fs/create-session-fs-service.js";
+import {  decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -99,7 +95,7 @@ describe("rollback ref_count + deferred blob gc", () => {
 
     await assert.rejects(
       () => revisions.adjustRefCount(999999, 1, 1),
-      (err: unknown) => isAppError(err, "VFS_NOT_FOUND"),
+      (err: unknown) => AppErrorOps.is(err, "VFS_NOT_FOUND"),
     );
   });
 
@@ -338,7 +334,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     assert.equal(Number(refBefore[0]?.ref_count), 2);
 
-    await deleteSessionFsData(ctx.conn, project.id, session.id);
+    await SessionFsServiceFactory.deleteData(ctx.conn, project.id, session.id);
 
     assert.equal(
       (await checkpoints.listFilePointersForSession(session.id)).length,

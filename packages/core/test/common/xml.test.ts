@@ -1,8 +1,8 @@
 /** common/xml 单测。 */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Xml } from "../../src/common/xml.js";
+import {  describe, it  } from "node:test";
+import {  Xml  } from "../../src/common/xml.js";
 
 describe("common/xml · Xml", () => {
   it("转义文本与属性", () => {

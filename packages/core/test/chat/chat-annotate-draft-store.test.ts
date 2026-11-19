@@ -2,8 +2,8 @@
  * 批注草稿进程内 store（迁并双端 T-AN*；T-X2-3）。
  */
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
-import { chatAnnotateDraftStore } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
+import {  afterEach, describe, it  } from "node:test";
+import {  chatAnnotateDraftStore  } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 afterEach(() => {

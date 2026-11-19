@@ -18,7 +18,7 @@
 import { z } from "zod";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { decode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { SMART_SORT_CAPTURE_KINDS, type SmartSortCaptureKind, type SmartSortRule } from "./smart-sort-rule.js";
 
 /** Current bundle document schema version. */
@@ -86,7 +86,7 @@ export const SmartSortRuleIo = {
     }
     // decode 已 Result 化（错误通道迁移四期）；decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
     // 原样接力，由 service / app 的导入通道贴「YAML 无效」标签。
-    const decoded = decode(migrated, smartSortRuleBundleDocumentSchema);
+    const decoded = SerializationDecode.decode(migrated, smartSortRuleBundleDocumentSchema);
     return decoded;
   },
 

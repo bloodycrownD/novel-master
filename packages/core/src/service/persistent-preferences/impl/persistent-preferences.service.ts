@@ -4,7 +4,7 @@
  * @module service/persistent-preferences/impl/persistent-preferences.service
  */
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { Kkv } from "@/common/kkv.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
@@ -97,7 +97,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
    */
   async getPreference(key: string): Promise<Result<string | undefined, AppError>> {
     const raw = await this.kkv.get(PREFERENCES_MODULE, key);
-    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    if (!raw.ok && !AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
     return Result.ok(raw.ok ? raw.value : undefined);
   }
 
@@ -128,7 +128,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */
   private async resetBooleanPref(name: BooleanPrefName): Promise<Result<void, AppError>> {
     const deleted = await this.kkv.delete(PREFERENCES_MODULE, BOOLEAN_PREFS[name].key);
-    if (!deleted.ok && !isAppError(deleted.error, "KKV_NOT_FOUND")) return deleted;
+    if (!deleted.ok && !AppErrorOps.is(deleted.error, "KKV_NOT_FOUND")) return deleted;
     return Result.ok(undefined);
   }
 }

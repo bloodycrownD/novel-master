@@ -9,23 +9,19 @@
  * - **blob 行是否真被删** → 直查 `vfs_content_blob`（GC 本身的判据）；
  * - **缺失时的完整性契约是否还在** → 清空池成冷态后读，必抛。
  */
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import {  describe, it  } from "node:test";
+import {  RevisionGc  } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { TdbcConnection } from "@novel-master/core";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

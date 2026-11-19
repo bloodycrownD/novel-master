@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqliteProviderRepository } from "../../src/domain/provider/repositories/impl/sqlite-provider.repository.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { unwrap } from "../helpers/result-unwrap.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SqliteProviderRepository  } from "../../src/domain/provider/repositories/impl/sqlite-provider.repository.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -42,7 +39,7 @@ async function insertProviderRow(
 
 function expectEmptyDisplayNameError(error: unknown, providerId: string): boolean {
   return (
-    isAppError(error, "PROVIDER_INVALID_ARGUMENT") &&
+    AppErrorOps.is(error, "PROVIDER_INVALID_ARGUMENT") &&
     error.message.includes("display_name 不得为空") &&
     (error.details as {providerId?: string} | undefined)?.providerId === providerId
   );
@@ -94,7 +91,7 @@ describe("SqliteProviderRepository", () => {
     const listed = await repo.list();
     assert.ok(!listed.ok, "毒行 list 应走 Err 通道");
     if (!listed.ok) {
-      assert.ok(isAppError(listed.error, "PROVIDER_INVALID_ARGUMENT"));
+      assert.ok(AppErrorOps.is(listed.error, "PROVIDER_INVALID_ARGUMENT"));
       const providerId = (listed.error.details as {providerId?: string} | undefined)?.providerId;
       assert.match(listed.error.message, /display_name 不得为空/);
       assert.match(providerId ?? "", /^[0-9a-f-]{36}$/i);

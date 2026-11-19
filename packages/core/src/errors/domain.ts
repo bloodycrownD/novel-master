@@ -2,7 +2,7 @@
  * 错误域段表（错误通道迁移三期 spec-3 §3.7）。
  *
  * 域是 6 位码的前三位（DDDSSS，见 error-codes.ts 头注），码表登记时就定死。
- * 判域一律走 errors/guards.ts 的 `domainOf` / `inDomain`——唯一实现，不依赖
+ * 判域一律走 errors/guards.ts 的 `ErrorGuards.domainOf` / `ErrorGuards.inDomain`——唯一实现，不依赖
  * key 的命名约定：key 改名或新增前缀时 `startsWith` 判域会静默漏判（只走兜底、
  * 不报错），段号不会。段表 {@link DOMAIN_RANGES} 全仓仅此一份（此前只在
  * test/errors/app-error.test.ts），测试引用这里，不再自留副本。

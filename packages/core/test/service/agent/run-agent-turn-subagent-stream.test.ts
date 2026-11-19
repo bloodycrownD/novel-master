@@ -12,22 +12,22 @@
  * @module test/service/agent/run-agent-turn-subagent-stream.test
  */
 
-import { Result } from "../../../src/errors/either.js";
+import {  Result  } from "../../../src/errors/either.js";
 import type { AppError } from "../../../src/errors/app-error.js";
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type  AgentTurnRuntimePort } from "@novel-master/core/agent";
+import {  AgentServiceFactory, AgentTurnRunner, type AgentDefinition, type  AgentTurnRuntimePort  } from "@novel-master/core/agent";
 import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type {
   ModelRequestService,
   ModelRequestOptions,
 } from "@/service/provider/model-request.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { createKkvService } from "@/service/kkv/create-kkv-service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  createKkvService  } from "@/service/kkv/create-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 novelMasterTestFixture();
@@ -255,7 +255,7 @@ async function runTaskTurn(
   await ctx.state.setCurrentAgentId("test-default-agent");
   await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-  const result = unwrap(await runAgentTurn(
+  const result = unwrap(await AgentTurnRunner.run(
     runtime,
     { projectId: project.id, sessionId: session.id },
     "请派生子代理完成任务",
@@ -311,7 +311,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     // 照 MF-3（test/agent/agent-runner.test.ts）先例：捕获 sink 收集日志，
     // finally 恢复默认 console sink，防止污染其它用例的输出。
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       // runTaskTurn 内部已断言 stopReason === completed（run 不抛）
       const streams = await runTaskTurn(ctx.preferences);
@@ -337,7 +337,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
         "回退日志 detail.error 应为 PreferencesError 的脱敏展开（name 保留错误码）",
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
       await ctx.preferences.resetSubagentStreamEnabled();
     }
   });
@@ -404,7 +404,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const result = unwrap(await runAgentTurn(
+    const result = unwrap(await AgentTurnRunner.run(
       runtime,
       { projectId: project.id, sessionId: session.id },
       "请派生子代理完成任务",

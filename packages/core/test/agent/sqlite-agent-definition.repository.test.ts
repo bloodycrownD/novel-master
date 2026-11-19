@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw, encode as encodeRaw } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
 import type { ZodType } from "zod";
 
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  SqliteAgentDefinitionRepository  } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
 
 /** encode 已改返回 Result（五期门⑦ toWire 门禁）：测试内统一解包，同 decode 模式。 */
-function encode(value: unknown, schema: Parameters<typeof encodeRaw>[1]): unknown {
-  return unwrap(encodeRaw(value, schema));
+function encode(value: unknown, schema: Parameters<typeof SerializationEncode.encode>[1]): unknown {
+  return unwrap(SerializationEncode.encode(value, schema));
 }
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";

@@ -3,10 +3,10 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
-import { LlmExport } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
-import { MessageBodyText } from "../../src/domain/prompt/logic/message-body.js";
+import {  LlmExport  } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
+import {  MessageBodyText  } from "../../src/domain/prompt/logic/message-body.js";
 
 function msg(
   role: string,

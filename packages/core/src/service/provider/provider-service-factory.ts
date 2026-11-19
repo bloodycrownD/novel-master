@@ -31,7 +31,7 @@ export const ProviderServiceFactory = {
   /**
    * Creates provider, model, and request services.
    *
-   * @param conn - Open connection after {@link bootstrapNovelMaster}
+   * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    * @param secretStore - SKSP composite store
    */
   create(conn: TdbcConnection, secretStore: SecretStore): ProviderServiceBundle {

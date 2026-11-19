@@ -6,19 +6,19 @@ export const PACKAGE_NAME = "@novel-master/core";
  * @remarks
  * `${name}` 会以原始字符串内联到 SQL，调用方必须自行做白名单或校验，避免注入风险。
  */
-export { SqlTemplateParser, SqlTemplateError, parseTemplateToAst, normalizeExpression, bindExpressionToContext, evaluateTest } from "./infra/sql-template/index.js";
+export { SqlTemplateParser, SqlTemplateError, SqlTemplateExpression } from "./infra/sql-template/index.js";
 export type { EvaluateTestOptions, SqlParseResult, ParseOptions, SqlTemplateErrorCode, AstNode } from "./infra/sql-template/index.js";
 
 /**
  * TDBC：异步 SQLite 连接协议（驱动由调用方独立注册）。
  */
-export { TdbcError, open, parseUrl, TdbcRegistry, normalizeBindings, executeTemplate, queryTemplate } from "./infra/tdbc/index.js";
+export { TdbcError, TdbcOpen, TdbcRegistry, TdbcBindings, TdbcTemplate } from "./infra/tdbc/index.js";
 export type { TdbcConnection, TdbcDriver, TdbcErrorCode, SqlValue, Row, ExecuteResult, BatchResult, OpenOptions, ParsedTdbcUrl } from "./infra/tdbc/index.js";
 
 /**
  * 启动与迁移：Novel Master 运行时基础建表。
  */
-export { bootstrapNovelMaster } from "./bootstrap/novel-master-bootstrap.js";
+export { NovelMasterBootstrap } from "./bootstrap/novel-master-bootstrap.js";
 
 /**
  * 宿主注册的 zlib 加速器（Node 侧 `node:zlib`）：desktop main / CLI 启动
@@ -43,8 +43,8 @@ export { DeferredFileCacheGc } from "./domain/session-kkv/logic/deferred-file-ca
 export {
   DB_BACKUP_PROVIDER_TABLES,
   ProviderTableSnapshotIo,
-  assertSqliteBackupHeader,
-  exportDatabaseBackupToPath,
+  SqliteBackupHeader,
+  DatabaseBackupExport,
 } from "./infra/db-backup/index.js";
 export type { ProviderBackupTableName, ProviderTableSnapshot } from "./infra/db-backup/index.js";
 
@@ -57,7 +57,7 @@ export type { ProviderBackupTableName, ProviderTableSnapshot } from "./infra/db-
  * ——真实库前置确认门均已过）。pack 两表与 `pack-codec` 读路径是现行数据
  * 形态，继续由 content store 消费。
  */
-export { createDbMaintenanceService } from "./infra/db-maintenance/index.js";
+export { DbMaintenance } from "./infra/db-maintenance/index.js";
 export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } from "./infra/db-maintenance/index.js";
 
 /**
@@ -65,16 +65,13 @@ export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } fr
  */
 export {
   CloudSyncCoordinator,
+  DefaultPushAgentMutex,
   DatabaseReplacedError,
-  parseCloudSyncStatus,
+  CloudSyncStatusParser,
   EMPTY_CLOUD_SYNC_STATUS,
-  isEffectiveLock,
-  canAcquireLock,
-  buildLease,
-  renewLease,
+  CloudSyncLease,
   DEFAULT_LEASE_SECONDS,
-  statusKey,
-  snapshotKey,
+  CloudSyncPaths,
 } from "./infra/cloud-sync/index.js";
 export type {
   ObjectStorageHeadResult,
@@ -100,7 +97,7 @@ export { ChatPromptBuildBailedError } from "./service/chat/model/chat-prompt-bui
 /**
  * 偏好与持久状态：对 KKV 的稳定封装（非 UI 模块直连 KKV）。
  */
-export { createPersistentState } from "./service/persistent-state/create-persistent-state.js";
+export { PersistentStateFactory } from "./service/persistent-state/create-persistent-state.js";
 export type { PersistentState } from "./service/persistent-state/persistent-state.port.js";
 export { createPersistentPreferences } from "./service/persistent-preferences/create-persistent-preferences.js";
 export type { PersistentPreferences } from "./service/persistent-preferences/persistent-preferences.port.js";
@@ -164,7 +161,7 @@ export type { CurlCommandDraft, CurlParseError } from "./domain/tool/builtin/sea
 /**
  * 基础序列化能力：供跨端配置读写共用。
  */
-export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
-export { stringifyText } from "./infra/serialization/stringify-text.js";
-export { decode } from "./infra/serialization/decode.js";
-export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
+export { SerializationParseText, type TextFormat } from "./infra/serialization/parse-text.js";
+export { SerializationStringifyText } from "./infra/serialization/stringify-text.js";
+export { SerializationDecode } from "./infra/serialization/decode.js";
+export { SerializationEncode, type EncodableSchema } from "./infra/serialization/encode.js";

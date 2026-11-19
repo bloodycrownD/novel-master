@@ -1,22 +1,17 @@
 import assert from "node:assert/strict";
-import { describe, it, mock, afterEach } from "node:test";
-import { isAppError } from "../../../src/errors/app-error.js";
-import {
-  postSse,
-  resetShouldUseXhrForSseCacheForTests,
-  setShouldUseXhrForSseOverrideForTests,
-  shouldUseXhrForSse,
-} from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
-import { DEFAULT_TICK_MS } from "../../../src/infra/llm-protocol/logic/sse-chunk-emitter.js";
+import {  describe, it, mock, afterEach  } from "node:test";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
+import {  LlmSseTransport  } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
+import {  DEFAULT_TICK_MS  } from "../../../src/infra/llm-protocol/logic/sse-chunk-emitter.js";
 
 afterEach(() => {
-  resetShouldUseXhrForSseCacheForTests();
+  LlmSseTransport.resetShouldUseXhrCacheForTests();
   mock.timers.reset();
 });
 
 describe("llm-sse-transport", () => {
   it("TRANS-01: fetch path delivers multiple onChunk calls", async () => {
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const ssePart1 = 'data: {"choices":[{"delta":{"content":"A"}}]}\n\n';
     const ssePart2 = 'data: {"choices":[{"delta":{"content":"B"}}]}\n\n';
@@ -37,7 +32,7 @@ describe("llm-sse-transport", () => {
     });
 
     const chunks: string[] = [];
-    const result = await postSse(
+    const result = await LlmSseTransport.post(
       "https://api.example.com/v1/chat/completions",
       {
         method: "POST",
@@ -57,7 +52,7 @@ describe("llm-sse-transport", () => {
 
   it("TRANS-02: XHR onprogress delivers incremental chunks", async () => {
     mock.timers.enable({ apis: ["setInterval"] });
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     type XhrInstance = {
       open: ReturnType<typeof mock.fn>;
@@ -104,7 +99,7 @@ describe("llm-sse-transport", () => {
 
     try {
       const chunks: string[] = [];
-      const promise = postSse(
+      const promise = LlmSseTransport.post(
         "https://api.example.com/v1/chat/completions",
         {
           method: "POST",
@@ -127,7 +122,7 @@ describe("llm-sse-transport", () => {
 
   it("U-04: burst onprogress throttles onChunk and onload preserves full text", async () => {
     mock.timers.enable({ apis: ["setInterval"] });
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     const burst = "x".repeat(100 * 1024);
 
@@ -157,7 +152,7 @@ describe("llm-sse-transport", () => {
 
     try {
       const chunks: string[] = [];
-      await postSse(
+      await LlmSseTransport.post(
         "https://api.example.com/v1/chat/completions",
         { method: "POST", body: "{}" },
         (chunk) => chunks.push(chunk),
@@ -172,7 +167,7 @@ describe("llm-sse-transport", () => {
   });
 
   it("U-05: onload-only delivery emits full responseText", async () => {
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     const fullText = 'data: {"done":true}\n\n';
 
@@ -198,7 +193,7 @@ describe("llm-sse-transport", () => {
 
     try {
       const chunks: string[] = [];
-      await postSse(
+      await LlmSseTransport.post(
         "https://api.example.com/v1/chat/completions",
         { method: "POST", body: "{}" },
         (chunk) => chunks.push(chunk),
@@ -213,7 +208,7 @@ describe("llm-sse-transport", () => {
 
   it("U-08: signal.abort before or during XHR rejects with ProviderError", async () => {
     mock.timers.enable({ apis: ["setInterval"] });
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     type XhrInstance = {
       abort: ReturnType<typeof mock.fn>;
@@ -254,7 +249,7 @@ describe("llm-sse-transport", () => {
       preAborted.abort();
       await assert.rejects(
         () =>
-          postSse(
+          LlmSseTransport.post(
             "https://api.example.com/v1/chat/completions",
             { method: "POST", body: "{}" },
             () => {},
@@ -262,14 +257,14 @@ describe("llm-sse-transport", () => {
             { signal: preAborted.signal },
           ),
         (err: unknown) => {
-          assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
+          assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
           assert.match(String(err.message), /Request aborted/);
           return true;
         },
       );
 
       const controller = new AbortController();
-      const promise = postSse(
+      const promise = LlmSseTransport.post(
         "https://api.example.com/v1/chat/completions",
         { method: "POST", body: "{}" },
         () => {},
@@ -282,7 +277,7 @@ describe("llm-sse-transport", () => {
       await assert.rejects(
         promise,
         (err: unknown) => {
-          assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
+          assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
           assert.match(String(err.message), /Request aborted/);
           return true;
         },
@@ -298,7 +293,7 @@ describe("llm-sse-transport", () => {
 
   it("U-06: no stall abort after long idle without onprogress", async () => {
     mock.timers.enable({ apis: ["setInterval"] });
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     type XhrInstance = {
       abort: ReturnType<typeof mock.fn>;
@@ -336,7 +331,7 @@ describe("llm-sse-transport", () => {
 
     try {
       const chunks: string[] = [];
-      const promise = postSse(
+      const promise = LlmSseTransport.post(
         "https://api.example.com/v1/chat/completions",
         { method: "POST", body: "{}" },
         (chunk) => chunks.push(chunk),
@@ -360,7 +355,7 @@ describe("llm-sse-transport", () => {
   });
 
   it("TRANS-03b: XHR HTTP 401 throws ProviderError", async () => {
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     class MockXMLHttpRequest {
       open = mock.fn();
@@ -385,14 +380,14 @@ describe("llm-sse-transport", () => {
     try {
       await assert.rejects(
         () =>
-          postSse(
+          LlmSseTransport.post(
             "https://api.example.com/v1/chat/completions",
             { method: "POST", body: "{}" },
             () => {},
             "openai-test",
           ),
         (err: unknown) => {
-          assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
+          assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
           assert.match(String(err.message), /401/);
           return true;
         },
@@ -404,7 +399,7 @@ describe("llm-sse-transport", () => {
   });
 
   it("TRANS-03: HTTP 401 throws ProviderError", async () => {
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const fetchFn = mock.fn(async () => {
       return new Response("Unauthorized", { status: 401 });
@@ -412,7 +407,7 @@ describe("llm-sse-transport", () => {
 
     await assert.rejects(
       () =>
-        postSse(
+        LlmSseTransport.post(
           "https://api.example.com/v1/chat/completions",
           { method: "POST", body: "{}" },
           () => {},
@@ -420,7 +415,7 @@ describe("llm-sse-transport", () => {
           { fetchFn: fetchFn as typeof fetch },
         ),
       (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
+        assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
         assert.match(String(err.message), /401/);
         return true;
       },
@@ -455,8 +450,8 @@ describe("llm-sse-transport", () => {
     (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
       MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
 
-    resetShouldUseXhrForSseCacheForTests();
-    assert.equal(shouldUseXhrForSse(), true);
+    LlmSseTransport.resetShouldUseXhrCacheForTests();
+    assert.equal(LlmSseTransport.shouldUseXhr(), true);
 
     const fetchFn = mock.fn(async () => {
       throw new Error("fetch must not be called on React Native");
@@ -464,7 +459,7 @@ describe("llm-sse-transport", () => {
 
     try {
       const chunks: string[] = [];
-      await postSse(
+      await LlmSseTransport.post(
         "https://api.example.com/v1/chat/completions",
         { method: "POST", body: "{}" },
         (chunk) => chunks.push(chunk),
@@ -487,12 +482,12 @@ describe("llm-sse-transport", () => {
       }
       (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
         origXhr;
-      resetShouldUseXhrForSseCacheForTests();
+      LlmSseTransport.resetShouldUseXhrCacheForTests();
     }
   });
 
   it("fetch path throws when response body is null", async () => {
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const fetchFn = mock.fn(async () => {
       return new Response(null, {
@@ -503,7 +498,7 @@ describe("llm-sse-transport", () => {
 
     await assert.rejects(
       () =>
-        postSse(
+        LlmSseTransport.post(
           "https://api.example.com/v1/chat/completions",
           { method: "POST", body: "{}" },
           () => {},
@@ -511,7 +506,7 @@ describe("llm-sse-transport", () => {
           { fetchFn: fetchFn as typeof fetch },
         ),
       (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
+        assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
         assert.match(String(err.message), /does not support fetch stream bodies/);
         return true;
       },

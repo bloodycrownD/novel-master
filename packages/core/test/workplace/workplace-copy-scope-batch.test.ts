@@ -10,31 +10,21 @@
  * @module test/workplace/workplace-copy-scope-batch
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
-import { Result } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import {
-  bootstrapNovelMaster,
-  open,
-  type TdbcConnection,
-} from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
 
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type {
   WorkplaceDirRule,
   WorkplaceFileRule,
 } from "@/domain/workplace/model/workplace-types.js";
 
-import {
-  CountingTdbcConnection,
-  SqlCounter,
-} from "../helpers/sql-counting-connection.js";
+import {  CountingTdbcConnection, SqlCounter  } from "../helpers/sql-counting-connection.js";
 
 interface CountedCtx {
   readonly conn: TdbcConnection;
@@ -44,13 +34,13 @@ interface CountedCtx {
 
 async function openCountedCtx(): Promise<CountedCtx> {
   registerBetterSqlite3Driver();
-  const rawConn = await open("tdbc:sqlite:file::memory:", {
+  const rawConn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
   const counter = new SqlCounter();
   const conn: TdbcConnection = new CountingTdbcConnection(rawConn, counter);
-  await bootstrapNovelMaster(conn);
+  await NovelMasterBootstrap.bootstrap(conn);
   return { conn, counter, repo: new SqliteWorkplaceRepository(conn) };
 }
 

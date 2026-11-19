@@ -20,32 +20,34 @@ const ANTHROPIC_THINKING_FIELD: ThinkingBodyField<"anthropic"> = { key: "thinkin
 const OPENAI_THINKING_FIELD: ThinkingBodyField<"openai"> = { key: "reasoning_effort", project: (t) => t.openai.reasoning_effort };
 const GEMINI_THINKING_FIELD: ThinkingBodyField<"gemini"> = { parent: "generationConfig", key: "thinkingConfig", project: (t) => ({ ...t.gemini.thinkingConfig }) };
 
-function writeThinkingField<P extends LlmProtocolKind>(body: Record<string, unknown>, field: ThinkingBodyField<P>, thinking: ThinkingOf<P>): void {
-  const value = field.project(thinking);
-  if (field.parent == null) {
-    body[field.key] = value;
-    return;
-  }
-  // 父字段与采样参数共用（gemini 的 generationConfig）：浅合并，保留已有键。
-  const existing = (body[field.parent] ?? {}) as Record<string, unknown>;
-  body[field.parent] = { ...existing, [field.key]: value };
-}
+export const ThinkingBody = {
+  writeField<P extends LlmProtocolKind>(body: Record<string, unknown>, field: ThinkingBodyField<P>, thinking: ThinkingOf<P>): void {
+    const value = field.project(thinking);
+    if (field.parent == null) {
+      body[field.key] = value;
+      return;
+    }
+    // 父字段与采样参数共用（gemini 的 generationConfig）：浅合并，保留已有键。
+    const existing = (body[field.parent] ?? {}) as Record<string, unknown>;
+    body[field.parent] = { ...existing, [field.key]: value };
+  },
 
-/**
- * 按 adapter 期望协议写入 thinking 字段；thinking 缺失或协议不一致时不写。
- *
- * 判别用 adapter 侧协议而非 `thinking.protocol`：两者不一致时宁可不写，
- * 也不把别的协议字段塞进当前 body。
- */
-export function applyThinkingToBody(protocol: LlmProtocolKind, body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
-  if (thinking?.protocol !== protocol) {
-    return;
-  }
-  if (thinking.protocol === "anthropic") {
-    writeThinkingField(body, ANTHROPIC_THINKING_FIELD, thinking);
-  } else if (thinking.protocol === "openai") {
-    writeThinkingField(body, OPENAI_THINKING_FIELD, thinking);
-  } else {
-    writeThinkingField(body, GEMINI_THINKING_FIELD, thinking);
-  }
-}
+  /**
+   * 按 adapter 期望协议写入 thinking 字段；thinking 缺失或协议不一致时不写。
+   *
+   * 判别用 adapter 侧协议而非 `thinking.protocol`：两者不一致时宁可不写，
+   * 也不把别的协议字段塞进当前 body。
+   */
+  apply(protocol: LlmProtocolKind, body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
+    if (thinking?.protocol !== protocol) {
+      return;
+    }
+    if (thinking.protocol === "anthropic") {
+      ThinkingBody.writeField(body, ANTHROPIC_THINKING_FIELD, thinking);
+    } else if (thinking.protocol === "openai") {
+      ThinkingBody.writeField(body, OPENAI_THINKING_FIELD, thinking);
+    } else {
+      ThinkingBody.writeField(body, GEMINI_THINKING_FIELD, thinking);
+    }
+  },
+} as const;

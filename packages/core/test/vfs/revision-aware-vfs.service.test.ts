@@ -1,12 +1,12 @@
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import { isAppError } from "@/errors/app-error.js";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@novel-master/core";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { EntrySequenceRepair } from "@/domain/vfs/logic/entry-sequence-repair.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  EntrySequenceRepair  } from "@/domain/vfs/logic/entry-sequence-repair.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 
 novelMasterTestFixture();
@@ -143,7 +143,7 @@ describe("RevisionAwareVfsService (integration)", () => {
     assert.equal(deletedRows[0]!.status, "deleted");
     assert.equal(deletedRows[0]!.content_hash, null);
     await rejectsErr(() => vfs.read(GLOBAL_SCOPE, "/del.txt"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -187,7 +187,7 @@ describe("RevisionAwareVfsService (integration)", () => {
     unwrap(await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true }));
 
     await rejectsErr(() => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     // 查 revision 表确认墓碑版本
     const entryRows = await conn.query<{ entry_id: number }>(
@@ -270,7 +270,7 @@ describe("RevisionAwareVfsService (integration)", () => {
     );
     assert.equal(entryRows.length, 0);
     await rejectsErr(() => vfs.read(GLOBAL_SCOPE, path), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 

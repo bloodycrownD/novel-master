@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { StreamTokenAnchor } from "../../../src/domain/format/stream-token-anchor.js";
+import {  describe, it  } from "node:test";
+import {  StreamTokenAnchor  } from "../../../src/domain/format/stream-token-anchor.js";
 
 /**
  * 「基线 + 增量」读值口径（stream-metrics-native ①，双端共用单点声明）。

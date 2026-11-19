@@ -1,11 +1,11 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { isAppError } from "@/errors/app-error.js";
-import { seedBuiltinSmartSortRules } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
-import { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
-import { createSmartSortRuleService } from "@/service/smart-sort-rule/create-smart-sort-rule.service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+import {  BuiltinSmartSortRules  } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
+import {  SmartSortRule  } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+import {  SmartSortRuleServiceFactory  } from "@/service/smart-sort-rule/create-smart-sort-rule.service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -15,7 +15,7 @@ const BUILTIN_IDS = ["builtin-zh-prologue", "builtin-zh-finale", "builtin-zh-ext
 /** 共享库用例隔离：删全部用户规则 + 重灌内置（恢复默认顺序与启用态）。 */
 beforeEach(async () => {
   const ctx = getNovelMasterTestContext();
-  const svc = createSmartSortRuleService(ctx.conn);
+  const svc = SmartSortRuleServiceFactory.create(ctx.conn);
   for (const rule of await svc.listRules()) {
     if (!SmartSortRule.isBuiltinId(rule.ruleId)) {
       unwrap(await svc.deleteRule(rule.ruleId));
@@ -31,7 +31,7 @@ function sortOrdersAreConsecutiveFromOne(rules: readonly { sortOrder: number }[]
 describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
   it("create appends at next sort order; listRules returns builtin seed first", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const created = unwrap(await svc.createRule({
       name: "我的规则",
       pattern: "第([0-9]+)话",
@@ -49,7 +49,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 
   it("updateRule merges patch and validates the merged draft", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const created = unwrap(await svc.createRule({
       name: "a",
       pattern: "第([0-9]+)话",
@@ -63,13 +63,13 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
     assert.equal(updated.pattern, "第([0-9]+)话");
     await rejectsErr(
       () => svc.updateRule(created.ruleId, { pattern: "第[0-9]+话" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
   });
 
   it("moveRule top/up/down/bottom + reorderRules keep sort_order consecutive 1..N", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const a = unwrap(await svc.createRule({ name: "a", pattern: "(\\d+)" }));
     const b = unwrap(await svc.createRule({ name: "b", pattern: "(\\d+)" }));
     const c = unwrap(await svc.createRule({ name: "c", pattern: "(\\d+)" }));
@@ -99,29 +99,29 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 
   it("reorderRules rejects partial / duplicated id lists", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const ids = (await svc.listRules()).map((r) => r.ruleId);
     await rejectsErr(
       () => svc.reorderRules(ids.slice(1)),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
     await rejectsErr(
       () => svc.reorderRules([...ids, ids[0]!]),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
   });
 
   it("delete/deleteBatch reject builtin- prefixed rules (D3)", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     await rejectsErr(
       () => svc.deleteRule("builtin-zh-chapter"),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_BUILTIN_PROTECTED")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_BUILTIN_PROTECTED")
     );
     const mine = unwrap(await svc.createRule({ name: "m", pattern: "(\\d+)" }));
     await rejectsErr(
       () => svc.deleteBatch([mine.ruleId, "builtin-numeric"]),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_BUILTIN_PROTECTED")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_BUILTIN_PROTECTED")
     );
     // 整体拒绝：用户规则也不应被删（半删防护）
     assert.ok((await svc.listRules()).some((r) => r.ruleId === mine.ruleId));
@@ -131,7 +131,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 
   it("setEnabled(Batch) toggles without touching order", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const a = unwrap(await svc.createRule({ name: "a", pattern: "(\\d+)" }));
     const b = unwrap(await svc.createRule({ name: "b", pattern: "(\\d+)" }));
     await svc.setEnabledBatch([a.ruleId, b.ruleId], false);
@@ -145,7 +145,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 
   it("previewSort reports matched rule + nums and sorts accordingly", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const result = unwrap(await svc.previewSort(["第十章 风起.txt", "第2卷 第13章.txt", "001、开端.txt", "Chapter 12.txt"]));
     const byName = new Map(result.lines.map((l) => [l.name, l]));
     assert.deepEqual(byName.get("第2卷 第13章.txt")!.nums, [2, 13]);
@@ -159,7 +159,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 
   it("D13：previewSort 内置七条下序章哨兵最前、终章/番外沉底（同值文件名决胜）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const result = unwrap(await svc.previewSort(["终章.txt", "第十章.txt", "序章.txt", "番外.txt", "第一章.txt"]));
     const byName = new Map(result.lines.map((l) => [l.name, l]));
     assert.equal(byName.get("序章.txt")!.matchedRuleId, "builtin-zh-prologue");
@@ -174,7 +174,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 
   it("D13：create/update 携带 captureKind 且 round-trip 无损（缺省 smart）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const fixed = unwrap(await svc.createRule({
       name: "序章类",
       pattern: "^(序章?|楔子)",
@@ -203,7 +203,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
 describe("T-SR2: resetDefaults 与 seed 幂等", () => {
   it("resetDefaults 只删 builtin-% 重灌，用户规则不动且顺序保持", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const mine = unwrap(await svc.createRule({ name: "mine", pattern: "(\\d+)" }));
     // 禁用内置 + 给用户规则改名，验证 resetDefaults 不影响用户规则
     unwrap(await svc.setEnabled("builtin-zh-chapter", false));
@@ -223,7 +223,7 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
 
   it("resetDefaults 后用户置顶规则回落到 builtin 默认序之后（B-2，不按 rule_id 决胜交错）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const mine = unwrap(await svc.createRule({ name: "mine", pattern: "(\\d+)" }));
     // 用户规则置顶：sort_order=1，与重灌 builtin 的种子 sortOrder 1..7 撞号
     unwrap(await svc.moveRule(mine.ruleId, "top"));
@@ -241,9 +241,9 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
 
   it("seed 幂等不覆盖存量行（禁用内置后重跑 seed 保持禁用，D3）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     unwrap(await svc.setEnabled("builtin-en-chapter", false));
-    await seedBuiltinSmartSortRules(ctx.conn);
+    await BuiltinSmartSortRules.seed(ctx.conn);
     const rules = await svc.listRules();
     const en = rules.find((r) => r.ruleId === "builtin-en-chapter")!;
     assert.equal(en.enabled, false, "INSERT OR IGNORE 不覆盖存量禁用态");
@@ -255,7 +255,7 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
 describe("T-SR3: export→import round-trip 无损（替换式）", () => {
   it("round-trip 保留 ruleId/enabled/description 与顺序（sort_order 重编号后顺序一致）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const a = unwrap(await svc.createRule({
       name: "a",
       pattern: "(\\d+)",
@@ -307,7 +307,7 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
 
   it("importRules 兼容 v1 旧文档（example 字段自动映射为 description）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const imported = unwrap(await svc.importRules({
       schemaVersion: 1,
       rules: [
@@ -328,14 +328,14 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
 
   it("importRules 拒绝重复 ruleId 与非法规则（先校验后替换，不半删）", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     const before = await svc.listRules();
     const doc = await svc.exportRules();
     const duplicate = structuredClone(doc);
     duplicate.rules.push({ ...duplicate.rules[0]! });
     await rejectsErr(
       () => svc.importRules(duplicate),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_CONFLICT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_CONFLICT")
     );
     const invalid = structuredClone(doc);
     invalid.rules.push({
@@ -348,7 +348,7 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
     });
     await rejectsErr(
       () => svc.importRules(invalid),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
     // 校验失败不落半删状态
     assert.deepEqual(
@@ -361,25 +361,25 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
 describe("T-SR4: 非法正则/零捕获组/非法 flags 被拒", () => {
   it("create rejects uncompilable pattern with INVALID_PATTERN", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     await rejectsErr(
       () => svc.createRule({ name: "bad", pattern: "第([0-9]+章" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_PATTERN")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_PATTERN")
     );
   });
 
   it("create rejects zero-capture-group pattern with INVALID_ARGUMENT", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     await rejectsErr(
       () => svc.createRule({ name: "bad", pattern: "第[0-9]+章" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
   });
 
   it("D13：fixed 档不强制捕获组；切回 smart 时零捕获组才被拒", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     // fixed 档 + 无捕获组：合法（命中即哨兵，捕获组被忽略）。
     const fixed = unwrap(await svc.createRule({
       name: "序章类",
@@ -396,20 +396,20 @@ describe("T-SR4: 非法正则/零捕获组/非法 flags 被拒", () => {
     // 切回 smart：零捕获组开始被拒（按合并后档位校验）。
     await rejectsErr(
       () => svc.updateRule(fixed.ruleId, { captureKind: "smart" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
   });
 
   it("create/update reject invalid flags (非 gimsuy 字符 / 重复)", async () => {
     const ctx = getNovelMasterTestContext();
-    const svc = createSmartSortRuleService(ctx.conn);
+    const svc = SmartSortRuleServiceFactory.create(ctx.conn);
     await rejectsErr(
       () => svc.createRule({ name: "bad", pattern: "(\\d+)", flags: "gx" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
     await rejectsErr(
       () => svc.createRule({ name: "bad", pattern: "(\\d+)", flags: "gg" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
     const ok = unwrap(await svc.createRule({
       name: "ok",
@@ -418,7 +418,7 @@ describe("T-SR4: 非法正则/零捕获组/非法 flags 被拒", () => {
     }));
     await rejectsErr(
       () => svc.updateRule(ok.ruleId, { flags: "x" }),
-      (e: unknown) => isAppError(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
+      (e: unknown) => AppErrorOps.is(e, "SMART_SORT_RULE_INVALID_ARGUMENT")
     );
     const stillOk = unwrap(await svc.updateRule(ok.ruleId, { flags: "gi" }));
     assert.equal(stillOk.flags, "gi");

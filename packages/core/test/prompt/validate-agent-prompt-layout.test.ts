@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import type { Result } from "../../src/errors/either.js";
-import { agentDefinitionSchema } from "../../src/domain/agent/model/agent-definition.schema.js";
-import { decode } from "../../src/infra/serialization/decode.js";
-import { AgentPromptLayoutValidate } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  agentDefinitionSchema  } from "../../src/domain/agent/model/agent-definition.schema.js";
+import {  SerializationDecode  } from "../../src/infra/serialization/decode.js";
+import {  AgentPromptLayoutValidate  } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 import type { AppError } from "../../src/errors/app-error.js";
 
 type LayoutErrorKey = "PROMPT_INVALID_LAYOUT" | "PROMPT_INVALID_MACRO";
@@ -26,7 +26,7 @@ function expectError(result: Result<unknown, unknown>, key: LayoutErrorKey, patt
   if (result.ok) {
     assert.fail("预期校验失败，实际成功");
   }
-  assert.ok(isAppError(result.error, key), `期望 ${key}，实际 ${String(result.error)}`);
+  assert.ok(AppErrorOps.is(result.error, key), `期望 ${key}，实际 ${String(result.error)}`);
   assert.match(renderError(result.error), pattern);
 }
 
@@ -176,7 +176,7 @@ describe("agentDefinitionSchema wire", () => {
   it("拒绝 prompts.blocks", () => {
     // preprocess 的 removed-feature 拦截沿 issue params 数据通道出 zod 管道，
     // decode 失败分支提取回 AppError 进 Err——与读侧 decode 入口同一契约。
-    const parsed = decode(
+    const parsed = SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "a",
@@ -187,13 +187,13 @@ describe("agentDefinitionSchema wire", () => {
     assert.ok(!parsed.ok, "prompts.blocks 应走 Err 通道");
     if (!parsed.ok) {
       assert.ok(
-        isAppError(parsed.error, "AGENT_INVALID_SCHEMA") && parsed.error.message.includes("prompts.blocks is removed"),
+        AppErrorOps.is(parsed.error, "AGENT_INVALID_SCHEMA") && parsed.error.message.includes("prompts.blocks is removed"),
       );
     }
   });
 
   it("拒绝 prompts.regions", () => {
-    const parsed = decode(
+    const parsed = SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "a",
@@ -204,13 +204,13 @@ describe("agentDefinitionSchema wire", () => {
     assert.ok(!parsed.ok, "prompts.regions 应走 Err 通道");
     if (!parsed.ok) {
       assert.ok(
-        isAppError(parsed.error, "AGENT_INVALID_SCHEMA") && parsed.error.message.includes("prompts.regions"),
+        AppErrorOps.is(parsed.error, "AGENT_INVALID_SCHEMA") && parsed.error.message.includes("prompts.regions"),
       );
     }
   });
 
   it("拒绝 prompts.chat", () => {
-    const parsed = decode(
+    const parsed = SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "a",
@@ -221,7 +221,7 @@ describe("agentDefinitionSchema wire", () => {
     assert.ok(!parsed.ok, "prompts.chat 应走 Err 通道");
     if (!parsed.ok) {
       assert.ok(
-        isAppError(parsed.error, "AGENT_INVALID_SCHEMA") && parsed.error.message.includes("prompts.chat"),
+        AppErrorOps.is(parsed.error, "AGENT_INVALID_SCHEMA") && parsed.error.message.includes("prompts.chat"),
       );
     }
   });

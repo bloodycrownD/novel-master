@@ -3,10 +3,6 @@
  * `key: value` 行。不认识任何业务实体，三端共用。
  *
  * @module common/front-matter
- *
- * 裸导出而非 object namespace：`splitMarkdownFrontMatter` 是
- * `@novel-master/core/workplace` 的既有公开契约名（mobile 预览与 package-exports
- * 快照按此名消费），保留原名才能让 public/workplace 只改转发来源一行。
  */
 
 const FRONT_MATTER_DELIMITER = /^---\s*$/;
@@ -34,44 +30,51 @@ interface FrontMatterField {
  *
  * @remarks 未闭合的起始 `---` 按「无 front matter」处理，正文取原文。
  */
-export function splitMarkdownFrontMatter(content: string): MarkdownFrontMatterSplit {
-    const lines = content.split(/\r?\n/);
-    if (lines.length === 0 || !FRONT_MATTER_DELIMITER.test(lines[0] ?? "")) {
-        return { frontMatterLines: null, body: content, closed: true };
-    }
-    const frontMatterLines: string[] = [];
-    let closed = false;
-    let endIndex = 1;
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i] ?? "";
-        if (FRONT_MATTER_DELIMITER.test(line)) {
-            closed = true;
-            endIndex = i + 1;
-            break;
+export const FrontMatter = {
+    /**
+     * Splits YAML front matter between `---` lines from the Markdown body.
+     *
+     * @remarks 未闭合的起始 `---` 按「无 front matter」处理，正文取原文。
+     */
+    splitMarkdown(content: string): MarkdownFrontMatterSplit {
+        const lines = content.split(/\r?\n/);
+        if (lines.length === 0 || !FRONT_MATTER_DELIMITER.test(lines[0] ?? "")) {
+            return { frontMatterLines: null, body: content, closed: true };
         }
-        frontMatterLines.push(line);
-    }
-    if (!closed) {
-        return { frontMatterLines: null, body: content, closed: true };
-    }
-    return { frontMatterLines, body: lines.slice(endIndex).join("\n"), closed: true };
-}
+        const frontMatterLines: string[] = [];
+        let closed = false;
+        let endIndex = 1;
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i] ?? "";
+            if (FRONT_MATTER_DELIMITER.test(line)) {
+                closed = true;
+                endIndex = i + 1;
+                break;
+            }
+            frontMatterLines.push(line);
+        }
+        if (!closed) {
+            return { frontMatterLines: null, body: content, closed: true };
+        }
+        return { frontMatterLines, body: lines.slice(endIndex).join("\n"), closed: true };
+    },
 
-/**
- * Splits front matter lines into `key: value` display rows.
- *
- * @remarks 空行与 `#` 注释行跳过；首个 `:` 前为非空 key 才拆成 key/value，
- * 否则整行落在 value（key 为空串）。不解析引号 / 数组 / 嵌套结构。
- */
-export function parseFrontMatterFields(lines: readonly string[]): FrontMatterField[] {
-    const fields: FrontMatterField[] = [];
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) {
-            continue;
+    /**
+     * Splits front matter lines into `key: value` display rows.
+     *
+     * @remarks 空行与 `#` 注释行跳过；首个 `:` 前为非空 key 才拆成 key/value，
+     * 否则整行落在 value（key 为空串）。不解析引号 / 数组 / 嵌套结构。
+     */
+    parseFields(lines: readonly string[]): FrontMatterField[] {
+        const fields: FrontMatterField[] = [];
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) {
+                continue;
+            }
+            const colon = trimmed.indexOf(":");
+            fields.push(colon > 0 ? { key: trimmed.slice(0, colon).trim(), value: trimmed.slice(colon + 1).trim() } : { key: "", value: trimmed });
         }
-        const colon = trimmed.indexOf(":");
-        fields.push(colon > 0 ? { key: trimmed.slice(0, colon).trim(), value: trimmed.slice(colon + 1).trim() } : { key: "", value: trimmed });
-    }
-    return fields;
-}
+        return fields;
+    },
+} as const;

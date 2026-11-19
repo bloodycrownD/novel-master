@@ -7,8 +7,8 @@
  * @module domain/vfs/logic/format-vfs-error-for-user
  */
 
-import { isAppError } from "@/errors/app-error.js";
-import { inDomain } from "@/errors/guards.js";
+import { AppErrorOps } from "@/errors/app-error.js";
+import { ErrorGuards } from "@/errors/guards.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { CORE_MESSAGE_KEYS } from "@/i18n/keys.js";
@@ -52,7 +52,7 @@ export const VfsErrorForUser = {
    */
   format: (error: unknown, _scope?: VfsScope): CoreMessageDescriptor => {
     // 旧 ToolError 的 cause 解包（类已退役，等价判 TOOL 域段；cause 双写在 Error.cause 与 details.cause）。
-    if (inDomain(error, "TOOL")) {
+    if (ErrorGuards.inDomain(error, "TOOL")) {
       const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
       if (cause != null) {
         return VfsErrorForUser.format(cause, _scope);
@@ -68,7 +68,7 @@ export const VfsErrorForUser = {
     }
 
     let shape: VfsErrorLike | null;
-    if (isAppError(error)) {
+    if (AppErrorOps.is(error)) {
       const code = APP_ERROR_TO_VFS_CODE[error.key];
       shape = code == null ? null : { code, message: error.message, path: typeof error.details?.path === "string" ? error.details.path : undefined };
       if (shape == null) {

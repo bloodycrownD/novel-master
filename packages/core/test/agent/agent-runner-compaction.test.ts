@@ -12,9 +12,9 @@
  *    agent-runner 不再经事件编排器走压缩路径。
  */
 import assert from "node:assert/strict";
-import { after, describe, it, mock } from "node:test";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { Result } from "../../src/errors/either.js";
+import {  after, describe, it, mock  } from "node:test";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type {
   AgentDefinition,
@@ -52,7 +52,9 @@ const runCompactionMock = mock.fn(
 // 必须在 import 任何会间接触发 run-compaction 模块加载的代码之前注册 mock。
 mock.module("../../src/service/compaction-conditions/run-compaction.js", {
   namedExports: {
-    runCompaction: runCompactionMock,
+    Compaction: {
+      run: runCompactionMock,
+    },
   },
 });
 

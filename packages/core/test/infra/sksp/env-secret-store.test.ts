@@ -1,19 +1,19 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import {  describe, it, beforeEach, afterEach  } from "node:test";
 import assert from "node:assert/strict";
-import { refToEnvVar } from "../../../src/infra/sksp/logic/ref-to-env.js";
-import { SkspFactory } from "../../../src/infra/sksp/impl/sksp-factory.js";
+import {  SkspRefToEnv  } from "../../../src/infra/sksp/logic/ref-to-env.js";
+import {  SkspFactory  } from "../../../src/infra/sksp/impl/sksp-factory.js";
 
 describe("refToEnvVar", () => {
   it("maps provider apiKey refs", () => {
     assert.equal(
-      refToEnvVar("provider/openai/apiKey"),
+      SkspRefToEnv.toEnvVar("provider/openai/apiKey"),
       "NOVEL_MASTER_PROVIDER_OPENAI_API_KEY",
     );
     assert.equal(
-      refToEnvVar("provider/my-gw/apiKey"),
+      SkspRefToEnv.toEnvVar("provider/my-gw/apiKey"),
       "NOVEL_MASTER_PROVIDER_MY_GW_API_KEY",
     );
-    assert.equal(refToEnvVar("other/ref"), null);
+    assert.equal(SkspRefToEnv.toEnvVar("other/ref"), null);
   });
 });
 

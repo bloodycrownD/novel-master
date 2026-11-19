@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw } from "../../src/infra/serialization/decode.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { sessionAgentConfigSchema } from "../../src/domain/chat/model/session-agent-config.schema.js";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "../../src/infra/serialization/decode.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  sessionAgentConfigSchema  } from "../../src/domain/chat/model/session-agent-config.schema.js";
 import type { ZodType } from "zod";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  const r = decodeRaw(raw, schema);
+  const r = SerializationDecode.decode(raw, schema);
   if (!r.ok) throw r.error;
   return r.value;
 }
@@ -16,14 +16,14 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
   it("缺 agentId 报错", () => {
     assert.throws(
       () => decode({}, sessionAgentConfigSchema),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 
   it("空 agentId 报错", () => {
     assert.throws(
       () => decode({ agentId: "" }, sessionAgentConfigSchema),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 
@@ -49,7 +49,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
           { agentId: "a", extra: 1 } as Record<string, unknown>,
           sessionAgentConfigSchema,
         ),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
     // 老 mode 字段现在被 .strict() 拒绝
     assert.throws(
@@ -58,7 +58,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
           { mode: "bind", agentId: "a" } as Record<string, unknown>,
           sessionAgentConfigSchema,
         ),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 
@@ -69,7 +69,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
           { agentId: "a", modelId: "" },
           sessionAgentConfigSchema,
         ),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 

@@ -1,19 +1,19 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { FileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
-import { FileTools } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { TextBlocks } from "../../src/domain/chat/content/text-blocks.js";
-import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
-import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  describe, it, mock  } from "node:test";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  WorkplaceDisplayAssembler  } from "../../src/service/workplace/assemble-workplace-display.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  FileTools  } from "../../src/domain/tool/builtin/vfs-tools.js";
+import {  TextBlocks  } from "../../src/domain/chat/content/text-blocks.js";
+import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
+import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -27,8 +27,8 @@ function layoutWithoutWorkplace(): Pick<AgentPromptLayout, "workplace"> {
 
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
-async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
-  return outcomeValue(await assembleWorkplaceDisplay(...args));
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
 }
 
 describe("assembleWorkplaceDisplay", () => {
@@ -36,10 +36,10 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "hello");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -63,16 +63,16 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "hello-world");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -106,10 +106,10 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "revived");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -117,7 +117,7 @@ describe("assembleWorkplaceDisplay", () => {
 
     await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -138,10 +138,10 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const baseVfs = ctx.sessionVfs(project.id, session.id);
     await baseVfs.write("/once.md", "body");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -157,7 +157,7 @@ describe("assembleWorkplaceDisplay", () => {
       },
     });
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -195,10 +195,10 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const baseVfs = ctx.sessionVfs(project.id, session.id);
     await baseVfs.write("/race.md", "body");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -213,7 +213,7 @@ describe("assembleWorkplaceDisplay", () => {
         return Reflect.get(target, prop, receiver);
       },
     });
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -238,7 +238,7 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const writeTool = FileTools.create().find((t) => t.name === "write");
     assert.ok(writeTool != null);
@@ -262,7 +262,7 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/e.md", "alpha");
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
@@ -286,16 +286,16 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/again.md", "v1");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/again.md", inclusionMode: "show" });
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -328,7 +328,7 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const cachedBody = JSON.stringify({ body: "keep-me", mtimeMs: 42 });
     const delKey = RuleSnapshotCodec.fileCacheKey("full", "/del.md");
@@ -361,11 +361,11 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-oversize-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/毒卡/巨型设定.md", "poison-body");
     await vfs.write("/正常.md", "hello-world");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -416,13 +416,13 @@ describe("assembleWorkplaceDisplay", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/卷/第一章.md", "正文一");
     await vfs.write("/卷/第二章.md", "正文二");
     await vfs.write("/卷/第三章.md", "正文三");
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -460,10 +460,10 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "hello");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -488,7 +488,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/full.md", "full-body");
     await vfs.write("/hdr.md", "header-body");
@@ -508,7 +508,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
-        workplace: createWorkplaceService(ctx.conn, {
+        workplace: WorkplaceServiceFactory.create(ctx.conn, {
           kind: "session",
           projectId: project.id,
           sessionId: session.id,
@@ -539,11 +539,11 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/hdr.md", "HEADER-BODY");
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,

@@ -17,7 +17,7 @@
 import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { DirectoryChain } from "./ensure-directory-chain.js";
 import type { RestorePathDeps, RestorePathError, RestorePathOutcome, RestorePathParams } from "./restore-path-model.js";
@@ -64,7 +64,7 @@ export const DeletedEntry = {
       // revisionHeadBackfill 对 entry 已删场景回补的 deleted 墓碑会落到这里——
       // 目标即删除态，路径上不留文件。
       const removed = await vfs.delete(logicalPath);
-      if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
+      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
         return Result.err(removed.error);
       }
       return Result.ok("deleted");
@@ -84,7 +84,7 @@ export const DeletedEntry = {
     if (!occupied.ok) return Result.err(occupied.error);
     if (occupied.value != null) {
       const removed = await vfs.delete(logicalPath);
-      if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
+      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
         return Result.err(removed.error);
       }
     }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
-import { TextBlocks } from "@novel-master/core/chat";
+import {  describe, it  } from "node:test";
+import {  ChatMessage  } from "../../src/domain/chat/logic/message/chat-message.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
 import type { ChatMessageData, MessageAttachment } from "@novel-master/core/chat";
 
 function stubMessage(

@@ -2,10 +2,10 @@
  * Composer `@路径` 插入 / typeahead / 扫描门闩（迁并双端 T-ATD*；T-X2-2）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
-import { composerAtPath } from "../../src/domain/chat/logic/composer/composer-at-path.js";
+import {  describe, it  } from "node:test";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  attachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import {  composerAtPath  } from "../../src/domain/chat/logic/composer/composer-at-path.js";
 
 describe("composer-at-path", () => {
   it("T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /", () => {

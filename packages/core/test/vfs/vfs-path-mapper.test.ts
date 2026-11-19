@@ -1,9 +1,9 @@
-import { unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { LogicalPath } from "@novel-master/core/vfs";
-import { KnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
+import {  describe, it  } from "node:test";
+import {  LogicalPath  } from "@novel-master/core/vfs";
+import {  KnownPhysicalPrefixes  } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
 
 /** 解包 Result 成功分支；失败直接让测试失败。 */
 function unwrapPath(result: ReturnType<typeof LogicalPath.resolve>): string {
@@ -30,7 +30,7 @@ describe("vfs-path-mapper", () => {
     for (const logical of ["/template/legacy.md", "/template"]) {
       const rejected = LogicalPath.validate({ kind: "global" }, logical);
       assert.ok(!rejected.ok, "legacy /template 前缀必须走 Err 分支（不再 throw）");
-      if (!rejected.ok) assert.ok(isAppError(rejected.error, "VFS_INVALID_PATH"));
+      if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "VFS_INVALID_PATH"));
     }
   });
 
@@ -65,7 +65,7 @@ describe("vfs-path-mapper", () => {
     for (const physical of ["/projects/p1/template/a.md", "/projects/p2/meta/skills/a/SKILL.md"]) {
       const rejected = LogicalPath.toLogical(scope, physical);
       assert.ok(!rejected.ok, `越 scope 必须走 Err 分支：${physical}`);
-      if (!rejected.ok) assert.ok(isAppError(rejected.error, "VFS_INVALID_PATH"));
+      if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "VFS_INVALID_PATH"));
     }
   });
 

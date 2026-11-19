@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it, mock } from "node:test";
+import {  afterEach, describe, it, mock  } from "node:test";
 
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
-import { TemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
-import { Encoding } from "../../src/common/encoding.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  TemplateEngine  } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  TOOL_OUTPUT_MAX_BYTES  } from "../../src/domain/tool/logic/tool-output-limits.js";
+import {  Encoding  } from "../../src/common/encoding.js";
 import type { ResolvedEngineConfig, SearchEngineTemplate } from "../../src/domain/tool/builtin/search/types.js";
 
 /** 构造记录调用参数的 mock fetchFn：按序回放预设 Response（照 search-engines 旧测试先例）。 */
@@ -378,7 +378,7 @@ describe("模板执行器：父级取消透传（G-1）", () => {
       // 取消统一 TOOL_CANCELLED 控制流码（不再走引擎失败文案）；message 走
       // desc 中性文案（三期撤 detail 的既成设计，tool-runner / 各引擎构造一致），
       // 引擎名信息改从 details.toolName 断言（不再锁定已退役的 detail 文案）。
-      assert.ok(isAppError(error, "TOOL_CANCELLED"));
+      assert.ok(AppErrorOps.is(error, "TOOL_CANCELLED"));
       assert.match(error.message, /tool execution cancelled/);
       assert.equal((error as { details?: { toolName?: string } }).details?.toolName, "测试引擎");
       return true;

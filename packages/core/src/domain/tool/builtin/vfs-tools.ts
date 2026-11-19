@@ -11,15 +11,15 @@ import type { VfsGrepMatch, VfsReadResult } from "@/domain/vfs/ports/vfs-service
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { FsCommand, type FsCommandResult } from "../logic/fs-command.js";
 import { ToolOutputLimits, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../logic/tool-output-limits.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { backfillMissingDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { ImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.vfs");
+const log = LogFactory.create("tool.vfs");
 
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = ["read", "write", "edit", "fs", "glob", "grep"] as const;
@@ -223,7 +223,7 @@ export const FileTools = {
         if (ctx.workplace != null) {
           const probe = await ctx.vfs.read(logicalPath);
           if (!probe.ok) {
-            if (isAppError(probe.error, "VFS_NOT_FOUND")) isNewFile = true;
+            if (AppErrorOps.is(probe.error, "VFS_NOT_FOUND")) isNewFile = true;
             else log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error: probe.error });
           }
         }
@@ -469,7 +469,7 @@ export const FileTools = {
       // 求差 / 跳根 / 路径规范化内核与导入链路共享；写入载体仍是 service
       // 层的 setDirRule（缺省字段即默认启用），BuiltinToolContext 依赖形状不变。
       const workplace = ctx.workplace;
-      const backfilled = await backfillMissingDirRules(chain, existing, (logicalPath) => workplace.setDirRule({ logicalPath }));
+      const backfilled = await ImportDirRules.backfillMissing(chain, existing, (logicalPath) => workplace.setDirRule({ logicalPath }));
       if (!backfilled.ok) {
         log.debug(`补目录规则失败（${dirLogicalPath}）`, { error: backfilled.error });
       }

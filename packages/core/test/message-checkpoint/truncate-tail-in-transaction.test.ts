@@ -2,24 +2,18 @@
  * truncate-tail-in-transaction 单测。
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USER_VFS_PENDING_QUEUE_KEY,
-  RULE_SNAPSHOT_CANON_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { TruncateTail } from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
-import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY, RULE_SNAPSHOT_CANON_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  TruncateTail  } from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -88,7 +82,7 @@ describe("TruncateTail.truncate", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
     await sessionKkv.set(
       session.id,
       SESSION_KKV_DOMAIN_USER_VFS_PENDING,
@@ -153,7 +147,7 @@ describe("TruncateTail.truncate", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
     const pendingJson = "[]";
     await sessionKkv.set(
       session.id,

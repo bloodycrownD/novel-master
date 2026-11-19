@@ -1,11 +1,8 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 
 // 独立文件（独享库）：本用例验证懒加载口径，必须保证评估时库里不存在其他
 // enabled+smart 目录规则——共享库文件里其他用例的 smart 规则残留会让旧实现
@@ -20,7 +17,7 @@ describe("smart 规则懒加载口径", () => {
     await gvfs.write("/novel/第四章.md", "FOUR");
     await gvfs.write("/novel/第一章.md", "ONE");
 
-    const wt = createWorkplaceService(ctx.conn, { kind: "global" });
+    const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
     const ruleBase = {
       logicalPath: "/novel",
       sortField: "smart" as const,

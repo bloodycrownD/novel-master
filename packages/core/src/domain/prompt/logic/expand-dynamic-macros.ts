@@ -8,8 +8,8 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import { DateTime } from "@/common/datetime.js";
-import { renderMacro } from "@/infra/prompt-template/macro-render.js";
-import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
+import { MacroRender } from "@/infra/prompt-template/macro-render.js";
+import { WeekCn } from "@/infra/prompt-template/week-cn.js";
 
 /** dynamic 宏展开上下文。 */
 interface DynamicMacroContext {
@@ -48,12 +48,12 @@ export const DynamicMacrosExpansion = {
     }
     const root = {
       time: DateTime.localDateTime(now),
-      week_cn: formatWeekCn(now),
+      week_cn: WeekCn.format(now),
       filetree,
     };
-    // renderMacro 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，
+    // MacroRender.render 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，
     // 不把 infra 的 AppError 漏出），detail/cause 与旧 catch 路径一致。
-    const rendered = renderMacro(content, { dot: {}, root });
+    const rendered = MacroRender.render(content, { dot: {}, root });
     if (!rendered.ok) {
       return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.macro_expand_failed", params: { detail: rendered.error.message } }, cause: rendered.error }));
     }

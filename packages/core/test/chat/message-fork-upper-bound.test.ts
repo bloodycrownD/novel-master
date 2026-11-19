@@ -5,18 +5,14 @@
  * `listBySessionUpToSeq` 的调用数），不是「服务内部调了哪个方法」——后者在换实现后
  * 立刻失真（RULE「给读路径换实现后观测面必须同步换」）。
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -159,7 +155,7 @@ describe("fork 上界读口（CD-13）", () => {
       await rejectsErr(
         () => ctx.messages.fork(session.id, ids[0]!),
         (error: unknown) =>
-          isAppError(error, "CHAT_INVALID_ARGUMENT") &&
+          AppErrorOps.is(error, "CHAT_INVALID_ARGUMENT") &&
           error.message.includes("No messages to fork up to the given id"),
       );
       assert.equal(txCalls, 0, "空集合守卫必须发生在开事务之前");

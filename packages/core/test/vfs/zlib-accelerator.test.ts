@@ -17,15 +17,15 @@
  */
 
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
-import { deflateSync, inflateSync } from "node:zlib";
-import { unzlibSync, zlibSync } from "fflate";
-import { ZlibAccelerator, type ZlibCodecAccelerator } from "../../src/domain/vfs/content-store/logic/zlib-accelerator.js";
-import { ZlibCodec } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
-import { PackCodec } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
-import { encodeFossilChainPack, encodeZlibConcatPack } from "../helpers/pack-fixtures.js";
+import {  afterEach, describe, it  } from "node:test";
+import {  deflateSync, inflateSync  } from "node:zlib";
+import {  unzlibSync, zlibSync  } from "fflate";
+import {  ZlibAccelerator, type ZlibCodecAccelerator  } from "../../src/domain/vfs/content-store/logic/zlib-accelerator.js";
+import {  ZlibCodec  } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
+import {  PackCodec  } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
+import {  encodeFossilChainPack, encodeZlibConcatPack  } from "../helpers/pack-fixtures.js";
 import type { Result } from "../../src/errors/either.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  LogFactory  } from "@novel-master/core/log";
 
 /** 纯 logic 的 Result 解包：成功取 value，失败直接让用例红。 */
 function unwrapResult<T, E>(result: Result<T, E>): T {
@@ -77,7 +77,7 @@ const BINARY_PLAIN = Uint8Array.from({ length: 4096 }, (_, index) => (index * 37
 /** 捕获 warn 日志（回落告警断言用，finally 恢复）。 */
 function captureWarnings<T>(fn: () => T): { result: T; warnings: string[] } {
   const warnings: string[] = [];
-  setDefaultLogSink({
+  LogFactory.setDefaultSink({
     write(record) {
       if (record.level === "warn") {
         warnings.push(record.message);
@@ -87,7 +87,7 @@ function captureWarnings<T>(fn: () => T): { result: T; warnings: string[] } {
   try {
     return { result: fn(), warnings };
   } finally {
-    restoreDefaultLogSink();
+    LogFactory.restoreDefaultSink();
   }
 }
 

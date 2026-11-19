@@ -12,18 +12,14 @@
  * @module test/skills/skill-write-domain-not-found
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -58,7 +54,7 @@ async function captureError(fn: () => Promise<Result<unknown, AppError>>): Promi
 
 function asSkillError(error: Error, context: string): AppError<"SKILL_NOT_FOUND"> {
   assert.ok(
-    isAppError(error, "SKILL_NOT_FOUND"),
+    AppErrorOps.is(error, "SKILL_NOT_FOUND"),
     `${context} 应抛 SKILL_NOT_FOUND，实际：${error.name}: ${error.message}`
   );
   return error as AppError<"SKILL_NOT_FOUND">;
@@ -67,7 +63,7 @@ function asSkillError(error: Error, context: string): AppError<"SKILL_NOT_FOUND"
 describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路径）", () => {
   it("edit 落 project 域、技能只在 global 域：报错指向 domain:\"global\"", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const name = `global-only-${suffix}`;
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
@@ -99,7 +95,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
 
   it("edit 落 global 域、技能只在 project 域：报错指向 domain:\"project\"", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const name = `project-only-${suffix}`;
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
@@ -129,7 +125,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
 
   it("edit 落 global 域但无 projectId：明说无法确认 project 域，不谎报「没有」", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `no-projid-${testIsolationSuffix()}`;
 
     const raw = await captureError(() =>
@@ -151,7 +147,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
 
   it("两域都不存在：给新建提示，不误导去改另一域", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const name = `nowhere-${suffix}`;
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
@@ -176,7 +172,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
 
   it("write 落 project 域、技能只在 global 域：在 project 域新建副本，不动 global", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const name = `global-only-w-${suffix}`;
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
@@ -200,7 +196,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
 
   it("显式传对 domain 时 edit 正常成功（防止改坏正向路径）", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `global-ok-${testIsolationSuffix()}`;
 
     unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
@@ -219,7 +215,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
 
   it("非 NOT_FOUND 的写失败原样透传，不被误转成域错误", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `nomatch-${testIsolationSuffix()}`;
 
     unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
@@ -235,7 +231,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     );
 
     assert.ok(
-      !isAppError(error, "SKILL_NOT_FOUND"),
+      !AppErrorOps.is(error, "SKILL_NOT_FOUND"),
       `匹配失败不应伪装成域内未找到，实际：${error.name}: ${error.message}`
     );
   });

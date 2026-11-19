@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Number } from "../../../src/common/number.js";
-import { StreamMetricsLine } from "../../../src/domain/format/format-stream-metrics-line.js";
+import {  describe, it  } from "node:test";
+import {  Number  } from "../../../src/common/number.js";
+import {  StreamMetricsLine  } from "../../../src/domain/format/format-stream-metrics-line.js";
 import type { StreamMetricsLineInput } from "../../../src/domain/format/format-stream-metrics-line.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
 
 /** parts → 整行（消费方形态：`{prefix} · {elapsed} · {body}`，descriptor 经 tCore 渲染）。 */
 function renderMetricsLine(metrics: StreamMetricsLineInput): string {

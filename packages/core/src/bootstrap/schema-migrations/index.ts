@@ -6,11 +6,11 @@
 
 import { assert } from "@/common/assert.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
-import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";
+import { SchemaMigrationsTable } from "./schema-migrations-table.js";
 
-const log = createLogger("bootstrap.migrations");
+const log = LogFactory.create("bootstrap.migrations");
 
 /**
  * 本版本最低支持 v1.5.23。以下 18 条 migration 的逻辑已并入 canonical DDL、
@@ -19,7 +19,7 @@ const log = createLogger("bootstrap.migrations");
  * rename-worktree-tables-to-workplace-v1、vfs-content-blob-zlib-v1、vfs-revision-ref-count-v1、
  * vfs-entry-id-redesign-v1、session-agent-config-v2、project-agent-config-cleanup-v1、
  * orphan-revision-gc-v1（运行期 deleteGlobalOrphans 持续维护）、table-constraints-v1b
- * （约束形态已是 canonical DDL，legacy 探针见 assertMinimumBaseline）、
+ * （约束形态已是 canonical DDL，legacy 探针见 NovelMasterBootstrap.assertMinimumBaseline）、
  * usage-cache-model-backfill-v1（第四轮退役：数据回填迁移，v1.5.4 首发引入，
  * 所有 ≥v1.5.5 的库均已登记应用记录，进入 BASELINE_MIGRATION_IDS 判据；
  * 数据迁移无 schema 形态可探，老库识别依赖既有 legacy 探针）。
@@ -36,7 +36,7 @@ const log = createLogger("bootstrap.migrations");
  * dedup-file-cache-storage-v1（v1.5.22 首发，清空 file_cache 存量行的数据迁移，
  * 按惯例只进基线清单、无 schema 形态可探）。
  *
- * 更早版本的库由 {@link assertMinimumBaseline}（novel-master-bootstrap）fail-fast 拦截。
+ * 更早版本的库由 {@link NovelMasterBootstrap.assertMinimumBaseline}（novel-master-bootstrap）fail-fast 拦截。
  */
 
 /**
@@ -48,30 +48,35 @@ const log = createLogger("bootstrap.migrations");
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [];
 
 /**
- * 执行 pending schema migration。
- *
- * 须在 bootstrap 事务内、DDL 之后、alignSchemaColumns 之前调用。
+ * schema migration runner 操作族。
  */
-export async function runPendingSchemaMigrations(tx: TdbcConnection): Promise<void> {
-  await ensureSchemaMigrationsTable(tx);
-  const applied = await listAppliedSchemaMigrationIds(tx);
+export const SchemaMigrations = {
+  /**
+   * 执行 pending schema migration。
+   *
+   * 须在 bootstrap 事务内、DDL 之后、SchemaColumnAlign.align 之前调用。
+   */
+  async runPending(tx: TdbcConnection): Promise<void> {
+    await SchemaMigrationsTable.ensure(tx);
+    const applied = await SchemaMigrationsTable.listAppliedIds(tx);
 
-  const seen = new Set<string>();
-  for (const migration of SCHEMA_MIGRATIONS) {
-    assert(!seen.has(migration.id), `重复的 schema migration id: ${migration.id}`);
-    seen.add(migration.id);
+    const seen = new Set<string>();
+    for (const migration of SCHEMA_MIGRATIONS) {
+      assert(!seen.has(migration.id), `重复的 schema migration id: ${migration.id}`);
+      seen.add(migration.id);
 
-    if (applied.has(migration.id)) {
-      continue;
+      if (applied.has(migration.id)) {
+        continue;
+      }
+
+      log.error(`migration run: ${migration.id}`);
+      await migration.up(tx);
+      await SchemaMigrationsTable.markApplied(tx, migration.id, Date.now());
+      applied.add(migration.id);
+      log.error(`migration applied: ${migration.id}`);
     }
-
-    log.error(`migration run: ${migration.id}`);
-    await migration.up(tx);
-    await markSchemaMigrationApplied(tx, migration.id, Date.now());
-    applied.add(migration.id);
-    log.error(`migration applied: ${migration.id}`);
-  }
-}
+  },
+} as const;
 
 export type { SchemaMigration } from "./schema-migration.types.js";
-export { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";
+export { SchemaMigrationsTable } from "./schema-migrations-table.js";

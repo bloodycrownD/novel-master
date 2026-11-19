@@ -4,7 +4,7 @@
  * @module domain/workplace/front-matter
  */
 
-import { splitMarkdownFrontMatter } from "@/common/front-matter.js";
+import { FrontMatter as MarkdownFrontMatter } from "@/common/front-matter.js";
 
 export const FrontMatter = {
   /**
@@ -13,7 +13,7 @@ export const FrontMatter = {
    * @returns Display lines (`lineNo|content`) or PRD fallback on failure.
    */
   parseMarkdown(content: string): string[] {
-    const split = splitMarkdownFrontMatter(content);
+    const split = MarkdownFrontMatter.splitMarkdown(content);
     if (split.frontMatterLines === null) {
       return ["1|（无 Front Matter）"];
     }

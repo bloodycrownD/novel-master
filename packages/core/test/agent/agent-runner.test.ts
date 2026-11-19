@@ -1,25 +1,25 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { Result } from "../../src/errors/either.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
-import { AppError } from "@novel-master/core/errors";
-import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type  AgentRunFinishedPayload, type  AgentRunStartedPayload, type  AgentStreamTextDeltaPayload } from "@novel-master/core/events";
-import { Random } from "../../src/common/random.js";
-import { BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
-import { type ModelRequestService } from "@novel-master/core/provider";
-import { type LlmChatResult } from "@novel-master/core/llm-protocol";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  describe, it, mock  } from "node:test";
+import {  AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  AppError  } from "@novel-master/core/errors";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type  AgentRunFinishedPayload, type  AgentRunStartedPayload, type  AgentStreamTextDeltaPayload  } from "@novel-master/core/events";
+import {  Random  } from "../../src/common/random.js";
+import {  BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 import type { SkillService } from "../../src/service/skills/skills.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 function minimalDefinition(): AgentDefinition {
@@ -1689,7 +1689,7 @@ describe("AgentRunner", () => {
   // MF-3：KKV 坏值（PreferencesError）不应炸掉整个 run。
   it("thinking 偏好抛 PreferencesError 时回退 false（默认关），run 正常完成并记标签日志", async () => {
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       const session = new InMemoryAgentSession();
       unwrap(await session.append("user", TextBlocks.of("go")));
@@ -1755,7 +1755,7 @@ describe("AgentRunner", () => {
       assert.equal(payload.code, "PREFERENCES_INVALID_VALUE");
       assert.equal(payload.fallback, false);
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
   });
 });

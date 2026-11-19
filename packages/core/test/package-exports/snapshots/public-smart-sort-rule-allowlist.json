@@ -6,5 +6,5 @@
   "SmartSortRule",
   "SmartSortRuleCompiler",
   "SmartSortRuleIo",
-  "createSmartSortRuleService"
+  "SmartSortRuleServiceFactory"
 ]

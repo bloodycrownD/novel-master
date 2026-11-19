@@ -14,7 +14,9 @@ import type { SessionRunStateService } from "./session-run-state.port.js";
  * 端口适配器（调用方依赖注入的接缝）：`settle` 按端口契约写入 settled 行并清空
  * partial 字段，其余方法原样转发。
  *
- * @param conn - 已 {@link bootstrapNovelMaster} 的连接（可为事务连接）
+ * @param conn - 已 {@link NovelMasterBootstrap.bootstrap} 的连接（可为事务连接）
+ *
+ * nm-style: keep-bare — session/project 两服务事务内按需构造的端口适配器工厂（单文件单函数），p23 重复组与 p24 主体桶均不在收口范围。
  */
 export function createSessionRunStateService(conn: TdbcConnection): SessionRunStateService {
   const repo = new SqliteSessionRunStateRepository(conn);

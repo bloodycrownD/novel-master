@@ -18,7 +18,7 @@ import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Outcome } from "@/errors/outcome.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
@@ -34,7 +34,7 @@ import { SkillName } from "@/domain/skills/model/skill-name.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { SkillEditMatch, SkillFileContent, SkillInfoChanges, SkillListItem, SkillListScope, SkillLocation, SkillService, SkillWriteOptions } from "../skills.port.js";
 
 /** Dependencies for {@link SkillsService}。 */
@@ -136,7 +136,7 @@ export class SkillsService implements SkillService {
    * 方向新建，所以三态不可并成两态。
    */
   private async toWriteNotFoundError(error: unknown, name: string, path: string, domain: SkillDomain, projectId?: string): Promise<AppError<"SKILL_NOT_FOUND">> {
-    if (!isAppError(error, "VFS_NOT_FOUND")) {
+    if (!AppErrorOps.is(error, "VFS_NOT_FOUND")) {
       throw error;
     }
     const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
@@ -171,7 +171,7 @@ export class SkillsService implements SkillService {
     let entries: VfsListEntry[];
     if (listed.ok) {
       entries = listed.value;
-    } else if (isAppError(listed.error, "VFS_NOT_FOUND")) {
+    } else if (AppErrorOps.is(listed.error, "VFS_NOT_FOUND")) {
       // 技能根目录尚不存在 = 无技能（write 首个 SKILL.md 时才会建目录行）
       return { kind: "completed", value: [] };
     } else {
@@ -270,7 +270,7 @@ export class SkillsService implements SkillService {
           version: result.value.version,
         });
       }
-      if (isAppError(result.error, "VFS_NOT_FOUND")) {
+      if (AppErrorOps.is(result.error, "VFS_NOT_FOUND")) {
         continue;
       }
       return Result.err(result.error);
@@ -452,7 +452,7 @@ export class SkillsService implements SkillService {
         if (renaming) {
           const renamed = await vfs.renamePrefix(oldPrefix, newPrefix);
           // 事务回调内失败必须 throw 才能回滚（unwrapOrRollback 集中解包，见 helper 注释）。
-          unwrapOrRollback(renamed);
+          TdbcTransaction.unwrapOrRollback(renamed);
         }
 
         // 校验链 6：front matter 同步——解析成功才重写（bump version +
@@ -463,14 +463,14 @@ export class SkillsService implements SkillService {
         const entryRead = await vfs.read(entryPath);
         if (entryRead.ok) {
           source = entryRead.value.content;
-        } else if (!isAppError(entryRead.error, "VFS_NOT_FOUND")) {
+        } else if (!AppErrorOps.is(entryRead.error, "VFS_NOT_FOUND")) {
           // 非 NOT_FOUND 的读取失败：抛出触发事务回滚（helper 集中解包）。
-          unwrapOrRollback(entryRead);
+          TdbcTransaction.unwrapOrRollback(entryRead);
         }
         if (source != null && SkillFrontMatter.parse(source).valid) {
           const written = await vfs.write(entryPath, SkillFrontMatterValues.rewrite(source, { ...(newName != null ? { name: newName } : {}), ...(description != null ? { description } : {}) }));
           // 写失败必须回滚（renamePrefix 已迁移目录，吞错会留半写状态）。
-          unwrapOrRollback(written);
+          TdbcTransaction.unwrapOrRollback(written);
         }
 
         // 校验链 7：负清单迁移（仅改名时）——project 域迁本项目单行；
@@ -489,7 +489,7 @@ export class SkillsService implements SkillService {
     } catch (error) {
       // 两 driver 的事务实现都会把非 TdbcError（含 AppError）包装成
       // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码
-      if (error instanceof TdbcError && isAppError(error.cause)) {
+      if (error instanceof TdbcError && AppErrorOps.is(error.cause)) {
         throw error.cause;
       }
       throw error;

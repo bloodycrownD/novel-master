@@ -5,23 +5,23 @@
  * v1.5.41 同批；本文件只测读路径）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { PackCodec, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat } from "@/domain/vfs/content-store/logic/pack-codec.js";
-import { encodeFossilChainPack, encodeZlibConcatPack } from "../helpers/pack-fixtures.js";
-import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { ZlibCodec } from "@/domain/vfs/content-store/logic/zlib-codec.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
-import { Result } from "@/errors/either.js";
-import { AppError } from "@/errors/app-error.js";
-import { FileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
+import {  describe, it  } from "node:test";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  PackCodec, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat  } from "@/domain/vfs/content-store/logic/pack-codec.js";
+import {  encodeFossilChainPack, encodeZlibConcatPack  } from "../helpers/pack-fixtures.js";
+import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import {  ZlibCodec  } from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES  } from "@/domain/character-card/logic/character-card-limits.js";
+import {  Result  } from "@/errors/either.js";
+import {  AppError  } from "@/errors/app-error.js";
+import {  FileCache  } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
 import type { TdbcConnection } from "@novel-master/core";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Json } from "../../src/common/json.js";
+import {  describe, it  } from "node:test";
+import {  Json  } from "../../src/common/json.js";
 
 describe("common/json · Json.parseText", () => {
   it("剥 UTF-8 BOM 后解析", () => {

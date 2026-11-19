@@ -17,29 +17,20 @@
  * @module test/vfs/vfs-gc-trigger
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster } from "@novel-master/core";
-import { SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { createTemplatePullService } from "../../src/service/template/create-template-pull-service.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
-import {
-  VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT,
-  VFS_BLOB_GC_TRIGGER_LEGACY_NAMES,
-  VFS_BLOB_GC_TRIGGER_NAMES_V2,
-  VFS_ENTRY_CONTENT_HASH_INDEX_NAME,
-} from "../../src/bootstrap/vfs/vfs-revision-schema.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  TemplatePullServiceFactory  } from "../../src/service/template/create-template-pull-service.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
+import {  VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT, VFS_BLOB_GC_TRIGGER_LEGACY_NAMES, VFS_BLOB_GC_TRIGGER_NAMES_V2, VFS_ENTRY_CONTENT_HASH_INDEX_NAME  } from "../../src/bootstrap/vfs/vfs-revision-schema.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
 
 novelMasterTestFixture();
 
@@ -164,7 +155,7 @@ describe("T-G2: 模板替换链后无 orphan blob（pullSessionTemplate 载体�
     await pvfs.write("/a.md", `A2-${suffix}`, { versionCheck: false });
     await pvfs.write("/b.md", `B-${suffix}`);
 
-    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
     // 替换后 session 树与 project 快照一致
     const paths = (unwrap(await svfs.list("/", { recursive: true })))
@@ -609,7 +600,7 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
       );
 
       // ── 升级 ──────────────────────────────────────────────────────────
-      await bootstrapNovelMaster(ctx.conn);
+      await NovelMasterBootstrap.bootstrap(ctx.conn);
 
       // ── ① v2 存在且带守卫 / ② 旧名已 DROP / user_version 已 bump ───────
       const after = await ctx.conn.query<{ name: string; sql: string }>(
@@ -775,7 +766,7 @@ describe("CS-07 第三条升级路径：被撤回 v18 留下的 user_version = 1
       );
 
       // ── 升级 ──────────────────────────────────────────────────────────
-      await bootstrapNovelMaster(ctx.conn);
+      await NovelMasterBootstrap.bootstrap(ctx.conn);
 
       // ── ① v2 存在且带守卫 / ② 旧名已 DROP / user_version 已 bump ───────
       const after = await ctx.conn.query<{ name: string; sql: string | null }>(

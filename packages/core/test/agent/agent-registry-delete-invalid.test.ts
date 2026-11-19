@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 // isAppError 与 service 同源（@novel-master/core/errors）：src/dist 双模块
 // 实例下跨 instanceof 会漏判（见 tool-runner normalizeToolFailure 同款注释）。
-import { AgentServiceFactory } from "@novel-master/core/agent";
-import { isAppError } from "@novel-master/core/errors";
-import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
-import { rejectsErr } from "../helpers/result-unwrap.js";
+import {  AgentServiceFactory  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  SqliteAgentDefinitionRepository  } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
+import {  rejectsErr  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -56,7 +52,7 @@ describe("AgentRegistryService.delete 不解码", () => {
     await rejectsErr(
       registry.get(agentId),
       (err: unknown) =>
-        assert.ok(isAppError(err, "AGENT_NOT_FOUND")),
+        assert.ok(AppErrorOps.is(err, "AGENT_NOT_FOUND")),
     );
   });
 
@@ -68,7 +64,7 @@ describe("AgentRegistryService.delete 不解码", () => {
     await rejectsErr(
       registry.delete(missingId),
       (err: unknown) =>
-        assert.ok(isAppError(err, "AGENT_NOT_FOUND")),
+        assert.ok(AppErrorOps.is(err, "AGENT_NOT_FOUND")),
     );
   });
 });

@@ -8,24 +8,24 @@
  * 命中即抛 AbortError（Promise 只有 reject 通道）；service 出口对
  * `isAbortLikeError` 原样上抛。
  */
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { CloudSyncCoordinator } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
+import {  writeFile  } from "node:fs/promises";
+import {  tmpdir  } from "node:os";
+import {  join  } from "node:path";
+import {  CloudSyncCoordinator  } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
 import type { CloudSyncCoordinatorDeps, PullOptions, PushOptions } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
-import { Result } from "../../src/errors/either.js";
-import { isAbortLikeError } from "../../src/infra/llm-protocol/logic/request-abort.js";
-import { PushAgentMutex } from "../../src/infra/cloud-sync/logic/push-agent-mutex.js";
-import { snapshotKey, statusKey } from "../../src/infra/cloud-sync/logic/paths.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  RequestAbort  } from "../../src/infra/llm-protocol/logic/request-abort.js";
+import {  PushAgentMutex  } from "../../src/infra/cloud-sync/logic/push-agent-mutex.js";
+import {  CloudSyncPaths  } from "../../src/infra/cloud-sync/logic/paths.js";
 import type { CloudSyncStatus } from "../../src/infra/cloud-sync/model/cloud-sync-status.js";
 import type { DbSyncPort } from "../../src/infra/cloud-sync/ports/db-sync.port.js";
 import type { ObjectStoragePort } from "../../src/infra/cloud-sync/ports/object-storage.port.js";
 
 const PREFIX = "novel-master/sync/";
 const DEVICE_ID = "550e8400-e29b-41d4-a716-446655440000";
-const SNAP_KEY = snapshotKey(PREFIX, 2);
+const SNAP_KEY = CloudSyncPaths.snapshotKey(PREFIX, 2);
 const SNAP_BYTES = new Uint8Array([1, 2, 3, 4]);
 const EXPORT_PATH = join(tmpdir(), `nm-coord-checkpoint-export-${process.pid}.nmbackup`);
 const IMPORT_PATH = join(tmpdir(), `nm-coord-checkpoint-import-${process.pid}.nmbackup`);
@@ -49,13 +49,13 @@ function createStorage(events: string[], options?: { fileDownload?: boolean; ini
   const fileDownload = options?.fileDownload === true;
   return {
     async head(key) {
-      if (key === statusKey(PREFIX)) {
+      if (key === CloudSyncPaths.statusKey(PREFIX)) {
         return { exists: true, etag: currentEtag };
       }
       return { exists: key === SNAP_KEY };
     },
     async get(key) {
-      if (key === statusKey(PREFIX)) {
+      if (key === CloudSyncPaths.statusKey(PREFIX)) {
         events.push("get:status");
         return { body: encodeStatus(currentStatus), etag: currentEtag };
       }
@@ -63,7 +63,7 @@ function createStorage(events: string[], options?: { fileDownload?: boolean; ini
       return { body: SNAP_BYTES, etag: "snap-etag" };
     },
     async put(key, body) {
-      if (key === statusKey(PREFIX)) {
+      if (key === CloudSyncPaths.statusKey(PREFIX)) {
         events.push("put:status");
         currentStatus = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
         currentEtag = `etag-${events.length}`;
@@ -158,7 +158,7 @@ function filePathDeps(events: string[]): CoordinatorOverrides {
 
 async function rejectsAsAbort(run: () => Promise<unknown>): Promise<void> {
   await assert.rejects(run, (error: unknown) => {
-    assert.ok(isAbortLikeError(error), `expected AbortError, got ${String(error)}`);
+    assert.ok(RequestAbort.isAbortLikeError(error), `expected AbortError, got ${String(error)}`);
     return true;
   });
 }

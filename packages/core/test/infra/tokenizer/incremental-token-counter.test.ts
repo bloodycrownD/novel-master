@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createIncrementalTokenCounter } from "../../../src/infra/tokenizer/logic/incremental-token-counter.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  describe, it  } from "node:test";
+import {  IncrementalTokenCounter  } from "../../../src/infra/tokenizer/logic/incremental-token-counter.js";
+import {  LogFactory  } from "@novel-master/core/log";
 
 /** 注入依赖类型（模块不再导出，从工厂签名推导）。 */
-type IncrementalTokenCounterDeps = Parameters<typeof createIncrementalTokenCounter>[0];
+type IncrementalTokenCounterDeps = Parameters<typeof IncrementalTokenCounter.create>[0];
 
 /**
  * 假 encode：按空白切词计数。对「断词切分」敏感——被切成两半的词会被算成
@@ -32,7 +32,7 @@ function recordingEncoder(base: (text: string) => number): {
 function makeCounter(
   deps: Partial<IncrementalTokenCounterDeps> = {},
 ): ReturnType<typeof createIncrementalTokenCounter> {
-  return createIncrementalTokenCounter({ encode: wordCount, ...deps });
+  return IncrementalTokenCounter.create({ encode: wordCount, ...deps });
 }
 
 /**
@@ -46,7 +46,7 @@ function captureWarnings(): {
   restore(): void;
 } {
   const warnings: string[] = [];
-  setDefaultLogSink({
+  LogFactory.setDefaultSink({
     write(record) {
       if (record.level === "warn") {
         warnings.push(record.message);
@@ -55,7 +55,7 @@ function captureWarnings(): {
   });
   return {
     warnings,
-    restore: restoreDefaultLogSink,
+    restore: LogFactory.restoreDefaultSink,
   };
 }
 
@@ -129,7 +129,7 @@ describe("createIncrementalTokenCounter（尾窗增量计数）", () => {
     const warnings = captureWarnings();
     try {
       let calls = 0;
-      const counter = createIncrementalTokenCounter({
+      const counter = IncrementalTokenCounter.create({
         encode: text => {
           calls += 1;
           if (calls === 1) {
@@ -164,7 +164,7 @@ describe("createIncrementalTokenCounter（尾窗增量计数）", () => {
     try {
       // 1 字符 = 1 token（口径可手算）；文本里带 "*" 的段模拟特殊 token 文本，
       // js-tiktoken 对它默认抛错。
-      const counter = createIncrementalTokenCounter({
+      const counter = IncrementalTokenCounter.create({
         encode: text => {
           if (text.includes("*")) {
             throw new Error("special token text");
@@ -251,7 +251,7 @@ describe("createIncrementalTokenCounter（尾窗增量计数）", () => {
 
   it("单次 encode 入参长度有界（≤64 字符），超长无空白串被拆段自保", () => {
     const recorder = recordingEncoder(text => text.length);
-    const counter = createIncrementalTokenCounter({
+    const counter = IncrementalTokenCounter.create({
       encode: recorder.encode,
     });
     // 12,000 字符纯中文无空白（真实 tiktoken 下整段 encode 要数十秒）。
@@ -268,7 +268,7 @@ describe("createIncrementalTokenCounter（尾窗增量计数）", () => {
 
   it("有界内存：encode 消耗的总字符数远小于「每次全量重算」口径", () => {
     const recorder = recordingEncoder(text => text.length);
-    const counter = createIncrementalTokenCounter({
+    const counter = IncrementalTokenCounter.create({
       encode: recorder.encode,
     });
     const total = 100_000;

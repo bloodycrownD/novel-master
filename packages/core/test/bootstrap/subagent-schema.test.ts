@@ -11,17 +11,14 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
-import { NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
-  return await open("tdbc:sqlite:file::memory:", {
+  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -51,7 +48,7 @@ describe("agent-subagent M1 schema（T-S1）", () => {
   it("新建库 bootstrap 后 chat_session.parent_session_id 由 DDL 直接创建", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "chat_session");
       assert.ok(
@@ -101,7 +98,7 @@ describe("agent-subagent M1 schema（T-S1）", () => {
       );
 
       // 触发升级：bootstrap 检测到 user_version=3 < SCHEMA_BOOT_VERSION，跑 ALIGN。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "chat_session");
       assert.ok(
@@ -126,8 +123,8 @@ describe("agent-subagent M1 schema（T-S1）", () => {
   it("已升版到 v4 的库再 bootstrap 走快路径仍保留列", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn); // 首次：建列 + 升到 v4
-      await bootstrapNovelMaster(conn); // 快路径：不应漏列
+      await NovelMasterBootstrap.bootstrap(conn); // 首次：建列 + 升到 v4
+      await NovelMasterBootstrap.bootstrap(conn); // 快路径：不应漏列
 
       const columns = await tableColumnNames(conn, "chat_session");
       assert.ok(columns.has("parent_session_id"));

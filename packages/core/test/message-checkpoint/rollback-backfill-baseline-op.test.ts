@@ -7,24 +7,17 @@
  * - repair 真补上 baseline checkpoint；
  * - 补完后再 detect 返回 needsRepair=false（幂等）。
  */
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
-import {
-  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  BackfillBaselineCheckpoints  } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteMessageRepository  } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteSessionKkvRepository  } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
+import {  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

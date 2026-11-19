@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ToolUseMutation } from "../../src/domain/tool/logic/tool-use-mutates-workspace.js";
+import {  describe, it  } from "node:test";
+import {  ToolUseMutation  } from "../../src/domain/tool/logic/tool-use-mutates-workspace.js";
 
 describe("tool-use-mutates-workspace", () => {
   it("write/edit 视为突变", () => {

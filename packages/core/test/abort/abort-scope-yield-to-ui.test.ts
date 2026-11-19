@@ -5,9 +5,9 @@
  * 已中断时立即返回 `Interrupt`，不再白等一个事件循环回合。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("yieldToUi：让出事件循环与两态（T-S5）", () => {
   it("未中断：先让出宏任务，随后返回 null", async () => {

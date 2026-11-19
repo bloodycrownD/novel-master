@@ -36,44 +36,47 @@ export interface ThinkingContextOptions {
   readonly requestThinkingEnabled: boolean;
 }
 
-/**
- * 按偏好与协议剥离历史 thinking / redacted_thinking（view-time transform，
- * 不回写数据库）。规则与顺序见模块注释。
- */
-export function applyThinkingContextForLlm(messages: readonly ChatMessageData[], options: ThinkingContextOptions): ChatMessageData[] {
-  const { enabled, protocol, retainProtocolMinimum, requestThinkingEnabled } = options;
+/** 思考上下文 view-time 变换集合（按偏好与协议剥离历史 thinking）。 */
+export const ThinkingContext = {
+  /**
+   * 按偏好与协议剥离历史 thinking / redacted_thinking（view-time transform，
+   * 不回写数据库）。规则与顺序见模块注释。
+   */
+  applyForLlm(messages: readonly ChatMessageData[], options: ThinkingContextOptions): ChatMessageData[] {
+    const { enabled, protocol, retainProtocolMinimum, requestThinkingEnabled } = options;
 
-  // 标准方案（档位开 + 开关开）：全量保留（含全部 thinking / redacted_thinking 与签名）。
-  // 开关开的保留集合 ⊇ 协议最低保留，无需叠加判定；浅拷贝满足可变返回类型，元素保持原引用（不可变惯例）。
-  if (requestThinkingEnabled && enabled) {
-    return [...messages];
-  }
+    // 标准方案（档位开 + 开关开）：全量保留（含全部 thinking / redacted_thinking 与签名）。
+    // 开关开的保留集合 ⊇ 协议最低保留，无需叠加判定；浅拷贝满足可变返回类型，元素保持原引用（不可变惯例）。
+    if (requestThinkingEnabled && enabled) {
+      return [...messages];
+    }
 
-  // 档位前置全局门：本次请求未启用 thinking 时一律全剥（含协议最低保留）——
-  // 保留集合发给未启用 thinking 的请求会触发 400，故最低保留分支不可达。
-  // 关态：全剥，仅档位未关闭且协议最低保留（anthropic / gemini）时跳过出站列表末条
-  // 含 tool_use 的 assistant（活跃工具循环，其 tool_result 作为 trailing user 消息待回传；不回溯更早消息）。
-  let retainIndex = -1;
-  if (requestThinkingEnabled && retainProtocolMinimum && (protocol === "anthropic" || protocol === "gemini")) {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]!;
-      if (message.role !== "assistant") {
-        continue;
+    // 档位前置全局门：本次请求未启用 thinking 时一律全剥（含协议最低保留）——
+    // 保留集合发给未启用 thinking 的请求会触发 400，故最低保留分支不可达。
+    // 关态：全剥，仅档位未关闭且协议最低保留（anthropic / gemini）时跳过出站列表末条
+    // 含 tool_use 的 assistant（活跃工具循环，其 tool_result 作为 trailing user 消息待回传；不回溯更早消息）。
+    let retainIndex = -1;
+    if (requestThinkingEnabled && retainProtocolMinimum && (protocol === "anthropic" || protocol === "gemini")) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i]!;
+        if (message.role !== "assistant") {
+          continue;
+        }
+        retainIndex = (message.content.blocks ?? []).some((block) => block.type === "tool_use") ? i : -1;
+        break;
       }
-      retainIndex = (message.content.blocks ?? []).some((block) => block.type === "tool_use") ? i : -1;
-      break;
     }
-  }
-  // 剥掉 assistant 消息内全部 thinking / redacted_thinking 块（无变更时返回原引用）。
-  return messages.map((message, index) => {
-    if (message.role !== "assistant" || index === retainIndex) {
-      return message;
-    }
-    const hasThinking = (message.content.blocks ?? []).some((block) => block.type === "thinking" || block.type === "redacted_thinking");
-    if (!hasThinking) {
-      return message;
-    }
-    const blocks = (message.content.blocks ?? []).filter((block) => block.type !== "thinking" && block.type !== "redacted_thinking");
-    return { ...message, content: { blocks } };
-  });
-}
+    // 剥掉 assistant 消息内全部 thinking / redacted_thinking 块（无变更时返回原引用）。
+    return messages.map((message, index) => {
+      if (message.role !== "assistant" || index === retainIndex) {
+        return message;
+      }
+      const hasThinking = (message.content.blocks ?? []).some((block) => block.type === "thinking" || block.type === "redacted_thinking");
+      if (!hasThinking) {
+        return message;
+      }
+      const blocks = (message.content.blocks ?? []).filter((block) => block.type !== "thinking" && block.type !== "redacted_thinking");
+      return { ...message, content: { blocks } };
+    });
+  },
+} as const;

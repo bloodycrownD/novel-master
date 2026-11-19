@@ -12,10 +12,10 @@
  *   落进 Err——谁把 catch 里的 throw 写回去，本组立刻变红。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Result, type ResultWire } from "../../src/errors/either.js";
-import { isVfsError } from "../../src/errors/guards.js";
-import { AppError } from "../../src/errors/app-error.js";
+import {  describe, it  } from "node:test";
+import {  Result, type ResultWire  } from "../../src/errors/either.js";
+import {  isVfsError  } from "../../src/errors/guards.js";
+import {  AppError  } from "../../src/errors/app-error.js";
 
 // vfsNotFound 工厂已退役（统一 new AppError）；本文件只是把 VFS 错误当 Result
 // 载体用，本地按现行唯一形态构造（legacy 手搓形态的守卫分支已随 mapper 删除）。

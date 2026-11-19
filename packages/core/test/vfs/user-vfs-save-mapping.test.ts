@@ -3,8 +3,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { UserVfsSaveMapping } from "../../src/domain/vfs/logic/user-vfs-save-mapping.js";
+import {  describe, it  } from "node:test";
+import {  UserVfsSaveMapping  } from "../../src/domain/vfs/logic/user-vfs-save-mapping.js";
 
 describe("UserVfsSaveMapping.mapToToolUses", () => {
   it("内容相等时返回 noop", () => {

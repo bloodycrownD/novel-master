@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 import type { ZodType } from "zod";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  const r = decodeRaw(raw, schema);
+  const r = SerializationDecode.decode(raw, schema);
   if (!r.ok) throw r.error;
   return r.value;
 }
-import { projectAgentConfigSchema, projectAgentModeSchema } from "../../src/domain/chat/model/project-agent-config.schema.js";
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { isAppError } from "@novel-master/core/errors";
-import { tCore } from "../helpers/core-i18n.js";
+import {  projectAgentConfigSchema, projectAgentModeSchema  } from "../../src/domain/chat/model/project-agent-config.schema.js";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 function minimalDefinitionWire() {
   return {
@@ -42,11 +42,11 @@ describe("projectAgentConfigSchema", () => {
   });
 
   it("custom 缺 definition 拒绝", () => {
-    assert.throws(() => decode({ mode: "custom" }, projectAgentConfigSchema), (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"));
+    assert.throws(() => decode({ mode: "custom" }, projectAgentConfigSchema), (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"));
   });
 
   it("非法 mode 拒绝", () => {
-    assert.throws(() => decode({ mode: "registry" }, projectAgentModeSchema), (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"));
+    assert.throws(() => decode({ mode: "registry" }, projectAgentModeSchema), (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"));
   });
 
   it("configToWire 对重名块 definition 返回 Err（第二份同款循环已被收敛点覆盖）", () => {
@@ -81,7 +81,7 @@ describe("projectAgentConfigSchema", () => {
       definition: dup,
     });
     assert.ok(!wire.ok, "重名块 toWire 必须失败（块名唯一性门禁 RT-04）");
-    assert.ok(isAppError(wire.error, "PROMPT_INVALID_LAYOUT") && wire.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+    assert.ok(AppErrorOps.is(wire.error, "PROMPT_INVALID_LAYOUT") && wire.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
   });
 });
 

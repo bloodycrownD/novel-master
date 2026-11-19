@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../src/errors/app-error.js";
-import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 
 const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000099";
 
@@ -37,7 +37,7 @@ describe("PersistentState", () => {
     const ctx = getNovelMasterTestContext();
     const r = await ctx.state.setCurrentModelId("prov1/model");
     assert.ok(!r.ok, "legacy 指针应走 Err 通道");
-    if (!r.ok) assert.ok(isAppError(r.error, "PROVIDER_INVALID_SAVED_MODEL_ID"));
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROVIDER_INVALID_SAVED_MODEL_ID"));
   });
 
   it("returns undefined for missing keys", async () => {

@@ -1,14 +1,14 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { type TdbcConnection } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  type TdbcConnection  } from "@novel-master/core";
 
-import { type MessageContent } from "@novel-master/core/chat";
-import { TextBlocks } from "@novel-master/core/chat";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  type MessageContent  } from "@novel-master/core/chat";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteSessionRepository  } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function firstTextBlock(content: MessageContent): string {
   const block = content.blocks[0];

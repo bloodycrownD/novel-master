@@ -1,9 +1,9 @@
-import { isAppError } from "../../src/errors/app-error.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 
 novelMasterTestFixture();
@@ -67,7 +67,7 @@ describe("DefaultVfsService (integration)", () => {
     const vfs = VfsServiceFactory.create(conn);
     unwrap(await vfs.write(GLOBAL, "/missing.txt", "hello"));
     await rejectsErr(() => vfs.replace(GLOBAL, "/missing.txt", "nope", "x"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_REPLACE_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_REPLACE_NOT_FOUND"));
     });
   });
 
@@ -132,7 +132,7 @@ describe("DefaultVfsService (integration)", () => {
     unwrap(await vfs.write(GLOBAL, "/del/child", "child"));
     unwrap(await vfs.delete(GLOBAL, "/del", { recursive: true }));
     await rejectsErr(() => vfs.read(GLOBAL, "/del/child"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 });

@@ -17,20 +17,11 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it, mock, afterEach } from "node:test";
-import {
-  postSse,
-  registerSseTransport,
-  resetShouldUseXhrForSseCacheForTests,
-  setShouldUseXhrForSseOverrideForTests,
-  setSseTransportOverrideForTests,
-  SSE_WHOLE_CALL_TIMEOUT_MS,
-  type SseByteHandler,
-  type SseTransport,
-} from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
-import { STREAM_IDLE_TIMEOUT_MS } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
-import { isAppError } from "../../../src/errors/app-error.js";
-import { isRequestAborted } from "../../../src/infra/llm-protocol/logic/request-abort.js";
+import {  describe, it, mock, afterEach  } from "node:test";
+import {  LlmSseTransport, SSE_WHOLE_CALL_TIMEOUT_MS, type SseByteHandler, type SseTransport  } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
+import {  STREAM_IDLE_TIMEOUT_MS  } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
+import {  RequestAbort  } from "../../../src/infra/llm-protocol/logic/request-abort.js";
 
 const SSE_URL = "https://api.example.com/v1/chat/completions";
 
@@ -151,8 +142,8 @@ function kindTimeoutError(): Error {
 }
 
 afterEach(() => {
-  resetShouldUseXhrForSseCacheForTests();
-  registerSseTransport(undefined);
+  LlmSseTransport.resetShouldUseXhrCacheForTests();
+  LlmSseTransport.register(undefined);
   mock.timers.reset();
   uninstallXhr();
 });
@@ -169,12 +160,12 @@ async function settleAsync(): Promise<void> {
 describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", () => {
   it("native 注册时优先于 XHR：transport 被调用，XHR 构造器零实例化", async () => {
     const instances = installXhr();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
     const chunks: string[] = [];
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", headers: { Authorization: "Bearer k" }, body: "{}" },
       (chunk) => chunks.push(chunk),
@@ -205,13 +196,13 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
   it("未注册时 RN 平台走 XHR 不走 fetchFn（XHR > fetch）", async () => {
     mock.timers.enable();
     const instances = installXhr();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
 
     const fetchFn = mock.fn(async () => {
       throw new Error("fetch must not be called when XHR selected");
     });
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       () => {},
@@ -230,7 +221,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
   });
 
   it("未注册且非 RN 平台走 fetchFn（fetch 兜底，零变化）", async () => {
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const fetchFn = mock.fn(async () => {
       const body = new ReadableStream<Uint8Array>({
@@ -245,7 +236,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
       });
     });
 
-    const result = await postSse(
+    const result = await LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       () => {},
@@ -259,18 +250,18 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
   it("测试强制位优先于真实注册位，清除后回到真实注册位", async () => {
     const real = createHangingTransport();
     const override = createHangingTransport();
-    registerSseTransport(real.transport);
+    LlmSseTransport.register(real.transport);
 
-    setSseTransportOverrideForTests(override.transport);
-    const first = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    LlmSseTransport.setOverrideForTests(override.transport);
+    const first = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
     override.resolve({ status: 200, contentType: "text/event-stream" });
     await first;
     assert.equal(override.calls.length, 1, "强制位生效");
     assert.equal(real.calls.length, 0, "真实注册位被强制位遮蔽");
 
-    setSseTransportOverrideForTests(undefined);
-    const second = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    LlmSseTransport.setOverrideForTests(undefined);
+    const second = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
     real.resolve({ status: 200, contentType: "text/event-stream" });
     await second;
@@ -281,11 +272,11 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
 describe("T-N3: Connection: close 条件化（spec §7）", () => {
   it("native 分支请求头不含 Connection: close——init 原样透传，XHR 零实例化", async () => {
     const instances = installXhr();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       {
         method: "POST",
@@ -313,13 +304,13 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
   it("注销 native（模拟未注册/加载失败）回落 XHR 时 Connection: close 保留", async () => {
     mock.timers.enable();
     const instances = installXhr();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const fake = createHangingTransport();
     // 先注册再注销：模拟「native 加载失败/运行中注销」的运行时回落路径。
-    registerSseTransport(fake.transport);
-    registerSseTransport(undefined);
+    LlmSseTransport.register(fake.transport);
+    LlmSseTransport.register(undefined);
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       {
         method: "POST",
@@ -355,9 +346,9 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
 describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", () => {
   it("0 数据超时（name 形态）→ 'first-chunk'（可重试分级），整调用预算", async () => {
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
 
     // native callTimeout 到点：无任何 onChunk 投递（首字黑洞形态）
@@ -367,7 +358,7 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
       promise,
       (err: unknown) => {
         assert.ok(
-          isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
+          AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"),
           `应映射为 PROVIDER_STREAM_TIMEOUT，实际：${String(err)}`,
         );
         assert.equal(err.name, "PROVIDER_STREAM_TIMEOUT");
@@ -387,10 +378,10 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
 
   it("已投数据后超时（kind 字段形态）→ 'idle'（不自动重试分级）", async () => {
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
     const chunks: string[] = [];
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       (chunk) => chunks.push(chunk),
@@ -402,21 +393,21 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
     await assert.rejects(
       promise,
       (err: unknown) =>
-        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
+        AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
     );
     assert.equal(chunks.join(""), 'data: {"x":1}\n\n', "超时前数据已投递");
   });
 
   it("transport 普通错误原样上抛，不映射为超时", async () => {
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
     fake.reject(new Error("boom: network down"));
 
     await assert.rejects(promise, (err: unknown) => {
-      assert.ok(!isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+      assert.ok(!AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"));
       assert.ok(err instanceof Error);
       assert.equal((err as Error).message, "boom: network down");
       return true;
@@ -428,9 +419,9 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
   it("流中长静默不自动超时（空闲看门狗已退役）：promise 保持 pending，收尾正常", async () => {
     mock.timers.enable();
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     let settledFlag = false;
     promise.then(
       () => {
@@ -466,9 +457,9 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
   it("首字黑洞由 transport callTimeout 承接：JS 侧不开 whole-call 定时器", async () => {
     mock.timers.enable();
     const fake = createHangingTransport();
-    registerSseTransport(fake.transport);
+    LlmSseTransport.register(fake.transport);
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     let settledFlag = false;
     promise.then(
       () => {
@@ -491,7 +482,7 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
     await assert.rejects(
       promise,
       (err: unknown) =>
-        isAppError(err, "PROVIDER_STREAM_TIMEOUT") &&
+        AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") &&
         err.details?.phase === "first-chunk",
     );
   });
@@ -513,9 +504,9 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
           );
         }),
     };
-    registerSseTransport(fake);
+    LlmSseTransport.register(fake);
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       () => {},
@@ -529,7 +520,7 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
       assert.ok(err instanceof Error);
       assert.equal((err as Error).name, "AbortError");
       // 与 ⑤ 现有 isRequestAborted 三判据链路保持兼容（signal.aborted 命中）
-      assert.equal(isRequestAborted(err, userController.signal), true);
+      assert.equal(RequestAbort.isAborted(err, userController.signal), true);
       return true;
     });
   });

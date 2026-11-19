@@ -7,7 +7,7 @@
  * @module public/session-kkv
  */
 
-export { createSessionKkvService } from "../service/session-kkv/create-session-kkv-service.js";
+export { SessionKkvServiceFactory } from "../service/session-kkv/create-session-kkv-service.js";
 export type { SessionKkvService } from "../service/session-kkv/session-kkv.port.js";
 export {
   SESSION_KKV_DOMAIN_FILE_CACHE,

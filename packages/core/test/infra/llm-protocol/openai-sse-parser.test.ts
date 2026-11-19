@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../../src/errors/app-error.js";
-import { createOpenAiSseParser } from "../../../src/infra/llm-protocol/logic/openai-sse-parser.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
+import {  OpenAiSseParser  } from "../../../src/infra/llm-protocol/logic/openai-sse-parser.js";
 
 describe("openai-sse-parser", () => {
   it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
@@ -13,7 +13,7 @@ describe("openai-sse-parser", () => {
         deltas.push(ev.text);
       }
     };
-    const parser = createOpenAiSseParser({ onStream });
+    const parser = OpenAiSseParser.create({ onStream });
 
     parser.feed('data:{"choices":[{"delta":{"content":"Hi"}}]}\n\n');
     const { blocks } = parser.finish();
@@ -25,7 +25,7 @@ describe("openai-sse-parser", () => {
 
   it("SSE-DATA-NS-02: 有空格形态不回归", () => {
     // 防「改成只认无空格」这种反向错修。
-    const parser = createOpenAiSseParser();
+    const parser = OpenAiSseParser.create();
     parser.feed('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n');
     const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
@@ -34,7 +34,7 @@ describe("openai-sse-parser", () => {
 
   it("SSE-01: incremental text deltas", () => {
     const deltas: string[] = [];
-    const parser = createOpenAiSseParser({
+    const parser = OpenAiSseParser.create({
       onStream: (ev) => {
         if (ev.type === "text-delta") {
           deltas.push(ev.text);
@@ -61,7 +61,7 @@ describe("openai-sse-parser", () => {
         deltas.push(ev.text);
       }
     };
-    const parser = createOpenAiSseParser({ onStream });
+    const parser = OpenAiSseParser.create({ onStream });
 
     parser.feed('data: {"choices":[{"delta":{"content":"A');
     parser.feed('B"}}]}\n\n');
@@ -72,7 +72,7 @@ describe("openai-sse-parser", () => {
   });
 
   it("SSE-03: [DONE] and usage from final chunk", () => {
-    const parser = createOpenAiSseParser();
+    const parser = OpenAiSseParser.create();
 
     parser.feed(
       [
@@ -126,7 +126,7 @@ describe("openai-sse-parser", () => {
         toolUses.push({ name: ev.name!, input: ev.input! });
       }
     };
-    const parser = createOpenAiSseParser({ onStream });
+    const parser = OpenAiSseParser.create({ onStream });
 
     parser.feed(`data: ${JSON.stringify(chunk1)}\n\n`);
     parser.feed(`data: ${JSON.stringify(chunk2)}\n\n`);
@@ -142,19 +142,19 @@ describe("openai-sse-parser", () => {
   });
 
   it("SSE-MAL-01: only malformed lines throw on finish", () => {
-    const parser = createOpenAiSseParser();
+    const parser = OpenAiSseParser.create();
     parser.feed("data: {not-json\n\n");
     assert.throws(
       () => parser.finish(),
       (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_MALFORMED_SSE"));
+        assert.ok(AppErrorOps.is(err, "PROVIDER_MALFORMED_SSE"));
         return true;
       },
     );
   });
 
   it("SSE-MAL-02: malformed plus valid text still yields blocks", () => {
-    const parser = createOpenAiSseParser();
+    const parser = OpenAiSseParser.create();
     parser.feed("data: bad\n\n");
     parser.feed("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n");
     const { blocks } = parser.finish();
@@ -191,7 +191,7 @@ describe("openai-sse-parser", () => {
         },
       ],
     });
-    const parser = createOpenAiSseParser({ onStream });
+    const parser = OpenAiSseParser.create({ onStream });
     parser.feed("data: " + chunk1 + "\n\n");
     assert.equal(toolUses.length, 0);
     parser.feed("data: " + chunk2 + "\n\n");
@@ -201,7 +201,7 @@ describe("openai-sse-parser", () => {
   });
 
   it("T-ITA-01 / TU-04: invalid tool JSON at finish degrades, no throw", () => {
-    const parser = createOpenAiSseParser();
+    const parser = OpenAiSseParser.create();
     const bad = JSON.stringify({
       choices: [
         {
@@ -234,7 +234,7 @@ describe("openai-sse-parser", () => {
     const onStream = (ev: { type: string }) => {
       eventTypes.push(ev.type);
     };
-    const parser = createOpenAiSseParser({ onStream });
+    const parser = OpenAiSseParser.create({ onStream });
 
     parser.feed(
       [

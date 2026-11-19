@@ -8,6 +8,7 @@
   "UserVfsActionXml",
   "UserVfsSaveBaseline",
   "UserVfsSaveMapping",
+  "UserVfsTurnOps",
   "VfsBatchPath",
   "VfsCopy",
   "VfsEntryOps",
@@ -18,10 +19,5 @@
   "VfsZipArchive",
   "VfsZipBuild",
   "VfsZipParse",
-  "VfsZipPath",
-  "buildUserVfsCreateFileOp",
-  "buildUserVfsDeleteOp",
-  "buildUserVfsMkdirOp",
-  "buildUserVfsRenameOp",
-  "buildUserVfsSaveOp"
+  "VfsZipPath"
 ]

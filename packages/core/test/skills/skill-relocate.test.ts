@@ -11,18 +11,14 @@
  * @module test/skills/skill-relocate
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
-import { outcomeValue } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -33,7 +29,7 @@ function entry(name: string, description: string): string {
 describe("技能存储重定位（T-SR1）", () => {
   it("global 技能落 global:meta 域，物理路径 /meta/skills/...", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const name = `g-relocate-${suffix}`;
 
@@ -67,7 +63,7 @@ describe("技能存储重定位（T-SR1）", () => {
 
   it("project 技能落 project:{pid}:meta 域，物理路径 /projects/{pid}/meta/skills/...", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-sr1-${suffix}`));
     const name = `p-relocate-${suffix}`;
@@ -127,7 +123,7 @@ describe("技能存储重定位（T-SR1）", () => {
 
   it("deleteSkill 清 meta 域 VFS 且负清单行沿用 project:{pid} 语义", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-del2-${suffix}`));
     const name = `del-meta-${suffix}`;
@@ -178,7 +174,7 @@ describe("技能存储重定位（T-SR1）", () => {
 describe("项目删除无孤儿（T-SR3）", () => {
   it("delete 后 project:{pid}:meta / project:{pid} / session:{pid}:{sid} 零 entry 残留", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-sr3-${suffix}`));
 

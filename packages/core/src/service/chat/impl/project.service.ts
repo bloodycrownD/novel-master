@@ -20,10 +20,10 @@ import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { LiveHeadRevisionSeeder } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { decode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { deleteSessionFsData, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SessionFsServiceFactory, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
 import { DeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
@@ -96,7 +96,7 @@ export class DefaultProjectService implements ProjectService {
         throw new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id });
       }
       const sessionList = await r.sessions.listByProject(id);
-      const sessionKkv = createSessionKkvService(tx);
+      const sessionKkv = SessionKkvServiceFactory.create(tx);
       // listByProject 现在只返 parent_session_id IS NULL 的顶层主会话，
       // 子 agent 会话需要 BFS 展开，否则会留孤儿 messages/fs/kkv/vfs。
       const allSessions: { id: string }[] = [];
@@ -109,7 +109,7 @@ export class DefaultProjectService implements ProjectService {
       }
       for (const session of allSessions) {
         await r.messages.deleteBySession(session.id);
-        await deleteSessionFsData(tx, id, session.id);
+        await SessionFsServiceFactory.deleteData(tx, id, session.id);
         await sessionKkv.clearSession(session.id);
         // entry_id 化后会话独立 scope：session:{pid}:{sid}，前缀为"/"
         // 【勿换成 sweepRevisionsUnderScope】：该 scope 的 live ref 已由上面的
@@ -156,7 +156,7 @@ export class DefaultProjectService implements ProjectService {
     if (json == null) {
       return Result.ok(DEFAULT_PROJECT_AGENT_CONFIG);
     }
-    return decode(JSON.parse(json), projectAgentConfigSchema);
+    return SerializationDecode.decode(JSON.parse(json), projectAgentConfigSchema);
   }
 
   /**
@@ -173,7 +173,7 @@ export class DefaultProjectService implements ProjectService {
     };
     const wire = projectAgentConfigSchema.toWire(merged);
     if (!wire.ok) return Result.err(wire.error);
-    const validated = decode(wire.value, projectAgentConfigSchema);
+    const validated = SerializationDecode.decode(wire.value, projectAgentConfigSchema);
     if (!validated.ok) return validated;
     const config = validated.value;
     if (config.mode === "custom") {

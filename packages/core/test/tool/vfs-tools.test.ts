@@ -1,19 +1,19 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { FileTools, MUTATING_FILE_TOOL_NAMES } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  describe, it  } from "node:test";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  FileTools, MUTATING_FILE_TOOL_NAMES  } from "../../src/domain/tool/builtin/vfs-tools.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 
-import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
-import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES  } from "../../src/domain/tool/logic/tool-output-limits.js";
+import {  ToolOutput  } from "../../src/domain/tool/logic/format-tool-output.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function toolCtx(
   vfs: BuiltinToolContext["vfs"],
@@ -34,7 +34,7 @@ describe("Builtin file tools V2 (unit)", () => {
     const runner = new ToolRunner(registry);
     await rejectsErr(
       () => runner.call("replace", { path: "/t.txt", oldString: "a", newString: "b" }, {} as BuiltinToolContext),
-      (e: unknown) => isAppError(e, "TOOL_NOT_FOUND"),
+      (e: unknown) => AppErrorOps.is(e, "TOOL_NOT_FOUND"),
     );
   });
 
@@ -405,7 +405,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await runner.call("fs", { action: "rm", path: "/dir" }, baseCtx));
     await rejectsErr(
       () => vfs.read("/dir/a.txt"),
-        (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+        (e: unknown) => AppErrorOps.is(e, "VFS_NOT_FOUND"),
       );
   });
 
@@ -425,7 +425,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await runner.call("fs", { action: "rm", path: "/dir", recursive: true }, baseCtx));
     await rejectsErr(
       () => vfs.read("/dir/a.txt"),
-        (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+        (e: unknown) => AppErrorOps.is(e, "VFS_NOT_FOUND"),
       );
   });
 
@@ -445,7 +445,7 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal((unwrap(await vfs.read("/new.md"))).content, "body");
     await rejectsErr(
       () => vfs.read("/old.md"),
-        (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+        (e: unknown) => AppErrorOps.is(e, "VFS_NOT_FOUND"),
       );
   });
 
@@ -525,7 +525,7 @@ describe("Builtin file tools V2 (integration)", () => {
     unwrap(await runner.call("fs", { action: "rm", path: "/a.txt" }, baseCtx));
     await rejectsErr(
       () => runner.call("read", { path: "/a.txt" }, baseCtx),
-      (e: unknown) => isAppError(e, "TOOL_FAILED"),
+      (e: unknown) => AppErrorOps.is(e, "TOOL_FAILED"),
     );
   });
 
@@ -543,7 +543,7 @@ describe("Builtin file tools V2 (integration)", () => {
 
     await rejectsErr(
       () => runner.call("read", { path: "/small.txt", offset: 100 }, baseCtx),
-      (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
+      (e: unknown) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -763,12 +763,12 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const workplace = createWorkplaceService(ctx.conn, {
+    const workplace = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
 
     // 行长 1023B：页 1 的 50 行 + 分隔符恰好耗尽 50KB 预算
     //（50×1023+50=51200，末行 remaining=0 整行丢弃而非部分截断），
@@ -861,10 +861,10 @@ describe("Builtin file tools V2 (integration)", () => {
     await rejectsErr(
       () => runner.call("read", { path: "/missing.txt" }, baseCtx),
       (e: unknown) => {
-        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.equal(e.key, "TOOL_FAILED");
         assert.equal(e.details?.toolName, "read");
-        assert.ok(isAppError(e.cause, "VFS_NOT_FOUND"));
+        assert.ok(AppErrorOps.is(e.cause, "VFS_NOT_FOUND"));
         return true;
       },
     );
@@ -875,7 +875,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const workplace = createWorkplaceService(ctx.conn, {
+    const workplace = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -909,7 +909,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const workplace = createWorkplaceService(ctx.conn, {
+    const workplace = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -957,7 +957,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const realWorkplace = createWorkplaceService(ctx.conn, {
+    const realWorkplace = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,

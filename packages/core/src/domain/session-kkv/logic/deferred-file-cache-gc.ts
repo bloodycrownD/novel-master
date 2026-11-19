@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 
 export const DeferredFileCacheGc = {
   /**
@@ -30,7 +30,7 @@ export const DeferredFileCacheGc = {
   run: async (conn: TdbcConnection): Promise<number> => {
     const parser = new SqlTemplateParser();
     const sql = `DELETE FROM session_file_cache_blob WHERE content_hash NOT IN (SELECT content_hash FROM session_file_cache_entry WHERE content_hash IS NOT NULL)`;
-    const result = await executeTemplate(conn, parser, sql, {});
+    const result = await TdbcTemplate.execute(conn, parser, sql, {});
     return result.changes;
   },
 } as const;

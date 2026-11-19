@@ -11,13 +11,13 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 
 type CountingCtx = NovelMasterTestContext & {
   readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
@@ -123,10 +123,10 @@ describe("T-DEL1 vfs.delete 递归删除批量化", () => {
     await vfs.delete("/tree3", { recursive: true });
 
     await rejectsErr(() => vfs.read("/tree3/a.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     await rejectsErr(() => vfs.read("/tree3/b.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 });

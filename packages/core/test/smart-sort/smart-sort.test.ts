@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  SmartSort,
-  type CompiledSmartSortRule,
-  type SmartSortKeyCache,
-} from "../../src/domain/workplace/logic/smart-sort.js";
-import { Number } from "../../src/common/number.js";
-import { Text } from "../../src/common/text.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  SmartSort, type CompiledSmartSortRule, type SmartSortKeyCache  } from "../../src/domain/workplace/logic/smart-sort.js";
+import {  Number  } from "../../src/common/number.js";
+import {  Text  } from "../../src/common/text.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 function compile(
   ruleId: string,

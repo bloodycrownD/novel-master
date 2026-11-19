@@ -7,12 +7,12 @@
  * 口径会整个变样。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import {  subagentTool  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -21,8 +21,8 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { Result } from "@/errors/either.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  Result  } from "@/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
   name: "general",

@@ -1,12 +1,9 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  createPersistentPreferences,
-  createPersistentState,
-} from "@novel-master/core";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  createPersistentPreferences, PersistentStateFactory  } from "@novel-master/core";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 
@@ -15,8 +12,8 @@ novelMasterTestFixture();
 describe("PersistentState / PersistentPreferences multi-consumer", () => {
   it("two state instances on same connection see the same project id", async () => {
     const ctx = getNovelMasterTestContext();
-    const a = createPersistentState(ctx.conn);
-    const b = createPersistentState(ctx.conn);
+    const a = PersistentStateFactory.create(ctx.conn);
+    const b = PersistentStateFactory.create(ctx.conn);
     await a.setCurrentProjectId("shared-project");
     assert.equal(unwrap(await b.getCurrentProjectId()), "shared-project");
   });

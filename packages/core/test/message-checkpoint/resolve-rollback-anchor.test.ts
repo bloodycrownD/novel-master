@@ -2,9 +2,9 @@
  * Pure unit tests for rollback turn anchor resolution.
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { type ChatMessageData } from "@novel-master/core/chat";
-import { RollbackAnchor } from "../../src/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
+import {  describe, it  } from "node:test";
+import {  type ChatMessageData  } from "@novel-master/core/chat";
+import {  RollbackAnchor  } from "../../src/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 
 function msg(
   id: string,

@@ -14,12 +14,8 @@ export type {
   SqlParseResult,
   TrimAttrs,
 } from "./types.js";
-export { parseTemplateToAst, TemplateParser } from "./parser.js";
-export {
-  normalizeExpression,
-  bindExpressionToContext,
-  evaluateTest,
-} from "./expression.js";
+export { SqlTemplateParse, TemplateParser } from "./parser.js";
+export { SqlTemplateExpression } from "./expression.js";
 export type { EvaluateTestOptions } from "./expression.js";
 
 import { TemplateEvaluator } from "./evaluator.js";

@@ -7,7 +7,7 @@
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import { AgentPromptLayoutNormalize } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
-import { decode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import type { StoredConfigHealth } from "./types.js";
 
 const REMOVED_FEATURE_KEYWORDS = [
@@ -28,7 +28,7 @@ export const AgentDefinitionWire = {
     // preprocess 的同步 throw（zod v4 的 safeParse 不把 transform/preprocess 抛错
     // 折进 issue，会原样穿透 decode，必须在这里兜住）。
     try {
-      const decoded = decode(raw, agentDefinitionSchema);
+      const decoded = SerializationDecode.decode(raw, agentDefinitionSchema);
       if (!decoded.ok) {
         const message = decoded.error.message;
         return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };

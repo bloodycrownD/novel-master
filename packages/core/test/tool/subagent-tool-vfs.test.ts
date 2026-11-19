@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { AppError } from "@/errors/app-error.js";
-import { Result } from "@/errors/either.js";
+import {  Result  } from "@/errors/either.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import {
-  subagentTool,
-  type TaskToolInput,
-  type TaskToolOutput,
-} from "@/domain/tool/builtin/subagent-tool.js";
+import {  subagentTool, type TaskToolInput, type TaskToolOutput  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -19,7 +15,7 @@ import type {
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
   name: "general",

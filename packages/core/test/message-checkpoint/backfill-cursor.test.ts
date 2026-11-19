@@ -6,31 +6,21 @@
  *   连续对话第二轮两段式正反场景 / 删除路径回退全量。
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import {
-  BackfillBaselineCheckpoints,
-  type BackfillShortCircuitDecision,
-} from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import {  describe, it, mock  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  BackfillBaselineCheckpoints, type BackfillShortCircuitDecision  } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import type { SessionKkvEntry } from "@/domain/session-kkv/model/session-kkv-entry.js";
-import {
-  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  SqliteMessageRepository  } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

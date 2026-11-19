@@ -1,29 +1,26 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw, encode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
 import type { ZodType } from "zod";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { AgentPromptLayout, PromptBuilder } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
-import { AgentDefinitionWire } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
-import {
-  createMemorySessionKkv,
-  mockWorkplaceService,
-} from "../helpers/prompt-layout-test-helpers.js";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AgentPromptLayout, PromptBuilder  } from "@novel-master/core/prompt";
+import {  WorkplaceDisplayAssembler  } from "@novel-master/core/workplace";
+import {  AgentDefinitionWire  } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
+import {  createMemorySessionKkv, mockWorkplaceService  } from "../helpers/prompt-layout-test-helpers.js";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
-async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
-  return outcomeValue(await assembleWorkplaceDisplay(...args));
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
 }
 
 describe("Workplace C0 协议", () => {
@@ -165,7 +162,7 @@ describe("Workplace C0 协议", () => {
       agentDefinitionSchema,
     );
     // encode 已改返回 Result（五期签名）：unwrap 解包后取 wire。
-    const wire = unwrap(encode(def, agentDefinitionSchema)) as {
+    const wire = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as {
       prompts: {
         persist: Record<string, { type: string }>;
         workplace?: boolean | string;

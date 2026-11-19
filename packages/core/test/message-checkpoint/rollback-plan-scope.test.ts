@@ -9,18 +9,14 @@
  * - 计数快照改走 countBySession（COUNT(*) 单行）后 A-22 冲突检测仍生效
  *   （既有 rollback-optimistic-lock.test.ts 回归兜底，此处断言 SQL 口径）。
  */
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

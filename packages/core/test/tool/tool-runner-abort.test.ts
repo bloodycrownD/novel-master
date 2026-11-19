@@ -3,17 +3,17 @@
  * 不依赖工具自身监听 signal——否则 waiting 中的回合会被慢工具（curl / search
  * 等长请求）占住线程、停止按钮点不动。
  */
-import { isAppError } from "../../src/errors/app-error.js";
-import { isAbortLikeError } from "../../src/infra/llm-protocol/logic/request-abort.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  RequestAbort  } from "../../src/infra/llm-protocol/logic/request-abort.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { getEventListeners } from "node:events";
-import { describe, it } from "node:test";
-import { z } from "zod";
+import {  getEventListeners  } from "node:events";
+import {  describe, it  } from "node:test";
+import {  z  } from "zod";
 
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { Result } from "../../src/errors/either.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  Result  } from "../../src/errors/either.js";
 
 describe("ToolRunner：回合取消竞速（A-24）", () => {
   it("工具永不返回时，abort 让 call 立即 reject（不等工具）", async () => {
@@ -35,7 +35,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       // 八期：在途竞速的取消载荷换 AbortError.create()（race 是平台协议例外），
       // 不再伪装成 TOOL_CANCELLED AppError。
       assert.equal((err as { name?: unknown }).name, "AbortError");
-      assert.ok(isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
+      assert.ok(RequestAbort.isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
       return true;
     });
   });
@@ -70,8 +70,8 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     await rejectsErr(runner.call("side-effect", {}, { signal: controller.signal }), (err) => {
       // 进入时已 abort 仍走 Result 返回值通道：TOOL_CANCELLED 保留作展示标签
       //（七期语义不变；在途竞速才换 AbortError）。
-      assert.ok(isAppError(err));
-      assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
+      assert.ok(AppErrorOps.is(err));
+      assert.ok(AppErrorOps.is(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
     });
     assert.equal(runCount, 0);
   });
@@ -137,7 +137,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
         if (!outcome.ok) {
           // 两条取消通道都要能识别：在途竞速以 AbortError reject（race 平台协议例外），
           // abort 后从队列取到的 call 在入口直接 Result.err(TOOL_CANCELLED)。
-          assert.ok(isAbortLikeError(outcome.error) || isAppError(outcome.error, "TOOL_CANCELLED"), "取消统一 AbortError / TOOL_CANCELLED");
+          assert.ok(RequestAbort.isAbortLikeError(outcome.error) || AppErrorOps.is(outcome.error, "TOOL_CANCELLED"), "取消统一 AbortError / TOOL_CANCELLED");
         }
       }
     }
@@ -166,7 +166,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       await assert.rejects(pending, (err: unknown) => {
         // 八期：竞速以 AbortError.create() reject，isAbortLikeError 统一识别。
         assert.equal((err as { name?: unknown }).name, "AbortError");
-        assert.ok(isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
+        assert.ok(RequestAbort.isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
         return true;
       });
       rejectWork(new Error("late failure")); // 竞速已结束才 reject：不得漏成 unhandled

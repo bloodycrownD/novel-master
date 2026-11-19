@@ -17,7 +17,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
-import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
+import { HttpUtil } from "@/infra/llm-protocol/logic/http-util.js";
 import type { CreateProviderInput, EditProviderPatch, ProviderListItem, ProviderService } from "../provider.port.js";
 
 interface DefaultProviderServiceDeps {
@@ -75,7 +75,7 @@ export class DefaultProviderService implements ProviderService {
       id,
       builtinKey: null,
       protocol: input.protocol,
-      baseUrl: normalizeBaseUrl(input.baseUrl),
+      baseUrl: HttpUtil.normalizeBaseUrl(input.baseUrl),
       displayName,
       secretRef,
       headers: input.headers ?? {},
@@ -153,7 +153,7 @@ export class DefaultProviderService implements ProviderService {
     const updated: LlmProvider = {
       ...provider,
       protocol: patch.protocol ?? provider.protocol,
-      baseUrl: patch.baseUrl ? normalizeBaseUrl(patch.baseUrl) : provider.baseUrl,
+      baseUrl: patch.baseUrl ? HttpUtil.normalizeBaseUrl(patch.baseUrl) : provider.baseUrl,
       displayName,
       headers: patch.headers ?? provider.headers,
       bodyParams: patch.bodyParams ?? provider.bodyParams,

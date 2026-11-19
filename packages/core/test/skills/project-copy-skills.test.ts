@@ -8,16 +8,12 @@
  * @module test/skills/project-copy-skills
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
-import { outcomeValue } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -28,7 +24,7 @@ function entry(name: string, description: string): string {
 describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
   it("copy 后技能与禁用行都在，且与源项目互不影响", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const source = unwrap(await ctx.projects.create(`P-${suffix}`));
 
@@ -99,7 +95,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
 
   it("copy 不携带 sessions，负清单行不串项目", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const source = unwrap(await ctx.projects.create(`P-ns-${suffix}`));
     unwrap(await ctx.sessions.create(source.id, "源会话"));
@@ -134,7 +130,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
 
   it("delete 项目后负清单行一并清理", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-del-${suffix}`));
     unwrap(await skills.writeSkillFile(

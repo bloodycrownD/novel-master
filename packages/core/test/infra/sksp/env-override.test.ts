@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { resolveSkspEnvOverride } from "../../../src/infra/sksp/logic/env-override.js";
+import {  SkspEnvOverride  } from "../../../src/infra/sksp/logic/env-override.js";
 
 /**
  * T-DS4：resolveSkspEnvOverride parity 套件。
@@ -13,27 +13,27 @@ describe("resolveSkspEnvOverride", () => {
 
   it("undefined 视为不覆盖 DB（返回 null）", () => {
     const env: Record<string, string | undefined> = {};
-    assert.equal(resolveSkspEnvOverride(name, env), null);
+    assert.equal(SkspEnvOverride.resolve(name, env), null);
   });
 
   it("显式 undefined 也视为不覆盖 DB", () => {
     const env: Record<string, string | undefined> = { [name]: undefined };
-    assert.equal(resolveSkspEnvOverride(name, env), null);
+    assert.equal(SkspEnvOverride.resolve(name, env), null);
   });
 
   it("空串视为不覆盖 DB", () => {
     const env: Record<string, string | undefined> = { [name]: "" };
-    assert.equal(resolveSkspEnvOverride(name, env), null);
+    assert.equal(SkspEnvOverride.resolve(name, env), null);
   });
 
   it("仅空白串视为不覆盖 DB", () => {
     const env: Record<string, string | undefined> = { [name]: "   " };
-    assert.equal(resolveSkspEnvOverride(name, env), null);
+    assert.equal(SkspEnvOverride.resolve(name, env), null);
   });
 
   it("非空值原样返回（含前后空格的有效密钥也保留）", () => {
     const env: Record<string, string | undefined> = { [name]: "sk-test" };
-    assert.equal(resolveSkspEnvOverride(name, env), "sk-test");
+    assert.equal(SkspEnvOverride.resolve(name, env), "sk-test");
   });
 
   it("其它无关变量存在时也不误命中", () => {
@@ -41,6 +41,6 @@ describe("resolveSkspEnvOverride", () => {
       OTHER_VAR: "noise",
       [name]: "  ",
     };
-    assert.equal(resolveSkspEnvOverride(name, env), null);
+    assert.equal(SkspEnvOverride.resolve(name, env), null);
   });
 });

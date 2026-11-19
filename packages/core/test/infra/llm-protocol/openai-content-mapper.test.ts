@@ -1,23 +1,19 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../../src/errors/app-error.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
-import {
-  blocksToOpenAiMessageContent as blocksToOpenAiMessageContentImpl,
-  chatMessagesToOpenAi as chatMessagesToOpenAiImpl,
-  openAiChoiceToBlocks,
-} from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
-import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
+import {  OpenAiMapper  } from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
+import {  ThinkingContext  } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
 
 // 六期签名适配：两个 mapper 返回 Result，本地同名 wrapper 拆包（失败原样抛出
 // AppError，assert.throws 用例语义不变），调用点与断言语义零改动。
 const blocksToOpenAiMessageContent = (blocks: Parameters<typeof blocksToOpenAiMessageContentImpl>[0]) => {
-  const result = blocksToOpenAiMessageContentImpl(blocks);
+  const result = OpenAiMapper.blocksToMessageContent(blocks);
   if (!result.ok) throw result.error;
   return result.value;
 };
 const chatMessagesToOpenAi = (messages: Parameters<typeof chatMessagesToOpenAiImpl>[0]) => {
-  const result = chatMessagesToOpenAiImpl(messages);
+  const result = OpenAiMapper.chatMessagesTo(messages);
   if (!result.ok) throw result.error;
   return result.value;
 };
@@ -67,7 +63,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("O2: OpenAI tool_calls response → tool_use blocks", () => {
-    const blocks = openAiChoiceToBlocks({
+    const blocks = OpenAiMapper.choiceToBlocks({
       role: "assistant",
       content: null,
       tool_calls: [
@@ -175,12 +171,12 @@ describe("openai-content-mapper", () => {
     assert.throws(
       () =>
         blocksToOpenAiMessageContent([{ type: "thinking", text: "hmm" }]),
-      (e: unknown) => isAppError(e, "PROVIDER_UNSUPPORTED_CONTENT"),
+      (e: unknown) => AppErrorOps.is(e, "PROVIDER_UNSUPPORTED_CONTENT"),
     );
   });
 
   it("maps reasoning_content inbound to thinking when content is present", () => {
-    const blocks = openAiChoiceToBlocks({
+    const blocks = OpenAiMapper.choiceToBlocks({
       content: "answer",
       reasoning_content: "internal chain",
     });
@@ -190,7 +186,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("string content 含内嵌标签时原样进 text，不挖入 thinking", () => {
-    const blocks = openAiChoiceToBlocks({
+    const blocks = OpenAiMapper.choiceToBlocks({
       content: "<thought>secret</thought>可见回复",
       reasoning_content: "structured",
     });
@@ -204,7 +200,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("maps reasoning-only inbound to thinking only (no GLM promotion)", () => {
-    const blocks = openAiChoiceToBlocks({
+    const blocks = OpenAiMapper.choiceToBlocks({
       content: "",
       reasoning_content: "visible reply",
     });
@@ -402,7 +398,7 @@ describe("openai-content-mapper", () => {
     const history = [userMsg("u1"), mk("a1", "第一轮思考"), userMsg("u2"), mk("a2", "第二轮思考")];
 
     const onOut = chatMessagesToOpenAi(
-      applyThinkingContextForLlm(history, {
+      ThinkingContext.applyForLlm(history, {
         enabled: true,
         protocol: "openai",
         retainProtocolMinimum: true,
@@ -413,7 +409,7 @@ describe("openai-content-mapper", () => {
     assert.equal(onOut[3]!.reasoning_content, "第二轮思考");
 
     const offOut = chatMessagesToOpenAi(
-      applyThinkingContextForLlm(history, {
+      ThinkingContext.applyForLlm(history, {
         enabled: false,
         protocol: "openai",
         retainProtocolMinimum: true,

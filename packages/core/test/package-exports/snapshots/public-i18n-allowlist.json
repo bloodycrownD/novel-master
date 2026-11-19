@@ -3,10 +3,8 @@
   "CORE_MESSAGE_KEYS",
   "CORE_MESSAGE_KEY_PATTERN",
   "ERROR_KEY_DOMAINS",
+  "ErrorMessage",
   "LABEL_KEY_DOMAINS",
-  "createTranslator",
-  "messageParamOf",
-  "parseCoreCatalog",
-  "resolveLocalizedMessage",
-  "userMessageOf"
+  "LocalizedMessage",
+  "createTranslator"
 ]

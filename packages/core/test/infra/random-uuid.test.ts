@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Random } from "../../src/common/random.js";
+import {  describe, it  } from "node:test";
+import {  Random  } from "../../src/common/random.js";
 
 describe("randomUUID", () => {
   it("returns RFC4122 v4 format", () => {

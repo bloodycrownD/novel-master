@@ -31,11 +31,11 @@
  */
 
 import { PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { sessionApiPromptTokenCache } from "./session-api-prompt-token-cache.js";
 
-const log = createLogger("tokenizer.session-api-store");
+const log = LogFactory.create("tokenizer.session-api-store");
 
 /**
  * 落库/回读一条 prompt 占用值所需的全部字段。

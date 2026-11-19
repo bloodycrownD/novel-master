@@ -5,11 +5,8 @@
  * `novelMasterTestFixture()` once at the top of the file, then use
  * `getNovelMasterTestContext()` inside each `it`.
  */
-import { after, before } from "node:test";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "./novel-master.js";
+import {  after, before  } from "node:test";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "./novel-master.js";
 
 let sharedCtx: NovelMasterTestContext | undefined;
 

@@ -19,20 +19,16 @@
  * @module test/message-checkpoint/rollback-restore-deleted-entry.test
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { RollbackErrorGuards } from "@novel-master/core/message-checkpoint";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  RollbackErrorGuards  } from "@novel-master/core/message-checkpoint";
 
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -142,7 +138,7 @@ describe("rollback-restore-deleted-entry", () => {
     unwrap(await svfs.delete("/docs", { recursive: true }));
     {
       const r = await svfs.read("/docs/a.md");
-      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "删除后读取应走 Err 且为 VFS_NOT_FOUND");
+      assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "删除后读取应走 Err 且为 VFS_NOT_FOUND");
     }
 
     await ctx.sessionFs.rollbackFilesToMessage(
@@ -189,7 +185,7 @@ describe("rollback-restore-deleted-entry", () => {
     assert.equal(unwrap(await svfs.read("/origin.md")).content, "v1");
     {
       const r = await svfs.read("/renamed.md");
-      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "rename 后旧路径读取应走 Err 且为 VFS_NOT_FOUND");
+      assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "rename 后旧路径读取应走 Err 且为 VFS_NOT_FOUND");
     }
   });
 

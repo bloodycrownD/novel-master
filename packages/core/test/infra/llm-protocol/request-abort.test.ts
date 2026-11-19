@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  AbortError,
-  isAbortLikeError,
-  isRequestAborted,
-} from "../../../src/infra/llm-protocol/logic/request-abort.js";
+import {  describe, it  } from "node:test";
+import {  RequestAbort, AbortError  } from "../../../src/infra/llm-protocol/logic/request-abort.js";
 
 describe("request-abort", () => {
   it("isAbortLikeError matches Error.name AbortError without DOMException", () => {
@@ -15,8 +11,8 @@ describe("request-abort", () => {
     try {
       const err = new Error("aborted");
       err.name = "AbortError";
-      assert.equal(isAbortLikeError(err), true);
-      assert.equal(isAbortLikeError(new Error("other")), false);
+      assert.equal(RequestAbort.isAbortLikeError(err), true);
+      assert.equal(RequestAbort.isAbortLikeError(new Error("other")), false);
     } finally {
       if (saved !== undefined) {
         g.DOMException = saved;
@@ -33,7 +29,7 @@ describe("request-abort", () => {
       const err = AbortError.create("cancelled");
       assert.equal(err.name, "AbortError");
       assert.equal(err.message, "cancelled");
-      assert.equal(isRequestAborted(err), true);
+      assert.equal(RequestAbort.isAborted(err), true);
     } finally {
       if (saved !== undefined) {
         g.DOMException = saved;

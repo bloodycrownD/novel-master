@@ -5,9 +5,9 @@
  */
 
 import { assert } from "@/common/assert.js";
-import { yieldToEventLoop } from "@/common/concurrency.js";
+import { Concurrency } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
@@ -27,15 +27,15 @@ import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/b
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import { SessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
 import { VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "@/domain/vfs/logic/vfs-import-chunk.js";
-import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import { ImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { importFailure } from "./import-failure.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { ImportFailure } from "./import-failure.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("vfs.zip-io");
+const log = LogFactory.create("vfs.zip-io");
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -57,10 +57,10 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
   if (logical === "/") {
     return;
   }
-  unwrapOrRollback(await ParentDirs.ensure(repo, sk, `${logical}/__vfs_zip_placeholder`));
-  const existing = unwrapOrRollback(await repo.findByPath(sk, logical));
+  TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repo, sk, `${logical}/__vfs_zip_placeholder`));
+  const existing = TdbcTransaction.unwrapOrRollback(await repo.findByPath(sk, logical));
   if (existing == null) {
-    unwrapOrRollback(await repo.insertDirectory(sk, logical));
+    TdbcTransaction.unwrapOrRollback(await repo.insertDirectory(sk, logical));
     return;
   }
   if (existing.entryKind !== "directory") {
@@ -185,7 +185,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       if (error instanceof Error && error.message === "test import failure") {
         throw error;
       }
-      throw importFailure(error);
+      throw ImportFailure.create(error);
     }
 
     // 段 B0 提交后立刻收被替换掉的旧内容：sweep 把旧 blob 的 ref_count 递减到 0
@@ -212,7 +212,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
               throw new Error("test import failure");
             }
             // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-            unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
+            TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
             await LiveHeadRevisionSeeder.insertFileSeeding(repoTx, revisionTx, sk, logical, content);
           }
         });
@@ -233,10 +233,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         if (error instanceof Error && error.message === "test import failure") {
           throw error;
         }
-        throw importFailure(error, committedShards, shardIndex + 1);
+        throw ImportFailure.create(error, committedShards, shardIndex + 1);
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。
-      await yieldToEventLoop();
+      await Concurrency.yieldToEventLoop();
     }
 
     // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**。
@@ -245,7 +245,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     // 未提交行 ⇒ 放进某一片会漏补后续片造出的目录。
     try {
       await this.conn.transaction(async (tx) => {
-        await ensureImportDirRules({
+        await ImportDirRules.ensure({
           vfsRepo: new SqliteVfsEntryRepository(tx),
           // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会
           // 撞驱动层 AsyncMutex 不可重入——那是死锁不是报错。
@@ -286,7 +286,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
     if (this.sessionKkv && scope.kind === "session") {
-      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
+      await SessionPromptCaches.clear(scope.sessionId, this.sessionKkv);
     }
     return Result.ok(undefined);
   }

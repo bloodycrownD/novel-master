@@ -12,7 +12,7 @@
  * @module test/service/chat/create-message-service-direct
  */
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
+import {  describe, it, mock  } from "node:test";
 import type { TdbcConnection } from "../../../src/infra/tdbc/ports/connection.port.js";
 
 let projectCtorCalls = 0;

@@ -5,24 +5,17 @@
  * 键空间 / 差集 / 吞错用内存 stub（不依赖真实 DB）；等价性用例走
  * novelMasterTestFixture 对照真实 WorkplaceService.setDirRule 产物。
  */
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { VfsEntryRepository } from "../../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { WorkplaceDirRule } from "../../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../../src/domain/workplace/repositories/workplace.port.js";
-import { SqliteVfsEntryRepository } from "../../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteWorkplaceRepository } from "../../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import {
-  buildDefaultDirRule,
-  ensureImportDirRules,
-} from "../../../src/service/vfs/logic/ensure-import-dir-rules.js";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "../../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteWorkplaceRepository  } from "../../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  ImportDirRules  } from "../../../src/service/vfs/logic/ensure-import-dir-rules.js";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -73,7 +66,7 @@ describe("ensureImportDirRules（stub 单测）", () => {
     const { vfsRepo, workplaceRepo, calls } = makeStubs({
       directories: ["/", "/a", "/a/b"],
     });
-    await ensureImportDirRules({
+    await ImportDirRules.ensure({
       vfsRepo,
       workplaceRepo,
       scope: SESSION_SCOPE,
@@ -95,11 +88,11 @@ describe("ensureImportDirRules（stub 单测）", () => {
     const { vfsRepo, workplaceRepo, calls } = makeStubs({
       directories: ["/角色", "/角色/开场"],
       existingRules: [
-        buildDefaultDirRule("session:s1", "/角色"),
-        { ...buildDefaultDirRule("session:s1", "/角色/开场"), ruleEnabled: false },
+        ImportDirRules.buildDefault("session:s1", "/角色"),
+        { ...ImportDirRules.buildDefault("session:s1", "/角色/开场"), ruleEnabled: false },
       ],
     });
-    await ensureImportDirRules({
+    await ImportDirRules.ensure({
       vfsRepo,
       workplaceRepo,
       scope: SESSION_SCOPE,
@@ -119,7 +112,7 @@ describe("ensureImportDirRules（stub 单测）", () => {
     };
     try {
       await assert.doesNotReject(
-        ensureImportDirRules({
+        ImportDirRules.ensure({
           vfsRepo,
           workplaceRepo,
           scope: SESSION_SCOPE,
@@ -136,7 +129,7 @@ describe("ensureImportDirRules（stub 单测）", () => {
     const { vfsRepo, workplaceRepo, calls } = makeStubs({
       directories: ["/角色", "/角色/世界书"],
     });
-    await ensureImportDirRules({
+    await ImportDirRules.ensure({
       vfsRepo,
       workplaceRepo,
       scope: SESSION_SCOPE,
@@ -158,10 +151,10 @@ describe("ensureImportDirRules（stub 单测）", () => {
     const { vfsRepo, workplaceRepo, calls } = makeStubs({
       directories: ["/角色", "/角色/开场", "/角色/世界书"],
       existingRules: [
-        { ...unwrap(buildDefaultDirRule("session:s1", "/角色/世界书")), ruleEnabled: false },
+        { ...unwrap(ImportDirRules.buildDefault("session:s1", "/角色/世界书")), ruleEnabled: false },
       ],
     });
-    await ensureImportDirRules({
+    await ImportDirRules.ensure({
       vfsRepo,
       workplaceRepo,
       scope: SESSION_SCOPE,
@@ -195,7 +188,7 @@ describe("ensureImportDirRules（真实 DB 等价性）", () => {
     unwrap(await vfs.mkdir("/角色/开场"));
 
     // 左边：helper 直构补行
-    await ensureImportDirRules({
+    await ImportDirRules.ensure({
       vfsRepo: new SqliteVfsEntryRepository(ctx.conn),
       workplaceRepo: new SqliteWorkplaceRepository(ctx.conn),
       scope,
@@ -212,7 +205,7 @@ describe("ensureImportDirRules（真实 DB 等价性）", () => {
     const vfs2 = ctx.sessionVfs(project.id, session2.id);
     unwrap(await vfs2.mkdir("/角色"));
     unwrap(await vfs2.mkdir("/角色/开场"));
-    const wt2 = createWorkplaceService(ctx.conn, scope2);
+    const wt2 = WorkplaceServiceFactory.create(ctx.conn, scope2);
     await wt2.setDirRule({ logicalPath: "/角色" });
     await wt2.setDirRule({ logicalPath: "/角色/开场" });
 

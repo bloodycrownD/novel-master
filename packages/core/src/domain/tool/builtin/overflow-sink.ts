@@ -24,9 +24,9 @@ import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { Encoding } from "@/common/encoding.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import { FileTools } from "./vfs-tools.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.overflow-sink");
+const log = LogFactory.create("tool.overflow-sink");
 
 /** 落盘子目录（会话工作区 VFS 内，子代理时为父会话工作区）。 */
 const OVERFLOW_SINK_DIR = "/tmp";

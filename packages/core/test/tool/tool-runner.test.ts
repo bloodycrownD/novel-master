@@ -1,10 +1,10 @@
-import { isAppError } from "../../src/errors/app-error.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { z } from "zod";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
+import {  describe, it  } from "node:test";
+import {  z  } from "zod";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
 
 describe("ToolRunner", () => {
   it("throws NOT_FOUND for missing tool", async () => {
@@ -12,7 +12,7 @@ describe("ToolRunner", () => {
     const runner = new ToolRunner(registry);
     await rejectsErr(
       () => runner.call("no.such.tool", {}, {}),
-      (e) => isAppError(e, "TOOL_NOT_FOUND"),
+      (e) => AppErrorOps.is(e, "TOOL_NOT_FOUND"),
     );
   });
 
@@ -31,7 +31,7 @@ describe("ToolRunner", () => {
     await rejectsErr(
       () => runner.call("test.sum", { a: 1 }, {}),
       (e) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.details?.toolName === "test.sum" &&
         typeof e.details === "object",
@@ -53,7 +53,7 @@ describe("ToolRunner", () => {
     await assert.rejects(
       () => runner.call("test.fail", {}, {}),
       (e) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_FAILED" &&
         e.details?.toolName === "test.fail" &&
         (e.cause as Error | undefined)?.message === "boom",
@@ -74,7 +74,7 @@ describe("ToolRunner", () => {
     const runner = new ToolRunner(registry);
     await rejectsErr(
       () => runner.call("test.badOutput", {}, {}),
-      (e) => isAppError(e, "TOOL_FAILED"),
+      (e) => AppErrorOps.is(e, "TOOL_FAILED"),
     );
   });
 });

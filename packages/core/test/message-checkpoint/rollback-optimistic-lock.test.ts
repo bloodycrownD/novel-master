@@ -1,17 +1,13 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { createSessionFsService } from "@novel-master/core/session-fs";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SessionFsServiceFactory  } from "@novel-master/core/session-fs";
 import type { TdbcConnection } from "@novel-master/core";
-import { isSessionFsError } from "../../src/errors/guards.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  isSessionFsError  } from "../../src/errors/guards.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 // T-SC11（A-22 乐观锁）：resolveRollbackPlan 多次 await 读与 conn.transaction 写之间
 // 存在 TOCTOU 间隙——agent 可在此期间 append 消息，导致 plan 基于过期读。
@@ -71,7 +67,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
 
     // 事务开始前持续注入写入——多于重试上限（3），最后一次重试仍会冲突并向上抛。
     const messagesBefore = (outcomeValue(await ctx.messages.listBySession(session.id))).length;
-    const sessionFs = createSessionFsService(
+    const sessionFs = SessionFsServiceFactory.create(
       wrapConnWithRaceWrite(
         ctx.conn,
         () =>
@@ -126,7 +122,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
 
     // 只注入 1 次：第一次事务冲突 → 重试；第二次重试时 resolveRollbackPlan 拿到的是
     // 含竞态写入后的新快照，事务重读计数一致 → 提交成功。
-    const sessionFs = createSessionFsService(
+    const sessionFs = SessionFsServiceFactory.create(
       wrapConnWithRaceWrite(
         ctx.conn,
         () =>

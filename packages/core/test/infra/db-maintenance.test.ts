@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
-import { rmSync, statSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { after, before, describe, it } from "node:test";
-import { bootstrapNovelMaster, createDbMaintenanceService, open, type TdbcConnection } from "@novel-master/core";
-import { runStartupMaintenanceOnce } from "../../src/infra/db-maintenance/impl/db-maintenance.service.js";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  rmSync, statSync, mkdtempSync  } from "node:fs";
+import {  tmpdir  } from "node:os";
+import {  join  } from "node:path";
+import {  after, before, describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, DbMaintenance, type TdbcConnection  } from "@novel-master/core";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { DbMaintenanceService } from "@/infra/db-maintenance/index.js";
 
 /**
@@ -30,12 +26,12 @@ before(async () => {
   registerBetterSqlite3Driver();
   // 文件库 open 形态照 test/helpers/novel-master.ts：URL 与 options 双写
   // filename，Windows 绝对路径塞进 URL 的解析歧义由 options 覆盖兜底。
-  conn = await open(`tdbc:sqlite:file:${dbPath}`, {
+  conn = await TdbcOpen.open(`tdbc:sqlite:file:${dbPath}`, {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: dbPath,
   });
-  await bootstrapNovelMaster(conn);
-  maintenance = createDbMaintenanceService(conn);
+  await NovelMasterBootstrap.bootstrap(conn);
+  maintenance = DbMaintenance.create(conn);
 });
 
 after(async () => {
@@ -81,7 +77,7 @@ function pseudoRandomBody(seed: number, chars: number): string {
 
 describe("数据库维护（infra/db-maintenance）", () => {
   it("T-DM1 文件库：写入→删除产生 freelist→maintenance 回收（freelist 归零、体积下降、缓存 GC 生效）", async () => {
-    const sk = createSessionKkvService(conn);
+    const sk = SessionKkvServiceFactory.create(conn);
     const bulkSession = "dm1-bulk";
     const keepSession = "dm1-keep";
 
@@ -184,7 +180,7 @@ describe("数据库维护（infra/db-maintenance）", () => {
     // 不支持重入），测的不是"SQLite 拒绝事务内 VACUUM"这个防护本身。
     await assert.rejects(() =>
       conn.transaction(async (tx) => {
-        await createDbMaintenanceService(tx).runDatabaseMaintenance();
+        await DbMaintenance.create(tx).runDatabaseMaintenance();
       })
     );
   });
@@ -194,20 +190,20 @@ describe("数据库维护（infra/db-maintenance）", () => {
     // 执行顺序解耦：用例内先跑一次让标记落位，再断言第二次短路。
     // T-DM1/T-DM2 走的是 `maintenance.runDatabaseMaintenance` 手动路径，
     // 不碰这个标记，故首个调用必然是真执行。
-    const first = await runStartupMaintenanceOnce(conn);
+    const first = await DbMaintenance.runStartupOnce(conn);
     assert.notEqual(first, null, "首个调用应真执行维护链路");
 
-    const second = await runStartupMaintenanceOnce(conn);
+    const second = await DbMaintenance.runStartupOnce(conn);
     assert.equal(second, null, "同进程第二次调用应短路返回 null");
   });
 
   it("T-DM4 手动「数据清理」不受启动去重标记影响：仍真执行并 VACUUM 回收", async () => {
     // 前置：确保启动去重标记已落位，手动路径必须与它无关。
-    await runStartupMaintenanceOnce(conn);
+    await DbMaintenance.runStartupOnce(conn);
 
     // 制造 freelist：24 份互不相同、且不可压缩的 8KB body（约占 48 页），
     // 写完连 entry 引用行与 blob 行一起删掉。
-    const sk = createSessionKkvService(conn);
+    const sk = SessionKkvServiceFactory.create(conn);
     const session = "dm4-temp";
     for (let i = 0; i < 24; i++) {
       await sk.set(

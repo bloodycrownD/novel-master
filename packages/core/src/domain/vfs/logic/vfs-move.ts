@@ -4,7 +4,7 @@
  * @module domain/vfs/logic/vfs-move
  */
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { Path } from "@/common/path.js";
 import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
@@ -26,7 +26,7 @@ export const VfsMove = {
     if (made.ok) {
       return Result.ok(undefined);
     }
-    if (!isAppError(made.error, "VFS_ALREADY_EXISTS")) {
+    if (!AppErrorOps.is(made.error, "VFS_ALREADY_EXISTS")) {
       return Result.err(made.error);
     }
     const read = await vfs.read(path);
@@ -42,7 +42,7 @@ export const VfsMove = {
   /** mkdir that treats ALREADY_EXISTS as success (idempotent directory chain). */
   async mkdirIgnoreExists(vfs: VfsService, path: string): Promise<Result<void, AppError>> {
     const made = await vfs.mkdir(path);
-    if (made.ok || isAppError(made.error, "VFS_ALREADY_EXISTS")) {
+    if (made.ok || AppErrorOps.is(made.error, "VFS_ALREADY_EXISTS")) {
       return Result.ok(undefined);
     }
     return Result.err(made.error);

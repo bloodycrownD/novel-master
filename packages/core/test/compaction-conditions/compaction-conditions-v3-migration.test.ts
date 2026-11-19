@@ -1,11 +1,11 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 
-import { compactionConditionsSchema, CompactionFactory } from "@novel-master/core/compaction";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
+import {  compactionConditionsSchema, CompactionFactory  } from "@novel-master/core/compaction";
+import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
 
 describe("compaction conditions v3 migration", () => {
   it("v2 KKV read-once migrates to v4 and writes back", async () => {
@@ -72,7 +72,7 @@ describe("compaction conditions v3 migration", () => {
 
   it("v2 set is rejected", () => {
     // 四期签名：decode 失败沿 Result.err 回传（不再 throw）。
-    const r = decode(
+    const r = SerializationDecode.decode(
       { schemaVersion: 2, enabled: true, tokenThreshold: 12000 },
       compactionConditionsSchema,
     );

@@ -95,8 +95,10 @@ export interface AssembleWorkplaceDisplayOptions extends LongTaskHooks {
   readonly kkvSessionId?: string;
 }
 
-/**
- * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
+/** 常驻工作区前缀组装集合（拼装展示文本 + S0/全量 path 集合 + 指纹）。 */
+export const WorkplaceDisplayAssembler = {
+  /**
+   * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
  * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [], visiblePaths: [] }`，
  *    不触 kkv
@@ -112,7 +114,7 @@ export interface AssembleWorkplaceDisplayOptions extends LongTaskHooks {
  *    其余失败仍沿 throw 冒泡（平台边界，适配层转码）。
   * 解包 throw 边界（错误通道迁移三期门⑦）：PathNormalizer.normalize 失败按迁移前形态上抛，由调用链端点 catch 收口。
  */
-export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<Outcome<AssembleWorkplaceDisplayResult>> {
+  async assemble(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<Outcome<AssembleWorkplaceDisplayResult>> {
   if (!AgentPromptLayout.hasWorkplace(deps.layout)) {
     return {
       kind: "completed",
@@ -229,4 +231,5 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
       fingerprint: fingerprintParts.join(";"),
     },
   };
-}
+  },
+} as const;

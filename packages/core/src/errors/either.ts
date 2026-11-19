@@ -230,7 +230,7 @@ export const Result = {
     if (candidate.ok === false) {
       // 落地端还原：Error 本体原样（structuredClone 通道）；带 name/message 的
       // 序列化产物重建 Error 并回填 own 字段（code 等结构守卫可用）；AppError
-      // 载荷（key + code 成对且 key 在码表登记）重建为真 AppError 实例——isAppError
+      // 载荷（key + code 成对且 key 在码表登记）重建为真 AppError 实例——AppErrorOps.is
       // 是 instanceof 判定，裸 Error + Object.assign 过不了守卫。
       const raw: unknown = candidate.error;
       if (raw instanceof Error) {

@@ -16,7 +16,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import type { Outcome } from "@/errors/outcome.js";
@@ -33,18 +33,18 @@ import { SESSION_KKV_DOMAIN_BACKFILL_CURSOR, SESSION_KKV_DOMAIN_USAGE_STATS, USA
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
 import { TruncateTail } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteUsageRecordRepository } from "@/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import { UsageRecord } from "@/domain/usage/logic/build-usage-record.js";
 import type { MessageService } from "../message.port.js";
 
-const log = createLogger("chat.message");
+const log = LogFactory.create("chat.message");
 
 /** Dependencies for {@link DefaultMessageService}. */
 interface MessageServiceDeps {
@@ -70,7 +70,7 @@ export class DefaultMessageService implements MessageService {
    * 都在 `conn.transaction` 块外，KKV 删除已 await（失败只吞 warn，不冒泡）。
    */
   private async invalidatePromptTokens(sessionId: string): Promise<void> {
-    await SessionApiPromptTokenEntry.invalidate(createSessionKkvService(this.deps.conn), sessionId);
+    await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), sessionId);
   }
 
   /**
@@ -88,7 +88,7 @@ export class DefaultMessageService implements MessageService {
    */
   private async invalidateToolUseCount(sessionId: string): Promise<void> {
     try {
-      await createSessionKkvService(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
+      await SessionKkvServiceFactory.create(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
     } catch (error) {
       log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -332,7 +332,7 @@ export class DefaultMessageService implements MessageService {
       if (inserted.kind !== "completed") throw AbortError.create();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
-      await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
+      await TdbcTransaction.unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
       return forked;
     });
     return Result.ok(await forkTransaction);

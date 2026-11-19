@@ -1,28 +1,18 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { describe, it, mock } from "node:test";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  describe, it, mock  } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
-import { DefaultProviderService } from "../../src/service/provider/impl/provider.service.js";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { KkvModelSuggestionRepository } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
-import { SqliteSavedModelRepository } from "../../src/domain/provider/repositories/impl/sqlite-saved-model.repository.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import {
-  BUILTIN_PROVIDER_UUID_OPENAI,
-  BUILTIN_PROVIDER_UUID_OPENCODE,
-} from "../../src/domain/provider/logic/builtin-providers.js";
-import { SavedModel } from "../../src/domain/provider/model/saved-model.js";
+import {  randomUUID  } from "node:crypto";
+import {  ProviderServiceFactory  } from "../../src/service/provider/provider-service-factory.js";
+import {  DefaultProviderService  } from "../../src/service/provider/impl/provider.service.js";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  KkvModelSuggestionRepository  } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
+import {  SqliteSavedModelRepository  } from "../../src/domain/provider/repositories/impl/sqlite-saved-model.repository.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  BUILTIN_PROVIDER_UUID_OPENAI, BUILTIN_PROVIDER_UUID_OPENCODE  } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  SavedModel  } from "../../src/domain/provider/model/saved-model.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import {
-  clearProtocolAdapters,
-  getProtocolAdapter,
-} from "../../src/infra/llm-protocol/logic/registry.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  Registry  } from "../../src/infra/llm-protocol/logic/registry.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
@@ -75,7 +65,7 @@ describe("ProviderService", () => {
           baseUrl: "https://example.com/v1",
           displayName: "   ",
         }),
-      (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
+      (e) => AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT"),
     );
   });
 
@@ -93,7 +83,7 @@ describe("ProviderService", () => {
 
     await rejectsErr(
       () => bundle.providers.edit(provider.id, { displayName: "  " }),
-      (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
+      (e) => AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT"),
     );
 
     const renamed = unwrap(await bundle.providers.edit(provider.id, {
@@ -113,11 +103,11 @@ describe("ProviderService", () => {
         bundle.providers.edit(BUILTIN_PROVIDER_UUID_OPENAI, {
           protocol: "gemini",
         }),
-      (e) => isAppError(e, "PROVIDER_BUILTIN_PROVIDER"),
+      (e) => AppErrorOps.is(e, "PROVIDER_BUILTIN_PROVIDER"),
     );
     await rejectsErr(
       () => bundle.providers.delete(BUILTIN_PROVIDER_UUID_OPENAI),
-      (e) => isAppError(e, "PROVIDER_BUILTIN_PROVIDER"),
+      (e) => AppErrorOps.is(e, "PROVIDER_BUILTIN_PROVIDER"),
     );
   });
 
@@ -130,7 +120,7 @@ describe("ProviderService", () => {
           "00000000-0000-4000-8000-000000000000",
           "hi",
         ),
-      (e) => isAppError(e, "PROVIDER_MODEL_NOT_SAVED"),
+      (e) => AppErrorOps.is(e, "PROVIDER_MODEL_NOT_SAVED"),
     );
   });
 
@@ -171,7 +161,7 @@ describe("ProviderService", () => {
 
     await rejectsErr(
       bundle.providers.delete(created.id),
-      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
     // 半套防护：模型必须仍在（服务层只有 savedList，没有 listByProvider）
     const still = unwrap(await bundle.providerModels.savedList(created.id));
@@ -320,7 +310,7 @@ describe("ProviderService", () => {
   });
 
   it("delete provider clears nm-model-suggestions KKV after fetch", async () => {
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
     const fetchFn = mock.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -329,7 +319,7 @@ describe("ProviderService", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     });
-    getProtocolAdapter("openai", fetchFn as typeof fetch);
+    Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
@@ -349,6 +339,6 @@ describe("ProviderService", () => {
     unwrap(await bundle.providers.delete(created.id));
     const keysAfter = await kkv.listKeys("nm-model-suggestions");
     assert.ok(!keysAfter.includes(created.id));
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
   });
 });

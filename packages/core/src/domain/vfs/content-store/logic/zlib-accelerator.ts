@@ -13,10 +13,10 @@
  * @module domain/vfs/content-store/logic/zlib-accelerator
  */
 
-import { createLogger } from "@/infra/log/logger.js";
-import { Errors } from "../../../../common/errors.js";
+import { LogFactory } from "@/infra/log/logger.js";
+import { Errors } from "@/common/index.js";
 
-const log = createLogger("vfs.zlib-accelerator");
+const log = LogFactory.create("vfs.zlib-accelerator");
 
 /**
  * 加速器契约：两个同步方法，入出均为 `Uint8Array`（实现可返回 Buffer——

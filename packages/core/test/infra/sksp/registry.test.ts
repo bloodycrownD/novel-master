@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { AssertionError } from "../../../src/common/assert.js";
-import { SkspRegistry } from "../../../src/infra/sksp/logic/registry.js";
+import {  AssertionError  } from "../../../src/common/assert.js";
+import {  SkspRegistry  } from "../../../src/infra/sksp/logic/registry.js";
 
 describe("SKSP registry", () => {
   it("resolves single registered driver", () => {

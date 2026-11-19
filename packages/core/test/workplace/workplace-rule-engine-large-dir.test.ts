@@ -1,12 +1,8 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -33,7 +29,7 @@ describe("workplace rule engine 大目录性能与语义回归", () => {
       await pvfs.write(name, `内容 ${i}`);
     }
 
-    const wt = createWorkplaceService(testCtx.conn, {
+    const wt = WorkplaceServiceFactory.create(testCtx.conn, {
       kind: "project",
       projectId: project.id,
     });
@@ -84,7 +80,7 @@ describe("workplace rule engine 大目录性能与语义回归", () => {
     await pvfs.write("/d/a.md", "a");
     await pvfs.write("/d/b.md", "b");
 
-    const wt = createWorkplaceService(testCtx.conn, {
+    const wt = WorkplaceServiceFactory.create(testCtx.conn, {
       kind: "project",
       projectId: project.id,
     });

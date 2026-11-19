@@ -7,10 +7,10 @@
  * 保证（本文件不做运行时重复断言）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AssertionError, assert as invariant } from "@/common/assert.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import {  AssertionError, assert as invariant  } from "@/common/assert.js";
+import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
 
 describe("common/assert（T-S25）", () => {
   it("assert(false, msg) 抛 AssertionError，带 [invariant] 前缀且不是 AppError", () => {
@@ -23,7 +23,7 @@ describe("common/assert（T-S25）", () => {
     assert.ok(thrown instanceof AssertionError);
     assert.equal((thrown as Error).name, "AssertionError");
     assert.equal((thrown as Error).message, "[invariant] 装配不变量破坏");
-    assert.equal(isAppError(thrown), false);
+    assert.equal(AppErrorOps.is(thrown), false);
     assert.equal(thrown instanceof AppError, false);
   });
 

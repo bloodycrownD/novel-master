@@ -8,8 +8,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SkillFrontMatterValues } from "@novel-master/core/skills";
+import {  describe, it  } from "node:test";
+import {  SkillFrontMatterValues  } from "@novel-master/core/skills";
 
 describe("SkillFrontMatterValues.rewrite（T-S1）", () => {
   it("替换既有 name/description，保留其余键与正文（含冒号描述转义）", () => {

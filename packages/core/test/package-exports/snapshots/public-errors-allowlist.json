@@ -1,10 +1,10 @@
 [
   "AppError",
+  "AppErrorOps",
   "Err",
   "ErrorCodes",
+  "ErrorGuards",
   "Ok",
-  "Result",
-  "domainOf",
-  "isAppError",
-  "matchOutcome"
+  "Outcome",
+  "Result"
 ]

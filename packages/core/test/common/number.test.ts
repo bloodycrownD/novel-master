@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Number as Num, STORAGE_BYTES } from "../../src/common/number.js";
+import {  describe, it  } from "node:test";
+import {  Number as Num, STORAGE_BYTES  } from "../../src/common/number.js";
 
 describe("common/number · Number.pad2", () => {
   it("补零到两位；超过两位原样返回不截断", () => {

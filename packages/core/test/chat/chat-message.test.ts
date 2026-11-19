@@ -3,9 +3,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
-import { MessageAttachmentSchema } from "../../src/domain/chat/model/message-attachment.schema.js";
+import {  describe, it  } from "node:test";
+import {  ChatMessage  } from "../../src/domain/chat/logic/message/chat-message.js";
+import {  MessageAttachmentSchema  } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 function makeMsg(

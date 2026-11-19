@@ -11,21 +11,18 @@
  * @module test/message-checkpoint/backfill-gap-index-join
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
-import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  MessageCheckpointFactory  } from "@novel-master/core/message-checkpoint";
+import {  BackfillBaselineCheckpoints  } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteMessageRepository  } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { ChatMessageHeader } from "@/domain/chat/model/message.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
 
 interface Counters {
   hasCheckpoint: number;

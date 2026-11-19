@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { buildStreamPartialBlocks } from "../../../src/infra/llm-protocol/logic/stream-partial-blocks.js";
+import {  describe, it  } from "node:test";
+import {  StreamPartialBlocks  } from "../../../src/infra/llm-protocol/logic/stream-partial-blocks.js";
 
 describe("buildStreamPartialBlocks", () => {
   it("T1: keeps partial thinking without empty text block", () => {
-    const blocks = buildStreamPartialBlocks({
+    const blocks = StreamPartialBlocks.build({
       text: "",
       thinking: "half thought",
     });
@@ -16,11 +16,11 @@ describe("buildStreamPartialBlocks", () => {
   });
 
   it("T2: returns empty when nothing streamed", () => {
-    assert.deepEqual(buildStreamPartialBlocks({ text: "", thinking: "" }), []);
+    assert.deepEqual(StreamPartialBlocks.build({ text: "", thinking: "" }), []);
   });
 
   it("includes text and tool_use when present", () => {
-    const blocks = buildStreamPartialBlocks({
+    const blocks = StreamPartialBlocks.build({
       text: "hi",
       thinking: "",
       toolUses: [{ id: "1", name: "read", input: { path: "/a" } }],

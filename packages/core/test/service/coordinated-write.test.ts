@@ -11,10 +11,10 @@
  * - register 校验 execute/rollback 必填。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { CoordinatedWrite } from "@/service/coordinated-write.js";
-import { Result } from "../../src/errors/either.js";
-import { createFailureInjector } from "../helpers/failure-injection.js";
+import {  describe, it  } from "node:test";
+import {  CoordinatedWrite  } from "@/service/coordinated-write.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  createFailureInjector  } from "../helpers/failure-injection.js";
 
 /** 回滚失败错误的运行期形状（类已收口为模块私有，测试按 name 字段识别）。 */
 type CaughtRollbackError = Error & { readonly rollbackErrors: ReadonlyArray<{ readonly step: string; readonly error: unknown }> };

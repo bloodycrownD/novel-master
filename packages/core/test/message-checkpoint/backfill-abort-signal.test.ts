@@ -14,26 +14,19 @@
  * @module test/message-checkpoint/backfill-abort-signal.test
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  describe, it, mock  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  BackfillBaselineCheckpoints  } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { ChatMessageHeader } from "@/domain/chat/model/message.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import {
-  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

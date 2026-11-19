@@ -3,11 +3,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  MessageAttachmentSchema,
-  messageAttachmentSchema,
-} from "../../src/domain/chat/model/message-attachment.schema.js";
+import {  describe, it  } from "node:test";
+import {  MessageAttachmentSchema, messageAttachmentSchema  } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("messageAttachmentSchema", () => {
   it("accepts workplace/attach/user_ops 合法条目", () => {

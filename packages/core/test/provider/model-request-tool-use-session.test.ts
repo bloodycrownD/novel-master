@@ -1,16 +1,13 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  BUILTIN_PROVIDER_UUID_ANTHROPIC  } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
+import {  describe, it, mock  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  ProviderServiceFactory  } from "../../src/service/provider/provider-service-factory.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import {
-  clearProtocolAdapters,
-  getProtocolAdapter,
-} from "../../src/infra/llm-protocol/logic/registry.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  Registry  } from "../../src/infra/llm-protocol/logic/registry.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
   return {
@@ -34,7 +31,7 @@ novelMasterTestFixture();
 
 describe("ModelRequestService tool_use session round-trip", () => {
   it("persists tool_use block after request with history", async () => {
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
     const fetchFn = mock.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -52,7 +49,7 @@ describe("ModelRequestService tool_use session round-trip", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     });
-    getProtocolAdapter("anthropic", fetchFn as typeof fetch);
+    Registry.getProtocolAdapter("anthropic", fetchFn as typeof fetch);
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
@@ -86,6 +83,6 @@ describe("ModelRequestService tool_use session round-trip", () => {
         (b) => b.type === "text" && b.text === "",
       ),
     );
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
   });
 });

@@ -26,26 +26,26 @@
  * @module test/service/agent/subsession-workspace-isolation.test
  */
 
-import { outcomeValue } from "../../helpers/outcome-value.js";
-import { Result } from "../../../src/errors/either.js";
+import {  outcomeValue  } from "../../helpers/outcome-value.js";
+import {  Result  } from "../../../src/errors/either.js";
 import type { AppError } from "../../../src/errors/app-error.js";
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
+import {  AgentServiceFactory, AgentTurnRunner, type AgentDefinition, type AgentTurnRuntimePort  } from "@novel-master/core/agent";
 import type { LlmChatResult } from "@novel-master/core/llm-protocol";
-import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
+import {  ChatAgentSession  } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { VfsService } from "@novel-master/core/vfs";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -429,7 +429,7 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理", { stream: false, onStream: () => {} }));
 
     assert.ok(childIds.length === 1, "应只创建 1 个子 session");
     const childId = childIds[0]!;
@@ -471,7 +471,7 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理写文件", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理写文件", { stream: false, onStream: () => {} }));
 
     assert.ok(childIds.length === 1, "应创建 1 个子 session");
     const childId = childIds[0]!;
@@ -514,7 +514,7 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理写后读", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理写后读", { stream: false, onStream: () => {} }));
 
     // 子 agent read/write 走同一父 scope 视图：read 的 tool_result 应含刚写的内容。
     const childId = childIds[0]!;
@@ -580,7 +580,7 @@ describe("T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理", { stream: false, onStream: () => {} }));
 
     const childId = childIds[0]!;
 
@@ -655,7 +655,7 @@ describe("T-SS-7：子会话首次装配 workplace 的 KKV 快照隔离", () => 
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理装配工作区", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: parent.id }, "派生子代理装配工作区", { stream: false, onStream: () => {} }));
 
     assert.ok(childIds.length === 1, "应创建 1 个子 session");
     const childId = childIds[0]!;
@@ -739,7 +739,7 @@ describe("T-SS-8：嵌套 / 多子 session 共享父工作区", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: parent.id }, "连派两个子代理", { stream: false, onStream: () => {} }));
+    unwrap(await AgentTurnRunner.run(runtime, { projectId: project.id, sessionId: parent.id }, "连派两个子代理", { stream: false, onStream: () => {} }));
 
     assert.equal(childIds.length, 2, "应创建 2 个兄弟子 session");
     const [childA, childB] = childIds;

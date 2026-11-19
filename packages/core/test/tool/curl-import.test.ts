@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { CurlImport, type CurlCommandDraft, type  CurlParseError } from "../../src/domain/tool/builtin/search/curl-import.js";
+import {  CurlImport, type CurlCommandDraft, type  CurlParseError  } from "../../src/domain/tool/builtin/search/curl-import.js";
 import type { Result } from "../../src/errors/either.js";
 
 const SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345";

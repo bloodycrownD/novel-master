@@ -1,8 +1,10 @@
 [
   "DEFAULT_WORKPLACE_DIR_RULE",
   "FrontMatter",
+  "RuleSnapshot",
   "RuleSnapshotCodec",
   "WorkplaceDisplay",
+  "WorkplaceDisplayAssembler",
   "WorkplaceEval",
   "WorkplaceFileTree",
   "WorkplaceLabels",
@@ -10,7 +12,5 @@
   "WorkplacePaths",
   "WorkplaceRuleEngine",
   "WorkplaceScope",
-  "assembleWorkplaceDisplay",
-  "createWorkplaceService",
-  "refreshRuleSnapshot"
+  "WorkplaceServiceFactory"
 ]

@@ -1,31 +1,22 @@
-import { unwrap } from "./helpers/result-unwrap.js";
+import {  unwrap  } from "./helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import * as coreMain from "@novel-master/core";
-import { createKkvService } from "@novel-master/core/kkv";
-import {
-  AgentServiceFactory,
-  resolveAgentForProject,
-} from "@novel-master/core/agent";
+import {  createKkvService  } from "@novel-master/core/kkv";
+import {  AgentServiceFactory, AgentProjectResolver  } from "@novel-master/core/agent";
 import type { ResolvedAgentForProject } from "@novel-master/core/agent";
-import {
-  ChatServiceFactory,
-  sessionAgentConfigSchema,
-} from "@novel-master/core/chat";
+import {  ChatServiceFactory, sessionAgentConfigSchema  } from "@novel-master/core/chat";
 import type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
 } from "@novel-master/core/chat";
-import { CompactionFactory } from "@novel-master/core/compaction";
-import { PromptBuilder } from "@novel-master/core/prompt";
-import { ProviderServiceFactory } from "@novel-master/core/provider";
-import { createSessionFsService } from "@novel-master/core/session-fs";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "./helpers/novel-master-fixture.js";
+import {  CompactionFactory  } from "@novel-master/core/compaction";
+import {  PromptBuilder  } from "@novel-master/core/prompt";
+import {  ProviderServiceFactory  } from "@novel-master/core/provider";
+import {  SessionFsServiceFactory  } from "@novel-master/core/session-fs";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "./helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -60,9 +51,9 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(mainEntry.CompactionFactory, undefined);
     assert.equal(mainEntry.PromptBuilder, undefined);
     assert.equal(mainEntry.ProviderServiceFactory, undefined);
-    assert.equal(mainEntry.createSessionFsService, undefined);
+    assert.equal(mainEntry.SessionFsServiceFactory, undefined);
     assert.equal(mainEntry.VfsServiceFactory, undefined);
-    assert.equal(mainEntry.createWorkplaceService, undefined);
+    assert.equal(mainEntry.WorkplaceServiceFactory, undefined);
   });
 
   it("exports createKkvService from @novel-master/core/kkv", async () => {
@@ -86,10 +77,10 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof PromptBuilder.assemble, "function");
     assert.equal(typeof ProviderServiceFactory, "object");
     assert.equal(typeof ProviderServiceFactory.create, "function");
-    assert.equal(typeof createSessionFsService, "function");
+    assert.equal(typeof SessionFsServiceFactory.create, "function");
     assert.equal(typeof VfsServiceFactory, "object");
     assert.equal(typeof VfsServiceFactory.createScoped, "function");
-    assert.equal(typeof createWorkplaceService, "function");
+    assert.equal(typeof WorkplaceServiceFactory.create, "function");
   });
 
   it("从 @novel-master/core/chat 导出 session agent config 符号", () => {
@@ -105,8 +96,8 @@ describe("T0 package exports (@novel-master/core entry)", () => {
 
   it("从 @novel-master/core/agent 导出 resolveAgentForProject（sessionId 必填签名）", () => {
     // Step 10 契约：sessionId 升级为必填后，函数仍从公开子入口导出。
-    assert.equal(typeof resolveAgentForProject, "function");
-    assert.equal(resolveAgentForProject.length, 3);
+    assert.equal(typeof AgentProjectResolver.resolve, "function");
+    assert.equal(AgentProjectResolver.resolve.length, 3);
     // 类型仅作 import 契约存在，锁定 ResolvedAgentForProject 两个 source 分支可达。
     const _typeCheck: ResolvedAgentForProject = {
       source: "session",

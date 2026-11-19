@@ -22,31 +22,33 @@ interface SseDispatchState {
   firstChunkDelivered: boolean;
 }
 
-/** 创建一份新的分发状态，供一次 SSE 响应全程复用。 */
-export function createSseDispatchState(): SseDispatchState {
-  return { firstChunkDelivered: false };
-}
+export const SseDispatch = {
+  /** 创建一份新的分发状态，供一次 SSE 响应全程复用。 */
+  createState(): SseDispatchState {
+    return { firstChunkDelivered: false };
+  },
 
-/**
- * 把解码后的 chunk 文本转发给 `emit`；首个非空 chunk 会触发一次 `onFirstChunk`。
- *
- * 注意：首参命名为 `chunk` 而非 spec 字面意义的 `rawBytes`。因为 XHR 路径拿到的
- * `responseText` 已是 UTF-8 解码后的字符串，强行要求 bytes 会让 RN 那条精心调过
- * 的 responseText 链路改成 arraybuffer，风险与收益不匹配。两条路径在调用本函数前
- * 各自完成解码（fetch 用 TextDecoder，XHR 用 responseText），转发语义在此统一。
- *
- * @param chunk 解码后的文本片段，可能为空；空片段会被忽略
- * @param state 跨 chunk 的分发状态，用来记首包
- * @param emit 投递 sink：fetch 传 onChunk，XHR 传 emitter.append
- * @param onFirstChunk 首个非空 chunk 的回调，用来打日志
- */
-export function dispatchSseChunk(chunk: string, state: SseDispatchState, emit: (text: string) => void, onFirstChunk?: (bytes: number) => void): void {
-  if (chunk.length === 0) {
-    return;
-  }
-  emit(chunk);
-  if (!state.firstChunkDelivered) {
-    state.firstChunkDelivered = true;
-    onFirstChunk?.(chunk.length);
-  }
-}
+  /**
+   * 把解码后的 chunk 文本转发给 `emit`；首个非空 chunk 会触发一次 `onFirstChunk`。
+   *
+   * 注意：首参命名为 `chunk` 而非 spec 字面意义的 `rawBytes`。因为 XHR 路径拿到的
+   * `responseText` 已是 UTF-8 解码后的字符串，强行要求 bytes 会让 RN 那条精心调过
+   * 的 responseText 链路改成 arraybuffer，风险与收益不匹配。两条路径在调用本函数前
+   * 各自完成解码（fetch 用 TextDecoder，XHR 用 responseText），转发语义在此统一。
+   *
+   * @param chunk 解码后的文本片段，可能为空；空片段会被忽略
+   * @param state 跨 chunk 的分发状态，用来记首包
+   * @param emit 投递 sink：fetch 传 onChunk，XHR 传 emitter.append
+   * @param onFirstChunk 首个非空 chunk 的回调，用来打日志
+   */
+  dispatchChunk(chunk: string, state: SseDispatchState, emit: (text: string) => void, onFirstChunk?: (bytes: number) => void): void {
+    if (chunk.length === 0) {
+      return;
+    }
+    emit(chunk);
+    if (!state.firstChunkDelivered) {
+      state.firstChunkDelivered = true;
+      onFirstChunk?.(chunk.length);
+    }
+  },
+} as const;

@@ -6,13 +6,12 @@
  * renderer、mobile）共享。文件按类别组织（encoding / errors / json / release…），
  * 新工具优先并进已有类别文件。
  *
- * 例外：断言原语（assert / AssertionError）、i18n 工厂 + 类型族、
- * 并发原语工厂（createBusyFlag）与 Markdown front matter 解析（front-matter.ts，
- * 保留 `splitMarkdownFrontMatter` 这个既有公开名）保持裸导出，不包命名空间。
+ * 例外：断言原语（assert / AssertionError）与 i18n 工厂 + 类型族
+ * （createTranslator）按 skill 5.3 豁免保持裸导出。
  */
 export {Coerce} from "./coerce.js";
 export {Guards} from "./guards.js";
-export {createBusyFlag} from "./concurrency.js";
+export {Concurrency} from "./concurrency.js";
 export {Json} from "./json.js";
 export {Text} from "./text.js";
 export type {DecodeHtmlEntitiesOptions} from "./text.js";
@@ -38,12 +37,8 @@ export {
     type TokenSourceBadge,
 } from "./token-format.js";
 
-// Markdown front matter：split 是 @novel-master/core/workplace 的既有公开名
-// （mobile 预览 / package-exports 快照按此名消费），故与 i18n 同列裸导出。
-export {
-    parseFrontMatterFields,
-    splitMarkdownFrontMatter,
-} from "./front-matter.js";
+// Markdown front matter：namespace 形态（FrontMatter.splitMarkdown / parseFields）。
+export {FrontMatter} from "./front-matter.js";
 
 export {assert, AssertionError} from "./assert.js";
 export {

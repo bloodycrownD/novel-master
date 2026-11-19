@@ -34,30 +34,33 @@ interface BusyFlag {
   resetForTest(): void;
 }
 
-export function createBusyFlag(): BusyFlag {
-  let count = 0;
-  const acquire = () => {
-    count += 1;
-  };
-  const release = () => {
-    count = Math.max(0, count - 1);
-  };
-  return {
-    isBusy: () => count > 0,
-    acquire,
-    release,
-    set: (busy) => (busy ? acquire() : release()),
-    resetForTest: () => {
-      count = 0;
-    },
-  };
-}
+export const Concurrency = {
+  /** 进程级忙碌旗工厂：`> 0` 即忙碌；`release` 钳到 0，多释放不产生负计数。 */
+  createBusyFlag(): BusyFlag {
+    let count = 0;
+    const acquire = () => {
+      count += 1;
+    };
+    const release = () => {
+      count = Math.max(0, count - 1);
+    };
+    return {
+      isBusy: () => count > 0,
+      acquire,
+      release,
+      set: (busy) => (busy ? acquire() : release()),
+      resetForTest: () => {
+        count = 0;
+      },
+    };
+  },
 
-/**
- * 片与片之间的事件循环让步（排一个 `setTimeout(0)` 宏任务）。
- *
- * RULE：让步**只能落在片与片之间，绝不能落在事务回调内部**（事务内语句须同步执行）。
- */
-export function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
+  /**
+   * 片与片之间的事件循环让步（排一个 `setTimeout(0)` 宏任务）。
+   *
+   * RULE：让步**只能落在片与片之间，绝不能落在事务回调内部**（事务内语句须同步执行）。
+   */
+  yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  },
+} as const;

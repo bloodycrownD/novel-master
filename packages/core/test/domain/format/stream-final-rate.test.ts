@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { StreamFinalRate } from "../../../src/domain/format/stream-final-rate.js";
+import {  describe, it  } from "node:test";
+import {  StreamFinalRate  } from "../../../src/domain/format/stream-final-rate.js";
 
 describe("stream-final-rate（session KKV 冻结速率快照编解码）", () => {
   it("往返：序列化后解析回同值", () => {

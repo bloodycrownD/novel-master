@@ -6,9 +6,9 @@
  * 最保守的 `"user-stop"` 记录。首个原因锁定后，后续 abort 不得覆盖。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("AbortScopeFactory.create：reason 来源与首因锁定（T-S1）", () => {
   it("初始状态：reason 为 null、signal 未中断、无 deadline", () => {

@@ -6,7 +6,7 @@
 
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AbortReason } from "@/errors/outcome.js";
 import { FsCommand } from "./fs-command.js";
@@ -21,7 +21,7 @@ export interface ToolCall {
 
 /** Outcome of one parallel tool invocation (errors are captured, not thrown). */
 // 取消是控制流信号不是失败：`TOOL_CANCELLED` 命中时落 `{ ok: false, error, kind: "cancelled", reason }`。
-// 保留 ok/error 让展示层（ToolResultBlock.build / ToolOutput.formatErrorForLlm）沿用既有 `isAppError` 取消分类；
+// 保留 ok/error 让展示层（ToolResultBlock.build / ToolOutput.formatErrorForLlm）沿用既有 `AppErrorOps.is` 取消分类；
 // `kind`/`reason` 供上层按 `Outcome.cancelled` 识别控制流（七期：取消改返回值传播）。
 export type ParallelToolOutcome =
   | { readonly ok: true; readonly output: unknown }
@@ -143,7 +143,7 @@ export class ToolRunner<Ctx = unknown> {
     // 不再往下抛。ctx 上仍是裸 signal（工具 API 不传染 scope），故 reason 按用户停止
     // 兜底；八期起在途竞速以 AbortError reject，走下方 catch 的失败 outcome 形态。
     const failedOutcome = (error: unknown): ParallelToolOutcome =>
-      isAppError(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
+      AppErrorOps.is(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
     // nm-style: keep-local — §2 一行写完的中转变量：内联进 Promise.all(Array.from(...)) 会重新拆出多行实参。
     const worker = async () => {
       while (true) {
@@ -168,7 +168,7 @@ export class ToolRunner<Ctx = unknown> {
           try {
             const result = await this.call(call.name, call.input, ctx);
             // 已知失败与取消都沿 Result.err 接力：TOOL_CANCELLED 收成取消 outcome
-            // （保留 error 供展示层沿用 isAppError 分类），其余原样落失败。
+            // （保留 error 供展示层沿用 AppErrorOps.is 分类），其余原样落失败。
             outcomes[index] = result.ok ? { ok: true, output: result.value } : failedOutcome(result.error);
           } catch (error: unknown) {
             // 在途竞速的 reject（八期载荷 AbortError.create，平台协议例外）与未知异常

@@ -5,11 +5,11 @@
  * @module test/helpers/pack-fixtures
  */
 
-import { createDelta } from "fossil-delta";
-import { VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackSpan } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
-import { ZlibCodec } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
-import { AppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
+import {  createDelta  } from "fossil-delta";
+import {  VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackSpan  } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
+import {  ZlibCodec  } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
+import {  AppError  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 
 /** 编码产物：pack 流字节 + 各成员区间（pack 为明文切片区间；fossil 为段区间）。 */
 export interface VfsPackEncodeResult {

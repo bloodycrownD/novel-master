@@ -21,7 +21,7 @@ import type { SetDirRuleInput, SetFileRuleInput, WorkplaceDirRule, WorkplaceList
 import type { WorkplaceRuleContext, WorkplaceRuleView } from "@/domain/workplace/model/workplace-rule-view.js";
 import type { WorkplaceLiveView, WorkplaceMaterialized, WorkplacePersistBlock, WorkplaceService } from "../workplace.port.js";
 import type { SmartRuleRowsProvider, SmartRulesProvider } from "../workplace.port.js";
-import { ensureWorkplaceViewEntry, getCachedWorkplaceView, publishWorkplaceView, type WorkplaceViewCacheValue, type WorkplaceViewSigs } from "./workplace-view-cache.js";
+import { WorkplaceViewCache, type WorkplaceViewCacheValue, type WorkplaceViewSigs } from "./workplace-view-cache.js";
 
 /** Dependencies for {@link DefaultWorkplaceService}. */
 interface WorkplaceServiceDeps {
@@ -206,8 +206,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
     // listOrdered 已按 sort_order 排序，行对象由 repo 字面量构造，序列化确定。
     const smartRuleRows = this.deps.smartRuleRows != null ? await this.deps.smartRuleRows() : [];
     const sigs: WorkplaceViewSigs = { vfs, rules: JSON.stringify([dirRules, fileRules]), smartRules: JSON.stringify(smartRuleRows) };
-    const entry = ensureWorkplaceViewEntry(conn, cacheKey);
-    const cached = getCachedWorkplaceView(entry, sigs);
+    const entry = WorkplaceViewCache.ensureEntry(conn, cacheKey);
+    const cached = WorkplaceViewCache.getCached(entry, sigs);
     if (cached != null) return Result.ok(cached);
     if (entry.inFlight != null) return entry.inFlight;
     const computing = (async (): Promise<Result<WorkplaceViewCacheValue, AppError>> => {
@@ -232,7 +232,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     try {
       const value = await computing;
       if (!value.ok) return Result.err(value.error);
-      publishWorkplaceView(conn, cacheKey, sigs, value.value);
+      WorkplaceViewCache.publish(conn, cacheKey, sigs, value.value);
       return value;
     } finally {
       if (entry.inFlight === computing) entry.inFlight = undefined;

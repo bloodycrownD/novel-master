@@ -4,20 +4,20 @@
  * @module service/provider/impl/model-request.service
  */
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { inDomain } from "@/errors/guards.js";
+import { ErrorGuards } from "@/errors/guards.js";
 import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { ThinkingLevelPresets } from "@/domain/provider/logic/thinking-level-presets.js";
 import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
-import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
+import { Registry } from "@/infra/llm-protocol/logic/registry.js";
 import type { LlmChatResult, LlmProtocolAdapter, LlmProtocolKind, LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
 import type { ModelRequestOptions, ModelRequestService } from "../model-request.port.js";
-import { isAbortLikeError } from "@/infra/llm-protocol/logic/request-abort.js";
+import { RequestAbort } from "@/infra/llm-protocol/logic/request-abort.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
@@ -61,7 +61,7 @@ const PRODUCED_EVENT_TYPES = new Set<LlmStreamEvent["type"]>(["text-delta", "thi
  * abort 文本判定又必须先于「无状态码默认可重试」）；内联进 catch 会把顺序敏感的矩阵拆进重试编排。
  */
 function isRetryableError(error: unknown): boolean {
-  if (isAbortLikeError(error)) {
+  if (RequestAbort.isAbortLikeError(error)) {
     return false;
   }
   // 流式超时分级（spec llm-stream-timeout 回炉版）：0 字节耗尽整调用预算
@@ -69,10 +69,10 @@ function isRetryableError(error: unknown): boolean {
   // 已有部分输出）不重试，避免重复输出/重复计费。本分支必须置于下方
   // 「非 PROVIDER_* AppError 默认 true」之前——否则 idle 超时会被当未知瞬时错误
   // 误判为可重试。
-  if (isAppError(error, "PROVIDER_STREAM_TIMEOUT")) {
+  if (AppErrorOps.is(error, "PROVIDER_STREAM_TIMEOUT")) {
     return error.details?.phase === "first-chunk";
   }
-  if (!inDomain(error, "PROVIDER")) {
+  if (!ErrorGuards.inDomain(error, "PROVIDER")) {
     // Unknown transport/runtime failures are treated as transient once.
     return true;
   }
@@ -160,7 +160,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       }
     }
 
-    const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
+    const resolveAdapter = this.deps.resolveAdapter ?? Registry.getProtocolAdapter;
     const adapter = resolveAdapter(row.protocol);
     // 无 options 的调用方显式表达「不可取消」：建一个无定时器、无父的 scope。
     const scope = options?.scope ?? AbortScopeFactory.create();
@@ -219,7 +219,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       } catch (error) {
         const canRetry = attempt <= policy.maxRetries && !attemptEmitted && isRetryableError(error);
         // WHY: cancel must short-circuit retries so terminate actions feel immediate.
-        if (!canRetry || isAbortLikeError(error)) {
+        if (!canRetry || RequestAbort.isAbortLikeError(error)) {
           throw error;
         }
         const retryPolicy = policy ?? DEFAULT_RETRY_POLICY;

@@ -1,13 +1,9 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { FsCommand, type FsToolInput } from "../../src/domain/tool/logic/fs-command.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  FsCommand, type FsToolInput  } from "../../src/domain/tool/logic/fs-command.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 describe("fs-command parser", () => {
   it("parses ls variants", () => {
@@ -86,7 +82,7 @@ describe("fs-command parser", () => {
     for (const input of bad) {
       const r = FsCommand.parse(input);
       assert.ok(!r.ok);
-      if (!r.ok) assert.ok(isAppError(r.error, "TOOL_INVALID_ARGUMENT"));
+      if (!r.ok) assert.ok(AppErrorOps.is(r.error, "TOOL_INVALID_ARGUMENT"));
     }
   });
 });

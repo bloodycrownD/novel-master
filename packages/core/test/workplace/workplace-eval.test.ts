@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  WorkplaceEval,
-} from "@novel-master/core/workplace";
-import { Number } from "@novel-master/core/common";
+import {  describe, it  } from "node:test";
+import {  WorkplaceEval  } from "@novel-master/core/workplace";
+import {  Number  } from "@novel-master/core/common";
 
 describe("worktree eval", () => {
   it("hide and show take priority", () => {

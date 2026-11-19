@@ -13,7 +13,7 @@ import { Guards } from "@/common/guards.js";
 import { Json } from "@/common/json.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { stringifyText } from "@/infra/serialization/stringify-text.js";
+import { SerializationStringifyText } from "@/infra/serialization/stringify-text.js";
 import type { MdTree } from "../model/character-card.js";
 
 const SPEC_V2 = "chara_card_v2";
@@ -91,7 +91,7 @@ export const CharacterCardToMdTree = {
       }
       usedNames.add(fileName);
       const content = typeof entry["content"] === "string" ? entry["content"] : "";
-      const fmBody = stringifyText({ keywords: [...keys] }, "yaml").trimEnd();
+      const fmBody = SerializationStringifyText.stringify({ keywords: [...keys] }, "yaml").trimEnd();
       tree.set(`世界书/${fileName}`, `---\n${fmBody}\n---\n${content}`);
     }
     return Result.ok(tree);

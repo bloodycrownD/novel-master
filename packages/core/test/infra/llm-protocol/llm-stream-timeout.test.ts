@@ -13,17 +13,12 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it, mock, afterEach } from "node:test";
-import { isAppError } from "../../../src/errors/app-error.js";
-import {
-  postSse,
-  resetShouldUseXhrForSseCacheForTests,
-  setShouldUseXhrForSseOverrideForTests,
-  SSE_WHOLE_CALL_TIMEOUT_MS,
-} from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
-import { STREAM_IDLE_TIMEOUT_MS } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
-import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  describe, it, mock, afterEach  } from "node:test";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
+import {  LlmSseTransport, SSE_WHOLE_CALL_TIMEOUT_MS  } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
+import {  STREAM_IDLE_TIMEOUT_MS  } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
+import {  AnthropicProtocolAdapter  } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 const SSE_URL = "https://api.example.com/v1/chat/completions";
@@ -77,7 +72,7 @@ function uninstallXhr(): void {
 }
 
 afterEach(() => {
-  resetShouldUseXhrForSseCacheForTests();
+  LlmSseTransport.resetShouldUseXhrCacheForTests();
   mock.timers.reset();
   uninstallXhr();
   const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean };
@@ -96,10 +91,10 @@ async function settleAsync(): Promise<void> {
 describe("llm-stream-timeout XHR 集成（回炉版）", () => {
   it("T-D3: 请求带 Connection: close，且在用户头之后设置（覆盖 provider.headers 同名头）", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       {
         method: "POST",
@@ -140,10 +135,10 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
 
   it("T-D4: xhr.timeout 被设为 SSE_WHOLE_CALL_TIMEOUT_MS（OkHttp callTimeout 兜底）", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
 
     const xhr = instances[0]!;
@@ -157,10 +152,10 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
 
   it("T-D5: ontimeout 分级——0 数据（黑洞）→ reject PROVIDER_STREAM_TIMEOUT first-chunk，非用户取消", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     let rejected = false;
     promise.catch(() => {
       rejected = true;
@@ -172,11 +167,11 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await settleAsync();
 
     await assert.rejects(promise, (err: unknown) => {
-      assert.ok(isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+      assert.ok(AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"));
       assert.equal(err.name, "PROVIDER_STREAM_TIMEOUT");
       assert.equal(err.details?.phase, "first-chunk");
       // 不得冒充用户取消（PROVIDER_HTTP_ERROR "Request aborted" 形态）
-      assert.ok(!isAppError(err, "PROVIDER_HTTP_ERROR"));
+      assert.ok(!AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
       return true;
     });
 
@@ -189,10 +184,10 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
 
   it("T-D5: ontimeout 分级——已有输出（健康长流超总预算）→ reject 'idle'（不自动重试语义）", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
-    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
 
     const xhr = instances[0]!;
@@ -204,17 +199,17 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) =>
-        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
+        AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
     );
   });
 
   it("B-1: 超时 settle 后迟到的 onprogress/onload 不得补投数据（settle 即终态）", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
     const chunks: string[] = [];
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       (chunk) => chunks.push(chunk),
@@ -242,18 +237,18 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) =>
-        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "first-chunk",
+        AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "first-chunk",
       "迟到 onload 不得把终态顶替成 resolve",
     );
   });
 
   it("B-1 姊妹：有数据 → idle 分级 settle 后，迟到回调不追加投递、不顶替终态", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
     const chunks: string[] = [];
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       (chunk) => chunks.push(chunk),
@@ -272,7 +267,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     xhr.ontimeout?.();
     await settleAsync();
     assert.ok(
-      isAppError(settledError, "PROVIDER_STREAM_TIMEOUT") &&
+      AppErrorOps.is(settledError, "PROVIDER_STREAM_TIMEOUT") &&
         settledError.details?.phase === "idle",
       "有数据时按 idle 分级 settle",
     );
@@ -291,18 +286,18 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) =>
-        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
+        AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
       "迟到 onload 不得改变既有 idle 超时终态",
     );
   });
 
   it("空闲超时已退役——有 chunk 后长静默不自动超时，onload 正常收尾", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
     const chunks: string[] = [];
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       (chunk) => chunks.push(chunk),
@@ -340,11 +335,11 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
 
   it("零误杀——含超原阈值静默间隔的长流正常收尾", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
     const chunks: string[] = [];
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       (chunk) => chunks.push(chunk),
@@ -381,7 +376,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
 describe("llm-stream-timeout fetch 集成（回炉版）", () => {
   it("T-D6: whole-call 兜底——body 无数据挂起 → reject PROVIDER_STREAM_TIMEOUT first-chunk 而非 AbortError", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     // start 不 enqueue 不 close：reader.read() 永久挂起（黑洞形态）
     const fetchFn = mock.fn(async () => {
@@ -396,7 +391,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
       });
     });
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       () => {},
@@ -410,7 +405,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+        assert.ok(AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"));
         assert.equal(err.details?.phase, "first-chunk");
         assert.notEqual((err as Error).name, "AbortError");
         return true;
@@ -420,7 +415,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
 
   it("首帧后挂起——空闲超时退役后由整调用预算收敛（idle 分级，而非 AbortError）", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const fetchFn = mock.fn(async () => {
       const body = new ReadableStream<Uint8Array>({
@@ -437,7 +432,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
       });
     });
 
-    const promise = postSse(
+    const promise = LlmSseTransport.post(
       SSE_URL,
       { method: "POST", body: "{}" },
       () => {},
@@ -457,7 +452,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+        assert.ok(AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"));
         assert.equal(err.details?.phase, "idle");
         assert.notEqual((err as Error).name, "AbortError");
         return true;
@@ -467,7 +462,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
 
   it("adapter 层: 整调用预算超时经 anthropic adapter rethrow，不吞成 partial 正常完成", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const fetchFn = mock.fn(async () => {
       const body = new ReadableStream<Uint8Array>({
@@ -504,7 +499,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
       chatPromise,
       (err: unknown) => {
         assert.ok(
-          isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
+          AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"),
           `应 rethrow 超时错误，实际：${String(err)}`,
         );
         assert.equal(err.details?.phase, "idle");
@@ -519,16 +514,16 @@ describe("llm-stream-timeout 观测打点", () => {
     // 只 mock setTimeout：emitter 的 setInterval 保持真实——测试毫秒级完成，
     // 待发缓冲不会被 32ms tick 冲走，bufferedBytes 才能按观测口径断言堆积
     mock.timers.enable({ apis: ["setTimeout"] });
-    setShouldUseXhrForSseOverrideForTests(true);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
     const instances = installXhr();
 
     const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean };
     g.__NM_DEBUG_LLM_FETCH__ = true;
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
 
     try {
-      const promise = postSse(
+      const promise = LlmSseTransport.post(
         SSE_URL,
         { method: "POST", body: "{}" },
         () => {},
@@ -546,7 +541,7 @@ describe("llm-stream-timeout 观测打点", () => {
 
       await assert.rejects(
         promise,
-        (err: unknown) => isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
+        (err: unknown) => AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"),
       );
 
       const timeoutCall = records.find(
@@ -577,18 +572,18 @@ describe("llm-stream-timeout 观测打点", () => {
         "bufferedBytes 取 SSE emitter 待发缓冲长度",
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
   });
 
   it("fetch: 整调用打点 bufferedBytes 记 0，processedLength 为读循环内累计", async () => {
     mock.timers.enable();
-    setShouldUseXhrForSseOverrideForTests(false);
+    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
     const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean };
     g.__NM_DEBUG_LLM_FETCH__ = true;
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
 
     try {
       const fetchFn = mock.fn(async () => {
@@ -604,7 +599,7 @@ describe("llm-stream-timeout 观测打点", () => {
         });
       });
 
-      const promise = postSse(
+      const promise = LlmSseTransport.post(
         SSE_URL,
         { method: "POST", body: "{}" },
         () => {},
@@ -618,7 +613,7 @@ describe("llm-stream-timeout 观测打点", () => {
 
       await assert.rejects(
         promise,
-        (err: unknown) => isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
+        (err: unknown) => AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT"),
       );
 
       const timeoutCall = records.find(
@@ -643,7 +638,7 @@ describe("llm-stream-timeout 观测打点", () => {
         "fetch 路径即时转发无节流缓冲，bufferedBytes 记 0",
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
   });
 });

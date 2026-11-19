@@ -50,12 +50,17 @@ export const EMPTY_CLOUD_SYNC_STATUS: CloudSyncStatus = {
 };
 
 /**
- * 解析并校验 status.json 载荷；失败沿 `Result.err` 返回 `CLOUD_SYNC_INVALID_STATUS`。
+ * status.json 文档解析（schemaVersion 1 校验）。
  */
-export function parseCloudSyncStatus(raw: unknown): Result<CloudSyncStatus, AppError> {
-  const result = cloudSyncStatusSchema.safeParse(raw);
-  if (!result.success) {
-    return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", { descriptor: { key: "error.cloud_sync.invalid_status.schema_invalid" } }, { cause: result.error }));
-  }
-  return Result.ok(result.data);
-}
+export const CloudSyncStatusParser = {
+  /**
+   * 解析并校验 status.json 载荷；失败沿 `Result.err` 返回 `CLOUD_SYNC_INVALID_STATUS`。
+   */
+  parse(raw: unknown): Result<CloudSyncStatus, AppError> {
+    const result = cloudSyncStatusSchema.safeParse(raw);
+    if (!result.success) {
+      return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", { descriptor: { key: "error.cloud_sync.invalid_status.schema_invalid" } }, { cause: result.error }));
+    }
+    return Result.ok(result.data);
+  },
+} as const;

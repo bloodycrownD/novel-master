@@ -16,28 +16,25 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
-import { BASELINE_MIGRATION_IDS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { userMessageOf } from "../../src/i18n/error-message.js";
-import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
-import { execLegacyVfsEntryTable } from "./helpers/legacy-db-fixtures.js";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  BASELINE_MIGRATION_IDS, SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  ErrorMessage  } from "../../src/i18n/error-message.js";
+import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
+import {  execLegacyVfsEntryTable  } from "./helpers/legacy-db-fixtures.js";
 
 const INDEX_NAME = "idx_vfs_entry_content_hash";
 
 /** 迁移后断言形态：错误经 userMessageOf 解析出 `error.infra.baseline_too_old`（文案在 core catalog）。 */
 function resolvesBaselineTooOld(error: unknown): boolean {
-  const descriptor = userMessageOf(error);
+  const descriptor = ErrorMessage.userOf(error);
   return descriptor != null && descriptor.key === "error.infra.baseline_too_old";
 }
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
-  return await open("tdbc:sqlite:file::memory:", {
+  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -69,7 +66,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
   it("新建库 bootstrap 后由 DDL 直接建出 content_hash 索引", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const indexSql = await sqliteMasterSql(conn, "index", INDEX_NAME);
       assert.ok(indexSql != null, `${INDEX_NAME} 索引应随 DDL 建出`);
@@ -86,12 +83,12 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
     try {
       // 模拟「已升版到上一代」的老库：完整 bootstrap 后删索引、把
       // user_version 钉回 SCHEMA_BOOT_VERSION - 1，下次 bootstrap 走慢路径。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       await conn.execute(`DROP INDEX IF EXISTS ${INDEX_NAME}`);
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION - 1}`);
       assert.equal(await indexExists(conn), false);
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assert.equal(
         await indexExists(conn),
@@ -107,7 +104,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
   it("已升版库再 bootstrap 走快路径，DDL 不重跑（删索引后不重建）", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       // 版本保持 SCHEMA_BOOT_VERSION 不动，仅删索引——再 bootstrap 走快路径
       // 跳过全部 DDL，索引不应被重建（快路径「不建」的直证；真实库里该形态
       // 只会来自外部改动，快路径的合同就是信任 user_version；分支内测试机
@@ -115,7 +112,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
       await conn.execute(`DROP INDEX IF EXISTS ${INDEX_NAME}`);
       assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assert.equal(
         await indexExists(conn),
@@ -131,7 +128,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
   it("打包候选谓词的 head 引用反查命中 content_hash 索引", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       // collectCandidateEntries 同款谓词（NOT EXISTS 反查 vfs_entry.content_hash）。
       const plan = await conn.query<{ detail: string }>(
@@ -164,7 +161,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
       await execLegacyVfsEntryTable(conn);
 
       await assert.rejects(
-        () => bootstrapNovelMaster(conn),
+        () => NovelMasterBootstrap.bootstrap(conn),
         (error: unknown) => resolvesBaselineTooOld(error),
         "legacy vfs_entry 应由基线检查拦下并给出升级提示"
       );
@@ -182,7 +179,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
     const conn = await openInMemoryConnection();
     try {
       await execLegacyVfsEntryTable(conn);
-      await ensureSchemaMigrationsTable(conn);
+      await SchemaMigrationsTable.ensure(conn);
       const baselineId = BASELINE_MIGRATION_IDS[0]!;
       await conn.execute(
         `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
@@ -190,7 +187,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
       );
 
       await assert.rejects(
-        () => bootstrapNovelMaster(conn),
+        () => NovelMasterBootstrap.bootstrap(conn),
         (error: unknown) => resolvesBaselineTooOld(error),
         "已登记 baseline id 的 legacy vfs_entry 库也应给出升级提示（而非 no such column）"
       );

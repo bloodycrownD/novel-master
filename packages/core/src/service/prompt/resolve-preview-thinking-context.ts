@@ -44,21 +44,24 @@ interface ResolvedPreviewThinkingContext {
   readonly protocol: LlmProtocolKind;
 }
 
-/** 解析预览用的思考上下文快照（双端 prompt-preview 各调一次）；偏好/读档失败沿 `Result.err` 回传。 */
-export async function resolvePreviewThinkingContext(input: ResolvePreviewThinkingContextInput): Promise<Result<ResolvedPreviewThinkingContext, AppError>> {
-  const { preferences, savedModels, providers, agentModelId, sessionModelId } = input;
-  const enabledPref = await preferences.getThinkingContextEnabled();
-  if (!enabledPref.ok) return Result.err(enabledPref.error);
-  const enabled = enabledPref.value;
-  const savedModelId = agentModelId ?? sessionModelId;
-  let requestThinkingEnabled = true;
-  if (savedModelId != null && savedModelId !== "") {
-    const saved = await savedModels.findById(savedModelId);
-    if (!saved.ok) return Result.err(saved.error);
-    if (saved.value != null) {
-      requestThinkingEnabled = saved.value.settings.generation.thinkingLevel !== "off";
+/** 预览思考上下文解析集合（双端 prompt-preview 共用）。 */
+export const PreviewThinkingContext = {
+  /** 解析预览用的思考上下文快照（双端 prompt-preview 各调一次）；偏好/读档失败沿 `Result.err` 回传。 */
+  async resolve(input: ResolvePreviewThinkingContextInput): Promise<Result<ResolvedPreviewThinkingContext, AppError>> {
+    const { preferences, savedModels, providers, agentModelId, sessionModelId } = input;
+    const enabledPref = await preferences.getThinkingContextEnabled();
+    if (!enabledPref.ok) return Result.err(enabledPref.error);
+    const enabled = enabledPref.value;
+    const savedModelId = agentModelId ?? sessionModelId;
+    let requestThinkingEnabled = true;
+    if (savedModelId != null && savedModelId !== "") {
+      const saved = await savedModels.findById(savedModelId);
+      if (!saved.ok) return Result.err(saved.error);
+      if (saved.value != null) {
+        requestThinkingEnabled = saved.value.settings.generation.thinkingLevel !== "off";
+      }
     }
-  }
-  const protocol = savedModelId != null && savedModelId !== "" ? await LlmProtocol.fromSavedModelId(savedModelId, savedModels, providers) : "anthropic";
-  return Result.ok({ enabled, requestThinkingEnabled, protocol });
-}
+    const protocol = savedModelId != null && savedModelId !== "" ? await LlmProtocol.fromSavedModelId(savedModelId, savedModels, providers) : "anthropic";
+    return Result.ok({ enabled, requestThinkingEnabled, protocol });
+  },
+} as const;

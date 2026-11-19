@@ -2,21 +2,17 @@
  * T-FR* / T-FR-D*：失败补偿走 resetHead/hardDelete（经 sessionVfs）。
  */
 
-import { isAppError } from "../../src/errors/app-error.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { MutatingPathHeads } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
-import { RevisionGc } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
-import { DeferredBlobGc } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
-import { ContentHash } from "../../src/domain/vfs/content-store/logic/hash-content.js";
-import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  MutatingPathHeads  } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
+import {  RevisionGc  } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
+import {  DeferredBlobGc  } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
+import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import {  SqliteVfsContentStore  } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -111,7 +107,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/new.md"]));
 
     await rejectsErr(() => vfs.read("/new.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.equal(await countDeletedRevisions(ctx.conn, sk, "/new.md"), 0);
   });
@@ -157,7 +153,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/d"]));
 
     await rejectsErr(() => vfs.read("/d/b.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     const a = unwrap(await vfs.read("/d/a.md"));
     assert.equal(a.content, "A0");
@@ -263,7 +259,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     unwrap(await MutatingPathHeads.restore(vfs, snapshots, ["/d"]));
 
     await rejectsErr(() => vfs.read("/d/sub/new.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     const a = unwrap(await vfs.read("/d/a.md"));
     assert.equal(a.content, "keep");

@@ -8,7 +8,7 @@
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
  * 最低支持版本：v1.5.23。低于此版本的极旧库需先升级到 v1.5.23，再升级到本版本——
- * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
+ * {@link NovelMasterBootstrap.assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
  * @module bootstrap/novel-master-bootstrap
@@ -17,9 +17,9 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
 import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schema.js";
@@ -38,16 +38,16 @@ import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
-import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
-import { seedBuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
-import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
-import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
-import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, runPendingSchemaMigrations } from "./schema-migrations/index.js";
+import { BuiltinProviders } from "./provider/seed-builtin-providers.js";
+import { BuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
+import { BuiltinSkills } from "./skills/seed-builtin-skills.js";
+import { SchemaColumnAlign } from "./schema-align/align-schema-columns.js";
+import { SchemaMigrations, SchemaMigrationsTable } from "./schema-migrations/index.js";
 import { EntrySequenceRepair } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
 
-const log = createLogger("bootstrap");
+const log = LogFactory.create("bootstrap");
 
 /**
  * 稳态 DDL + 列对齐合同版本。
@@ -184,7 +184,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
  * v1.5.23 之前上线的 schema migration id 清单。
  *
  * 本版本最低支持 v1.5.23，这些 migration 的逻辑已融入 canonical DDL 与 align（或
- * 已不再需要），源文件已删除，不再在 {@link runPendingSchemaMigrations} 阵列里执行。
+ * 已不再需要），源文件已删除，不再在 {@link SchemaMigrations.runPending} 阵列里执行。
  * 但运行时仍需确认老库走过它们——若表里一条都没登记、又探测到 legacy 形态，
  * 说明用户跳过了 v1.5.23 直接到本版本，须 fail-fast 提示先升级。
  *
@@ -237,19 +237,23 @@ const BASELINE_TOO_OLD_MESSAGE: CoreMessageDescriptor = {
 };
 
 /**
- * 版本基线检查：migration runner 之前 fail-fast。
- *
- * 判断逻辑：`schema_migrations` 表里必须至少有一条 baseline id 被登记；
- * 一条都没登记、且探测到 legacy 形态时，判定为跨大版本升级，报错拦下。
- * 全新空库（无 legacy 表征）不触发——首次安装是新装路径。
- *
- * **vfs_entry 缺 content_hash 列的形态单列前置判定**（不在 `hasBaseline`
- * 短路之内）：见下方前置探测的注释——v1.3.10~v1.4.06 库已被 baseline 登记
- * 命中提前 return，漏判就会拿裸 `no such column` 顶掉升级提示。`some()` 语义不动。
+ * Novel Master bootstrap 操作族（DDL 编排 + 基线检查 + 内置数据 seed）。
  */
-export async function assertMinimumBaseline(tx: TdbcConnection): Promise<Result<void, AppError>> {
-  await ensureSchemaMigrationsTable(tx);
-  const applied = await listAppliedSchemaMigrationIds(tx);
+export const NovelMasterBootstrap = {
+  /**
+   * 版本基线检查：migration runner 之前 fail-fast。
+   *
+   * 判断逻辑：`schema_migrations` 表里必须至少有一条 baseline id 被登记；
+   * 一条都没登记、且探测到 legacy 形态时，判定为跨大版本升级，报错拦下。
+   * 全新空库（无 legacy 表征）不触发——首次安装是新装路径。
+   *
+   * **vfs_entry 缺 content_hash 列的形态单列前置判定**（不在 `hasBaseline`
+   * 短路之内）：见下方前置探测的注释——v1.3.10~v1.4.06 库已被 baseline 登记
+   * 命中提前 return，漏判就会拿裸 `no such column` 顶掉升级提示。`some()` 语义不动。
+   */
+  async assertMinimumBaseline(tx: TdbcConnection): Promise<Result<void, AppError>> {
+    await SchemaMigrationsTable.ensure(tx);
+    const applied = await SchemaMigrationsTable.listAppliedIds(tx);
 
   // `vfs_entry` 存在但缺 `content_hash` 列 → vfs-entry-id-redesign-v1 之前的老库形态。
   // 与 hasBaseline 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起就登记，
@@ -308,95 +312,96 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<Result<
       if (Number(chatProjectRows[0]?.cnt ?? 0) > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
     }
   }
-  return Result.ok(undefined);
-}
+    return Result.ok(undefined);
+  },
 
-/**
- * 确保所有实体表存在并写入内置 provider。可安全重复调用。
- *
- * **入口清进程内派生缓存（2026-09-30）**：bootstrap 是双端「拿到库句柄」的
- * 必经之路，也是**整库被替换后**的唯一收口——备份导入 / 云同步 pull 的流程是
- * `close 连接 → 覆盖库文件 → 重新 open + bootstrap`（desktop 侧见
- * `rebootstrapDesktopRuntime` / `db-backup.service`）。at-rest 压缩正文的
- * 进程内解压产物层（`infra/content-cache`）若不在这里清，就会出现「同一 id
- * 在库里是旧正文、内存里是新正文」的陈旧读数（编辑后 pull 回旧库即可复现）。
- * 内容池按内容哈希索引、本身免清（同 hash 必同明文），一起清是为了守住
- * 「派生缓存与库同寿命」这条一句话能讲清的纪律。
- *
- * @param conn - 已打开的 TDBC 连接
- */
-export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> {
-  decodedContentCache.clear();
-  await conn.transaction(async (tx) => {
-    const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
-    if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {
-      // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
-      unwrapOrRollback(await assertMinimumBaseline(tx));
-      await runPendingSchemaMigrations(tx);
-      await seedBuiltinProviders(tx);
-      await seedBuiltinSmartSortRules(tx);
-      return;
-    }
-
-    // 基线检查先于 DDL：低版本老库的表形态可能与 canonical DDL 不兼容
-    //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
-    //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
-    // 先后顺序对非 legacy 库无持久影响。
-    unwrapOrRollback(await assertMinimumBaseline(tx));
-    for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
-      await tx.execute(sql);
-    }
-    await runPendingSchemaMigrations(tx);
-    await alignSchemaColumns(tx);
-    // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
-    // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
-    await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
-    await seedBuiltinProviders(tx);
-    await seedBuiltinSmartSortRules(tx);
-    // user_version 为整数 pragma，不能参数绑定。
-    await tx.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
-  });
-
-  // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
-  // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
-  //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
-  //（18 >= 18）不会重跑 DDL——pack 两表永不建出，打包任务每轮以
-  // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
-  // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
-  // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
-  // `idx_chat_message_pending_blob` 先例（V1' 退役第六轮已删）同款落点纪律。**失败语义 fail
-  // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
-  // 退役 Part B 时随迭代一并评估删除。
-  for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {
-    await conn.execute(sql);
-  }
-
-  // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
-  // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。
-  // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。两条失败通道
-  // 都要记：`Result.err` 是域内已知失败（技能读/写），throw 是 SQL 级未知异常。
-  try {
-    const seeded = await seedBuiltinSkills(conn);
-    if (!seeded.ok) log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error: seeded.error });
-  } catch (error) {
-    log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error });
-  }
-
-  // W3：发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
-  // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
-  // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
-  // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
-  // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
-  try {
-    const reports = await new IntegrityRepairRegistry().register(EntrySequenceRepair.create(conn)).runAll();
-    for (const report of reports) {
-      if (report.error != null) {
-        log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });
+  /**
+   * 确保所有实体表存在并写入内置 provider。可安全重复调用。
+   *
+   * **入口清进程内派生缓存（2026-09-30）**：bootstrap 是双端「拿到库句柄」的
+   * 必经之路，也是**整库被替换后**的唯一收口——备份导入 / 云同步 pull 的流程是
+   * `close 连接 → 覆盖库文件 → 重新 open + bootstrap`（desktop 侧见
+   * `rebootstrapDesktopRuntime` / `db-backup.service`）。at-rest 压缩正文的
+   * 进程内解压产物层（`infra/content-cache`）若不在这里清，就会出现「同一 id
+   * 在库里是旧正文、内存里是新正文」的陈旧读数（编辑后 pull 回旧库即可复现）。
+   * 内容池按内容哈希索引、本身免清（同 hash 必同明文），一起清是为了守住
+   * 「派生缓存与库同寿命」这条一句话能讲清的纪律。
+   *
+   * @param conn - 已打开的 TDBC 连接
+   */
+  async bootstrap(conn: TdbcConnection): Promise<void> {
+    decodedContentCache.clear();
+    await conn.transaction(async (tx) => {
+      const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
+      if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {
+        // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
+        TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
+        await SchemaMigrations.runPending(tx);
+        await BuiltinProviders.seed(tx);
+        await BuiltinSmartSortRules.seed(tx);
+        return;
       }
+
+      // 基线检查先于 DDL：低版本老库的表形态可能与 canonical DDL 不兼容
+      //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
+      //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
+      // 先后顺序对非 legacy 库无持久影响。
+      TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
+      for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
+        await tx.execute(sql);
+      }
+      await SchemaMigrations.runPending(tx);
+      await SchemaColumnAlign.align(tx);
+      // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
+      // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
+      await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
+      await BuiltinProviders.seed(tx);
+      await BuiltinSmartSortRules.seed(tx);
+      // user_version 为整数 pragma，不能参数绑定。
+      await tx.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
+    });
+
+    // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
+    // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
+    //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
+    //（18 >= 18）不会重跑 DDL——pack 两表永不建出，打包任务每轮以
+    // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
+    // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
+    // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
+    // `idx_chat_message_pending_blob` 先例（V1' 退役第六轮已删）同款落点纪律。**失败语义 fail
+    // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
+    // 退役 Part B 时随迭代一并评估删除。
+    for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {
+      await conn.execute(sql);
     }
-  } catch (error) {
-    // runAll 对单步失败已兜底挂报告，这里是 registry 编排层异常的保险：
-    // 同样只记日志不阻断启动（可重试）。
-    log.warn("发号器完整性修复运行异常（不阻断启动，下次启动重试）", { error });
-  }
-}
+
+    // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
+    // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。
+    // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。两条失败通道
+    // 都要记：`Result.err` 是域内已知失败（技能读/写），throw 是 SQL 级未知异常。
+    try {
+      const seeded = await BuiltinSkills.seed(conn);
+      if (!seeded.ok) log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error: seeded.error });
+    } catch (error) {
+      log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error });
+    }
+
+    // W3：发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
+    // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
+    // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
+    // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
+    // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
+    try {
+      const reports = await new IntegrityRepairRegistry().register(EntrySequenceRepair.create(conn)).runAll();
+      for (const report of reports) {
+        if (report.error != null) {
+          log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });
+        }
+      }
+    } catch (error) {
+      // runAll 对单步失败已兜底挂报告，这里是 registry 编排层异常的保险：
+      // 同样只记日志不阻断启动（可重试）。
+      log.warn("发号器完整性修复运行异常（不阻断启动，下次启动重试）", { error });
+    }
+  },
+} as const;

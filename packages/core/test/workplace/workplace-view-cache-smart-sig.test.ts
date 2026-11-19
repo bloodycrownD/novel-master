@@ -10,18 +10,18 @@
  * 计数方式：沿用 workplace-view-cache.test.ts 的 spying 范式——包装
  * VfsEntryRepository 对 listFileMetaUnderPrefix 计数（命中缓存不触它）。
  */
-import { unwrap } from "../helpers/result-unwrap.js";
-import { Result } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { SqliteSmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.js";
-import { SmartSortRuleCompiler } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
-import { DefaultWorkplaceService } from "@/service/workplace/impl/workplace.service.js";
-import { clearAllWorkplaceViewCache } from "@/service/workplace/impl/workplace-view-cache.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  SqliteSmartSortRuleRepository  } from "@/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.js";
+import {  SmartSortRuleCompiler  } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
+import {  DefaultWorkplaceService  } from "@/service/workplace/impl/workplace.service.js";
+import {  WorkplaceViewCache  } from "@/service/workplace/impl/workplace-view-cache.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 /**
  * spying 构造：provider 组装照生产工厂（createWorkplaceService）同款——
@@ -99,7 +99,7 @@ novelMasterTestFixture();
 
 describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () => {
   it("T-B3a：smart 排序目录改智能规则——签名 miss 重算且排序刷新", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
@@ -140,7 +140,7 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
   });
 
   it("T-B3b：未动智能规则时缓存照旧命中（含非 smart 库）", async () => {
-    clearAllWorkplaceViewCache();
+    WorkplaceViewCache.clearAll();
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);

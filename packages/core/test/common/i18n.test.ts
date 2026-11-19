@@ -1,8 +1,8 @@
 /** common/i18n 运行时单测。 */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createTranslator, type MessageCatalog } from "../../src/common/i18n.js";
+import {  describe, it  } from "node:test";
+import {  createTranslator, type MessageCatalog  } from "../../src/common/i18n.js";
 
 const zhCN = {
   greeting: "你好，{name}",

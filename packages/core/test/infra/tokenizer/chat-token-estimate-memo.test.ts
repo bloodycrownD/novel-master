@@ -12,17 +12,13 @@
  * - memo 按会话数 64 条截断（r4q-5）。
  */
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  registerNodeTokenizerDriverForTests  } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
-import {
-  createDefaultTokenCounterRegistry,
-  resolveCurrentPromptTokens,
-  sessionApiPromptTokenCache,
-} from "../../../src/infra/tokenizer/index.js";
-import { ChatTokenEstimateMemo } from "../../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
+import {  DefaultTokenCounterRegistry, CurrentPromptTokens, sessionApiPromptTokenCache  } from "../../../src/infra/tokenizer/index.js";
+import {  ChatTokenEstimateMemo  } from "../../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
-import { emptyRegistryDeps } from "./registry-test-helpers.js";
+import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
 
 function msg(seq: number, text: string): ChatMessageData {
   return {
@@ -67,7 +63,7 @@ function params(
     layout: layoutOf(layout),
     ctx,
     savedModelId: "openai/gpt-4o",
-    registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
   };
 }
 
@@ -87,7 +83,7 @@ function keyOf(
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（弃权语义在 resolve-current-prompt-tokens.test.ts）。 */
 async function resolveCompleted(...args: Parameters<typeof resolveCurrentPromptTokens>) {
-  const outcome = await resolveCurrentPromptTokens(...args);
+  const outcome = await CurrentPromptTokens.resolve(...args);
   assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
   return outcome.value;
 }

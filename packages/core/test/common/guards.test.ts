@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Guards } from "../../src/common/guards.js";
+import {  describe, it  } from "node:test";
+import {  Guards  } from "../../src/common/guards.js";
 
 describe("common/guards · Guards.isRecord", () => {
   it("普通对象 → true；null / 数组 / 原始值 → false", () => {

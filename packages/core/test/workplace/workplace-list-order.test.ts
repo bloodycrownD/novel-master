@@ -1,8 +1,8 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 novelMasterTestFixture();
@@ -14,7 +14,7 @@ describe("worktree list order", () => {
     await gvfs.write("/parent/a.md", "A");
     await gvfs.write("/parent/sub/b.md", "B");
 
-    const wt = createWorkplaceService(ctx.conn, { kind: "global" });
+    const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
     await wt.setFileRule({
       logicalPath: "/parent/a.md",
       inclusionMode: "show",
@@ -55,7 +55,7 @@ describe("worktree list order", () => {
     await gvfs.write("/novel/第四章.md", "FOUR");
     await gvfs.write("/novel/第一章.md", "ONE");
 
-    const wt = createWorkplaceService(ctx.conn, { kind: "global" });
+    const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
     await wt.setDirRule({
       logicalPath: "/novel",
       ruleEnabled: true,
@@ -86,7 +86,7 @@ describe("worktree list order", () => {
     await gvfs.write("/vols/第四卷/a.md", "A");
     await gvfs.write("/vols/第一卷/a.md", "A");
 
-    const wt = createWorkplaceService(ctx.conn, { kind: "global" });
+    const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
     await wt.setDirRule({
       logicalPath: "/vols",
       ruleEnabled: true,

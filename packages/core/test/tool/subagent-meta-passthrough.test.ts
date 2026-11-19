@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { ToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
-import { ToolOutput } from "@/domain/tool/logic/format-tool-output.js";
+import {  ToolResultBlock  } from "@/domain/tool/logic/build-tool-result-block.js";
+import {  ToolOutput  } from "@/domain/tool/logic/format-tool-output.js";
 
 describe("subagent meta 透传链路", () => {
   it("T-T1: ToolOutput.formatForLlm 对 task 输出返回结构化 JSON（主 agent 可读 stopped / failureReason / text）", () => {

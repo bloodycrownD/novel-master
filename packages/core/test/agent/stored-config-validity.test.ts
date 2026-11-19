@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode, encode } from "@novel-master/core";
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import {
-  AGENT_LIST_LABELS,
-  AgentDefinitionWire,
-  DefaultAgentDefinition,
-  STORED_CONFIG_LABELS,
-} from "../../src/domain/agent/stored-config-validity/index.js";
-import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AGENT_LIST_LABELS, AgentDefinitionWire, DefaultAgentDefinition, STORED_CONFIG_LABELS  } from "../../src/domain/agent/stored-config-validity/index.js";
+import {  SqliteAgentDefinitionRepository  } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("AgentDefinitionWire.assess", () => {
   it("T-A1: prompts.blocks agent wire → invalid(removed_feature)", () => {
@@ -88,7 +80,7 @@ describe("DefaultAgentDefinition.build", () => {
     assert.deepEqual(def.prompts, { persist: [], dynamic: [] });
     assert.deepEqual(def.runtime, { maxSteps: 20 });
     assert.doesNotThrow(() => {
-      decode(encode(def, agentDefinitionSchema), agentDefinitionSchema);
+      SerializationDecode.decode(SerializationEncode.encode(def, agentDefinitionSchema), agentDefinitionSchema);
     });
   });
 });

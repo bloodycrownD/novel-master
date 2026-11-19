@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { chatMessagesToAnthropic } from "@/infra/llm-protocol/logic/anthropic-content-mapper.js";
-import { chatMessagesToOpenAi as chatMessagesToOpenAiImpl } from "@/infra/llm-protocol/logic/openai-content-mapper.js";
-import { chatMessagesToGeminiContents as chatMessagesToGeminiContentsImpl } from "@/infra/llm-protocol/logic/gemini-content-mapper.js";
+import {  AnthropicMapper  } from "@/infra/llm-protocol/logic/anthropic-content-mapper.js";
+import {  OpenAiMapper  } from "@/infra/llm-protocol/logic/openai-content-mapper.js";
+import {  GeminiMapper  } from "@/infra/llm-protocol/logic/gemini-content-mapper.js";
 
 // 六期签名适配：两个 mapper 返回 Result，本地同名 wrapper 拆包（失败原样抛出
 // AppError），调用点与断言语义零改动。
 const chatMessagesToOpenAi = (messages: Parameters<typeof chatMessagesToOpenAiImpl>[0]) => {
-  const result = chatMessagesToOpenAiImpl(messages);
+  const result = OpenAiMapper.chatMessagesTo(messages);
   if (!result.ok) throw result.error;
   return result.value;
 };
@@ -17,7 +17,7 @@ const chatMessagesToGeminiContents = (
   messages: Parameters<typeof chatMessagesToGeminiContentsImpl>[0],
   options?: Parameters<typeof chatMessagesToGeminiContentsImpl>[1],
 ) => {
-  const result = chatMessagesToGeminiContentsImpl(messages, options);
+  const result = GeminiMapper.chatMessagesToContents(messages, options);
   if (!result.ok) throw result.error;
   return result.value;
 };
@@ -41,7 +41,7 @@ describe("LLM content mapper 天然忽略 meta/summary/ok（T-M1 / P1-8）", () 
   ];
 
   it("Anthropic: tool_result wire 只含 tool_use_id + content", () => {
-    const out = chatMessagesToAnthropic(messages);
+    const out = AnthropicMapper.chatMessagesTo(messages);
     const json = JSON.stringify(out);
     assert.ok(json.includes("tu1"));
     assert.ok(json.includes("hello"));

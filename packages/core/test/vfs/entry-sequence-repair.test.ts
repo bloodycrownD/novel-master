@@ -5,18 +5,14 @@
  * @module test/vfs/entry-sequence-repair
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { EntrySequenceRepair } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
-import { runIntegrityRepair } from "../../src/service/integrity-repair.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  EntrySequenceRepair  } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
+import {  IntegrityRepair  } from "../../src/service/integrity-repair.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -27,7 +23,7 @@ const SKILL_MD = (name: string) =>
 async function seedOrphanOccupiedIds(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
 ): Promise<{ orphanIds: number[] }> {
-  const skills = createSkillsService(ctx.conn);
+  const skills = SkillsServiceFactory.create(ctx.conn);
   const names = [
     `orph-a-${testIsolationSuffix()}`,
     `orph-b-${testIsolationSuffix()}`,
@@ -66,7 +62,7 @@ describe("vfs entry-sequence repair", () => {
     const det = await op.detect();
     assert.equal(det.needsRepair, true, "应检出发号器低于孤儿占号");
 
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const doomed = `doomed-${testIsolationSuffix()}`;
     // 未修复：新 entry 复用孤儿 entry_id → revision (id, v1) 撞唯一键
     await assert.rejects(
@@ -136,7 +132,7 @@ describe("vfs entry-sequence repair", () => {
     );
 
     // 经 registry 编排：detect 抛错被保守地判为需要修复，repair 再试抛错挂报告
-    const report = await runIntegrityRepair(op);
+    const report = await IntegrityRepair.run(op);
     assert.equal(
       report.detection.needsRepair,
       true,

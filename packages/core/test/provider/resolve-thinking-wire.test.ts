@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { ThinkingWire } from "../../src/domain/provider/logic/resolve-thinking-wire.js";
-import { ThinkingLevelPresets } from "../../src/domain/provider/logic/thinking-level-presets.js";
+import {  ThinkingWire  } from "../../src/domain/provider/logic/resolve-thinking-wire.js";
+import {  ThinkingLevelPresets  } from "../../src/domain/provider/logic/thinking-level-presets.js";
 
 describe("resolve-thinking-wire", () => {
   it("resolveEffectiveMaxTokens 在无采样时使用协议默认", () => {

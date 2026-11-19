@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AppError, isAppError } from "@/errors/app-error.js";
-import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {  describe, it  } from "node:test";
+import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
+import {  PathNormalizer  } from "@/domain/vfs/repositories/impl/normalize-path.js";
 
 /** 把 Result 收成路径串：失败分支在测试里直接断言失败。 */
 function unwrapPath(result: ReturnType<typeof PathNormalizer.normalize>): string {
@@ -68,7 +68,7 @@ describe("PathNormalizer.normalize（Result 型）", () => {
     if (result.ok) {
       return;
     }
-    assert.ok(isAppError(result.error, "VFS_INVALID_PATH"));
+    assert.ok(AppErrorOps.is(result.error, "VFS_INVALID_PATH"));
     assert.equal(result.error.name, "VFS_INVALID_PATH");
     assert.equal(result.error.code, 102004);
     assert.equal(result.error.desc, "invalid vfs path");

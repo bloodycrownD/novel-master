@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Encoding } from "../../src/common/encoding.js";
+import {  describe, it  } from "node:test";
+import {  Encoding  } from "../../src/common/encoding.js";
 
 describe("common/encoding · Encoding.base64", () => {
   it("bytesToBase64 / base64ToBytes 往返", () => {

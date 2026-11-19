@@ -19,12 +19,12 @@ import {
   CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,
 } from "@/domain/character-card/logic/character-card-limits.js";
 import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { Encoding } from "@/common/encoding.js";
-import { yieldToEventLoop } from "@/common/concurrency.js";
+import { Concurrency } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
@@ -33,15 +33,15 @@ import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/b
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import { SessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
 import { VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "@/domain/vfs/logic/vfs-import-chunk.js";
-import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import { ImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { importFailure } from "./import-failure.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { ImportFailure } from "./import-failure.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("vfs.character-card-import");
+const log = LogFactory.create("vfs.character-card-import");
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
 /** @internal 导入事务回滚单测钩子 */
@@ -169,10 +169,10 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         await VfsTreeCopy.releaseAndDeletePrefix(repoTx, revisionTx, sk, directoryPath);
         if (directoryPath !== "/") {
           // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-          unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
-          const existing = unwrapOrRollback(await repoTx.findByPath(sk, directoryPath));
+          TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
+          const existing = TdbcTransaction.unwrapOrRollback(await repoTx.findByPath(sk, directoryPath));
           if (existing == null) {
-            unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
+            TdbcTransaction.unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
           } else if (existing.entryKind !== "directory") {
             throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` });
           }
@@ -184,8 +184,8 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
       if (error instanceof Error && error.message === "test import failure") {
         throw error;
       }
-      if (isAppError(error)) return Result.err(error);
-      return Result.err(importFailure(error));
+      if (AppErrorOps.is(error)) return Result.err(error);
+      return Result.err(ImportFailure.create(error));
     }
 
     // 段 B0 提交后收被替换掉的旧内容：sweep 只把旧 blob 的 ref_count 递减到 0
@@ -210,7 +210,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
               throw new Error("test import failure");
             }
             // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-            unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
+            TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
             await LiveHeadRevisionSeeder.insertFileSeeding(repoTx, revisionTx, sk, logical, content);
           }
         });
@@ -231,18 +231,18 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         if (error instanceof Error && error.message === "test import failure") {
           throw error;
         }
-        if (isAppError(error)) return Result.err(error);
-        return Result.err(importFailure(error, committedShards, shardIndex + 1));
+        if (AppErrorOps.is(error)) return Result.err(error);
+        return Result.err(ImportFailure.create(error, committedShards, shardIndex + 1));
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。
-      await yieldToEventLoop();
+      await Concurrency.yieldToEventLoop();
     }
 
     // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**
     // （目录全集靠 `listDirectoryPathsUnderPrefix` 在调用时现扫）。
     try {
       await this.conn.transaction(async (tx) => {
-        await ensureImportDirRules({
+        await ImportDirRules.ensure({
           vfsRepo: new SqliteVfsEntryRepository(tx),
           // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会撞
           // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
@@ -276,7 +276,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
 
     // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
     if (this.sessionKkv && scope.kind === "session") {
-      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
+      await SessionPromptCaches.clear(scope.sessionId, this.sessionKkv);
     }
     return Result.ok(undefined);
   }

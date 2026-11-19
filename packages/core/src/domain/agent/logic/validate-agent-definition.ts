@@ -6,8 +6,8 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { messageParamOf } from "@/i18n/localized-message.js";
-import { decode } from "@/infra/serialization/decode.js";
+import { LocalizedMessage } from "@/i18n/localized-message.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { AgentToolPolicyValidator } from "./validate-agent-tool-policy.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 import { agentDefinitionSchema } from "../model/agent-definition.schema.js";
@@ -75,19 +75,19 @@ export const AgentDefinitionValidator = {
       const wire = agentDefinitionSchema.toWire(def);
       if (!wire.ok) {
         const detail = wire.error.message;
-        return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } } }));
+        return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: LocalizedMessage.paramOf(detail) } } }));
       }
       // decode 已 Result 化（错误通道迁移四期）：Err 走与旧 catch 同一条转译。
-      const decoded = decode(wire.value, agentDefinitionSchema);
+      const decoded = SerializationDecode.decode(wire.value, agentDefinitionSchema);
       if (!decoded.ok) {
         const detail = decoded.error.message;
-        return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } } }));
+        return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: LocalizedMessage.paramOf(detail) } } }));
       }
     } catch (error) {
       // schema 层同步失败协议（读侧 transform / preprocess 抛 PROMPT_* 等）在这里
       // 统一转译成定义级失败，保留原始 message。
       const detail = error instanceof Error ? error.message : String(error);
-      return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } } }));
+      return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: LocalizedMessage.paramOf(detail) } } }));
     }
     const pin = def.model;
     if (pin == null || options.assertSavedModel == null) {

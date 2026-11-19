@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsToolFilePath } from "../../src/domain/tool/logic/vfs-tool-file-path.js";
+import {  describe, it  } from "node:test";
+import {  VfsToolFilePath  } from "../../src/domain/tool/logic/vfs-tool-file-path.js";
 
 describe("VfsToolFilePath.resolve", () => {
   it("write 相对路径规范化为绝对逻辑路径", () => {

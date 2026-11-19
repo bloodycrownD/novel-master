@@ -7,11 +7,11 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { ContentBlock } from "../../src/domain/chat/model/content-block.js";
-import { HideMessageRange } from "../../src/domain/depth/logic/resolve-hide-message-range.js";
-import { DepthSlice } from "../../src/domain/depth/logic/depth-slice.js";
+import {  HideMessageRange  } from "../../src/domain/depth/logic/resolve-hide-message-range.js";
+import {  DepthSlice  } from "../../src/domain/depth/logic/depth-slice.js";
 
 function filterVisible(messages: readonly ChatMessageData[]): ChatMessageData[] {
   return messages.filter((message) => !message.hidden);

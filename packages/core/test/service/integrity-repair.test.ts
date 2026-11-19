@@ -11,12 +11,8 @@
  * - runIntegrityRepair 便捷函数等价于 registry 单步。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  IntegrityRepairRegistry,
-  runIntegrityRepair,
-  type IntegrityRepairOperation,
-} from "@/service/integrity-repair.js";
+import {  describe, it  } from "node:test";
+import {  IntegrityRepairRegistry, IntegrityRepair, type IntegrityRepairOperation  } from "@/service/integrity-repair.js";
 
 /** 拼一个可控行为的假操作，方便断言 detect/repair 是否被调用。 */
 function fakeOp(
@@ -186,7 +182,7 @@ describe("IntegrityRepairRegistry", () => {
 
   it("runIntegrityRepair 便捷函数等价于 registry 单步", async () => {
     const op = fakeOp("solo", { needsRepair: true });
-    const report = await runIntegrityRepair(op);
+    const report = await IntegrityRepair.run(op);
 
     assert.equal(op.detectCalls, 1);
     assert.equal(op.repairCalls, 1);

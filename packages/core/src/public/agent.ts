@@ -31,18 +31,13 @@ export type { AgentRegistryService } from "../service/agent/agent-registry.port.
 export type { AgentAbortRegistry } from "../service/agent/agent-abort-registry.port.js";
 export type { AgentStreamRegistry } from "../service/agent/agent-stream-registry.port.js";
 export {
-  resolveCurrentAgentId,
-  resolveCurrentAgentDefinition,
-  resolveApplicationModelIdForRun,
+  AgentRunShared,
   AGENT_RUN_RESOLVE_KEYS,
 } from "../service/agent/logic/agent-run-shared.js";
 export type { AgentRunRuntimePort } from "../service/agent/logic/agent-run-shared.js";
-export { resolveAgentForProject } from "../service/agent/logic/resolve-agent-for-project.js";
+export { AgentProjectResolver } from "../service/agent/logic/resolve-agent-for-project.js";
 export type { ResolvedAgentForProject } from "../service/agent/logic/resolve-agent-for-project.js";
-export {
-  runAgentTurn,
-  mapResolveError,
-} from "../service/agent/logic/run-agent-turn.js";
+export { AgentTurnRunner } from "../service/agent/logic/run-agent-turn.js";
 export { AgentActivityTracker } from "../service/agent/logic/agent-activity-tracker.js";
 export type {
   AgentTurnScope,
@@ -51,7 +46,7 @@ export type {
 export { PENDING_RUN_ID, RunLifecycle } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
 export type { ShouldApplyTranscriptReloadOptions } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
 export {
-  assembleAgentRunnerDeps,
+  AgentRunnerDepsAssembler,
   type AssembleAgentRunnerDepsInput,
 } from "../service/agent/logic/assemble-agent-runner-deps.js";
 export { DEFAULT_AGENT_MAX_STEPS } from "../service/agent/logic/agent-run-max-steps.js";

@@ -1,28 +1,25 @@
 import type { ZodType } from "zod";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
-import { describe, it, mock } from "node:test";
+import {  describe, it, mock  } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { decode as decodeRaw } from "@novel-master/core";
-import { agentDefinitionSchema, AgentServiceFactory } from "@novel-master/core/agent";
-import { SavedModelDisplayName } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
-import { SavedModel } from "../../src/domain/provider/model/saved-model.js";
-import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
-import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { SavedModelSettings } from "../../src/domain/provider/model/saved-model-settings.js";
+import {  randomUUID  } from "node:crypto";
+import {  SerializationDecode  } from "@novel-master/core";
+import {  agentDefinitionSchema, AgentServiceFactory  } from "@novel-master/core/agent";
+import {  SavedModelDisplayName  } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
+import {  SavedModel  } from "../../src/domain/provider/model/saved-model.js";
+import {  BUILTIN_PROVIDER_UUID_OPENAI  } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  ProviderServiceFactory  } from "../../src/service/provider/provider-service-factory.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  SavedModelSettings  } from "../../src/domain/provider/model/saved-model-settings.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import {
-  clearProtocolAdapters,
-  getProtocolAdapter,
-} from "../../src/infra/llm-protocol/logic/registry.js";
-import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
-import { createPersistentState } from "../../src/service/persistent-state/create-persistent-state.js";
+import {  Registry  } from "../../src/infra/llm-protocol/logic/registry.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
+import {  PersistentStateFactory  } from "../../src/service/persistent-state/create-persistent-state.js";
 
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
@@ -46,7 +43,7 @@ novelMasterTestFixture();
 
 describe("ProviderModelService fetch", () => {
   it("populates suggestions from listModels response", async () => {
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
     const fetchFn = mock.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -55,7 +52,7 @@ describe("ProviderModelService fetch", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     });
-    getProtocolAdapter("openai", fetchFn as typeof fetch);
+    Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
@@ -70,11 +67,11 @@ describe("ProviderModelService fetch", () => {
     );
     const saved = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
     assert.equal(saved.length, 0);
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
   });
 
   it("normalizes prefixed vendor ids when saving fetched models", async () => {
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
     const fetchFn = mock.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -83,7 +80,7 @@ describe("ProviderModelService fetch", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     });
-    getProtocolAdapter("openai", fetchFn as typeof fetch);
+    Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
@@ -108,7 +105,7 @@ describe("ProviderModelService fetch", () => {
       SavedModel.displayName(saved, "智谱"),
       SavedModelDisplayName.format("智谱", "glm-4-flash"),
     );
-    clearProtocolAdapters();
+    Registry.clearProtocolAdapters();
   });
 });
 
@@ -139,7 +136,7 @@ describe("ProviderModelService settings", () => {
         bundle.providerModels.updateSettings(saved.id, {
           contextWindowTokens: 0,
         }),
-      (e) => assert.ok(isAppError(e, "PROVIDER_INVALID_ARGUMENT")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT")),
     );
   });
 
@@ -191,7 +188,7 @@ describe("ProviderModelService settings", () => {
         bundle.providerModels.updateSettings(saved.id, {
           tokenCounterMode: "not-a-mode" as "auto",
         }),
-      (e) => assert.ok(isAppError(e, "PROVIDER_INVALID_ARGUMENT")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT")),
     );
   });
 
@@ -262,7 +259,7 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
     assert.equal(after.modelName, "Label A");
     await rejectsErr(
       () => bundle.providerModels.editSaved(created.id, ""),
-      (e) => assert.ok(isAppError(e, "PROVIDER_INVALID_MODEL_NAME")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_MODEL_NAME")),
     );
   });
 });
@@ -272,11 +269,11 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const state = createPersistentState(ctx.conn);
+    const state = PersistentStateFactory.create(ctx.conn);
     await state.setCurrentModelId(saved.id);
     await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -299,7 +296,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     );
     await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -322,7 +319,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     }));
     await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -340,7 +337,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     }));
     await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 

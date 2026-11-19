@@ -2,8 +2,8 @@
  * Composer 发送门闩（T-CR3 / T-ATD* / T-AN4）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { composerSendPolicy } from "../../src/domain/chat/logic/composer/composer-send-policy.js";
+import {  describe, it  } from "node:test";
+import {  composerSendPolicy  } from "../../src/domain/chat/logic/composer/composer-send-policy.js";
 
 describe("resolveComposerSendIntent", () => {
   it("T-CR3: 空输入 + 无 resume → 不可发；attachOnly 恒空", () => {

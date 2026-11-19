@@ -5,8 +5,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { EffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
+import {  describe, it  } from "node:test";
+import {  EffectiveSkills  } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillSummary } from "@/domain/skills/model/skill.schema.js";
 
 function skill(

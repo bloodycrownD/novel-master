@@ -6,10 +6,10 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { SmartSortHighlight } from "../../src/domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
-import { SmartSortPattern } from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
+import {  SmartSortHighlight  } from "../../src/domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
+import {  SmartSortPattern  } from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
 
 function ok(
   result: ReturnType<typeof SmartSortPattern.match>

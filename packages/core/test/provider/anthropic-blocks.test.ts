@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
-import {
-  anthropicContentToBlocks,
-  blocksToAnthropicContent,
-} from "../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
+import {  describe, it, mock  } from "node:test";
+import {  AnthropicProtocolAdapter  } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import {  AnthropicMapper  } from "../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
 
 describe("anthropic content mapper", () => {
   it("drops empty text segments from API response", () => {
-    const blocks = anthropicContentToBlocks([
+    const blocks = AnthropicMapper.contentToBlocks([
       { type: "text", text: "" },
       { type: "tool_use", id: "tu_1", name: "grep", input: {} },
     ]);
@@ -17,7 +14,7 @@ describe("anthropic content mapper", () => {
   });
 
   it("maps tool_use and text from API response", () => {
-    const blocks = anthropicContentToBlocks([
+    const blocks = AnthropicMapper.contentToBlocks([
       {
         type: "tool_use",
         id: "tu_1",
@@ -33,7 +30,7 @@ describe("anthropic content mapper", () => {
   });
 
   it("parses thinking without signature (legacy payload)", () => {
-    const blocks = anthropicContentToBlocks([
+    const blocks = AnthropicMapper.contentToBlocks([
       { type: "thinking", thinking: "old" },
     ]);
     assert.equal(blocks.length, 1);
@@ -44,7 +41,7 @@ describe("anthropic content mapper", () => {
   });
 
   it("blocksToAnthropicContent includes tool_use", () => {
-    const api = blocksToAnthropicContent([
+    const api = AnthropicMapper.blocksToContent([
       {
         type: "tool_use",
         id: "tu_1",

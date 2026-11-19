@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { emitDirectTextDelta } from "../../../src/infra/llm-protocol/logic/inline-thinking-parser.js";
+import {  describe, it  } from "node:test";
+import {  InlineThinkingParser  } from "../../../src/infra/llm-protocol/logic/inline-thinking-parser.js";
 
 describe("inline-thinking-parser", () => {
   it("emitDirectTextDelta 直通写入 textParts 并发出 text-delta", () => {
     const state = { textParts: [] as string[] };
     const events: Array<{ type: string; text: string }> = [];
-    emitDirectTextDelta(state, "Hello", (ev) => {
+    InlineThinkingParser.emitDirectTextDelta(state, "Hello", (ev) => {
       if (ev.type === "text-delta") {
         events.push(ev);
       }
@@ -19,7 +19,7 @@ describe("inline-thinking-parser", () => {
   it("emitDirectTextDelta 忽略空字符串", () => {
     const state = { textParts: [] as string[] };
     let called = false;
-    emitDirectTextDelta(state, "", () => {
+    InlineThinkingParser.emitDirectTextDelta(state, "", () => {
       called = true;
     });
     assert.deepEqual(state.textParts, []);

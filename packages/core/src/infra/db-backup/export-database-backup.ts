@@ -4,7 +4,7 @@
  * 平台差异全部经 {@link ExportDatabaseBackupDeps} 注入：WAL checkpoint（两端
  * connection 模块）、库路径解析（desktop 同步 / mobile 异步）、文件拷贝
  * （node copyFile / RN blobFs.cp）。busy 互斥的 acquire/release 配对留在各端壳里，
- * 本函数只覆盖「checkpoint → copy → scrub」这段策略。
+ * 本对象只覆盖「checkpoint → copy → scrub」这段策略。
  *
  * @module infra/db-backup/export-database-backup
  */
@@ -28,18 +28,23 @@ type ExportDatabaseBackupDeps = {
 };
 
 /**
- * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
- * 调用方负责 Agent 守卫、目标路径管理与 busy 互斥。
- *
- * 取消策略：copy 前调用 `checkpoint`，命中走 AbortError（平台协议例外：Promise
- * 无 Result 通道），由各端边界转 Outcome.cancelled / IPC_ABORTED。
+ * 数据库导出（checkpoint → 拷贝 → 清除服务商三表）。
  */
-export async function exportDatabaseBackupToPath(conn: TdbcConnection, destPath: string, deps: ExportDatabaseBackupDeps, checkpoint?: () => Interrupt | null): Promise<void> {
-    await deps.checkpointDatabase(conn);
-    const dbPath = await deps.resolveDbPath();
-    if (checkpoint?.() != null) {
-        throw AbortError.create();
-    }
-    await deps.copyFile(dbPath, destPath);
-    await ProviderTableSnapshotIo.scrubInDatabase(conn, destPath, EXPORT_ATTACH_ALIAS);
-}
+export const DatabaseBackupExport = {
+    /**
+     * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
+     * 调用方负责 Agent 守卫、目标路径管理与 busy 互斥。
+     *
+     * 取消策略：copy 前调用 `checkpoint`，命中走 AbortError（平台协议例外：Promise
+     * 无 Result 通道），由各端边界转 Outcome.cancelled / IPC_ABORTED。
+     */
+    async toPath(conn: TdbcConnection, destPath: string, deps: ExportDatabaseBackupDeps, checkpoint?: () => Interrupt | null): Promise<void> {
+        await deps.checkpointDatabase(conn);
+        const dbPath = await deps.resolveDbPath();
+        if (checkpoint?.() != null) {
+            throw AbortError.create();
+        }
+        await deps.copyFile(dbPath, destPath);
+        await ProviderTableSnapshotIo.scrubInDatabase(conn, destPath, EXPORT_ATTACH_ALIAS);
+    },
+} as const;

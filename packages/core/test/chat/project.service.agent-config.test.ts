@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { describe, it } from "node:test";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  describe, it  } from "node:test";
 import type { AgentDefinition } from "@novel-master/core/agent";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function customDefinition(name: string): AgentDefinition {
   return {
@@ -101,7 +97,7 @@ describe("ProjectService agent config", () => {
     await rejectsErr(
       () => ctx.projects.getAgentConfig(project.id),
       (error: unknown) =>
-        isAppError(error, "CHAT_NOT_FOUND"),
+        AppErrorOps.is(error, "CHAT_NOT_FOUND"),
     );
   });
 });

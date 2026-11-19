@@ -1,22 +1,22 @@
-import { isAppError } from "@/errors/app-error.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { TextBlock, ToolResultBlock } from "@/domain/chat/model/content-block.js";
-import { Result } from "@/errors/either.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { subagentTool, SUBAGENT_STOP_REASON_USER } from "@/domain/tool/builtin/subagent-tool.js";
+import {  TextBlock, ToolResultBlock  } from "@/domain/chat/model/content-block.js";
+import {  Result  } from "@/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  subagentTool, SUBAGENT_STOP_REASON_USER  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
   RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { AgentTools } from "@/domain/agent/logic/resolve-agent-tools.js";
-import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
+import {  AgentTools  } from "@/domain/agent/logic/resolve-agent-tools.js";
+import {  ToolRegistry  } from "@/domain/tool/logic/tool-registry.js";
+import {  BuiltinTools  } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -204,7 +204,7 @@ describe("subagent-tool / task", () => {
           makeToolCtx(ctx),
         ),
       (err: unknown) =>
-        assert.ok(isAppError(err) && err.key.startsWith("TOOL_") && err.message.includes("未找到")),
+        assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_") && err.message.includes("未找到")),
     );
   });
 

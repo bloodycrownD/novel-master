@@ -9,19 +9,15 @@
  * @module test/session-run-state/session-run-state.fork-copy-guard.test
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { createSessionRunStateService } from "../../src/service/session-run-state/create-session-run-state-service.js";
-import { ChatServiceFactory } from "../../src/service/chat/chat-service-factory.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  createSessionRunStateService  } from "../../src/service/session-run-state/create-session-run-state-service.js";
+import {  ChatServiceFactory  } from "../../src/service/chat/chat-service-factory.js";
 import type { SessionRunState } from "../../src/domain/session-run-state/model/session-run-state.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 

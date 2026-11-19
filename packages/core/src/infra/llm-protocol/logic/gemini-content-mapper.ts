@@ -37,252 +37,254 @@ type ResolveContext = {
   readonly knownToolNames?: readonly string[];
 };
 
-function buildToolUseLookup(messages: readonly ChatMessageData[]): ToolUseLookup {
-  const idToName = new Map<string, string>();
-  const idToUse = new Map<string, ToolUseBlock>();
-  for (const msg of messages) {
-    for (const block of msg.content.blocks) {
-      if (block.type === "tool_use" && block.name !== "") {
-        idToName.set(block.id, block.name);
-        idToUse.set(block.id, block);
-        // Gemini may echo function name as call id when the API omits functionCall.id.
-        idToName.set(block.name, block.name);
-        if (!idToUse.has(block.name)) {
-          idToUse.set(block.name, block);
+export const GeminiMapper = {
+  buildToolUseLookup(messages: readonly ChatMessageData[]): ToolUseLookup {
+    const idToName = new Map<string, string>();
+    const idToUse = new Map<string, ToolUseBlock>();
+    for (const msg of messages) {
+      for (const block of msg.content.blocks) {
+        if (block.type === "tool_use" && block.name !== "") {
+          idToName.set(block.id, block.name);
+          idToUse.set(block.id, block);
+          // Gemini may echo function name as call id when the API omits functionCall.id.
+          idToName.set(block.name, block.name);
+          if (!idToUse.has(block.name)) {
+            idToUse.set(block.name, block);
+          }
         }
       }
     }
-  }
-  return { idToName, idToUse };
-}
+    return { idToName, idToUse };
+  },
 
-/** Resolves tool_use id → declared function name; null when assistant tool_use is unavailable (e.g. compaction). */
-function resolveFunctionNameOrNull(toolUseId: unknown, ctx: ResolveContext): string | null {
-  if (typeof toolUseId !== "string" || toolUseId.trim() === "") {
+  /** Resolves tool_use id → declared function name; null when assistant tool_use is unavailable (e.g. compaction). */
+  resolveFunctionNameOrNull(toolUseId: unknown, ctx: ResolveContext): string | null {
+    if (typeof toolUseId !== "string" || toolUseId.trim() === "") {
+      return null;
+    }
+    const id = toolUseId.trim();
+    const mapped = ctx.lookup.idToName.get(id);
+    if (mapped != null && mapped !== "") {
+      return mapped;
+    }
+    if (ctx.knownToolNames?.includes(id)) {
+      return id;
+    }
     return null;
-  }
-  const id = toolUseId.trim();
-  const mapped = ctx.lookup.idToName.get(id);
-  if (mapped != null && mapped !== "") {
-    return mapped;
-  }
-  if (ctx.knownToolNames?.includes(id)) {
-    return id;
-  }
-  return null;
-}
+  },
 
-function isResolvableToolResult(block: ToolResultBlock, ctx: ResolveContext): boolean {
-  return resolveFunctionNameOrNull(block.toolUseId, ctx) != null;
-}
+  isResolvableToolResult(block: ToolResultBlock, ctx: ResolveContext): boolean {
+    return GeminiMapper.resolveFunctionNameOrNull(block.toolUseId, ctx) != null;
+  },
 
-function toolResultToGeminiPart(block: ToolResultBlock, ctx: ResolveContext): GeminiPart {
-  const functionName = resolveFunctionNameOrNull(block.toolUseId, ctx);
-  if (functionName != null) {
-    return {
-      functionResponse: {
-        name: functionName,
-        response: { output: block.content },
-        id: block.toolUseId,
-      },
-    };
-  }
-  // Orphaned after compaction: same plain-text shape as token counting / prompt preview.
-  const text = MessageBodyText.fromBlocks([block]);
-  return { text: text !== "" ? text : "[tool_result]" };
-}
-
-/** NM blocks → Gemini `parts` for one content turn. */
-export function blocksToGeminiParts(blocks: readonly ContentBlock[], ctx: ResolveContext = { lookup: buildToolUseLookup([]) }): Result<GeminiPart[], AppError> {
-  const parts: GeminiPart[] = [];
-  let toolUseSignatureEmitted = false;
-  for (const block of blocks) {
-    switch (block.type) {
-      case "text":
-        if (block.text !== "") {
-          parts.push({ text: block.text });
-        }
-        break;
-      case "tool_use": {
-        const part: GeminiPart = {
-          functionCall: {
-            name: block.name,
-            args: block.input,
-            id: block.id,
-          },
-        };
-        // Parallel function calls: only the first part carries thought_signature.
-        if (!toolUseSignatureEmitted && block.thinkingSignature != null) {
-          part.thought_signature = block.thinkingSignature;
-          toolUseSignatureEmitted = true;
-        }
-        parts.push(part);
-        break;
-      }
-      case "tool_result":
-        parts.push(toolResultToGeminiPart(block, ctx));
-        break;
-      case "thinking": {
-        const part: GeminiPart = { text: block.text, thought: true };
-        if (block.thinkingSignature != null) {
-          part.thought_signature = block.thinkingSignature;
-        }
-        parts.push(part);
-        break;
-      }
-      case "redacted_thinking":
-        break;
-      case "image":
-        return Result.err(new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "Gemini outbound messages do not support image blocks in this iteration" }));
-      default:
-        break;
+  toolResultToPart(block: ToolResultBlock, ctx: ResolveContext): GeminiPart {
+    const functionName = GeminiMapper.resolveFunctionNameOrNull(block.toolUseId, ctx);
+    if (functionName != null) {
+      return {
+        functionResponse: {
+          name: functionName,
+          response: { output: block.content },
+          id: block.toolUseId,
+        },
+      };
     }
-  }
-  return Result.ok(parts);
-}
+    // Orphaned after compaction: same plain-text shape as token counting / prompt preview.
+    const text = MessageBodyText.fromBlocks([block]);
+    return { text: text !== "" ? text : "[tool_result]" };
+  },
 
-/** Gemini `parts` → NM blocks. */
-export function geminiPartsToBlocks(parts: readonly unknown[], options: GeminiPartsToBlocksOptions = {}): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
-  for (const part of parts) {
-    if (!Guards.isRecord(part)) {
-      continue;
+  /** NM blocks → Gemini `parts` for one content turn. */
+  blocksToParts(blocks: readonly ContentBlock[], ctx: ResolveContext = { lookup: GeminiMapper.buildToolUseLookup([]) }): Result<GeminiPart[], AppError> {
+    const parts: GeminiPart[] = [];
+    let toolUseSignatureEmitted = false;
+    for (const block of blocks) {
+      switch (block.type) {
+        case "text":
+          if (block.text !== "") {
+            parts.push({ text: block.text });
+          }
+          break;
+        case "tool_use": {
+          const part: GeminiPart = {
+            functionCall: {
+              name: block.name,
+              args: block.input,
+              id: block.id,
+            },
+          };
+          // Parallel function calls: only the first part carries thought_signature.
+          if (!toolUseSignatureEmitted && block.thinkingSignature != null) {
+            part.thought_signature = block.thinkingSignature;
+            toolUseSignatureEmitted = true;
+          }
+          parts.push(part);
+          break;
+        }
+        case "tool_result":
+          parts.push(GeminiMapper.toolResultToPart(block, ctx));
+          break;
+        case "thinking": {
+          const part: GeminiPart = { text: block.text, thought: true };
+          if (block.thinkingSignature != null) {
+            part.thought_signature = block.thinkingSignature;
+          }
+          parts.push(part);
+          break;
+        }
+        case "redacted_thinking":
+          break;
+        case "image":
+          return Result.err(new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "Gemini outbound messages do not support image blocks in this iteration" }));
+        default:
+          break;
+      }
     }
-    // Gemini wire thought_signature（snake 或 camelCase）。
-    const sig = part.thought_signature ?? part.thoughtSignature;
-    const thoughtSignature = typeof sig === "string" && sig !== "" ? sig : undefined;
-    if (typeof part.text === "string" && part.text !== "") {
-      if (part.thought === true) {
-        // 结构化 thought 字段 → thinking 块
+    return Result.ok(parts);
+  },
+
+  /** Gemini `parts` → NM blocks. */
+  partsToBlocks(parts: readonly unknown[], options: GeminiPartsToBlocksOptions = {}): ContentBlock[] {
+    const blocks: ContentBlock[] = [];
+    for (const part of parts) {
+      if (!Guards.isRecord(part)) {
+        continue;
+      }
+      // Gemini wire thought_signature（snake 或 camelCase）。
+      const sig = part.thought_signature ?? part.thoughtSignature;
+      const thoughtSignature = typeof sig === "string" && sig !== "" ? sig : undefined;
+      if (typeof part.text === "string" && part.text !== "") {
+        if (part.thought === true) {
+          // 结构化 thought 字段 → thinking 块
+          blocks.push({
+            type: "thinking",
+            text: part.text,
+            ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
+          });
+        } else {
+          // 非 thought 正文直通为 text，不做内嵌标签清洗
+          blocks.push({ type: "text", text: part.text });
+        }
+        continue;
+      }
+      const functionCall = part.functionCall;
+      if (Guards.isRecord(functionCall) && typeof functionCall.name === "string") {
+        const args = Guards.isRecord(functionCall.args) ? functionCall.args : {};
+        const id = typeof functionCall.id === "string" && functionCall.id !== "" ? functionCall.id : `${functionCall.name}-${blocks.length}`;
         blocks.push({
-          type: "thinking",
-          text: part.text,
+          type: "tool_use",
+          id,
+          name: functionCall.name,
+          input: args,
           ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
         });
-      } else {
-        // 非 thought 正文直通为 text，不做内嵌标签清洗
-        blocks.push({ type: "text", text: part.text });
+        continue;
       }
-      continue;
-    }
-    const functionCall = part.functionCall;
-    if (Guards.isRecord(functionCall) && typeof functionCall.name === "string") {
-      const args = Guards.isRecord(functionCall.args) ? functionCall.args : {};
-      const id = typeof functionCall.id === "string" && functionCall.id !== "" ? functionCall.id : `${functionCall.name}-${blocks.length}`;
-      blocks.push({
-        type: "tool_use",
-        id,
-        name: functionCall.name,
-        input: args,
-        ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
-      });
-      continue;
-    }
-    const functionResponse = part.functionResponse;
-    if (Guards.isRecord(functionResponse) && typeof functionResponse.name === "string") {
-      const response = functionResponse.response;
-      const content = Guards.isRecord(response) && typeof response.output === "string" ? response.output : typeof response === "string" ? response : JSON.stringify(response ?? "");
-      const functionName = functionResponse.name;
-      const toolUseId = typeof functionResponse.id === "string" && functionResponse.id !== "" ? functionResponse.id : options.toolUseIdByFunctionName?.get(functionName) ?? functionName;
-      blocks.push({
-        type: "tool_result",
-        toolUseId,
-        content,
-      });
-    }
-  }
-  return blocks;
-}
-
-/** Session history → Gemini `contents[]`. */
-export function chatMessagesToGeminiContents(messages: readonly ChatMessageData[], options: ChatMessagesToGeminiContentsOptions = {}): Result<GeminiContent[], AppError> {
-  const out: GeminiContent[] = [];
-  const lookupSource = options.toolLookupMessages != null && options.toolLookupMessages.length > 0 ? options.toolLookupMessages : messages;
-  const ctx: ResolveContext = {
-    lookup: buildToolUseLookup(lookupSource),
-    knownToolNames: options.knownToolNames,
-  };
-
-  for (const msg of messages) {
-    const toolResults = msg.content.blocks.filter((b): b is ToolResultBlock => b.type === "tool_result");
-    const other = msg.content.blocks.filter((b) => b.type !== "tool_result");
-
-    const resolvable = toolResults.filter((b) => isResolvableToolResult(b, ctx));
-    const orphaned = toolResults.filter((b) => !isResolvableToolResult(b, ctx));
-
-    if (resolvable.length > 0) {
-      const syntheticParts: GeminiPart[] = [];
-      for (const block of resolvable) {
-        const functionName = resolveFunctionNameOrNull(block.toolUseId, ctx);
-        if (functionName == null) {
-          continue;
-        }
-        const tu = ctx.lookup.idToUse.get(block.toolUseId);
-        syntheticParts.push({ functionCall: { name: functionName, args: tu?.input ?? {}, id: tu?.id ?? block.toolUseId } });
-      }
-      const synthetic: GeminiContent | null = syntheticParts.length === 0 ? null : { role: "model", parts: syntheticParts };
-      const last = out[out.length - 1];
-      let covered = false;
-      if (last != null && last.role === "model") {
-        const functionCalls = last.parts.map((p) => p.functionCall).filter(Guards.isRecord);
-        const calls = functionCalls.map((fc) => ({ name: typeof fc.name === "string" ? fc.name : "", id: typeof fc.id === "string" ? fc.id : "" })).filter((fc) => fc.name !== "");
-        covered = resolvable.every((block) => {
-          const expectedName = resolveFunctionNameOrNull(block.toolUseId, ctx);
-          if (expectedName == null) return true;
-          return calls.some((fc) => fc.name === expectedName && (fc.id === "" || fc.id === block.toolUseId || fc.id === expectedName));
+      const functionResponse = part.functionResponse;
+      if (Guards.isRecord(functionResponse) && typeof functionResponse.name === "string") {
+        const response = functionResponse.response;
+        const content = Guards.isRecord(response) && typeof response.output === "string" ? response.output : typeof response === "string" ? response : JSON.stringify(response ?? "");
+        const functionName = functionResponse.name;
+        const toolUseId = typeof functionResponse.id === "string" && functionResponse.id !== "" ? functionResponse.id : options.toolUseIdByFunctionName?.get(functionName) ?? functionName;
+        blocks.push({
+          type: "tool_result",
+          toolUseId,
+          content,
         });
       }
-      if (synthetic != null && !covered) {
-        out.push(synthetic);
+    }
+    return blocks;
+  },
+
+  /** Session history → Gemini `contents[]`. */
+  chatMessagesToContents(messages: readonly ChatMessageData[], options: ChatMessagesToGeminiContentsOptions = {}): Result<GeminiContent[], AppError> {
+    const out: GeminiContent[] = [];
+    const lookupSource = options.toolLookupMessages != null && options.toolLookupMessages.length > 0 ? options.toolLookupMessages : messages;
+    const ctx: ResolveContext = {
+      lookup: GeminiMapper.buildToolUseLookup(lookupSource),
+      knownToolNames: options.knownToolNames,
+    };
+
+    for (const msg of messages) {
+      const toolResults = msg.content.blocks.filter((b): b is ToolResultBlock => b.type === "tool_result");
+      const other = msg.content.blocks.filter((b) => b.type !== "tool_result");
+
+      const resolvable = toolResults.filter((b) => GeminiMapper.isResolvableToolResult(b, ctx));
+      const orphaned = toolResults.filter((b) => !GeminiMapper.isResolvableToolResult(b, ctx));
+
+      if (resolvable.length > 0) {
+        const syntheticParts: GeminiPart[] = [];
+        for (const block of resolvable) {
+          const functionName = GeminiMapper.resolveFunctionNameOrNull(block.toolUseId, ctx);
+          if (functionName == null) {
+            continue;
+          }
+          const tu = ctx.lookup.idToUse.get(block.toolUseId);
+          syntheticParts.push({ functionCall: { name: functionName, args: tu?.input ?? {}, id: tu?.id ?? block.toolUseId } });
+        }
+        const synthetic: GeminiContent | null = syntheticParts.length === 0 ? null : { role: "model", parts: syntheticParts };
+        const last = out[out.length - 1];
+        let covered = false;
+        if (last != null && last.role === "model") {
+          const functionCalls = last.parts.map((p) => p.functionCall).filter(Guards.isRecord);
+          const calls = functionCalls.map((fc) => ({ name: typeof fc.name === "string" ? fc.name : "", id: typeof fc.id === "string" ? fc.id : "" })).filter((fc) => fc.name !== "");
+          covered = resolvable.every((block) => {
+            const expectedName = GeminiMapper.resolveFunctionNameOrNull(block.toolUseId, ctx);
+            if (expectedName == null) return true;
+            return calls.some((fc) => fc.name === expectedName && (fc.id === "" || fc.id === block.toolUseId || fc.id === expectedName));
+          });
+        }
+        if (synthetic != null && !covered) {
+          out.push(synthetic);
+        }
+        out.push({
+          role: "user",
+          parts: resolvable.map((b) => GeminiMapper.toolResultToPart(b, ctx)),
+        });
       }
-      out.push({
-        role: "user",
-        parts: resolvable.map((b) => toolResultToGeminiPart(b, ctx)),
-      });
+
+      if (orphaned.length > 0) {
+        out.push({
+          role: "user",
+          parts: orphaned.map((b) => GeminiMapper.toolResultToPart(b, ctx)),
+        });
+      }
+
+      if (other.length > 0) {
+        const parts = GeminiMapper.blocksToParts(other, ctx);
+        if (!parts.ok) return Result.err(parts.error);
+        out.push({
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: parts.value,
+        });
+      }
     }
 
-    if (orphaned.length > 0) {
-      out.push({
-        role: "user",
-        parts: orphaned.map((b) => toolResultToGeminiPart(b, ctx)),
-      });
+    // 先完成 model turn 修补，再合并相邻 user（Step A2 顺序约束）。
+    // 相邻 user content 合并：parts 按序拼接，functionResponse part 前置（D2 规则，出站单向操作，不回写内部消息列表）。
+    const merged: GeminiContent[] = [];
+    for (const content of out) {
+      const last = merged[merged.length - 1];
+      if (content.role !== "user" || last == null || last.role !== "user") {
+        merged.push({ role: content.role, parts: [...content.parts] });
+        continue;
+      }
+      const functionResponseFirst = [...last.parts.filter((part) => part.functionResponse != null), ...content.parts.filter((part) => part.functionResponse != null)];
+      const rest = [...last.parts.filter((part) => part.functionResponse == null), ...content.parts.filter((part) => part.functionResponse == null)];
+      last.parts = [...functionResponseFirst, ...rest];
     }
+    return Result.ok(merged);
+  },
 
-    if (other.length > 0) {
-      const parts = blocksToGeminiParts(other, ctx);
-      if (!parts.ok) return Result.err(parts.error);
-      out.push({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: parts.value,
-      });
-    }
-  }
-
-  // 先完成 model turn 修补，再合并相邻 user（Step A2 顺序约束）。
-  // 相邻 user content 合并：parts 按序拼接，functionResponse part 前置（D2 规则，出站单向操作，不回写内部消息列表）。
-  const merged: GeminiContent[] = [];
-  for (const content of out) {
-    const last = merged[merged.length - 1];
-    if (content.role !== "user" || last == null || last.role !== "user") {
-      merged.push({ role: content.role, parts: [...content.parts] });
-      continue;
-    }
-    const functionResponseFirst = [...last.parts.filter((part) => part.functionResponse != null), ...content.parts.filter((part) => part.functionResponse != null)];
-    const rest = [...last.parts.filter((part) => part.functionResponse == null), ...content.parts.filter((part) => part.functionResponse == null)];
-    last.parts = [...functionResponseFirst, ...rest];
-  }
-  return Result.ok(merged);
-}
-
-/** NM tool definitions → Gemini `tools` array entry. */
-export function toolsToGeminiFunctionDeclarations(tools: readonly LlmToolDefinition[]): unknown[] {
-  return [
-    {
-      functionDeclarations: tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.inputSchema,
-      })),
-    },
-  ];
-}
+  /** NM tool definitions → Gemini `tools` array entry. */
+  toolsToFunctionDeclarations(tools: readonly LlmToolDefinition[]): unknown[] {
+    return [
+      {
+        functionDeclarations: tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema,
+        })),
+      },
+    ];
+  },
+} as const;

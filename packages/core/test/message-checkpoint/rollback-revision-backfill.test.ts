@@ -1,20 +1,16 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { RollbackErrorGuards } from "@novel-master/core/message-checkpoint";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  RollbackErrorGuards  } from "@novel-master/core/message-checkpoint";
 
-import { BackfillMissingRevision } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  BackfillMissingRevision  } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -276,7 +272,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     {
       const r = await svfs.read("/gone.md");
-      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "降级路径读取应走 Err 且为 VFS_NOT_FOUND");
+      assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "降级路径读取应走 Err 且为 VFS_NOT_FOUND");
     }
     const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);

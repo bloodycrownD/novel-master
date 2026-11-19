@@ -7,17 +7,13 @@
  * @module test/vfs/physical-vfs
  */
 
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import { isAppError, type AppError } from "../../src/errors/app-error.js";
-import { VfsServiceFactory, type PhysicalVfsService } from "@novel-master/core/vfs";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  AppErrorOps, type AppError  } from "../../src/errors/app-error.js";
+import {  VfsServiceFactory, type PhysicalVfsService  } from "@novel-master/core/vfs";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -51,7 +47,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     await ctx.globalVfs().write(`/root-${suffix}.md`, "G");
     // 技能造数必须经 SkillsService（写 /meta/skills/... 约定），
     // 禁止 meta 域 vfs 直写（旧 /skills/... 直写是错误约定，会掩盖双前缀冲突）
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     unwrap(await skills.writeSkillFile(
       "global",
       `global-skill-${suffix}`,
@@ -87,7 +83,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     const p1 = unwrap(await ctx.projects.create(`P1-${suffix}`));
     await ctx.projectVfs(p1.id).write(`/p1-${suffix}.md`, "P1");
     // 项目技能同样经 SkillsService 造数（meta 域约定）
-    await createSkillsService(ctx.conn).writeSkillFile(
+    await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
       "project",
       `proj-skill-${suffix}`,
       undefined,
@@ -180,11 +176,11 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     const ctx = getNovelMasterTestContext();
     const svc = VfsServiceFactory.createPhysical(ctx.conn);
     await rejectsErr(svc.list("/nope"), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
     await rejectsErr(svc.list(`/projects/nonexistent-${testIsolationSuffix()}`), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
   });
@@ -196,7 +192,7 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     const suffix = testIsolationSuffix();
 
     await ctx.globalVfs().write(`/g-${suffix}.md`, "GLOBAL");
-    await createSkillsService(ctx.conn).writeSkillFile(
+    await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
       "global",
       `gm-${suffix}`,
       undefined,
@@ -204,7 +200,7 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     );
     const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write(`/pt-${suffix}.md`, "PROJECT");
-    await createSkillsService(ctx.conn).writeSkillFile(
+    await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
       "project",
       `pm-${suffix}`,
       undefined,
@@ -258,12 +254,12 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     const suffix = testIsolationSuffix();
     // 文件不存在（域前缀合法）
     await rejectsErr(svc.read(`/template/absent-${suffix}.md`), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
     // 不落任何域前缀
     await rejectsErr(svc.read("/nope/x.md"), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
   });
@@ -326,7 +322,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     // 经 SkillsService 造数（/meta/skills/... 约定），含辅助文件形成多层
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const name = `tree-skill-${suffix}`;
     unwrap(await skills.writeSkillFile("global", name, undefined, "入口"));
     unwrap(await skills.writeSkillFile(
@@ -359,7 +355,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     const suffix = testIsolationSuffix();
     const project = unwrap(await ctx.projects.create(`P-tree-${suffix}`));
     await ctx.projectVfs(project.id).write(`/pt-${suffix}.md`, "P");
-    await createSkillsService(ctx.conn).writeSkillFile(
+    await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
       "project",
       `pt-skill-${suffix}`,
       undefined,
@@ -418,7 +414,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     ]);
 
     await rejectsErr(svc.listTree("/nope"), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
   });
@@ -497,11 +493,11 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
 
     const svc = VfsServiceFactory.createPhysical(ctx.conn);
     await rejectsErr(svc.list(`/projects/${projectA.id}/sessions/${sessionB.id}`), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
     await rejectsErr(svc.read(`/projects/${projectA.id}/sessions/${sessionB.id}/x.md`), (err: unknown) => {
-      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"));
       assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
   });
@@ -514,7 +510,7 @@ describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
     const project = unwrap(await ctx.projects.create(`P-g2-${suffix}`));
     // 种上技能，让 /meta 与 /projects/{pid}/meta 落在显式目录行上
     //（否则查无 entry，测不到 IS_DIRECTORY → NOT_FOUND 归一分支）
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     unwrap(await skills.writeSkillFile(
       "global",
       `g2-global-${suffix}`,
@@ -541,7 +537,7 @@ describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
     ];
     for (const path of mountRoots) {
       await rejectsErr(svc.read(path), (err: unknown) => {
-        assert.ok(isAppError(err, "VFS_NOT_FOUND"), `${path} 应报 VFS_NOT_FOUND`);
+        assert.ok(AppErrorOps.is(err, "VFS_NOT_FOUND"), `${path} 应报 VFS_NOT_FOUND`);
       });
     }
   });

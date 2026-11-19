@@ -5,34 +5,34 @@
  * 既有用例都直接调 helper/driver 或手工构造 context，把 agent-runner 里
  * `tools` / `sessionKkv` 两行删掉也不会变红。
  */
-import { Result } from "../../src/errors/either.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { z } from "zod";
-import { AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
-import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { SimpleEventBus } from "@novel-master/core/events";
-import { type ModelRequestService } from "@novel-master/core/provider";
-import { resolveCurrentPromptTokens, sessionApiPromptTokenCache } from "@novel-master/core/tokenizer";
-import { type LlmChatResult } from "@novel-master/core/llm-protocol";
-import { BuiltinTools, ToolRegistry } from "@novel-master/core";
-import { type VfsService } from "@novel-master/core/vfs";
+import {  afterEach, beforeEach, describe, it, mock  } from "node:test";
+import {  z  } from "zod";
+import {  AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  CurrentPromptTokens, sessionApiPromptTokenCache  } from "@novel-master/core/tokenizer";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
+import {  type VfsService  } from "@novel-master/core/vfs";
 import type { MessageService } from "../../src/service/chat/message.port.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
-import { createDefaultTokenCounterRegistry } from "../../src/infra/tokenizer/index.js";
-import { SessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { PROMPT_TOKENS_LAST_USAGE_KEY, RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_PROMPT_TOKENS, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { ChatTokenEstimateMemo } from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
+import {  registerNodeTokenizerDriverForTests  } from "../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  DefaultTokenCounterRegistry  } from "../../src/infra/tokenizer/index.js";
+import {  SessionApiPromptTokenEntry  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_PROMPT_TOKENS, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  ChatTokenEstimateMemo  } from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { EVENT_AGENT_STEP_COMMITTED, type AgentStepCommittedPayload } from "../../src/domain/events/model/event-types.js";
-import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
-import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
+import {  EVENT_AGENT_STEP_COMMITTED, type AgentStepCommittedPayload  } from "../../src/domain/events/model/event-types.js";
+import {  emptyRegistryDeps  } from "../infra/tokenizer/registry-test-helpers.js";
+import {  TokenRatioConditionTrigger  } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p-token-cache";
@@ -176,8 +176,8 @@ const defaultRunScope = {
 };
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（弃权语义在 resolve-current-prompt-tokens.test.ts）。 */
-async function resolveCompleted(...args: Parameters<typeof resolveCurrentPromptTokens>) {
-  const outcome = await resolveCurrentPromptTokens(...args);
+async function resolveCompleted(...args: Parameters<typeof CurrentPromptTokens.resolve>) {
+  const outcome = await CurrentPromptTokens.resolve(...args);
   assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
   return outcome.value;
 }
@@ -232,7 +232,7 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(row?.savedModelId, RUN_MODEL_ID);
     assert.equal(typeof row?.atMs, "number");
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const params = {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
@@ -401,7 +401,7 @@ describe("AgentRunner session API prompt token cache", () => {
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
     assert.equal(await rawPromptTokenRow(), null);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
@@ -454,7 +454,7 @@ describe("AgentRunner session API prompt token cache", () => {
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
     assert.equal(await rawPromptTokenRow(), null);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
@@ -500,7 +500,7 @@ describe("AgentRunner session API prompt token cache", () => {
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
     assert.equal(await rawPromptTokenRow(), null);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
@@ -554,7 +554,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
       },
     ]);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const seen: { tokenCount: number; counterKind: string }[] = [];
 
     const registry = new ToolRegistry();
@@ -714,7 +714,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
       },
     ]);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const seen: { tokenCount: number; counterKind: string }[] = [];
     const realTrigger = new TokenRatioConditionTrigger(
       MUST_TRIGGER_OPTIONS,
@@ -783,7 +783,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
   });
 
   it("T-G1b: tool description 变长 → 压缩评估的本地档 tokenCount 明显变大（tools 接上了）", async () => {
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
     /**
      * 跑一轮真实链路，返回压缩评估读口读到的本地档 tokenCount。
@@ -928,7 +928,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         raw: {},
       },
     ]);
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluatedFingerprints: Array<string | undefined> = [];
 
     const runner = AgentServiceFactory.createRunner(

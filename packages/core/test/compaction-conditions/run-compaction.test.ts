@@ -11,30 +11,23 @@
  * T-CR4 验证清域失败只 warn、不把压缩成功翻成失败。
  */
 
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "../../src/domain/chat/content/text-blocks.js";
-import { ChatAgentSession } from "../../src/service/agent/impl/chat-agent-session.js";
-import { runCompaction } from "../../src/service/compaction-conditions/run-compaction.js";
-import { CompactionFactory } from "../../src/service/compaction-conditions/compaction-factory.js";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { SessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "../../src/domain/chat/content/text-blocks.js";
+import {  ChatAgentSession  } from "../../src/service/agent/impl/chat-agent-session.js";
+import {  Compaction  } from "../../src/service/compaction-conditions/run-compaction.js";
+import {  CompactionFactory  } from "../../src/service/compaction-conditions/compaction-factory.js";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  sessionApiPromptTokenCache  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  SessionApiPromptTokenEntry  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -167,7 +160,7 @@ describe("runCompaction", () => {
       await seedPromptTokenRow(sessionId);
       assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
 
-      const result = await runCompaction(
+      const result = await Compaction.run(
         {
           sessionKkv: ctx.sessionKkv,
           messages: ctx.messages,
@@ -226,7 +219,7 @@ describe("runCompaction", () => {
     });
     await seedPromptTokenRow(sessionId);
 
-    const result = await runCompaction(
+    const result = await Compaction.run(
       {
         sessionKkv: ctx.sessionKkv,
         messages: ctx.messages,
@@ -268,7 +261,7 @@ describe("runCompaction", () => {
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
     await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
 
-    const result = await runCompaction(
+    const result = await Compaction.run(
       {
         sessionKkv: ctx.sessionKkv,
         messages: ctx.messages,
@@ -333,10 +326,10 @@ describe("runCompaction", () => {
     }) as SessionKkvService;
 
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     let result;
     try {
-      result = await runCompaction(
+      result = await Compaction.run(
         {
           sessionKkv: boomKkv,
           messages: ctx.messages,
@@ -344,7 +337,7 @@ describe("runCompaction", () => {
         { sessionId, trigger: "manual" },
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     // 压缩本身是成功的：清域失败不得把它翻成失败（file_cache 只是加速层）。
@@ -383,7 +376,7 @@ describe("runCompaction", () => {
     });
     await seedPromptTokenRow(sessionId);
 
-    const result = await runCompaction(
+    const result = await Compaction.run(
       {
         sessionKkv: ctx.sessionKkv,
         messages: ctx.messages,
@@ -435,7 +428,7 @@ describe("runCompaction", () => {
     });
     await seedPromptTokenRow(sessionId);
 
-    const result = await runCompaction(
+    const result = await Compaction.run(
       {
         sessionKkv: ctx.sessionKkv,
         messages: throwingMessages(ctx.messages),

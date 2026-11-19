@@ -13,13 +13,16 @@ import type { ProviderModelService } from "../provider-model.port.js";
 type TokenCounterModeReader = Pick<ProviderModelService, "getTokenCounterMode">;
 type TokenCounterModeResult = Promise<Result<TokenizerOverride, AppError>>;
 
-/**
- * Returns saved model token counter mode, or `"auto"` when model is unknown;
- * 读口失败沿 `Result.err` 透传（五期门⑦）。
- */
-export async function resolveTokenCounterModeForModel(providerModels: TokenCounterModeReader, savedModelId: string | null | undefined): TokenCounterModeResult {
-  if (savedModelId == null || savedModelId === "") {
-    return Result.ok("auto");
-  }
-  return providerModels.getTokenCounterMode(savedModelId);
-}
+/** per-model token counter 解析集合。 */
+export const TokenCounterMode = {
+  /**
+   * Returns saved model token counter mode, or `"auto"` when model is unknown;
+   * 读口失败沿 `Result.err` 透传（五期门⑦）。
+   */
+  async resolveForModel(providerModels: TokenCounterModeReader, savedModelId: string | null | undefined): TokenCounterModeResult {
+    if (savedModelId == null || savedModelId === "") {
+      return Result.ok("auto");
+    }
+    return providerModels.getTokenCounterMode(savedModelId);
+  },
+} as const;

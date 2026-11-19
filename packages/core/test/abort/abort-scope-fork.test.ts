@@ -6,9 +6,9 @@
  * children 集合摘除，父之后再 abort 不得波及已经结束的子 scope。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortSignalView } from "@/domain/abort/model/abort-scope.js";
 import type { AbortReason } from "@/errors/outcome.js";
 

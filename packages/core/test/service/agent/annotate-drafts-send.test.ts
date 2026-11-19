@@ -2,29 +2,21 @@
  * annotateDrafts 发送契约（T-AN3/T-AN4/T-AN6 Core 位点）。
  */
 
-import { Result } from "../../../src/errors/either.js";
-import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import {
-  describe,
-  it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import { isAppError } from "@/errors/app-error.js";
-import {
-  runAgentTurn,
-  type AgentTurnRuntimePort,
-  } from "@/service/agent/logic/run-agent-turn.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { userMessageFormatter } from "@/domain/chat/logic/prompt/user-message-formatter.js";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
-import {
-  messageAttachmentSchema,
-  type MessageAttachment,
-} from "@/domain/chat/model/message-attachment.schema.js";
+import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  userMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
+import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  messageAttachmentSchema, type MessageAttachment  } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -149,7 +141,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     // 改为：mock 到 append 后抛错——实际上 runAgentTurn 会继续 runner。
     // 最小：断言空 content + annotate 不抛「消息不能为空」，且 delete 未调用。
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "",
@@ -193,7 +185,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     });
 
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hello",
@@ -272,7 +264,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
       userVfsTurn: mockUserVfsTurn(),
     });
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hello",
@@ -315,14 +307,14 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     // 发送门是业务失败：沿 Result.err 交回（AGENT_MESSAGE_EMPTY 自带 code + messageKey）。
     await rejectsErr(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           runtime,
           { projectId: "p1", sessionId: "s1" },
           "  ",
           { stream: false },
         ),
       (err: unknown) =>
-        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY") && err.messageKey === "error.agent.message_empty"),
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY") && err.messageKey === "error.agent.message_empty"),
     );
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
@@ -384,7 +376,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     });
 
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -430,7 +422,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     });
 
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -476,7 +468,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     });
 
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -519,7 +511,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     });
 
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",

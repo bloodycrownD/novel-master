@@ -11,17 +11,17 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
-import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  after, before, describe, it  } from "node:test";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import {  openSqlCountingNovelMasterTestConnection, type SqlCounter  } from "../helpers/sql-counting-connection.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
 import type { TdbcConnection } from "@novel-master/core";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -111,7 +111,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
     decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
-    const sessionKkv = createSessionKkvService(conn);
+    const sessionKkv = SessionKkvServiceFactory.create(conn);
     const body = `共享正文-${testIsolationSuffix()}：${"章节正文\n".repeat(60)}`;
 
     // 两条存储各有自己的 hash 算法，但都是 ContentHash.hash(明文)——前提本身有牙

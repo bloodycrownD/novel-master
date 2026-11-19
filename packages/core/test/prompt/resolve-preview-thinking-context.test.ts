@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Result } from "../../src/errors/either.js";
-import { resolvePreviewThinkingContext } from "../../src/service/prompt/resolve-preview-thinking-context.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  PreviewThinkingContext  } from "../../src/service/prompt/resolve-preview-thinking-context.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import type { SavedModel } from "../../src/domain/provider/model/saved-model.js";
 import type { LlmProvider } from "../../src/domain/provider/model/provider.js";
 import type { ThinkingLevel } from "../../src/domain/provider/model/saved-model-settings.js";
@@ -34,7 +34,7 @@ function makeProvider(protocol: LlmProvider["protocol"]): LlmProvider {
 
 describe("resolvePreviewThinkingContext", () => {
   it("取不到模型时兜底：requestThinkingEnabled true + protocol anthropic", async () => {
-    const result = unwrap(await resolvePreviewThinkingContext({
+    const result = unwrap(await PreviewThinkingContext.resolve({
       preferences: { getThinkingContextEnabled: async () => Result.ok(true) },
       savedModels: { findById: async () => Result.ok(null) },
       providers: { findById: async () => Result.ok(null) },
@@ -50,7 +50,7 @@ describe("resolvePreviewThinkingContext", () => {
 
   it("agent pin 优先于会话覆盖：档位按 pin 模型读取", async () => {
     const readIds: string[] = [];
-    const result = unwrap(await resolvePreviewThinkingContext({
+    const result = unwrap(await PreviewThinkingContext.resolve({
       preferences: { getThinkingContextEnabled: async () => Result.ok(false) },
       savedModels: {
         findById: async (id: string) => {
@@ -71,7 +71,7 @@ describe("resolvePreviewThinkingContext", () => {
   });
 
   it("档位 off → requestThinkingEnabled false（协议照常推断）", async () => {
-    const result = unwrap(await resolvePreviewThinkingContext({
+    const result = unwrap(await PreviewThinkingContext.resolve({
       preferences: { getThinkingContextEnabled: async () => Result.ok(true) },
       savedModels: {
         findById: async () => Result.ok(makeSaved("m-off", "off")),

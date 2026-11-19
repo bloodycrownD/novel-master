@@ -9,15 +9,15 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 
-import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 
 type Ctx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
 

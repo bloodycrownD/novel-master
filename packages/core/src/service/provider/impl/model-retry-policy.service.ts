@@ -6,7 +6,7 @@
  * @module service/provider/impl/model-retry-policy.service
  */
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
@@ -43,7 +43,7 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
   async getPolicy(): Promise<Result<ModelRetryPolicy | null, AppError>> {
     const raw = await this.kkv.get(MODULE, KEY);
     if (!raw.ok) {
-      if (isAppError(raw.error, "KKV_NOT_FOUND")) {
+      if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
         return Result.ok(null);
       }
       return Result.err(raw.error);
@@ -84,7 +84,7 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
    */
   async clearPolicy(): Promise<Result<void, AppError>> {
     const deleted = await this.kkv.delete(MODULE, KEY);
-    if (!deleted.ok && !isAppError(deleted.error, "KKV_NOT_FOUND")) return deleted;
+    if (!deleted.ok && !AppErrorOps.is(deleted.error, "KKV_NOT_FOUND")) return deleted;
     return Result.ok(undefined);
   }
 }

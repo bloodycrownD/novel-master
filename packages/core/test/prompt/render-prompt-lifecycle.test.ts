@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { describe, it } from "node:test";
-import {
-  PromptBuilder,
-  type AgentPromptLayout,
-} from "@novel-master/core/prompt";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  PromptBuilder, type AgentPromptLayout  } from "@novel-master/core/prompt";
 
 const ctx = {
   workplaceDisplay: "",

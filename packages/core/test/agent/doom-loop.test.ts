@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { DoomLoopDetector } from "../../src/domain/agent/logic/doom-loop.js";
-import { AppError } from "../../src/errors/app-error.js";
+import {  describe, it  } from "node:test";
+import {  DoomLoopDetector  } from "../../src/domain/agent/logic/doom-loop.js";
+import {  AppError  } from "../../src/errors/app-error.js";
 import type { Result } from "../../src/errors/either.js";
 
 /** 造一个 tool_use 内容块；检测只看 name + input，id 不影响判定。 */

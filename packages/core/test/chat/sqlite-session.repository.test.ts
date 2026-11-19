@@ -1,30 +1,17 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open } from "@novel-master/core";
-import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
-import {
-  ComposerDraftSchema,
-} from "../../src/domain/chat/model/composer-draft.schema.js";
-import { chatAnnotateDraftStore } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USER_VFS_PENDING_QUEUE_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { execLegacyV107ChatDdl } from "../bootstrap/helpers/legacy-db-fixtures.js";
-import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
-import { BASELINE_MIGRATION_IDS } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  randomUUID  } from "node:crypto";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen  } from "@novel-master/core";
+import {  SqliteSessionRepository  } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {  ComposerDraftSchema  } from "../../src/domain/chat/model/composer-draft.schema.js";
+import {  chatAnnotateDraftStore  } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  execLegacyV107ChatDdl  } from "../bootstrap/helpers/legacy-db-fixtures.js";
+import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
+import {  BASELINE_MIGRATION_IDS  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -163,7 +150,7 @@ describe("SqliteSessionRepository", () => {
 describe("SqliteSessionRepository legacy 库 bootstrap", () => {
   it("v1.0.7 风格缺列库 bootstrap 后无 user_vfs_pending_json 且可读会话", async () => {
     registerBetterSqlite3Driver();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
@@ -174,7 +161,7 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
     await execLegacyV107ChatDdl(conn);
     // v1.0.7 形态已是 baseline 之前的老库，登记哨兵模拟「已过 v1.4.27 基线」
     // 后再验证 align 补列与仓储读写。
-    await ensureSchemaMigrationsTable(conn);
+    await SchemaMigrationsTable.ensure(conn);
     await conn.execute(
       `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
       [BASELINE_MIGRATION_IDS[0]!, Date.now()],
@@ -183,7 +170,7 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
        VALUES ('${sessionId}', '${projectId}', 'legacy-bootstrap', ${now}, ${now})`,
     );
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const columns = await conn.query<{ name: string }>(
       `SELECT name FROM pragma_table_info('chat_session')`,

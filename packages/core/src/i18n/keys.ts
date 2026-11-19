@@ -12,7 +12,7 @@
 
 import type { MessageDescriptor } from "@/common/i18n.js";
 
-/** keyRule 的可执行形态；parseCoreCatalog 与 catalog 测试共用。 */
+/** keyRule 的可执行形态；Catalog.parseCore 与 catalog 测试共用。 */
 export const CORE_MESSAGE_KEY_PATTERN = /^(error|label)\.[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$/;
 
 /** error.* 第二段（域）的固定词表（spec §2.2，19 域）。 */

@@ -23,7 +23,7 @@ import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import { Path } from "@/common/path.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { VfsServiceFactory } from "../vfs-service-factory.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
@@ -60,7 +60,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     try {
       return Result.ok(await p);
     } catch (error) {
-      if (isAppError(error)) return Result.err(error);
+      if (AppErrorOps.is(error)) return Result.err(error);
       throw error;
     }
   }
@@ -237,10 +237,10 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     } catch (error) {
       // inner 的 read 链若仍有边界抛出（如旧 wiring），此处转码到 Result 通道；
       // 目录行按「无此文件」归一（本视图 read 只面向文件）。
-      if (isAppError(error, "VFS_IS_DIRECTORY")) {
+      if (AppErrorOps.is(error, "VFS_IS_DIRECTORY")) {
         return Result.err(new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` }));
       }
-      if (isAppError(error)) {
+      if (AppErrorOps.is(error)) {
         return Result.err(error);
       }
       throw error;
@@ -248,7 +248,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     // inner 的 read 链失败走 Result 通道（错误通道迁移四期）：目录行按
     // 「无此文件」归一（本视图 read 只面向文件），抛出路径（旧 wiring）同款处理。
     if (!result.ok) {
-      if (isAppError(result.error, "VFS_IS_DIRECTORY")) {
+      if (AppErrorOps.is(result.error, "VFS_IS_DIRECTORY")) {
         return Result.err(new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` }));
       }
       return result;

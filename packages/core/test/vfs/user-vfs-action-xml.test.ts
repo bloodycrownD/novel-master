@@ -1,8 +1,8 @@
 /** user-vfs-action-xml codec 单测。 */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { UserVfsActionXml } from "../../src/domain/vfs/logic/user-vfs-action-xml.js";
+import {  describe, it  } from "node:test";
+import {  UserVfsActionXml  } from "../../src/domain/vfs/logic/user-vfs-action-xml.js";
 
 describe("user-vfs-action-xml", () => {
   it("build → parse round-trip，保留特殊字符与换行", () => {

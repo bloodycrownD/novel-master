@@ -9,7 +9,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import { Coerce } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
@@ -55,7 +55,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   }
 
   async findMaxVersionForEntry(entryId: number): Promise<number | null> {
-    const rows = await queryTemplate<{ max_version: number | null }>(this.conn, this.parser, `SELECT MAX(version) AS max_version FROM vfs_revision WHERE entry_id = #{entryId}`, { entryId });
+    const rows = await TdbcTemplate.query<{ max_version: number | null }>(this.conn, this.parser, `SELECT MAX(version) AS max_version FROM vfs_revision WHERE entry_id = #{entryId}`, { entryId });
     const max = rows[0]?.max_version;
     return max == null ? null : Number(max);
   }
@@ -78,7 +78,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
          FROM vfs_revision
          WHERE entry_id IN (${inList})
          GROUP BY entry_id`;
-      const rows = await queryTemplate<{ entry_id: number; max_version: number }>(this.conn, this.parser, sql52, bindings);
+      const rows = await TdbcTemplate.query<{ entry_id: number; max_version: number }>(this.conn, this.parser, sql52, bindings);
       for (const row of rows) {
         result.set(Number(row.entry_id), Number(row.max_version));
       }
@@ -88,7 +88,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
   async findByEntryAndVersion(entryId: number, version: number): Promise<Result<VfsRevision | null, AppError>> {
     const sql53 = "SELECT entry_id, version, content_hash, status, mtime_ms\n       FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    const rows = await queryTemplate(this.conn, this.parser, sql53, { entryId, version });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql53, { entryId, version });
     if (rows.length === 0) {
       return Result.ok(null);
     }
@@ -109,13 +109,13 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   /** nm-style: keep-public — 实现 VfsRevisionRepository.existsByEntryAndVersion 端口方法；内联会把查询 SQL 搬进调用层。 */
   async existsByEntryAndVersion(entryId: number, version: number): Promise<boolean> {
     const sql54 = "SELECT 1 AS one FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
-    const rows = await queryTemplate<{ one: number }>(this.conn, this.parser, sql54, { entryId, version });
+    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, sql54, { entryId, version });
     return rows.length > 0;
   }
 
   async findMetaByEntryAndVersion(entryId: number, version: number): Promise<VfsRevisionPointerMeta | null> {
     const sql55 = "SELECT status, content_hash FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
-    const rows = await queryTemplate<{ status: string; content_hash: string | null }>(this.conn, this.parser, sql55, { entryId, version });
+    const rows = await TdbcTemplate.query<{ status: string; content_hash: string | null }>(this.conn, this.parser, sql55, { entryId, version });
     const row = rows[0];
     if (row == null) {
       return null;
@@ -143,7 +143,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       const sql56 = `SELECT entry_id, version, status, content_hash
          FROM vfs_revision
          WHERE ${conditions}`;
-      const rows = await queryTemplate<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, sql56, bindings);
+      const rows = await TdbcTemplate.query<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, sql56, bindings);
       for (const row of rows) {
         result.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), {
           status: row.status as VfsRevisionStatus,
@@ -200,7 +200,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
 
     const sql23 = "INSERT INTO vfs_revision\n       (entry_id, version, content_hash, status, mtime_ms)\n       VALUES (#{entryId}, #{version}, #{contentHash}, #{status}, #{mtimeMs})";
-    await executeTemplate(this.conn, this.parser, sql23, {
+    await TdbcTemplate.execute(this.conn, this.parser, sql23, {
       entryId: input.entryId,
       version: input.version,
       contentHash,
@@ -215,7 +215,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     const sql57 = "SELECT r.entry_id AS entry_id, r.version AS version\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
-    const rows = await queryTemplate<{ entry_id: number; version: number }>(this.conn, this.parser, sql57, { scopeKey, path: base, pattern });
+    const rows = await TdbcTemplate.query<{ entry_id: number; version: number }>(this.conn, this.parser, sql57, { scopeKey, path: base, pattern });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       version: Number(row.version),
@@ -228,7 +228,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     const sql58 = "SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
-    const rows = await queryTemplate<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, sql58, { scopeKey, path: base, pattern });
+    const rows = await TdbcTemplate.query<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, sql58, { scopeKey, path: base, pattern });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       version: Number(row.version),
@@ -253,7 +253,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
         return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
       });
       const conditions = placeholders.join(" OR ");
-      await executeTemplate(this.conn, this.parser, `DELETE FROM vfs_revision WHERE ${conditions}`, bindings);
+      await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM vfs_revision WHERE ${conditions}`, bindings);
       deleted += chunk.length;
     }
     return deleted;
@@ -265,7 +265,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       return;
     }
     const sql24 = "UPDATE vfs_revision SET ref_count = ref_count + #{delta}\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    const result = await executeTemplate(this.conn, this.parser, sql24, { entryId, version, delta });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, sql24, { entryId, version, delta });
     if (delta > 0 && result.changes === 0) {
       // 记录缺失而非路径缺失，无 path 可挂；走旧签名过渡保 details 一层形态（与旧 VfsError 一致）。
       throw new AppError("VFS_NOT_FOUND", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });
@@ -323,7 +323,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   /** nm-style: keep-public — 实现 VfsRevisionRepository.repairRefCountFloor 端口方法；integrity-repair 注明保留逐条版，生产对账走 batchRepairRefCountFloor，端口契约仍在且端口文件不在本轮范围。 */
   async repairRefCountFloor(entryId: number, version: number, expected: number): Promise<boolean> {
     const sql59 = "SELECT ref_count FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    const rows = await queryTemplate<{ ref_count: number }>(this.conn, this.parser, sql59, { entryId, version });
+    const rows = await TdbcTemplate.query<{ ref_count: number }>(this.conn, this.parser, sql59, { entryId, version });
     const row = rows[0];
     if (row == null) {
       return false;
@@ -333,7 +333,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       return false;
     }
     const sql25 = "UPDATE vfs_revision SET ref_count = #{expected}\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    await executeTemplate(this.conn, this.parser, sql25, { entryId, version, expected });
+    await TdbcTemplate.execute(this.conn, this.parser, sql25, { entryId, version, expected });
     return true;
   }
 
@@ -420,7 +420,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
        WHERE e.scope_key = #{scopeKey}
          AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
          AND r.ref_count <= 0`;
-    const before = await queryTemplate<{ n: number }>(this.conn, this.parser, sql26, bindings);
+    const before = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, sql26, bindings);
     const count = Number(before[0]?.n ?? 0);
     if (count === 0) {
       return 0;
@@ -437,7 +437,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
     // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
     // 所以这条改动本身不改变 rowid 表上的行为。
-    await executeTemplate(this.conn, this.parser, sql27, bindings);
+    await TdbcTemplate.execute(this.conn, this.parser, sql27, bindings);
     return count;
   }
 
@@ -446,7 +446,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 直接按「ref_count<=0 且 entry_id 不存在」全表清扫。
     // revision DELETE 触发器会连带维护 vfs_content_blob.ref_count 并回收归零 blob。
     // 常量即上方 ORPHAN_REVISION_GC_SQL（migration 退役后运行期独占）。
-    const result = await executeTemplate(this.conn, this.parser, ORPHAN_REVISION_GC_SQL, {});
+    const result = await TdbcTemplate.execute(this.conn, this.parser, ORPHAN_REVISION_GC_SQL, {});
     return Number(result.changes);
   }
 }

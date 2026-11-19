@@ -3,14 +3,10 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 

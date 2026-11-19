@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsGrep } from "../../src/domain/vfs/logic/vfs-grep.js";
+import {  describe, it  } from "node:test";
+import {  VfsGrep  } from "../../src/domain/vfs/logic/vfs-grep.js";
 
 function grep(...args: Parameters<typeof VfsGrep.grepContents>) {
   const result = VfsGrep.grepContents(...args);

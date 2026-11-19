@@ -1,26 +1,22 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import { isAppError, type AppError } from "@/errors/app-error.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+import {  AppErrorOps, type AppError  } from "@/errors/app-error.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 /**
  * 事务回调内的域失败走「抛错回滚」通道（infra/tdbc 事务边界把非 TdbcError
  * 包成 TdbcError、message 原样保留），这里沿 cause 解出 AppError 供 key 断言。
  */
 function vfsAppError(e: unknown): AppError {
-  if (isAppError(e)) return e;
+  if (AppErrorOps.is(e)) return e;
   const cause = (e as {cause?: unknown}).cause;
-  assert.ok(isAppError(cause), `预期 VFS 域 AppError（直接或经 cause 包装），实际 ${String(e)}`);
+  assert.ok(AppErrorOps.is(cause), `预期 VFS 域 AppError（直接或经 cause 包装），实际 ${String(e)}`);
   return cause;
 }
 
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -87,7 +83,7 @@ describe("VFS directory nodes", () => {
       () => vfs.replace(GLOBAL_SCOPE, drafts, "a", "b"),
     ]) {
       await rejectsErr(fn, (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_IS_DIRECTORY"));
+        assert.ok(AppErrorOps.is(e, "VFS_IS_DIRECTORY"));
       });
     }
   });
@@ -136,7 +132,7 @@ describe("VFS directory nodes", () => {
     await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true });
 
     await rejectsErr(() => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -155,7 +151,7 @@ describe("VFS directory nodes", () => {
     const parentFile = `${await prepareRoot(vfs)}/parent-file`;
     await vfs.write(GLOBAL_SCOPE, parentFile, "content", { versionCheck: false });
     await rejectsErr(() => vfs.mkdir(GLOBAL_SCOPE, `${parentFile}/child`), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_A_DIRECTORY"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_A_DIRECTORY"));
     });
   });
 
@@ -164,7 +160,7 @@ describe("VFS directory nodes", () => {
     const vfs = VfsServiceFactory.create(ctx.conn);
     const nested = `${await prepareRoot(vfs)}/nested/leaf`;
     await rejectsErr(() => vfs.mkdir(GLOBAL_SCOPE, nested), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_PARENT_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_PARENT_NOT_FOUND"));
     });
   });
 
@@ -189,7 +185,7 @@ describe("VFS directory nodes", () => {
     const vfs = VfsServiceFactory.create(conn);
     const root = await prepareRoot(vfs);
     await vfs.mkdir(GLOBAL_SCOPE, `${root}/empty`);
-    const wt = createWorkplaceService(conn, { kind: "global" });
+    const wt = WorkplaceServiceFactory.create(conn, { kind: "global" });
     const rows = unwrap(await wt.buildListRows());
     const logicalEmpty = root + "/empty";
     assert.ok(

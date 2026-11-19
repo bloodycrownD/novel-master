@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { MatchNormalizer } from "../../src/domain/vfs/logic/normalize-for-match.js";
+import {  describe, it  } from "node:test";
+import {  MatchNormalizer  } from "../../src/domain/vfs/logic/normalize-for-match.js";
 
 /** 弯引号常量，方便用例阅读。 */
 const LDQ = "\u201C"; // “

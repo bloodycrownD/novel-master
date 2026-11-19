@@ -5,7 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { Coerce } from "@/common/coerce.js";
 import type { ChatProject } from "../../model/project.js";
@@ -39,20 +39,20 @@ export class SqliteProjectRepository extends BaseSqliteChatRepository<ChatProjec
 
   async list(): Promise<ChatProject[]> {
     const sql = `SELECT ${PROJECT_COLUMNS} FROM chat_project ORDER BY created_at_ms`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, {});
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, {});
     return rows.map(rowToProject);
   }
 
   /** nm-style: keep-public — ProjectRepository 端口方法；project.service 单点调用。 */
   async updateName(id: string, name: string, updatedAtMs: number): Promise<boolean> {
     const sql = `UPDATE chat_project SET name = #{name}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}`;
-    const result = await executeTemplate(this.conn, this.parser, sql, { id, name, updatedAtMs });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id, name, updatedAtMs });
     return result.changes > 0;
   }
 
   async getAgentConfig(id: string): Promise<string | null> {
     const sql = "SELECT agent_config_json FROM chat_project WHERE id = #{id}";
-    const rows = await queryTemplate(this.conn, this.parser, sql, { id });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { id });
     if (rows.length === 0) {
       return null;
     }
@@ -61,7 +61,7 @@ export class SqliteProjectRepository extends BaseSqliteChatRepository<ChatProjec
 
   async updateAgentConfig(id: string, configJson: string | null, updatedAtMs: number): Promise<boolean> {
     const sql = `UPDATE chat_project SET agent_config_json = #{configJson}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}`;
-    const result = await executeTemplate(this.conn, this.parser, sql, { id, configJson, updatedAtMs });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id, configJson, updatedAtMs });
     return result.changes > 0;
   }
 

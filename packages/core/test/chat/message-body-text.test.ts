@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
+import {  describe, it  } from "node:test";
+import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
 
 describe("MessageBodyText.fromBlocks", () => {
   it("text only → hello", () => {

@@ -3,12 +3,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import {
-  AnnotateDraftSchema,
-  type AnnotateDraft,
-} from "@/domain/chat/model/annotate-draft.schema.js";
+import {  describe, it  } from "node:test";
+import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  AnnotateDraftSchema, type AnnotateDraft  } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
 /** 手工构造历史消息批注伪 path 附件（发送管线已移除消息形 builder）。 */

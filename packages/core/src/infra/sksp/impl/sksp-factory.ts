@@ -9,8 +9,8 @@
  */
 
 import type { SecretStore } from "../ports/secret-store.port.js";
-import { refToEnvVar } from "../logic/ref-to-env.js";
-import { resolveSkspEnvOverride } from "../logic/env-override.js";
+import { SkspRefToEnv } from "../logic/ref-to-env.js";
+import { SkspEnvOverride } from "../logic/env-override.js";
 
 /** Env-backed store: get/has only (no set/delete). */
 // nm-style: keep-public — @novel-master/core/sksp 子入口再导出的公共类型契约（无生产直引）
@@ -22,12 +22,12 @@ export interface EnvSecretStoreLike {
 /** 从 NOVEL_MASTER_PROVIDER_*_API_KEY 环境变量读取 provider API 密钥。 */
 class EnvSecretStore {
   async get(ref: string): Promise<string | null> {
-    const name = refToEnvVar(ref);
+    const name = SkspRefToEnv.toEnvVar(ref);
     if (!name) {
       return null;
     }
-    // 空串 / 空白 / undefined 一律视为不覆盖 DB（见 resolveSkspEnvOverride）
-    return resolveSkspEnvOverride(name, process.env);
+    // 空串 / 空白 / undefined 一律视为不覆盖 DB（见 SkspEnvOverride.resolve）
+    return SkspEnvOverride.resolve(name, process.env);
   }
 
   async has(ref: string): Promise<boolean> {

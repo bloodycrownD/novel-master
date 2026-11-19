@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { ScopePrefix } from "@/domain/vfs/repositories/impl/scope-prefix-helpers.js";
@@ -66,7 +66,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         head_count = excluded.head_count,
         tail_count = excluded.tail_count,
         fill_policy = excluded.fill_policy`;
-    await executeTemplate(this.conn, this.parser, sql28, {
+    await TdbcTemplate.execute(this.conn, this.parser, sql28, {
       scopeKey: rule.scopeKey,
       logicalPath,
       ruleEnabled: rule.ruleEnabled ? 1 : 0,
@@ -88,7 +88,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
        VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
        ON CONFLICT(scope_key, logical_path) DO UPDATE SET
          inclusion_mode = excluded.inclusion_mode`;
-    await executeTemplate(this.conn, this.parser, sql29, {
+    await TdbcTemplate.execute(this.conn, this.parser, sql29, {
       scopeKey: rule.scopeKey,
       logicalPath,
       inclusionMode: rule.inclusionMode,
@@ -149,22 +149,22 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
 
   /** nm-style: keep-public — 实现 WorkplaceRepository.deleteScope 端口方法；内联会把双表删除 SQL 搬进调用层。 */
   async deleteScope(scopeKey: string): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
-    await executeTemplate(this.conn, this.parser, `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
   }
 
   async listDirRules(scopeKey: string): Promise<WorkplaceDirRule[]> {
     const sql30 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
-    const rows = await queryTemplate(this.conn, this.parser, sql30, { scopeKey });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql30, { scopeKey });
     return rows.map(rowToDirRule);
   }
 
   async listFileRules(scopeKey: string): Promise<WorkplaceFileRule[]> {
     const sql31 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
-    const rows = await queryTemplate(this.conn, this.parser, sql31, { scopeKey });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql31, { scopeKey });
     return rows.map(rowToFileRule);
   }
 
@@ -175,7 +175,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
-    const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
       return Result.ok(null);
     }
@@ -189,7 +189,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
-    const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
       return Result.ok(null);
     }
@@ -229,11 +229,11 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
-    await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: base, childPattern });
+    await TdbcTemplate.execute(this.conn, this.parser, sql34, { scopeKey, path: base, childPattern });
     const sql35 = `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
-    await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
+    await TdbcTemplate.execute(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
     return Result.ok(undefined);
   }
 
@@ -268,13 +268,13 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     // 注意：TDBC 事务不可嵌套——目前唯一调用方（createWorkplaceService 的默认连接）
     // 在此处是非事务连接，安全；若未来有调用方把本方法放进外层事务，需改成“复用外层 tx”。
     await this.conn.transaction(async (tx) => {
-      await executeTemplate(tx, this.parser, renameDir, {
+      await TdbcTemplate.execute(tx, this.parser, renameDir, {
         scopeKey,
         oldBase,
         newBase,
         childPattern,
       });
-      await executeTemplate(tx, this.parser, renameFile, {
+      await TdbcTemplate.execute(tx, this.parser, renameFile, {
         scopeKey,
         oldBase,
         newBase,

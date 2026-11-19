@@ -33,11 +33,11 @@
  */
 
 import { PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_TOKEN_CHUNKS } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenCounterKind } from "../ports/token-counter.port.js";
 
-const log = createLogger("tokenizer.prompt-whole-cache");
+const log = LogFactory.create("tokenizer.prompt-whole-cache");
 
 /** L1 缓存条目：一次整 prompt 本地计数的完整结果（口径三件套）。 */
 export interface PromptWholeCacheEntry {

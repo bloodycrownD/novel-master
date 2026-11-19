@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, describe, it, mock } from "node:test";
+import {  after, describe, it, mock  } from "node:test";
 
 const sseChunks = [
   'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n',
@@ -23,7 +23,7 @@ const postSseMock = mock.fn(
 
 mock.module("../../../src/infra/llm-protocol/logic/llm-sse-transport.js", {
   namedExports: {
-    postSse: postSseMock,
+    LlmSseTransport: { post: postSseMock },
   },
 });
 

@@ -1,37 +1,26 @@
-import { unwrap } from "../helpers/result-unwrap.js";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
-import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } from "../../src/domain/character-card/logic/character-card-limits.js";
-import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import {  describe, it  } from "node:test";
+import {  VfsServiceFactory, type VfsService  } from "@novel-master/core/vfs";
+import {  CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES  } from "../../src/domain/character-card/logic/character-card-limits.js";
+import {  CharacterCardToMdTree  } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import {
-  buildBrokenPngBytes,
-  buildPngWithTextChara,
-} from "./helpers/png-chara-fixture.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  buildBrokenPngBytes, buildPngWithTextChara  } from "./helpers/png-chara-fixture.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USER_VFS_PENDING  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  sessionApiPromptTokenCache  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsContentStore  } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  SqliteWorkplaceRepository  } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
-import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/character-card-import.service.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  DefaultCharacterCardImportService  } from "../../src/service/vfs/impl/character-card-import.service.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
-import { tCore } from "../helpers/core-i18n.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -198,7 +187,7 @@ describe("CharacterCardImportService", () => {
     // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
     const goneOld = await vfs.read("/角色/旧文件.md");
     assert.ok(!goneOld.ok, "补偿后旧文件应走 Err 通道");
-    if (!goneOld.ok) assert.ok(isAppError(goneOld.error, "VFS_NOT_FOUND"));
+    if (!goneOld.ok) assert.ok(AppErrorOps.is(goneOld.error, "VFS_NOT_FOUND"));
   });
 
   it("T-C9: importFromBytes 解析失败 → 子树不变", async () => {
@@ -247,7 +236,7 @@ describe("CharacterCardImportService", () => {
     unwrap(await vfs.mkdir("/角色"));
     unwrap(await vfs.write("/角色/旧.md", "old"));
 
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     unwrap(await wt.setDirRule({
       logicalPath: "/角色",
       sortField: "name",
@@ -304,7 +293,7 @@ describe("CharacterCardImportService", () => {
     });
 
     // 前缀下全部目录（含目标自身与任意深度嵌套）都有默认启用规则行
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     for (const dir of [
       "/角色",
       "/角色/开场",
@@ -426,7 +415,7 @@ describe("CharacterCardImportService", () => {
       directoryPath: "/",
     });
 
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     for (const dir of ["/世界书", "/世界书/章节", "/世界书/章节/深层"]) {
       const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);
@@ -477,11 +466,11 @@ describe("CharacterCardImportService", () => {
       ["世界书/章节/深层/设定.md", "深层设定"],
     ]);
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       unwrap(await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }));
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     // 仅失败目录触发一次 warn，导入整体成功
@@ -496,7 +485,7 @@ describe("CharacterCardImportService", () => {
     );
 
     // 失败之前的 /角色 与之后的章节链都有默认启用行，失败目录自身无行
-    const wt = createWorkplaceService(ctx.conn, scope);
+    const wt = WorkplaceServiceFactory.create(ctx.conn, scope);
     for (const dir of [
       "/角色",
       "/角色/世界书/章节",
@@ -770,7 +759,7 @@ describe("CharacterCardImportService", () => {
     );
 
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       const tree = parseTree(JSON.stringify(SAMPLE_V2));
       unwrap(await svc.import(scope, tree, {
@@ -778,7 +767,7 @@ describe("CharacterCardImportService", () => {
         directoryPath: "/角色",
       }));
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     // 导入本体已落库，缓存对齐失败仅 warn 留痕

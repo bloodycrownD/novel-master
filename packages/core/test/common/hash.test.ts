@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Hash } from "../../src/common/hash.js";
-import { chunkHash16 } from "../../src/infra/tokenizer/logic/token-chunk-cache.js";
+import {  describe, it  } from "node:test";
+import {  Hash  } from "../../src/common/hash.js";
+import {  TokenChunkCache  } from "../../src/infra/tokenizer/logic/token-chunk-cache.js";
 
 describe("common/hash · Hash.fnv1aHex16", () => {
   it("恒 16 位小写 hex，确定性", () => {
@@ -19,7 +19,7 @@ describe("common/hash · Hash.fnv1aHex16", () => {
 
   it("chunkHash16 与 Hash.fnv1aHex16 逐字节一致（上提后键值域不变）", () => {
     for (const sample of ["", "块一", "块二", "a".repeat(10_000), "落霞与孤鹜齐飞，秋水共长天一色。"]) {
-      assert.equal(chunkHash16(sample), Hash.fnv1aHex16(sample));
+      assert.equal(TokenChunkCache.chunkHash16(sample), Hash.fnv1aHex16(sample));
     }
   });
 });

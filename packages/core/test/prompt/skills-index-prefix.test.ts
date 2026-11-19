@@ -3,14 +3,11 @@
  * 自定义前缀替换默认行；缺省用 DEFAULT_SKILLS_INDEX_PREFIX。
  */
 import assert from "node:assert/strict";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { describe, it } from "node:test";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
 
-import {
-  DEFAULT_SKILLS_INDEX_PREFIX,
-  type AgentPromptLayout,
-} from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { PromptBuilder } from "../../src/service/prompt/render-prompt.js";
+import {  DEFAULT_SKILLS_INDEX_PREFIX, type AgentPromptLayout  } from "../../src/domain/prompt/model/agent-prompt-layout.js";
+import {  PromptBuilder  } from "../../src/service/prompt/render-prompt.js";
 import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";
 
 const ENTRIES = [

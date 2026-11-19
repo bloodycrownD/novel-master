@@ -12,8 +12,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AgentServiceFactory } from "@/service/agent/agent-service-factory.js";
+import {  describe, it  } from "node:test";
+import {  AgentServiceFactory  } from "@/service/agent/agent-service-factory.js";
 
 describe("AgentAbortRegistry", () => {
   describe("T-R1 register/abort/unregister/has + 所有权校验", () => {

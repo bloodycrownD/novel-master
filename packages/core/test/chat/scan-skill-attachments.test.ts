@@ -3,8 +3,8 @@
  * 不存在技能名容错（扫描不查存在性，未知名照常落库、不阻塞发送）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import {  describe, it  } from "node:test";
+import {  attachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("scanSkillAttachments (T-SK11)", () => {

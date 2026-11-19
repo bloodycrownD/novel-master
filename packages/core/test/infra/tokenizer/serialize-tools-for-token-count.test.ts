@@ -12,20 +12,13 @@
  * 3. 空数组与 undefined 结果一致（不引入无意义差异）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
-import { unwrap } from "../../helpers/result-unwrap.js";
-import { countTextWithDefaultEncoding } from "../../../../tokenizer-driver-node/src/impl/encoding-cache.js";
+import {  describe, it  } from "node:test";
+import {  registerNodeTokenizerDriverForTests  } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
+import {  countTextWithDefaultEncoding  } from "../../../../tokenizer-driver-node/src/impl/encoding-cache.js";
 import type { LlmToolDefinition } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
-import {
-  countPromptLlmInput,
-  countPromptLlmInputHeuristicOnly,
-  createDefaultTokenCounterRegistry,
-  serializePromptLlmInput,
-  serializeToolsForTokenCount,
-  splitTextIntoChunks,
-} from "../../../src/infra/tokenizer/index.js";
-import { emptyRegistryDeps } from "./registry-test-helpers.js";
+import {  PromptLlmInputCount, DefaultTokenCounterRegistry, serializePromptLlmInput, TokenCountTools, ChunkSplitter  } from "../../../src/infra/tokenizer/index.js";
+import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
 
 const TOOLS: readonly LlmToolDefinition[] = [
   {
@@ -52,9 +45,9 @@ const BASE_PARAMS = {
 
 describe("serializeToolsForTokenCount", () => {
   it("空数组 / undefined → 空串（拼接即恒等）", () => {
-    assert.equal(serializeToolsForTokenCount(undefined), "");
-    assert.equal(serializeToolsForTokenCount([]), "");
-    assert.equal("prompt".concat(serializeToolsForTokenCount([])), "prompt");
+    assert.equal(TokenCountTools.serialize(undefined), "");
+    assert.equal(TokenCountTools.serialize([]), "");
+    assert.equal("prompt".concat(TokenCountTools.serialize([])), "prompt");
   });
 
   it("非空 → 前导换行 + 只含 name/description/inputSchema 的稳定 JSON", () => {
@@ -63,7 +56,7 @@ describe("serializeToolsForTokenCount", () => {
       // 多余字段（如 registry 内部标记）不得进序列化串
       internalFlag: true,
     } as unknown as LlmToolDefinition;
-    const text = serializeToolsForTokenCount([extra]);
+    const text = TokenCountTools.serialize([extra]);
     assert.ok(text.startsWith("\n"));
     assert.deepEqual(JSON.parse(text.slice(1)), [
       {
@@ -73,24 +66,24 @@ describe("serializeToolsForTokenCount", () => {
       },
     ]);
     // 同输入同输出（稳定序列化）
-    assert.equal(text, serializeToolsForTokenCount([TOOLS[0]]));
+    assert.equal(text, TokenCountTools.serialize([TOOLS[0]]));
   });
 });
 
 describe("本地计数含 tools 段", () => {
-  const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+  const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
   it("heuristic-only：带 tools 比不带大；空数组与不带一致", async () => {
-    const without = unwrap(await countPromptLlmInputHeuristicOnly({
+    const without = unwrap(await PromptLlmInputCount.countHeuristicOnly({
       ...BASE_PARAMS,
       registry,
     }));
-    const withTools = unwrap(await countPromptLlmInputHeuristicOnly({
+    const withTools = unwrap(await PromptLlmInputCount.countHeuristicOnly({
       ...BASE_PARAMS,
       registry,
       tools: TOOLS,
     }));
-    const withEmpty = unwrap(await countPromptLlmInputHeuristicOnly({
+    const withEmpty = unwrap(await PromptLlmInputCount.countHeuristicOnly({
       ...BASE_PARAMS,
       registry,
       tools: [],
@@ -108,12 +101,12 @@ describe("本地计数含 tools 段", () => {
   it("注册驱动路径（node driver，heuristic 档）：tools 文本按同一序列化拼接", async () => {
     registerNodeTokenizerDriverForTests();
 
-    const without = unwrap(await countPromptLlmInput({
+    const without = unwrap(await PromptLlmInputCount.count({
       ...BASE_PARAMS,
       registry,
       tokenizerOverride: "heuristic",
     }));
-    const withTools = unwrap(await countPromptLlmInput({
+    const withTools = unwrap(await PromptLlmInputCount.count({
       ...BASE_PARAMS,
       registry,
       tokenizerOverride: "heuristic",
@@ -130,9 +123,9 @@ describe("本地计数含 tools 段", () => {
     // message-token-cache Step 3（T-TC5 迁移注记）：驱动 heuristic 档挂 L2 块
     // 流程后，期望从「整串一次增量计数」迁移为「splitTextIntoChunks 块逐个
     // 计数求和」（本夹具 89 vs 整串 90，差 1 token 属英文串边界效应）。
-    const text = serialized + serializeToolsForTokenCount(TOOLS);
+    const text = serialized + TokenCountTools.serialize(TOOLS);
     let expected = 0;
-    for (const chunk of splitTextIntoChunks(text)) {
+    for (const chunk of ChunkSplitter.splitText(text)) {
       const perChunk = countTextWithDefaultEncoding(chunk);
       assert.ok(
         perChunk != null,

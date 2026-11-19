@@ -11,7 +11,7 @@ import {TdbcError} from "../infra/tdbc/errors.js";
 import {AppError} from "../errors/app-error.js";
 import type {CoreMessageDescriptor} from "../i18n/keys.js";
 import type {MessageLike} from "./i18n.js";
-import {resolveLocalizedMessage, userMessageOf} from "@/i18n/index.js";
+import {ErrorMessage, LocalizedMessage} from "@/i18n/index.js";
 
 export const Errors = {
     /**
@@ -38,14 +38,14 @@ export const Errors = {
      * `AppError("CONFIG_DECODE_INVALID_SCHEMA")`，fallback descriptor（reason 参数
      * 已混入，经 {@link Errors.text} 取原错误文本，不做字符串拼接）经 params.descriptor
      * 接管 messageKey/messageParams，detail 承载同一份翻译文本作 message——
-     * `userMessageOf` 与直接读 `message` 两条消费路径都保持旧 LocalizedYamlError 的
+     * `ErrorMessage.userOf` 与直接读 `message` 两条消费路径都保持旧 LocalizedYamlError 的
      * 文案；传 string 时保持旧的 `fallback：message` 拼接（apps 侧自有 fallback
      * 文案仍走这条通道）。
      */
     normalizeYaml: (error: unknown, fallback: string | CoreMessageDescriptor): Error => {
         if (typeof fallback !== "string") {
             const descriptor = {key: fallback.key, params: {...fallback.params, reason: Errors.text(error)}};
-            return new AppError("CONFIG_DECODE_INVALID_SCHEMA", {descriptor, detail: resolveLocalizedMessage(descriptor).text});
+            return new AppError("CONFIG_DECODE_INVALID_SCHEMA", {descriptor, detail: LocalizedMessage.resolve(descriptor).text});
         }
         if (error instanceof Error) {
             return new Error(`${fallback}：${error.message}`);
@@ -95,12 +95,12 @@ export const Errors = {
     /**
      * 错误 → 用户可见文案：descriptor 存在时交给宿主 translator 渲染，否则回落 fallback。
      *
-     * `userMessageOf` 自己沿 cause 链（带环检测）找 messageKey，两端曾各有一份逐字
+     * `ErrorMessage.userOf` 自己沿 cause 链（带环检测）找 messageKey，两端曾各有一份逐字
      * 实现（desktop `format-ipc-error` / mobile `format-error`）；差异只在各自的
      * `coreT` 实例——catalog 装载与 locale 归宿主，core 不持 translator，故以参数注入。
      */
     visibleMessage: (error: unknown, fallback: string, translate: (message: MessageLike) => string): string => {
-        const descriptor = userMessageOf(error);
+        const descriptor = ErrorMessage.userOf(error);
         return descriptor != null ? translate(descriptor) : fallback;
     },
 } as const;

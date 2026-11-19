@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode as decodeRaw, encode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
 import type { ZodType } from "zod";
-import { isAppError } from "@novel-master/core/errors";
+import {  AppErrorOps  } from "@novel-master/core/errors";
 
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(decodeRaw(raw, schema));
+  return unwrap(SerializationDecode.decode(raw, schema));
 }
 
 const emptyPrompts = { persist: {}, dynamic: {} };
@@ -50,7 +50,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
     );
   });
 
@@ -66,7 +66,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
     );
   });
 
@@ -81,7 +81,7 @@ describe("agentDefinitionSchema", () => {
       agentDefinitionSchema
     );
     // encode 已 Result 化（错误通道迁移）：Err 抛出断言失败，Ok 解包取 wire
-    const doc = unwrap(encode(def, agentDefinitionSchema)) as { model?: string };
+    const doc = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as { model?: string };
     assert.equal(doc.model, TEST_SAVED_MODEL);
     const again = decode(doc, agentDefinitionSchema);
     assert.equal(again.model, TEST_SAVED_MODEL);
@@ -125,7 +125,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
+      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
     );
   });
 
@@ -145,7 +145,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA")
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
     );
   });
 
@@ -170,7 +170,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA")
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
     );
   });
 
@@ -303,7 +303,7 @@ describe("agentDefinitionSchema", () => {
     const wired = agentDefinitionSchema.toWire(def);
     assert.ok(!wired.ok, "重名 persist 块应走 Err 通道");
     if (!wired.ok) {
-      assert.ok(isAppError(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+      assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
     }
   });
 
@@ -332,7 +332,7 @@ describe("agentDefinitionSchema", () => {
     const wired = agentDefinitionSchema.toWire(dup);
     assert.ok(!wired.ok, "重名 dynamic 块应走 Err 通道");
     if (!wired.ok) {
-      assert.ok(isAppError(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+      assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
     }
   });
 

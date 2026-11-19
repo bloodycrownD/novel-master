@@ -12,11 +12,8 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  NewSkillDoc,
-  SkillFrontMatter,
-} from "@novel-master/core/skills";
+import {  describe, it  } from "node:test";
+import {  NewSkillDoc, SkillFrontMatter  } from "@novel-master/core/skills";
 
 describe("NewSkillDoc.build（wave-e H3）", () => {
   it("description 含半角冒号时产出的 front matter 可被 SkillFrontMatter.parse 解析", () => {

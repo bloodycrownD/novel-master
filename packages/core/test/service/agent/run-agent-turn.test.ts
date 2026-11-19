@@ -1,20 +1,17 @@
-import { rejectsErr, unwrap } from "../../helpers/result-unwrap.js";
-import { outcomeValue } from "../../helpers/outcome-value.js";
-import { Result } from "../../../src/errors/either.js";
+import {  rejectsErr, unwrap  } from "../../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../../helpers/outcome-value.js";
+import {  Result  } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { isAppError } from "@/errors/app-error.js";
-import {
-  runAgentTurn,
-  type AgentTurnRuntimePort,
-} from "@/service/agent/logic/run-agent-turn.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
+import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
 
 /** 发送侧（mobile）区间扫描口径：逐区间 slice 单独扫（D9）。 */
 function scanComposerRanges(
@@ -185,13 +182,13 @@ describe("runAgentTurn", () => {
   it("returns AGENT_MESSAGE_EMPTY when input is empty and resume is not allowed", async () => {
     await rejectsErr(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           makeRuntime({}),
           { projectId: "p", sessionId: "s" },
           "",
         ),
       (err: unknown) => {
-        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
       },
     );
@@ -212,7 +209,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "",
@@ -235,7 +232,7 @@ describe("runAgentTurn", () => {
   it("returns AGENT_MESSAGE_EMPTY on empty resume when last message is not user", async () => {
     await rejectsErr(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           makeRuntime({
             listBySessionTail: async () => [
               { role: "assistant", content: { blocks: [] } },
@@ -246,7 +243,7 @@ describe("runAgentTurn", () => {
           { allowResumeWithoutInput: true },
         ),
       (err: unknown) => {
-        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
       },
     );
   });
@@ -265,7 +262,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "请看 @notes/a.md",
@@ -293,7 +290,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "再提 @notes/a.md",
@@ -342,7 +339,7 @@ describe("runAgentTurn", () => {
       { start: 13, end: 18 },
     ];
     try {
-      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
         attachments: scanComposerRanges(text, ranges),
         excludedScanRanges: ranges,
       }));
@@ -386,7 +383,7 @@ describe("runAgentTurn", () => {
       { start: 10, end: 13 },
     ];
     try {
-      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
         attachments: scanComposerRanges(text, ranges),
         excludedScanRanges: ranges,
       }));
@@ -419,7 +416,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
         attachments: [
           {
             name: "a.md",
@@ -461,7 +458,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
         attachments: [
           {
             name: "preview-wp",
@@ -527,9 +524,9 @@ describe("runAgentTurn", () => {
     });
     await rejectsErr(
       () =>
-        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+        AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
       },
     );
@@ -564,9 +561,9 @@ describe("runAgentTurn", () => {
       },
     });
     await rejectsErr(
-      () => runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+      () => AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
       },
     );
@@ -597,9 +594,9 @@ describe("runAgentTurn", () => {
     });
     await rejectsErr(
       () =>
-        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+        AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
       },
     );
@@ -625,7 +622,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "只是一条纯文本消息",
@@ -655,7 +652,7 @@ describe("runAgentTurn", () => {
     });
     await assert.rejects(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           runtime,
           { projectId: "p", sessionId: "s" },
           "纯文本消息",
@@ -691,7 +688,7 @@ describe("runAgentTurn", () => {
     });
     await assert.rejects(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           runtime,
           { projectId: "p", sessionId: "s" },
           "会触发 capture 失败的消息",
@@ -721,7 +718,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      unwrap(await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "继续聊天",
@@ -748,7 +745,7 @@ describe("runAgentTurn", () => {
     });
     for (let round = 0; round < 2; round++) {
       try {
-        unwrap(await runAgentTurn(
+        unwrap(await AgentTurnRunner.run(
           runtime,
           { projectId: "p", sessionId: "s" },
           `第 ${round + 1} 轮消息`,

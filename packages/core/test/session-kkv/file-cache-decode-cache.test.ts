@@ -14,14 +14,14 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec, type FileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
-import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
+import {  after, before, describe, it  } from "node:test";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec, type FileCachePayload  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import {  openSqlCountingNovelMasterTestConnection, type SqlCounter  } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -66,7 +66,7 @@ describe("file_cache × 进程内解压产物层", () => {
   it("第二次 get 走内存：blob 被投毒仍读到原正文；mtime 取自 entry 行现拼", async () => {
     decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
-    const sessionKkv = createSessionKkvService(conn);
+    const sessionKkv = SessionKkvServiceFactory.create(conn);
     const sessionId = `s-${testIsolationSuffix()}`;
     const key = `full:/正文-${testIsolationSuffix()}.md`;
     const body = `文件正文-${testIsolationSuffix()}：${"段落内容\n".repeat(70)}`;
@@ -97,7 +97,7 @@ describe("file_cache × 进程内解压产物层", () => {
   it("getMany：部分命中时命中项不吃投毒、未命中项照常解压", async () => {
     decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
-    const sessionKkv = createSessionKkvService(conn);
+    const sessionKkv = SessionKkvServiceFactory.create(conn);
     const sessionId = `s-${testIsolationSuffix()}`;
     const cachedKey = `full:/已读-${testIsolationSuffix()}.md`;
     const freshKey = `full:/未读-${testIsolationSuffix()}.md`;
@@ -121,7 +121,7 @@ describe("file_cache × 进程内解压产物层", () => {
   it("全命中时连 blob 表 SQL 都不发（workplace 批次读形态）", async () => {
     decodedContentCache.clear();
     const ctx = countingCtx!;
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
     const sessionId = `s-count-${testIsolationSuffix()}`;
     const keys = [1, 2, 3].map((n) => `full:/f${n}-${testIsolationSuffix()}.md`);
     for (const [index, key] of keys.entries()) {

@@ -1,26 +1,19 @@
-import { outcomeValue } from "../helpers/outcome-value.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
-import { BASELINE_MIGRATION_IDS, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import {
-  execLegacyChatMessageWithoutHidden,
-  execLegacyV107ChatDdl,
-  execLegacyV7ChatMessageDdl,
-} from "./helpers/legacy-db-fixtures.js";
-import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
+import {  randomUUID  } from "node:crypto";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  BASELINE_MIGRATION_IDS, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteSessionRepository  } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  execLegacyChatMessageWithoutHidden, execLegacyV107ChatDdl, execLegacyV7ChatMessageDdl  } from "./helpers/legacy-db-fixtures.js";
+import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
-  return await open("tdbc:sqlite:file::memory:", {
+  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -32,7 +25,7 @@ async function openInMemoryConnection(): Promise<TdbcConnection> {
  * assertMinimumBaseline fail-fast 拦下，align 行为测试需先过基线检查。
  */
 async function seedBaselineSentinel(conn: TdbcConnection): Promise<void> {
-  await ensureSchemaMigrationsTable(conn);
+  await SchemaMigrationsTable.ensure(conn);
   await conn.execute(
     `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
     [BASELINE_MIGRATION_IDS[0]!, Date.now()]
@@ -62,7 +55,7 @@ describe("schema 列对齐（T-B3）", () => {
     await execLegacyV107ChatDdl(conn);
     await execBootstrapSchemaDdl(conn);
     await seedBaselineSentinel(conn);
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const columns = await tableColumnNames(conn, "chat_session");
     assert.equal(columns.has("user_vfs_pending_json"), false);
@@ -88,7 +81,7 @@ describe("schema 列对齐（T-B3）", () => {
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
        VALUES ('${sessionId}', '${projectId}', 'legacy-session', ${now}, ${now})`
     );
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const repo = new SqliteSessionRepository(conn);
     const sessions = await repo.listByProject(projectId);
@@ -120,7 +113,7 @@ describe("schema 列对齐（T-B3）", () => {
          '${messageId}', '${sessionId}', 1, 'user', '{"blocks":[{"type":"text","text":"hi"}]}', ${now}
        )`
     );
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.ok((await tableColumnNames(conn, "chat_message")).has("hidden"));
 
@@ -142,7 +135,7 @@ describe("schema 列对齐（T-B3）", () => {
     const conn = await openInMemoryConnection();
     try {
       // 新库路径：canonical DDL 已含 entry_kind/head_version，无需 legacy rebuild。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       const columns = await tableColumnNames(conn, "vfs_entry");
       assert.ok(columns.has("entry_kind"));
       assert.ok(columns.has("head_version"));
@@ -153,9 +146,9 @@ describe("schema 列对齐（T-B3）", () => {
 
   it("A5：完整 schema 库连续 bootstrap 三次幂等无错", async () => {
     const conn = await openInMemoryConnection();
-    await bootstrapNovelMaster(conn);
-    await bootstrapNovelMaster(conn);
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const sessionCols = await tableColumnNames(conn, "chat_session");
     assert.equal(sessionCols.has("user_vfs_pending_json"), false);
@@ -166,7 +159,7 @@ describe("schema 列对齐（T-B3）", () => {
 
   it("A6：空库 bootstrap 与 T-B1 一致，列由 DDL 创建", async () => {
     const conn = await openInMemoryConnection();
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     for (const tableName of [
       "agent_definition",
@@ -206,7 +199,7 @@ describe("schema 列对齐（T-B3）", () => {
     // 本用例改为验证「新库 chat_session 不含 user_vfs_pending_json 列」，与 canonical DDL 一致。
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       const columns = await tableColumnNames(conn, "chat_session");
       assert.equal(columns.has("user_vfs_pending_json"), false);
       assert.ok(columns.has("composer_draft_json"));
@@ -233,7 +226,7 @@ describe("schema 列对齐（T-B3）", () => {
       `INSERT INTO chat_project (id, name, created_at_ms, updated_at_ms)
        VALUES ('${projectId}', 'legacy-project', ${now}, ${now})`
     );
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const columns = await tableColumnNames(conn, "chat_project");
     assert.ok(columns.has("agent_config_json"));
@@ -267,7 +260,7 @@ describe("schema 列对齐（T-B3）", () => {
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
        VALUES ('${sessionId}', '${projectId}', 'legacy-agent-col', ${now}, ${now})`
     );
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const columns = await tableColumnNames(conn, "chat_session");
     assert.ok(
@@ -295,8 +288,8 @@ describe("schema 列对齐（T-B3）", () => {
 
   it("A10：新库 bootstrap 后 chat_session.agent_config_json 由 DDL 直接创建（不重复 ALIGN）", async () => {
     const conn = await openInMemoryConnection();
-    await bootstrapNovelMaster(conn);
-    await bootstrapNovelMaster(conn); // 快路径：user_version 已达 SCHEMA_BOOT_VERSION
+    await NovelMasterBootstrap.bootstrap(conn);
+    await NovelMasterBootstrap.bootstrap(conn); // 快路径：user_version 已达 SCHEMA_BOOT_VERSION
 
     const columns = await tableColumnNames(conn, "chat_session");
     assert.ok(columns.has("agent_config_json"));
@@ -327,9 +320,9 @@ describe("schema 列对齐（T-B3）", () => {
          '{"blocks":[{"type":"text","text":"legacy"}]}', ${now}
        )`
     );
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     // 重复执行幂等：第二次 bootstrap 不因列已存在而报错
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     const columns = await tableColumnNames(conn, "chat_message");
     assert.ok(columns.has("first_token_ms"), "first_token_ms 应被 ALIGN 补列");
@@ -377,12 +370,12 @@ describe("schema 列对齐（T-B3）", () => {
     try {
       // 先建完整 schema，再裁掉 v9 新增的耗时两列、把 user_version 回拨到 8，
       // 模拟真实 v8 存量库（其余表结构与当前一致）。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       await conn.execute("ALTER TABLE chat_message DROP COLUMN first_token_ms");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN duration_ms");
       await conn.execute("PRAGMA user_version = 8");
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "chat_message");
       assert.ok(
@@ -410,7 +403,7 @@ describe("schema 列对齐（T-B3）", () => {
     // 存量行无需回填、读出来应是 {}（repository 解析层兑底）。
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       await conn.execute(
         "ALTER TABLE llm_provider DROP COLUMN body_params_json"
       );
@@ -429,7 +422,7 @@ describe("schema 列对齐（T-B3）", () => {
          )`
       );
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "llm_provider");
       assert.ok(
@@ -468,7 +461,7 @@ describe("schema 列对齐（T-B3）", () => {
     // 存量行新列取 DEFAULT（0 / 'heuristic'），水合按 0 t 起算兜底，无存量回填。
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       // 补列前插入一行存量 running 行（无 token 两列的 v15 形态）
       const legacySessionId = randomUUID();
       const now = 1_700_000_000_000;
@@ -490,7 +483,7 @@ describe("schema 列对齐（T-B3）", () => {
       );
       await conn.execute("PRAGMA user_version = 15");
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "session_run_state");
       assert.ok(

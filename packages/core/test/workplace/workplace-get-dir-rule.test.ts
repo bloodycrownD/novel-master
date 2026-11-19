@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 novelMasterTestFixture();
@@ -10,7 +10,7 @@ novelMasterTestFixture();
 describe("worktree getDirRule", () => {
   it("returns undefined when no rule exists and persisted fields when set", async () => {
     const ctx = getNovelMasterTestContext();
-    const wt = createWorkplaceService(ctx.conn, { kind: "global" });
+    const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
     const path = "/my-dir";
 
     assert.equal(unwrap(await wt.getDirRule(path)), undefined);

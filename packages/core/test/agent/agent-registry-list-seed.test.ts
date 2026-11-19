@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 
-import { AgentServiceFactory, agentDefinitionSchema } from "@novel-master/core/agent";
-import { isAppError } from "@novel-master/core/errors";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  AgentServiceFactory, agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -31,7 +27,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await rejectsErr(
       registry.get("non-existent-uuid-xxx"),
-      (e: unknown) => assert.ok(isAppError(e, "AGENT_NOT_FOUND")),
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "AGENT_NOT_FOUND")),
     );
   });
 
@@ -40,7 +36,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await rejectsErr(
       registry.delete("general"),
-      (e: unknown) => assert.ok(isAppError(e, "AGENT_NOT_FOUND")),
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "AGENT_NOT_FOUND")),
     );
   });
 
@@ -60,7 +56,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
       registry.upsert(
         dbGeneralId,
         unwrap(
-          decode(
+          SerializationDecode.decode(
             {
               schemaVersion: 1,
               name: "general",
@@ -71,7 +67,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
         ),
       ),
       (e) => {
-        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA"));
+        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA"));
       },
     );
   });
@@ -96,7 +92,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     await registry.upsert(
       writerId,
       unwrap(
-        decode(
+        SerializationDecode.decode(
           {
             schemaVersion: 1,
             name: `writer-${testIsolationSuffix()}`,

@@ -1,5 +1,5 @@
 /**
- * SKILL.md front matter 解析（splitMarkdownFrontMatter + parseText("yaml")）。
+ * SKILL.md front matter 解析（FrontMatter.splitMarkdown + parseText("yaml")）。
  *
  * 解析失败不抛错，产出有效性标记与无效原因——无效技能保留在清单里，
  * 管理界面展示原因并可修复。
@@ -7,12 +7,12 @@
  * @module domain/skills/logic/parse-skill-front-matter
  */
 
-import { splitMarkdownFrontMatter } from "@/common/front-matter.js";
+import { FrontMatter } from "@/common/front-matter.js";
 import { Coerce } from "@/common/coerce.js";
 import { Guards } from "@/common/guards.js";
 import type { MessageLike } from "@/common/i18n.js";
-import { messageParamOf } from "@/i18n/localized-message.js";
-import { parseText } from "@/infra/serialization/parse-text.js";
+import { LocalizedMessage } from "@/i18n/localized-message.js";
+import { SerializationParseText } from "@/infra/serialization/parse-text.js";
 import { skillFrontMatterSchema } from "../model/skill.schema.js";
 
 /** front matter 解析结果（含有效性标记与无效原因；invalidReason 供 UI 翻译）。 */
@@ -40,7 +40,7 @@ export const SkillFrontMatter = {
    * （name 与 description 非空，无未知键）。
    */
   parse(source: string): ParsedSkillFrontMatter {
-    const split = splitMarkdownFrontMatter(source);
+    const split = FrontMatter.splitMarkdown(source);
     if (split.frontMatterLines === null) {
       return {
         valid: false,
@@ -52,7 +52,7 @@ export const SkillFrontMatter = {
 
     // parseText 四期起沿 Result 回传解析失败（不再 throw）；Err.error 即原
     // AppError，message 口径与旧 catch 分支一致。
-    const text = parseText(split.frontMatterLines.join("\n"), "yaml");
+    const text = SerializationParseText.parse(split.frontMatterLines.join("\n"), "yaml");
     if (!text.ok) {
       const message = text.error instanceof Error ? text.error.message : "invalid YAML";
       return {
@@ -69,7 +69,7 @@ export const SkillFrontMatter = {
       const issue = parsed.error.issues[0];
       return {
         valid: false,
-        invalidReason: { key: "error.skill.front_matter_field_invalid", params: { message: messageParamOf(issue?.message ?? "unknown") } },
+        invalidReason: { key: "error.skill.front_matter_field_invalid", params: { message: LocalizedMessage.paramOf(issue?.message ?? "unknown") } },
         name: SkillFrontMatter.pickStringField(raw, "name"),
         description: SkillFrontMatter.pickStringField(raw, "description"),
       };

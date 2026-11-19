@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { applyThinkingToBody } from "../../../src/infra/llm-protocol/logic/apply-thinking-to-body.js";
-import { GeminiProtocolAdapter } from "../../../src/infra/llm-protocol/impl/gemini.adapter.js";
+import {  describe, it, mock  } from "node:test";
+import {  ThinkingBody  } from "../../../src/infra/llm-protocol/logic/apply-thinking-to-body.js";
+import {  GeminiProtocolAdapter  } from "../../../src/infra/llm-protocol/impl/gemini.adapter.js";
 
 describe("Gemini thinking body", () => {
-  it("applyThinkingToBody('gemini') 写入 thinkingConfig", () => {
+  it("ThinkingBody.apply('gemini') 写入 thinkingConfig", () => {
     const body: Record<string, unknown> = {};
-    applyThinkingToBody("gemini", body, {
+    ThinkingBody.apply("gemini", body, {
       protocol: "gemini",
       gemini: { thinkingConfig: { thinkingBudget: -1 } },
     });
@@ -19,7 +19,7 @@ describe("Gemini thinking body", () => {
     const body: Record<string, unknown> = {
       generationConfig: { temperature: 0.7 },
     };
-    applyThinkingToBody("gemini", body, {
+    ThinkingBody.apply("gemini", body, {
       protocol: "gemini",
       gemini: { thinkingConfig: { thinkingLevel: "medium" } },
     });
@@ -31,7 +31,7 @@ describe("Gemini thinking body", () => {
 
   it("未传 thinking 时不写入字段", () => {
     const body: Record<string, unknown> = {};
-    applyThinkingToBody("gemini", body, undefined);
+    ThinkingBody.apply("gemini", body, undefined);
     assert.equal(body.generationConfig, undefined);
   });
 

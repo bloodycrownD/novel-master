@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
-import {
-  buildBrokenPngBytes,
-  buildPngWithOnlyItxtChara,
-  buildPngWithOnlyZtxtChara,
-  buildPngWithTextChara,
-} from "./helpers/png-chara-fixture.js";
+import {  describe, it  } from "node:test";
+import {  CharacterCardToMdTree  } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import {  buildBrokenPngBytes, buildPngWithOnlyItxtChara, buildPngWithOnlyZtxtChara, buildPngWithTextChara  } from "./helpers/png-chara-fixture.js";
 
 const SAMPLE_CARD = {
   spec: "chara_card_v2",

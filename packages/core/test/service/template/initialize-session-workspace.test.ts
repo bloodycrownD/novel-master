@@ -4,28 +4,24 @@
  * 覆盖：
  * - (a) session scope 文件/目录/内容与 project template 一致，且 revision 已 seed
  * - (b) worktree 规则经 mapProjectWorkplacePathToSession 复制到 session scope
- * - (c) initializeSessionWorkspace(clearCheckpoints=false) 不清 checkpoint；
+ * - (c) SessionWorkspaceInit.initialize(clearCheckpoints=false) 不清 checkpoint；
  *      (clearCheckpoints=true) 清空 checkpoint
  * - (d) 事务回滚：workspace 初始化后出错不残留（session.create 事务边界原子性）
  */
 
-import { unwrap } from "../../helpers/result-unwrap.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TextBlocks } from "@novel-master/core/chat";
-import { createSkillsService } from "@novel-master/core/skills";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SessionWorkspaceInit  } from "@/service/template/logic/initialize-session-workspace.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -37,7 +33,7 @@ describe("session create / workspace initialize (core 层)", () => {
     // 非空 template：根目录文件 + 子目录文件
     unwrap(await pvfs.write("/a.md", "A-content"));
     unwrap(await pvfs.write("/sub/b.md", "B-content"));
-    const pwt = createWorkplaceService(ctx.conn, {
+    const pwt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "project",
       projectId: project.id,
     });
@@ -98,7 +94,7 @@ describe("session create / workspace initialize (core 层)", () => {
     }
 
     // --- (b) worktree 规则经 mapProjectWorkplacePathToSession 复制 ---
-    const swt = createWorkplaceService(ctx.conn, {
+    const swt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -131,7 +127,7 @@ describe("session create / workspace initialize (core 层)", () => {
 
     // 分支1：create 语义（clearCheckpoints=false）不清 checkpoint
     await ctx.conn.transaction(async (tx) => {
-      await initializeSessionWorkspace(tx, project.id, session.id, {
+      await SessionWorkspaceInit.initialize(tx, project.id, session.id, {
         clearCheckpoints: false,
       });
     });
@@ -143,7 +139,7 @@ describe("session create / workspace initialize (core 层)", () => {
 
     // 分支2：pull 语义（clearCheckpoints=true）清 checkpoint
     await ctx.conn.transaction(async (tx) => {
-      await initializeSessionWorkspace(tx, project.id, session.id, {
+      await SessionWorkspaceInit.initialize(tx, project.id, session.id, {
         clearCheckpoints: true,
       });
     });
@@ -164,7 +160,7 @@ describe("session create / workspace initialize (core 层)", () => {
     // 事务内做一次 replace + copy（真在写库），然后人为抛错回滚
     await assert.rejects(
       ctx.conn.transaction(async (tx) => {
-        await initializeSessionWorkspace(tx, project.id, session.id, {
+        await SessionWorkspaceInit.initialize(tx, project.id, session.id, {
           clearCheckpoints: false,
         });
         throw new Error("boom");
@@ -186,7 +182,7 @@ describe("session create / workspace initialize (core 层)", () => {
     unwrap(await pvfs.write("/sub/deep/b.md", "B-content"));
 
     // 技能经 SkillService 落独立 meta 域，project template 域不再有 /meta/skills 内容
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     unwrap(await skills.writeSkillFile(
       "project",
       "my-skill",

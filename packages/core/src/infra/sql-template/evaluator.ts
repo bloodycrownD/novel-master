@@ -3,12 +3,12 @@
  * Produces final SQL text and ordered parameters for prepared statements.
  */
 
-import { pushScope, resolvePath, type ContextStack } from "./context.js";
-import { evaluateTest } from "./expression.js";
-import { renderBind } from "./placeholder.js";
-import { normalizeCollection } from "./tags/foreach.js";
-import { applyTrimOverrides } from "./tags/trim.js";
-import { wrapWhere } from "./tags/where.js";
+import { SqlTemplateContext, type ContextStack } from "./context.js";
+import { SqlTemplateExpression } from "./expression.js";
+import { SqlTemplatePlaceholder } from "./placeholder.js";
+import { SqlTemplateForeach } from "./tags/foreach.js";
+import { SqlTemplateTrim } from "./tags/trim.js";
+import { SqlTemplateWhere } from "./tags/where.js";
 import type { AstNode } from "./types.js";
 import type { SqlParseResult } from "./types.js";
 
@@ -40,13 +40,13 @@ export class TemplateEvaluator {
           state.parts.push(node.value);
           break;
         case "bind": {
-          const { fragment, parameters } = renderBind(node.kind, node.path, stack, this.placeholder);
+          const { fragment, parameters } = SqlTemplatePlaceholder.renderBind(node.kind, node.path, stack, this.placeholder);
           state.parts.push(fragment);
           state.parameters.push(...parameters);
           break;
         }
         case "if":
-          if (evaluateTest(node.test, stack, { offset: node.testOffset })) {
+          if (SqlTemplateExpression.evaluateTest(node.test, stack, { offset: node.testOffset })) {
             this.evaluateNodes(node.children, stack, state);
           }
           break;
@@ -54,13 +54,13 @@ export class TemplateEvaluator {
           const innerState: EvaluateState = { parts: [], parameters: [] };
           this.evaluateNodes(node.children, stack, innerState);
           state.parameters.push(...innerState.parameters);
-          const wrapped = wrapWhere(innerState.parts.join(""));
+          const wrapped = SqlTemplateWhere.wrap(innerState.parts.join(""));
           if (wrapped) state.parts.push(wrapped);
           break;
         }
         case "foreach": {
-          const collection = resolvePath(stack, node.attrs.collection);
-          const items = normalizeCollection(collection);
+          const collection = SqlTemplateContext.resolvePath(stack, node.attrs.collection);
+          const items = SqlTemplateForeach.normalizeCollection(collection);
           if (items.length === 0) break;
 
           const open = node.attrs.open ?? "";
@@ -75,7 +75,7 @@ export class TemplateEvaluator {
             if (node.attrs.index) {
               frame[node.attrs.index] = index;
             }
-            const childStack = pushScope(stack, frame);
+            const childStack = SqlTemplateContext.pushScope(stack, frame);
             const chunkState: EvaluateState = { parts: [], parameters: [] };
             this.evaluateNodes(node.children, childStack, chunkState);
             state.parameters.push(...chunkState.parameters);
@@ -89,13 +89,13 @@ export class TemplateEvaluator {
           const innerState: EvaluateState = { parts: [], parameters: [] };
           this.evaluateNodes(node.children, stack, innerState);
           state.parameters.push(...innerState.parameters);
-          state.parts.push(applyTrimOverrides(innerState.parts.join(""), node.attrs));
+          state.parts.push(SqlTemplateTrim.applyOverrides(innerState.parts.join(""), node.attrs));
           break;
         }
         case "choose": {
           let matched = false;
           for (const when of node.whens) {
-            if (evaluateTest(when.test, stack, { offset: when.testOffset })) {
+            if (SqlTemplateExpression.evaluateTest(when.test, stack, { offset: when.testOffset })) {
               this.evaluateNodes(when.children, stack, state);
               matched = true;
               break;

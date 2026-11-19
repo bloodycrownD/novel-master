@@ -6,11 +6,11 @@
  * unregister 所有权比对、register 覆盖 vs tryRegister 冲突。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AbortRegistryFactory } from "@/domain/abort/logic/create-abort-registry.js";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { ABORT_KEY } from "@/domain/abort/model/abort-key.js";
+import {  AbortRegistryFactory  } from "@/domain/abort/logic/create-abort-registry.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  ABORT_KEY  } from "@/domain/abort/model/abort-key.js";
 
 describe("AbortRegistry 泛化语义（T-S8）", () => {
   it("abort(key) 只取消该 key；其余登记项保持未中断", () => {

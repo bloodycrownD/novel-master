@@ -5,13 +5,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  SKILL_NAME_PATTERN,
-  SKILL_NAME_PATTERN_SOURCE,
-  SkillName,
-} from "@/domain/skills/model/skill-name.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  SKILL_NAME_PATTERN, SKILL_NAME_PATTERN_SOURCE, SkillName  } from "@/domain/skills/model/skill-name.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("SKILL_NAME_PATTERN 校验", () => {
   it("合法名通过：字母 / 数字 / 连字符 / 下划线 / 中文 / 中间点", () => {

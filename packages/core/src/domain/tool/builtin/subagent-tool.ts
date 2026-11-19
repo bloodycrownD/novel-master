@@ -31,7 +31,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
@@ -195,7 +195,7 @@ ${callableList}
     if (requestedSessionId.length > 0) {
       const sessionResult = await subagent.sessions.get(requestedSessionId);
       if (!sessionResult.ok) {
-        if (!isAppError(sessionResult.error, "CHAT_NOT_FOUND")) return Result.err(sessionResult.error);
+        if (!AppErrorOps.is(sessionResult.error, "CHAT_NOT_FOUND")) return Result.err(sessionResult.error);
         return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `找不到子会话 "${requestedSessionId}"（可能已被删除）。${resumeGuide()}` }));
       }
       // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。

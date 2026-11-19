@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AgentPromptLayoutWire } from "../../src/domain/prompt/logic/agent-prompt-layout-wire.js";
+import {  describe, it  } from "node:test";
+import {  AgentPromptLayoutWire  } from "../../src/domain/prompt/logic/agent-prompt-layout-wire.js";
 import type {
   DynamicPromptBlock,
   PersistTextPromptBlock,

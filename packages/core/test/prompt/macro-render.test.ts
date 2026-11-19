@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { DateTime } from "../../src/common/datetime.js";
-import { isAppError } from "../../src/errors/app-error.js";
-import { renderMacro } from "../../src/infra/prompt-template/macro-render.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  DateTime  } from "../../src/common/datetime.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  MacroRender  } from "../../src/infra/prompt-template/macro-render.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const fixedNow = new Date(2026, 4, 24, 15, 30, 45);
 
 describe("renderMacro", () => {
   it("substitutes $filetree via root context", () => {
-    const out = unwrap(renderMacro("tree:\n{{ $filetree }}", {
+    const out = unwrap(MacroRender.render("tree:\n{{ $filetree }}", {
       dot: {},
       root: { time: "t", week_cn: "w", filetree: "/\n└── a.md" },
     }));
@@ -17,7 +17,7 @@ describe("renderMacro", () => {
   });
 
   it("substitutes $.time with fixed now", () => {
-    const out = unwrap(renderMacro("at {{ $.time }}", {
+    const out = unwrap(MacroRender.render("at {{ $.time }}", {
       dot: {},
       root: {
         time: DateTime.localDateTime(fixedNow),
@@ -29,7 +29,7 @@ describe("renderMacro", () => {
 
   it("substitutes $.week_cn", () => {
     const week = fixedNow.toLocaleDateString("zh-CN", { weekday: "long" });
-    const out = unwrap(renderMacro("{{ $.week_cn }}", {
+    const out = unwrap(MacroRender.render("{{ $.week_cn }}", {
       dot: {},
       root: { time: "t", week_cn: week },
     }));
@@ -38,7 +38,7 @@ describe("renderMacro", () => {
   });
 
   it("removes comments", () => {
-    const out = unwrap(renderMacro("a{{/* hidden */}}b", {
+    const out = unwrap(MacroRender.render("a{{/* hidden */}}b", {
       dot: {},
       root: { time: "t", week_cn: "w" },
     }));
@@ -47,29 +47,29 @@ describe("renderMacro", () => {
 
   it("throws UNSUPPORTED_SYNTAX for if", () => {
     // 四期签名：renderMacro 失败沿 Result.err 回传，不再 throw。
-    const r = renderMacro("{{ if .x }}", {
+    const r = MacroRender.render("{{ if .x }}", {
       dot: {},
       root: { time: "t", week_cn: "w" },
     });
     assert.ok(!r.ok);
-    if (!r.ok) assert.ok(isAppError(r.error, "PROMPT_UNSUPPORTED_SYNTAX"));
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNSUPPORTED_SYNTAX"));
   });
 
   it("throws UNKNOWN_FIELD for unknown root key", () => {
-    const r = renderMacro("{{ $.foo }}", {
+    const r = MacroRender.render("{{ $.foo }}", {
       dot: {},
       root: { time: "t", week_cn: "w" },
     });
     assert.ok(!r.ok);
-    if (!r.ok) assert.ok(isAppError(r.error, "PROMPT_UNKNOWN_FIELD"));
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
   });
 
   it("throws UNKNOWN_FIELD for missing dot path when dot is empty", () => {
-    const r = renderMacro("{{ .missing }}", {
+    const r = MacroRender.render("{{ .missing }}", {
       dot: {},
       root: { time: "t", week_cn: "w" },
     });
     assert.ok(!r.ok);
-    if (!r.ok) assert.ok(isAppError(r.error, "PROMPT_UNKNOWN_FIELD"));
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
   });
 });

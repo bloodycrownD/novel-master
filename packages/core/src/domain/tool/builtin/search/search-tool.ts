@@ -43,9 +43,9 @@ import type { BuiltinToolContext } from "../builtin-tool-context.js";
 import { OverflowSink } from "../overflow-sink.js";
 import { SearchEngine, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
 import { SearchDispatch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.search");
+const log = LogFactory.create("tool.search");
 
 /** 工具名（注册表 / catalog / policy 共用；测试直引）。 */
 export const SEARCH_TOOL_NAME = "search";

@@ -4,10 +4,10 @@
  * @module service/compaction-conditions/impl/compaction-conditions-store.service
  */
 
-import { decode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { compactionConditionsSchema } from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
 import { DEFAULT_HIDE_START_DEPTH, type CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
@@ -30,7 +30,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
 
   async getConditions(): Promise<Result<CompactionConditions | null, AppError>> {
     const raw = await this.kkv.get(MODULE, KEY_POLICY);
-    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    if (!raw.ok && !AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
     if (!raw.ok) return Result.ok(null);
     let parsed: unknown;
     try {
@@ -50,7 +50,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
           ...(visibleFloor != null ? { visibleFloor } : {}),
           hideStartDepth: DEFAULT_HIDE_START_DEPTH,
         };
-        const validated = decode(migrated, compactionConditionsSchema);
+        const validated = SerializationDecode.decode(migrated, compactionConditionsSchema);
         if (!validated.ok) return Result.err(invalidSchemaError(validated.error));
         await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
         return Result.ok(validated.value);
@@ -67,19 +67,19 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
           ...(visibleFloor != null ? { visibleFloor } : {}),
           hideStartDepth: DEFAULT_HIDE_START_DEPTH,
         };
-        const validated = decode(migrated, compactionConditionsSchema);
+        const validated = SerializationDecode.decode(migrated, compactionConditionsSchema);
         if (!validated.ok) return Result.err(invalidSchemaError(validated.error));
         await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
         return Result.ok(validated.value);
       }
     }
-    const direct = decode(parsed, compactionConditionsSchema);
+    const direct = SerializationDecode.decode(parsed, compactionConditionsSchema);
     if (!direct.ok) return Result.err(invalidSchemaError(direct.error));
     return Result.ok(direct.value);
   }
 
   async setConditions(conditions: CompactionConditions): Promise<void> {
-    const validated = decode(conditions, compactionConditionsSchema);
+    const validated = SerializationDecode.decode(conditions, compactionConditionsSchema);
     // 端口无失败位、apps set 路径按异常收口：schema 违约在写入口仍走 throw（边界决定，见 port 注）。
     if (!validated.ok) throw invalidSchemaError(validated.error);
     await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
@@ -90,7 +90,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
     try {
       await this.kkv.delete(MODULE, KEY_POLICY);
     } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+      if (AppErrorOps.is(error, "KKV_NOT_FOUND")) {
         return;
       }
       throw error;

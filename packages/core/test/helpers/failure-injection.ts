@@ -15,7 +15,7 @@
  * 注入器成功路径补齐 `Result.ok(undefined)`；注入失败仍走 throw（未知异常通道，
  * 与 port 注释同口）。
  */
-import { Result } from "../../src/errors/either.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { AppError } from "../../src/errors/app-error.js";
 
 export interface FailureInjectionOptions {

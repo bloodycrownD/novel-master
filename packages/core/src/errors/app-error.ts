@@ -165,36 +165,6 @@ export type ErrorParams<K extends ErrorKey> = (K extends keyof ErrorParamsMap ? 
 };
 
 /**
- * 取 params 里的 descriptor（spec §2.3 契约）：先读 `params.descriptor`（key 命中
- * keyRule；params 里的 `key` 字符串字段不会误判）；无则返回第一个 descriptor
- * 形状的顶层成员值；再无则 undefined。
- */
-export function firstDescriptorOf(params: unknown): CoreMessageDescriptor | undefined {
-  if (typeof params !== "object" || params == null) {
-    return undefined;
-  }
-  const direct = (params as { descriptor?: unknown }).descriptor;
-  if (typeof direct === "object" && direct != null && typeof (direct as { key?: unknown }).key === "string" && CORE_MESSAGE_KEY_PATTERN.test((direct as { key: string }).key)) {
-    return direct as CoreMessageDescriptor;
-  }
-  for (const value of Object.values(params as Record<string, unknown>)) {
-    if (typeof value === "object" && value != null && "key" in value && typeof (value as { key?: unknown }).key === "string") {
-      return value as CoreMessageDescriptor;
-    }
-  }
-  return undefined;
-}
-
-/** 顶层成员名 camelCase → snake_case（浅转换；catalog 模板占位是 snake_case）。 */
-export function toSnakeCase(params: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(params)) {
-    out[name.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)] = value;
-  }
-  return out;
-}
-
-/**
  * 统一错误类；各域错误随迁移逐步收敛到它。
  *
  * message 取值顺序 `params.detail → desc`：descriptor 命中时 `Error.message`
@@ -212,7 +182,7 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
 
   constructor(key: K, params?: ErrorParams<K>, options?: ErrorOptions) {
     const def: ErrorCodeDef = ErrorCodes[key];
-    const descriptor = firstDescriptorOf(params);
+    const descriptor = AppErrorOps.firstDescriptorOf(params);
     super(params?.detail ?? def.desc, { cause: (params as { cause?: unknown } | undefined)?.cause ?? options?.cause });
     this.name = key;
     this.key = key;
@@ -221,7 +191,7 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
     this.messageKey = descriptor?.key ?? def.messageKey;
     // descriptor 命中时 messageParams 只取 descriptor.params（为空即 undefined，与旧 VfsError
     // wire 一致）；不再回退 toSnakeCase(params)——那会把 descriptor 对象自身当参数透传出去。
-    this.messageParams = descriptor != null ? descriptor.params : params == null ? undefined : (toSnakeCase(params as Record<string, unknown>) as MessageParams);
+    this.messageParams = descriptor != null ? descriptor.params : params == null ? undefined : (AppErrorOps.toSnakeCase(params as Record<string, unknown>) as MessageParams);
     this.details = params as Record<string, unknown> | undefined;
   }
 
@@ -238,7 +208,42 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
   }
 }
 
-/** `instanceof` 收窄；给了 key 时再校一次业务码，并把 key 收窄到该字面量。 */
-export function isAppError<K extends ErrorKey = ErrorKey>(error: unknown, key?: K): error is AppError<K> {
-  return error instanceof AppError && (key === undefined || error.key === key);
-}
+/**
+ * AppError 周边操作族（与类 {@link AppError} 撞名，故缀 Ops 区分）。
+ */
+export const AppErrorOps = {
+  /**
+   * 取 params 里的 descriptor（spec §2.3 契约）：先读 `params.descriptor`（key 命中
+   * keyRule；params 里的 `key` 字符串字段不会误判）；无则返回第一个 descriptor
+   * 形状的顶层成员值；再无则 undefined。
+   */
+  firstDescriptorOf(params: unknown): CoreMessageDescriptor | undefined {
+    if (typeof params !== "object" || params == null) {
+      return undefined;
+    }
+    const direct = (params as { descriptor?: unknown }).descriptor;
+    if (typeof direct === "object" && direct != null && typeof (direct as { key?: unknown }).key === "string" && CORE_MESSAGE_KEY_PATTERN.test((direct as { key: string }).key)) {
+      return direct as CoreMessageDescriptor;
+    }
+    for (const value of Object.values(params as Record<string, unknown>)) {
+      if (typeof value === "object" && value != null && "key" in value && typeof (value as { key?: unknown }).key === "string") {
+        return value as CoreMessageDescriptor;
+      }
+    }
+    return undefined;
+  },
+
+  /** 顶层成员名 camelCase → snake_case（浅转换；catalog 模板占位是 snake_case）。 */
+  toSnakeCase(params: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(params)) {
+      out[name.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)] = value;
+    }
+    return out;
+  },
+
+  /** `instanceof` 收窄；给了 key 时再校一次业务码，并把 key 收窄到该字面量。 */
+  is<K extends ErrorKey = ErrorKey>(error: unknown, key?: K): error is AppError<K> {
+    return error instanceof AppError && (key === undefined || error.key === key);
+  },
+} as const;

@@ -1,16 +1,12 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { DeferredFileCacheGc } from "../../src/domain/session-kkv/logic/deferred-file-cache-gc.js";
+import {  describe, it  } from "node:test";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  DeferredFileCacheGc  } from "../../src/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import type { TdbcConnection } from "@novel-master/core";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -43,7 +39,7 @@ describe("file_cache 缓存 blob 延期 GC", () => {
   it("T-G1 手工制造孤儿 blob：GC 回收无引用行，被引用 blob 保留", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const sk = createSessionKkvService(conn);
+    const sk = SessionKkvServiceFactory.create(conn);
     const s1 = `g1a-${testIsolationSuffix()}`;
     const s2 = `g1b-${testIsolationSuffix()}`;
     const s3 = `g1c-${testIsolationSuffix()}`;
@@ -96,7 +92,7 @@ describe("file_cache 缓存 blob 延期 GC", () => {
   it("T-G2 sessions.delete 真删链路调度 GC 且不影响仍引用同 blob 的其他会话", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const sk = createSessionKkvService(conn);
+    const sk = SessionKkvServiceFactory.create(conn);
     const project = unwrap(await ctx.projects.create(`P-g2-${testIsolationSuffix()}`));
     const s1 = unwrap(await ctx.sessions.create(project.id));
     const s2 = unwrap(await ctx.sessions.create(project.id));

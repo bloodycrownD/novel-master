@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { UsageRecordInsert } from "../../model/usage-record.js";
 import type { UsageRecordRepository } from "../usage-record.port.js";
 
@@ -25,6 +25,6 @@ export class SqliteUsageRecordRepository implements UsageRecordRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async insert(record: UsageRecordInsert): Promise<void> {
-    await executeTemplate(this.conn, this.parser, INSERT_USAGE_RECORD_SQL, { ...record });
+    await TdbcTemplate.execute(this.conn, this.parser, INSERT_USAGE_RECORD_SQL, { ...record });
   }
 }

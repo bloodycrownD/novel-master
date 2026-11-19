@@ -4,9 +4,9 @@
  */
 
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-import { describe, it } from "node:test";
+import {  readdirSync, readFileSync, statSync  } from "node:fs";
+import {  join, relative  } from "node:path";
+import {  describe, it  } from "node:test";
 
 const SRC_ROOT = join(import.meta.dirname, "../../../src");
 

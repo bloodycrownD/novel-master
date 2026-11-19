@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
-import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
+import {  OrphanToolResults  } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("normalizeOrphanToolResultsForLlm", () => {
   it("converts tool_result to text when assistant tool_use is not visible", () => {
@@ -20,7 +20,7 @@ describe("normalizeOrphanToolResultsForLlm", () => {
       },
     ];
 
-    const out = normalizeOrphanToolResultsForLlm(messages);
+    const out = OrphanToolResults.normalizeForLlm(messages);
     assert.equal(out.length, 1);
     assert.equal(out[0]?.content.blocks.length, 1);
     assert.equal(out[0]?.content.blocks[0]?.type, "text");
@@ -59,7 +59,7 @@ describe("normalizeOrphanToolResultsForLlm", () => {
       },
     ];
 
-    const out = normalizeOrphanToolResultsForLlm(messages);
+    const out = OrphanToolResults.normalizeForLlm(messages);
     assert.equal(out[1]?.content.blocks[0]?.type, "tool_result");
   });
 });

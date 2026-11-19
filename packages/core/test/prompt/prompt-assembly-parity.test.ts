@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { describe, it } from "node:test";
-import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks, type ChatMessageData  } from "@novel-master/core/chat";
 
-import { PromptBuilder, type AgentPromptLayout } from "@novel-master/core/prompt";
+import {  PromptBuilder, type AgentPromptLayout  } from "@novel-master/core/prompt";
 
-import { serializePromptLlmInput } from "@novel-master/core/tokenizer";
+import {  serializePromptLlmInput  } from "@novel-master/core/tokenizer";
 
 const layout: AgentPromptLayout = {
   system: "ctx",

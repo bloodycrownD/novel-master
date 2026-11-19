@@ -53,57 +53,60 @@ interface WorkplaceViewCacheEntry {
 
 let cache = new WeakMap<TdbcConnection, Map<string, WorkplaceViewCacheEntry>>();
 
-/**
- * ensure 语义：取（无则建）scope 的缓存条目，供 service 挂载/清除 inFlight。
- */
-export function ensureWorkplaceViewEntry(conn: TdbcConnection, scopeKey: string): WorkplaceViewCacheEntry {
-  let scopes = cache.get(conn);
-  if (scopes == null) {
-    scopes = new Map();
-    cache.set(conn, scopes);
-  }
-  let entry = scopes.get(scopeKey);
-  if (entry == null) {
-    entry = { sigs: undefined };
-    scopes.set(scopeKey, entry);
-  }
-  return entry;
-}
+/** workplace 评估链进程内缓存（conn 级 WeakMap L1 memo）操作集合。 */
+export const WorkplaceViewCache = {
+  /**
+   * ensure 语义：取（无则建）scope 的缓存条目，供 service 挂载/清除 inFlight。
+   */
+  ensureEntry(conn: TdbcConnection, scopeKey: string): WorkplaceViewCacheEntry {
+    let scopes = cache.get(conn);
+    if (scopes == null) {
+      scopes = new Map();
+      cache.set(conn, scopes);
+    }
+    let entry = scopes.get(scopeKey);
+    if (entry == null) {
+      entry = { sigs: undefined };
+      scopes.set(scopeKey, entry);
+    }
+    return entry;
+  },
 
-/**
- * 发布：以**计算开始前**采样的校验值写入（若计算期间有写，下一个读者比对
- * 当前签名不匹配即重算——脏结果最多存活一次读取）。
- */
-export function publishWorkplaceView(conn: TdbcConnection, scopeKey: string, sigs: WorkplaceViewSigs, value: WorkplaceViewCacheValue): void {
-  const entry = ensureWorkplaceViewEntry(conn, scopeKey);
-  entry.sigs = sigs;
-  entry.ctx = value.ctx;
-  entry.view = value.view;
-  entry.filetreeDisplay = value.filetreeDisplay;
-}
+  /**
+   * 发布：以**计算开始前**采样的校验值写入（若计算期间有写，下一个读者比对
+   * 当前签名不匹配即重算——脏结果最多存活一次读取）。
+   */
+  publish(conn: TdbcConnection, scopeKey: string, sigs: WorkplaceViewSigs, value: WorkplaceViewCacheValue): void {
+    const entry = WorkplaceViewCache.ensureEntry(conn, scopeKey);
+    entry.sigs = sigs;
+    entry.ctx = value.ctx;
+    entry.view = value.view;
+    entry.filetreeDisplay = value.filetreeDisplay;
+  },
 
-/**
- * 命中读取：entry 已发布（sigs 有值 + 三件套齐全）且校验值与刚采样的相等时
- * 返回缓存结果，否则返回 undefined（miss，由调用方走计算路径）。
- */
-export function getCachedWorkplaceView(entry: WorkplaceViewCacheEntry, sigs: WorkplaceViewSigs): WorkplaceViewCacheValue | undefined {
-  if (entry.sigs == null || entry.ctx == null || entry.view == null || entry.filetreeDisplay == null) {
-    return undefined;
-  }
-  if (entry.sigs.vfs !== sigs.vfs || entry.sigs.rules !== sigs.rules || entry.sigs.smartRules !== sigs.smartRules) {
-    return undefined;
-  }
-  return {
-    ctx: entry.ctx,
-    view: entry.view,
-    filetreeDisplay: entry.filetreeDisplay,
-  };
-}
+  /**
+   * 命中读取：entry 已发布（sigs 有值 + 三件套齐全）且校验值与刚采样的相等时
+   * 返回缓存结果，否则返回 undefined（miss，由调用方走计算路径）。
+   */
+  getCached(entry: WorkplaceViewCacheEntry, sigs: WorkplaceViewSigs): WorkplaceViewCacheValue | undefined {
+    if (entry.sigs == null || entry.ctx == null || entry.view == null || entry.filetreeDisplay == null) {
+      return undefined;
+    }
+    if (entry.sigs.vfs !== sigs.vfs || entry.sigs.rules !== sigs.rules || entry.sigs.smartRules !== sigs.smartRules) {
+      return undefined;
+    }
+    return {
+      ctx: entry.ctx,
+      view: entry.view,
+      filetreeDisplay: entry.filetreeDisplay,
+    };
+  },
 
-/** 测试专用：清空全部连接的缓存（不进 public 导出面）。 */
-// nm-style: keep-public — 测试支持 API：重置模块级弱引用缓存以隔离用例；生产零调用、不进 public allowlist，无法内联（11 处测试调用点）。
-export function clearAllWorkplaceViewCache(): void {
-  // WeakMap 不可枚举：整体换新实例，旧 map 丢引用后连同各 conn 的条目一起
-  // 可回收，语义上等价于清空且不阻止 conn 本身被 GC。
-  cache = new WeakMap();
-}
+  /** 测试专用：清空全部连接的缓存（不进 public 导出面）。 */
+  // nm-style: keep-public — 测试支持 API：重置模块级弱引用缓存以隔离用例；生产零调用、不进 public allowlist，无法内联（11 处测试调用点）。
+  clearAll(): void {
+    // WeakMap 不可枚举：整体换新实例，旧 map 丢引用后连同各 conn 的条目一起
+    // 可回收，语义上等价于清空且不阻止 conn 本身被 GC。
+    cache = new WeakMap();
+  },
+} as const;

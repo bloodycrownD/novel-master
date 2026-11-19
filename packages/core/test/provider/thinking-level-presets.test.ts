@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { ThinkingLevelPresets } from "../../src/domain/provider/logic/thinking-level-presets.js";
+import {  ThinkingLevelPresets  } from "../../src/domain/provider/logic/thinking-level-presets.js";
 
 const samplingOff = { enabled: false as const };
 

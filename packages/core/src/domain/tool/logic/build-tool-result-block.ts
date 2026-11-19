@@ -11,7 +11,7 @@
 import { Guards } from "@/common/guards.js";
 import { Encoding } from "@/common/encoding.js";
 import { Number } from "@/common/number.js";
-import { isAppError } from "@/errors/app-error.js";
+import { AppErrorOps } from "@/errors/app-error.js";
 import type { ToolResultBlock as ChatToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
 import { ToolOutput } from "./format-tool-output.js";
@@ -271,7 +271,7 @@ export const ToolResultBlock = {
     // 取消（TOOL_CANCELLED）是控制流信号不是错误：块仍标 ok=false（LLM 知道调用
     // 未执行），但不产出 summary——UI 卡片 status=error 且无 summary 时回退入参
     // 摘要、不弹错误文案，呈现为 cancelled。
-    const cancelled = isAppError(outcome.error, "TOOL_CANCELLED");
+    const cancelled = AppErrorOps.is(outcome.error, "TOOL_CANCELLED");
     const content = ToolOutput.formatErrorForLlm(outcome.error, {
       vfsScope: meta?.vfsScope,
     });

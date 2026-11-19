@@ -14,22 +14,22 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
-import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { createTemplatePullService } from "@/service/template/create-template-pull-service.js";
+import { TemplatePullServiceFactory } from "@/service/template/create-template-pull-service.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { decode } from "@/infra/serialization/decode.js";
-import { deleteSessionFsData, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SessionFsServiceFactory, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { DeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
-import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
-import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
+import { SessionWorkspaceInit } from "@/service/template/logic/initialize-session-workspace.js";
+import { AgentRunShared } from "@/service/agent/logic/agent-run-shared.js";
 import { ChatServiceFactory } from "../chat-service-factory.js";
 import type { SessionService } from "../session.port.js";
 
@@ -85,7 +85,7 @@ export class DefaultSessionService implements SessionService {
     }
     // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
     // 读取放在事务外：state / agentRegistry 走的是另一套表，不需要在 chat_session 事务内同步。
-    const agentIdResult = await resolveWorkspaceAgentForNewSession({ state: this.deps.state, agentRegistry: this.deps.agentRegistry });
+    const agentIdResult = await AgentRunShared.resolveWorkspaceForNewSession({ state: this.deps.state, agentRegistry: this.deps.agentRegistry });
     if (!agentIdResult.ok) return Result.err(agentIdResult.error);
     const agentId = agentIdResult.value;
     if (agentId == null || agentId === "") {
@@ -110,7 +110,7 @@ export class DefaultSessionService implements SessionService {
         updatedAtMs: now,
       };
       await r.sessions.insert(session);
-      await initializeSessionWorkspace(tx, projectId, session.id, {
+      await SessionWorkspaceInit.initialize(tx, projectId, session.id, {
         clearCheckpoints: false,
       });
       await r.sessions.setSessionAgentConfig(session.id, configJson, now);
@@ -198,8 +198,8 @@ export class DefaultSessionService implements SessionService {
       await this.deleteSessionTree(tx, child);
     }
     await r.messages.deleteBySession(session.id);
-    await deleteSessionFsData(tx, session.projectId, session.id);
-    await createSessionKkvService(tx).clearSession(session.id);
+    await SessionFsServiceFactory.deleteData(tx, session.projectId, session.id);
+    await SessionKkvServiceFactory.create(tx).clearSession(session.id);
     // 同事务清 run_state 行：留着孤儿 starting/running 行会在重启水合时
     // 生成幽灵 interrupted 单元（递归子会话在本函数逐层清理时一并覆盖）。
     await createSessionRunStateService(tx).deleteBySession(session.id);
@@ -212,12 +212,12 @@ export class DefaultSessionService implements SessionService {
 
   /** nm-style: keep-public — SessionService 端口方法（runtime.sessions 跨端契约）；树复制权威在 TemplatePullService。 */
   async pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>> {
-    return createTemplatePullService(this.deps.conn).pullSessionTemplate(sessionId);
+    return TemplatePullServiceFactory.create(this.deps.conn).pullSessionTemplate(sessionId);
   }
 
   /** nm-style: keep-public — SessionService 端口方法（runtime.sessions 跨端契约）；树复制权威在 TemplatePullService。 */
   async pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>> {
-    return createTemplatePullService(this.deps.conn).pushSessionTemplate(sessionId);
+    return TemplatePullServiceFactory.create(this.deps.conn).pushSessionTemplate(sessionId);
   }
 
   async getComposerDraftJson(id: string): Promise<Result<string | null, AppError>> {
@@ -240,7 +240,7 @@ export class DefaultSessionService implements SessionService {
       // migration 后不应有 NULL；这里视为已知失败走返回值，提示运行 session-agent-config-v2。
       return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "session agent config missing, run migration session-agent-config-v2" }));
     }
-    return decode(JSON.parse(json), sessionAgentConfigSchema);
+    return SerializationDecode.decode(JSON.parse(json), sessionAgentConfigSchema);
   }
 
   async updateSessionAgentConfig(id: string, patch: SessionAgentConfigPatch): Promise<Result<SessionAgentConfig, AppError>> {
@@ -264,7 +264,7 @@ export class DefaultSessionService implements SessionService {
     // merge 完走 schema 校验（agentId 必填）+ 规范化（含 strict）。
     const wire = sessionAgentConfigSchema.toWire(merged);
     if (!wire.ok) return Result.err(wire.error);
-    const validated = decode(wire.value, sessionAgentConfigSchema);
+    const validated = SerializationDecode.decode(wire.value, sessionAgentConfigSchema);
     if (!validated.ok) return validated;
     const config = validated.value;
     const updatedAtMs = Date.now();
@@ -281,7 +281,7 @@ export class DefaultSessionService implements SessionService {
     // 口径收窄：只比较 overlay merge 前后真正变化的字段，避免把「patch 里
     // 出现但值相同」的无效写也清掉（那会让收窄白写，还多一次 KKV 写）。
     if (config.agentId !== baseline.value.agentId || config.modelId !== baseline.value.modelId) {
-      await SessionApiPromptTokenEntry.invalidate(createSessionKkvService(this.deps.conn), id);
+      await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), id);
     }
     return Result.ok(config);
   }
@@ -352,7 +352,7 @@ export class DefaultSessionService implements SessionService {
       if (inserted.kind !== "completed") throw AbortError.create();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 copy，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
-      await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));
+      await TdbcTransaction.unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));
       return copy;
     });
     return Result.ok(await copyTransaction);

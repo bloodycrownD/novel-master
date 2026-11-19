@@ -4,19 +4,19 @@
  * @module infra/cloud-sync/impl/cloud-sync-coordinator
  */
 
-import { createLogger } from "@/infra/log/logger.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { LogFactory } from "@/infra/log/logger.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Interrupt } from "@/errors/outcome.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
-import { buildLease, canAcquireLock, DEFAULT_LEASE_SECONDS, isEffectiveLock, renewLease } from "../logic/lock.js";
+import { CloudSyncLease, DEFAULT_LEASE_SECONDS } from "../logic/lock.js";
 import { PushAgentMutex, type PushAgentLockHandle } from "../logic/push-agent-mutex.js";
-import { snapshotKey, statusKey } from "../logic/paths.js";
-import { EMPTY_CLOUD_SYNC_STATUS, parseCloudSyncStatus, type CloudSyncStatus } from "../model/cloud-sync-status.js";
+import { CloudSyncPaths } from "../logic/paths.js";
+import { CloudSyncStatusParser, EMPTY_CLOUD_SYNC_STATUS, type CloudSyncStatus } from "../model/cloud-sync-status.js";
 import type { DbSyncPort } from "../ports/db-sync.port.js";
 import type { ObjectStoragePort } from "../ports/object-storage.port.js";
 
-const log = createLogger("cloud-sync.coordinator");
+const log = LogFactory.create("cloud-sync.coordinator");
 
 /** 协调器依赖：哈希与文件读取由调用方注入（Core 不使用 node:crypto） */
 // nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
@@ -41,7 +41,7 @@ export type CloudSyncCoordinatorDeps = {
    * 但 sync 之间（pull ↔ push）需要共享同一把锁，所以默认走单例。
    *
    * ⚠️ 事实态（注释诚实化）：**「sync ↔ agent」这一段目前是空的**——
-   * `getDefaultPushAgentMutex` 未从 `infra/cloud-sync/index.ts` 导出，
+   * `DefaultPushAgentMutex.get` 未从 `infra/cloud-sync/index.ts` 导出，
    * apps 侧（desktop / mobile）也零 acquire；agent 启动入口尚未接线，
    * 靠 `dbSync.isAgentActive()` 的入口复检兜底。见 M-25。
    */
@@ -53,14 +53,19 @@ export type CloudSyncCoordinatorDeps = {
 /** 模块级默认互斥锁单例；coordinator 与 apps runtime 共享。 */
 let defaultPushMutex: PushAgentMutex | null = null;
 
-// nm-style: keep-public — M-25：apps runtime 的 agent 启动入口要与 coordinator 共享同一把进程内单例锁；本函数是单例状态 defaultPushMutex 的唯一访问器，内联会把单例契约摊进构造器。
-/** 获取进程内默认 push/agent 互斥锁单例（apps runtime 的 agent 启动入口用同一个）。 */
-export function getDefaultPushAgentMutex(): PushAgentMutex {
-  if (defaultPushMutex == null) {
-    defaultPushMutex = new PushAgentMutex();
-  }
-  return defaultPushMutex;
-}
+/**
+ * 进程内默认 push/agent 互斥锁单例的访问器。
+ */
+// nm-style: keep-public — M-25：apps runtime 的 agent 启动入口要与 coordinator 共享同一把进程内单例锁；本对象是单例状态 defaultPushMutex 的唯一访问器，内联会把单例契约摊进构造器。
+export const DefaultPushAgentMutex = {
+  /** 获取进程内默认 push/agent 互斥锁单例（apps runtime 的 agent 启动入口用同一个）。 */
+  get(): PushAgentMutex {
+    if (defaultPushMutex == null) {
+      defaultPushMutex = new PushAgentMutex();
+    }
+    return defaultPushMutex;
+  },
+} as const;
 
 // nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type PullOptions = {
@@ -129,7 +134,7 @@ export class CloudSyncCoordinator {
     this.hashSnapshotFile = deps.hashSnapshotFile;
     this.importTempPath = deps.importTempPath;
     this.leaseSeconds = deps.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
-    this.pushMutex = deps.pushMutex ?? getDefaultPushAgentMutex();
+    this.pushMutex = deps.pushMutex ?? DefaultPushAgentMutex.get();
     // 默认 30s：push 通常很快，agent 启动等 30s 还等不到就降级拒绝
     this.pushAcquireTimeoutMs = deps.pushAcquireTimeoutMs ?? 30_000;
   }
@@ -265,8 +270,8 @@ export class CloudSyncCoordinator {
         return Result.err(new AppError("CLOUD_SYNC_NEED_PULL_FIRST", { descriptor: { key: "error.cloud_sync.need_pull_first.remote_ahead" } }));
       }
 
-      const newLock = buildLease(this.deviceId, this.leaseSeconds);
-      if (!canAcquireLock(remote.lock, this.deviceId)) {
+      const newLock = CloudSyncLease.build(this.deviceId, this.leaseSeconds);
+      if (!CloudSyncLease.canAcquire(remote.lock, this.deviceId)) {
         return Result.err(new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
       }
 
@@ -287,7 +292,7 @@ export class CloudSyncCoordinator {
         this.throwIfInterrupted("push:exported", options.checkpoint);
 
         const nextRev = remote.rev + 1;
-        const snapKey = snapshotKey(this.pathPrefix, nextRev);
+        const snapKey = CloudSyncPaths.snapshotKey(this.pathPrefix, nextRev);
 
         let hash: string;
         const uploadStart = Date.now();
@@ -314,7 +319,7 @@ export class CloudSyncCoordinator {
         if (uploadActive != null) return Result.err(uploadActive);
 
         if (uploadElapsed > this.leaseSeconds * 500) {
-          const renewedLock = renewLease(newLock, this.leaseSeconds);
+          const renewedLock = CloudSyncLease.renew(newLock, this.leaseSeconds);
           const renewedStatus: CloudSyncStatus = {
             ...lockedStatus,
             lock: renewedLock,
@@ -355,10 +360,10 @@ export class CloudSyncCoordinator {
           const latestStatus = await this.readRemoteStatus();
           if (!latestStatus.ok) return Result.err(latestStatus.error);
           const { status: latest, etag: rereadEtag } = latestStatus.value;
-          // 两条判定必须并存：canAcquireLock 在「他人租约已过期」时返回 true，
+          // 两条判定必须并存：CloudSyncLease.canAcquire 在「他人租约已过期」时返回 true，
           // 只判它仍会把已被别人推进的 rev 盖掉；latest.rev >= nextRev 才是
           // 「rev 是否被别人推进过」的唯一判据。
-          if (!canAcquireLock(latest.lock, this.deviceId)) {
+          if (!CloudSyncLease.canAcquire(latest.lock, this.deviceId)) {
             return Result.err(new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
           }
           if (latest.rev >= nextRev) {
@@ -383,7 +388,7 @@ export class CloudSyncCoordinator {
               const { status: current, etag } = clearStatus.value;
               const effectiveEtag = etag ?? statusEtag;
               const currentLock = current.lock;
-              if (effectiveEtag != null && currentLock != null && isEffectiveLock(currentLock) && currentLock.holderDeviceId === this.deviceId) {
+              if (effectiveEtag != null && currentLock != null && CloudSyncLease.isEffective(currentLock) && currentLock.holderDeviceId === this.deviceId) {
                 await this.conditionalPutStatus({ ...current, lock: null }, effectiveEtag);
               }
             }
@@ -406,7 +411,7 @@ export class CloudSyncCoordinator {
       const handle = await this.pushMutex.acquire({ timeoutMs: this.pushAcquireTimeoutMs });
       return Result.ok(handle);
     } catch (error) {
-      if (isAppError(error, "AGENT_BUSY")) {
+      if (AppErrorOps.is(error, "AGENT_BUSY")) {
         const timeoutKey = operation === "pull" ? "error.cloud_sync.push_mutex_timeout.pull" : "error.cloud_sync.push_mutex_timeout.push";
         return Result.err(new AppError("CLOUD_SYNC_PUSH_MUTEX_TIMEOUT", { descriptor: { key: timeoutKey } }, { cause: error }));
       }
@@ -423,7 +428,7 @@ export class CloudSyncCoordinator {
   }
 
   private async readRemoteStatus(): Promise<Result<{ status: CloudSyncStatus; etag?: string }, AppError>> {
-    const key = statusKey(this.pathPrefix);
+    const key = CloudSyncPaths.statusKey(this.pathPrefix);
     const head = await this.storage.head(key);
     if (!head.exists) {
       return Result.ok({ status: { ...EMPTY_CLOUD_SYNC_STATUS }, etag: undefined });
@@ -437,7 +442,7 @@ export class CloudSyncCoordinator {
       return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", { descriptor: { key: "error.cloud_sync.invalid_status.unparseable" } }, { cause: error }));
     }
 
-    const validated = parseCloudSyncStatus(parsed);
+    const validated = CloudSyncStatusParser.parse(parsed);
     if (!validated.ok) return Result.err(validated.error);
     return Result.ok({ status: validated.value, etag });
   }
@@ -447,9 +452,9 @@ export class CloudSyncCoordinator {
    * 其它失败沿 Result.err 上行，决定权交给调用方。
    */
   private async conditionalPutStatus(status: CloudSyncStatus, ifMatch?: string): Promise<Result<string | null, AppError>> {
-    const put = await this.storage.put(statusKey(this.pathPrefix), new TextEncoder().encode(JSON.stringify(status)), ifMatch != null ? { ifMatch } : undefined);
+    const put = await this.storage.put(CloudSyncPaths.statusKey(this.pathPrefix), new TextEncoder().encode(JSON.stringify(status)), ifMatch != null ? { ifMatch } : undefined);
     if (!put.ok) {
-      if (isAppError(put.error, "CLOUD_SYNC_LOCK_CONTENTION")) {
+      if (AppErrorOps.is(put.error, "CLOUD_SYNC_LOCK_CONTENTION")) {
         return Result.ok(null);
       }
       return Result.err(put.error);

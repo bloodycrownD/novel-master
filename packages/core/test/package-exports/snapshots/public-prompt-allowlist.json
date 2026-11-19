@@ -9,9 +9,9 @@
   "DynamicMacrosExpansion",
   "LlmExport",
   "MessageBodyText",
+  "PreviewThinkingContext",
   "PromptBuilder",
-  "WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT",
-  "applyThinkingContextForLlm",
-  "formatToolUsePreviewJson",
-  "resolvePreviewThinkingContext"
+  "PromptPreviewTurns",
+  "ThinkingContext",
+  "WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT"
 ]

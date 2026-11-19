@@ -7,12 +7,8 @@
  * 用例输入由 `NORMALIZED_OPTIONAL_FIELDS` 驱动，**不再硬编码字段名**。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  AgentPromptLayoutNormalize,
-  NORMALIZED_OPTIONAL_FIELDS,
-  NORMALIZE_FIELD_SENTINELS,
-} from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
+import {  describe, it  } from "node:test";
+import {  AgentPromptLayoutNormalize, NORMALIZED_OPTIONAL_FIELDS, NORMALIZE_FIELD_SENTINELS  } from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import type { NormalizedOptionalField } from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
 
 const OPTIONAL_FIELDS = Object.keys(

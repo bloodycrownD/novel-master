@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AssertionError } from "../../../src/common/assert.js";
-import { TokenizerRegistry } from "../../../src/infra/nmtp/logic/registry.js";
+import {  describe, it  } from "node:test";
+import {  AssertionError  } from "../../../src/common/assert.js";
+import {  TokenizerRegistry  } from "../../../src/infra/nmtp/logic/registry.js";
 import type { TokenizerDriver } from "../../../src/infra/nmtp/ports/tokenizer-driver.port.js";
 
 function stubDriver(name: string): TokenizerDriver {

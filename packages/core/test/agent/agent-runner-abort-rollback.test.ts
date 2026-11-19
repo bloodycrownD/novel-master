@@ -8,21 +8,21 @@
  * @module test/agent/agent-runner-abort-rollback.test
  */
 
-import { Result } from "../../src/errors/either.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
-import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { TextBlocks } from "@novel-master/core/chat";
-import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
-import { SimpleEventBus } from "@novel-master/core/events";
-import { BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
-import { type ModelRequestService } from "@novel-master/core/provider";
-import { type LlmChatResult } from "@novel-master/core/llm-protocol";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
+import {  describe, it, mock  } from "node:test";
+import {  AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
+import {  novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 import type { VfsService } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";

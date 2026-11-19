@@ -1,27 +1,17 @@
-import { isAppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
+import {  after, before, describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { DefaultVfsBatchIoService } from "../../src/service/vfs/impl/vfs-batch-io.service.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-import {
-  probeTransactions,
-  type TransactionProbe,
-} from "../helpers/transaction-probe.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  DefaultVfsBatchIoService  } from "../../src/service/vfs/impl/vfs-batch-io.service.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
+import {  probeTransactions, type TransactionProbe  } from "../helpers/transaction-probe.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -93,7 +83,7 @@ describe("VfsBatchIoService", () => {
     assert.deepEqual(report.written, ["/ok.md"]);
     assert.ok(report.skipped.includes("bad.bin"));
     await rejectsErr(() => vfs.read("/bad.bin"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -216,10 +206,10 @@ describe("VfsBatchIoService", () => {
     // failed[0].path 报的是**失败片的首个 logical**（不是真正抛错的那条）。
     assert.equal(report.failed[0]!.path, "/chap/a.md");
     await rejectsErr(() => vfs.read("/chap/a.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     await rejectsErr(() => vfs.read("/chap/b.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -268,7 +258,7 @@ describe("VfsBatchIoService", () => {
     // 第 1 片确实落库可读。
     assert.equal(unwrap(await vfs.read(expectedCommitted[0]!)).content, "B0");
     await rejectsErr(() => vfs.read(failLogical), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
   });
 
@@ -345,7 +335,7 @@ describe("VfsBatchIoService", () => {
     assert.equal(report.failed.length, 1);
     assert.equal(unwrap(await vfs.read("/chap/a.md")).content, "A");
     await rejectsErr(() => vfs.read("/chap/b.md"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
     });
     assert.deepEqual(writtenViaWriter, ["/chap/a.md"]);
   });

@@ -5,16 +5,16 @@
  */
 
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { DateTime } from "@/common/datetime.js";
 import { MessageContentParse } from "@/domain/chat/content/parse-message-content.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type {
   SessionUsageDetail,
   SessionUsageLastRequest,
@@ -29,7 +29,7 @@ import type {
   UsageStatsSummary,
 } from "../usage-stats.port.js";
 
-const log = createLogger("chat.usage-stats");
+const log = LogFactory.create("chat.usage-stats");
 
 /**
  * 命中率分母（计费口径全部输入）的 SUM 表达式：
@@ -173,7 +173,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
          ${modelFilterSql(filter.model)}
          ${providerFilterSql(filter.providerId)}
        GROUP BY day_key`;
-    const rows = await queryTemplate<Row>(this.conn, this.parser, dailyBucketsSql, { fromMs, toMs, modelName: filter.model ?? null, providerId: filter.providerId ?? null });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, dailyBucketsSql, { fromMs, toMs, modelName: filter.model ?? null, providerId: filter.providerId ?? null });
     const rowByDay = new Map<string, Row>();
     for (const row of rows) {
       rowByDay.set(String(row.day_key), row);
@@ -221,7 +221,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
          ${providerFilterSql(filter.providerId)}
        GROUP BY provider_id, model_name
        -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）`;
-    const rows = await queryTemplate<Row>(this.conn, this.parser, modelBreakdownSql, { fromMs, toMs, modelName: filter.model ?? null, providerId: filter.providerId ?? null });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, modelBreakdownSql, { fromMs, toMs, modelName: filter.model ?? null, providerId: filter.providerId ?? null });
     const mapped = rows.map((row) => ({
       providerId: row.provider_id == null ? null : String(row.provider_id),
       modelName: row.model_name == null ? null : String(row.model_name),
@@ -283,7 +283,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       offset,
       limit,
     };
-    const totalRows = await queryTemplate<{ n: number }>(this.conn, this.parser, `SELECT COUNT(*) AS n FROM usage_record ${whereSql}`, params);
+    const totalRows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, `SELECT COUNT(*) AS n FROM usage_record ${whereSql}`, params);
     const requestRowsSql = `SELECT created_at_ms, model_name, prompt_tokens, completion_tokens,
               total_tokens, cache_read_tokens, cache_creation_tokens,
               first_token_ms, duration_ms
@@ -291,7 +291,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
        ${whereSql}
        ORDER BY created_at_ms DESC, id ASC
        LIMIT #{limit} OFFSET #{offset}`;
-    const rows = await queryTemplate<Row>(this.conn, this.parser, requestRowsSql, params);
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, requestRowsSql, params);
     return Result.ok({
       rows: rows.map(
         (row): UsageStatsRequestRow => ({
@@ -313,7 +313,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async listModels(): Promise<string[]> {
     // 选项与服务商配置的模型列表同源（vendor_model_id 去重），
     // 不从 chat_message 历史记录 distinct——历史模型会随模型更替不断堆积。
-    const rows = await queryTemplate<{ vendor_model_id: string }>(this.conn, this.parser, "SELECT DISTINCT vendor_model_id FROM llm_saved_model ORDER BY vendor_model_id ASC", {});
+    const rows = await TdbcTemplate.query<{ vendor_model_id: string }>(this.conn, this.parser, "SELECT DISTINCT vendor_model_id FROM llm_saved_model ORDER BY vendor_model_id ASC", {});
     return rows.map((row) => String(row.vendor_model_id));
   }
 
@@ -339,9 +339,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
          LIMIT 1`;
     const visibleCountSql = "SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId} AND hidden = 0";
     const sessionUsageQueries = Promise.all([
-      queryTemplate<Row>(this.conn, this.parser, lastRequestSql, { sessionId }),
-      queryTemplate<{ n: number }>(this.conn, this.parser, visibleCountSql, { sessionId }),
-      createSessionKkvService(this.conn).get(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY),
+      TdbcTemplate.query<Row>(this.conn, this.parser, lastRequestSql, { sessionId }),
+      TdbcTemplate.query<{ n: number }>(this.conn, this.parser, visibleCountSql, { sessionId }),
+      SessionKkvServiceFactory.create(this.conn).get(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY),
     ]);
     const [lastRows, visibleRows, cachedToolUseCount] = await sessionUsageQueries;
     const lastRow = lastRows[0];
@@ -369,7 +369,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 坏行（parse 失败）按 0 计并 warn：计数是统计读数，单条历史坏行
     // 不该让整个弹窗报错。
     const assistantRowsSql = "SELECT id, content_json FROM chat_message WHERE session_id = #{sessionId} AND role = 'assistant'";
-    const assistantRows = await queryTemplate<Row>(this.conn, this.parser, assistantRowsSql, { sessionId });
+    const assistantRows = await TdbcTemplate.query<Row>(this.conn, this.parser, assistantRowsSql, { sessionId });
     let toolUseCount = 0;
     // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
@@ -389,7 +389,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 通过回填陈旧值，窗口延续到下次失效自愈——两次失效夹一次现算的低
     // 概率场景，不引入版本化哨兵。回填 best-effort，失败只影响下次读数。
     try {
-      const sessionKkv = createSessionKkvService(this.conn);
+      const sessionKkv = SessionKkvServiceFactory.create(this.conn);
       const current = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY);
       if (current === cachedToolUseCount) {
         await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, String(toolUseCount));
@@ -443,7 +443,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
          ${timeRangeSql(fromMs, toMs)}
          ${modelFilterSql(model)}
          ${providerFilterSql(providerId)}`;
-    const rows = await queryTemplate<Row>(this.conn, this.parser, aggregateSql, { fromMs, toMs, modelName: model ?? null, providerId: providerId ?? null });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, aggregateSql, { fromMs, toMs, modelName: model ?? null, providerId: providerId ?? null });
     return rows[0] ?? ZERO_AGG_ROW;
   }
 

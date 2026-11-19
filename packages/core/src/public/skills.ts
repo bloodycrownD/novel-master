@@ -7,7 +7,7 @@
  * @module public/skills
  */
 
-export { createSkillsService } from "../service/skills/create-skills-service.js";
+export { SkillsServiceFactory } from "../service/skills/create-skills-service.js";
 export type {
   SkillService,
   SkillListScope,

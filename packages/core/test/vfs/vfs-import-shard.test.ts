@@ -9,28 +9,22 @@
  * @module test/vfs/vfs-import-shard
  */
 
-import { isAppError } from "../../src/errors/app-error.js";
-import { isVfsError } from "../../src/errors/guards.js";
-import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  isVfsError  } from "../../src/errors/guards.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { VfsServiceFactory } from "@novel-master/core/vfs";
-import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import {  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK  } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
-import {
-  probeTransactions,
-  type TransactionProbe,
-} from "../helpers/transaction-probe.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
+import {  probeTransactions, type TransactionProbe  } from "../helpers/transaction-probe.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
-import { tCore } from "../helpers/core-i18n.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 /** 分片大小上界（与实现共用常量，防止测试悄悄跟实现漂移）。 */
 const CHUNK = ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK;
@@ -200,7 +194,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
           { confirmed: true }
         ),
       (e: unknown) =>
-        isAppError(e, "VFS_IMPORT_FAILED") &&
+        AppErrorOps.is(e, "VFS_IMPORT_FAILED") &&
         (e as {messageKey?: string}).messageKey === "error.vfs.import_failed.with_progress" &&
         (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.committed === 1 &&
         (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.failed_shard === 2
@@ -227,7 +221,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     );
 
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       await assert.rejects(
         () =>
@@ -238,7 +232,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
           e instanceof Error && e.message === "test import failure"
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
       await ctx.conn.execute(`DROP TRIGGER IF EXISTS t_block_compensate_delete`);
     }
 

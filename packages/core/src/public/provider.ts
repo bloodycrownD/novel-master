@@ -52,7 +52,7 @@ export { SavedModelSettingsJson } from "../domain/provider/model/saved-model-set
 export {
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
 } from "../domain/provider/model/token-counter-mode-options.js";
-export { resolveTokenCounterModeForModel } from "../service/provider/logic/resolve-token-counter-mode-for-model.js";
+export { TokenCounterMode } from "../service/provider/logic/resolve-token-counter-mode-for-model.js";
 export type {
   ModelRetryPolicy,
   ModelRetryPolicyService,
@@ -70,4 +70,4 @@ export type {
   ModelRequestService,
   ModelRequestOptions,
 } from "../service/provider/model-request.port.js";
-export { zodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";
+export { SerializationZodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";

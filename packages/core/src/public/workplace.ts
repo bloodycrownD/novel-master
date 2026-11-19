@@ -23,7 +23,7 @@ export { WorkplaceLabels } from "../domain/workplace/logic/workplace-labels.js";
 export { WorkplaceDisplay } from "../domain/workplace/logic/workplace-display.js";
 export { WorkplaceFileTree } from "../domain/workplace/logic/workplace-file-tree.js";
 export { FrontMatter } from "../domain/workplace/logic/front-matter.js";
-export { createWorkplaceService } from "../service/workplace/create-workplace-service.js";
+export { WorkplaceServiceFactory } from "../service/workplace/create-workplace-service.js";
 export type {
   WorkplaceService,
   WorkplaceMaterialized,
@@ -31,13 +31,13 @@ export type {
   WorkplacePersistBlock,
 } from "../service/workplace/workplace.port.js";
 export {
-  assembleWorkplaceDisplay,
+  WorkplaceDisplayAssembler,
   type AssembleWorkplaceDisplayDeps,
   type AssembleWorkplaceDisplayResult,
   type AssembleWorkplaceDisplayOptions,
 } from "../service/workplace/assemble-workplace-display.js";
 export {
-  refreshRuleSnapshot,
+  RuleSnapshot,
   type RefreshRuleSnapshotDeps,
 } from "../service/workplace/refresh-rule-snapshot.js";
 export {

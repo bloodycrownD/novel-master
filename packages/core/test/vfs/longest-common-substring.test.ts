@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { Text } from "../../src/common/text.js";
-import {
-  MAX_LCS_SNIPPET_CHARS,
-  MIN_LCS_LENGTH,
-} from "../../src/domain/vfs/logic/longest-common-substring.js";
+import {  describe, it  } from "node:test";
+import {  Text  } from "../../src/common/text.js";
+import {  MAX_LCS_SNIPPET_CHARS, MIN_LCS_LENGTH  } from "../../src/domain/vfs/logic/longest-common-substring.js";
 
 describe("longestCommonSubstring", () => {
   it("T-LCS-01: finds non-empty substring for whitespace difference", () => {

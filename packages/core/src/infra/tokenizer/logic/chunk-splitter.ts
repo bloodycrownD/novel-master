@@ -41,48 +41,50 @@ const SOFT_BOUNDARY_CHARS: ReadonlySet<string> = new Set([
   "\"", "'", "“", "”", "‘", "’", " ", "\t", "—", "·", "%", "/", "\\", "|",
 ]);
 
-/**
- * 把整段文本切成不超过 {@link MAX_CHUNK_CHARS} 字符（规则②③）或一个贪吃句末段
- * （规则①）的块序列。
- *
- * 不变量（测试锁定）：
- * - `splitTextIntoChunks(text).join("") === text`（划分，不增不删一字节）；
- * - **除规则①的贪吃段外**，每块长度 ≤ {@link MAX_CHUNK_CHARS}
- *   （⚠️ 不是「恒 ≤64」——贪吃段按设计可超限，见文件头与 T-TC1-E1/E2）；
- * - 同输入双调用结果逐项相等（确定性）；
- * - 空串返回空数组。
- */
-export function splitTextIntoChunks(text: string): string[] {
-  const chunks: string[] = [];
-  const n = text.length;
-  let start = 0;
-  let i = 0;
-  let lastSoft = -1;
-  while (i < n) {
-    const ch = text[i]!;
-    if (SENTENCE_END_CHARS.has(ch)) {
-      // 贪吃连续句末符号（如 "……" / "\n\n" / "。。"）
-      let end = i + 1;
-      while (end < n && SENTENCE_END_CHARS.has(text[end]!)) end++;
-      chunks.push(text.slice(start, end));
-      start = end;
-      lastSoft = -1;
-      i = end;
-      continue;
-    }
-    if (SOFT_BOUNDARY_CHARS.has(ch)) lastSoft = i;
-    if (i - start + 1 >= MAX_CHUNK_CHARS) {
-      if (lastSoft >= start) {
-        chunks.push(text.slice(start, lastSoft + 1));
-        start = lastSoft + 1;
-      } else {
-        chunks.push(text.slice(start, i + 1));
-        start = i + 1;
+export const ChunkSplitter = {
+  /**
+   * 把整段文本切成不超过 {@link MAX_CHUNK_CHARS} 字符（规则②③）或一个贪吃句末段
+   * （规则①）的块序列。
+   *
+   * 不变量（测试锁定）：
+   * - `ChunkSplitter.splitText(text).join("") === text`（划分，不增不删一字节）；
+   * - **除规则①的贪吃段外**，每块长度 ≤ {@link MAX_CHUNK_CHARS}
+   *   （⚠️ 不是「恒 ≤64」——贪吃段按设计可超限，见文件头与 T-TC1-E1/E2）；
+   * - 同输入双调用结果逐项相等（确定性）；
+   * - 空串返回空数组。
+   */
+  splitText(text: string): string[] {
+    const chunks: string[] = [];
+    const n = text.length;
+    let start = 0;
+    let i = 0;
+    let lastSoft = -1;
+    while (i < n) {
+      const ch = text[i]!;
+      if (SENTENCE_END_CHARS.has(ch)) {
+        // 贪吃连续句末符号（如 "……" / "\n\n" / "。。"）
+        let end = i + 1;
+        while (end < n && SENTENCE_END_CHARS.has(text[end]!)) end++;
+        chunks.push(text.slice(start, end));
+        start = end;
+        lastSoft = -1;
+        i = end;
+        continue;
       }
-      lastSoft = -1;
+      if (SOFT_BOUNDARY_CHARS.has(ch)) lastSoft = i;
+      if (i - start + 1 >= MAX_CHUNK_CHARS) {
+        if (lastSoft >= start) {
+          chunks.push(text.slice(start, lastSoft + 1));
+          start = lastSoft + 1;
+        } else {
+          chunks.push(text.slice(start, i + 1));
+          start = i + 1;
+        }
+        lastSoft = -1;
+      }
+      i++;
     }
-    i++;
-  }
-  if (start < n) chunks.push(text.slice(start));
-  return chunks;
-}
+    if (start < n) chunks.push(text.slice(start));
+    return chunks;
+  },
+} as const;

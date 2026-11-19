@@ -14,22 +14,22 @@
  *
  * T-BF1/T-BF4 需要「写侧被挂住仍能返回」，用内存 kkv 的 set 闸门表达。
  */
-import { Result } from "../../src/errors/either.js";
-import { outcomeValue } from "../helpers/outcome-value.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { FileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
-import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { ContentHash } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  WorkplaceDisplayAssembler  } from "../../src/service/workplace/assemble-workplace-display.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -102,8 +102,8 @@ async function flushMacrotasks(times = 4): Promise<void> {
 
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
-async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
-  return outcomeValue(await assembleWorkplaceDisplay(...args));
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
 }
 
 describe("workplace 冷 miss 回填后台化", () => {
@@ -111,11 +111,11 @@ describe("workplace 冷 miss 回填后台化", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const inner = createSessionKkvService(ctx.conn);
+    const inner = SessionKkvServiceFactory.create(ctx.conn);
     const gated = gatedKkv(inner);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/cold.md", "冷态正文ABC");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -149,10 +149,10 @@ describe("workplace 冷 miss 回填后台化", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/fill.md", "后台回填正文XYZ");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -176,11 +176,11 @@ describe("workplace 冷 miss 回填后台化", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = createSessionKkvService(ctx.conn);
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const body = `同内容不回填-${testIsolationSuffix()}`;
     await vfs.write("/same.md", body);
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,

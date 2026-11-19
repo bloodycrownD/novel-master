@@ -11,7 +11,7 @@
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
-import { matchGlob } from "../glob-match.js";
+import { GlobMatch } from "../glob-match.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsService } from "../vfs.port.js";
 import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 import type { AppError } from "@/errors/app-error.js";
@@ -110,7 +110,7 @@ export class ScopedVfsService implements VfsService {
     const { pathGlob, ...innerOptions } = options ?? {};
     const matches = await this.inner.grep(this.scopeKeyStr, pattern, { ...innerOptions, pathPrefix: logicalPrefix });
     if (!matches.ok) return matches;
-    return Result.ok(matches.value.filter((m) => (pathGlob != null ? matchGlob(pathGlob, m.path) : true)));
+    return Result.ok(matches.value.filter((m) => (pathGlob != null ? GlobMatch.match(pathGlob, m.path) : true)));
   }
 
   async delete(path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {

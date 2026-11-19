@@ -19,8 +19,8 @@ import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { createWorkplaceService } from "@/service/workplace/create-workplace-service.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
+import { WorkplaceServiceFactory } from "@/service/workplace/create-workplace-service.js";
 import { DefaultProjectService } from "./impl/project.service.js";
 import { DefaultSessionService } from "./impl/session.service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
@@ -76,7 +76,7 @@ export const ChatServiceFactory = {
   /**
    * Creates project, session, and message services sharing repositories.
    *
-   * @param conn - Open connection after {@link bootstrapNovelMaster}
+   * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    * @param sessionDeps - Session service 创建会话时读 workspace 当前指针所需；
    *   projects/messages 不消费此参数。
    * @param options - 可选装配项（yieldFn 列表解析让步）；缺省 = 现状行为。
@@ -161,7 +161,7 @@ export const ChatServiceFactory = {
     return new DefaultMessageTranscriptEffectsService({
       conn,
       messages: ChatServiceFactory.createMessage(conn),
-      sessionKkv: createSessionKkvService(conn),
+      sessionKkv: SessionKkvServiceFactory.create(conn),
     });
   },
 
@@ -187,7 +187,7 @@ export const ChatServiceFactory = {
     const registry = new ToolRegistry<BuiltinToolContext>();
     BuiltinTools.register(registry);
     const toolRunner = new ToolRunner(registry);
-    const sessionKkv = createSessionKkvService(conn);
+    const sessionKkv = SessionKkvServiceFactory.create(conn);
 
     const userVfsTurn = new DefaultUserVfsTurnService({
       conn,
@@ -206,7 +206,7 @@ export const ChatServiceFactory = {
         sessionKkv,
         // 目录规则默认启用：与 agent 链路（runAgentTurn）同款注入 session scope
         // workplace，保证 write / mkdir 的补规则行为在两条链路一致。
-        workplace: createWorkplaceService(conn, { kind: "session", projectId, sessionId }),
+        workplace: WorkplaceServiceFactory.create(conn, { kind: "session", projectId, sessionId }),
         // A-14 path policy：用户 VFS turn 走 toolCtx 也走默认不限制语义；
         // 后续根据 agent 定义 / project 策略收紧时在此注入。
         allowedPaths: undefined,

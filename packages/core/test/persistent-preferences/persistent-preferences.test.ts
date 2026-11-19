@@ -1,8 +1,8 @@
-import { isAppError } from "../../src/errors/app-error.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 
@@ -15,7 +15,7 @@ describe("PersistentPreferences", () => {
     await kkv.set("nm-preferences", "chat.llmStream", "not-a-bool");
     const r = await ctx.preferences.getLlmStreamEnabled();
     assert.ok(!r.ok, "无效存储布尔值应走 Err 通道");
-    if (!r.ok) assert.ok(isAppError(r.error, "PREFERENCES_INVALID_VALUE"));
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PREFERENCES_INVALID_VALUE"));
     // 清理：同库后续用例（v2 defaults）会读到该键，不能留脏值
     await ctx.preferences.resetLlmStreamEnabled();
   });
@@ -86,7 +86,7 @@ describe("PersistentPreferences", () => {
       await kkv.set("nm-preferences", "vfs.userVfsUnifiedToolTurn", "not-a-bool");
       const r = await ctx.preferences.getUserVfsUnifiedToolTurn();
       assert.ok(!r.ok, "无效存储布尔值应走 Err 通道");
-      if (!r.ok) assert.ok(isAppError(r.error, "PREFERENCES_INVALID_VALUE"));
+      if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PREFERENCES_INVALID_VALUE"));
     });
   });
 
@@ -131,7 +131,7 @@ describe("PersistentPreferences", () => {
       await kkv.set("nm-preferences", "chat.subagentStream", "not-a-bool");
       const r = await ctx.preferences.getSubagentStreamEnabled();
       assert.ok(!r.ok, "无效存储布尔值应走 Err 通道");
-      if (!r.ok) assert.ok(isAppError(r.error, "PREFERENCES_INVALID_VALUE"));
+      if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PREFERENCES_INVALID_VALUE"));
       // 清理：同库共享一条 in-memory DB，list 排序断言是全量 deepEqual，不能留脏值
       await ctx.preferences.resetSubagentStreamEnabled();
     });
@@ -164,7 +164,7 @@ describe("PersistentPreferences", () => {
       await kkv.set("nm-preferences", "chat.thinkingContext", "not-a-bool");
       const r = await ctx.preferences.getThinkingContextEnabled();
       assert.ok(!r.ok, "无效存储布尔值应走 Err 通道");
-      if (!r.ok) assert.ok(isAppError(r.error, "PREFERENCES_INVALID_VALUE"));
+      if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PREFERENCES_INVALID_VALUE"));
     });
   });
 });

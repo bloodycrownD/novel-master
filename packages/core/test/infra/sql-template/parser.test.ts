@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqlTemplateError } from "@/infra/sql-template/errors.js";
-import { parseTemplateToAst } from "@/infra/sql-template/parser.js";
+import {  describe, it  } from "node:test";
+import {  SqlTemplateError  } from "@/infra/sql-template/errors.js";
+import {  SqlTemplateParse  } from "@/infra/sql-template/parser.js";
 
 describe("parser", () => {
   it("builds AST for nested if", () => {
-    const ast = parseTemplateToAst(
+    const ast = SqlTemplateParse.parseToAst(
       '<if test="a">X<if test="b">Y</if></if>',
     );
     assert.equal(ast.length, 1);
@@ -19,7 +19,7 @@ describe("parser", () => {
 
   it("throws UNKNOWN_TAG for unknown tags", () => {
     assert.throws(
-      () => parseTemplateToAst("<unknown>x</unknown>"),
+      () => SqlTemplateParse.parseToAst("<unknown>x</unknown>"),
       (err: unknown) => {
         assert.ok(err instanceof SqlTemplateError);
         assert.equal(err.code, "UNKNOWN_TAG");
@@ -32,7 +32,7 @@ describe("parser", () => {
 
   it("throws UNCLOSED_TAG for unclosed if", () => {
     assert.throws(
-      () => parseTemplateToAst('<if test="x">body'),
+      () => SqlTemplateParse.parseToAst('<if test="x">body'),
       (err: unknown) => {
         assert.ok(err instanceof SqlTemplateError);
         assert.equal(err.code, "UNCLOSED_TAG");
@@ -42,7 +42,7 @@ describe("parser", () => {
   });
 
   it("preserves static comparison a < b as text", () => {
-    const ast = parseTemplateToAst("SELECT * FROM t WHERE a < b");
+    const ast = SqlTemplateParse.parseToAst("SELECT * FROM t WHERE a < b");
     assert.equal(ast.length, 1);
     assert.equal(ast[0].type, "text");
     if (ast[0].type === "text") {

@@ -4,7 +4,7 @@
  * @module domain/provider/model/default-saved-model-settings
  */
 
-import { seedContextWindowTokens } from "@/infra/tokenizer/logic/seed-context-window-tokens.js";
+import { ContextWindowSeed } from "@/infra/tokenizer/logic/seed-context-window-tokens.js";
 import type { SavedModelSettings } from "./saved-model-settings.js";
 
 export const DefaultSavedModelSettings = {
@@ -19,7 +19,7 @@ export const DefaultSavedModelSettings = {
     return {
       schemaVersion: 2,
       internal: {
-        contextWindowTokens: seedContextWindowTokens(vendorModelId),
+        contextWindowTokens: ContextWindowSeed.seed(vendorModelId),
         tokenCounterMode: "auto",
       },
       generation: {

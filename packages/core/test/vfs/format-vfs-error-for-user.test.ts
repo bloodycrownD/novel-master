@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AppError } from "../../src/errors/app-error.js";
-import { VfsErrorForUser } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  AppError  } from "../../src/errors/app-error.js";
+import {  VfsErrorForUser  } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 
 const sessionScope: VfsScope = {

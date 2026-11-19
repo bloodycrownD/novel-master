@@ -11,7 +11,7 @@ export type {
 export type { DbSyncPort } from "./ports/db-sync.port.js";
 
 export {
-  parseCloudSyncStatus,
+  CloudSyncStatusParser,
   EMPTY_CLOUD_SYNC_STATUS,
 } from "./model/cloud-sync-status.js";
 export type {
@@ -22,16 +22,13 @@ export type { CloudSyncConfigInput } from "./model/cloud-sync-config.js";
 export { DatabaseReplacedError } from "./model/database-replaced-error.js";
 
 export {
-  isEffectiveLock,
-  canAcquireLock,
-  buildLease,
-  renewLease,
+  CloudSyncLease,
   DEFAULT_LEASE_SECONDS,
 } from "./logic/lock.js";
 
-export { statusKey, snapshotKey } from "./logic/paths.js";
+export { CloudSyncPaths } from "./logic/paths.js";
 
-export { CloudSyncCoordinator } from "./impl/cloud-sync-coordinator.js";
+export { CloudSyncCoordinator, DefaultPushAgentMutex } from "./impl/cloud-sync-coordinator.js";
 export type {
   CloudSyncCoordinatorDeps,
   PullOptions,

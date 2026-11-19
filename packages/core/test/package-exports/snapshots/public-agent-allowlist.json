@@ -2,9 +2,13 @@
   "AGENT_RUN_RESOLVE_KEYS",
   "AgentActivityTracker",
   "AgentDefinitionValidator",
+  "AgentProjectResolver",
+  "AgentRunShared",
+  "AgentRunnerDepsAssembler",
   "AgentServiceFactory",
   "AgentToolPolicyValidator",
   "AgentTools",
+  "AgentTurnRunner",
   "AgentYamlCodec",
   "ChatAgentSession",
   "DEFAULT_AGENT_MAX_STEPS",
@@ -13,12 +17,5 @@
   "PENDING_RUN_ID",
   "RunLifecycle",
   "agentDefinitionSchema",
-  "assembleAgentRunnerDeps",
-  "mapResolveError",
-  "promptsDocumentSchema",
-  "resolveAgentForProject",
-  "resolveApplicationModelIdForRun",
-  "resolveCurrentAgentDefinition",
-  "resolveCurrentAgentId",
-  "runAgentTurn"
+  "promptsDocumentSchema"
 ]

@@ -22,15 +22,15 @@
  * @module test/message-checkpoint/checkpoint-in-clause-chunk
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  after, before, describe, it  } from "node:test";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import type { Row } from "../../src/infra/tdbc/types.js";
 

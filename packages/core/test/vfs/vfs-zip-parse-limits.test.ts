@@ -29,11 +29,11 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { unzipSync, zipSync } from "fflate";
-import { VfsZipParse } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
-import { SkillZip } from "@/domain/skills/logic/preview-skill-zip.js";
-import { VFS_ZIP_MAX_ENTRY_COUNT, VFS_ZIP_MAX_ENTRY_PATH_LEN, VFS_ZIP_MAX_UNCOMPRESSED_BYTES } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
+import {  describe, it  } from "node:test";
+import {  unzipSync, zipSync  } from "fflate";
+import {  VfsZipParse  } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
+import {  SkillZip  } from "@/domain/skills/logic/preview-skill-zip.js";
+import {  VFS_ZIP_MAX_ENTRY_COUNT, VFS_ZIP_MAX_ENTRY_PATH_LEN, VFS_ZIP_MAX_UNCOMPRESSED_BYTES  } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 
 const EOCD_SIG = 0x06054b50;
 

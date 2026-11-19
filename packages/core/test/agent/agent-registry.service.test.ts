@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 
-import { AgentServiceFactory, agentDefinitionSchema } from "@novel-master/core/agent";
-import { AppError, isAppError } from "@novel-master/core/errors";
+import {  AgentServiceFactory, agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AppError, AppErrorOps  } from "@novel-master/core/errors";
 import type { AgentDefinition } from "@novel-master/core/agent";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -14,7 +14,7 @@ describe("AgentRegistryService", () => {
   it("upsert preserves display name separate from agentId", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const def = unwrap(decode(
+    const def = unwrap(SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "写作助手",
@@ -58,7 +58,7 @@ describe("AgentRegistryService", () => {
     const id = `agent-missing-${testIsolationSuffix()}`;
     await rejectsErr(
       registry.update(id, { description: "x" }),
-      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
+      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -74,7 +74,7 @@ describe("AgentRegistryService", () => {
     await rejectsErr(
       () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
       (e) => {
-        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required");
+        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required");
       }
     );
     // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
@@ -119,12 +119,12 @@ describe("AgentRegistryService", () => {
           prompts: "你是翻译",
         } as unknown as AgentDefinition),
       (e) => {
-        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
       }
     );
     await rejectsErr(
       registry.get(id),
-      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
+      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -139,12 +139,12 @@ describe("AgentRegistryService", () => {
           prompts: [{ persist: [], dynamic: [] }],
         } as unknown as AgentDefinition),
       (e) => {
-        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
       }
     );
     await rejectsErr(
       registry.get(id),
-      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
+      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -159,12 +159,12 @@ describe("AgentRegistryService", () => {
           prompts: 42,
         } as unknown as AgentDefinition),
       (e) => {
-        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
       }
     );
     await rejectsErr(
       registry.get(id),
-      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
+      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -173,7 +173,7 @@ describe("AgentRegistryService", () => {
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await registry.upsert(
       "summarizer",
-      unwrap(decode(
+      unwrap(SerializationDecode.decode(
         {
           schemaVersion: 1,
           name: "summarizer",
@@ -185,7 +185,7 @@ describe("AgentRegistryService", () => {
     await registry.delete("summarizer");
     await rejectsErr(
       registry.get("summarizer"),
-      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
+      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -193,7 +193,7 @@ describe("AgentRegistryService", () => {
     const ctx = getNovelMasterTestContext();
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const displayName = `写作助手-${testIsolationSuffix()}`;
-    const def = unwrap(decode(
+    const def = unwrap(SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: displayName,
@@ -205,7 +205,7 @@ describe("AgentRegistryService", () => {
     await rejectsErr(
       () => registry.upsert("writer-b", def),
       (e) => {
-        assert.ok(e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name");
+        assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name");
       }
     );
   });
@@ -213,7 +213,7 @@ describe("AgentRegistryService", () => {
   it("upsert 允许同一 Agent 保存原显示名", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const def = unwrap(decode(
+    const def = unwrap(SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "写作助手",
@@ -234,7 +234,7 @@ describe("AgentRegistryService", () => {
     const displayName = `写作助手-${testIsolationSuffix()}`;
     await registry.upsert(
       "writer-a",
-      unwrap(decode(
+      unwrap(SerializationDecode.decode(
         {
           schemaVersion: 1,
           name: `  ${displayName}  `,
@@ -247,7 +247,7 @@ describe("AgentRegistryService", () => {
       () =>
         registry.upsert(
           "writer-b",
-          unwrap(decode(
+          unwrap(SerializationDecode.decode(
             {
               schemaVersion: 1,
               name: displayName,
@@ -257,7 +257,7 @@ describe("AgentRegistryService", () => {
           ))
         ),
       (e) => {
-        assert.ok(e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME"));
+        assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_DUPLICATE_NAME"));
       }
     );
   });
@@ -265,7 +265,7 @@ describe("AgentRegistryService", () => {
   it("AG5a: delete 当前 Agent 时重置指针（注入 state）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
-    const def = unwrap(decode(
+    const def = unwrap(SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "a",
@@ -283,7 +283,7 @@ describe("AgentRegistryService", () => {
   it("AG5b: delete 非当前 Agent 时保留指针", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
-    const def = unwrap(decode(
+    const def = unwrap(SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "a",
@@ -301,7 +301,7 @@ describe("AgentRegistryService", () => {
   it("AG5c: 未注入 state 时 delete 不清指针", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const def = unwrap(decode(
+    const def = unwrap(SerializationDecode.decode(
       {
         schemaVersion: 1,
         name: "a",

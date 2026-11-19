@@ -6,7 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { Coerce } from "@/common/coerce.js";
 import type { SessionRunState, SessionRunStatus } from "../../model/session-run-state.js";
@@ -44,7 +44,7 @@ export class SqliteSessionRunStateRepository implements SessionRunStateRepositor
 
   async get(sessionId: string): Promise<SessionRunState | null> {
     const sql = `SELECT session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms FROM session_run_state WHERE session_id = #{sessionId}`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId });
     if (rows.length === 0) {
       return null;
     }
@@ -53,7 +53,7 @@ export class SqliteSessionRunStateRepository implements SessionRunStateRepositor
 
   async upsert(state: SessionRunState): Promise<void> {
     const sql = `INSERT INTO session_run_state (session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms) VALUES (#{sessionId}, #{projectId}, #{runId}, #{status}, #{startedAtMs}, #{textChars}, #{thinkingChars}, #{completionTokens}, #{tokenSource}, #{partialText}, #{partialThinking}, #{pendingChildrenJson}, #{updatedAtMs}) ON CONFLICT(session_id) DO UPDATE SET project_id = excluded.project_id, run_id = excluded.run_id, status = excluded.status, started_at_ms = excluded.started_at_ms, text_chars = excluded.text_chars, thinking_chars = excluded.thinking_chars, completion_tokens = excluded.completion_tokens, token_source = excluded.token_source, partial_text = excluded.partial_text, partial_thinking = excluded.partial_thinking, pending_children_json = excluded.pending_children_json, updated_at_ms = excluded.updated_at_ms`;
-    await executeTemplate(this.conn, this.parser, sql, { ...state });
+    await TdbcTemplate.execute(this.conn, this.parser, sql, { ...state });
   }
 
   async listByStatuses(statuses: readonly SessionRunStatus[]): Promise<SessionRunState[]> {
@@ -69,17 +69,17 @@ export class SqliteSessionRunStateRepository implements SessionRunStateRepositor
     }
     const inClause = placeholders.join(", ");
     const sql = `SELECT session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms FROM session_run_state WHERE status IN (${inClause}) ORDER BY session_id`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, bindings);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, bindings);
     return rows.map(rowToState);
   }
 
   async deleteBySession(sessionId: string): Promise<boolean> {
-    const result = await executeTemplate(this.conn, this.parser, `DELETE FROM session_run_state WHERE session_id = #{sessionId}`, { sessionId });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM session_run_state WHERE session_id = #{sessionId}`, { sessionId });
     return result.changes > 0;
   }
 
   async deleteByProject(projectId: string): Promise<boolean> {
-    const result = await executeTemplate(this.conn, this.parser, `DELETE FROM session_run_state WHERE project_id = #{projectId}`, { projectId });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM session_run_state WHERE project_id = #{projectId}`, { projectId });
     return result.changes > 0;
   }
 }

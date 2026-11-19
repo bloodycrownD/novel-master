@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, it } from "node:test";
-import { TextBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock } from "@novel-master/core/chat";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  readFileSync  } from "node:fs";
+import {  join  } from "node:path";
+import {  describe, it  } from "node:test";
+import {  TextBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock  } from "@novel-master/core/chat";
+import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 /** DTO 断言 helper：summaryText 为 MessageLike、metaText 为 MessageLike[]（G3.5），渲染后比对。 */
 const summaryOf = (m: unknown) => tCore(m as Parameters<typeof tCore>[0]);
 const metaOf = (parts: readonly unknown[]) => parts.map((m) => summaryOf(m)).join(" · ");
-import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
+import {  UserVfsActionXml  } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 
-import { PromptBuilder, MessageBodyText, type AgentPromptLayout, type  PromptPreviewTurn, type  PromptRenderContext, type  PromptToolGroupCardData, type  PromptTurnCardData } from "@novel-master/core/prompt";
+import {  PromptBuilder, MessageBodyText, type AgentPromptLayout, type  PromptPreviewTurn, type  PromptRenderContext, type  PromptToolGroupCardData, type  PromptTurnCardData  } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 

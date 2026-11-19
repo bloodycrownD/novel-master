@@ -31,7 +31,7 @@
 
 export const DEFAULT_TICK_MS = 32;
 
-interface SseChunkEmitter {
+interface SseChunkEmitterHandle {
   /**
    * 追加 XHR 切片。距上次 flush 已过 tickMs 闸门时立即同步 flush（会调用
    * onChunk）；窗口内的 append 只进缓冲、不投递。`flush()` / `dispose()`
@@ -46,75 +46,77 @@ interface SseChunkEmitter {
   bufferedLength(): number;
 }
 
-export function createSseChunkEmitter(onChunk: (chunk: string) => void, options?: { tickMs?: number }): SseChunkEmitter {
-  const tickMs = options?.tickMs ?? DEFAULT_TICK_MS;
-  let buffer = "";
-  // 初始化为创建时刻（不能是 0）：若初始化为 0，首个 append 距「上次
-  // flush」必然已过 tickMs、立即开闸同步 flush，「append 后不 tick 则
-  // 零投递」的既有语义（U-01）即碎。初始化为创建时刻，测试里紧跟创建
-  // 的首个 append 会落在开闸窗口内、进缓冲等 tick。
-  // 注意：这只在「创建到首个 append < tickMs」时成立，生产环境不成立——
-  // 建连 + TTFT 通常远超 32ms，首个 chunk 走「过闸直投」属预期行为，
-  // 也正是后台连续性依赖的路径（interval 停摆时靠数据到达推进）。
-  let lastFlushAt = Date.now();
-  // 终态标志：`flush()` / `dispose()` 之后置位，`append()` 不再有任何效果。
-  let stopped = false;
+export const SseChunkEmitter = {
+  create(onChunk: (chunk: string) => void, options?: { tickMs?: number }): SseChunkEmitterHandle {
+    const tickMs = options?.tickMs ?? DEFAULT_TICK_MS;
+    let buffer = "";
+    // 初始化为创建时刻（不能是 0）：若初始化为 0，首个 append 距「上次
+    // flush」必然已过 tickMs、立即开闸同步 flush，「append 后不 tick 则
+    // 零投递」的既有语义（U-01）即碎。初始化为创建时刻，测试里紧跟创建
+    // 的首个 append 会落在开闸窗口内、进缓冲等 tick。
+    // 注意：这只在「创建到首个 append < tickMs」时成立，生产环境不成立——
+    // 建连 + TTFT 通常远超 32ms，首个 chunk 走「过闸直投」属预期行为，
+    // 也正是后台连续性依赖的路径（interval 停摆时靠数据到达推进）。
+    let lastFlushAt = Date.now();
+    // 终态标志：`flush()` / `dispose()` 之后置位，`append()` 不再有任何效果。
+    let stopped = false;
 
-  const emitBuffer = (): void => {
-    if (buffer.length === 0) {
-      return;
-    }
-    const chunk = buffer;
-    buffer = "";
-    lastFlushAt = Date.now();
-    onChunk(chunk);
-  };
-
-  let timer: ReturnType<typeof setInterval> | null = setInterval(() => {
-    emitBuffer();
-  }, tickMs);
-
-  const stopTimer = (): void => {
-    // 停表的同时进入终态：`flush()` / `dispose()` 是两条终态路径，
-    // 走完之后 `append()` 一律 no-op。
-    stopped = true;
-    if (timer != null) {
-      clearInterval(timer);
-      timer = null;
-    }
-  };
-
-  return {
-    append(text: string): void {
-      // 终态守卫：flush / dispose 之后不再缓冲、也不再投递。
-      if (stopped) {
+    const emitBuffer = (): void => {
+      if (buffer.length === 0) {
         return;
       }
-      buffer += text;
-      // 数据到达驱动 + 时间闸门：过闸的 append 立即同步 flush（后台
-      // interval 停摆时投递仍由数据到达推进）；未过闸的 append 留缓冲，
-      // interval tick 照旧兜底 flush。闸门保证窗口内至多一次同步 flush；
-      // tick 通道本身不过闸，故 append 投递与紧随 tick 的投递可相隔
-      // 0ms，整流上限为每 tickMs 一次 append 触发 + 一次 tick。
-      if (Date.now() - lastFlushAt >= tickMs) {
-        emitBuffer();
+      const chunk = buffer;
+      buffer = "";
+      lastFlushAt = Date.now();
+      onChunk(chunk);
+    };
+
+    let timer: ReturnType<typeof setInterval> | null = setInterval(() => {
+      emitBuffer();
+    }, tickMs);
+
+    const stopTimer = (): void => {
+      // 停表的同时进入终态：`flush()` / `dispose()` 是两条终态路径，
+      // 走完之后 `append()` 一律 no-op。
+      stopped = true;
+      if (timer != null) {
+        clearInterval(timer);
+        timer = null;
       }
-    },
+    };
 
-    flush(): string {
-      stopTimer();
-      const tail = buffer;
-      buffer = "";
-      return tail;
-    },
+    return {
+      append(text: string): void {
+        // 终态守卫：flush / dispose 之后不再缓冲、也不再投递。
+        if (stopped) {
+          return;
+        }
+        buffer += text;
+        // 数据到达驱动 + 时间闸门：过闸的 append 立即同步 flush（后台
+        // interval 停摆时投递仍由数据到达推进）；未过闸的 append 留缓冲，
+        // interval tick 照旧兜底 flush。闸门保证窗口内至多一次同步 flush；
+        // tick 通道本身不过闸，故 append 投递与紧随 tick 的投递可相隔
+        // 0ms，整流上限为每 tickMs 一次 append 触发 + 一次 tick。
+        if (Date.now() - lastFlushAt >= tickMs) {
+          emitBuffer();
+        }
+      },
 
-    dispose(): void {
-      stopTimer();
-      buffer = "";
-    },
+      flush(): string {
+        stopTimer();
+        const tail = buffer;
+        buffer = "";
+        return tail;
+      },
 
-    bufferedLength(): number {
-      return buffer.length;
-    },
-  };
-}
+      dispose(): void {
+        stopTimer();
+        buffer = "";
+      },
+
+      bufferedLength(): number {
+        return buffer.length;
+      },
+    };
+  },
+} as const;

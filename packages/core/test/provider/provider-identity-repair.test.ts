@@ -7,15 +7,15 @@
  * - provider secret rename 操作的 detect + repair 幂等搬运。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ProviderIdentityRepair } from "@/domain/provider/logic/provider-identity-repair.js";
-import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
+import {  describe, it  } from "node:test";
+import {  ProviderIdentityRepair  } from "@/domain/provider/logic/provider-identity-repair.js";
+import {  SqliteProviderRepository  } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
-import { Result } from "@/errors/either.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import {  Result  } from "@/errors/either.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** 内存版 ProviderRepository，方便构造异常形态（绕开真实 repo 的读取校验）。 */
 function inMemoryProviderRepo(rows: LlmProvider[]): ProviderRepository {

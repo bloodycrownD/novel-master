@@ -1,4 +1,4 @@
-import { Result } from "../../src/errors/either.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 
 /** Minimal stub for agent-runner tests (infer falls back when findById resolves null). */

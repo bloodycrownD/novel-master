@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { describe, it } from "node:test";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
 
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import { AGENT_TOOL_NAME, agentTool } from "../../src/domain/tool/builtin/agent-tool.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  AGENT_TOOL_NAME, agentTool  } from "../../src/domain/tool/builtin/agent-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
-import { Json } from "../../src/common/json.js";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { Result } from "../../src/errors/either.js";
-import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { AgentTools } from "../../src/domain/agent/logic/resolve-agent-tools.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  Json  } from "../../src/common/json.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  AgentTurnRunner  } from "../../src/service/agent/logic/run-agent-turn.js";
+import {  AgentTools  } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 /** 最小合法 AgentDefinition 形状（照 agent-tool-policy.test.ts 的 BASE_DEF）。 */
 function def(name: string, extra?: Partial<AgentDefinition>): AgentDefinition {
@@ -177,7 +177,7 @@ describe("agent 管理工具", () => {
     await rejectsErr(
       () => runner.call("agent", { action: "get" }, makeCtx(fakeAgentRegistry())),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("name") &&
         e.message.includes("agentId"),
@@ -189,7 +189,7 @@ describe("agent 管理工具", () => {
     await rejectsErr(
       () => runner.call("agent", { action: "create" }, makeCtx(fakeAgentRegistry())),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("definition"),
     );
@@ -205,7 +205,7 @@ describe("agent 管理工具", () => {
           makeCtx(fakeAgentRegistry()),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("name") &&
         e.message.includes("agentId"),
@@ -221,7 +221,7 @@ describe("agent 管理工具", () => {
     };
     await rejectsErr(
       () => runner.call("agent", { action: "list" }, bare),
-      (e) => isAppError(e, "TOOL_FAILED") && e.message.includes("agents"),
+      (e) => AppErrorOps.is(e, "TOOL_FAILED") && e.message.includes("agents"),
     );
   });
 
@@ -294,12 +294,12 @@ describe("agent 管理工具", () => {
     await rejectsErr(
       () => runner.call("agent", { action: "get", name: "nope" }, ctx),
       (e: unknown) =>
-        isAppError(e, "TOOL_FAILED") && e.message.includes("nope"),
+        AppErrorOps.is(e, "TOOL_FAILED") && e.message.includes("nope"),
     );
     await rejectsErr(
       () => runner.call("agent", { action: "get", agentId: "agent-404" }, ctx),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_FAILED" &&
         e.message.includes("agent-404"),
     );
@@ -340,7 +340,7 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("未注册工具名") &&
         e.message.includes("nope_tool"),
@@ -360,7 +360,7 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_FAILED" &&
         e.message.includes("数据库只读"),
     );
@@ -461,7 +461,7 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("至少包含一个要修改的字段"),
     );
@@ -478,7 +478,7 @@ describe("agent 管理工具", () => {
           makeCtx(fakeAgentRegistry()),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_FAILED" &&
         e.message.includes("内置 agent"),
     );
@@ -511,7 +511,7 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
         e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("agent-404") &&
         e.message.includes("未找到"),
@@ -531,7 +531,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
       def("beta", { mode: "subagent" }),
     ];
 
-    const ctx = assembleAgentsToolContext(
+    const ctx = AgentTurnRunner.assembleAgentsToolContext(
       agentRegistry,
       allDefs,
       probe.list(),
@@ -559,7 +559,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     );
     assert.ok(!subRegistry.list().includes("agent"));
     assert.equal(
-      assembleAgentsToolContext(
+      AgentTurnRunner.assembleAgentsToolContext(
         fakeAgentRegistry(),
         [],
         probe.list(),
@@ -574,7 +574,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     });
     assert.ok(!grandRegistry.list().includes("agent"));
     assert.equal(
-      assembleAgentsToolContext(
+      AgentTurnRunner.assembleAgentsToolContext(
         fakeAgentRegistry(),
         [],
         probe.list(),
@@ -590,7 +590,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     );
     assert.ok(!deniedRegistry.list().includes("agent"));
     assert.equal(
-      assembleAgentsToolContext(
+      AgentTurnRunner.assembleAgentsToolContext(
         fakeAgentRegistry(),
         [],
         probe.list(),

@@ -12,20 +12,22 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { WorkplacePathMap } from "@/domain/workplace/logic/workplace-path-map.js";
 import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { SessionFsServiceFactory } from "@/service/session-fs/create-session-fs-service.js";
 
 interface InitializeSessionWorkspaceOptions {
   /** pull 时清空 message checkpoint；create 时不清。 */
   readonly clearCheckpoints: boolean;
 }
 
-/**
- * 将会话 VFS/worktree 重置为当前 project template 快照。
- */
-export async function initializeSessionWorkspace(tx: TdbcConnection, projectId: string, sessionId: string, options: InitializeSessionWorkspaceOptions): Promise<void> {
-  if (options.clearCheckpoints) {
-    await deleteSessionFsData(tx, projectId, sessionId);
-  }
+/** session 工作区初始化集合（pull 时从 project template 重置 VFS/worktree）。 */
+export const SessionWorkspaceInit = {
+  /**
+   * 将会话 VFS/worktree 重置为当前 project template 快照。
+   */
+  async initialize(tx: TdbcConnection, projectId: string, sessionId: string, options: InitializeSessionWorkspaceOptions): Promise<void> {
+    if (options.clearCheckpoints) {
+      await SessionFsServiceFactory.deleteData(tx, projectId, sessionId);
+    }
   const vfs = new SqliteVfsEntryRepository(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
   const worktree = new SqliteWorkplaceRepository(tx);
@@ -34,5 +36,6 @@ export async function initializeSessionWorkspace(tx: TdbcConnection, projectId: 
     contentStore: new SqliteVfsContentStore(tx),
     // 技能已重定位到独立 meta 域，project 域全部内容都带入 session，无需排除项
   });
-  await worktree.copyScope(WorkplaceScope.key({ kind: "project", projectId }), WorkplaceScope.key({ kind: "session", projectId, sessionId }), WorkplacePathMap.mapProjectToSession);
-}
+    await worktree.copyScope(WorkplaceScope.key({ kind: "project", projectId }), WorkplaceScope.key({ kind: "session", projectId, sessionId }), WorkplacePathMap.mapProjectToSession);
+  },
+} as const;

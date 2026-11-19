@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { serializePromptLlmInput } from "../../../src/infra/tokenizer/logic/serialize-prompt-input.js";
+import {  describe, it  } from "node:test";
+import {  serializePromptLlmInput  } from "../../../src/infra/tokenizer/logic/serialize-prompt-input.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("serializePromptLlmInput", () => {

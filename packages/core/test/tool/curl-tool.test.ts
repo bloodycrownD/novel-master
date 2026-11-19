@@ -1,17 +1,17 @@
-import { isAppError } from "../../src/errors/app-error.js";
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { afterEach, describe, it, mock } from "node:test";
+import {  afterEach, describe, it, mock  } from "node:test";
 
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import { curlTool } from "../../src/domain/tool/builtin/curl-tool.js";
-import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  curlTool  } from "../../src/domain/tool/builtin/curl-tool.js";
+import {  TOOL_OUTPUT_MAX_BYTES  } from "../../src/domain/tool/logic/tool-output-limits.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
-import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
-import { AgentTools } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import {  ToolOutput  } from "../../src/domain/tool/logic/format-tool-output.js";
+import {  ToolResultBlock  } from "../../src/domain/tool/logic/build-tool-result-block.js";
+import {  AgentTools  } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 afterEach(() => {
@@ -114,7 +114,7 @@ describe("curl 工具", () => {
 
     for (const url of ["file:///etc/passwd", "ftp://x", "data:text/plain,x"]) {
       await rejectsErr(runner.call("curl", { url }, makeCtx(fetchFn as unknown as typeof fetch)), (err: unknown) => {
-        assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+        assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
         assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
       });
@@ -304,7 +304,7 @@ describe("curl 工具", () => {
     mock.timers.tick(30_000);
 
     await rejectsErr(pending, (err) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const message = ToolOutput.formatErrorForLlm(err);
       assert.match(message, /timed out/);
@@ -332,7 +332,7 @@ describe("curl 工具", () => {
     mock.timers.tick(30_000);
 
     await rejectsErr(pending, (err) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const message = ToolOutput.formatErrorForLlm(err);
       assert.match(message, /timed out/);
@@ -351,7 +351,7 @@ describe("curl 工具", () => {
           : assert.fail("网络错误应抛 ToolError"),
       (e: unknown) => e
     );
-    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
     assert.equal(err.key, "TOOL_FAILED");
     assert.match(ToolOutput.formatErrorForLlm(err), /Network request failed/);
   });
@@ -701,7 +701,7 @@ describe("curl 工具", () => {
 
     for (const input of invalidInputs) {
       await rejectsErr(runner.call("curl", input, ctx), (err: unknown) => {
-        assert.ok(isAppError(err) && err.key.startsWith("TOOL_"), `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
+        assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"), `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
         assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
       });
@@ -727,7 +727,7 @@ describe("curl 工具", () => {
     mock.timers.tick(2_000);
 
     await rejectsErr(pending, (err) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const message = ToolOutput.formatErrorForLlm(err);
       assert.match(message, /timed out after 2000ms/);
@@ -742,7 +742,7 @@ describe("curl 工具", () => {
     // 经 ToolRunner.call 时 B-1 的 runner 层早退先拦（见 tool-runner-abort 套件），
     // 本用例按 fix-spec B-2 口径直调 tool.run，锁 curl 自身的裸暴露面。
     await rejectsErr(() => curlTool.run({ url: "https://example.com/pre-aborted" }, { ...makeCtx(fetchFn), signal: controller.signal }), (err) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
       // 取消统一 TOOL_CANCELLED 控制流码；formatter 渲染为中性文案
       // （不带 Error 前缀、不携带 URL，UI 卡片不弹错误）。
       assert.equal(err.key, "TOOL_CANCELLED");

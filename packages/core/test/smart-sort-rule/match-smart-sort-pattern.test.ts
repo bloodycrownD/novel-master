@@ -5,18 +5,11 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  SmartSortPattern,
-  type SmartSortPatternMatch,
-} from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
-import {
-  FIXED_MAX_SORT_TUPLE,
-  FIXED_MIN_SORT_TUPLE,
-  SmartSort,
-} from "../../src/domain/workplace/logic/smart-sort.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  SmartSortPattern, type SmartSortPatternMatch  } from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
+import {  FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, SmartSort  } from "../../src/domain/workplace/logic/smart-sort.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 function ok(
   result: ReturnType<typeof SmartSortPattern.match>
