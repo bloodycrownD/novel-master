@@ -18,25 +18,27 @@ export type AgentRunOptions = {
   readonly onUserMessageAppended?: () => void | Promise<void>;
 };
 
-/** Appends a user message and runs the agent loop (streaming via event bus). */
-export async function runAgentTurnAdapter(runtime: MobileNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
-  return AgentTurnRunner.run(runtime, scope, userContent, {
-    ...options,
-    onRunFailed: ctx => {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        let err: {name: string; message: string; stack?: string; cause?: string};
-        if (ctx.error instanceof Error) {
-          err = {name: ctx.error.name, message: ctx.error.message, stack: ctx.error.stack, cause: String((ctx.error as Error & {cause?: unknown}).cause ?? '')};
-        } else {
-          err = {name: typeof ctx.error, message: String(ctx.error)};
+export namespace AgentRunService {
+  /** Appends a user message and runs the agent loop (streaming via event bus). */
+  export async function run(runtime: MobileNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
+    return AgentTurnRunner.run(runtime, scope, userContent, {
+      ...options,
+      onRunFailed: ctx => {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          let err: {name: string; message: string; stack?: string; cause?: string};
+          if (ctx.error instanceof Error) {
+            err = {name: ctx.error.name, message: ctx.error.message, stack: ctx.error.stack, cause: String((ctx.error as Error & {cause?: unknown}).cause ?? '')};
+          } else {
+            err = {name: typeof ctx.error, message: String(ctx.error)};
+          }
+          console.error('[novel-master/agent-run] failed', {
+            stage: ctx.stage,
+            sessionId: ctx.scope.sessionId,
+            projectId: ctx.scope.projectId,
+            err,
+          });
         }
-        console.error('[novel-master/agent-run] failed', {
-          stage: ctx.stage,
-          sessionId: ctx.scope.sessionId,
-          projectId: ctx.scope.projectId,
-          err,
-        });
-      }
-    },
-  });
+      },
+    });
+  }
 }

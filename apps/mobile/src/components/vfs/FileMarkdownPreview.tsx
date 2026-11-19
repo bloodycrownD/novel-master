@@ -14,19 +14,23 @@ import {defaultVfsMarkdownPreviewEngine, readVfsMarkdownPreviewEngine, type VfsM
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 import {ChatComposerDraft} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
-import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
-import {isRichContentOverLimit, isWebViewDocumentOverLimit} from '../rich-content/rich-content-limits';
+import {TranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
+import {RichContentLimits} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
-import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
+import {FrontMatterDocumentHtml} from './build-front-matter-document-html';
 import type {RichDocumentAnnotationMark, RichDocumentRecogitoCreatePayload} from './RichDocumentBridge';
 import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
 
-// nm-style: keep-public — 预览档位判定谓词（FileEditorScreen 消费）
-export function isMarkdownPreviewPath(path: string): boolean {
-  return MARKDOWN_PATH.test(path);
+// 偏离登记：文件名 FileMarkdownPreview 与组件同名，tsx helper namespace 不得撞组件名；
+// helper 主体是 markdown 预览档位判定，按内容主体起名 MarkdownPreview。
+export namespace MarkdownPreview {
+  // nm-style: keep-public — 预览档位判定谓词（FileEditorScreen 消费）
+  export function isPath(path: string): boolean {
+    return MARKDOWN_PATH.test(path);
+  }
 }
 
 /**
@@ -225,7 +229,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
     [sessionId, editingDraft],
   );
 
-  const isMdPath = isMarkdownPreviewPath(path);
+  const isMdPath = MarkdownPreview.isPath(path);
   const split = useMemo(() => (isMdPath ? FrontMatter.splitMarkdown(content) : null), [content, isMdPath]);
 
   const fmLines = split?.frontMatterLines ?? null;
@@ -239,7 +243,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
 
   // WebView 引擎走浏览器整页渲染，用放宽阈值（20 万字）；rn 兜底引擎维持
   // RenderHTML 的 12k FlatList 护栏（RichContentBody 内部同款判定）。
-  const overLimitFor = previewEngine === 'webview' ? isWebViewDocumentOverLimit : isRichContentOverLimit;
+  const overLimitFor = previewEngine === 'webview' ? RichContentLimits.isWebViewDocumentOverLimit : RichContentLimits.isOverLimit;
   const mdOverLimit = overLimitFor(mdBody);
 
   const mdBodyHtml = useMemo(() => {
@@ -247,7 +251,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       return undefined;
     }
     try {
-      return prepareTranscriptRichHtml(mdBody);
+      return TranscriptRichHtml.prepare(mdBody);
     } catch {
       return undefined;
     }
@@ -259,7 +263,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
     if (!mdUseWebViewPreview || !showFrontMatter) {
       return undefined;
     }
-    return buildFrontMatterDocumentHtml({
+    return FrontMatterDocumentHtml.build({
       fields: fmFields,
       empty: fmLines.length === 0,
     });
@@ -350,12 +354,12 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
   // 路径，落到 `!isMdPath` 就被吃掉退化成纯文本了。
   // 200k 超限降级与 rn 引擎回退沿用既有语义（与 md 档同一套阈值/引擎开关）。
   if (renderKind === 'rich') {
-    const richOverLimit = isWebViewDocumentOverLimit(content);
+    const richOverLimit = RichContentLimits.isWebViewDocumentOverLimit(content);
     if (previewEngine === 'webview') {
       let richHtml: string | undefined;
       if (!richOverLimit) {
         try {
-          richHtml = prepareTranscriptRichHtml(content);
+          richHtml = TranscriptRichHtml.prepare(content);
         } catch {
           richHtml = undefined;
         }

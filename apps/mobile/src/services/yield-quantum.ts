@@ -8,7 +8,7 @@
  * 让步次数从 O(步数) 降到 O(总时长/intervalMs)，ANR 防护等价、开销摊薄
  * 到可忽略。
  *
- * 用法：调用方持有 createQuantumYield() 返回的零参让步函数，在循环体内
+ * 用法：调用方持有 YieldQuantum.create() 返回的零参让步函数，在循环体内
  * await 它即可——距上次真实让步不足 intervalMs 时同步直通（不安排任何
  * 定时器），跨窗才真正 await setTimeout(0) 并以让步完成时刻重置窗口。
  *
@@ -17,13 +17,15 @@
  * 传极大值使所有调用同步直通（等价于使用方经构造参数注入同步 resolve
  * 的 yield mock，调用方零参、测试面收窄到构造处）。默认 16ms 即生产取值。
  */
-export function createQuantumYield(intervalMs = 16): () => Promise<void> {
-  let lastYieldAt = Date.now();
-  return async () => {
-    const now = Date.now();
-    if (now - lastYieldAt >= intervalMs) {
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-      lastYieldAt = Date.now();
-    }
-  };
+export namespace YieldQuantum {
+  export function create(intervalMs = 16): () => Promise<void> {
+    let lastYieldAt = Date.now();
+    return async () => {
+      const now = Date.now();
+      if (now - lastYieldAt >= intervalMs) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        lastYieldAt = Date.now();
+      }
+    };
+  }
 }

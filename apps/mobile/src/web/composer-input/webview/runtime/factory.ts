@@ -12,10 +12,12 @@
  *   薄入口用默认参数调用即行为零变化（宏链活依赖 composer-input 包）。
  * - 装配顺序照旧 main.ts：先挂编辑器（后续 init 直接应用）→ 再绑 host 消息通道 →
  *   最后发 ready（宿主一切下行以 ready 为门控）。
+ *
+ * namespace 名偏离文件名（Factory 过泛）：按 p23 `XxxFactory` 先例取 ComposerFactory。
  */
-import {bindHostMessageChannel} from '@web/shared/host-message-channel';
-import {handleHostMessage, post} from './bridge';
-import {mountComposerEditor} from './editor';
+import {HostMessageChannel} from '@web/shared/host-message-channel';
+import {ComposerBridge, post} from './bridge';
+import {ComposerEditor} from './editor';
 import {BRIDGE_V} from './model';
 
 type ComposerRuntimeOptions = {
@@ -43,47 +45,49 @@ type ComposerRuntimeHandle = {
   readonly emitReady: boolean;
 };
 
-/**
- * 挂载点解析：元素直通；选择器字符串走 querySelector（合成包挂 `#composer-input`）。
- *
- * 模块内私有：全仓只有本工厂自用（cr1-P1-1 收回导出——外部零消费方的 export 是
- * 死面，留着只会让人以为它是一条可依赖的公开契约）。
- */
-function resolveComposerHost(host: HTMLElement | string): HTMLElement | null {
-  if (typeof host === 'string') {
-    return document.querySelector(host);
-  }
-  return host ?? null;
-}
-
-/**
- * 装配 composer runtime 的全部顶层副作用（挂载 / 绑通道 / 发 ready）。
- * @param host    挂载点元素或选择器；未命中时跳过挂载（不抛，与旧 main.ts 的 null 守卫同口径）
- * @param options 三个开关，缺省即旧包现行为
- */
-export function createComposerRuntime(host: HTMLElement | string, options: ComposerRuntimeOptions = {}): ComposerRuntimeHandle {
-  const heightReport = options.heightReport !== false;
-  const bindChannel = options.bindChannel !== false;
-  const emitReady = options.emitReady !== false;
-
-  const parent = resolveComposerHost(host);
-  if (parent != null) {
-    mountComposerEditor(parent, {heightReport});
+export namespace ComposerFactory {
+  /**
+   * 挂载点解析：元素直通；选择器字符串走 querySelector（合成包挂 `#composer-input`）。
+   *
+   * 模块内私有：全仓只有本工厂自用（cr1-P1-1 收回导出——外部零消费方的 export 是
+   * 死面，留着只会让人以为它是一条可依赖的公开契约）。
+   */
+  function resolveComposerHost(host: HTMLElement | string): HTMLElement | null {
+    if (typeof host === 'string') {
+      return document.querySelector(host);
+    }
+    return host ?? null;
   }
 
-  if (bindChannel) {
-    bindHostMessageChannel(handleHostMessage);
-  }
+  /**
+   * 装配 composer runtime 的全部顶层副作用（挂载 / 绑通道 / 发 ready）。
+   * @param host    挂载点元素或选择器；未命中时跳过挂载（不抛，与旧 main.ts 的 null 守卫同口径）
+   * @param options 三个开关，缺省即旧包现行为
+   */
+  export function create(host: HTMLElement | string, options: ComposerRuntimeOptions = {}): ComposerRuntimeHandle {
+    const heightReport = options.heightReport !== false;
+    const bindChannel = options.bindChannel !== false;
+    const emitReady = options.emitReady !== false;
 
-  if (emitReady) {
-    post('ready', {version: BRIDGE_V});
-  }
+    const parent = resolveComposerHost(host);
+    if (parent != null) {
+      ComposerEditor.mount(parent, {heightReport});
+    }
 
-  return {
-    parent,
-    mounted: parent != null,
-    heightReport,
-    bindChannel,
-    emitReady,
-  };
+    if (bindChannel) {
+      HostMessageChannel.bind(ComposerBridge.handle);
+    }
+
+    if (emitReady) {
+      post('ready', {version: BRIDGE_V});
+    }
+
+    return {
+      parent,
+      mounted: parent != null,
+      heightReport,
+      bindChannel,
+      emitReady,
+    };
+  }
 }

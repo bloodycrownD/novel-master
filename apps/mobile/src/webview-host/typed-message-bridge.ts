@@ -22,31 +22,33 @@ export interface TypedMessageBridge<ToClient, ToHost> {
   readonly decodeToClient: (raw: string) => ToClient;
 }
 
-/**
- * @param version 信封版本（各桥自己的 BRIDGE_V，web 侧同值）
- * @param label   错误文案里的域名（composer-input / code-editor / rich-document）
- */
-export function createMessageBridge<ToClient, ToHost>(version: number, label: string): TypedMessageBridge<ToClient, ToHost> {
-  const versionError = `Invalid ${label} bridge envelope version`;
-  const shapeError = `Invalid ${label} bridge envelope shape`;
+export const TypedMessageBridge = {
+  /**
+   * @param version 信封版本（各桥自己的 BRIDGE_V，web 侧同值）
+   * @param label   错误文案里的域名（composer-input / code-editor / rich-document）
+   */
+  create: <ToClient, ToHost>(version: number, label: string): TypedMessageBridge<ToClient, ToHost> => {
+    const versionError = `Invalid ${label} bridge envelope version`;
+    const shapeError = `Invalid ${label} bridge envelope shape`;
 
-  function decodeEnvelope(raw: string, requirePayload: boolean): unknown {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Guards.isRecord(parsed) || parsed.v !== version) {
-      // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
-      throw new Error(versionError);
+    function decodeEnvelope(raw: string, requirePayload: boolean): unknown {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Guards.isRecord(parsed) || parsed.v !== version) {
+        // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
+        throw new Error(versionError);
+      }
+      if (typeof parsed.type !== 'string' || (requirePayload && !Guards.isRecord(parsed.payload))) {
+        // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
+        throw new Error(shapeError);
+      }
+      return parsed;
     }
-    if (typeof parsed.type !== 'string' || (requirePayload && !Guards.isRecord(parsed.payload))) {
-      // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
-      throw new Error(shapeError);
-    }
-    return parsed;
-  }
 
-  return {
-    encodeToClient: message => JSON.stringify(message),
-    encodeToHost: message => JSON.stringify(message),
-    decodeToHost: raw => decodeEnvelope(raw, true) as ToHost,
-    decodeToClient: raw => decodeEnvelope(raw, false) as ToClient,
-  };
-}
+    return {
+      encodeToClient: message => JSON.stringify(message),
+      encodeToHost: message => JSON.stringify(message),
+      decodeToHost: raw => decodeEnvelope(raw, true) as ToHost,
+      decodeToClient: raw => decodeEnvelope(raw, false) as ToClient,
+    };
+  },
+} as const;

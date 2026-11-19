@@ -5,11 +5,6 @@
 export const BRIDGE_V = 1;
 export const OVER_LIMIT_HINT = '内容过长，已显示原文';
 
-/** 拼接 FM HTML（置于前）与正文，统一进 .doc-body；无 FM 时原样返回正文。 */
-export function concatDocBodyHtml(frontMatterHtml: string, body: string): string {
-  return frontMatterHtml ? `${frontMatterHtml}${body}` : body;
-}
-
 /**
  * DocumentApp 落 `.doc-body` 的分支描述（纯函数，供合约测试直测）：
  * - `html`：FM 与富文本正文拼成同一条 HTML，整体经 TrustedHtml；
@@ -28,20 +23,27 @@ type DocumentBody =
       readonly text: string;
     };
 
-/** 由载荷选出 `.doc-body` 分支；无可显示内容时返回 null。 */
-export function buildDocumentBody(payload: DocumentPayload): DocumentBody | null {
-  const fm = payload.frontMatterHtml || '';
-  if (payload.mode === 'html' && payload.html) {
-    return {
-      kind: 'html',
-      html: concatDocBodyHtml(fm, payload.html),
-      layout: payload.layout,
-    };
+export namespace DocumentModel {
+  /** 拼接 FM HTML（置于前）与正文，统一进 .doc-body；无 FM 时原样返回正文。 */
+  export function concatBodyHtml(frontMatterHtml: string, body: string): string {
+    return frontMatterHtml ? `${frontMatterHtml}${body}` : body;
   }
-  if (payload.plain) {
-    return {kind: 'plain', fmHtml: fm, text: payload.plain};
+
+  /** 由载荷选出 `.doc-body` 分支；无可显示内容时返回 null。 */
+  export function buildBody(payload: DocumentPayload): DocumentBody | null {
+    const fm = payload.frontMatterHtml || '';
+    if (payload.mode === 'html' && payload.html) {
+      return {
+        kind: 'html',
+        html: concatBodyHtml(fm, payload.html),
+        layout: payload.layout,
+      };
+    }
+    if (payload.plain) {
+      return {kind: 'plain', fmHtml: fm, text: payload.plain};
+    }
+    return null;
   }
-  return null;
 }
 
 export type {HostTheme} from '@web/shared/host-theme';

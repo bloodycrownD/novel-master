@@ -55,10 +55,9 @@ import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/tokenizer';
 import {LogFactory} from '@novel-master/core/log';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
-import {createStreamApplyBuffer} from './stream-apply-buffer';
-import type {StreamApplyBuffer} from './stream-apply-buffer';
+import {StreamApplyBuffer} from './stream-apply-buffer';
 import {SessionViewCache} from './chat-session-view-cache';
-import {prependOlderMessages} from './message-paging';
+import {MessagePaging} from './message-paging';
 
 /** 单元侧日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
 const log = LogFactory.create('chat.stream-unit');
@@ -92,12 +91,14 @@ export type SessionStreamUnitStatus =
   | SessionStreamUnitActiveStatus
   | SessionStreamUnitSettledStatus;
 
-/** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
-// prettier-ignore
-export function isSessionStreamUnitSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
-  return (
-    status === 'interrupted' || status === 'finished' || status === 'failed'
-  );
+export namespace SessionStreamUnit {
+  /** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
+  // prettier-ignore
+  export function isSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
+    return (
+      status === 'interrupted' || status === 'finished' || status === 'failed'
+    );
+  }
 }
 
 /** 事件收尾驱动的 run 终态（interrupted 不经事件路径，故不在其列）。 */
@@ -484,7 +485,7 @@ export class SessionStreamUnit {
     this.tokenEstimatorFactory = options.tokenEstimatorFactory;
     // 进程级单调序号（同一毫秒建两个 unit 也不撞 streamId；见模块顶部注释）。
     this.streamEpoch = ++streamUnitEpoch;
-    this.applyBuffer = createStreamApplyBuffer(
+    this.applyBuffer = StreamApplyBuffer.create(
       segments => this.applyStreamSegments(segments),
       {flushIntervalMs: SESSION_STREAM_APPLY_INTERVAL_MS},
     );
@@ -1310,7 +1311,7 @@ export class SessionStreamUnit {
         return;
       }
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
-      const next = prependOlderMessages(this.messagesValue, older);
+      const next = MessagePaging.prependOlder(this.messagesValue, older);
       SessionViewCache.set(SessionViewCache.key(this.projectId, this.sessionId), {
         messages: next,
         hasMoreMessages: hasMore,

@@ -23,14 +23,16 @@ type SendButtonState = {
   readonly action: ConversationDockAction;
 };
 
-export function resolveSendButtonState(input: {
-  readonly canSend: boolean;
-  readonly running: boolean;
-}): SendButtonState {
-  return {
-    disabled: !input.canSend,
-    running: input.running,
-    variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
-    action: input.running ? 'terminate' : 'send',
-  };
+export namespace SendButton {
+  export function resolve(input: {
+    readonly canSend: boolean;
+    readonly running: boolean;
+  }): SendButtonState {
+    return {
+      disabled: !input.canSend,
+      running: input.running,
+      variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
+      action: input.running ? 'terminate' : 'send',
+    };
+  }
 }

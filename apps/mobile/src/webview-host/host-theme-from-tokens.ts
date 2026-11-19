@@ -9,16 +9,18 @@
 import type {ThemeTokens} from '@/theme/tokens';
 import type {HostTheme} from '@/web/shared/host-theme';
 
-export function hostThemeFromTokens(tokens: ThemeTokens): Required<HostTheme> {
-  return {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    primaryMuted: `${tokens.primary}22`,
-    selection: tokens.selection,
-    danger: tokens.danger,
-    surface: tokens.surface,
-    borderLight: tokens.borderLight,
-  };
-}
+export const HostThemeMapping = {
+  fromTokens: (tokens: ThemeTokens): Required<HostTheme> => {
+    return {
+      background: tokens.background,
+      text: tokens.text,
+      textSecondary: tokens.textSecondary,
+      primary: tokens.primary,
+      primaryMuted: `${tokens.primary}22`,
+      selection: tokens.selection,
+      danger: tokens.danger,
+      surface: tokens.surface,
+      borderLight: tokens.borderLight,
+    };
+  },
+} as const;

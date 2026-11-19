@@ -9,6 +9,8 @@ import {UpdateCheck, type FetchFn, type UpdateCheckData} from '@novel-master/cor
 import {type AppError, Result} from '@novel-master/core/errors';
 import {APP_VERSION} from './app-meta';
 
-export function checkForUpdates(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
-  return UpdateCheck.check(localVersion, fetchFn, 'mobile');
+export namespace CheckForUpdates {
+  export function check(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
+    return UpdateCheck.check(localVersion, fetchFn, 'mobile');
+  }
 }

@@ -17,12 +17,16 @@ type AttachmentDraftChipsProps = {
   transparentRow?: boolean;
 };
 
-/**
- * Chip 文案：中文二字 + `:` + path（Core `AttachmentChip.formatStatusLabelFromAttachment`）。
- */
-// nm-style: keep-public — chip 文案契约：core AttachmentChip.formatStatusLabelFromAttachment 的命名收口
-export function formatAttachmentChipLabel(a: MessageAttachment): string {
-  return AttachmentChip.formatStatusLabelFromAttachment(a);
+// 偏离登记：文件名 AttachmentDraftChips 与组件同名，tsx helper namespace 不得撞组件名；
+// helper 主体是 chip 状态文案，按内容主体起名 AttachmentChipLabel，成员剥主体词剩动词。
+export namespace AttachmentChipLabel {
+  /**
+   * Chip 文案：中文二字 + `:` + path（Core `AttachmentChip.formatStatusLabelFromAttachment`）。
+   */
+  // nm-style: keep-public — chip 文案契约：core AttachmentChip.formatStatusLabelFromAttachment 的命名收口
+  export function format(a: MessageAttachment): string {
+    return AttachmentChip.formatStatusLabelFromAttachment(a);
+  }
 }
 
 function AttachmentDraftChips({attachments, disabled, accessibilityLabel, transparentRow = false}: AttachmentDraftChipsProps) {
@@ -39,7 +43,7 @@ function AttachmentDraftChips({attachments, disabled, accessibilityLabel, transp
       accessibilityLabel={accessibilityLabel}
     >
       {attachments.map((a, index) => {
-        const label = formatAttachmentChipLabel(a);
+        const label = AttachmentChipLabel.format(a);
         return (
           <View
             key={`${a.source}:${a.path ?? a.name}:${index}`}

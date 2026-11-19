@@ -22,21 +22,23 @@ const TEXTUAL_EXTENSIONS = [
   'log',
 ];
 
-/** MIME / UTType filters for single-file VFS import（文本类白名单 + octet-stream 兜底）。 */
-export function vfsSingleFileImportPickTypes(): string[] {
-  const fromExtensions = TEXTUAL_EXTENSIONS.flatMap(knownTypesForExtension);
-  return [
-    types.plainText,
-    types.json,
-    'text/markdown',
-    'text/html',
-    'text/csv',
-    'application/xml',
-    'text/xml',
-    ...fromExtensions,
-    // WHY: Downloads / file managers often tag any file as octet-stream, so the
-    // whitelist alone would block legitimate picks; the real gate is core's
-    // UTF-8 check (skippedBinary), not this list.
-    'application/octet-stream',
-  ];
+export namespace VfsSingleFileDocumentPick {
+  /** MIME / UTType filters for single-file VFS import（文本类白名单 + octet-stream 兜底）。 */
+  export function pickTypes(): string[] {
+    const fromExtensions = TEXTUAL_EXTENSIONS.flatMap(knownTypesForExtension);
+    return [
+      types.plainText,
+      types.json,
+      'text/markdown',
+      'text/html',
+      'text/csv',
+      'application/xml',
+      'text/xml',
+      ...fromExtensions,
+      // WHY: Downloads / file managers often tag any file as octet-stream, so the
+      // whitelist alone would block legitimate picks; the real gate is core's
+      // UTF-8 check (skippedBinary), not this list.
+      'application/octet-stream',
+    ];
+  }
 }

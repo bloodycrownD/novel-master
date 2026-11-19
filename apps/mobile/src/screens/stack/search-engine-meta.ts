@@ -46,27 +46,29 @@ const CUSTOM_ENGINE_HINT_KEY: SettingsMessageKey = 'settings.search.meta.hint.cu
 // prettier-ignore
 export const PRESET_TEMPLATES: Readonly<Record<string, SearchEngineTemplate>> = PRESET_ENGINE_TEMPLATES;
 
-/**
- * 行副标题：预置 id 查出厂文案，未收录（自定义实例等）回落自定义模板口径。
- *
- * nm-style: keep-local — 唯一调用点在 SearchEnginesScreen 行渲染内；内联会迫使
- * 模块私有的 `ENGINE_HINT_KEYS` / `CUSTOM_ENGINE_HINT_KEY` 提升为导出，反而扩大
- * 导出面，故保留为单调用点函数。
- */
-export function engineHint(engineId: string): string {
-  const key = ENGINE_HINT_KEYS[engineId] ?? CUSTOM_ENGINE_HINT_KEY;
-  return settingsTranslator({key});
-}
+export const SearchEngineMeta = {
+  /**
+   * 行副标题：预置 id 查出厂文案，未收录（自定义实例等）回落自定义模板口径。
+   *
+   * nm-style: keep-local — 唯一调用点在 SearchEnginesScreen 行渲染内；内联会迫使
+   * 模块私有的 `ENGINE_HINT_KEYS` / `CUSTOM_ENGINE_HINT_KEY` 提升为导出，反而扩大
+   * 导出面，故保留为单调用点函数。
+   */
+  engineHint: (engineId: string): string => {
+    const key = ENGINE_HINT_KEYS[engineId] ?? CUSTOM_ENGINE_HINT_KEY;
+    return settingsTranslator({key});
+  },
 
-/**
- * 展示名：读模型 name 优先（拍板 5，双端同口径——desktop 同款）；静态表
- * {@link ENGINE_LABEL_KEYS} 仅未知 id / 读模型缺名时兜底，未收录的 id 返回 id 本身。
- */
-export function engineTitle(engineId: string, modelName?: string): string {
-  const name = modelName?.trim();
-  if (name != null && name.length > 0) {
-    return name;
-  }
-  const labelKey = ENGINE_LABEL_KEYS[engineId];
-  return labelKey == null ? engineId : settingsTranslator({key: labelKey});
-}
+  /**
+   * 展示名：读模型 name 优先（拍板 5，双端同口径——desktop 同款）；静态表
+   * {@link ENGINE_LABEL_KEYS} 仅未知 id / 读模型缺名时兜底，未收录的 id 返回 id 本身。
+   */
+  engineTitle: (engineId: string, modelName?: string): string => {
+    const name = modelName?.trim();
+    if (name != null && name.length > 0) {
+      return name;
+    }
+    const labelKey = ENGINE_LABEL_KEYS[engineId];
+    return labelKey == null ? engineId : settingsTranslator({key: labelKey});
+  },
+} as const;

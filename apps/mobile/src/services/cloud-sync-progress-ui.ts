@@ -88,63 +88,65 @@ const PULL_RULES: Record<string, StepRule> = {
 
 const SNAPSHOT_BYTE_THRESHOLD = 64 * 1024;
 
-/** 将内部 progress 事件映射为 UI 状态；未知事件返回 null。 */
-export function mapCloudSyncProgressEvent(op: CloudSyncProgressOp, event: string, detail?: Record<string, unknown>): CloudSyncProgressUiState | null {
-  if (op !== 'push' && op !== 'pull') {
-    return null;
-  }
-
-  const rules = op === 'push' ? PUSH_RULES : PULL_RULES;
-  // 事件 key 归一：`_done` / `_failed` 直通；存储阶段按「大快照 / 快照 key / fromPath」升格成大件档。
-  let key = event;
-  if (!event.endsWith('_done') && !event.endsWith('_failed')) {
-    const bytes = typeof detail?.bytes === 'number' ? detail.bytes : undefined;
-    const isLargeSnapshot = bytes != null && bytes >= SNAPSHOT_BYTE_THRESHOLD;
-    const isSnapshotKey = typeof detail?.key === 'string' && (detail.key.includes('snapshots/') || detail.key.includes('.nmbackup'));
-
-    if (op === 'push') {
-      if ((event === 'storage_put_start' || event === 'storage_put_file_start') && (isLargeSnapshot || isSnapshotKey || detail?.fromPath === true)) {
-        key = event === 'storage_put_file_start' ? 'storage_put_file_start' : 'storage_put_start_large';
-      }
-      if ((event === 'storage_put_done' || event === 'storage_put_file_done') && (isLargeSnapshot || isSnapshotKey || detail?.fromPath === true)) {
-        key = event === 'storage_put_file_done' ? 'storage_put_file_done' : 'storage_put_done_large';
-      }
+export namespace CloudSyncProgressUi {
+  /** 将内部 progress 事件映射为 UI 状态；未知事件返回 null。 */
+  export function mapEvent(op: CloudSyncProgressOp, event: string, detail?: Record<string, unknown>): CloudSyncProgressUiState | null {
+    if (op !== 'push' && op !== 'pull') {
+      return null;
     }
 
-    if (op === 'pull') {
-      if (event === 'storage_get_start' && (isLargeSnapshot || isSnapshotKey)) {
-        key = 'storage_get_start_large';
+    const rules = op === 'push' ? PUSH_RULES : PULL_RULES;
+    // 事件 key 归一：`_done` / `_failed` 直通；存储阶段按「大快照 / 快照 key / fromPath」升格成大件档。
+    let key = event;
+    if (!event.endsWith('_done') && !event.endsWith('_failed')) {
+      const bytes = typeof detail?.bytes === 'number' ? detail.bytes : undefined;
+      const isLargeSnapshot = bytes != null && bytes >= SNAPSHOT_BYTE_THRESHOLD;
+      const isSnapshotKey = typeof detail?.key === 'string' && (detail.key.includes('snapshots/') || detail.key.includes('.nmbackup'));
+
+      if (op === 'push') {
+        if ((event === 'storage_put_start' || event === 'storage_put_file_start') && (isLargeSnapshot || isSnapshotKey || detail?.fromPath === true)) {
+          key = event === 'storage_put_file_start' ? 'storage_put_file_start' : 'storage_put_start_large';
+        }
+        if ((event === 'storage_put_done' || event === 'storage_put_file_done') && (isLargeSnapshot || isSnapshotKey || detail?.fromPath === true)) {
+          key = event === 'storage_put_file_done' ? 'storage_put_file_done' : 'storage_put_done_large';
+        }
       }
-      if (event === 'storage_get_done' && (isLargeSnapshot || isSnapshotKey)) {
-        key = 'storage_get_done_large';
+
+      if (op === 'pull') {
+        if (event === 'storage_get_start' && (isLargeSnapshot || isSnapshotKey)) {
+          key = 'storage_get_start_large';
+        }
+        if (event === 'storage_get_done' && (isLargeSnapshot || isSnapshotKey)) {
+          key = 'storage_get_done_large';
+        }
       }
     }
+    let rule = rules[key];
+
+    if (rule == null && event === `${op}_done`) {
+      rule = rules[`${op}_done`];
+    }
+
+    if (rule == null) {
+      return null;
+    }
+
+    return {
+      op,
+      event,
+      label: rule.label,
+      progress: rule.progress,
+      indeterminate: rule.indeterminate,
+    };
   }
-  let rule = rules[key];
 
-  if (rule == null && event === `${op}_done`) {
-    rule = rules[`${op}_done`];
+  /** 同步开始时的初始 UI 状态 */
+  export function initial(op: 'push' | 'pull'): CloudSyncProgressUiState {
+    return {
+      op,
+      event: 'start',
+      label: op === 'push' ? '准备推送…' : '准备拉取…',
+      progress: 0.02,
+    };
   }
-
-  if (rule == null) {
-    return null;
-  }
-
-  return {
-    op,
-    event,
-    label: rule.label,
-    progress: rule.progress,
-    indeterminate: rule.indeterminate,
-  };
-}
-
-/** 同步开始时的初始 UI 状态 */
-export function initialCloudSyncProgressUi(op: 'push' | 'pull'): CloudSyncProgressUiState {
-  return {
-    op,
-    event: 'start',
-    label: op === 'push' ? '准备推送…' : '准备拉取…',
-    progress: 0.02,
-  };
 }

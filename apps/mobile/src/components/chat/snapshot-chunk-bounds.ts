@@ -33,49 +33,51 @@ type Bounds = Array<readonly [number, number]>;
 type BytesAt = (index: number) => number;
 type Messages = readonly ChatMessageData[];
 
-/**
- * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
- * ——逐条累计源 content JSON 的 UTF-8 真实字节，条数到上限或累计字节超预算
- * 即封桶；单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end)
- * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
- */
-export function planSnapshotChunkBounds(messages: Messages): Bounds {
-  return planChunkBounds(messages.length, index =>
-    Encoding.utf8ByteLength(JSON.stringify(messages[index]!.content)),
-  );
-}
-
-/**
- * 流式行的分片边界（spec §2.2.2）：与 DB 行同一套 50 行 / 256KB 预算，
- * 度量口径为**整行 wire JSON** 的 UTF-8 字节（含 text/thinking/textHtml/tools），
- * 因为流式片就是这些行原样上行。空列表返回空数组（无流式行时不发空片）。
- */
-export function planRowChunkBounds(rows: readonly TranscriptRow[]): Bounds {
-  if (rows.length === 0) {
-    return [];
+export namespace SnapshotChunkBounds {
+  /**
+   * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
+   * ——逐条累计源 content JSON 的 UTF-8 真实字节，条数到上限或累计字节超预算
+   * 即封桶；单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end)
+   * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
+   */
+  export function planSnapshotChunkBounds(messages: Messages): Bounds {
+    return SnapshotChunkBounds.planChunkBounds(messages.length, index =>
+      Encoding.utf8ByteLength(JSON.stringify(messages[index]!.content)),
+    );
   }
-  return planChunkBounds(rows.length, index =>
-    Encoding.utf8ByteLength(JSON.stringify(rows[index])),
-  );
-}
 
-function planChunkBounds(count: number, bytesAt: BytesAt): Bounds {
-  const bounds: Bounds = [];
-  let start = 0;
-  let bytes = 0;
-  for (let i = 0; i < count; i += 1) {
-    const itemBytes = bytesAt(i);
-    const countInBucket = i - start + 1;
-    if (
-      countInBucket > SNAPSHOT_CHUNK_SIZE ||
-      (bytes + itemBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
-    ) {
-      bounds.push([start, i]);
-      start = i;
-      bytes = 0;
+  /**
+   * 流式行的分片边界（spec §2.2.2）：与 DB 行同一套 50 行 / 256KB 预算，
+   * 度量口径为**整行 wire JSON** 的 UTF-8 字节（含 text/thinking/textHtml/tools），
+   * 因为流式片就是这些行原样上行。空列表返回空数组（无流式行时不发空片）。
+   */
+  export function planRowChunkBounds(rows: readonly TranscriptRow[]): Bounds {
+    if (rows.length === 0) {
+      return [];
     }
-    bytes += itemBytes;
+    return SnapshotChunkBounds.planChunkBounds(rows.length, index =>
+      Encoding.utf8ByteLength(JSON.stringify(rows[index])),
+    );
   }
-  bounds.push([start, count]);
-  return bounds;
+
+  function planChunkBounds(count: number, bytesAt: BytesAt): Bounds {
+    const bounds: Bounds = [];
+    let start = 0;
+    let bytes = 0;
+    for (let i = 0; i < count; i += 1) {
+      const itemBytes = bytesAt(i);
+      const countInBucket = i - start + 1;
+      if (
+        countInBucket > SNAPSHOT_CHUNK_SIZE ||
+        (bytes + itemBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
+      ) {
+        bounds.push([start, i]);
+        start = i;
+        bytes = 0;
+      }
+      bytes += itemBytes;
+    }
+    bounds.push([start, count]);
+    return bounds;
+  }
 }

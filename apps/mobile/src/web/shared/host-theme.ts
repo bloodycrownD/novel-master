@@ -5,7 +5,7 @@
  * 变量，缺省不填充默认色，由消费侧 `var(--x, fallback)` 兜底；
  * `--bg` 的 JS 读取链（mermaid-core）另有 `#fff` 兜底。
  */
-import {inferThemeModeFromBg} from './theme-mode';
+import {ThemeMode} from './theme-mode';
 
 /** 宿主下发的主题 token 超集（chat 域含 danger/selection；其余域未消费亦容忍）。 */
 export type HostTheme = {
@@ -54,7 +54,7 @@ const THEME_VARS: Array<{key: keyof HostTheme; cssVar: string}> = [
  * 不再各抄一份。原先三份手抄之间零约束，宿主加第 10 个 token 时三处全不红、
  * 只在某天 `::selection` 那样漏写才由 UI 变色暴露；现在改 `THEME_VARS` 一处即全跟随。
  *
- * 顺序即 `THEME_VARS` 的写入顺序（条件式写入按此表顺序，见 `applyHostTheme`），
+ * 顺序即 `THEME_VARS` 的写入顺序（条件式写入按此表顺序，见 `HostTheme.apply`），
  * 两个消费端的双端同序断言依赖这一点。
  */
 export const HOST_THEME_KEYS: readonly (keyof HostTheme)[] = THEME_VARS.map(entry => entry.key);
@@ -64,20 +64,26 @@ type ApplyHostThemeOptions = {
   extraVars?: Partial<Record<keyof HostTheme, string[]>>;
 };
 
-export function applyHostTheme(theme: HostTheme | null | undefined, opts: ApplyHostThemeOptions = {}): void {
-  if (!theme) return;
-  const root = document.documentElement;
-  for (const {key, cssVar} of THEME_VARS) {
-    const value = theme[key];
-    if (!value) continue;
-    root.style.setProperty(cssVar, value);
-    for (const extra of opts.extraVars?.[key] ?? []) {
-      root.style.setProperty(extra, value);
+/**
+ * type HostTheme 与 namespace 同名（type alias 不能与 namespace 块合并），
+ * 本 namespace 用 const 对象形态共存（值/类型空间分离）。
+ */
+export const HostTheme = {
+  apply(theme: HostTheme | null | undefined, opts: ApplyHostThemeOptions = {}): void {
+    if (!theme) return;
+    const root = document.documentElement;
+    for (const {key, cssVar} of THEME_VARS) {
+      const value = theme[key];
+      if (!value) continue;
+      root.style.setProperty(cssVar, value);
+      for (const extra of opts.extraVars?.[key] ?? []) {
+        root.style.setProperty(extra, value);
+      }
     }
-  }
-  // 代码高亮 token 配色：按背景亮度推断 dark|light（init 与 themeUpdate 都走这里），
-  // token CSS 写两套静态规则（html[data-nm-mode="dark"] 覆盖），不扩展 HostTheme payload
-  if (theme.background) {
-    root.dataset.nmMode = inferThemeModeFromBg(theme.background);
-  }
-}
+    // 代码高亮 token 配色：按背景亮度推断 dark|light（init 与 themeUpdate 都走这里），
+    // token CSS 写两套静态规则（html[data-nm-mode="dark"] 覆盖），不扩展 HostTheme payload
+    if (theme.background) {
+      root.dataset.nmMode = ThemeMode.inferFromBg(theme.background);
+    }
+  },
+} as const;

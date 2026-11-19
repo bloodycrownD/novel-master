@@ -13,51 +13,53 @@ import type {AppError} from '@novel-master/core/errors';
 import type {AppUiPreferences} from './app-ui-prefs';
 import type {UpdateCheckData} from '@novel-master/core/common';
 
-export async function readDismissedVersion(appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> {
-  return appUi.get(APP_UI_KEY_UPDATES_DISMISSED_VERSION);
-}
-
-export async function writeDismissedVersion(appUi: AppUiPreferences, version: string): Promise<void> {
-  await appUi.set(APP_UI_KEY_UPDATES_DISMISSED_VERSION, version);
-}
-
-export async function readLastCheckStatus(appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> {
-  return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS);
-}
-
-export async function readLastCheckRemoteVersion(appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> {
-  return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION);
-}
-
 /** 24h snooze window after user taps「今日不再提醒」. */
 const UPDATE_SNOOZE_MS = 24 * 60 * 60 * 1000;
 
-/** Returns true when snoozeUntil is in the future. */
-export function isSnoozed(snoozeUntil: string | undefined): boolean {
-  if (!snoozeUntil) return false;
-  const until = Date.parse(snoozeUntil);
-  if (!Number.isFinite(until)) return false;
-  return Date.now() < until;
-}
+export const UpdatePrefs = {
+  readDismissedVersion: async (appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> => {
+    return appUi.get(APP_UI_KEY_UPDATES_DISMISSED_VERSION);
+  },
 
-export async function readSnoozeUntil(appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> {
-  return appUi.get(APP_UI_KEY_UPDATES_SNOOZE_UNTIL);
-}
+  writeDismissedVersion: async (appUi: AppUiPreferences, version: string): Promise<void> => {
+    await appUi.set(APP_UI_KEY_UPDATES_DISMISSED_VERSION, version);
+  },
 
-export async function writeSnoozeUntil(appUi: AppUiPreferences): Promise<void> {
-  const until = new Date(Date.now() + UPDATE_SNOOZE_MS).toISOString();
-  await appUi.set(APP_UI_KEY_UPDATES_SNOOZE_UNTIL, until);
-}
+  readLastCheckStatus: async (appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> => {
+    return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS);
+  },
 
-/** Persists successful check metadata (updates lastCheckAt for About page). */
-export async function persistUpdateCheckResult(appUi: AppUiPreferences, data: UpdateCheckData): Promise<void> {
-  const now = new Date().toISOString();
-  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_AT, now);
-  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION, data.remoteVersion);
-  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS, data.status === 'update-available' ? 'available' : 'up-to-date');
-}
+  readLastCheckRemoteVersion: async (appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> => {
+    return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION);
+  },
 
-/** Persists failed check status (lastCheckAt unchanged). */
-export async function persistFailedUpdateCheck(appUi: AppUiPreferences): Promise<void> {
-  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS, 'error');
-}
+  /** Returns true when snoozeUntil is in the future. */
+  isSnoozed: (snoozeUntil: string | undefined): boolean => {
+    if (!snoozeUntil) return false;
+    const until = Date.parse(snoozeUntil);
+    if (!Number.isFinite(until)) return false;
+    return Date.now() < until;
+  },
+
+  readSnoozeUntil: async (appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> => {
+    return appUi.get(APP_UI_KEY_UPDATES_SNOOZE_UNTIL);
+  },
+
+  writeSnoozeUntil: async (appUi: AppUiPreferences): Promise<void> => {
+    const until = new Date(Date.now() + UPDATE_SNOOZE_MS).toISOString();
+    await appUi.set(APP_UI_KEY_UPDATES_SNOOZE_UNTIL, until);
+  },
+
+  /** Persists successful check metadata (updates lastCheckAt for About page). */
+  persistUpdateCheckResult: async (appUi: AppUiPreferences, data: UpdateCheckData): Promise<void> => {
+    const now = new Date().toISOString();
+    await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_AT, now);
+    await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION, data.remoteVersion);
+    await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS, data.status === 'update-available' ? 'available' : 'up-to-date');
+  },
+
+  /** Persists failed check status (lastCheckAt unchanged). */
+  persistFailedUpdateCheck: async (appUi: AppUiPreferences): Promise<void> => {
+    await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS, 'error');
+  },
+} as const;

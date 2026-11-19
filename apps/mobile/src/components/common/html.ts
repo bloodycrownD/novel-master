@@ -6,6 +6,8 @@
  * （build-webview.mjs 门 B，`composer-input` 白名单为空）要求零 core 模块，
  * 故本文件必须保持 core-free，不能改成薄再导出。改这里时同步 `Text.escapeHtml`。
  */
-export function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export namespace Html {
+  export function escape(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
 }

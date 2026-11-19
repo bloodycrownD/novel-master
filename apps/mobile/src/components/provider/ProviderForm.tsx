@@ -44,93 +44,97 @@ type Props = {
   onSubmit: (values: ProviderFormValues) => Promise<void>;
 };
 
-function parseHeadersJson(raw: string): Record<string, string> | undefined {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Headers 必须是 JSON 对象');
-  }
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof value !== 'string') {
-      throw new Error(`Header ${key} 必须是字符串`);
+// 偏离登记：文件名 ProviderForm 与组件同名，tsx helper namespace 不得撞组件名，
+// 按内容主体（provider 表单值 ↔ wire 转换）起名 ProviderFormMapper。
+export namespace ProviderFormMapper {
+  function parseHeadersJson(raw: string): Record<string, string> | undefined {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return undefined;
     }
-    out[key] = value;
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Headers 必须是 JSON 对象');
+    }
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value !== 'string') {
+        throw new Error(`Header ${key} 必须是字符串`);
+      }
+      out[key] = value;
+    }
+    return out;
   }
-  return out;
-}
 
-/**
- * 自定义参数：必须是 JSON 对象，值任意 JSON（boolean/number/嵌套对象均可）。
- * 空文本返回显式空对象（保存即可清空，区别于 headers 的「空文本不修改」）。
- */
-export function parseBodyParamsJson(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return {};
+  /**
+   * 自定义参数：必须是 JSON 对象，值任意 JSON（boolean/number/嵌套对象均可）。
+   * 空文本返回显式空对象（保存即可清空，区别于 headers 的「空文本不修改」）。
+   */
+  export function parseBodyParamsJson(raw: string): Record<string, unknown> {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return {};
+    }
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('自定义参数必须是 JSON 对象');
+    }
+    return parsed as Record<string, unknown>;
   }
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('自定义参数必须是 JSON 对象');
-  }
-  return parsed as Record<string, unknown>;
-}
 
-export function providerFormToCreateInput(values: ProviderFormValues) {
-  const displayName = values.displayName.trim();
-  const baseUrl = values.baseUrl.trim();
-  const apiKey = values.apiKey.trim();
-  if (!displayName || !baseUrl) {
-    throw new Error('请填写服务商名称与 baseUrl');
+  export function toCreateInput(values: ProviderFormValues) {
+    const displayName = values.displayName.trim();
+    const baseUrl = values.baseUrl.trim();
+    const apiKey = values.apiKey.trim();
+    if (!displayName || !baseUrl) {
+      throw new Error('请填写服务商名称与 baseUrl');
+    }
+    if (!apiKey) {
+      throw new Error('请填写 API Key');
+    }
+    return {
+      protocol: values.protocol,
+      baseUrl,
+      displayName,
+      apiKey,
+      headers: ProviderFormMapper.parseHeadersJson(values.headersJson),
+      bodyParams: ProviderFormMapper.parseBodyParamsJson(values.bodyParamsJson),
+    };
   }
-  if (!apiKey) {
-    throw new Error('请填写 API Key');
-  }
-  return {
-    protocol: values.protocol,
-    baseUrl,
-    displayName,
-    apiKey,
-    headers: parseHeadersJson(values.headersJson),
-    bodyParams: parseBodyParamsJson(values.bodyParamsJson),
-  };
-}
 
-export function providerFormToEditPatch(values: ProviderFormValues) {
-  const patch: {
-    protocol?: LlmProtocolKind;
-    baseUrl?: string;
-    displayName?: string;
-    apiKey?: string;
-    headers?: Record<string, string>;
-    bodyParams?: Record<string, unknown>;
-  } = {};
-  const displayName = values.displayName.trim();
-  if (displayName) {
-    patch.displayName = displayName;
+  export function toEditPatch(values: ProviderFormValues) {
+    const patch: {
+      protocol?: LlmProtocolKind;
+      baseUrl?: string;
+      displayName?: string;
+      apiKey?: string;
+      headers?: Record<string, string>;
+      bodyParams?: Record<string, unknown>;
+    } = {};
+    const displayName = values.displayName.trim();
+    if (displayName) {
+      patch.displayName = displayName;
+    }
+    const baseUrl = values.baseUrl.trim();
+    if (baseUrl) {
+      patch.baseUrl = baseUrl;
+    }
+    const apiKey = values.apiKey.trim();
+    if (apiKey) {
+      patch.apiKey = apiKey;
+    }
+    const headers = ProviderFormMapper.parseHeadersJson(values.headersJson);
+    if (headers) {
+      patch.headers = headers;
+    }
+    // 自定义参数始终显式提交：空文本 → {}（清空），非空 → 解析对象；
+    // 非法输入由 parseBodyParamsJson 抛中文错误阻断保存。
+    patch.bodyParams = ProviderFormMapper.parseBodyParamsJson(values.bodyParamsJson);
+    if (Object.keys(patch).length === 0) {
+      throw new Error('请至少修改一项');
+    }
+    return patch;
   }
-  const baseUrl = values.baseUrl.trim();
-  if (baseUrl) {
-    patch.baseUrl = baseUrl;
-  }
-  const apiKey = values.apiKey.trim();
-  if (apiKey) {
-    patch.apiKey = apiKey;
-  }
-  const headers = parseHeadersJson(values.headersJson);
-  if (headers) {
-    patch.headers = headers;
-  }
-  // 自定义参数始终显式提交：空文本 → {}（清空），非空 → 解析对象；
-  // 非法输入由 parseBodyParamsJson 抛中文错误阻断保存。
-  patch.bodyParams = parseBodyParamsJson(values.bodyParamsJson);
-  if (Object.keys(patch).length === 0) {
-    throw new Error('请至少修改一项');
-  }
-  return patch;
 }
 
 export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, saving = false, onSubmit}: Props) {

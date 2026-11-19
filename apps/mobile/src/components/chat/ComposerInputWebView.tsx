@@ -70,32 +70,37 @@ export type ComposerInputWebViewHandle = {
   blur: () => void;
 };
 
-/** 主题组装：全量宿主主题（`hostThemeFromTokens`）取 composer 子集（胶囊 = primary 字 + primaryMuted 底）。 */
-export function themeFromTokens(tokens: ThemeTokens): ComposerInputTheme {
-  const {background, text, textSecondary, primary, primaryMuted, selection} = hostThemeFromTokens(tokens);
-  return {background, text, textSecondary, primary, primaryMuted, selection};
-}
+// 偏离登记：文件名 ComposerInputWebView 与组件同名，tsx helper namespace 不得撞组件名，
+// 按任务提示用主题主体名 ComposerInputTheme（与同名 type 值/类型空间分离共存）；
+// toNativeSelectionEvent 语义上属选区事件包装，随文件级 namespace 收容。
+export namespace ComposerInputTheme {
+  /** 主题组装：全量宿主主题（`hostThemeFromTokens`）取 composer 子集（胶囊 = primary 字 + primaryMuted 底）。 */
+  export function fromTokens(tokens: ThemeTokens): ComposerInputTheme {
+    const {background, text, textSecondary, primary, primaryMuted, selection} = hostThemeFromTokens(tokens);
+    return {background, text, textSecondary, primary, primaryMuted, selection};
+  }
 
-/**
- * web 上报的选区 → RN 事件形状（`nativeEvent.selection`，ChatComposer 的 setCursor 链）。
- *
- * `TextInputSelectionChangeEventData` 的 target 等字段为 TextInput 专属，RN 侧两壳
- * 只消费 `nativeEvent.selection`，这里按 main 版口径整体断言类型。
- */
-export function toNativeSelectionEvent(selection: ComposerInputSelection): NativeSyntheticEvent<TextInputSelectionChangeEventData> {
-  return {
-    nativeEvent: {
-      selection: {start: selection.start, end: selection.end},
-    },
-  } as NativeSyntheticEvent<TextInputSelectionChangeEventData>;
-}
+  /**
+   * web 上报的选区 → RN 事件形状（`nativeEvent.selection`，ChatComposer 的 setCursor 链）。
+   *
+   * `TextInputSelectionChangeEventData` 的 target 等字段为 TextInput 专属，RN 侧两壳
+   * 只消费 `nativeEvent.selection`，这里按 main 版口径整体断言类型。
+   */
+  export function toNativeSelectionEvent(selection: ComposerInputSelection): NativeSyntheticEvent<TextInputSelectionChangeEventData> {
+    return {
+      nativeEvent: {
+        selection: {start: selection.start, end: selection.end},
+      },
+    } as NativeSyntheticEvent<TextInputSelectionChangeEventData>;
+  }
 
-function finiteOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
+  function finiteOrNull(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
 
-function sameSelection(a: ComposerInputSelection | null, b: ComposerInputSelection | null): boolean {
-  return a != null && b != null && a.start === b.start && a.end === b.end;
+  function sameSelection(a: ComposerInputSelection | null, b: ComposerInputSelection | null): boolean {
+    return a != null && b != null && a.start === b.start && a.end === b.end;
+  }
 }
 
 export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, ComposerInputWebViewProps>(function ComposerInputWebView(props, ref) {
@@ -134,7 +139,7 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
   onChangeTextRef.current = onChangeText;
   onSelectionChangeRef.current = onSelectionChange;
 
-  const resolvedTheme = useMemo(() => theme ?? themeFromTokens(tokens), [theme, tokens]);
+  const resolvedTheme = useMemo(() => theme ?? ComposerInputTheme.fromTokens(tokens), [theme, tokens]);
 
   /** init 是 ready 后一次性快照：取当拍值（此后变化各有专线消息）。 */
   const initSnapshotRef = useRef({
@@ -195,15 +200,15 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
       }
       if (message.type === 'selectionChange') {
         const next = {
-          start: finiteOrNull(message.payload.start) ?? 0,
-          end: finiteOrNull(message.payload.end) ?? 0,
+          start: ComposerInputTheme.finiteOrNull(message.payload.start) ?? 0,
+          end: ComposerInputTheme.finiteOrNull(message.payload.end) ?? 0,
         };
         lastSelectionRef.current = next;
         onSelectionChangeRef.current?.(next);
         return;
       }
       if (message.type === 'heightChange') {
-        const height = finiteOrNull(message.payload.height);
+        const height = ComposerInputTheme.finiteOrNull(message.payload.height);
         if (height != null) {
           applyHeight(height);
         }
@@ -281,7 +286,7 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
     if (!webReady || selection == null) {
       return;
     }
-    if (sameSelection(lastSelectionRef.current, selection)) {
+    if (ComposerInputTheme.sameSelection(lastSelectionRef.current, selection)) {
       return;
     }
     const next = {start: selection.start, end: selection.end};

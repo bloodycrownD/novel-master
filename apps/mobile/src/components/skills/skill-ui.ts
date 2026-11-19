@@ -12,15 +12,17 @@ import type {SkillDomain} from '@novel-master/core/skills';
 //    用正则锁死了它的精确形态，合并成 `export {a, b} from ...` 会把那条测试打红。
 export {SkillFrontMatterValues} from '@novel-master/core/skills';
 
-/** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
-export function skillDomainBadgeLabel(domain: SkillDomain, overridden: boolean): string {
-  if (domain === 'global') {
-    return '全局';
+export namespace SkillUi {
+  /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
+  export function domainBadgeLabel(domain: SkillDomain, overridden: boolean): string {
+    if (domain === 'global') {
+      return '全局';
+    }
+    return overridden ? '项目 · 覆盖全局' : '项目';
   }
-  return overridden ? '项目 · 覆盖全局' : '项目';
-}
 
-/** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */
-export function skillDomainBadgeColor(domain: SkillDomain, tokens: {primary: string; textSecondary: string}): string {
-  return domain === 'global' ? tokens.textSecondary : tokens.primary;
+  /** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */
+  export function domainBadgeColor(domain: SkillDomain, tokens: {primary: string; textSecondary: string}): string {
+    return domain === 'global' ? tokens.textSecondary : tokens.primary;
+  }
 }

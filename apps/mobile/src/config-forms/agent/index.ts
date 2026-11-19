@@ -1,7 +1,7 @@
 export * from "./agent-editor-state";
 export * from "./agent-tool-catalog";
 export {
-  agentModeMatchesTab,
+  AgentModeTab,
   type AgentSettingsTab,
 } from "./agent-mode-tab";
-export { allocateAgentDisplayName } from "./allocate-agent-display-name";
+export { AllocateAgentDisplayName } from "./allocate-agent-display-name";

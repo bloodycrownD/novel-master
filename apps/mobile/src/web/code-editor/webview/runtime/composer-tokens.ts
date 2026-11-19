@@ -52,7 +52,9 @@ export const composerTokenHighlight = ViewPlugin.fromClass(ComposerTokenHighligh
   provide: plugin => EditorView.atomicRanges.of(view => view.plugin(plugin)?.decorations ?? Decoration.none),
 });
 
-/** 路径是否挂 composer-token 胶囊扩展（伪路径判定）。 */
-export function composerTokenEnabled(path: string): boolean {
-  return path === COMPOSER_TOKEN_PATH;
+export namespace ComposerTokens {
+  /** 路径是否挂 composer-token 胶囊扩展（伪路径判定）。 */
+  export function enabled(path: string): boolean {
+    return path === COMPOSER_TOKEN_PATH;
+  }
 }

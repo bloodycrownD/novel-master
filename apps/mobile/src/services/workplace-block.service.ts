@@ -11,12 +11,14 @@ interface SessionWorkplaceBlockScope {
   readonly sessionId: string;
 }
 
-/**
- * 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。
- * 不必清 annotate store。
- */
-export async function clearSessionWorkplaceKkv(runtime: MobileNovelMasterRuntime, scope: SessionWorkplaceBlockScope) {
-  await runtime.sessionKkv.clearSession(scope.sessionId);
-  await refreshComposerStatusAfterSessionKkvCleared(scope);
-  return {workplaceDisplay: '', capturedAtMs: Date.now()};
+export namespace WorkplaceBlockService {
+  /**
+   * 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。
+   * 不必清 annotate store。
+   */
+  export async function clearSessionKkv(runtime: MobileNovelMasterRuntime, scope: SessionWorkplaceBlockScope) {
+    await runtime.sessionKkv.clearSession(scope.sessionId);
+    await refreshComposerStatusAfterSessionKkvCleared(scope);
+    return {workplaceDisplay: '', capturedAtMs: Date.now()};
+  }
 }

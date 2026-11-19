@@ -23,7 +23,7 @@
  * 消费方仅剩 `ChatTabProvider`（读一次、值丢弃）。
  */
 import {APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE} from './app-ui-keys';
-import {readEnumPref} from './app-ui-pref-io';
+import {AppUiPrefIo} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
 
 /**
@@ -35,18 +35,20 @@ type ChatTranscriptEngine = 'legacy-rn' | 'webview';
 const DEFAULT_ENGINE: ChatTranscriptEngine = 'webview';
 const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = ['legacy-rn', 'webview'];
 
-/** 恒为 `webview`（引擎开关已退役，见文件头）。 */
-export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
-  return DEFAULT_ENGINE;
-}
+export const ChatTranscriptEngine = {
+  /** 恒为 `webview`（引擎开关已退役，见文件头）。 */
+  default: (): ChatTranscriptEngine => {
+    return DEFAULT_ENGINE;
+  },
 
-/**
- * 读一次引擎键、**丢弃读到的值**，恒返回 `webview`。
- *
- * 保留读动作是为了让这个键有个显式消费点（理由见文件头），返回值不带任何
- * 分支语义——调用方拿到的永远是 `DEFAULT_ENGINE`。
- */
-export async function readChatTranscriptEngine(appUi: AppUiPreferences | null | undefined): Promise<ChatTranscriptEngine> {
-  await readEnumPref(appUi, APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
-  return DEFAULT_ENGINE;
-}
+  /**
+   * 读一次引擎键、**丢弃读到的值**，恒返回 `webview`。
+   *
+   * 保留读动作是为了让这个键有个显式消费点（理由见文件头），返回值不带任何
+   * 分支语义——调用方拿到的永远是 `DEFAULT_ENGINE`。
+   */
+  read: async (appUi: AppUiPreferences | null | undefined): Promise<ChatTranscriptEngine> => {
+    await AppUiPrefIo.readEnumPref(appUi, APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
+    return DEFAULT_ENGINE;
+  },
+} as const;

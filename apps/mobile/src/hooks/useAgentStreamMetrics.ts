@@ -33,14 +33,16 @@ export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
   readonly tokensPerSecond: number | null;
 };
 
-/** 快照 → 展示 View（冻结态不喂速率，tokensPerSecond 缺省 null）。 */
-export function toAgentStreamMetricsView(running: boolean, snap: AgentStreamMetricsSnapshot, tokensPerSecond: number | null = null): AgentStreamMetricsView {
-  return {...snap, running, tokensPerSecond};
-}
+export namespace AgentStreamMetrics {
+  /** 快照 → 展示 View（冻结态不喂速率，tokensPerSecond 缺省 null）。 */
+  export function toView(running: boolean, snap: AgentStreamMetricsSnapshot, tokensPerSecond: number | null = null): AgentStreamMetricsView {
+    return {...snap, running, tokensPerSecond};
+  }
 
-/** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
-// nm-style: keep-public — use-agent-stream-metrics.test.ts / session-stream-unit-final-rate.test.ts 直接 import 断言 T-M8 文案快照，测试锁名
-export function buildChatStreamMetricsLine(metrics: AgentStreamMetricsView): string {
-  const parts = StreamMetricsLine.build(metrics);
-  return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
+  /** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
+  // nm-style: keep-public — use-agent-stream-metrics.test.ts / session-stream-unit-final-rate.test.ts 直接 import 断言 T-M8 文案快照，测试锁名
+  export function buildChatLine(metrics: AgentStreamMetricsView): string {
+    const parts = StreamMetricsLine.build(metrics);
+    return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
+  }
 }

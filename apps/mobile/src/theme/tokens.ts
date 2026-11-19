@@ -73,6 +73,8 @@ const darkTheme: ThemeTokens = {
   danger: '#FF453A',
 };
 
-export function tokensForMode(mode: ThemeMode): ThemeTokens {
-  return mode === 'dark' ? darkTheme : lightTheme;
+export namespace Tokens {
+  export function forMode(mode: ThemeMode): ThemeTokens {
+    return mode === 'dark' ? darkTheme : lightTheme;
+  }
 }

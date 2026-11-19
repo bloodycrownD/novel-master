@@ -1,7 +1,7 @@
 import {HighlightStyle, syntaxHighlighting} from '@codemirror/language';
 import {tags as t} from '@lezer/highlight';
 import {EditorView} from '@codemirror/view';
-import {applyHostTheme, type HostTheme} from '@web/shared/host-theme';
+import {HostTheme} from '@web/shared/host-theme';
 
 /** Theme via CSS variables set from RN tokens. */
 const editorThemeSpec = {
@@ -78,12 +78,14 @@ export const editorSyntaxHighlighting = syntaxHighlighting(highlightStyle, {
  * 的 primaryMuted 字段条件式写入，本文件不再自拼 `primary + '22'`——自算会让
  * code-editor 与 composer-input 两条链的派生口径分裂（一边宿主拼、一边 web 拼）。
  */
-export function applyTheme(theme: HostTheme | null | undefined): void {
-  applyHostTheme(theme, {
-    extraVars: {
-      background: ['--editor-bg'],
-      surface: ['--editor-gutter-bg'],
-      borderLight: ['--editor-gutter-border'],
-    },
-  });
+export namespace Theme {
+  export function apply(theme: HostTheme | null | undefined): void {
+    HostTheme.apply(theme, {
+      extraVars: {
+        background: ['--editor-bg'],
+        surface: ['--editor-gutter-bg'],
+        borderLight: ['--editor-gutter-border'],
+      },
+    });
+  }
 }

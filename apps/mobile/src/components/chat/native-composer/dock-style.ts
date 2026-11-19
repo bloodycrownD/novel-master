@@ -93,8 +93,10 @@ export const DOCK_PADDING_BASE = 8;
  * 布尔翻转派生，纪律 B）——RN 侧与 web 不同，不必担心「键盘高度不进视口」
  * 的自判问题，但传参形态保持与 composerState.keyboardUp 同源。
  */
-export function resolveDockBottomPadding(keyboardUp: boolean, safeAreaBottom: number, base: number = DOCK_PADDING_BASE): number {
-  return keyboardUp ? 0 : Math.max(base, safeAreaBottom);
+export namespace DockStyle {
+  export function resolveDockBottomPadding(keyboardUp: boolean, safeAreaBottom: number, base: number = DOCK_PADDING_BASE): number {
+    return keyboardUp ? 0 : Math.max(base, safeAreaBottom);
+  }
 }
 
 /**

@@ -10,7 +10,7 @@
  *   表，避免同进程建两份）：构造要解析全量 ranks（实测 cl100k_base 约
  *   180–250ms、o200k_base 约 420ms），不能每次 run 重建；也**不在模块顶层
  *   构造**（RN 依赖 `fast-text-encoding` polyfill 先执行）。构造时机＝**会话
- *   切换时空闲预热**（`primeStreamTokenModelHint` 的 `.then` 回调里
+ *   切换时空闲预热**（`primeModelHint` 的 `.then` 回调里
  *   `setTimeout(..., 0)`），未就绪时在 `begin()`（run 起手）同步兜底；
  * - 构造 / encode 失败一律返回 null → 调用方回退启发式；估算器内部对 encode
  *   抛错也已吞掉（保持上一次读值），这里只是把「整张编码表都建不起来」的
@@ -26,7 +26,7 @@
  *   （`tokenSource` 仍是 `'heuristic'`，联合类型与 DB 列语义不动）；
  * - 读取会话/模型是异步仓储，而单元创建是同步的：解析结果落**会话级提示
  *   缓存**（带 10 分钟 TTL，换模型后不沿用旧编码），装配方在会话切换时
- *   预热（`primeStreamTokenModelHint`），首个 run 起手基本已就绪；没赶上
+ *   预热（`primeModelHint`），首个 run 起手基本已就绪；没赶上
  *   就按 cl100k 兜底，usage 真值到达后仍会重锚基线。
  *
  * @module services/stream-token-estimator
@@ -54,7 +54,7 @@ const VENDOR_MODEL_HINT_CACHE_MAX = 32;
 /**
  * 提示条目存活时长：用户可能在会话内换模型（模型选择器改的是会话配置），
  * 过期的提示会让人换模型后继续按旧编码估算、偏差静默发生。过期判定与
- * 淘汰都收在读口一处（见 `readVendorModelHint`），prime 不重复判时钟。
+ * 淘汰都收在读口一处（见 `createForSession`），prime 不重复判时钟。
  */
 const VENDOR_MODEL_HINT_TTL_MS = 10 * 60_000;
 const vendorModelHintBySession = new Map<string, {readonly vendorModelId: string | null; readonly atMs: number}>();
@@ -80,150 +80,152 @@ export interface StreamTokenModelHintRuntime {
   };
 }
 
-/**
- * vendorModelId → 编码名（best-effort，解析不出/非 tiktoken 家族落 cl100k）。
- *
- * 顺序：先直接问 js-tiktoken（能命中 `gpt-4o` / `gpt-5` 这类标准 id 及其
- * 快照名），再按 core 的家族表走 vendor 前缀映射（`openai/gpt-4o`、
- * `gpt-4.1-mini` 等子串形态）。两次都问不出 → cl100k。
- */
-export function resolveStreamTokenEncodingName(vendorModelId: string | null | undefined): StreamTokenEncodingName {
-  const id = (vendorModelId ?? '').trim();
-  if (id.length === 0) {
+export namespace StreamTokenEstimator {
+  /**
+   * vendorModelId → 编码名（best-effort，解析不出/非 tiktoken 家族落 cl100k）。
+   *
+   * 顺序：先直接问 js-tiktoken（能命中 `gpt-4o` / `gpt-5` 这类标准 id 及其
+   * 快照名），再按 core 的家族表走 vendor 前缀映射（`openai/gpt-4o`、
+   * `gpt-4.1-mini` 等子串形态）。两次都问不出 → cl100k。
+   */
+  export function resolveEncodingName(vendorModelId: string | null | undefined): StreamTokenEncodingName {
+    const id = (vendorModelId ?? '').trim();
+    if (id.length === 0) {
+      return 'cl100k_base';
+    }
+    const asO200k = (model: string): StreamTokenEncodingName | null => {
+      try {
+        // getEncodingNameForModel 的入参类型是字面量模型名联合，vendor 侧是任意
+        // 字符串（未知模型会抛错）——按 unknown 传入、异常兜底。
+        return getEncodingNameForModel(model as never) === 'o200k_base' ? 'o200k_base' : 'cl100k_base';
+      } catch {
+        return null;
+      }
+    };
+    const direct = asO200k(id);
+    if (direct != null) {
+      return direct;
+    }
+    if (TokenizerFamilyResolver.resolve(id, 'auto') === 'tiktoken') {
+      const mapped = asO200k(TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(id));
+      if (mapped != null) {
+        return mapped;
+      }
+    }
     return 'cl100k_base';
   }
-  const asO200k = (model: string): StreamTokenEncodingName | null => {
+
+  /**
+   * 建一条实时 token 估算器（尾窗增量计数）；编码表不可用时返回 null，
+   * 调用方（SessionStreamUnit）回退启发式。
+   */
+  // nm-style: keep-public — stream-token-estimator.test.ts 直接 import 多用例断言（null 回退/计数口径），测试锁名
+  export function create(options?: {readonly vendorModelId?: string | null | undefined}): IncrementalTokenCounter | null {
+    const encodingName = resolveEncodingName(options?.vendorModelId ?? null);
+    const encoding = getRnEncoding(encodingName);
+    if (encoding == null) {
+      return null;
+    }
+    return IncrementalTokenCounter.create({
+      encode: text => encoding.encode(text).length,
+    });
+  }
+
+  /** 解析会话的 vendor model id（失败/缺配置 → null，不抛）。 */
+  // nm-style: keep-public — stream-token-estimator.test.ts 直接 import 断言，测试锁名
+  export async function resolveVendorModelId(runtime: StreamTokenModelHintRuntime, sessionId: string): Promise<string | null> {
     try {
-      // getEncodingNameForModel 的入参类型是字面量模型名联合，vendor 侧是任意
-      // 字符串（未知模型会抛错）——按 unknown 传入、异常兜底。
-      return getEncodingNameForModel(model as never) === 'o200k_base' ? 'o200k_base' : 'cl100k_base';
+      const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
+      // 失败 → null（错误通道迁移四期：与旧 catch 同款兜底，不抛）。
+      if (!sessionConfig.ok) {
+        return null;
+      }
+      let savedModelId = sessionConfig.value.modelId;
+      if (savedModelId == null || savedModelId.length === 0) {
+        const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
+        // registry 读失败（已知失败）与旧 catch 同款兜底：回落 modelId 缺省路径。
+        savedModelId = definition.ok ? definition.value.model : undefined;
+      }
+      if (savedModelId == null || savedModelId.length === 0) {
+        return null;
+      }
+      const saved = await runtime.providerModels.getSavedById(savedModelId);
+      // 读失败（已知失败）与旧 catch 同款兜底：null 缺省路径（错误通道迁移四期，
+      // 同上方 sessionConfig / definition 两处口径，不解包上抛）。
+      if (!saved.ok) return null;
+      const vendorModelId = saved.value?.vendorModelId;
+      return vendorModelId != null && vendorModelId.length > 0 ? vendorModelId : null;
     } catch {
       return null;
     }
-  };
-  const direct = asO200k(id);
-  if (direct != null) {
-    return direct;
   }
-  if (TokenizerFamilyResolver.resolve(id, 'auto') === 'tiktoken') {
-    const mapped = asO200k(TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(id));
-    if (mapped != null) {
-      return mapped;
-    }
-  }
-  return 'cl100k_base';
-}
 
-/**
- * 建一条实时 token 估算器（尾窗增量计数）；编码表不可用时返回 null，
- * 调用方（SessionStreamUnit）回退启发式。
- */
-// nm-style: keep-public — stream-token-estimator.test.ts 直接 import 多用例断言（null 回退/计数口径），测试锁名
-export function createStreamTokenEstimator(options?: {readonly vendorModelId?: string | null | undefined}): IncrementalTokenCounter | null {
-  const encodingName = resolveStreamTokenEncodingName(options?.vendorModelId ?? null);
-  const encoding = getRnEncoding(encodingName);
-  if (encoding == null) {
-    return null;
-  }
-  return IncrementalTokenCounter.create({
-    encode: text => encoding.encode(text).length,
-  });
-}
-
-/** 解析会话的 vendor model id（失败/缺配置 → null，不抛）。 */
-// nm-style: keep-public — stream-token-estimator.test.ts 直接 import 断言，测试锁名
-export async function resolveStreamTokenVendorModelId(runtime: StreamTokenModelHintRuntime, sessionId: string): Promise<string | null> {
-  try {
-    const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
-    // 失败 → null（错误通道迁移四期：与旧 catch 同款兜底，不抛）。
-    if (!sessionConfig.ok) {
-      return null;
+  /**
+   * 预热会话的 vendor model id 提示（装配方在会话切换时调用；幂等、在途去重）。
+   * 结果落会话级缓存，供该会话的 run 创建估算器时同步取用；解析落地后顺带
+   * 空闲预热两张编码表（见 `.then` 回调内注释）。
+   */
+  export function primeModelHint(runtime: StreamTokenModelHintRuntime, sessionId: string): void {
+    if (vendorModelHintBySession.has(sessionId) || vendorModelHintInFlight.has(sessionId)) {
+      return;
     }
-    let savedModelId = sessionConfig.value.modelId;
-    if (savedModelId == null || savedModelId.length === 0) {
-      const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
-      // registry 读失败（已知失败）与旧 catch 同款兜底：回落 modelId 缺省路径。
-      savedModelId = definition.ok ? definition.value.model : undefined;
-    }
-    if (savedModelId == null || savedModelId.length === 0) {
-      return null;
-    }
-    const saved = await runtime.providerModels.getSavedById(savedModelId);
-    // 读失败（已知失败）与旧 catch 同款兜底：null 缺省路径（错误通道迁移四期，
-    // 同上方 sessionConfig / definition 两处口径，不解包上抛）。
-    if (!saved.ok) return null;
-    const vendorModelId = saved.value?.vendorModelId;
-    return vendorModelId != null && vendorModelId.length > 0 ? vendorModelId : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 预热会话的 vendor model id 提示（装配方在会话切换时调用；幂等、在途去重）。
- * 结果落会话级缓存，供该会话的 run 创建估算器时同步取用；解析落地后顺带
- * 空闲预热两张编码表（见 `.then` 回调内注释）。
- */
-export function primeStreamTokenModelHint(runtime: StreamTokenModelHintRuntime, sessionId: string): void {
-  if (vendorModelHintBySession.has(sessionId) || vendorModelHintInFlight.has(sessionId)) {
-    return;
-  }
-  vendorModelHintInFlight.add(sessionId);
-  void resolveStreamTokenVendorModelId(runtime, sessionId)
-    .then(vendorModelId => {
-      if (vendorModelHintBySession.size >= VENDOR_MODEL_HINT_CACHE_MAX) {
-        // 简单 FIFO 淘汰：提示只是「首轮少猜一次编码」，丢旧无害。
-        const oldest = vendorModelHintBySession.keys().next().value;
-        if (oldest != null) {
-          vendorModelHintBySession.delete(oldest);
+    vendorModelHintInFlight.add(sessionId);
+    void resolveVendorModelId(runtime, sessionId)
+      .then(vendorModelId => {
+        if (vendorModelHintBySession.size >= VENDOR_MODEL_HINT_CACHE_MAX) {
+          // 简单 FIFO 淘汰：提示只是「首轮少猜一次编码」，丢旧无害。
+          const oldest = vendorModelHintBySession.keys().next().value;
+          if (oldest != null) {
+            vendorModelHintBySession.delete(oldest);
+          }
         }
-      }
-      vendorModelHintBySession.set(sessionId, {
-        vendorModelId,
-        atMs: Date.now(),
+        vendorModelHintBySession.set(sessionId, {
+          vendorModelId,
+          atMs: Date.now(),
+        });
+        // 空闲预热编码表：把 180–420ms 的构造从「点发送」搬到「切会话之后的
+        // 下一个宏任务」，`begin()` 那边多半已是命中缓存。**两张都要热**——
+        // 解析出的那张给赶上了提示的首 run，`cl100k_base` 兜底那张给「提示
+        // 没赶上」的首 run（此时 `begin()` 会按 cl100k 起算并同步构造，不热就
+        // 白付一次）。`setTimeout(..., 0)` 只是挪到下一个宏任务，不等于不卡。
+        setTimeout(() => {
+          getRnEncoding(resolveEncodingName(vendorModelId));
+          getRnEncoding('cl100k_base');
+        }, 0);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        vendorModelHintInFlight.delete(sessionId);
       });
-      // 空闲预热编码表：把 180–420ms 的构造从「点发送」搬到「切会话之后的
-      // 下一个宏任务」，`begin()` 那边多半已是命中缓存。**两张都要热**——
-      // 解析出的那张给赶上了提示的首 run，`cl100k_base` 兜底那张给「提示
-      // 没赶上」的首 run（此时 `begin()` 会按 cl100k 起算并同步构造，不热就
-      // 白付一次）。`setTimeout(..., 0)` 只是挪到下一个宏任务，不等于不卡。
-      setTimeout(() => {
-        getRnEncoding(resolveStreamTokenEncodingName(vendorModelId));
-        getRnEncoding('cl100k_base');
-      }, 0);
-    })
-    .catch(() => undefined)
-    .finally(() => {
-      vendorModelHintInFlight.delete(sessionId);
-    });
-}
+  }
 
-/**
- * 为某会话建实时 token 估算器（`SessionStreamUnit` 的
- * `tokenEstimatorFactory` 落点）：用会话级提示缓存里的 vendorModelId 选编码，
- * 缓存未就绪/已过期时按 cl100k 兜底（并在后台重新预热，供后续 run 使用）。
- *
- * 说明：编码在估算器创建时**一次定死**，run 中途不切换（换编码会让累计值
- * 跳变、污染速率窗口）；要换编码只能等下一个 run。
- */
-// nm-style: keep-public — stream-token-estimator.test.ts 直接 import 断言 hint 缓存/TTL 语义，测试锁名
-export function createSessionStreamTokenEstimator(runtime: StreamTokenModelHintRuntime, sessionId: string): IncrementalTokenCounter | null {
-  // 读会话级 vendor model id（命中即返；未解析或已过期返回 undefined）。
-  // **过期即淘汰**：判定过期时直接 `delete`，让 prime 的 `has` 早退守卫放行、
-  // 重新解析一次；条目留在 map 里会让 prime 被 `has()` 挡死、该会话此后永久
-  // 退回 cl100k（直到被 32 上限 FIFO 偶然淘汰）——TTL 就成了摆设。
-  const hintEntry = vendorModelHintBySession.get(sessionId);
-  let hint: string | null | undefined = undefined;
-  if (hintEntry !== undefined) {
-    if (Date.now() - hintEntry.atMs > VENDOR_MODEL_HINT_TTL_MS) {
-      vendorModelHintBySession.delete(sessionId);
-    } else {
-      hint = hintEntry.vendorModelId;
+  /**
+   * 为某会话建实时 token 估算器（`SessionStreamUnit` 的
+   * `tokenEstimatorFactory` 落点）：用会话级提示缓存里的 vendorModelId 选编码，
+   * 缓存未就绪/已过期时按 cl100k 兜底（并在后台重新预热，供后续 run 使用）。
+   *
+   * 说明：编码在估算器创建时**一次定死**，run 中途不切换（换编码会让累计值
+   * 跳变、污染速率窗口）；要换编码只能等下一个 run。
+   */
+  // nm-style: keep-public — stream-token-estimator.test.ts 直接 import 断言 hint 缓存/TTL 语义，测试锁名
+  export function createForSession(runtime: StreamTokenModelHintRuntime, sessionId: string): IncrementalTokenCounter | null {
+    // 读会话级 vendor model id（命中即返；未解析或已过期返回 undefined）。
+    // **过期即淘汰**：判定过期时直接 `delete`，让 prime 的 `has` 早退守卫放行、
+    // 重新解析一次；条目留在 map 里会让 prime 被 `has()` 挡死、该会话此后永久
+    // 退回 cl100k（直到被 32 上限 FIFO 偶然淘汰）——TTL 就成了摆设。
+    const hintEntry = vendorModelHintBySession.get(sessionId);
+    let hint: string | null | undefined = undefined;
+    if (hintEntry !== undefined) {
+      if (Date.now() - hintEntry.atMs > VENDOR_MODEL_HINT_TTL_MS) {
+        vendorModelHintBySession.delete(sessionId);
+      } else {
+        hint = hintEntry.vendorModelId;
+      }
     }
+    if (hint === undefined) {
+      // 首轮没赶上预热：按 cl100k 起算，同时踢一次解析（下一轮 run 用得上）。
+      primeModelHint(runtime, sessionId);
+    }
+    return create({vendorModelId: hint ?? null});
   }
-  if (hint === undefined) {
-    // 首轮没赶上预热：按 cl100k 起算，同时踢一次解析（下一轮 run 用得上）。
-    primeStreamTokenModelHint(runtime, sessionId);
-  }
-  return createStreamTokenEstimator({vendorModelId: hint ?? null});
 }

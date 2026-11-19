@@ -14,7 +14,7 @@
  * 独立成模块（而非 main.ts 内私有函数）是为可测：白屏根因层必须能被单测直接
  * 调用锁定——改回 v1 直绑、删掉这层翻译或动 v 号常量，行为断言即红。
  */
-import {handleHostMessage} from '@web/chat-transcript/webview/runtime/bridge';
+import {Bridge} from '@web/chat-transcript/webview/runtime/bridge';
 import {BRIDGE_V} from '@web/chat-transcript/webview/runtime/state/state';
 
 /**
@@ -46,29 +46,31 @@ type HostEnvelopeV2 = {
  *   runtime（runtime 的 v1 匹配本就该由本层独家承担）；
  * - payload 原样透传——重打信封只换 v 号，语义内容零改动。
  */
-export function rawDowntranslate(raw: unknown): void {
-  let parsed: unknown = raw;
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+export const HostDowntranslate = {
+  raw: (raw: unknown): void => {
+    let parsed: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return;
+      }
+    }
+    if (parsed == null || typeof parsed !== 'object') {
       return;
     }
-  }
-  if (parsed == null || typeof parsed !== 'object') {
-    return;
-  }
-  const env = parsed as HostEnvelopeV2;
-  if (
-    typeof env.v !== 'number' ||
-    env.v !== TRANSCRIPT_ENTRY_BRIDGE_V ||
-    typeof env.type !== 'string'
-  ) {
-    return;
-  }
-  handleHostMessage({
-    v: TRANSCRIPT_RUNTIME_BRIDGE_V,
-    type: env.type,
-    payload: env.payload,
-  });
-}
+    const env = parsed as HostEnvelopeV2;
+    if (
+      typeof env.v !== 'number' ||
+      env.v !== TRANSCRIPT_ENTRY_BRIDGE_V ||
+      typeof env.type !== 'string'
+    ) {
+      return;
+    }
+    Bridge.handleHostMessage({
+      v: TRANSCRIPT_RUNTIME_BRIDGE_V,
+      type: env.type,
+      payload: env.payload,
+    });
+  },
+} as const;

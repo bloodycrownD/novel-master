@@ -7,28 +7,30 @@
  * 并弹中文 toast「已取消」，避免英文报错漏到调用方的 catch 里。
  */
 import {errorCodes, isErrorWithCode, pick, type DocumentPickerOptions, type DocumentPickerResponse} from '@react-native-documents/picker';
-import {showAppToast} from './app-toast';
+import {AppToast} from './app-toast';
 
-/** 判定文档选择/保存错误是否为用户主动取消（iOS reject 形态）。 */
-export function isUserCancelledPick(error: unknown): boolean {
-  return isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED;
-}
+export namespace DocumentPick {
+  /** 判定文档选择/保存错误是否为用户主动取消（iOS reject 形态）。 */
+  export function isUserCancelled(error: unknown): boolean {
+    return isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED;
+  }
 
-/** 单选文档；用户取消返回 null（并提示「已取消」），其余错误原样抛出。 */
-export async function pickSingleDocument(options: Pick<DocumentPickerOptions, 'type'>): Promise<DocumentPickerResponse | null> {
-  let file: DocumentPickerResponse | undefined;
-  try {
-    [file] = await pick({type: options.type, allowMultiSelection: false});
-  } catch (error) {
-    if (isUserCancelledPick(error)) {
-      showAppToast('已取消');
+  /** 单选文档；用户取消返回 null（并提示「已取消」），其余错误原样抛出。 */
+  export async function pickSingle(options: Pick<DocumentPickerOptions, 'type'>): Promise<DocumentPickerResponse | null> {
+    let file: DocumentPickerResponse | undefined;
+    try {
+      [file] = await pick({type: options.type, allowMultiSelection: false});
+    } catch (error) {
+      if (isUserCancelled(error)) {
+        AppToast.show('已取消');
+        return null;
+      }
+      throw error;
+    }
+    if (file == null) {
+      AppToast.show('已取消');
       return null;
     }
-    throw error;
+    return file;
   }
-  if (file == null) {
-    showAppToast('已取消');
-    return null;
-  }
-  return file;
 }

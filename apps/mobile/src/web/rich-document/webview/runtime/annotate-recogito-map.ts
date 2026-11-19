@@ -23,22 +23,6 @@ export type RecogitoTextAnnotation = {
   };
 };
 
-export function draftToRecogitoAnnotation(draft: RecogitoRenderDraft): RecogitoTextAnnotation {
-  return {
-    id: draft.id,
-    bodies: [],
-    target: {
-      selector: [
-        {
-          quote: draft.originalText,
-          start: draft.renderStart,
-          end: draft.renderEnd,
-        },
-      ],
-    },
-  };
-}
-
 type RecogitoAnnotationInput =
   | {
       readonly id?: string;
@@ -67,50 +51,68 @@ type DraftAnnotationFields = {
   readonly renderEnd: number;
 };
 
-/**
- * 从 Recogito annotation 抽出草稿投影字段。
- * selector 缺失或非法时返回 null（不写脏 offset）。
- */
-export function recogitoAnnotationToDraftFields(annotation: RecogitoAnnotationInput): DraftAnnotationFields | null {
-  if (annotation == null) {
-    return null;
+export namespace AnnotateRecogitoMap {
+  export function draftToAnnotation(draft: RecogitoRenderDraft): RecogitoTextAnnotation {
+    return {
+      id: draft.id,
+      bodies: [],
+      target: {
+        selector: [
+          {
+            quote: draft.originalText,
+            start: draft.renderStart,
+            end: draft.renderEnd,
+          },
+        ],
+      },
+    };
   }
-  const id = String(annotation.id ?? '').trim();
-  const sel = annotation.target?.selector?.[0];
-  if (!sel) {
-    return null;
-  }
-  const quote = String(sel.quote ?? '').replace(/\u00a0/g, ' ');
-  const originalText = quote; // 保留首尾空白语义与 Recogito quote 一致；宿主 trim 另议
-  const renderStart = sel.start;
-  const renderEnd = sel.end;
-  if (
-    id.length === 0 ||
-    typeof renderStart !== 'number' ||
-    typeof renderEnd !== 'number' ||
-    !Number.isFinite(renderStart) ||
-    !Number.isFinite(renderEnd) ||
-    renderStart < 0 ||
-    renderEnd <= renderStart
-  ) {
-    return null;
-  }
-  return {
-    id,
-    originalText,
-    renderStart,
-    renderEnd,
-  };
-}
 
-/** 仅投影带成对 renderStart/renderEnd 的草稿（R8：旧 VFS offset 稿可不投影）。 */
-export function draftsToRecogitoAnnotations(drafts: readonly DraftAnnotationInput[]): RecogitoTextAnnotation[] {
-  const out: RecogitoTextAnnotation[] = [];
-  for (const d of drafts) {
-    if (typeof d.renderStart !== 'number' || typeof d.renderEnd !== 'number' || d.renderStart < 0 || d.renderEnd <= d.renderStart) {
-      continue;
+  /**
+   * 从 Recogito annotation 抽出草稿投影字段。
+   * selector 缺失或非法时返回 null（不写脏 offset）。
+   */
+  export function annotationToDraftFields(annotation: RecogitoAnnotationInput): DraftAnnotationFields | null {
+    if (annotation == null) {
+      return null;
     }
-    out.push(draftToRecogitoAnnotation({id: d.id, originalText: d.originalText, renderStart: d.renderStart, renderEnd: d.renderEnd}));
+    const id = String(annotation.id ?? '').trim();
+    const sel = annotation.target?.selector?.[0];
+    if (!sel) {
+      return null;
+    }
+    const quote = String(sel.quote ?? '').replace(/\u00a0/g, ' ');
+    const originalText = quote; // 保留首尾空白语义与 Recogito quote 一致；宿主 trim 另议
+    const renderStart = sel.start;
+    const renderEnd = sel.end;
+    if (
+      id.length === 0 ||
+      typeof renderStart !== 'number' ||
+      typeof renderEnd !== 'number' ||
+      !Number.isFinite(renderStart) ||
+      !Number.isFinite(renderEnd) ||
+      renderStart < 0 ||
+      renderEnd <= renderStart
+    ) {
+      return null;
+    }
+    return {
+      id,
+      originalText,
+      renderStart,
+      renderEnd,
+    };
   }
-  return out;
+
+  /** 仅投影带成对 renderStart/renderEnd 的草稿（R8：旧 VFS offset 稿可不投影）。 */
+  export function draftsToAnnotations(drafts: readonly DraftAnnotationInput[]): RecogitoTextAnnotation[] {
+    const out: RecogitoTextAnnotation[] = [];
+    for (const d of drafts) {
+      if (typeof d.renderStart !== 'number' || typeof d.renderEnd !== 'number' || d.renderStart < 0 || d.renderEnd <= d.renderStart) {
+        continue;
+      }
+      out.push(draftToAnnotation({id: d.id, originalText: d.originalText, renderStart: d.renderStart, renderEnd: d.renderEnd}));
+    }
+    return out;
+  }
 }

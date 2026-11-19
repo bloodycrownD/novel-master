@@ -30,17 +30,19 @@ export interface ViewSlot<P> {
   invoke(props: P): boolean;
 }
 
-export function createViewSlot<P>(): ViewSlot<P> {
-  let render: ((props: P) => void) | null = null;
-  return {
-    has: () => render != null,
-    register(next) {
-      render = next;
-    },
-    invoke(props) {
-      if (render == null) return false;
-      render(props);
-      return true;
-    },
-  };
-}
+export const ViewSlot = {
+  create: <P>(): ViewSlot<P> => {
+    let render: ((props: P) => void) | null = null;
+    return {
+      has: () => render != null,
+      register(next) {
+        render = next;
+      },
+      invoke(props) {
+        if (render == null) return false;
+        render(props);
+        return true;
+      },
+    };
+  },
+} as const;

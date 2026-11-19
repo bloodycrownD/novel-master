@@ -29,37 +29,39 @@ export interface SnapshotCompleteSignal {
   consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'>;
 }
 
-export function createSnapshotCompleteSignal(): SnapshotCompleteSignal {
-  let waiting: (() => void) | null = null;
-  let pending = false;
-  return {
-    notify() {
-      if (waiting != null) {
-        const resolve = waiting;
-        waiting = null;
-        resolve();
-        return;
-      }
-      pending = true;
-    },
-    consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'> {
-      return new Promise(resolve => {
-        if (pending) {
-          pending = false;
-          resolve('signaled');
+export namespace SnapshotCompleteSignal {
+  export function create(): SnapshotCompleteSignal {
+    let waiting: (() => void) | null = null;
+    let pending = false;
+    return {
+      notify() {
+        if (waiting != null) {
+          const resolve = waiting;
+          waiting = null;
+          resolve();
           return;
         }
-        const timer = setTimeout(() => {
-          if (waiting != null) {
-            waiting = null;
-            resolve('timeout');
+        pending = true;
+      },
+      consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'> {
+        return new Promise(resolve => {
+          if (pending) {
+            pending = false;
+            resolve('signaled');
+            return;
           }
-        }, timeoutMs);
-        waiting = () => {
-          clearTimeout(timer);
-          resolve('signaled');
-        };
-      });
-    },
-  };
+          const timer = setTimeout(() => {
+            if (waiting != null) {
+              waiting = null;
+              resolve('timeout');
+            }
+          }, timeoutMs);
+          waiting = () => {
+            clearTimeout(timer);
+            resolve('signaled');
+          };
+        });
+      },
+    };
+  }
 }

@@ -1,8 +1,8 @@
 import MarkdownIt from 'markdown-it';
 import {Text} from '@novel-master/core/common';
-import {decodeAfterSanitize} from './decode-literal-html-entities';
-import {normalizeFenceLang, resolveHighlight} from './highlight-code';
-import {sanitizeRichHtml} from './sanitize-rich-html';
+import {LiteralHtmlEntities} from './decode-literal-html-entities';
+import {HighlightCode} from './highlight-code';
+import {SanitizeRichHtml} from './sanitize-rich-html';
 
 const markdown = new MarkdownIt({html: true, linkify: true});
 
@@ -67,10 +67,10 @@ markdown.linkify.match = (text: string) =>
 markdown.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]!;
   const rawLang = token.info.trim().split(/\s+/)[0] || '';
-  const normalized = normalizeFenceLang(rawLang);
-  // 高亮判定在 resolveHighlight 内统一（归一化表 + hljs 注册表内置别名，与 desktop 同一逻辑）；
+  const normalized = HighlightCode.normalizeFenceLang(rawLang);
+  // 高亮判定在 HighlightCode.resolve 内统一（归一化表 + hljs 注册表内置别名，与 desktop 同一逻辑）；
   // 语言标分流按 normalizeFenceLang 返回值走，与高亮与否解耦（MF-1 修订）。
-  const highlighted = resolveHighlight(token.content, rawLang);
+  const highlighted = HighlightCode.resolve(token.content, rawLang);
   // mermaid 不插复制按钮：与 desktop MermaidBlock（图表渲染、无按钮）口径对齐（MF-11）
   const isMermaid = rawLang === 'mermaid';
   const copyBtn = isMermaid ? '' : '<span class="code-copy"></span>';
@@ -101,19 +101,22 @@ markdown.renderer.rules.code_block = (tokens, idx) => {
   return `<pre data-lang="plain"><span class="code-copy"></span><code>${markdown.utils.escapeHtml(token.content)}</code></pre>\n`;
 };
 
-/**
- * Markdown → 消毒 HTML，供 WebView transcript 气泡（browser innerHTML）。
- * 顺序：入口完整 decode → markdown-it → sanitize(escape) → 出口 decode（保留 &lt;/&gt;）。
- * 安全规则由共享的 sanitizeRichHtml 统一（各富文本管线同源）；不做 RN RenderHTML 的 class 物化。
- */
-export function prepareTranscriptRichHtml(content: string): string {
-  const normalized = Text.decodeHtmlEntities(content);
-  // 表格包一层横滚容器：单元格上限（72vw）+ 表宽 max-content 的组合需要「不超过气泡宽」的外壳来滚动，
-  // 否则 table 自己的盒子与内容同宽，没有可滚动的溢出、只会撑破气泡（真机实测）。
-  // 代码块里的 <table> 字面量已被转义成 &lt;table&gt;，不会误伤。
-  const tableWrapped = markdown.render(normalized).replace(/<table(\s[^>]*)?>/g, '<div class="table-wrap"><table$1>');
-  const rendered = tableWrapped.replace(/<\/table>/g, '</table></div>');
-  const sanitized = sanitizeRichHtml(rendered);
-  // sanitize-html 只能把 markdown-it 的 &quot; 变成 &amp;quot; —— 出口仍解 quot/amp
-  return decodeAfterSanitize(sanitized);
+// 文件名带动词 prepare，按内容主体（transcript 富文本 HTML 管线）起名 TranscriptRichHtml。
+export namespace TranscriptRichHtml {
+  /**
+   * Markdown → 消毒 HTML，供 WebView transcript 气泡（browser innerHTML）。
+   * 顺序：入口完整 decode → markdown-it → sanitize(escape) → 出口 decode（保留 &lt;/&gt;）。
+   * 安全规则由共享的 SanitizeRichHtml.sanitize 统一（各富文本管线同源）；不做 RN RenderHTML 的 class 物化。
+   */
+  export function prepare(content: string): string {
+    const normalized = Text.decodeHtmlEntities(content);
+    // 表格包一层横滚容器：单元格上限（72vw）+ 表宽 max-content 的组合需要「不超过气泡宽」的外壳来滚动，
+    // 否则 table 自己的盒子与内容同宽，没有可滚动的溢出、只会撑破气泡（真机实测）。
+    // 代码块里的 <table> 字面量已被转义成 &lt;table&gt;，不会误伤。
+    const tableWrapped = markdown.render(normalized).replace(/<table(\s[^>]*)?>/g, '<div class="table-wrap"><table$1>');
+    const rendered = tableWrapped.replace(/<\/table>/g, '</table></div>');
+    const sanitized = SanitizeRichHtml.sanitize(rendered);
+    // sanitize-html 只能把 markdown-it 的 &quot; 变成 &amp;quot; —— 出口仍解 quot/amp
+    return LiteralHtmlEntities.decodeAfterSanitize(sanitized);
+  }
 }

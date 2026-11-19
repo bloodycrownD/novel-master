@@ -11,7 +11,7 @@ import {AppErrorOps} from '@novel-master/core/errors';
 import {AGENT_RUN_RESOLVE_KEYS, AgentProjectResolver} from '@novel-master/core/agent';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {resolveModelDisplayLabel} from './model-display-label';
+import {ModelDisplayLabel} from './model-display-label';
 
 /**
  * modelSource 与 desktop `PromptAgentMetaResponse.modelSource` 同语义
@@ -34,96 +34,9 @@ export interface ChatAgentMeta {
 }
 
 /**
- * 按项目 + 会话解析 Agent 元信息。
- *
- * 项目智能体已下线：所有项目统一走 session 级——会话独立 agentId 解析得到
- * registry definition。
- *
- * modelSource 两档：agent definition 自带 model 压制一切，
- * 否则跟随会话（session.modelId 可选，作为 savedModelId 兜底）。
- *
- * 失败通道（错误通道迁移四期）：会话配置的已知失败沿 `Result.err` 接力；
- * agent 解析失败（AGENT_RUN_RESOLVE_KEYS）归一为 source='none' 的待重选
- * meta（Ok）；其余未知异常保持 reject，调用方「锁定 + 错误文案」报错态。
- */
-export async function loadChatAgentMeta(runtime: MobileNovelMasterRuntime, projectId: string, sessionId: string): Promise<Result<ChatAgentMeta, AppError>> {
-  try {
-    // resolveAgentForProject 与 getSessionAgentConfig 互不依赖（后者只需
-    // sessionId，且为无副作用的读取），并行发起；resolveModelDisplayLabel
-    // 依赖两者结果合成的 savedModelId，必须等两边都回来，保持串行。
-    const sessionConfigPromise = runtime.sessions.getSessionAgentConfig(sessionId);
-    // 兜底挂接：resolveAgentForProject 先失败提前退出（归一 none meta /
-    // rethrow）时，本路在途的拒绝不会变成 unhandled rejection；
-    // 真正的错误仍在下方 await 按原语义抛出。
-    sessionConfigPromise.catch(() => undefined);
-    const resolved = await AgentProjectResolver.resolve(runtime, projectId, sessionId);
-    if (!resolved.ok) {
-      // 归一口径与下方 catch 同款（错误通道迁移四期：不再借 throw 进 catch）：
-      // RESOLVE_KEYS 内的 agent 解析失败收成待重选 none meta，其余已知失败
-      // 沿 Result.err 接力给调用方（两个调用方对 !ok 与未知异常同终端）。
-      if (AppErrorOps.is(resolved.error) && AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
-        return Result.ok({
-          source: 'none',
-          agentId: undefined,
-          agentName: '未配置 Agent',
-          modelLabel: '—',
-          tokenLabel: '',
-          hasDedicatedModel: false,
-          modelSource: 'session',
-        });
-      }
-      return Result.err(resolved.error);
-    }
-    const sessionConfig = await sessionConfigPromise;
-    if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-    const {definition, agentId} = resolved.value;
-    const hasDedicatedModel = definition.model != null && definition.model !== '';
-    const savedModelId = definition.model ?? sessionConfig.value.modelId;
-    let modelLabel = '未选择模型';
-    if (savedModelId) {
-      try {
-        const label = await resolveModelDisplayLabel(runtime, savedModelId);
-        modelLabel = label.ok ? label.value : savedModelId;
-      } catch {
-        modelLabel = savedModelId;
-      }
-    }
-    // modelSource 优先级链：agent pin 压制 → 否则跟随会话。
-    const modelSource: ChatAgentModelSource = hasDedicatedModel ? 'agent-pin' : 'session';
-    return Result.ok({
-      source: 'session',
-      agentId,
-      agentName: definition.name,
-      modelLabel,
-      tokenLabel: '',
-      hasDedicatedModel,
-      modelSource,
-    });
-  } catch (error) {
-    // 归一口径与 desktop prompt handler 对齐（au/C-orch-2，方向 b）：仅
-    // AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败（agentId 指向已删 agent 等）
-    // 归一为 source='none' 的待重选 meta；其它失败走 Err / 未知异常原样
-    // reject，由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充
-    // 「已被删除」。
-    if (AppErrorOps.is(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
-      return Result.ok({
-        source: 'none',
-        agentId: undefined,
-        agentName: '未配置 Agent',
-        modelLabel: '—',
-        tokenLabel: '',
-        hasDedicatedModel: false,
-        modelSource: 'session',
-      });
-    }
-    throw error;
-  }
-}
-
-/**
  * 锁定 / 待重选提示文案统一收口（screens/C-11）。
  *
- * isAgentLocked 拆分后（none 态放开为待重选），agent 锁定 toast 仅在
+ * isLocked 拆分后（none 态放开为待重选），agent 锁定 toast 仅在
  * meta 还没加载出来时触发，两处文案统一为加载中语义；none 态点击
  * 智能体卡则直接弹 picker 重选（badge 已提示已删，不再额外弹 toast），
  * 不再锁死。
@@ -137,39 +50,128 @@ export const AGENT_RESELECT_HINT = '智能体已删除 · 点击重选';
 /** 模型锁定提示：会话面板与会话详情页共用同一文案。 */
 export const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 
-/**
- * Agent 是否被锁定（不可在会话内切换）。
- *
- * 仅在 meta 还没加载出来（undefined）时按锁定处理，避免加载中误触；
- * source='none'（绑定的智能体已被删除）时不再锁定——智能体卡放开为
- * 「待重选」，可点击弹 picker 重选，写入新 agentId 后悬空即解除。
- */
-export function isAgentLocked(meta: ChatAgentMeta | undefined): boolean {
-  return meta == null;
-}
-
-/**
- * 智能体是否处于「已删待重选」态（meta 已加载且解析失败）。
- *
- * 该态下智能体卡不锁定：可点击弹 picker，选中存在的智能体后悬空解除。
- */
-// nm-style: keep-public — chat-agent-meta.test.ts 直接 import 断言；session-detail-screen 两测试经它渲染分支
-export function isAgentDeleted(meta: ChatAgentMeta | undefined): boolean {
-  return meta != null && meta.source === 'none';
-}
-
-/**
- * Model 是否被锁定（不可在会话内覆盖）。
- *
- * 维持原口径：meta 为空或 source!=='session'（含 none——智能体没了，
- * pin 的模型无从解析，重选智能体后自然解锁）即锁定；source='session'
- * 时再额外看 agent-pin 压制 / hasDedicatedModel。
- * 注意 isAgentLocked 拆分后不能再借它判定，这里直接写 source 条件。
- * hasDedicatedModel 已是 boolean（非 optional），不需要再兜 ?? false。
- */
-export function isModelLocked(meta: ChatAgentMeta | undefined): boolean {
-  if (!meta) {
-    return true;
+export namespace ChatAgentMeta {
+  /**
+   * 按项目 + 会话解析 Agent 元信息。
+   *
+   * 项目智能体已下线：所有项目统一走 session 级——会话独立 agentId 解析得到
+   * registry definition。
+   *
+   * modelSource 两档：agent definition 自带 model 压制一切，
+   * 否则跟随会话（session.modelId 可选，作为 savedModelId 兜底）。
+   *
+   * 失败通道（错误通道迁移四期）：会话配置的已知失败沿 `Result.err` 接力；
+   * agent 解析失败（AGENT_RUN_RESOLVE_KEYS）归一为 source='none' 的待重选
+   * meta（Ok）；其余未知异常保持 reject，调用方「锁定 + 错误文案」报错态。
+   */
+  export async function load(runtime: MobileNovelMasterRuntime, projectId: string, sessionId: string): Promise<Result<ChatAgentMeta, AppError>> {
+    try {
+      // resolveAgentForProject 与 getSessionAgentConfig 互不依赖（后者只需
+      // sessionId，且为无副作用的读取），并行发起；resolveModelDisplayLabel
+      // 依赖两者结果合成的 savedModelId，必须等两边都回来，保持串行。
+      const sessionConfigPromise = runtime.sessions.getSessionAgentConfig(sessionId);
+      // 兜底挂接：resolveAgentForProject 先失败提前退出（归一 none meta /
+      // rethrow）时，本路在途的拒绝不会变成 unhandled rejection；
+      // 真正的错误仍在下方 await 按原语义抛出。
+      sessionConfigPromise.catch(() => undefined);
+      const resolved = await AgentProjectResolver.resolve(runtime, projectId, sessionId);
+      if (!resolved.ok) {
+        // 归一口径与下方 catch 同款（错误通道迁移四期：不再借 throw 进 catch）：
+        // RESOLVE_KEYS 内的 agent 解析失败收成待重选 none meta，其余已知失败
+        // 沿 Result.err 接力给调用方（两个调用方对 !ok 与未知异常同终端）。
+        if (AppErrorOps.is(resolved.error) && AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
+          return Result.ok({
+            source: 'none',
+            agentId: undefined,
+            agentName: '未配置 Agent',
+            modelLabel: '—',
+            tokenLabel: '',
+            hasDedicatedModel: false,
+            modelSource: 'session',
+          });
+        }
+        return Result.err(resolved.error);
+      }
+      const sessionConfig = await sessionConfigPromise;
+      if (!sessionConfig.ok) return Result.err(sessionConfig.error);
+      const {definition, agentId} = resolved.value;
+      const hasDedicatedModel = definition.model != null && definition.model !== '';
+      const savedModelId = definition.model ?? sessionConfig.value.modelId;
+      let modelLabel = '未选择模型';
+      if (savedModelId) {
+        try {
+          const label = await ModelDisplayLabel.resolve(runtime, savedModelId);
+          modelLabel = label.ok ? label.value : savedModelId;
+        } catch {
+          modelLabel = savedModelId;
+        }
+      }
+      // modelSource 优先级链：agent pin 压制 → 否则跟随会话。
+      const modelSource: ChatAgentModelSource = hasDedicatedModel ? 'agent-pin' : 'session';
+      return Result.ok({
+        source: 'session',
+        agentId,
+        agentName: definition.name,
+        modelLabel,
+        tokenLabel: '',
+        hasDedicatedModel,
+        modelSource,
+      });
+    } catch (error) {
+      // 归一口径与 desktop prompt handler 对齐（au/C-orch-2，方向 b）：仅
+      // AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败（agentId 指向已删 agent 等）
+      // 归一为 source='none' 的待重选 meta；其它失败走 Err / 未知异常原样
+      // reject，由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充
+      // 「已被删除」。
+      if (AppErrorOps.is(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
+        return Result.ok({
+          source: 'none',
+          agentId: undefined,
+          agentName: '未配置 Agent',
+          modelLabel: '—',
+          tokenLabel: '',
+          hasDedicatedModel: false,
+          modelSource: 'session',
+        });
+      }
+      throw error;
+    }
   }
-  return meta.source !== 'session' || meta.modelSource === 'agent-pin' || meta.hasDedicatedModel;
+
+  /**
+   * Agent 是否被锁定（不可在会话内切换）。
+   *
+   * 仅在 meta 还没加载出来（undefined）时按锁定处理，避免加载中误触；
+   * source='none'（绑定的智能体已被删除）时不再锁定——智能体卡放开为
+   * 「待重选」，可点击弹 picker 重选，写入新 agentId 后悬空即解除。
+   */
+  export function isLocked(meta: ChatAgentMeta | undefined): boolean {
+    return meta == null;
+  }
+
+  /**
+   * 智能体是否处于「已删待重选」态（meta 已加载且解析失败）。
+   *
+   * 该态下智能体卡不锁定：可点击弹 picker，选中存在的智能体后悬空解除。
+   */
+  // nm-style: keep-public — chat-agent-meta.test.ts 直接 import 断言；session-detail-screen 两测试经它渲染分支
+  export function isDeleted(meta: ChatAgentMeta | undefined): boolean {
+    return meta != null && meta.source === 'none';
+  }
+
+  /**
+   * Model 是否被锁定（不可在会话内覆盖）。
+   *
+   * 维持原口径：meta 为空或 source!=='session'（含 none——智能体没了，
+   * pin 的模型无从解析，重选智能体后自然解锁）即锁定；source='session'
+   * 时再额外看 agent-pin 压制 / hasDedicatedModel。
+   * 注意 isLocked 拆分后不能再借它判定，这里直接写 source 条件。
+   * hasDedicatedModel 已是 boolean（非 optional），不需要再兜 ?? false。
+   */
+  export function isModelLocked(meta: ChatAgentMeta | undefined): boolean {
+    if (!meta) {
+      return true;
+    }
+    return meta.source !== 'session' || meta.modelSource === 'agent-pin' || meta.hasDedicatedModel;
+  }
 }

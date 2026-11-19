@@ -46,8 +46,12 @@ type Props = {
  * 导出给子会话屏复用：屏级「已中断」横幅只在指标条不可见时渲染，避免
  * 同一中断态出现两次标识（cr-fix-spec mobile-metrics/C-4）。
  */
-export function hasVisibleSettledMetrics(view: SessionStreamUnitView): boolean {
-  return isSessionStreamUnitSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
+// 偏离登记：文件名 ChatStreamMetricsBarLive 与组件同名，tsx helper namespace 不得撞组件名，
+// 按内容主体（settled 指标可见性）起名 SettledMetrics，成员剥词尾主体词。
+export namespace SettledMetrics {
+  export function hasVisible(view: SessionStreamUnitView): boolean {
+    return isSessionStreamUnitSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
+  }
 }
 
 export function ChatStreamMetricsBarLive({agentRunning, sessionId, contextTokenLabel}: Props) {
@@ -88,7 +92,7 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId, contextTokenL
   let interrupted = false;
   if (sessionId != null) {
     const view = manager.snapshot(sessionId);
-    if (view != null && hasVisibleSettledMetrics(view)) {
+    if (view != null && SettledMetrics.hasVisible(view)) {
       // 终态快照即冻结指标。事件收尾的单元 elapsedMs 已冻结；水合
       // interrupted 单元 elapsedMs 为 null，以 settledAtMs-startedAtMs
       // 近似冻结历时；全零守卫兜底极老形态（起点与字数皆无的空行）。

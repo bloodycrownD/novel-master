@@ -58,79 +58,81 @@ type RunStateWritethroughOptions = {
   readonly largePayloadChars?: number;
 };
 
-export function createRunStateWritethrough(write: RunStateWritethroughWriteFn, options?: RunStateWritethroughOptions): RunStateWritethrough {
-  const intervalMs = options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
-  const slowIntervalMs = options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
-  const largePayloadChars = options?.largePayloadChars ?? RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
+export namespace RunStateWritethrough {
+  export function create(write: RunStateWritethroughWriteFn, options?: RunStateWritethroughOptions): RunStateWritethrough {
+    const intervalMs = options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
+    const slowIntervalMs = options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
+    const largePayloadChars = options?.largePayloadChars ?? RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
 
-  let pending: SessionRunState | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  /** 当前定时器的档位（毫秒）：仅当新载荷要求更慢的档时才重排。 */
-  let scheduledMs = 0;
-  let disposed = false;
+    let pending: SessionRunState | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    /** 当前定时器的档位（毫秒）：仅当新载荷要求更慢的档时才重排。 */
+    let scheduledMs = 0;
+    let disposed = false;
 
-  const clearTimer = (): void => {
-    if (timer != null) {
-      clearTimeout(timer);
+    const clearTimer = (): void => {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      scheduledMs = 0;
+    };
+
+    /** 定时到期/flush 的共同落点：取走 pending 并同步发起写（吞错留日志）。 */
+    const writeNow = (): void => {
       timer = null;
-    }
-    scheduledMs = 0;
-  };
-
-  /** 定时到期/flush 的共同落点：取走 pending 并同步发起写（吞错留日志）。 */
-  const writeNow = (): void => {
-    timer = null;
-    scheduledMs = 0;
-    if (pending == null) {
-      return;
-    }
-    const state = pending;
-    pending = null;
-    write(state).catch(err => {
-      console.error('[novel-master/run-state-writethrough] write failed', err);
-    });
-  };
-
-  return {
-    append(state: SessionRunState): void {
-      if (disposed) {
+      scheduledMs = 0;
+      if (pending == null) {
         return;
       }
-      pending = state;
-      const payloadChars = (state.partialText?.length ?? 0) + (state.partialThinking?.length ?? 0) + (state.pendingChildrenJson?.length ?? 0);
-      const wantMs = payloadChars > largePayloadChars ? slowIntervalMs : intervalMs;
-      if (timer == null) {
-        timer = setTimeout(writeNow, wantMs);
-        scheduledMs = wantMs;
-      } else if (wantMs > scheduledMs) {
-        // 载荷变大 → 升到慢档重排（推迟写，防写放大）；变小则等本轮到期
-        // 后自然恢复快档，不做提前重排。
-        clearTimer();
-        timer = setTimeout(writeNow, wantMs);
-        scheduledMs = wantMs;
-      }
-    },
-
-    flush(): void {
-      if (disposed) {
-        return;
-      }
-      clearTimer();
-      writeNow();
-    },
-
-    dispose(): void {
-      clearTimer();
+      const state = pending;
       pending = null;
-      disposed = true;
-    },
+      write(state).catch(err => {
+        console.error('[novel-master/run-state-writethrough] write failed', err);
+      });
+    };
 
-    isDisposed(): boolean {
-      return disposed;
-    },
+    return {
+      append(state: SessionRunState): void {
+        if (disposed) {
+          return;
+        }
+        pending = state;
+        const payloadChars = (state.partialText?.length ?? 0) + (state.partialThinking?.length ?? 0) + (state.pendingChildrenJson?.length ?? 0);
+        const wantMs = payloadChars > largePayloadChars ? slowIntervalMs : intervalMs;
+        if (timer == null) {
+          timer = setTimeout(writeNow, wantMs);
+          scheduledMs = wantMs;
+        } else if (wantMs > scheduledMs) {
+          // 载荷变大 → 升到慢档重排（推迟写，防写放大）；变小则等本轮到期
+          // 后自然恢复快档，不做提前重排。
+          clearTimer();
+          timer = setTimeout(writeNow, wantMs);
+          scheduledMs = wantMs;
+        }
+      },
 
-    hasPending(): boolean {
-      return pending != null;
-    },
-  };
+      flush(): void {
+        if (disposed) {
+          return;
+        }
+        clearTimer();
+        writeNow();
+      },
+
+      dispose(): void {
+        clearTimer();
+        pending = null;
+        disposed = true;
+      },
+
+      isDisposed(): boolean {
+        return disposed;
+      },
+
+      hasPending(): boolean {
+        return pending != null;
+      },
+    };
+  }
 }

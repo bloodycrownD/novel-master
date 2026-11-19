@@ -5,29 +5,31 @@
  */
 import {type ChatMessageData, type ContentBlock, type MessageContent, ChatMessage} from '@novel-master/core/chat';
 
-/** Re-export Core 规则。 */
-export function editableTextFromMessage(message: ChatMessageData): string | null {
-  return ChatMessage.from(message).editableText();
-}
-
-/**
- * Merges edited text into the first text-block slot; non-text blocks keep original order.
- */
-export function applyTextEditToMessage(message: ChatMessageData, newText: string): MessageContent {
-  const blocks = message.content.blocks ?? [];
-  const result: ContentBlock[] = [];
-  let textReplaced = false;
-
-  for (const block of blocks) {
-    if (block.type === 'text') {
-      if (!textReplaced) {
-        result.push({type: 'text', text: newText});
-        textReplaced = true;
-      }
-    } else {
-      result.push(block);
-    }
+export namespace MessageEdit {
+  /** Re-export Core 规则。 */
+  export function editableTextFromMessage(message: ChatMessageData): string | null {
+    return ChatMessage.from(message).editableText();
   }
 
-  return {blocks: result};
+  /**
+   * Merges edited text into the first text-block slot; non-text blocks keep original order.
+   */
+  export function applyTextEditToMessage(message: ChatMessageData, newText: string): MessageContent {
+    const blocks = message.content.blocks ?? [];
+    const result: ContentBlock[] = [];
+    let textReplaced = false;
+
+    for (const block of blocks) {
+      if (block.type === 'text') {
+        if (!textReplaced) {
+          result.push({type: 'text', text: newText});
+          textReplaced = true;
+        }
+      } else {
+        result.push(block);
+      }
+    }
+
+    return {blocks: result};
+  }
 }

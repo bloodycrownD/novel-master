@@ -24,44 +24,46 @@ export type ChatLinkProbeVfs = {
 /** 链接点击的执行意图：应用内打开文件 / 外跳系统浏览器 / 路径未命中 / 无动作。 */
 type ChatLinkOpenIntent = {kind: 'file'; scope: 'session' | 'project'; path: string} | {kind: 'external'; url: string} | {kind: 'not-found'; path: string} | {kind: 'none'};
 
-/**
- * 解析链接点击意图。
- *
- * 顺序：http(s) 直接外跳；其余交 core 单源识别（mailto 及非法形态 → none）；
- * 识别出的逻辑路径先探 session 工作区、再探 project 工作区（spec 定序），
- * 命中文件返回打开意图；双未命中返回 not-found（调用方弹「路径不存在」
- * 提示——用户拍板，不再静默无动作）。
- */
-export async function resolveChatLinkIntent(href: string, deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null}): Promise<ChatLinkOpenIntent> {
-  const trimmed = href.trim();
-  if (chatLinkResolver.isHttp(trimmed)) {
-    return {kind: 'external', url: trimmed};
-  }
-  // mailto 及其它 scheme、非法序列、纯锚点等均为 null → 维持现状无动作
-  const target = chatLinkResolver.resolve(trimmed);
-  if (target == null) {
-    return {kind: 'none'};
-  }
-  if (await probeFileIn(deps.sessionVfs, target)) {
-    return {kind: 'file', scope: 'session', path: target};
-  }
-  if (await probeFileIn(deps.projectVfs, target)) {
-    return {kind: 'file', scope: 'project', path: target};
-  }
-  return {kind: 'not-found', path: target};
-}
+export const ChatLinkNav = {
+  /**
+   * 解析链接点击意图。
+   *
+   * 顺序：http(s) 直接外跳；其余交 core 单源识别（mailto 及非法形态 → none）；
+   * 识别出的逻辑路径先探 session 工作区、再探 project 工作区（spec 定序），
+   * 命中文件返回打开意图；双未命中返回 not-found（调用方弹「路径不存在」
+   * 提示——用户拍板，不再静默无动作）。
+   */
+  resolveChatLinkIntent: async (href: string, deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null}): Promise<ChatLinkOpenIntent> => {
+    const trimmed = href.trim();
+    if (chatLinkResolver.isHttp(trimmed)) {
+      return {kind: 'external', url: trimmed};
+    }
+    // mailto 及其它 scheme、非法序列、纯锚点等均为 null → 维持现状无动作
+    const target = chatLinkResolver.resolve(trimmed);
+    if (target == null) {
+      return {kind: 'none'};
+    }
+    if (await ChatLinkNav.probeFileIn(deps.sessionVfs, target)) {
+      return {kind: 'file', scope: 'session', path: target};
+    }
+    if (await ChatLinkNav.probeFileIn(deps.projectVfs, target)) {
+      return {kind: 'file', scope: 'project', path: target};
+    }
+    return {kind: 'not-found', path: target};
+  },
 
-/** 在单个工作区探测归一化路径是否为已存在的文件（目录不算命中）。 */
-async function probeFileIn(vfs: ChatLinkProbeVfs | null, normalizedPath: string): Promise<boolean> {
-  if (vfs == null) {
-    return false;
-  }
-  const slash = normalizedPath.lastIndexOf('/');
-  const parentDir = slash <= 0 ? '/' : normalizedPath.slice(0, slash);
-  const listed = await vfs.list(parentDir);
-  if (!listed.ok) {
-    // 父目录 NOT_FOUND 及一切探测失败按不存在处理
-    return false;
-  }
-  return listed.value.some(entry => entry.path === normalizedPath && entry.kind === 'file');
-}
+  /** 在单个工作区探测归一化路径是否为已存在的文件（目录不算命中）。 */
+  probeFileIn: async (vfs: ChatLinkProbeVfs | null, normalizedPath: string): Promise<boolean> => {
+    if (vfs == null) {
+      return false;
+    }
+    const slash = normalizedPath.lastIndexOf('/');
+    const parentDir = slash <= 0 ? '/' : normalizedPath.slice(0, slash);
+    const listed = await vfs.list(parentDir);
+    if (!listed.ok) {
+      // 父目录 NOT_FOUND 及一切探测失败按不存在处理
+      return false;
+    }
+    return listed.value.some(entry => entry.path === normalizedPath && entry.kind === 'file');
+  },
+} as const;

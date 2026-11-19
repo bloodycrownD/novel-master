@@ -48,27 +48,29 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   },
 ] as const;
 
-// prettier-ignore
-export function buildToolsPolicyFromSelection(mode: ToolsMode, selected: readonly string[]): AgentToolPolicy | undefined {
-  if (mode === 'default') {
-    return undefined;
-  }
-  const names = [...selected];
-  if (mode === 'allow') {
-    return {allow: names};
-  }
-  return {deny: names};
-}
+export const AgentToolCatalog = {
+  // prettier-ignore
+  buildToolsPolicyFromSelection: (mode: ToolsMode, selected: readonly string[]): AgentToolPolicy | undefined => {
+    if (mode === 'default') {
+      return undefined;
+    }
+    const names = [...selected];
+    if (mode === 'allow') {
+      return {allow: names};
+    }
+    return {deny: names};
+  },
 
-export function toolsSelectionFromDefinition(def: AgentDefinition): {
-  mode: ToolsMode;
-  selected: readonly string[];
-} {
-  if (def.tools?.allow != null) {
-    return {mode: 'allow', selected: [...def.tools.allow]};
-  }
-  if (def.tools?.deny != null) {
-    return {mode: 'deny', selected: [...def.tools.deny]};
-  }
-  return {mode: 'default', selected: []};
-}
+  toolsSelectionFromDefinition: (def: AgentDefinition): {
+    mode: ToolsMode;
+    selected: readonly string[];
+  } => {
+    if (def.tools?.allow != null) {
+      return {mode: 'allow', selected: [...def.tools.allow]};
+    }
+    if (def.tools?.deny != null) {
+      return {mode: 'deny', selected: [...def.tools.deny]};
+    }
+    return {mode: 'default', selected: []};
+  },
+} as const;

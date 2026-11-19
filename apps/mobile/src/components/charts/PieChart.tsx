@@ -40,10 +40,22 @@ const PIE_PALETTE_FIXED = {
   slate: '#64748B',
 } as const;
 
-/** 固定循环色板（P2-5，与桌面同序：蓝→青→绿→黄→橙→红→紫→灰蓝）：
- * 索引超长后取模复用。 */
-export function pieChartColors(t: ThemeTokens): string[] {
-  return [t.primary, PIE_PALETTE_FIXED.teal, t.success, PIE_PALETTE_FIXED.yellow, t.warning, t.danger, PIE_PALETTE_FIXED.purple, PIE_PALETTE_FIXED.slate];
+// 偏离登记：文件名 PieChart 与组件同名，tsx helper namespace 不得撞组件名；
+// helper 覆盖色板与几何两类渲染纯函数，按「视觉计算」主体起名 PieChartVisual。
+export namespace PieChartVisual {
+  /** 固定循环色板（P2-5，与桌面同序：蓝→青→绿→黄→橙→红→紫→灰蓝）：
+   * 索引超长后取模复用。 */
+  export function colors(t: ThemeTokens): string[] {
+    return [t.primary, PIE_PALETTE_FIXED.teal, t.success, PIE_PALETTE_FIXED.yellow, t.warning, t.danger, PIE_PALETTE_FIXED.purple, PIE_PALETTE_FIXED.slate];
+  }
+
+  /** 角度（弧度，从 12 点方向顺时针）→ 扇区路径端点坐标。 */
+  function arcPoint(angle: number): {x: number; y: number} {
+    return {
+      x: CENTER + RADIUS * Math.sin(angle),
+      y: CENTER - RADIUS * Math.cos(angle),
+    };
+  }
 }
 
 /** 饼图几何常量：viewBox 200×200，圆心 (100,100)，半径 80。 */
@@ -58,14 +70,6 @@ const SLICE_LABEL_MIN_SHARE = 0.1;
 
 /** 扇区标注位置：弧心角方向、约 0.62 半径处（视觉居中且远离圆心与弧缘）。 */
 const LABEL_RADIUS = RADIUS * 0.62;
-
-/** 角度（弧度，从 12 点方向顺时针）→ 扇区路径端点坐标。 */
-function arcPoint(angle: number): {x: number; y: number} {
-  return {
-    x: CENTER + RADIUS * Math.sin(angle),
-    y: CENTER - RADIUS * Math.cos(angle),
-  };
-}
 
 /** 角度（弧度）→ 扇区标注文字坐标（弧心角 × 0.62 半径）。 */
 
@@ -82,7 +86,7 @@ export function PieChart({
   testID?: string;
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const palette = pieChartColors(tokens);
+  const palette = PieChartVisual.colors(tokens);
 
   // 扇区几何：按传入顺序累计角度（从 12 点顺时针），零值行不占角但保留图例。
   const sectors = useMemo(() => {
@@ -162,8 +166,8 @@ export function PieChart({
                 );
               }
               // 单个扇区 path：a 从 12 点起顺时针的起止弧度（start < end）。
-              const from = arcPoint(start);
-              const to = arcPoint(end);
+              const from = PieChartVisual.arcPoint(start);
+              const to = PieChartVisual.arcPoint(end);
               const largeArc = end - start > Math.PI ? 1 : 0;
               const sectorD = [`M ${CENTER} ${CENTER}`, `L ${from.x.toFixed(2)} ${from.y.toFixed(2)}`, `A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${to.x.toFixed(2)} ${to.y.toFixed(2)}`, 'Z'].join(' ');
               return (

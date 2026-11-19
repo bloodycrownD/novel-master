@@ -25,16 +25,18 @@ export interface CallbackSlot<T> {
   take(): T | null;
 }
 
-export function createCallbackSlot<T>(): CallbackSlot<T> {
-  let callback: T | null = null;
-  return {
-    set(next) {
-      callback = next;
-    },
-    take() {
-      const taken = callback;
-      callback = null;
-      return taken;
-    },
-  };
-}
+export const CallbackSlot = {
+  create: <T>(): CallbackSlot<T> => {
+    let callback: T | null = null;
+    return {
+      set(next) {
+        callback = next;
+      },
+      take() {
+        const taken = callback;
+        callback = null;
+        return taken;
+      },
+    };
+  },
+} as const;

@@ -33,87 +33,90 @@ const EMPTY_COMPOSER_SEND_SCAN: ComposerSendScan = {
   excludedScanRanges: [],
 };
 
-/**
- * 扫描发送草稿的确认区间（D9 掩码二段式）。
- *
- * 1. **区间扫描**：每个确认区间 `slice` 出区间文本单独扫（触发符在 index 0
- *    天然过边界）→ `rangeResults`；
- * 2. **掩码全量扫描**：区间替换成**等长空白**（下标不变）后全量扫原文——
- *    区间内触发符不再参与识别，手输 token（区间外）照常可扫 →
- *    `fullScanResults`；
- * 3. **合并**：`attachmentScanner.mergeByPath(rangeResults, fullScanResults)`——
- *    该函数已有优先，区间结果必须放 existing 位。
- *
- * @param sourceText 未 trim 的草稿原文（区间下标基准）
- * @param content 发送正文（`sourceText.trim()`，core 扫描与落库 body）
- * @param ranges Composer 确认区间；`undefined` / `[]` → 空结果（历史全量扫描）
- */
-export function scanComposerTokenRangesForSend(sourceText: string, content: string, ranges: readonly ComposerDraftTokenRange[] | undefined): ComposerSendScan {
-  // 夹取并排序区间；丢弃非法/零长度/重叠区间（端点相接的相邻区间保留——
-  // `$A$$B$` 的第二颗必须作为独立区间扫描）。
-  if (ranges == null || ranges.length === 0) {
-    return EMPTY_COMPOSER_SEND_SCAN;
-  }
-  const clamped: ComposerDraftTokenRange[] = [];
-  for (const range of ranges) {
-    if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) {
-      continue;
+// namespace 名与下方非导出 type `ComposerSendScan` 同名：值/类型空间分离共存。
+export namespace ComposerSendScan {
+  /**
+   * 扫描发送草稿的确认区间（D9 掩码二段式）。
+   *
+   * 1. **区间扫描**：每个确认区间 `slice` 出区间文本单独扫（触发符在 index 0
+   *    天然过边界）→ `rangeResults`；
+   * 2. **掩码全量扫描**：区间替换成**等长空白**（下标不变）后全量扫原文——
+   *    区间内触发符不再参与识别，手输 token（区间外）照常可扫 →
+   *    `fullScanResults`；
+   * 3. **合并**：`attachmentScanner.mergeByPath(rangeResults, fullScanResults)`——
+   *    该函数已有优先，区间结果必须放 existing 位。
+   *
+   * @param sourceText 未 trim 的草稿原文（区间下标基准）
+   * @param content 发送正文（`sourceText.trim()`，core 扫描与落库 body）
+   * @param ranges Composer 确认区间；`undefined` / `[]` → 空结果（历史全量扫描）
+   */
+  export function scanComposerTokenRangesForSend(sourceText: string, content: string, ranges: readonly ComposerDraftTokenRange[] | undefined): ComposerSendScan {
+    // 夹取并排序区间；丢弃非法/零长度/重叠区间（端点相接的相邻区间保留——
+    // `$A$$B$` 的第二颗必须作为独立区间扫描）。
+    if (ranges == null || ranges.length === 0) {
+      return EMPTY_COMPOSER_SEND_SCAN;
     }
-    const start = Math.max(0, range.start);
-    const end = Math.min(sourceText.length, range.end);
-    if (start < end) {
-      clamped.push({start, end});
+    const clamped: ComposerDraftTokenRange[] = [];
+    for (const range of ranges) {
+      if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) {
+        continue;
+      }
+      const start = Math.max(0, range.start);
+      const end = Math.min(sourceText.length, range.end);
+      if (start < end) {
+        clamped.push({start, end});
+      }
     }
-  }
-  clamped.sort((a, b) => a.start - b.start || a.end - b.end);
+    clamped.sort((a, b) => a.start - b.start || a.end - b.end);
 
-  const normalized: ComposerDraftTokenRange[] = [];
-  let coveredUntil = 0;
-  for (const range of clamped) {
-    if (range.start < coveredUntil) {
-      continue;
+    const normalized: ComposerDraftTokenRange[] = [];
+    let coveredUntil = 0;
+    for (const range of clamped) {
+      if (range.start < coveredUntil) {
+        continue;
+      }
+      normalized.push(range);
+      coveredUntil = range.end;
     }
-    normalized.push(range);
-    coveredUntil = range.end;
-  }
-  if (normalized.length === 0) {
-    return EMPTY_COMPOSER_SEND_SCAN;
-  }
-
-  // 第 1 段：区间扫描。区间内触发符在 index 0：`$` 满足 `(?<!\S)`，`@` 到
-  // 区间尾自然终止，`$技能$` 与 `@path@` 因成对切分互不吞噬。
-  const rangeResults: MessageAttachment[] = [];
-  for (const range of normalized) {
-    const slice = sourceText.slice(range.start, range.end);
-    rangeResults.push(...attachmentScanner.scanAtPaths(slice), ...attachmentScanner.scanSkills(slice));
-  }
-
-  // 第 2 段：掩码全量扫描。等长空白保证下标不变；区间外的手输 token
-  // （`用 $foo$ 看 @notes/a.md@`）照常识别，贴邻触发器（`$A$$B$`）在源头消失。
-  let maskedText = '';
-  let cursor = 0;
-  for (const range of normalized) {
-    maskedText += sourceText.slice(cursor, range.start);
-    maskedText += ' '.repeat(range.end - range.start);
-    cursor = range.end;
-  }
-  maskedText += sourceText.slice(cursor);
-  const fullScanResults: MessageAttachment[] = [...attachmentScanner.scanAtPaths(maskedText), ...attachmentScanner.scanSkills(maskedText)];
-
-  // 第 3 段：合并——existing=区间（区间结果优先，去重键相同则保留区间对象）。
-  // 区间换算到 trim 后正文坐标：整体左移 trimStart 字符数，`end` 夹到正文
-  // 长度（尾部空白被 trim 掉）；越界/翻转/空区间丢弃。
-  const leading = sourceText.length - sourceText.trimStart().length;
-  const excludedScanRanges: ComposerDraftTokenRange[] = [];
-  for (const range of normalized) {
-    const start = Math.max(0, range.start - leading);
-    const end = Math.min(content.length, range.end - leading);
-    if (start < end) {
-      excludedScanRanges.push({start, end});
+    if (normalized.length === 0) {
+      return EMPTY_COMPOSER_SEND_SCAN;
     }
+
+    // 第 1 段：区间扫描。区间内触发符在 index 0：`$` 满足 `(?<!\S)`，`@` 到
+    // 区间尾自然终止，`$技能$` 与 `@path@` 因成对切分互不吞噬。
+    const rangeResults: MessageAttachment[] = [];
+    for (const range of normalized) {
+      const slice = sourceText.slice(range.start, range.end);
+      rangeResults.push(...attachmentScanner.scanAtPaths(slice), ...attachmentScanner.scanSkills(slice));
+    }
+
+    // 第 2 段：掩码全量扫描。等长空白保证下标不变；区间外的手输 token
+    // （`用 $foo$ 看 @notes/a.md@`）照常识别，贴邻触发器（`$A$$B$`）在源头消失。
+    let maskedText = '';
+    let cursor = 0;
+    for (const range of normalized) {
+      maskedText += sourceText.slice(cursor, range.start);
+      maskedText += ' '.repeat(range.end - range.start);
+      cursor = range.end;
+    }
+    maskedText += sourceText.slice(cursor);
+    const fullScanResults: MessageAttachment[] = [...attachmentScanner.scanAtPaths(maskedText), ...attachmentScanner.scanSkills(maskedText)];
+
+    // 第 3 段：合并——existing=区间（区间结果优先，去重键相同则保留区间对象）。
+    // 区间换算到 trim 后正文坐标：整体左移 trimStart 字符数，`end` 夹到正文
+    // 长度（尾部空白被 trim 掉）；越界/翻转/空区间丢弃。
+    const leading = sourceText.length - sourceText.trimStart().length;
+    const excludedScanRanges: ComposerDraftTokenRange[] = [];
+    for (const range of normalized) {
+      const start = Math.max(0, range.start - leading);
+      const end = Math.min(content.length, range.end - leading);
+      if (start < end) {
+        excludedScanRanges.push({start, end});
+      }
+    }
+    return {
+      attachments: attachmentScanner.mergeByPath(rangeResults, fullScanResults),
+      excludedScanRanges,
+    };
   }
-  return {
-    attachments: attachmentScanner.mergeByPath(rangeResults, fullScanResults),
-    excludedScanRanges,
-  };
 }

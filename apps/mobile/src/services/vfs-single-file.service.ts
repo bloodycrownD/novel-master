@@ -15,9 +15,9 @@
 import {AppError} from '@novel-master/core/errors';
 import {VfsServiceFactory, type BatchApplyReport, type BatchIngestPlan, type VfsScope} from '@novel-master/core/vfs';
 import {Result} from '@novel-master/core/errors';
-import {exportBytesViaDocumentPicker, knownTypesForExtension, pickAndReadFileWithMeta, type PickAndReadOptions} from './document-io';
-import {blobFs} from './rn-file-io';
-import {vfsSingleFileImportPickTypes} from './vfs-single-file-document-pick';
+import {DocumentIo, type PickAndReadOptions} from './document-io';
+import {RnFileIo} from './rn-file-io';
+import {VfsSingleFileDocumentPick} from './vfs-single-file-document-pick';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /**
@@ -66,81 +66,81 @@ interface VfsSingleFileImportOptions {
   readonly targetDir?: string;
 }
 
-/** 归一目标目录：空值与根路径别名都收敛成 `/`（与 zip 导入同口径）。 */
+export namespace VfsSingleFileService {
+  /**
+   * 导入单个文件到 VFS。
+   *
+   * picker 取消（`pickSingle` 内部已 toast「已取消」）→ 静默返回
+   * `cancelled`，不触达 core；同名冲突 → 返回 `needs-confirm` 且**不** apply；
+   * 其余（含二进制被判跳过）→ apply 并返回 `applied`。
+   */
+  export async function importFile(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: VfsSingleFileImportOptions = {}): Promise<Result<VfsSingleFileImportResult, AppError>> {
+    const pickOptions: PickAndReadOptions = {
+      mimeTypes: VfsSingleFileDocumentPick.pickTypes(),
+      // 缓存目录里的固定临时名：原件名走 fileName 返回，不靠落盘名反推。
+      localFileName: 'import.bin',
+      maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES,
+      buildTooLargeError: sizeBytes => new AppError('VFS_SINGLE_FILE_TOO_LARGE', {sizeBytes, maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES}),
+      buildCopyError: copyError => new AppError('VFS_SINGLE_FILE_READ_FAILED', {reason: copyError ?? ''}),
+      buildMissingError: fsPath => new AppError('VFS_SINGLE_FILE_NOT_FOUND', {path: fsPath}),
+    };
+    const picked = await DocumentIo.pickAndReadFileWithMeta(pickOptions);
+    if (picked == null) {
+      return Result.ok({status: 'cancelled'});
+    }
 
-/**
- * 导入单个文件到 VFS。
- *
- * picker 取消（`pickSingleDocument` 内部已 toast「已取消」）→ 静默返回
- * `cancelled`，不触达 core；同名冲突 → 返回 `needs-confirm` 且**不** apply；
- * 其余（含二进制被判跳过）→ apply 并返回 `applied`。
- */
-export async function importVfsSingleFile(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: VfsSingleFileImportOptions = {}): Promise<Result<VfsSingleFileImportResult, AppError>> {
-  const pickOptions: PickAndReadOptions = {
-    mimeTypes: vfsSingleFileImportPickTypes(),
-    // 缓存目录里的固定临时名：原件名走 fileName 返回，不靠落盘名反推。
-    localFileName: 'import.bin',
-    maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES,
-    buildTooLargeError: sizeBytes => new AppError('VFS_SINGLE_FILE_TOO_LARGE', {sizeBytes, maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES}),
-    buildCopyError: copyError => new AppError('VFS_SINGLE_FILE_READ_FAILED', {reason: copyError ?? ''}),
-    buildMissingError: fsPath => new AppError('VFS_SINGLE_FILE_NOT_FOUND', {path: fsPath}),
-  };
-  const picked = await pickAndReadFileWithMeta(pickOptions);
-  if (picked == null) {
-    return Result.ok({status: 'cancelled'});
+    const targetDir = options.targetDir == null || options.targetDir.trim() === '' ? '/' : options.targetDir;
+    const batchIo = VfsServiceFactory.createBatchIo(runtime.conn);
+    const planned = await batchIo.planBatchIngest(scope, targetDir, [{relativePath: picked.fileName, kind: 'file', bytes: picked.bytes}]);
+    if (!planned.ok) return Result.err(planned.error);
+    const plan = planned.value;
+
+    const apply = async (): Promise<Result<VfsSingleFileAppliedResult, AppError>> => {
+      const applied = await batchIo.applyBatchIngest(scope, targetDir, plan, {overwriteConfirmed: true});
+      if (!applied.ok) return Result.err(applied.error);
+      return Result.ok({status: 'applied', report: applied.value, skippedBinary: [...plan.skippedBinary]});
+    };
+
+    if (plan.conflicts.length > 0) {
+      return Result.ok({
+        status: 'needs-confirm',
+        conflictCount: plan.conflicts.length,
+        fileName: picked.fileName,
+        confirm: apply,
+      });
+    }
+    return apply();
   }
 
-  const targetDir = options.targetDir == null || options.targetDir.trim() === '' ? '/' : options.targetDir;
-  const batchIo = VfsServiceFactory.createBatchIo(runtime.conn);
-  const planned = await batchIo.planBatchIngest(scope, targetDir, [{relativePath: picked.fileName, kind: 'file', bytes: picked.bytes}]);
-  if (!planned.ok) return Result.err(planned.error);
-  const plan = planned.value;
+  /**
+   * 导出单个 VFS 文件到用户指定位置。
+   *
+   * `logicalPath` 必须是**文件**：core 的 planBatchExport 对目录会递归整棵子树，
+   * 这里按 spec D4 的口径校验 files.length === 1，误传目录直接报错不写盘。
+   */
+  export async function exportFile(runtime: MobileNovelMasterRuntime, scope: VfsScope, logicalPath: string): Promise<Result<'saved' | 'cancelled', AppError>> {
+    const batchIo = VfsServiceFactory.createBatchIo(runtime.conn);
+    const planned = await batchIo.planBatchExport(scope, [logicalPath]);
+    if (!planned.ok) return Result.err(planned.error);
+    const plan = planned.value;
+    if (plan.files.length !== 1) {
+      return Result.err(new AppError('VFS_SINGLE_FILE_EXPORT_TARGET_INVALID', {logicalPath}));
+    }
 
-  const apply = async (): Promise<Result<VfsSingleFileAppliedResult, AppError>> => {
-    const applied = await batchIo.applyBatchIngest(scope, targetDir, plan, {overwriteConfirmed: true});
-    if (!applied.ok) return Result.err(applied.error);
-    return Result.ok({status: 'applied', report: applied.value, skippedBinary: [...plan.skippedBinary]});
-  };
+    const file = plan.files[0]!;
+    // 相对路径取末段（单文件导出的 relativePath 即 basename，这里兜住异常形态）。
+    const normalizedPath = file.relativePath.replace(/\/+$/, '');
+    const pathIndex = normalizedPath.lastIndexOf('/');
+    const fileName = pathIndex === -1 ? normalizedPath : normalizedPath.slice(pathIndex + 1);
+    // 取扩展名（不含点）；无点或点开头（`.gitignore`）返回空串。
+    const dotIndex = fileName.lastIndexOf('.');
+    const extension = dotIndex > 0 ? fileName.slice(dotIndex + 1) : '';
+    // knownTypesForExtension 依赖原生模块，未知扩展名返回 []（测试环境恒 []），
+    // saveDocuments 的 mimeType 必填，故兜底不可省。
+    const mimeType = DocumentIo.knownTypesForExtension(extension)[0] ?? FALLBACK_EXPORT_MIME_TYPE;
 
-  if (plan.conflicts.length > 0) {
-    return Result.ok({
-      status: 'needs-confirm',
-      conflictCount: plan.conflicts.length,
-      fileName: picked.fileName,
-      confirm: apply,
-    });
+    // VFS 内容本就是 core 解码过的 UTF-8 文本，走 utf8 直写，不绕 base64。
+    const exportResult = await DocumentIo.exportBytes({fileName, mimeType, write: tmpPath => RnFileIo.blobFs().writeFile(tmpPath, file.content, 'utf8')});
+    return Result.ok(exportResult);
   }
-  return apply();
-}
-
-/**
- * 导出单个 VFS 文件到用户指定位置。
- *
- * `logicalPath` 必须是**文件**：core 的 planBatchExport 对目录会递归整棵子树，
- * 这里按 spec D4 的口径校验 files.length === 1，误传目录直接报错不写盘。
- */
-export async function exportVfsSingleFile(runtime: MobileNovelMasterRuntime, scope: VfsScope, logicalPath: string): Promise<Result<'saved' | 'cancelled', AppError>> {
-  const batchIo = VfsServiceFactory.createBatchIo(runtime.conn);
-  const planned = await batchIo.planBatchExport(scope, [logicalPath]);
-  if (!planned.ok) return Result.err(planned.error);
-  const plan = planned.value;
-  if (plan.files.length !== 1) {
-    return Result.err(new AppError('VFS_SINGLE_FILE_EXPORT_TARGET_INVALID', {logicalPath}));
-  }
-
-  const file = plan.files[0]!;
-  // 相对路径取末段（单文件导出的 relativePath 即 basename，这里兜住异常形态）。
-  const normalizedPath = file.relativePath.replace(/\/+$/, '');
-  const pathIndex = normalizedPath.lastIndexOf('/');
-  const fileName = pathIndex === -1 ? normalizedPath : normalizedPath.slice(pathIndex + 1);
-  // 取扩展名（不含点）；无点或点开头（`.gitignore`）返回空串。
-  const dotIndex = fileName.lastIndexOf('.');
-  const extension = dotIndex > 0 ? fileName.slice(dotIndex + 1) : '';
-  // knownTypesForExtension 依赖原生模块，未知扩展名返回 []（测试环境恒 []），
-  // saveDocuments 的 mimeType 必填，故兜底不可省。
-  const mimeType = knownTypesForExtension(extension)[0] ?? FALLBACK_EXPORT_MIME_TYPE;
-
-  // VFS 内容本就是 core 解码过的 UTF-8 文本，走 utf8 直写，不绕 base64。
-  const exportResult = await exportBytesViaDocumentPicker({fileName, mimeType, write: tmpPath => blobFs().writeFile(tmpPath, file.content, 'utf8')});
-  return Result.ok(exportResult);
 }

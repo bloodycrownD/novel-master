@@ -11,8 +11,8 @@ import {AppModal} from '@/components/ui/AppModal';
 import {useTheme} from '@/theme/ThemeProvider';
 import {formatError} from '@/errors/format-error';
 import {useRuntime} from '@/hooks/useRuntime';
-import {isDirectChild, parentLogicalPath} from '@/components/vfs/vfs-row-mapper';
-import {isBlockedMoveTarget} from '@/components/vfs/vfs-move-path';
+import {VfsRowMapper, parentLogicalPath} from '@/components/vfs/vfs-row-mapper';
+import {VfsMovePath} from '@/components/vfs/vfs-move-path';
 import {composerAtPath} from './composer-at-path';
 
 type AtRefPickerProps = {
@@ -39,26 +39,30 @@ type PickDirectoryPickerProps = {
 
 type FileReferencePickerProps = AtRefPickerProps | PickDirectoryPickerProps;
 
-/** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
-export function listPickerChildRows(rows: readonly WorkplaceListRow[], currentPath: string): WorkplaceListRow[] {
-  return rows.filter(r => isDirectChild(currentPath, r.path));
-}
-
-/** pick-directory 模式只列目录，隐藏文件勾选。 */
-export function listPickerDirectoryChildRows(rows: readonly WorkplaceListRow[], currentPath: string): WorkplaceListRow[] {
-  return listPickerChildRows(rows, currentPath).filter(r => r.kind === 'dir');
-}
-
 export {composerAtPath};
 
-function toggleInSet(prev: Set<string>, path: string): Set<string> {
-  const next = new Set(prev);
-  if (next.has(path)) {
-    next.delete(path);
-  } else {
-    next.add(path);
+// 偏离登记：文件名 FileReferencePicker 与组件同名，tsx helper namespace 不得撞组件名，
+// 按内容主体（picker 子行过滤）起名 PickerRows；成员名不含完整主体词干，保留全名。
+export namespace PickerRows {
+  /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
+  export function listPickerChildRows(rows: readonly WorkplaceListRow[], currentPath: string): WorkplaceListRow[] {
+    return rows.filter(r => VfsRowMapper.isDirectChild(currentPath, r.path));
   }
-  return next;
+
+  /** pick-directory 模式只列目录，隐藏文件勾选。 */
+  export function listPickerDirectoryChildRows(rows: readonly WorkplaceListRow[], currentPath: string): WorkplaceListRow[] {
+    return PickerRows.listPickerChildRows(rows, currentPath).filter(r => r.kind === 'dir');
+  }
+
+  function toggleInSet(prev: Set<string>, path: string): Set<string> {
+    const next = new Set(prev);
+    if (next.has(path)) {
+      next.delete(path);
+    } else {
+      next.add(path);
+    }
+    return next;
+  }
 }
 
 export function FileReferencePicker(props: FileReferencePickerProps) {
@@ -110,11 +114,11 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 打开瞬时拉一次列表
   }, [visible, scopeKey]);
 
-  const visibleRows = useMemo(() => (isPickDirectory ? listPickerDirectoryChildRows(rows, currentPath) : listPickerChildRows(rows, currentPath)), [rows, currentPath, isPickDirectory]);
+  const visibleRows = useMemo(() => (isPickDirectory ? PickerRows.listPickerDirectoryChildRows(rows, currentPath) : PickerRows.listPickerChildRows(rows, currentPath)), [rows, currentPath, isPickDirectory]);
 
   const parentPath = parentLogicalPath(currentPath);
   const canGoUp = parentPath != null;
-  const cwdBlocked = isPickDirectory ? isBlockedMoveTarget(currentPath, blockedSourcePaths) : false;
+  const cwdBlocked = isPickDirectory ? VfsMovePath.isBlockedMoveTarget(currentPath, blockedSourcePaths) : false;
   const canConfirmAtRef = selectedFiles.size > 0 || selectedDirs.size > 0;
   const canConfirmPickDir = !cwdBlocked;
   const canConfirm = isPickDirectory ? canConfirmPickDir : canConfirmAtRef;
@@ -134,11 +138,11 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
       confirmPickDirectory();
       return;
     }
-    setSelectedDirs(prev => toggleInSet(prev, currentPath));
+    setSelectedDirs(prev => PickerRows.toggleInSet(prev, currentPath));
   };
 
   const toggleFile = (filePath: string) => {
-    setSelectedFiles(prev => toggleInSet(prev, filePath));
+    setSelectedFiles(prev => PickerRows.toggleInSet(prev, filePath));
   };
 
   const handleConfirm = () => {
@@ -211,13 +215,13 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                 const pathParts = item.path.split('/').filter(Boolean);
                 const label = pathParts[pathParts.length - 1] ?? item.path;
                 if (item.kind === 'dir') {
-                  const dirBlocked = isPickDirectory && isBlockedMoveTarget(item.path, blockedSourcePaths);
+                  const dirBlocked = isPickDirectory && VfsMovePath.isBlockedMoveTarget(item.path, blockedSourcePaths);
                   const checked = selectedDirs.has(item.path);
                   return (
                     <View style={styles.row} testID={`file-ref-dir-${item.path}`}>
                       {isPickDirectory ? null : (
                         <Pressable
-                          onPress={() => setSelectedDirs(prev => toggleInSet(prev, item.path))}
+                          onPress={() => setSelectedDirs(prev => PickerRows.toggleInSet(prev, item.path))}
                           style={styles.checkHit}
                           testID={`file-ref-dir-check-${item.path}`}
                           accessibilityLabel={`选用目录 ${label}`}

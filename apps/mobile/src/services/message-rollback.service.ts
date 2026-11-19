@@ -7,6 +7,8 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 type RollbackScope = {readonly projectId: string; readonly sessionId: string};
 
-export async function rollbackToMessage(runtime: MobileNovelMasterRuntime, scope: RollbackScope, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
-  return runtime.sessionFs.rollbackFilesToMessage(scope.sessionId, scope.projectId, messageId, options);
+export namespace MessageRollbackService {
+  export async function rollback(runtime: MobileNovelMasterRuntime, scope: RollbackScope, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
+    return runtime.sessionFs.rollbackFilesToMessage(scope.sessionId, scope.projectId, messageId, options);
+  }
 }
