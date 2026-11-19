@@ -223,11 +223,12 @@ test("CLI 端到端：文本模式汇总行（FINDINGS/PASS）与退出码", () 
     const failed = runCli(["check", dirty], PKG_ROOT);
     assert.equal(failed.status, 1);
     assert.ok(failed.stdout.includes("PARAMS") && failed.stdout.includes("VARDECL"), "阻断行进表格");
-    assert.ok(failed.stdout.includes("nm-style: FINDINGS（signatures=6 hygiene=0 bare-exports=0 dup=0 oop=0）"));
+    // wave-4 起汇总行五行全实数：bare-exports/dup/oop 接入后，域外文件 INFO(0)、无基线仓 dup=无基线。
+    assert.ok(failed.stdout.includes("nm-style: FINDINGS（signatures=6 hygiene=0 bare-exports=INFO(0) dup=无基线 oop=INFO(0)）"));
     fs.writeFileSync(clean, "export const ok = 1;\nexport function fine(a: string): string { return a; }\n");
     const passed = runCli(["check", clean], PKG_ROOT);
     assert.equal(passed.status, 0);
-    assert.ok(passed.stdout.includes("nm-style: PASS（signatures=0 hygiene=0 bare-exports=0 dup=0 oop=0）"));
+    assert.ok(passed.stdout.includes("nm-style: PASS（signatures=0 hygiene=0 bare-exports=INFO(0) dup=无基线 oop=INFO(0)）"));
   } finally {
     fs.rmSync(dirty, { force: true });
     fs.rmSync(clean, { force: true });
@@ -323,7 +324,7 @@ test("CLI 端到端：--range/--since 扫描面 exit 1，--range 缺值 exit 2",
   }
 });
 
-test("CLI 用法：无扫描面（无参 / --all）exit 2 且提示缺省扫描面未接线", () => {
+test("CLI 用法：缺省扫描面目录不存在（无参 / --all，cwd=包根无 packages/core/src）exit 2 且友好提示", () => {
   const bare = runCli(["check"], PKG_ROOT);
   assert.equal(bare.status, 2);
   assert.ok(bare.stderr.includes("缺省扫描面"));
