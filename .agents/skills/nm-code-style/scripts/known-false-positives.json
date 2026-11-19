@@ -221,6 +221,38 @@
       "file": "packages/core/src/service/prompt/render-prompt.ts",
       "symbol": "buildPromptPreviewTurnsFromLayout",
       "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
+    },
+    {
+      "segment": "methods",
+      "file": "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts",
+      "symbol": "countMessages",
+      "category": "port-impl",
+      "reason": "TokenCounter port 的接口方法实现（legacy compaction 估算路径），implements 契约要求必须存在，删实现即编译失败；check-methods 按名字计数数不到 port 接口层的消费者。同类实现 SentencePieceTokenCounter.countMessages 未被报出仅因测试撞名。",
+      "basis": "packages/core/src/infra/tokenizer/ports/token-counter.port.ts:39 声明 countMessages；实现处 tiktoken-token-counter.ts:40（implements TokenCounter）。"
+    },
+    {
+      "segment": "inline",
+      "file": "apps/desktop/src/main/ipc/handlers/agent-registry.ts",
+      "symbol": "importAgentFromYaml",
+      "category": "rule-conflict",
+      "reason": "具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参重新跨行（check-signatures ARGS/VARDECL），两条规则互斥。keep-local 已写在 :240，但 check-inline 的箭头函数行数口径下不生效。",
+      "basis": "agent-registry.ts:240（keep-local）、:241-263（importAgentFromYaml 定义与单调用点 :264）；check-inline.mjs:130（>20 行才认 keep-local）；check-signatures.mjs VARDECL 判据。"
+    },
+    {
+      "segment": "inline",
+      "file": "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts",
+      "symbol": "importRulesFromYaml",
+      "category": "rule-conflict",
+      "reason": "具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参重新跨行（check-signatures ARGS/VARDECL），两条规则互斥。函数体约 13 行不满足 keep-local 的 >20 行豁免。",
+      "basis": "smart-sort-rule.ts:191（keep-local）、:192-204（importRulesFromYaml 定义与单调用点 :205）；check-inline.mjs:130（>20 行才认 keep-local）；check-signatures.mjs VARDECL 判据。"
+    },
+    {
+      "segment": "methods",
+      "file": "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts",
+      "symbol": "countMessages",
+      "category": "port-impl",
+      "reason": "TokenCounter port 的接口方法实现（legacy compaction 估算路径），implements 契约要求必须存在；生产消费走 counter.countSerializedPrompt（web-tokenizer-counter.ts:134），countMessages 是接口方法不是单点私有函数。",
+      "basis": "packages/core/src/infra/tokenizer/ports/token-counter.port.ts:39 声明 countMessages；实现处 web-tokenizer-counter.ts:99（implements TokenCounter）。"
     }
   ],
   "suppressPrefixes": [

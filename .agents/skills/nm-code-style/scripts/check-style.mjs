@@ -6,6 +6,8 @@
  *   3. check-methods.mjs    — §1/§9 类方法死代码 / 单点内联 / 薄包装 / 废弃
  *   4. find-fake-exports.mjs — §4.1 假公开 / 仅测试引用 / 死导出
  *   5. check-oop.mjs        — §9 OOP 化候选（默认只提示，--strict 才阻断）
+ *   6. bare-exports 段      — §9.4/p24 新增裸顶层 export function 门禁
+ *                            （--changed 拦新增并阻断；--all/指定目录只报存量计数不阻断）
  *
  * 用法：
  *   node .agents/skills/nm-code-style/scripts/check-style.mjs --changed
@@ -14,7 +16,8 @@
  *   node .../check-style.mjs packages/core/src/domain/chat/logic
  *   node .../check-style.mjs --changed --include-tests
  *
- * 退出码：signatures / inline / 导出审计有发现 → 1。`--changed` / `--all` / `--strict`
+ * 退出码：signatures / inline / 导出审计有发现 → 1；bare-exports 在 --changed 下
+ * 有新增裸顶层 export function 同样 → 1。`--changed` / `--all` / `--strict`
  * 时导出审计按严格模式（INLINE_CANDIDATE 含 public 单点）；默认全 core 扫描仍输出线索表。
  * `--changed` 只覆盖改动文件；找未改动文件里的死导出要用 `--all` 或传目录。
  * 修完必须重跑；内联和删除会制造新的单点/死引用。
@@ -28,7 +31,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectFiles, parseFlags, toPosix } from "./lib/style-utils.mjs";
+import { addedLineFilter, collectFiles, parseFlags, toPosix } from "./lib/style-utils.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const flags = parseFlags(process.argv.slice(2));
@@ -167,7 +170,62 @@ for (const target of fakeTargets) {
   if (run("find-fake-exports.mjs", args) !== 0) fakeFailed = true;
 }
 
-const failed = !signatures || !inline || !methods || fakeFailed;
+// —— bare-exports：p24 期间拦新增裸顶层 export function（与目标仓 scripts/list-bare-exports.mjs 同口径）——
+const BARE_EXPORT_FN = /^export\s+(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/;
+
+/** 单文件内的裸顶层 export function，返回 [{name, line}]。豁免与目标仓口径一致：hooks / .tsx PascalCase 组件 / keep-bare 注释。addedLine 非 null 时只留新增行；HEAD 已有同名导出的不算新增（防跨 hunk 移动/行尾重写把既有函数误判成新增导出）。 */
+function scanBareExports(file, addedLine, headExportNames) {
+  const isTsx = file.endsWith(".tsx");
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+  const found = [];
+  for (let i = 0; i < lines.length; i++) {
+    const match = BARE_EXPORT_FN.exec(lines[i]);
+    if (match == null) continue;
+    const name = match[1];
+    if (isTsx && /^[A-Z]/.test(name)) continue;
+    if (/^use[A-Z0-9_]/.test(name) || name === "use") continue;
+    if (lines.slice(Math.max(0, i - 3), i).join("\n").includes("nm-style: keep-bare")) continue;
+    if (addedLine != null && !addedLine(file, i + 1)) continue;
+    if (headExportNames != null && headExportNames.has(name)) continue;
+    found.push({ name, line: i + 1 });
+  }
+  return found;
+}
+
+/** `git show HEAD:<file>` 的顶层 export function 名集合；文件不在 HEAD（新增文件）或 git 不可用时返回 null（不做豁免）。 */
+function headExportFnNames(relFile) {
+  const result = spawnSync("git", ["show", `HEAD:${toPosix(relFile)}`], { encoding: "utf8", maxBuffer: 1024 * 1024 * 20 });
+  if (result.status !== 0 || result.stdout == null) return null;
+  const names = new Set();
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const match = BARE_EXPORT_FN.exec(line);
+    if (match != null) names.add(match[1]);
+  }
+  return names;
+}
+
+console.log("\n== bare-exports ==");
+let bareExportsFailed = false;
+let bareExportsCount = 0;
+if (flags.changed) {
+  const addedLine = addedLineFilter(true);
+  const headNamesCache = new Map();
+  const headNamesOf = (file) => {
+    const key = toPosix(file);
+    if (!headNamesCache.has(key)) headNamesCache.set(key, headExportFnNames(key));
+    return headNamesCache.get(key);
+  };
+  const finds = collectFiles({ ...flags, changed: true }).flatMap((file) => scanBareExports(file, addedLine, headNamesOf(file)).map((fn) => ({ file, ...fn })));
+  for (const { file, name, line } of finds) console.log(`FIND  ${toPosix(file)}:${line}  ${name}  [bare-export] p24 期间新增顶层 export function 必须直接进 namespace；确需裸导出加 nm-style: keep-bare 注释`);
+  if (finds.length === 0) console.log("bare-exports: PASS（改动文件无新增裸顶层 export function）");
+  bareExportsFailed = finds.length > 0;
+} else {
+  const files = collectFiles({ ...flags, paths: flags.paths.length > 0 ? flags.paths : ["packages/core/src"] });
+  bareExportsCount = files.reduce((total, file) => total + scanBareExports(file).length, 0);
+  console.log(`bare-exports: INFO(${bareExportsCount}) 存量裸顶层 export function（p24 收编对象，此处只计数不阻断；全仓清单见目标仓 scripts/list-bare-exports.mjs）`);
+}
+
+const failed = !signatures || !inline || !methods || fakeFailed || bareExportsFailed;
 // —— dup-signatures：所有函数（含 export）的签名重复增量门禁 ——
 console.log(String.fromCharCode(10) + "== dup-signatures（所有函数，含 export）==");
 try {
@@ -189,5 +247,5 @@ try {
 console.log("\n== check-oop ==");
 const oop = run("check-oop.mjs", [...(flags.changed ? ["--changed"] : []), ...flags.paths, ...(flags.strict ? ["--strict"] : [])]);
 const oopFailed = flags.strict && oop !== 0;
-console.log(`\ncheck-style: ${failed || oopFailed ? "FINDINGS" : "PASS"}（signatures=${signatures ? "PASS" : "FIND"} inline=${inline ? "PASS" : "FIND"} methods=${methods ? "PASS" : "FIND"} exports=${fakeFailed ? "FIND" : "PASS"} oop=${oop === 0 ? "PASS" : "REVIEW"}）`);
+console.log(`\ncheck-style: ${failed || oopFailed ? "FINDINGS" : "PASS"}（signatures=${signatures ? "PASS" : "FIND"} inline=${inline ? "PASS" : "FIND"} methods=${methods ? "PASS" : "FIND"} exports=${fakeFailed ? "FIND" : "PASS"} bare-exports=${flags.changed ? (bareExportsFailed ? "FIND" : "PASS") : `INFO(${bareExportsCount})`} oop=${oop === 0 ? "PASS" : "REVIEW"}）`);
 process.exit(failed || oopFailed ? 1 : 0);

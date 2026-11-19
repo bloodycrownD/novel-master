@@ -38,7 +38,9 @@ export function parseFlags(argv) {
 
 function gitLines(command) {
   try {
-    return execSync(command, { encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean);
+    // 大改动（千文件级）的 diff 输出可超 execSync 默认 1MB maxBuffer，超限抛错会让 --changed
+    // 的行级过滤静默失效（所有行都算新增行）——这里放大到 64MB 并保持失败时返回空。
+    return execSync(command, { encoding: "utf8", maxBuffer: 1024 * 1024 * 64 }).trim().split(/\r?\n/).filter(Boolean);
   } catch {
     return [];
   }
@@ -59,29 +61,50 @@ export function collectFiles({ changed, includeTests, paths }) {
   return unique.sort();
 }
 
-/** `--changed` 时只报新增行；未跟踪文件视为整文件新增。 */
+/**
+ * `--changed` 时只报新增行；未跟踪文件视为整文件新增。
+ * hunk 内「删了又加」的行（行尾变化、重排后内容不变）不算新增——只报真正新增内容的行，
+ * 否则触碰大文件时既有拆行会被当成新增债报出。跨 hunk 移动不在此配对（bare-exports 段另有 HEAD 兜底）。
+ */
 export function addedLineFilter(changed) {
   if (!changed) return () => true;
-  const ranges = new Map();
+  const addedLines = new Map();
   let current = null;
-  for (const line of gitLines("git diff HEAD -U0")) {
+  let plusLine = 0;
+  let removedInHunk = new Map();
+  const consumeRemoved = (text) => {
+    const count = removedInHunk.get(text) ?? 0;
+    if (count > 0) removedInHunk.set(text, count - 1);
+  };
+  for (const raw of gitLines("git diff HEAD -U0")) {
+    const line = raw.replace(/\r$/, "");
     if (line.startsWith("diff --git ")) {
       current = null;
     } else if (line.startsWith("+++ b/")) {
       current = line.slice(6);
     } else if (current != null && line.startsWith("@@")) {
       const match = /\+(\d+)(?:,(\d+))?/.exec(line);
-      if (match == null) continue;
-      const start = Number(match[1]);
-      const count = match[2] == null ? 1 : Number(match[2]);
-      const list = ranges.get(current) ?? [];
-      list.push([start, start + count - 1]);
-      ranges.set(current, list);
+      plusLine = match == null ? 0 : Number(match[1]);
+      removedInHunk = new Map();
+    } else if (current != null && line.startsWith("-") && !line.startsWith("---")) {
+      const text = line.slice(1);
+      removedInHunk.set(text, (removedInHunk.get(text) ?? 0) + 1);
+    } else if (current != null && line.startsWith("+") && !line.startsWith("+++")) {
+      const text = line.slice(1);
+      const removedCount = removedInHunk.get(text) ?? 0;
+      if (removedCount > 0) {
+        consumeRemoved(text);
+      } else {
+        const set = addedLines.get(current) ?? new Set();
+        set.add(plusLine);
+        addedLines.set(current, set);
+      }
+      plusLine += 1;
     }
   }
   return (file, line) => {
-    const list = ranges.get(toPosix(file));
-    return list == null || list.some(([start, end]) => line >= start && line <= end);
+    const set = addedLines.get(toPosix(file));
+    return set == null || set.has(line);
   };
 }
 
