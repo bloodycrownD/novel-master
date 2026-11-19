@@ -379,3 +379,22 @@ test("CLI 端到端：--changed 行过滤 + 引用面恒全仓——唯一消费
     fs.rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test("index 子命令：dump symbol-index（spec §3.4 调试面），表格与 --json 两形态", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "nm-style-index-"));
+  try {
+    fs.mkdirSync(path.join(repo, "packages/demo/src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "packages/demo/src/a.ts"), "export function alpha() {}\nexport const Box = { go() {} };\n");
+    const table = runCli(["index"], repo);
+    assert.equal(table.status, 0);
+    assert.ok(table.stdout.includes("bare-fn") && table.stdout.includes("1 个文件"), "表格形态含 form 计数");
+    const json = runCli(["index", "--json"], repo);
+    assert.equal(json.status, 0);
+    const parsed = JSON.parse(json.stdout);
+    assert.equal(parsed.files, 1);
+    assert.ok(parsed.symbols.some((s) => s.name === "alpha" && s.form === "bare-fn"));
+    assert.ok(parsed.symbols.some((s) => s.name === "go" && s.form === "object-method"));
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});

@@ -17,6 +17,7 @@ import { dupBaselinePayload, dupGateCompare, salvageJudged, scanDupGroups, type 
 import { scanOop } from "./rules/oop.js";
 import { hygieneUnits, scanHygiene, type HygieneMode } from "./rules/hygiene.js";
 import { rangeScanInput, scanSignatures, type SignaturesScanContext } from "./rules/signatures.js";
+import { buildSymbolIndex } from "./lib/symbols.js";
 
 const USAGE_LINES = [
   "nm-style <command> [args...]",
@@ -59,7 +60,8 @@ function main(): number {
   if (command === "gate") return runGate(rest);
   if (command === "list") return runList(rest);
   if (command === "baseline") return runBaseline(rest);
-  console.error(`nm-style: 命令「${command}」尚未实现（后续波次接入）`);
+  if (command === "index") return runIndex(rest);
+  console.error(`nm-style: 命令「${command}」尚未实现`);
   return 2;
 }
 
@@ -438,6 +440,22 @@ function writeBareBaseline(baselinePath: string, includeTests: boolean): number 
   fs.writeFileSync(baselinePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   const totalFn = Object.values(files).reduce((n, v) => n + v.length, 0);
   console.log(`已写基线：${Object.keys(files).length} 文件 / ${totalFn} 函数 → ${baselinePath}`);
+  return 0;
+}
+
+/** `index [--json]`：调试——dump 当前仓（packages+apps 口径树，与 hygiene 引用面同宇宙）的 symbol-index。 */
+function runIndex(argv: string[]): number {
+  const flags = parseFlags(argv);
+  const units = hygieneUnits([]);
+  const index = buildSymbolIndex(units);
+  if (flags.json) {
+    console.log(JSON.stringify({ files: units.length, symbols: index.symbols, bindings: index.bindings }, null, 2));
+    return 0;
+  }
+  const byForm = new Map<string, number>();
+  for (const symbol of index.symbols) byForm.set(symbol.form, (byForm.get(symbol.form) ?? 0) + 1);
+  console.log(`== nm-style index ==（${units.length} 个文件，${index.symbols.length} 个符号，${index.bindings.length} 条绑定）`);
+  for (const [form, count] of [...byForm].sort((a, b) => a[0].localeCompare(b[0]))) console.log(`  ${form.padEnd(16)} ${count}`);
   return 0;
 }
 
