@@ -48,7 +48,7 @@
 | core/common+errors+i18n+presentation+bootstrap+domain 杂项 | ~30 | ~90 | p24 |
 | **合计** | **663** | **1881** | |
 
-**精确清单生成器**：分桶脚本 `D:/tmp/bare-buckets.py` 随本 spec 移入 `scripts/list-bare-exports.mjs`（步骤 1 实现），按域桶输出精确到文件的清单。**执行分片必须用生成的清单，禁止 agent 自选范围。**
+**精确清单生成器**：由 `nm-style list bare --summary|--bucket <桶>` 输出按域桶分组的精确文件清单（nm-style-toolchain 迭代已把本 spec 的两个生成器收编为该命令）。**执行分片必须用生成的清单，禁止 agent 自选范围。**
 
 ## 三、统一改法（机械规则，执行者不做风格判断）
 
@@ -92,7 +92,7 @@
 
 | 波 | 内容 | 分片 |
 |---|---|---|
-| 0 | 规则层：SKILL.md 统一判据 + `check-style` 第四段 `bare-exports`（`--changed` 拦新增）+ `scripts/list-subject-clusters.mjs` + `scripts/list-bare-exports.mjs` | 1 |
+| 0 | 规则层：SKILL.md 统一判据 + `nm-style check` 的 bare-exports 段（`--changed` 拦新增）+ `nm-style gate bare`（基线守增量）+ `nm-style list bare --summary|--bucket`（精确清单与域桶汇总）——两个生成器已由 nm-style-toolchain 迭代收编 | 1 |
 | 1 | A 类族（core 侧 5 族）：`SessionApiPromptTokenEntry` / `LogicalPath` / `ChatTokenEstimateMemo` / `FsCommand`（先并文件）/ `ProviderTableSnapshot`（先并文件）——判据已定，机械执行 | 1-2 |
 | 2 | C 类族判定（core 侧：`FileCachePayload` / `VfsZip`（core 侧）/ `InTransaction` 的 `resolvePathsNeedDeleteInTransaction`）——**只读**，产出处置 + 证据 | 1（只读） |
 | 3 | core/domain 桶：vfs / tool / workplace+smart-sort+skills+format+depth / chat+provider+message-checkpoint+prompt+abort+agent+session-kkv+character-card+session-run-state+usage | 4 片并行 |
@@ -131,9 +131,9 @@
 ```
 1. 根 typecheck                          exit 0（14 workspace）
 2. core / desktop / mobile 全量测试       exit 0
-3. check-style 四段                       signatures / inline / methods PASS；bare-exports 新增 0
+3. nm-style check --all                  signatures / hygiene PASS；bare-exports 段 INFO 计数与 gate bare 对表
 4. dup-gate                               新增 0（namespace 化产生同方法名新组 → 登记 baseline + 理由，不算违规）
-5. list-subject-clusters --gate           新增族 0、新增裸导出 0
+5. nm-style gate bare                    新增裸导出 0（新增族视图随 list clusters --all 人工过目）
 6. 裸导出总量（豁免外）                    p24 后 core 侧 0；p25 后全仓 0
 7. A 类 13 族旧顶层名全仓 grep             0 残留
 8. C 类每族一条明确结论（收/跳过 + file:line 证据），不允许「未判定」
@@ -156,10 +156,10 @@
 ## 八、检测器规格（波 0 产出）
 
 ```bash
-node scripts/list-subject-clusters.mjs <repo> --all            # 四种视图
-node scripts/list-subject-clusters.mjs <repo> --gate           # 与 baseline 比对，新增 exit 1
-node scripts/list-bare-exports.mjs <repo> --bucket core/domain/vfs   # 按域桶输出精确文件清单
-node scripts/list-bare-exports.mjs <repo> --summary                 # 域桶汇总表
+nm-style list clusters --all                # 四种视图（同主体族/修饰词复读/长名榜/裸函数榜）
+nm-style gate bare                          # 与 scripts/bare-exports-baseline.json 比对，新增 exit 1
+nm-style list bare --bucket core/domain/vfs    # 按域桶输出精确文件清单
+nm-style list bare --summary                   # 域桶汇总表
 ```
 
 四种视图：同主体族 / 修饰词复读 / 长名榜 / 裸函数榜（按文件聚合计数 + 域桶汇总）。

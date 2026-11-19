@@ -21,12 +21,12 @@ function captureErrors(fn) {
   }
 }
 
-test("加载包根真实 KFP：33 条零警告，rule 分布 32 hygiene + 1 signatures", () => {
+test("加载包根真实 KFP：entries 11 条零警告（10 hygiene + 1 signatures 防御性保留）+ 尾部 retired 段 22 条留档", () => {
   const { result: manifest, errors } = captureErrors(() => loadKfp());
   assert.equal(errors.length, 0);
-  assert.equal(manifest.entries.length, 33);
+  assert.equal(manifest.entries.length, 11);
   assert.deepEqual(manifest.suppressPrefixes, ["apps/cli/"]);
-  assert.equal(manifest.entries.filter((entry) => entry.rule === "hygiene").length, 32);
+  assert.equal(manifest.entries.filter((entry) => entry.rule === "hygiene").length, 10);
   assert.equal(manifest.entries.filter((entry) => entry.rule === "signatures").length, 1);
   for (const entry of manifest.entries) {
     assert.equal(typeof entry.file, "string");
@@ -34,9 +34,14 @@ test("加载包根真实 KFP：33 条零警告，rule 分布 32 hygiene + 1 sign
     assert.equal(typeof entry.reason, "string");
     assert.ok(entry.symbol === null || (typeof entry.symbol === "string" && entry.symbol.length > 0));
   }
-  // 抽查两条代表性条目确认逐字迁移
-  assert.ok(manifest.entries.some((entry) => entry.rule === "signatures" && entry.symbol === "raceWithCancel" && entry.file === "packages/core/src/domain/abort/logic/create-abort-scope.ts"));
+  // Step 7 burn-in 复核落盘布局（证据 tmp/golden/E-kfp-33-review.md：retired 23 判定，raceWithCancel 防御性保留在 entries）
+  const defensiveEntry = manifest.entries.find((entry) => entry.rule === "signatures" && entry.symbol === "raceWithCancel" && entry.file === "packages/core/src/domain/abort/logic/create-abort-scope.ts");
+  assert.ok(defensiveEntry != null && defensiveEntry.reason.includes("防御性保留"), "raceWithCancel 应以防御性保留标注存于 entries");
   assert.ok(manifest.entries.some((entry) => entry.rule === "hygiene" && entry.symbol === null && entry.file === "packages/core/src/errors/either.ts"));
+  // 尾部 retired 段留档：22 条、每条带退役机制、不参与匹配（loadKfp 只读 entries）
+  const raw = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "known-false-positives.json"), "utf8"));
+  assert.equal(raw.retired.length, 22);
+  assert.ok(raw.retired.every((entry) => typeof entry.retiredReason === "string" && entry.retiredReason.length > 0));
 });
 
 const FIXTURE = {
