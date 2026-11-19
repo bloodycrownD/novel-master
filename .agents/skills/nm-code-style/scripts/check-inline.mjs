@@ -52,6 +52,16 @@ function isParamDerived(arg, paramName) {
     if (ts.isPropertyAccessExpression(arg.expression) && ts.isIdentifier(arg.expression.expression) && arg.expression.expression.text === paramName) return true;
     if (ts.isIdentifier(arg.expression) && ["String", "Number", "Boolean"].includes(arg.expression.text)) return true;
   }
+  // 对象字面量包裹：`new Impl({conn})` / `f({conn, opts})` —— 每个属性值都必须由该参数派生。
+  // 有一处不是（如 `{conn, extra: other}` 或 spread `...deps(x)`）就判「不是纯转发」，避免把真组装误报。
+  if (ts.isObjectLiteralExpression(arg)) {
+    if (arg.properties.length === 0) return false;
+    return arg.properties.every((prop) => {
+      if (ts.isShorthandPropertyAssignment(prop)) return prop.name.text === paramName;
+      if (ts.isPropertyAssignment(prop)) return isParamDerived(prop.initializer, paramName);
+      return false;
+    });
+  }
   return false;
 }
 

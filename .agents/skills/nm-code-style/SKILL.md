@@ -487,6 +487,24 @@ class ChatMessageEntity {
 - **值对象**：`AttachmentPath`、`PromptPathSeen`、`ComposerAtPath` —— 若没有实例状态，用命名空间对象，不要靠 `new` 制造身份；
 - **数据包装/假对象**：`MessageContentEntity`、`UserVfsTurnStorage`、`ChatMessageEntity` —— 删除或提升为真正的实体。
 
+### 9.7 顶层裸函数收口（subject-cluster，2026-11-19 立项）
+
+**顶层裸 `export function` 本身是异常态**——即使构不成 ≥3 动词的族，裸导出也不该是默认形态。作用范围由结构（namespace / class）表达，不由名字后缀表达。`createXxx` 族（p23 收成 `XxxFactory`）与「同一主体多动词族」（`SessionApiPromptTokenEntry.read`）是同一原则的两面。
+
+三个可机械化信号：同主体多动词族（`getXxx`/`setXxx`/`deleteXxx`/`renameXxx` 宾语相同）、修饰词复读（`ForTests`/`After*`/`FromLayout`/`InTransaction` ×3+）、超长名（≥32 字符）。
+
+统一改法（机械规则，不做风格判断）：
+
+- **namespace 命名**默认取文件名 PascalCase（`vfs-path-mapper.ts` → `VfsPathMapper`）；文件名带动词前缀（`create-abort-scope.ts`）或与域内符号冲突时，按内容主体起名并在 notes 登记理由。
+- 一个文件一个 namespace；文件内**全部**裸 export function 收进去；非 export 的顶层函数**同时收**（同文件内调用改 `Ns.fn(...)`）。
+- **成员名剥主体词**：`resolveLogicalPath` → `VfsPathMapper.resolve`；无主体词的保留（`read`/`write`/`parse`）；剥后撞名保留区分性修饰（`resolveNeedDelete`），不许 `resolve2`。
+- **硬切，不留兼容壳**：禁止 `export const resolveLogicalPath = VfsPathMapper.resolve` 引用别名（§4.1 已判死刑的形态）。消费方 import 与调用点同步迁移。
+- **既有裁决不翻案**：`XxxFactory`（p23）、十八期保留项（persistent-preferences 门面、composer-status 双端镜像）、`common/` 11 个 namespace（p12）是目标形态，不重做。
+
+豁免（默认不允许，必须显式）：React 组件（`.tsx` + PascalCase）、`use*` hooks（React 顶层调用规则）、test 目录、其余确有理由的写 `// nm-style: keep-bare: <理由>` 进 baseline。
+
+检测器：`node scripts/list-bare-exports.mjs <repo> --summary|--bucket <桶>` 圈精确清单；`node scripts/list-subject-clusters.mjs <repo> --gate` 守增量（新增裸导出 exit 1）；`check-style` 第四段 `bare-exports` 在 `--changed` 模式拦新增。
+
 ## 交付前检查
 
 - 跑过 `check-style.mjs --changed` 并循环到 0 处？收尾再跑一次 `--all`。

@@ -15,13 +15,44 @@
 **代码**
 
 - ESM + `node:` 前缀：`import {readFileSync} from "node:fs"`；禁止 `require`
-- 双引号、2 空格缩进（与 prettier 默认一致）。改完跑 `npx prettier --write --print-width 200 <files>`
+- 双引号、2 空格缩进（与 prettier 默认一致）。改完**只对单文件 / 单包**跑 `node scripts/prettier-guard.mjs -- --write --print-width 200 <files>`；不要直接对全仓跑 prettier（原因见下面「prettier guard」一节）
 - 可执行脚本首行 `#!/usr/bin/env node`
 - **文件头注释必须包含：用途 / 用法 / 退出码**（范式见 `scan-spread-await-risk.mjs`）
 - CLI：位置参数取实参，可选参数用 `--flag value`；缺参时打印用法并 `exit 2`
 - 退出码：成功 `0`、业务判定失败 `1`、用法错误 `2`。门禁脚本必须能返回非 0
 - 输出：人读信息走 `console.log`，错误走 `console.error`；不要静默吞异常
 - 临时产物只写 `tmp/`（已 gitignore），用完删掉；不要在仓库根留 `*.log` / `*.png`
+
+## prettier guard — 别让格式化把 check-signatures 打红
+
+`nm-code-style` §2 要求函数签名、调用参数、`new` 构造、短 import、简单右值都写一行，而 prettier 按 `printWidth` 拆行，两者天然冲突。**六期实测**：对全仓跑
+
+```
+npx prettier --write --print-width 200
+```
+
+之后，`check-signatures` 从 **0 反弹到 148 处**；`--print-width 200` 也挡不住，最后只能 `git restore .` 回滚。这类纯重排混进 diff 会淹没真正的评审点，所以写操作必须收窄。
+
+正确流程：先让 `check-signatures` 确认目标文件本来就有 0 处发现（有发现的文件不要跑 prettier——那是规范冲突，不是格式不整），再只对这些文件单独跑：
+
+```
+node .agents/skills/nm-code-style/scripts/check-signatures.mjs packages/core/src/foo.ts
+node scripts/prettier-guard.mjs -- --write --print-width 200 packages/core/src/foo.ts
+```
+
+只读检查不受限，可以扫整包或全仓：
+
+```
+node scripts/prettier-guard.mjs -- --check --print-width 200 packages/core/src
+```
+
+`prettier-guard.mjs` 会拒绝下列写法，并以退出码 2 打印正确用法：
+
+- `--write` 没带 `--print-width`（prettier 默认 80，几乎必然拆行）
+- 跨包宽通配：`packages/*`、`apps/**`、`packages/{core,desktop}/...` 等
+- 仓库根 / 全局通配：`.`、`*`、`**/*`、裸 `packages` / `apps`、`{packages,apps}/**`
+
+通过后它用 `npx prettier <原参数>` 原样转发，退出码透传；guard 自己的用法错误 / 拒绝一律为 2。
 
 ## 门禁类（被 `package.json` / git hook / CI 引用，改接口要同步调用方）
 
