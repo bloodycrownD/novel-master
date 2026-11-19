@@ -293,7 +293,7 @@ export const Service = { go() {} };
     unit(
       "packages/demo/src/user.ts",
       `
-import { Service as Svc } from "./containers";
+import { Outer, Service as Svc } from "./containers";
 Outer.inner.hit();
 makeSink().drain();
 Svc.go();
@@ -428,4 +428,96 @@ test("简写绑定 { helper }：注册为容器成员且绑定位不计消费（
   assert.equal(member.form, "object-binding");
   const memberRefs = index.globalRefs(member);
   assert.ok(memberRefs.prodCalls + memberRefs.prodRefs >= 1, "Sink.helper() 调用须命中成员");
+});
+
+test("回退命名容器不劫持接收者归因：实参对象字面量让位保守归因（修复前 ping 假 DEAD）", () => {
+  const index = buildSymbolIndex([
+    unit(
+      "packages/demo/src/arg-hijack.ts",
+      `
+function createService(options: { tag: string }) {
+  return { ping() { return options.tag; } };
+}
+const svc2 = createService({ tag: "x" });
+svc2.ping();
+`,
+    ),
+  ]);
+  const [ping] = index.find("ping", "createService");
+  // 实参 { tag } 被 objectBindingOf 回退注册成名为 svc2 的容器，修复前 svc2.ping() 精确归因到它 → ping prodCalls 0（假 kill）；
+  // 回退命名容器不是标识符 svc2 绑定值的容器，过滤后无法归因 → 按属性名保守命中（spec §3.2）。
+  assert.deepEqual(index.globalRefs(ping), refs(1, 0, 0, 0));
+});
+
+test("跨文件工厂形态：create 返回对象的成员经保守归因计入 test 消费（StreamWatchdog 形状）", () => {
+  const index = buildSymbolIndex([
+    unit(
+      "packages/demo/src/watchdog.ts",
+      `
+export const StreamWatchdog = {
+  create(options: { interval: number }) {
+    return { noteActivity() { return options.interval; }, stop() {} };
+  },
+};
+`,
+    ),
+    unit(
+      "packages/demo/test/watchdog.test.ts",
+      `
+import { StreamWatchdog } from "../src/watchdog";
+const w = StreamWatchdog.create({ interval: 5 });
+w.noteActivity();
+`,
+    ),
+  ]);
+  const [noteActivity] = index.find("noteActivity", "create");
+  // 测试文件里 create({...}) 的实参容器（回退命名为 w）不得劫持 w.noteActivity()：noteActivity 计 test 消费
+  assert.deepEqual(index.globalRefs(noteActivity), refs(0, 0, 1, 0));
+});
+
+test("直接绑定不回归：真绑定容器保持精确归因，同名成员不被保守归因翻倍", () => {
+  const index = buildSymbolIndex([
+    unit(
+      "packages/demo/src/direct-bind.ts",
+      `
+export const Store = { save() {} };
+export const Locker = { save() {} };
+Store.save();
+`,
+    ),
+  ]);
+  const [storeSave] = index.find("save", "Store");
+  const [lockerSave] = index.find("save", "Locker");
+  // Store 是 const 直接绑定的真绑定容器 → 精确命中；若误走保守归因，两个 save 会各计 1。
+  assert.deepEqual(index.globalRefs(storeSave), refs(1, 0, 0, 0));
+  assert.deepEqual(index.globalRefs(lockerSave), refs(0, 0, 0, 0));
+});
+
+test("跨文件同名容器不越界归因：prod 引用点不消费 test 桩，非 import 位的属性尾段走保守", () => {
+  const index = buildSymbolIndex([
+    unit("packages/demo/src/tool-runner.ts", `
+export class ToolRunner {
+  runParallel() {}
+}
+`),
+    unit("packages/demo/src/agent-runner.ts", `
+import { ToolRunner } from "./tool-runner";
+export class AgentRunner {
+  private toolRunner: ToolRunner;
+  run() { return this.toolRunner.runParallel(); }
+}
+`),
+    unit("packages/demo/test/stub.test.ts", `
+import { ToolRunner } from "../src/tool-runner";
+const toolRunner = { runParallel() {} } as ToolRunner;
+toolRunner.runParallel();
+`),
+  ]);
+  const [runParallel] = index.find("runParallel", "ToolRunner");
+  // this.toolRunner.runParallel() 的接收者结构上摸不到 test 桩容器 → 保守归因 → prod 计 1；
+  // 若被 test 桩（真绑定同名容器）经全局唯一查找精确劫持，prod 会变 0（真仓 ToolRunner.runParallel 实证）。
+  assert.deepEqual(index.globalRefs(runParallel), refs(1, 0, 0, 0));
+  const [stubRunParallel] = index.find("runParallel", "toolRunner");
+  // 保守归因按属性名命中全部同名成员：桩成员也被 prod 站点保守计 1；test 站点由桩内真绑定接收者精确命中
+  assert.deepEqual(index.globalRefs(stubRunParallel), refs(1, 0, 1, 0));
 });

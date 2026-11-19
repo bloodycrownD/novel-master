@@ -3,7 +3,8 @@
  * 一张表覆盖全部声明形态（bare-fn / var-fn / 对象成员 / object-binding / class 成员 /
  * namespace-object），dead / inline / exports 审计消费同一张表：顶层符号（container=null）
  * 按裸名标识符计数；成员符号按 Container.member 属性访问链计数，接收者无法静态归因时
- * 按属性名命中全部同名成员（保守归因，宁漏报不误杀）；private class 方法只数同文件同类。
+ * 按属性名命中全部同名成员（保守归因，宁漏报不误杀；identifier/属性尾段只认真绑定容器，
+ * 回退命名容器——实参/数组元素/工厂返回——不充当归因目标）；private class 方法只数同文件同类。
  * 遍历一律 forEachChild 语义——JSDoc/注释不是 child，旧 getChildren 全遍历把 `{@link}`
  * 当引用是已证假阳性源，这里从机制上排除。
  * 导出面机制沿旧 find-fake-exports 全套并形态无关化：import 感知（named / as 别名 /
@@ -131,6 +132,8 @@ interface ContainerDef {
   kind: ContainerKind;
   unit: UnitData;
   exported: boolean;
+  /** true=回退命名：名字是猜的（ownerName/文件名），对象并未直接绑定到该名字（实参/数组元素/工厂返回）；false=真绑定（const X = {...} / 属性位 / namespace / class）。 */
+  fallback: boolean;
   members: InternalDef[];
 }
 
@@ -315,8 +318,8 @@ function collectUnit(unit: SymbolUnit, defs: InternalDef[]): UnitData {
     }
   }
 
-  const registerContainer = (kind: ContainerKind, name: string, exported: boolean): ContainerDef => {
-    const container: ContainerDef = { name, kind, unit: data, exported, members: [] };
+  const registerContainer = (kind: ContainerKind, name: string, exported: boolean, fallback: boolean): ContainerDef => {
+    const container: ContainerDef = { name, kind, unit: data, exported, fallback, members: [] };
     const list = data.localContainers.get(name) ?? [];
     list.push(container);
     data.localContainers.set(name, list);
@@ -367,7 +370,7 @@ function collectUnit(unit: SymbolUnit, defs: InternalDef[]): UnitData {
     // —— 容器与声明形态 ——
     if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name) && node.body != null) {
       const exported = hasExportModifier(node);
-      const container = registerContainer("namespace", node.name.text, exported);
+      const container = registerContainer("namespace", node.name.text, exported, false);
       if (node.parent === sourceFile && exported) addTopDef(node.name.text, "namespace-object", node, exported);
       ts.forEachChild(node, (child) => visit(child, { container, ownerName: node.name.text }));
       return;
@@ -378,7 +381,7 @@ function collectUnit(unit: SymbolUnit, defs: InternalDef[]): UnitData {
         ts.forEachChild(node, (child) => visit(child, { container: null, ownerName: ctx.ownerName }));
         return;
       }
-      const container = registerContainer("class", bound.name, bound.exported);
+      const container = registerContainer("class", bound.name, bound.exported, false);
       // 只有成员声明拿到 class 上下文；构造器/属性初始化器里的嵌套函数不属于类成员。
       ts.forEachChild(node, (child) => visit(child, { container: isMemberDecl(child) ? container : null, ownerName: bound.name }));
       return;
@@ -386,7 +389,8 @@ function collectUnit(unit: SymbolUnit, defs: InternalDef[]): UnitData {
     if (ts.isObjectLiteralExpression(node)) {
       const bound = objectBindingOf(node);
       const name = bound?.name ?? ctx.ownerName ?? fallbackContainerName();
-      const container = registerContainer("object", name, bound?.exported ?? false);
+      // bound == null → 回退命名容器：名字来自 ownerName/文件名猜测（实参/数组元素/工厂返回），对象并未绑定到该名字，接收者归因不得把它当该名字的真值（spec §3.2）。
+      const container = registerContainer("object", name, bound?.exported ?? false, bound == null);
       // 顶层导出的对象字面量本身入表（namespace-object），供 exports 审计判整对象死活。
       if (bound != null && bound.topLevel && bound.exported) addTopDef(bound.name, "namespace-object", bound.declNode, true);
       ts.forEachChild(node, (child) => visit(child, { container: isMemberDecl(child) || ts.isPropertyAssignment(child) || ts.isShorthandPropertyAssignment(child) ? container : null, ownerName: name }));
@@ -534,34 +538,57 @@ export function buildSymbolIndex(units: readonly SymbolUnit[], options: SymbolIn
   const defBySymbol = new Map<SymbolInfo, InternalDef>();
   for (const def of defs) defBySymbol.set(def.info, def);
 
-  const globalUniqueContainers = (name: string): ContainerDef[] | null => {
-    const all = containersByName.get(name);
-    if (all == null || all.length === 0) return null;
+  /**
+   * 全局唯一容器查找（跨文件兜底，调用方先过 import 门）。三道过滤：
+   * ① 回退命名容器（fallback=true）不是绑定值的容器（名字是猜的），identifier / 属性尾段不收；
+   * ② 非 test 单元的引用点结构上消费不到 test 文件定义的容器（prod 不 import test）——测试桩是
+   *    真绑定容器且名字常与 prod 变量/属性同形，不过滤会把 prod 消费精确劫持到测试桩上；
+   * ③ 过滤后非唯一 → null（同名多容器无法区分，走保守归因）。
+   */
+  const globalUniqueContainers = (name: string, allowFallback: boolean, fromTest: boolean): ContainerDef[] | null => {
+    const all = (containersByName.get(name) ?? []).filter((c) => (allowFallback || !c.fallback) && (fromTest || !c.unit.isTest));
+    if (all.length === 0) return null;
     return all.length === 1 ? all : null; // 全局同名多容器无法区分 → 视为无法归因，走保守兜底
   };
 
   /**
    * 接收者归因：返回候选容器列表；null=无法归因（按属性名保守命中全部同名成员）。
-   * 归因顺序：本文件同名容器 → import 别名/裸名的全局唯一容器 → 属性链尾段 → 工厂调用 callee。
+   * 归因顺序：本文件同名容器 → import 感知的全局唯一容器 → 属性链尾段 → 工厂调用 callee。
+   * identifier / 属性尾段只认真绑定容器（fallback=false）：回退命名容器（实参/数组元素/工厂返回，
+   * 名字是猜的）不是该标识符绑定值或该属性的值，放行会把真消费劫持到实参对象上（如
+   * `const w = Factory.create({...}); w.noteActivity()` 的实参被注册成名为 w 的容器 → 假 DEAD）。
+   * 跨文件查找必须过 import 门（v1 不上语义解析，用已登记的 import 作用域当锚）：
+   * identifier 只认 named import 位（importedNames），属性尾段只认 namespace/named import 的
+   * base（ns.C / importedX.y）——`this.deps.x`、局部变量 `repo.x` 结构上摸不到别的文件里的
+   * 容器，按名唯一也会 latch 到无关同形容器（真仓 toolRunner/deps/base 劫持实证）→ null 保守。
+   * identifier 本地只剩回退容器时直接 null——同名本地声明遮蔽 import，落到全局反而可能误归因；
+   * 属性尾段无遮蔽关系，本地为空继续查全局。
+   * 工厂调用分支放行回退容器：callee 同名的回退容器正是该函数的返回对象，f().m() 的接收者就是它
+   * （prod 工厂必然留有同名词作用域锚，跨文件走全局唯一查找不会因此劫持）。
    */
   const resolveReceiver = (u: UnitData, receiver: ts.Expression): ContainerDef[] | null => {
     if (ts.isIdentifier(receiver)) {
       const raw = receiver.text;
       if (u.namespaceLocals.has(raw)) return null; // ns.X 是裸名层面的消费，成员计数跳过
-      const local = u.localContainers.get(raw);
-      if (local != null && local.length > 0) return local;
-      return globalUniqueContainers(u.aliases.get(raw) ?? raw);
+      const local = (u.localContainers.get(raw) ?? []).filter((c) => !c.fallback);
+      if (local.length > 0) return local;
+      if (u.localContainers.has(raw)) return null;
+      const imported = u.aliases.get(raw) ?? raw;
+      if (!u.importedNames.has(imported)) return null; // 非 import 位（局部变量/未知名）不跨文件归因
+      return globalUniqueContainers(imported, false, u.isTest);
     }
     if (ts.isPropertyAccessExpression(receiver) && ts.isIdentifier(receiver.name)) {
-      const local = u.localContainers.get(receiver.name.text);
-      if (local != null && local.length > 0) return local;
-      return globalUniqueContainers(receiver.name.text); // ns.C / Outer.inner：按尾段名归因
+      const local = (u.localContainers.get(receiver.name.text) ?? []).filter((c) => !c.fallback);
+      if (local.length > 0) return local;
+      const base = receiver.expression;
+      if (!ts.isIdentifier(base) || (!u.namespaceLocals.has(base.text) && !u.importedNames.has(u.aliases.get(base.text) ?? base.text))) return null;
+      return globalUniqueContainers(receiver.name.text, false, u.isTest); // ns.C / importedX.y：按尾段名归因
     }
     if ((ts.isCallExpression(receiver) || ts.isNewExpression(receiver)) && ts.isIdentifier(receiver.expression)) {
       const raw = receiver.expression.text;
       const local = u.localContainers.get(raw);
       if (local != null && local.length > 0) return local;
-      return globalUniqueContainers(raw); // 工厂调用 createSink().member
+      return globalUniqueContainers(raw, true, u.isTest); // 工厂调用 createSink().member
     }
     return null; // this / 复杂表达式：无法静态归因
   };
