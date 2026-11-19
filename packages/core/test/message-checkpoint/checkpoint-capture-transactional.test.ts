@@ -8,7 +8,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { listSessionFileHeads } from "../../src/domain/message-checkpoint/logic/list-session-files.js";
+import { SessionFiles } from "../../src/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   getNovelMasterTestContext,
@@ -33,14 +33,14 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
     // 开启一个事务 tx1，在 tx1 内扫描 heads
     const tx1Heads = await ctx.conn.transaction(async (tx) => {
       const txEntries = new SqliteVfsEntryRepository(tx);
-      return listSessionFileHeads(txEntries, project.id, session.id);
+      return SessionFiles.listHeads(txEntries, project.id, session.id);
     });
 
     // 在 tx1 提交后，写一个额外文件 fileB，再开启 tx2 扫描
     await svfs.write("/b.md", "bravo", { versionCheck: false });
     const tx2Heads = await ctx.conn.transaction(async (tx) => {
       const txEntries = new SqliteVfsEntryRepository(tx);
-      return listSessionFileHeads(txEntries, project.id, session.id);
+      return SessionFiles.listHeads(txEntries, project.id, session.id);
     });
 
     // tx1 扫描在 fileB 写入前完成，不应包含 fileB

@@ -4,4 +4,4 @@
  * @module domain/prompt/message-body
  */
 
-export { messageBodyTextFromBlocks, formatChatMessageForCliPreview } from "@/domain/chat/content/message-body-text.js";
+export { MessageBodyText } from "@/domain/chat/content/message-body-text.js";

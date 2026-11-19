@@ -26,7 +26,7 @@
 
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { formatChatMessageForCliPreview } from "@/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import { countPromptLlmInput, resolveVendorModelIdFromSaved } from "./count-prompt-llm-input.js";
 import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
 import { estimateTokensCjkAware } from "./estimate-tokens-cjk-aware.js";
@@ -40,7 +40,7 @@ import { buildCounterScope, chunkHash16, tokenChunkCache } from "./token-chunk-c
 import type { Interrupt, Outcome } from "../../../errors/outcome.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.js";
-import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
+import { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 /** 占用结果来源。 */
 type PromptTokenSource = "api" | "local";
@@ -106,7 +106,7 @@ export interface ResolveCurrentPromptTokensOptions {
  * API 命中时的增量估算：锚点之后追加的可见消息折算 token。
  *
  * 口径说明：
- * - 序列化用 `formatChatMessageForCliPreview`（`role: body` 段、`\n\n` 连接），
+ * - 序列化用 `MessageBodyText.formatForCliPreview`（`role: body` 段、`\n\n` 连接），
  *   与驱动整串序列化的消息段同构——增量本来就是估算，不追求逐 token 对齐。
  *   传入的 ctx.messages 是 prepare 之后的消息（附件已 wrap 进文本块），
  *   大附件的正文天然计入增量。
@@ -132,7 +132,7 @@ function estimateAnchoredDelta(anchorSeq: number | undefined, params: CountPromp
   if (tail.length === 0) {
     return 0;
   }
-  const segments = tail.map((m) => formatChatMessageForCliPreview(m));
+  const segments = tail.map((m) => MessageBodyText.formatForCliPreview(m));
   const lines = segments.map((parts) => parts.map((p) => `${p.role}: ${p.body}`).join("\n\n"));
   const text = lines.join("\n\n");
   if (text.length === 0) {
@@ -301,7 +301,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     // 有指纹时也跳过下方 L1 预查——它要 serialize+hash 整串（真机 ~1.3s），
     // 恰是要消灭的成本；「同内容已有精确读数」由上方记忆精确条目覆盖。
     const fingerprint = params.ctx?.workplaceFingerprint;
-    if (fingerprint != null && params.ctx != null && layoutHasWorkplace(params.layout) && params.ctx.workplaceDisplay.length > 0) {
+    if (fingerprint != null && params.ctx != null && AgentPromptLayout.hasWorkplace(params.layout) && params.ctx.workplaceDisplay.length > 0) {
       let wpEstimate = ChatTokenEstimateMemo.lookupWorkplaceEstimateByFingerprint(fingerprint);
       if (wpEstimate == null) {
         wpEstimate = estimateTokensCjkAware(params.ctx.workplaceDisplay);

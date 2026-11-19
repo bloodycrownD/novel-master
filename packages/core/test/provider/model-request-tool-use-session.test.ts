@@ -3,7 +3,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
@@ -62,7 +62,7 @@ describe("ModelRequestService tool_use session round-trip", () => {
 
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("find foo")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("find foo")));
 
     const history = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => !m.hidden,

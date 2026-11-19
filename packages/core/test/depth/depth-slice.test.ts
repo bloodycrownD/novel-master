@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { type DepthSlice, matchDepth, messageIdsInSlice, validateDepthSlice } from "../../src/domain/depth/logic/depth-slice.js";
+import { DepthSlice } from "../../src/domain/depth/logic/depth-slice.js";
 
 describe("depth slice", () => {
   const ids = ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9"];
   const visibleMessages = ids.map((id, i) => ({ id, seq: i + 1 }));
   const sliceIds = (slice: DepthSlice): string[] => {
-    const r = messageIdsInSlice(visibleMessages, slice);
+    const r = DepthSlice.messageIds(visibleMessages, slice);
     assert.ok(r.ok);
     return r.value;
   };
@@ -27,16 +27,16 @@ describe("depth slice", () => {
     assert.equal(sliceIds({ startDepth: 0 }).length, 10);
   });
 
-  it("matchDepth boundaries", () => {
-    assert.equal(matchDepth(6, { startDepth: 6 }), true);
-    assert.equal(matchDepth(5, { startDepth: 6 }), false);
-    assert.equal(matchDepth(2, { endDepth: 2 }), true);
-    assert.equal(matchDepth(3, { endDepth: 2 }), false);
+  it("match boundaries", () => {
+    assert.equal(DepthSlice.match(6, { startDepth: 6 }), true);
+    assert.equal(DepthSlice.match(5, { startDepth: 6 }), false);
+    assert.equal(DepthSlice.match(2, { endDepth: 2 }), true);
+    assert.equal(DepthSlice.match(3, { endDepth: 2 }), false);
   });
 
   it("rejects invalid slices with DEPTH_INVALID_SLICE", () => {
     for (const slice of [{}, { startDepth: -1 }, { endDepth: 1.5 }, { startDepth: 3, endDepth: 2 }]) {
-      const r = validateDepthSlice(slice);
+      const r = DepthSlice.validate(slice);
       if (r.ok) assert.fail(`expected invalid slice: ${JSON.stringify(slice)}`);
       assert.equal(r.error.key, "DEPTH_INVALID_SLICE");
     }

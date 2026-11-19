@@ -3,11 +3,8 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
-import { textBlocks } from "@novel-master/core/chat";
-import {
-  isRollbackRevisionBackfillRequiredError,
-  isRollbackVfsDegradableError,
-} from "@novel-master/core/message-checkpoint";
+import { TextBlocks } from "@novel-master/core/chat";
+import { RollbackErrorGuards } from "@novel-master/core/message-checkpoint";
 // isSessionFsError 已从公开入口撤下（导出面收口注释：测试走 src 路径）。
 import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -24,14 +21,14 @@ async function setupR1Scenario() {
   const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
   const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "here" }],
   }));
   await svfs.write("/poem.md", "roses", { versionCheck: false });
   unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
   const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
   }));
@@ -74,8 +71,8 @@ describe("MessageRollbackService (degraded fallback)", () => {
       () =>
         ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
-        assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
-        assert.equal(isRollbackVfsDegradableError(error), false);
+        assert.equal(RollbackErrorGuards.isRevisionBackfillRequired(error), true);
+        assert.equal(RollbackErrorGuards.isVfsDegradable(error), false);
         assert.equal(
           isSessionFsError(error) &&
             isAppError(error, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"),
@@ -195,41 +192,41 @@ describe("MessageRollbackService (degraded fallback)", () => {
             isAppError(error, "SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND"),
           true,
         );
-        assert.equal(isRollbackVfsDegradableError(error), false);
+        assert.equal(RollbackErrorGuards.isVfsDegradable(error), false);
         return true;
       },
     );
   });
 
-  it("DF6: isRollbackVfsDegradableError 边界", () => {
+  it("DF6: RollbackErrorGuards.isVfsDegradable 边界", () => {
     assert.equal(
-      isRollbackVfsDegradableError(
+      RollbackErrorGuards.isVfsDegradable(
         new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", "工作区无法恢复：测试"),
       ),
       true,
     );
     // undo_send 无 baseline（live 树非空）：同样可降级为仅截断消息
     assert.equal(
-      isRollbackVfsDegradableError(
+      RollbackErrorGuards.isVfsDegradable(
         new AppError("SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET", "undo send empty target"),
       ),
       true,
     );
     assert.equal(
-      isRollbackVfsDegradableError(
+      RollbackErrorGuards.isVfsDegradable(
         new AppError("SESSION_FS_RESTORE_REVISION_MISSING", "revision missing"),
       ),
       false,
     );
     assert.equal(
-      isRollbackVfsDegradableError(
+      RollbackErrorGuards.isVfsDegradable(
         new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", "rollback message not found: msg-1"),
       ),
       false,
     );
-    assert.equal(isRollbackVfsDegradableError(new Error("generic")), false);
-    assert.equal(isRollbackVfsDegradableError(null), false);
-    assert.equal(isRollbackVfsDegradableError(undefined), false);
+    assert.equal(RollbackErrorGuards.isVfsDegradable(new Error("generic")), false);
+    assert.equal(RollbackErrorGuards.isVfsDegradable(null), false);
+    assert.equal(RollbackErrorGuards.isVfsDegradable(undefined), false);
   });
 
   it("DF-U1: undo_send + skipVfsReconcile 删除锚点且 VFS 不变", async () => {
@@ -239,7 +236,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/keep.md", "stable", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("anchor")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
     }));
@@ -266,13 +263,13 @@ describe("MessageRollbackService (degraded fallback)", () => {
     }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("prompt")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("prompt")));
     const asst1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
     }));
     await svfs.write("/state.md", "after-user1", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
       revisionHeadBackfill: true,

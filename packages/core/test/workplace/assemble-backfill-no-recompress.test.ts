@@ -4,8 +4,8 @@
  * 病根修复把「压缩 + 落库」挪到了后台，但**不能顺手把昨天的
  * 「先 hash 比对、blob 已在库则不压缩」优化改丢**。DB 层观测（blob 行数
  * 不增长）区分不了「压缩被跳过」与「压缩后被 INSERT OR IGNORE 丢弃」，
- * 所以这里用 `mock.module` 把 `compressFileCacheBodyForBlob` 换成计数
- * spy，直接钉死调用次数。
+ * 所以这里用 `mock.module` 把 `FileCacheBlobCodec.compressBodyForBlob` 换成
+ * 计数 spy，直接钉死调用次数。
  *
  * 独立成文件的必要性（module mock 需先于被测模块注册，同
  * message-content-decompression.test.ts 的坏行桩范式）：
@@ -28,15 +28,17 @@ let hashCalls = 0;
 // 2) 注册 spy（namedExports 必须补齐全，否则其它导出是 undefined）。
 mock.module("../../src/domain/session-kkv/logic/file-cache-blob-codec.js", {
   namedExports: {
-    hashFileCachePayload: (value: string) => {
-      hashCalls++;
-      return realCodec.hashFileCachePayload(value);
+    FileCacheBlobCodec: {
+      hashPayload: (value: string) => {
+        hashCalls++;
+        return realCodec.FileCacheBlobCodec.hashPayload(value);
+      },
+      compressBodyForBlob: (body: string) => {
+        compressCalls++;
+        return realCodec.FileCacheBlobCodec.compressBodyForBlob(body);
+      },
+      decodeBlobBody: (encoding: string, bytes: unknown) => realCodec.FileCacheBlobCodec.decodeBlobBody(encoding, bytes),
     },
-    compressFileCacheBodyForBlob: (body: string) => {
-      compressCalls++;
-      return realCodec.compressFileCacheBodyForBlob(body);
-    },
-    decodeFileCacheBlobBody: realCodec.decodeFileCacheBlobBody,
   },
 });
 
@@ -47,7 +49,7 @@ const { createSessionKkvService } = await import(
 const { SESSION_KKV_DOMAIN_FILE_CACHE } = await import(
   "../../src/domain/session-kkv/model/session-kkv-domains.js"
 );
-const { serializeFileCachePayload } = await import(
+const { RuleSnapshotCodec } = await import(
   "../../src/domain/workplace/logic/rule-snapshot-codec.js"
 );
 const {
@@ -56,7 +58,7 @@ const {
 const { createWorkplaceService } = await import(
   "../../src/service/workplace/create-workplace-service.js"
 );
-const { settlePendingFileCacheBackfills } = await import(
+const { FileCache } = await import(
   "../../src/domain/workplace/logic/load-or-fill-file-cache.js"
 );
 const { openNovelMasterTestConnection } = await import("../helpers/novel-master.js");
@@ -73,7 +75,7 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
     try {
       const sk = createSessionKkvService(ctx.conn);
       const sid = `bf3b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const value = serializeFileCachePayload({ body: `bf3b-body-${sid}`, mtimeMs: 1 });
+      const value = RuleSnapshotCodec.serializeFileCachePayload({ body: `bf3b-body-${sid}`, mtimeMs: 1 });
 
       await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/bf3b.md", value);
       assert.equal(compressCalls, 1, "blob 不存在时必须真压缩一次");
@@ -120,7 +122,7 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
       // 第一次：blob 不存在 → 真压缩
       const out1 = await assembleDisplay(scope, deps);
       assert.match(out1.workplaceDisplay, /bf3c-unique-/);
-      await settlePendingFileCacheBackfills();
+      await FileCache.settlePendingBackfills();
       const afterFirst = compressCalls;
       assert.ok(afterFirst > 0, "首次回填必须真压缩");
 
@@ -129,7 +131,7 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
       await sk.clearDomain(session.id, SESSION_KKV_DOMAIN_FILE_CACHE);
       const out2 = await assembleDisplay(scope, deps);
       assert.match(out2.workplaceDisplay, /bf3c-unique-/, "二次组装仍出正文（自愈重读）");
-      await settlePendingFileCacheBackfills();
+      await FileCache.settlePendingBackfills();
 
       assert.equal(
         compressCalls,

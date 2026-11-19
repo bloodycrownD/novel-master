@@ -1,13 +1,10 @@
 [
+  "PatternInput",
   "SMART_SORT_CAPTURE_KINDS",
-  "compileSmartSortRule",
-  "createSmartSortRuleService",
-  "decodeSmartSortRuleBundle",
-  "encodeSmartSortRuleBundle",
-  "formatPatternInput",
-  "isBuiltinSmartSortRuleId",
-  "matchSmartSortPattern",
-  "parsePatternInput",
-  "splitSmartSortHighlightSegments",
-  "validateSmartSortRuleDraft"
+  "SmartSortHighlight",
+  "SmartSortPattern",
+  "SmartSortRule",
+  "SmartSortRuleCompiler",
+  "SmartSortRuleIo",
+  "createSmartSortRuleService"
 ]

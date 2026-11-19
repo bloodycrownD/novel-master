@@ -3,10 +3,10 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/message-checkpoint";
+import { TextBlocks } from "@novel-master/core/chat";
+import { RollbackErrorGuards } from "@novel-master/core/message-checkpoint";
 
-import { backfillMissingRevisionIfNeeded } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
+import { BackfillMissingRevision } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
@@ -25,14 +25,14 @@ async function setupR1Scenario() {
   const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
   const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "here" }],
   }));
   await svfs.write("/poem.md", "roses", { versionCheck: false });
   unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
   const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
   }));
@@ -73,7 +73,7 @@ async function setupMultiFilePartialScenario() {
   const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
   const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "write" }],
   }));
@@ -81,7 +81,7 @@ async function setupMultiFilePartialScenario() {
   await svfs.write("/b.md", "anchor-b", { versionCheck: false });
   unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
   const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
   }));
@@ -103,7 +103,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       () =>
         ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
-        assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
+        assert.equal(RollbackErrorGuards.isRevisionBackfillRequired(error), true);
         const err = error as { details?: { missingLogicalPaths?: readonly string[] } };
         assert.deepEqual(err.details?.missingLogicalPaths, ["/b.md"]);
         return true;
@@ -152,7 +152,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
     const sk = LogicalPath.scopeKey(scope);
 
-    const backfilled = unwrap(await backfillMissingRevisionIfNeeded(
+    const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
       sk,
       "/ghost.md",
@@ -169,14 +169,14 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
     }));
     await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" },
       ],
@@ -205,14 +205,14 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
     }));
     await svfs.write("/gone2.md", "anchor-content", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -235,7 +235,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
     }));
@@ -250,7 +250,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     assert.ok(entry != null);
     const entryId = entry.entryId;
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -344,7 +344,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       [entry.entryId],
     );
 
-    const backfilled = unwrap(await backfillMissingRevisionIfNeeded(
+    const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
       sk,
       "/exists.md",

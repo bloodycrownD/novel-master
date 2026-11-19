@@ -9,17 +9,6 @@ import { z } from "zod";
 /** 空 path 时落库 `name` 占位（满足 `min(1)`）。 */
 const NO_PATH_ATTACHMENT_NAME = "__no_path__";
 
-/**
- * 落库 `name`：有非空 path 时与 path 逐字相同；否则 `__no_path__`。
- * UI 永不把 `name` 当 chip 文案真源。
- */
-export function attachmentStorageName(path: string | null | undefined): string {
-  if (path == null || path === "") {
-    return NO_PATH_ATTACHMENT_NAME;
-  }
-  return path;
-}
-
 /** 附件 action 枚举（提示词 `<action name>` / 落库真源）。 */
 const messageAttachmentActionSchema = z.enum([
   "delete",
@@ -79,14 +68,14 @@ export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine
       path: ["name"],
     });
   }
-  // 有 action 时 name 须与 attachmentStorageName(path) 一致
+  // 有 action 时 name 须与 storageName(path) 一致
   if (val.action != null) {
-    const expected = attachmentStorageName(val.path);
+    const expected = MessageAttachmentSchema.storageName(val.path);
     if (val.name !== expected) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         // zod message 通道无法携带 {expected} 参数（静态 string）；本分支消费链
-        // 为 parseAttachmentsJson 静默降级与写侧防御，无 UI 直达路径。
+        // 为 parseJson 静默降级与写侧防御，无 UI 直达路径。
         message: "error.chat.attachment_name_storage_mismatch",
         path: ["name"],
       });
@@ -99,38 +88,51 @@ export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
 
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
-/**
- * 解析 `attachments_json`；NULL/空/非法 → `null`（无值），整数组逐条降级。
- *
- * 口径（逐条降级，与 `parseComposerDraftJson` 对齐）：**一条不合规不牵连其余**；
- * 只在整段不是合法 JSON 数组时整体降级为 `null`，数组内逐条 `safeParse`、
- * 只保留成功项（全部失败时返回 `[]` 而非 `null`——两者在消费侧 `?? []`
- * 等价，但返回 `[]` 让「本来就没附件」与「全被丢弃」在下游表现一致）。
- * 理由：消息是 append-only 的历史数据、附件形态跨版本演进，宁可少附件也不可让
- * 整条消息的附件静默蒸发——那会造成落库历史与送给 LLM 的提示词不一致。
- *
- * nm-style: keep-public — attachments_json 唯一读侧解码入口；逐条降级/空值写 NULL 是 wire 契约。
- */
-export function parseAttachmentsJson(raw: string | null | undefined): MessageAttachment[] | null {
-  if (raw == null || raw === "") {
-    return null;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  // 非数组（含标量、对象、JSON null）→ 无粒度可 salv，整体降级
-  if (!Array.isArray(parsed)) {
-    return null;
-  }
-  const kept: MessageAttachment[] = [];
-  for (const item of parsed) {
-    const result = messageAttachmentSchema.safeParse(item);
-    if (result.success) {
-      kept.push(result.data);
+export const MessageAttachmentSchema = {
+  /**
+   * 落库 `name`：有非空 path 时与 path 逐字相同；否则 `__no_path__`。
+   * UI 永不把 `name` 当 chip 文案真源。
+   */
+  storageName(path: string | null | undefined): string {
+    if (path == null || path === "") {
+      return NO_PATH_ATTACHMENT_NAME;
     }
-  }
-  return kept;
-}
+    return path;
+  },
+
+  /**
+   * 解析 `attachments_json`；NULL/空/非法 → `null`（无值），整数组逐条降级。
+   *
+   * 口径（逐条降级，与 `ComposerDraftSchema.parseJson` 对齐）：**一条不合规不牵连其余**；
+   * 只在整段不是合法 JSON 数组时整体降级为 `null`，数组内逐条 `safeParse`、
+   * 只保留成功项（全部失败时返回 `[]` 而非 `null`——两者在消费侧 `?? []`
+   * 等价，但返回 `[]` 让「本来就没附件」与「全被丢弃」在下游表现一致）。
+   * 理由：消息是 append-only 的历史数据、附件形态跨版本演进，宁可少附件也不可让
+   * 整条消息的附件静默蒸发——那会造成落库历史与送给 LLM 的提示词不一致。
+   *
+   * nm-style: keep-public — attachments_json 唯一读侧解码入口；逐条降级/空值写 NULL 是 wire 契约。
+   */
+  parseJson(raw: string | null | undefined): MessageAttachment[] | null {
+    if (raw == null || raw === "") {
+      return null;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    // 非数组（含标量、对象、JSON null）→ 无粒度可 salv，整体降级
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    const kept: MessageAttachment[] = [];
+    for (const item of parsed) {
+      const result = messageAttachmentSchema.safeParse(item);
+      if (result.success) {
+        kept.push(result.data);
+      }
+    }
+    return kept;
+  },
+} as const;

@@ -24,13 +24,13 @@ import type { Outcome } from "@/errors/outcome.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
-import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
-import { SKILL_ENTRY_FILE, SKILLS_ROOT, resolveSkillRelPathCore } from "@/domain/skills/logic/skill-paths.js";
-import { withSkillFrontMatterValues } from "@/domain/skills/logic/with-skill-front-matter-values.js";
-import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
+import { SkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
+import { SKILL_ENTRY_FILE, SKILLS_ROOT, SkillPaths } from "@/domain/skills/logic/skill-paths.js";
+import { SkillFrontMatterValues } from "@/domain/skills/logic/with-skill-front-matter-values.js";
+import { EffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillDomain } from "@/domain/skills/model/skill.schema.js";
-import { validateSkillName } from "@/domain/skills/model/skill-name.js";
+import { SkillName } from "@/domain/skills/model/skill-name.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
@@ -58,7 +58,7 @@ interface SkillsServiceDeps {
  * @returns Ok = 相对技能目录的归一化路径；Err = 路径非法（域校验，A 类）。
  */
 function resolveSkillRelPath(name: string, path: string | undefined): Result<string, AppError> {
-  const resolved = resolveSkillRelPathCore(name, path);
+  const resolved = SkillPaths.resolveRelPathCore(name, path);
   if (resolved.ok) {
     return Result.ok(resolved.rel);
   }
@@ -93,7 +93,7 @@ function disabledScopeKeyOfProject(projectId: string): string {
 
 /** 显式校验技能名（write/edit/copy 目标、delete 输入）；非法返回 Err(SKILL_INVALID_NAME)。 */
 function assertValidSkillName(name: string): Result<void, AppError> {
-  const reason = validateSkillName(name);
+  const reason = SkillName.validate(name);
   if (reason != null) {
     return Result.err(new AppError("SKILL_INVALID_NAME", { descriptor: reason, skillName: name }));
   }
@@ -224,7 +224,7 @@ export class SkillsService implements SkillService {
         });
         continue;
       }
-      const parsed = parseSkillFrontMatter(source);
+      const parsed = SkillFrontMatter.parse(source);
       items.push({
         name,
         description: parsed.description,
@@ -244,7 +244,7 @@ export class SkillsService implements SkillService {
     if (project.kind === "failed") return Result.err(project.error);
     // 本方法不注入 hooks，listSkills 不会产生中断；命中说明调用链被改动（不变量破坏）。
     assert(global.kind === "completed" && project.kind === "completed", "effectiveSkills 不注入 hooks，listSkills 不应产生中断");
-    return Result.ok(computeEffectiveSkills({ global: global.value, project: project.value, disabledNames }));
+    return Result.ok(EffectiveSkills.compute({ global: global.value, project: project.value, disabledNames }));
   }
 
   async readSkillFile(domain: SkillDomain | undefined, name: string, path?: string, projectId?: string): Promise<Result<SkillFileContent, AppError>> {
@@ -467,8 +467,8 @@ export class SkillsService implements SkillService {
           // 非 NOT_FOUND 的读取失败：抛出触发事务回滚（helper 集中解包）。
           unwrapOrRollback(entryRead);
         }
-        if (source != null && parseSkillFrontMatter(source).valid) {
-          const written = await vfs.write(entryPath, withSkillFrontMatterValues(source, { ...(newName != null ? { name: newName } : {}), ...(description != null ? { description } : {}) }));
+        if (source != null && SkillFrontMatter.parse(source).valid) {
+          const written = await vfs.write(entryPath, SkillFrontMatterValues.rewrite(source, { ...(newName != null ? { name: newName } : {}), ...(description != null ? { description } : {}) }));
           // 写失败必须回滚（renamePrefix 已迁移目录，吞错会留半写状态）。
           unwrapOrRollback(written);
         }

@@ -2,10 +2,10 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { Result } from "../../src/errors/either.js";
-import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
-import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
+import { MissingRevisions } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
+import { RestorePath } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { RevisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
@@ -63,7 +63,7 @@ describe("rollback version short-circuit", () => {
     assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 2), false);
   });
 
-  it("findMissingRevisionPointers：用批量 findMetasByEntryVersions 而非 findByEntryAndVersion", async () => {
+  it("MissingRevisions.findPointers：用批量 findMetasByEntryVersions 而非 findByEntryAndVersion", async () => {
     const scope = {
       kind: "session" as const,
       projectId: "p1",
@@ -118,14 +118,14 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = unwrap(await findMissingRevisionPointers({ revisionRepo, entryRepo }, { scope, targetTree: new Map([["/a.md", 1]]), pathsToReconcile: ["/a.md"] }));
+    const missing = unwrap(await MissingRevisions.findPointers({ revisionRepo, entryRepo }, { scope, targetTree: new Map([["/a.md", 1]]), pathsToReconcile: ["/a.md"] }));
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
     assert.equal(findCalls, 0);
   });
 
-  it("restorePathToRevision：head version 相等时跳过 find 与 write", async () => {
+  it("RestorePath.restoreToRevision：head version 相等时跳过 find 与 write", async () => {
     let findCalls = 0;
     let writeCalls = 0;
     const entryId = 1;
@@ -193,7 +193,7 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const result = await restorePathToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/same.md", version: 2, liveHeadByPath });
+    const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/same.md", version: 2, liveHeadByPath });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -202,7 +202,7 @@ describe("rollback version short-circuit", () => {
     assert.equal(writeCalls, 0);
   });
 
-  it("restorePathToRevision：version 不等但 content_hash 相同则跳过解压与 write", async () => {
+  it("RestorePath.restoreToRevision：version 不等但 content_hash 相同则跳过解压与 write", async () => {
     let findFullCalls = 0;
     let findMetaCalls = 0;
     let writeCalls = 0;
@@ -254,7 +254,7 @@ describe("rollback version short-circuit", () => {
     // live head 高于锚点（T-RB1），但正文 hash 已与目标 revision 一致
     const liveHeadByPath = new Map([["/hash-same.md", 3]]);
 
-    const result = await restorePathToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath });
+    const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -264,7 +264,7 @@ describe("rollback version short-circuit", () => {
     assert.equal(writeCalls, 0);
   });
 
-  it("restorePathToRevision：head version 不等且正文不同时仍执行 restore", async () => {
+  it("RestorePath.restoreToRevision：head version 不等且正文不同时仍执行 restore", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -283,7 +283,7 @@ describe("rollback version short-circuit", () => {
     await svfs.write("/delta.md", "tail", { versionCheck: false });
     const liveHeadByPath = new Map([["/delta.md", unwrap(await svfs.read("/delta.md")).version]]);
 
-    const result = await restorePathToRevision({ vfs: svfs, revisionRepo: revisions, entryRepo: entries }, { scope, logicalPath: "/delta.md", version: anchorVersion, liveHeadByPath });
+    const result = await RestorePath.restoreToRevision({ vfs: svfs, revisionRepo: revisions, entryRepo: entries }, { scope, logicalPath: "/delta.md", version: anchorVersion, liveHeadByPath });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -299,13 +299,13 @@ describe("rollback version short-circuit", () => {
 
     await svfs.write("/stable.md", "keep-me", { versionCheck: false });
     const headVersion = unwrap(await svfs.read("/stable.md")).version;
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
     }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("u2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u2")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a2" }],
     }));

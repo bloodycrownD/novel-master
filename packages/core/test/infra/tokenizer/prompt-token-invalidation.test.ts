@@ -18,7 +18,7 @@
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { textBlocks } from "../../../src/domain/chat/content/text-blocks.js";
+import { TextBlocks } from "../../../src/domain/chat/content/text-blocks.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
@@ -98,7 +98,7 @@ describe("prompt 占用失效挂点", () => {
     const { ctx, session } = await makeSession();
     await seedRow(ctx.sessionKkv, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("new turn")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("new turn")));
     const raw = unwrap(await ctx.sessionKkv.get(
       session.id,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
@@ -117,7 +117,7 @@ describe("prompt 占用失效挂点", () => {
     const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hi")
+      TextBlocks.of("hi")
     ));
     await seedRow(ctx.sessionKkv, session.id);
 
@@ -130,11 +130,11 @@ describe("prompt 占用失效挂点", () => {
     const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("before")
+      TextBlocks.of("before")
     ));
     await seedRow(ctx.sessionKkv, session.id);
 
-    unwrap(await ctx.messages.updateContent(message.id, textBlocks("after")));
+    unwrap(await ctx.messages.updateContent(message.id, TextBlocks.of("after")));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
@@ -143,7 +143,7 @@ describe("prompt 占用失效挂点", () => {
     const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hide me")
+      TextBlocks.of("hide me")
     ));
     await seedRow(ctx.sessionKkv, session.id);
 
@@ -156,7 +156,7 @@ describe("prompt 占用失效挂点", () => {
     const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("show me")
+      TextBlocks.of("show me")
     ));
     unwrap(await ctx.messages.hide(message.id));
     await seedRow(ctx.sessionKkv, session.id);
@@ -170,7 +170,7 @@ describe("prompt 占用失效挂点", () => {
     const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hide range")
+      TextBlocks.of("hide range")
     ));
     await seedRow(ctx.sessionKkv, session.id);
 
@@ -184,7 +184,7 @@ describe("prompt 占用失效挂点", () => {
     const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("show range")
+      TextBlocks.of("show range")
     ));
     unwrap(await ctx.messages.hideRange(session.id, message.seq, message.seq));
     await seedRow(ctx.sessionKkv, session.id);
@@ -199,9 +199,9 @@ describe("prompt 占用失效挂点", () => {
     const first = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("keep")
+      TextBlocks.of("keep")
     ));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("tail")));
     await seedRow(ctx.sessionKkv, session.id);
 
     unwrap(await ctx.messages.truncateAfter(session.id, first.id));
@@ -211,20 +211,20 @@ describe("prompt 占用失效挂点", () => {
   it("回滚（sessionFs.rollbackFilesToMessage）后 KKV 行被清", async () => {
     const { ctx, project, session } = await makeSession();
     const svfs = ctx.sessionVfs(project.id, session.id);
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
     const assistant1 = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("here")
+      TextBlocks.of("here")
     ));
     await svfs.write("/rb.md", "anchor-body", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     const assistant2 = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("later")
+      TextBlocks.of("later")
     ));
     await svfs.write("/rb.md", "later-body", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
@@ -243,9 +243,9 @@ describe("prompt 占用失效挂点", () => {
     const anchor = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("anchor")
+      TextBlocks.of("anchor")
     ));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("reply")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("reply")));
     await seedRow(ctx.sessionKkv, session.id);
 
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);

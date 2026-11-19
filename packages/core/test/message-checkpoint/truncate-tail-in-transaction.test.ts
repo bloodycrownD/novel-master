@@ -6,7 +6,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -15,7 +15,7 @@ import {
   USER_VFS_PENDING_QUEUE_KEY,
   RULE_SNAPSHOT_CANON_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { truncateTailInTransaction } from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { TruncateTail } from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
@@ -50,23 +50,23 @@ async function insertOrphanRevision(
   );
 }
 
-describe("truncateTailInTransaction", () => {
+describe("TruncateTail.truncate", () => {
   it("截断 seq > afterSeq 的消息并清理 checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
     const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
     }));
     await svfs.write("/a.md", "v1", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -114,11 +114,11 @@ describe("truncateTailInTransaction", () => {
       "value",
     );
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -168,10 +168,10 @@ describe("truncateTailInTransaction", () => {
       '{"body":"x","mtimeMs":1}',
     );
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("only")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("only")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -202,8 +202,8 @@ describe("truncateTailInTransaction", () => {
     const project = unwrap(await ctx.projects.create(`P-gs-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
     // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
     await insertOrphanRevision(ctx.conn, 999101);
@@ -214,7 +214,7 @@ describe("truncateTailInTransaction", () => {
     );
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -235,13 +235,13 @@ describe("truncateTailInTransaction", () => {
     const project = unwrap(await ctx.projects.create(`P-gd-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
     await insertOrphanRevision(ctx.conn, 999102);
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,

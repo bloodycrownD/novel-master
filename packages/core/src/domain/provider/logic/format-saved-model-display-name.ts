@@ -4,7 +4,9 @@
  * @module domain/provider/logic/format-saved-model-display-name
  */
 
-/** 主文案前缀为服务商 displayName（非技术 id）。 */
-export function formatSavedModelDisplayName(providerDisplayName: string, modelName: string): string {
-  return `${providerDisplayName}/${modelName}`;
-}
+export const SavedModelDisplayName = {
+  /** 主文案前缀为服务商 displayName（非技术 id）。 */
+  format(providerDisplayName: string, modelName: string): string {
+    return `${providerDisplayName}/${modelName}`;
+  },
+} as const;

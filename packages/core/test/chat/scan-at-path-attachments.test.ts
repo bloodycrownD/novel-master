@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
-import { attachmentStorageName, messageAttachmentsSchema, type MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
+import { MessageAttachmentSchema, messageAttachmentsSchema, type MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import { tCore } from "../helpers/core-i18n.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
@@ -67,12 +67,12 @@ function fromPaths(paths: readonly string[]): MessageAttachment[] {
 }
 
 describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）", () => {
-  it("name === attachmentStorageName(path)、action=userAttach、content=null、source=attach", () => {
+  it("name === MessageAttachmentSchema.storageName(path)、action=userAttach、content=null、source=attach", () => {
     const [first] = fromPaths(["notes/a.md"]);
     assert.ok(first);
     assert.equal(first.source, "attach");
     assert.equal(first.path, "/notes/a.md");
-    assert.equal(first.name, attachmentStorageName("/notes/a.md"));
+    assert.equal(first.name, MessageAttachmentSchema.storageName("/notes/a.md"));
     assert.equal(first.name, "/notes/a.md");
     assert.equal(first.action, "userAttach");
     assert.equal(first.content, null);
@@ -88,7 +88,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
     const [first] = fromPaths(["notes/a.md"]);
     assert.ok(first);
     const basenameForm: MessageAttachment = { ...first, name: "a.md" };
-    // 带 action 时 name 必须是 attachmentStorageName(path)，basename 形态 100% 抛错。
+    // 带 action 时 name 必须是 MessageAttachmentSchema.storageName(path)，basename 形态 100% 抛错。
     assert.throws(() => messageAttachmentsSchema.parse([basenameForm]));
   });
 
@@ -111,7 +111,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
     for (const a of built) {
       assert.equal(a.action, "userAttach");
       assert.equal(a.content, null);
-      assert.equal(a.name, attachmentStorageName(a.path));
+      assert.equal(a.name, MessageAttachmentSchema.storageName(a.path));
     }
   });
 

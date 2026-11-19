@@ -16,7 +16,7 @@
  *   持续增长而分子不变，速率自然衰减趋零，恢复后随新样本回升。
  *
  * 组件侧的采样序列维护（token 变化才记样本、同刻去重、时钟回拨丢弃、
- * 校正点重 seed）由 {@link createTokenRateSampler} 封装，双端共用同一语义。
+ * 校正点重 seed）由 {@link SlidingTokenRate.createSampler} 封装，双端共用同一语义。
  *
  * @module domain/format/sliding-token-rate
  */
@@ -31,44 +31,6 @@ interface TokenRateSample {
 
 /** 速率滑窗的默认时长（毫秒）。 */
 export const SLIDING_TOKEN_RATE_WINDOW_MS = 2_500;
-
-/**
- * 计算滑窗 token 速率（token/秒）；样本不足或时长非正时返回 null。
- *
- * 序列按 tMs 升序（采样器保证）；未来样本（`tMs > nowMs`）不参与窗口，
- * 末样本取「不晚于 nowMs 的最近一条」——全部样本都在未来时与「样本不足」
- * 同解（null）。
- *
- * @param samples 按 tMs 升序的采样序列（调用方维护，本函数只读不改）。
- * @param nowMs 当前时刻（毫秒）。
- * @param windowMs 窗口时长（毫秒），缺省 2.5s。
- */
-export function slidingTokenRate(samples: readonly TokenRateSample[], nowMs: number, windowMs: number = SLIDING_TOKEN_RATE_WINDOW_MS): number | null {
-  // 末样本 = 不晚于 nowMs 的最近一条：时钟回拨/跳变留下的未来样本不参与
-  // 窗口（全未来样本 → lastIndex < 1 → null，与「样本不足」同解）。
-  let lastIndex = samples.length - 1;
-  while (lastIndex >= 0 && samples[lastIndex]!.tMs > nowMs) {
-    lastIndex -= 1;
-  }
-  if (lastIndex < 1) {
-    return null;
-  }
-  // 窗口外样本淘汰：只保留窗口内（含边界）的可用段；候选样本仍须不晚于
-  // nowMs（无序残留的未来样本到此为止，窗口内样本恒 ≤ nowMs）。
-  const windowStartMs = nowMs - windowMs;
-  let firstIndex = lastIndex;
-  while (firstIndex > 0 && samples[firstIndex - 1]!.tMs >= windowStartMs && samples[firstIndex - 1]!.tMs <= nowMs) {
-    firstIndex -= 1;
-  }
-  const first = samples[firstIndex]!;
-  const last = samples[lastIndex]!;
-  const elapsedMs = nowMs - first.tMs;
-  if (elapsedMs <= 0) {
-    return null;
-  }
-  const tokenDelta = Math.max(0, last.tokens - first.tokens);
-  return (tokenDelta * 1_000) / elapsedMs;
-}
 
 /** 样本数上限（超长 run 的兜底裁剪；2.5s 窗口 × 250ms 采样 ≈ 10 条在册）。 */
 const MAX_RATE_SAMPLES = 512;
@@ -114,66 +76,106 @@ export interface TokenRateSampler {
   reset(): void;
 }
 
-/** 建一个采样器（持有可变样本序列，组件级单例使用）。 */
-export function createTokenRateSampler(): TokenRateSampler {
-  let samples: TokenRateSample[] = [];
-  let lastTokens: number | null = null;
-  let lastSource: string | null = null;
-  /** 末样本时刻（同刻去重与时钟回拨判定用；reset 清回 −∞）。 */
-  let lastSampleMs = Number.NEGATIVE_INFINITY;
+export const SlidingTokenRate = {
   /**
-   * 上一个稳定窗口的末值 = `freeze()` 的回落值（样本不足以成窗口时用）。
-   * 写入点即校正点（source 翻转 / 窗口折叠）；reset 清空。
+   * 计算滑窗 token 速率（token/秒）；样本不足或时长非正时返回 null。
+   *
+   * 序列按 tMs 升序（采样器保证）；未来样本（`tMs > nowMs`）不参与窗口，
+   * 末样本取「不晚于 nowMs 的最近一条」——全部样本都在未来时与「样本不足」同
+   * 解（null）。
+   *
+   * @param samples 按 tMs 升序的采样序列（调用方维护，本函数只读不改）。
+   * @param nowMs 当前时刻（毫秒）。
+   * @param windowMs 窗口时长（毫秒），缺省 2.5s。
    */
-  let lastSettledRate: number | null = null;
-  /** 末值：窗口以最后一个样本时刻收尾（停顿不拉低）。 */
-  const tailRate = (): number | null => {
-    const last = samples[samples.length - 1];
-    return last == null ? null : slidingTokenRate(samples, last.tMs);
-  };
-  return {
-    sample(tokens, source, nowMs) {
-      if (lastSource !== source) {
-        // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
-        lastSettledRate = tailRate() ?? lastSettledRate;
-        samples = [{ tMs: nowMs, tokens }];
-        lastSampleMs = nowMs;
-        lastSource = source;
-      } else if (lastTokens !== tokens) {
-        if (nowMs > lastSampleMs) {
-          if (nowMs - lastSampleMs >= SLIDING_TOKEN_RATE_WINDOW_MS) {
-            // 窗口折叠：与上个样本相隔 ≥ 窗口时长，旧样本再也不会进任何未来
-            // 窗口（多步 run 的 step 间静默即此形态）。先把当前窗口末值刷进
-            // 回落值，再清空重 seed——freeze() 才能给出最后一段稳定速率。
-            lastSettledRate = tailRate() ?? lastSettledRate;
-            samples = [];
-          }
-          samples.push({ tMs: nowMs, tokens });
+  rate(samples: readonly TokenRateSample[], nowMs: number, windowMs: number = SLIDING_TOKEN_RATE_WINDOW_MS): number | null {
+    // 末样本 = 不晚于 nowMs 的最近一条：时钟回拨/跳变留下的未来样本不参与
+    // 窗口（全未来样本 → lastIndex < 1 → null，与「样本不足」同解）。
+    let lastIndex = samples.length - 1;
+    while (lastIndex >= 0 && samples[lastIndex]!.tMs > nowMs) {
+      lastIndex -= 1;
+    }
+    if (lastIndex < 1) {
+      return null;
+    }
+    // 窗口外样本淘汰：只保留窗口内（含边界）的可用段；候选样本仍须不晚于
+    // nowMs（无序残留的未来样本到此为止，窗口内样本恒 ≤ nowMs）。
+    const windowStartMs = nowMs - windowMs;
+    let firstIndex = lastIndex;
+    while (firstIndex > 0 && samples[firstIndex - 1]!.tMs >= windowStartMs && samples[firstIndex - 1]!.tMs <= nowMs) {
+      firstIndex -= 1;
+    }
+    const first = samples[firstIndex]!;
+    const last = samples[lastIndex]!;
+    const elapsedMs = nowMs - first.tMs;
+    if (elapsedMs <= 0) {
+      return null;
+    }
+    const tokenDelta = Math.max(0, last.tokens - first.tokens);
+    return (tokenDelta * 1_000) / elapsedMs;
+  },
+
+  /** 建一个采样器（持有可变样本序列，组件级单例使用）。 */
+  createSampler(): TokenRateSampler {
+    let samples: TokenRateSample[] = [];
+    let lastTokens: number | null = null;
+    let lastSource: string | null = null;
+    /** 末样本时刻（同刻去重与时钟回拨判定用；reset 清回 −∞）。 */
+    let lastSampleMs = Number.NEGATIVE_INFINITY;
+    /**
+     * 上一个稳定窗口的末值 = `freeze()` 的回落值（样本不足以成窗口时用）。
+     * 写入点即校正点（source 翻转 / 窗口折叠）；reset 清空。
+     */
+    let lastSettledRate: number | null = null;
+    /** 末值：窗口以最后一个样本时刻收尾（停顿不拉低）。 */
+    const tailRate = (): number | null => {
+      const last = samples[samples.length - 1];
+      return last == null ? null : SlidingTokenRate.rate(samples, last.tMs);
+    };
+    return {
+      sample(tokens, source, nowMs) {
+        if (lastSource !== source) {
+          // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
+          lastSettledRate = tailRate() ?? lastSettledRate;
+          samples = [{ tMs: nowMs, tokens }];
           lastSampleMs = nowMs;
-          if (samples.length > MAX_RATE_SAMPLES) {
-            samples = samples.slice(-MAX_RATE_SAMPLES);
+          lastSource = source;
+        } else if (lastTokens !== tokens) {
+          if (nowMs > lastSampleMs) {
+            if (nowMs - lastSampleMs >= SLIDING_TOKEN_RATE_WINDOW_MS) {
+              // 窗口折叠：与上个样本相隔 ≥ 窗口时长，旧样本再也不会进任何未来
+              // 窗口（多步 run 的 step 间静默即此形态）。先把当前窗口末值刷进
+              // 回落值，再清空重 seed——freeze() 才能给出最后一段稳定速率。
+              lastSettledRate = tailRate() ?? lastSettledRate;
+              samples = [];
+            }
+            samples.push({ tMs: nowMs, tokens });
+            lastSampleMs = nowMs;
+            if (samples.length > MAX_RATE_SAMPLES) {
+              samples = samples.slice(-MAX_RATE_SAMPLES);
+            }
+          } else if (nowMs === lastSampleMs) {
+            // 同刻去重：同一毫秒内的多条 delta 只留最终累计值，不 push。
+            samples[samples.length - 1] = { tMs: nowMs, tokens };
           }
-        } else if (nowMs === lastSampleMs) {
-          // 同刻去重：同一毫秒内的多条 delta 只留最终累计值，不 push。
-          samples[samples.length - 1] = { tMs: nowMs, tokens };
+          // nowMs < lastSampleMs：时钟回拨，入口丢弃——不记样本，保序列升序。
         }
-        // nowMs < lastSampleMs：时钟回拨，入口丢弃——不记样本，保序列升序。
-      }
-      lastTokens = tokens;
-      return slidingTokenRate(samples, nowMs);
-    },
-    rateAt(nowMs) {
-      return slidingTokenRate(samples, nowMs);
-    },
-    freeze() {
-      return tailRate() ?? lastSettledRate;
-    },
-    reset() {
-      samples = [];
-      lastTokens = null;
-      lastSource = null;
-      lastSampleMs = Number.NEGATIVE_INFINITY;
-      lastSettledRate = null;
-    },
-  };
-}
+        lastTokens = tokens;
+        return SlidingTokenRate.rate(samples, nowMs);
+      },
+      rateAt(nowMs) {
+        return SlidingTokenRate.rate(samples, nowMs);
+      },
+      freeze() {
+        return tailRate() ?? lastSettledRate;
+      },
+      reset() {
+        samples = [];
+        lastTokens = null;
+        lastSource = null;
+        lastSampleMs = Number.NEGATIVE_INFINITY;
+        lastSettledRate = null;
+      },
+    };
+  },
+} as const;

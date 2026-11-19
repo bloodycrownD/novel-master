@@ -12,8 +12,8 @@ import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { z } from "zod";
 import { AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { resolveCurrentPromptTokens, sessionApiPromptTokenCache } from "@novel-master/core/tokenizer";
@@ -27,7 +27,7 @@ import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-to
 import { createDefaultTokenCounterRegistry } from "../../src/infra/tokenizer/index.js";
 import { SessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { PROMPT_TOKENS_LAST_USAGE_KEY, RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_PROMPT_TOKENS, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey, serializeFileCachePayload, serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { ChatTokenEstimateMemo } from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import { EVENT_AGENT_STEP_COMMITTED, type AgentStepCommittedPayload } from "../../src/domain/events/model/event-types.js";
@@ -195,7 +195,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
   it("T-T4: completed 且 pick 有值 → set 后 trigger 与 resolve 同值", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -281,7 +281,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
   it("T-T4 (persistMessages=false): overlay completed run 不落热层/KKV", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // 两步 run：step1 tool_use（usage 4000，chokepoint ② 落 tool_results 后）、
     // step2 收尾文本（usage 5000）。观察点用 STEP_COMMITTED 事件而非压缩评估
@@ -366,7 +366,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -394,7 +394,7 @@ describe("AgentRunner session API prompt token cache", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
     assert.equal(result.stopReason, "cancelled");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
@@ -415,7 +415,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -468,7 +468,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(8888);
 
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model: ModelRequestService = {
       request: mock.fn(async () => {
@@ -529,7 +529,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
 
   it("两步 run：step2 的压缩评估命中 step1 回锚的 api 基线（含增量），run 末终值带锚点", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // step1：tool_use（usage 4000）→ step2：收尾文本（usage 5000）
     const model = createMockModel([
@@ -666,7 +666,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
   it("T-G1a: 重启（clearAll）后第二轮的压缩评估仍用 KKV 里的 api 值", async () => {
     // 第一轮：正常 completed，落下 4242 的 api 值。
     const firstSession = new InMemoryAgentSession();
-    unwrap(await firstSession.append("user", textBlocks("go")));
+    unwrap(await firstSession.append("user", TextBlocks.of("go")));
     const firstModel = createMockModel([
       {
         assistantText: "done",
@@ -704,7 +704,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
     // 第二轮：真实链路（runner 填 sessionKkv → trigger → 读口）必须命中 KKV 的
     // api 值 4242，而不是回退本地估算（本地档远小于 4242）。
     const secondSession = new InMemoryAgentSession();
-    unwrap(await secondSession.append("user", textBlocks("go again")));
+    unwrap(await secondSession.append("user", TextBlocks.of("go again")));
     const secondModel = createMockModel([
       {
         assistantText: "done",
@@ -801,7 +801,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         tokenRegistry,
       );
       const session = new InMemoryAgentSession();
-      unwrap(await session.append("user", textBlocks("go")));
+      unwrap(await session.append("user", TextBlocks.of("go")));
       const model = createMockModel([
         {
           assistantText: "done",
@@ -902,7 +902,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
     // sessionId 三合一（workplaceScope / kkvScope 都指自身）：assemble 的
     // kkvSessionId = session.kkvScopeSessionId，必须与下面预置的 KKV 同键。
     const session = new InMemoryAgentSession(SESSION_ID);
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // 预置规则快照 + file_cache：assemble 走「缓存命中」路径，不需要 workplace
     // 评估也不需要读 VFS——本用例锁的是「指纹有没有传下去」，不是组装本身。
@@ -912,13 +912,13 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
       SESSION_ID,
       SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
       RULE_SNAPSHOT_CANON_KEY,
-      serializeRuleSnapshot([{ path: "/a.md", status: "full" }])
+      RuleSnapshotCodec.serialize([{ path: "/a.md", status: "full" }])
     );
     await sessionKkv.set(
       SESSION_ID,
       SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/a.md"),
-      serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME })
+      RuleSnapshotCodec.fileCacheKey("full", "/a.md"),
+      RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME })
     );
 
     const model = createMockModel([

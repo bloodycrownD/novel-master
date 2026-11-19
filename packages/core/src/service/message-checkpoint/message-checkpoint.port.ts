@@ -38,7 +38,7 @@ export interface MessageCheckpointService {
    *   下一轮发送会接着补齐剩下的空窗；且中断时不写 backfill 游标，判定下次必然
    *   回退全量，**不会**因游标前移而把「没补完」误判成「已确认无空窗」。
    *
-   *   无取消诉求的调用方传 `createAbortScope()` 显式表达「不可取消」。
+   *   无取消诉求的调用方传 `AbortScopeFactory.create()` 显式表达「不可取消」。
    */
   backfillMissingBaselines(
     sessionId: string,

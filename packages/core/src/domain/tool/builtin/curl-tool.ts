@@ -120,7 +120,7 @@ const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", 
  * 静态 `curl` 工具实例。
  *
  * description 是静态 lambda（不依赖 ctx 动态内容）；是否对 LLM 可见由
- * `resolveAgentToolRegistry` 的 tools.allow/deny 控制（curl 不在任何
+ * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制（curl 不在任何
  * 摘除分支内，主/子/孙 agent 全深度可用）。
  */
 /** url 入参 schema：协议白名单校验在工具实例处的 superRefine（issue 文案贴使用点）。 */

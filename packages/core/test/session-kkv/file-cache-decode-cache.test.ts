@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload, serializeFileCachePayload, type FileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec, type FileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
@@ -37,7 +37,7 @@ after(async () => {
 
 /** 解析必须成功（非法载荷直接让用例红），返回载荷本体。 */
 function parsePayload(raw: string): FileCachePayload {
-  const parsed = parseFileCachePayload(raw);
+  const parsed = RuleSnapshotCodec.parseFileCachePayload(raw);
   assert.ok(parsed.ok);
   return parsed.value;
 }
@@ -71,7 +71,7 @@ describe("file_cache × 进程内解压产物层", () => {
     const key = `full:/正文-${testIsolationSuffix()}.md`;
     const body = `文件正文-${testIsolationSuffix()}：${"段落内容\n".repeat(70)}`;
 
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 1000 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 1000 }));
     const first = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
     assert.equal(parsePayload(first!).body, body);
 
@@ -104,8 +104,8 @@ describe("file_cache × 进程内解压产物层", () => {
     const cachedBody = `已读正文-${testIsolationSuffix()}`;
     const freshBody = `未读正文-${testIsolationSuffix()}`;
 
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey, serializeFileCachePayload({ body: cachedBody, mtimeMs: 11 }));
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, freshKey, serializeFileCachePayload({ body: freshBody, mtimeMs: 22 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey, RuleSnapshotCodec.serializeFileCachePayload({ body: cachedBody, mtimeMs: 11 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, freshKey, RuleSnapshotCodec.serializeFileCachePayload({ body: freshBody, mtimeMs: 22 }));
 
     // 只把 cachedKey 读一次（进池），freshKey 保持未读
     const single = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey);
@@ -129,7 +129,7 @@ describe("file_cache × 进程内解压产物层", () => {
         sessionId,
         SESSION_KKV_DOMAIN_FILE_CACHE,
         key,
-        serializeFileCachePayload({
+        RuleSnapshotCodec.serializeFileCachePayload({
           body: `第 ${index} 个文件正文-${testIsolationSuffix()}`,
           mtimeMs: index,
         })

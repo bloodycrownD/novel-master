@@ -1,5 +1,5 @@
 /**
- * previewSkillZip：技能 zip 预检（新建弹窗预填）。
+ * SkillZip.preview：技能 zip 预检（新建弹窗预填）。
  *
  * - 根 SKILL.md 存在：提取 name/description 与文件数；
  * - front matter 无效：字段可空但 skillMd 保留（调用方可补全后重建）；
@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { previewSkillZip } from "../../src/domain/skills/logic/preview-skill-zip.js";
+import { SkillZip } from "../../src/domain/skills/logic/preview-skill-zip.js";
 
 function zipOf(files: Record<string, string>, dirs: string[] = []): Uint8Array {
   return VfsZipBuild.build(new Map(Object.entries(files)), dirs);
@@ -18,14 +18,14 @@ function zipOf(files: Record<string, string>, dirs: string[] = []): Uint8Array {
 
 /** 预检成功路径；失败时把 AppError 抛给测试（测试是边界）。 */
 function previewOf(bytes: Uint8Array) {
-  const result = previewSkillZip(bytes);
+  const result = SkillZip.preview(bytes);
   if (!result.ok) {
     throw result.error;
   }
   return result.value;
 }
 
-describe("previewSkillZip", () => {
+describe("SkillZip.preview", () => {
   it("根含 SKILL.md：提取 front matter 元数据与文件数（目录条目不计）", () => {
     const bytes = zipOf(
       {

@@ -7,7 +7,7 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { MutatingPathHeads } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
-import { sweepSessionRevisions } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
+import { RevisionGc } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
 import { DeferredBlobGc } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
 import { ContentHash } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -199,7 +199,7 @@ describe("fail restore compensation (sessionVfs)", () => {
 
     // sweep 现在含 deleteGlobalOrphans：entry 已删、ref_count<=0 的 orphan revision
     // 会被全局清扫回收（findings 发现 14 修复）。
-    const deleted = await sweepSessionRevisions(revisions, project.id, session.id);
+    const deleted = await RevisionGc.sweepSession(revisions, project.id, session.id);
     assert.ok(deleted >= 1, "sweep 应通过全局孤儿清扫回收到 entry 已删的 orphan revision");
 
     // re-create entry 后旧 entry_id 的 revision 已被上一步 sweep 清掉（不再残留）

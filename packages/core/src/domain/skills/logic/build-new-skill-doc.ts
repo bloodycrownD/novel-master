@@ -4,7 +4,7 @@
  * 病症背景：此前 desktop 与 mobile 各自手拼一份模板，desktop 端**裸插值**、
  * mobile 端用 `JSON.stringify` 转义。于是 description 里带**半角** `": "`
  * （如「用途: 调研」）时，desktop 端产出的 YAML 被解析成嵌套 map，
- * `parseSkillFrontMatter` 返回 `valid:false`，技能**创建后立即显示为「无效技能」**；
+ * `SkillFrontMatter.parse` 返回 `valid:false`，技能**创建后立即显示为「无效技能」**；
  * 同一输入 mobile 端正常。（⚠️ 必须是半角冒号 + 后跟空格；全角 `：` 不复现。
  * ⚠️ 也不是抛错——解析失败走 `valid:false` + `invalidReason`，对外不抛。）
  *
@@ -25,9 +25,11 @@
  */
 type SkillDocBodyVariant = "desktop" | "mobile";
 
-/** 新建技能的 SKILL.md 模板；`variant` 缺省取 `desktop`。 */
-export function buildNewSkillDoc(name: string, description: string, variant: SkillDocBodyVariant = "desktop"): string {
-  const frontMatter = ["---", `name: ${JSON.stringify(name)}`, `description: ${JSON.stringify(description)}`, "---", ""];
-  const body = variant === "mobile" ? [`# ${name}`, "", description, "", "## 使用说明", "", "- 这里描述技能的用途、触发时机与使用方式，模型会据此决定是否使用本技能。", "- 辅助文件可放在本目录或子目录（如 `references/notes.md`），", "  由模型经技能工具按需读取；正文无需内联全文。", ""] : [`# ${name}`, "", description, "", "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->", ""];
-  return [...frontMatter, ...body].join("\n");
-}
+export const NewSkillDoc = {
+  /** 新建技能的 SKILL.md 模板；`variant` 缺省取 `desktop`。 */
+  build(name: string, description: string, variant: SkillDocBodyVariant = "desktop"): string {
+    const frontMatter = ["---", `name: ${JSON.stringify(name)}`, `description: ${JSON.stringify(description)}`, "---", ""];
+    const body = variant === "mobile" ? [`# ${name}`, "", description, "", "## 使用说明", "", "- 这里描述技能的用途、触发时机与使用方式，模型会据此决定是否使用本技能。", "- 辅助文件可放在本目录或子目录（如 `references/notes.md`），", "  由模型经技能工具按需读取；正文无需内联全文。", ""] : [`# ${name}`, "", description, "", "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->", ""];
+    return [...frontMatter, ...body].join("\n");
+  },
+} as const;

@@ -8,7 +8,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { type VfsService } from "@novel-master/core/vfs";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -90,7 +90,7 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
       );
 
       for (let i = 0; i < 50; i++) {
-        unwrap(await ctx.messages.append(session.id, "user", textBlocks(`msg ${i}`)));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`msg ${i}`)));
       }
 
       for (let i = 0; i < FILE_COUNT; i++) {

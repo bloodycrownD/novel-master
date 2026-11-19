@@ -103,7 +103,7 @@ function buildChainErrorMessage(failureLines: readonly string[], untried: number
  * description 是静态 lambda：通用段就地拼装，逐引擎段消费装配期
  * `engineSnapshot`（`ctx.search` 注入，回合内改配置下回合生效）；
  * 链解析与凭证明文读取仍在 run 内进行。是否对 LLM 可见由
- * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
+ * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制。
  */
 export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolContext> = {
   name: SEARCH_TOOL_NAME,

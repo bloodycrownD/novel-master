@@ -8,11 +8,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
-describe("createAbortScope：reason 来源与首因锁定（T-S1）", () => {
+describe("AbortScopeFactory.create：reason 来源与首因锁定（T-S1）", () => {
   it("初始状态：reason 为 null、signal 未中断、无 deadline", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     assert.equal(scope.reason, null);
     assert.equal(scope.signal.aborted, false);
     assert.equal(scope.deadlineAt, null);
@@ -29,7 +29,7 @@ describe("createAbortScope：reason 来源与首因锁定（T-S1）", () => {
         throw new Error("实现不应读取 signal.reason");
       },
     });
-    const scope = createAbortScope({ controller });
+    const scope = AbortScopeFactory.create({ controller });
     scope.abort("shutdown");
     assert.equal(scope.reason, "shutdown");
     assert.equal(scope.signal.aborted, true);
@@ -37,7 +37,7 @@ describe("createAbortScope：reason 来源与首因锁定（T-S1）", () => {
 
   it("外部 controller abort 时忽略 signal.reason，按保守的 user-stop 记录", () => {
     const controller = new AbortController();
-    const scope = createAbortScope({ controller });
+    const scope = AbortScopeFactory.create({ controller });
     // 伪造误导性的 reason：裸 controller 中断无从得知真实原因。
     Object.defineProperty(controller.signal, "reason", { configurable: true, get: () => "timeout" });
     controller.abort("timeout");
@@ -45,7 +45,7 @@ describe("createAbortScope：reason 来源与首因锁定（T-S1）", () => {
   });
 
   it("首因锁定：二次 abort 不覆盖首次原因，checkpoint 与 onCancel 只见首因", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     const cancelled: string[] = [];
     scope.onCancel((reason) => cancelled.push(reason));
     scope.abort("user-stop");

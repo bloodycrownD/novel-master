@@ -9,14 +9,14 @@
  * @module domain/chat/logic/fork-copy-seeder
  */
 
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -52,7 +52,7 @@ class ForkCopySeeder {
     const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
     const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
 
-    const heads = await listSessionFileHeads(entries, projectId, targetSessionId);
+    const heads = await SessionFiles.listHeads(entries, projectId, targetSessionId);
 
     // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
     // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
@@ -100,8 +100,8 @@ class ForkCopySeeder {
       await revisions.batchAppendWithRefCount(items);
     }
 
-    const sourceScope = workplaceScopeKey({ kind: "session", projectId, sessionId: sourceSessionId });
-    const targetScope = workplaceScopeKey({ kind: "session", projectId, sessionId: targetSessionId });
+    const sourceScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: sourceSessionId });
+    const targetScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: targetSessionId });
     const copied = await workplace.copyScope(sourceScope, targetScope, (p) => PathNormalizer.normalize(p));
     if (!copied.ok) {
       return Result.err(copied.error);

@@ -7,9 +7,9 @@
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { inDomain } from "@/errors/guards.js";
-import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import { thinkingLevelToModelThinkingParams } from "@/domain/provider/logic/thinking-level-presets.js";
-import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
+import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
+import { ThinkingLevelPresets } from "@/domain/provider/logic/thinking-level-presets.js";
+import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
@@ -17,8 +17,9 @@ import type { LlmChatResult, LlmProtocolAdapter, LlmProtocolKind, LlmStreamEvent
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
 import type { ModelRequestOptions, ModelRequestService } from "../model-request.port.js";
-import { createAbortError, isAbortLikeError } from "@/infra/llm-protocol/logic/request-abort.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { isAbortLikeError } from "@/infra/llm-protocol/logic/request-abort.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
 interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
@@ -109,7 +110,7 @@ async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> 
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(createAbortError());
+      reject(AbortError.create());
     };
     if (signal == null) {
       return;
@@ -127,7 +128,7 @@ export class DefaultModelRequestService implements ModelRequestService {
   constructor(private readonly deps: DefaultModelRequestServiceDeps) {}
 
   async request(savedModelId: string, userContent: string, options?: ModelRequestOptions): Promise<Result<LlmChatResult, AppError>> {
-    const asserted = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
+    const asserted = await SavedModelUuid.assert(savedModelId, this.deps.savedModels);
     if (!asserted.ok) {
       return Result.err(new AppError("PROVIDER_MODEL_NOT_SAVED", { detail: `Model not saved: ${savedModelId}. Fetch and save the model first.`, modelId: savedModelId }));
     }
@@ -138,7 +139,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${providerId}`, providerId }));
     }
     const row = provider.value;
-    const apiKeyResult = await resolveProviderApiKey(row, this.deps.secretStore);
+    const apiKeyResult = await ProviderApiKey.resolve(row, this.deps.secretStore);
     if (!apiKeyResult.ok) {
       return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: row.id }));
     }
@@ -155,14 +156,14 @@ export class DefaultModelRequestService implements ModelRequestService {
     if (thinking === undefined) {
       const thinkingLevel = saved.settings.generation.thinkingLevel;
       if (thinkingLevel !== "off") {
-        thinking = thinkingLevelToModelThinkingParams(thinkingLevel, row.protocol, vendorModelId, saved.settings.generation.sampling);
+        thinking = ThinkingLevelPresets.toModelThinkingParams(thinkingLevel, row.protocol, vendorModelId, saved.settings.generation.sampling);
       }
     }
 
     const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
     const adapter = resolveAdapter(row.protocol);
     // 无 options 的调用方显式表达「不可取消」：建一个无定时器、无父的 scope。
-    const scope = options?.scope ?? createAbortScope();
+    const scope = options?.scope ?? AbortScopeFactory.create();
     let policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
     if (this.deps.retryPolicies != null) {
       const fetched = await this.deps.retryPolicies.getPolicy();

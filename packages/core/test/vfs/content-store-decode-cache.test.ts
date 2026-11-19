@@ -15,7 +15,7 @@ import { after, before, describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload, serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
@@ -118,7 +118,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
     const vfsHash = await store.put(body);
     const sessionId = `s-${testIsolationSuffix()}`;
     const key = `full:/share-${testIsolationSuffix()}.md`;
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 42 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 42 }));
     const entryRows = await conn.query<{ content_hash: string }>(
       `SELECT content_hash FROM session_file_cache_entry
        WHERE session_id = ? AND key = ?`,
@@ -133,7 +133,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
 
     const raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
     assert.notEqual(raw, null);
-    const payload = parseFileCachePayload(raw!);
+    const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
     assert.ok(payload.ok);
     assert.equal(payload.value.body, body, "file_cache 读链直接吃了 vfs 侧解出来的正文");
     assert.equal(payload.value.mtimeMs, 42, "mtime 仍来自 entry 行，不进内存池");

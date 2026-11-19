@@ -6,8 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   composerDraftSchema,
-  parseComposerDraftJson,
-  serializeComposerDraftJson,
+  ComposerDraftSchema,
   type ComposerDraftTokenRange,
 } from "../../src/domain/chat/model/composer-draft.schema.js";
 
@@ -79,7 +78,7 @@ describe("composerDraftSchema", () => {
     assert.equal(draft.attachments[0]?.path, "/a.md");
   });
 
-  it("parseComposerDraftJson / serializeComposerDraftJson round-trip", () => {
+  it("ComposerDraftSchema.parseJson / serializeJson round-trip", () => {
     const draft = {
       text: "草稿正文",
       attachments: [
@@ -92,22 +91,22 @@ describe("composerDraftSchema", () => {
         },
       ],
     };
-    const json = serializeComposerDraftJson(draft);
+    const json = ComposerDraftSchema.serializeJson(draft);
     assert.ok(json != null);
-    assert.deepEqual(parseComposerDraftJson(json), draft);
-    assert.equal(serializeComposerDraftJson({ text: "", attachments: [] }), null);
-    assert.deepEqual(parseComposerDraftJson(null), {
+    assert.deepEqual(ComposerDraftSchema.parseJson(json), draft);
+    assert.equal(ComposerDraftSchema.serializeJson({ text: "", attachments: [] }), null);
+    assert.deepEqual(ComposerDraftSchema.parseJson(null), {
       text: "",
       attachments: [],
     });
-    assert.deepEqual(parseComposerDraftJson("not-json"), {
+    assert.deepEqual(ComposerDraftSchema.parseJson("not-json"), {
       text: "",
       attachments: [],
     });
   });
 
   it("serialize 写入前剥掉非 attach", () => {
-    const json = serializeComposerDraftJson({
+    const json = ComposerDraftSchema.serializeJson({
       text: "x",
       attachments: [
         {
@@ -150,7 +149,7 @@ describe("composerDraftSchema", () => {
         },
       ],
     });
-    const result = parseComposerDraftJson(raw);
+    const result = ComposerDraftSchema.parseJson(raw);
     // 断言必须是「text 等于那个具体非空字符串」，不能写「text 非空」——
     // 后者在返回空串时恒红、返回 undefined 时恒绿，两种退化都测不出来
     assert.equal(result.text, "我写了一半", "正文不应因附件非法而丢");
@@ -172,7 +171,7 @@ describe("composerDraftSchema", () => {
       content: null,
       path: "/b.md",
     };
-    const result = parseComposerDraftJson(
+    const result = ComposerDraftSchema.parseJson(
       JSON.stringify({
         text: "正文还在",
         attachments: [
@@ -202,13 +201,13 @@ describe("composerDraftSchema", () => {
       JSON.stringify({ attachments: [] }),
     ]) {
       assert.deepEqual(
-        parseComposerDraftJson(raw),
+        ComposerDraftSchema.parseJson(raw),
         { text: "", attachments: [] },
         `顶层非草稿形状（${raw}）应整体降级为空草稿`,
       );
     }
     // 非 attach 源仍被剥掉（既有行为）
-    const stripped = parseComposerDraftJson(
+    const stripped = ComposerDraftSchema.parseJson(
       JSON.stringify({
         text: "keep",
         attachments: [
@@ -250,9 +249,9 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
         { start: 4, end: 6 },
       ],
     };
-    const json = serializeComposerDraftJson(draft);
+    const json = ComposerDraftSchema.serializeJson(draft);
     assert.ok(json != null);
-    assert.deepEqual(parseComposerDraftJson(json), draft);
+    assert.deepEqual(ComposerDraftSchema.parseJson(json), draft);
   });
 
   it("composerDraftSchema 拒收非法区间，合法区间放行", () => {
@@ -308,7 +307,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
         attachments: [attachFixture],
         tokenRanges,
       });
-      const result = parseComposerDraftJson(raw);
+      const result = ComposerDraftSchema.parseJson(raw);
       assert.equal(
         result.text,
         "正文不能丢",
@@ -333,7 +332,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
       attachments: [],
       tokenRanges: [{ start: 5, end: 1 }],
     });
-    const result = parseComposerDraftJson(raw);
+    const result = ComposerDraftSchema.parseJson(raw);
     assert.equal(
       hasOwn(result, "tokenRanges"),
       false,
@@ -342,7 +341,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
   });
 
   it("serialize 过滤非法条目：丢坏条目、其余照写", () => {
-    const json = serializeComposerDraftJson({
+    const json = ComposerDraftSchema.serializeJson({
       text: "正文",
       attachments: [],
       tokenRanges: asTokenRanges([
@@ -368,7 +367,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
   });
 
   it("serialize 全非法 → 写 []，不抛错", () => {
-    const json = serializeComposerDraftJson({
+    const json = ComposerDraftSchema.serializeJson({
       text: "正文",
       attachments: [],
       tokenRanges: asTokenRanges([null, { start: 3, end: 1 }, "x"]),
@@ -378,7 +377,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
   });
 
   it("serialize：undefined 不写字段，[] 照写（undefined ≠ []）", () => {
-    const withoutRanges = serializeComposerDraftJson({
+    const withoutRanges = ComposerDraftSchema.serializeJson({
       text: "手输$foo",
       attachments: [],
     });
@@ -389,7 +388,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
       "undefined 语义（允许兜底扫描）不应落成字段"
     );
 
-    const emptyRanges = serializeComposerDraftJson({
+    const emptyRanges = ComposerDraftSchema.serializeJson({
       text: "手输$foo",
       attachments: [],
       tokenRanges: [],
@@ -405,7 +404,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
   });
 
   it("旧 JSON（无 tokenRanges 字段）→ 结果对象无自有键", () => {
-    const result = parseComposerDraftJson(
+    const result = ComposerDraftSchema.parseJson(
       JSON.stringify({ text: "旧草稿", attachments: [] })
     );
     assert.equal(result.text, "旧草稿");
@@ -414,7 +413,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
   });
 
   it("旧代码读新 JSON（parse 自构造对象路径）→ text 保留、ranges 静默丢弃", () => {
-    const json = serializeComposerDraftJson({
+    const json = ComposerDraftSchema.serializeJson({
       text: "$技能 尾追",
       attachments: [],
       tokenRanges: [{ start: 0, end: 3 }],
@@ -450,7 +449,7 @@ describe("T-CA1: 草稿 schema 的 tokenRanges roundtrip 与降级口径", () =>
 
   it("既有清空口径不变：空正文 + 空附件 → null（即使带 ranges）", () => {
     assert.equal(
-      serializeComposerDraftJson({
+      ComposerDraftSchema.serializeJson({
         text: "",
         attachments: [],
         tokenRanges: [{ start: 0, end: 3 }],

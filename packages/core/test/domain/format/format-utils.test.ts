@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Number } from "../../../src/common/number.js";
-import {
-  buildStreamMetricsLine,
-  formatStreamElapsed,
-  type StreamMetricsLineInput,
-} from "../../../src/domain/format/format-stream-metrics-line.js";
+import { StreamMetricsLine } from "../../../src/domain/format/format-stream-metrics-line.js";
+import type { StreamMetricsLineInput } from "../../../src/domain/format/format-stream-metrics-line.js";
 import { tCore } from "../../helpers/core-i18n.js";
 
 /** parts → 整行（消费方形态：`{prefix} · {elapsed} · {body}`，descriptor 经 tCore 渲染）。 */
 function renderMetricsLine(metrics: StreamMetricsLineInput): string {
-  const parts = buildStreamMetricsLine(metrics);
+  const parts = StreamMetricsLine.build(metrics);
   return `${tCore(parts.prefix)} · ${parts.elapsed} · ${tCore(parts.body)}`;
 }
 
@@ -20,22 +17,22 @@ describe("Number.charCount", () => {
   });
 });
 
-describe("formatStreamElapsed（core-metrics/C-2：core 单点实现，双端复用）", () => {
+describe("StreamMetricsLine.formatElapsed（core-metrics/C-2：core 单点实现，双端复用）", () => {
   it("60s 内一位小数（含 0 与四舍五入）", () => {
-    assert.equal(formatStreamElapsed(0), "0.0s");
-    assert.equal(formatStreamElapsed(1.25), "1.3s");
-    assert.equal(formatStreamElapsed(12.34), "12.3s");
-    assert.equal(formatStreamElapsed(59.94), "59.9s");
+    assert.equal(StreamMetricsLine.formatElapsed(0), "0.0s");
+    assert.equal(StreamMetricsLine.formatElapsed(1.25), "1.3s");
+    assert.equal(StreamMetricsLine.formatElapsed(12.34), "12.3s");
+    assert.equal(StreamMetricsLine.formatElapsed(59.94), "59.9s");
   });
 
   it("60s 起取整（边界 60 即离开小数段）", () => {
-    assert.equal(formatStreamElapsed(60), "60s");
-    assert.equal(formatStreamElapsed(61.4), "61s");
-    assert.equal(formatStreamElapsed(3_599.6), "3600s");
+    assert.equal(StreamMetricsLine.formatElapsed(60), "60s");
+    assert.equal(StreamMetricsLine.formatElapsed(61.4), "61s");
+    assert.equal(StreamMetricsLine.formatElapsed(3_599.6), "3600s");
   });
 });
 
-describe("buildStreamMetricsLine（T-M8 文案快照，经 tCore 渲染拼装）", () => {
+describe("StreamMetricsLine.build（T-M8 文案快照，经 tCore 渲染拼装）", () => {
   it("生成中 · 秒 · 输出 token · 速率全段拼接（千分位 + tok/s 惯例）", () => {
     const line = renderMetricsLine({
       running: true,

@@ -28,26 +28,26 @@ type VfsZipValidateError = AppError<"VFS_ZIP_INVALID_ARCHIVE" | "VFS_ZIP_INVALID
 
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
-/**
- * Decodes bytes as UTF-8 text; rejects invalid sequences.
- * Uses round-trip encoding (not `fatal: true`) so Hermes matches Node behavior.
- */
-export function decodeUtf8Entry(bytes: Uint8Array, entryName: string): Result<string, AppError<"VFS_ZIP_INVALID_UTF8">> {
-  // 去掉 UTF-8 BOM 再解码；round-trip 比对覆盖 BOM 之后的每个字节。
-  const payload = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? bytes.subarray(3) : bytes;
-  const decoded = new TextDecoder("utf-8").decode(payload);
-  const roundTrip = new TextEncoder().encode(decoded);
-  let same = payload.length === roundTrip.length;
-  for (let i = 0; same && i < payload.length; i++) {
-    same = payload[i] === roundTrip[i];
-  }
-  if (!same) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", { detail: `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)` }));
-  }
-  return Result.ok(decoded);
-}
-
 export const VfsZipValidate = {
+  /**
+   * Decodes bytes as UTF-8 text; rejects invalid sequences.
+   * Uses round-trip encoding (not `fatal: true`) so Hermes matches Node behavior.
+   */
+  decodeUtf8Entry(bytes: Uint8Array, entryName: string): Result<string, AppError<"VFS_ZIP_INVALID_UTF8">> {
+    // 去掉 UTF-8 BOM 再解码；round-trip 比对覆盖 BOM 之后的每个字节。
+    const payload = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? bytes.subarray(3) : bytes;
+    const decoded = new TextDecoder("utf-8").decode(payload);
+    const roundTrip = new TextEncoder().encode(decoded);
+    let same = payload.length === roundTrip.length;
+    for (let i = 0; same && i < payload.length; i++) {
+      same = payload[i] === roundTrip[i];
+    }
+    if (!same) {
+      return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", { detail: `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)` }));
+    }
+    return Result.ok(decoded);
+  },
+
   assertEntryNameAllowed(entryName: string): VfsZipValidateError | null {
     if (entryName.length === 0) {
       return null;
@@ -154,7 +154,7 @@ export const VfsZipValidate = {
       }
       const scopeError = VfsZipValidate.assertLogicalAllowed(scope, logical.value, entryName);
       if (scopeError != null) return Result.err(scopeError);
-      const content = decodeUtf8Entry(bytes, entryName);
+      const content = VfsZipValidate.decodeUtf8Entry(bytes, entryName);
       if (!content.ok) return Result.err(content.error);
       files.set(logical.value, content.value);
     }

@@ -1,12 +1,12 @@
 [
   "BUILTIN_SKILL_NAMES",
+  "EffectiveSkills",
+  "NewSkillDoc",
   "SKILL_NAME_PATTERN",
-  "buildNewSkillDoc",
-  "computeEffectiveSkills",
+  "SkillFrontMatter",
+  "SkillFrontMatterValues",
+  "SkillName",
+  "SkillZip",
   "createSkillsService",
-  "parseSkillFrontMatter",
-  "previewSkillZip",
-  "skillFrontMatterSchema",
-  "validateSkillName",
-  "withSkillFrontMatterValues"
+  "skillFrontMatterSchema"
 ]

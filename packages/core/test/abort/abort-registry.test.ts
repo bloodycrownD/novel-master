@@ -8,15 +8,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAbortRegistry } from "@/domain/abort/logic/create-abort-registry.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortRegistryFactory } from "@/domain/abort/logic/create-abort-registry.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { ABORT_KEY } from "@/domain/abort/model/abort-key.js";
 
 describe("AbortRegistry 泛化语义（T-S8）", () => {
   it("abort(key) 只取消该 key；其余登记项保持未中断", () => {
-    const registry = createAbortRegistry();
-    const backup = createAbortScope();
-    const sync = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const backup = AbortScopeFactory.create();
+    const sync = AbortScopeFactory.create();
     registry.register(ABORT_KEY.backup("r1"), backup);
     registry.register(ABORT_KEY.cloudSync("local"), sync);
 
@@ -31,8 +31,8 @@ describe("AbortRegistry 泛化语义（T-S8）", () => {
   });
 
   it("abort(key, reason) 保留显式原因；未登记 key 静默 no-op", () => {
-    const registry = createAbortRegistry();
-    const scope = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const scope = AbortScopeFactory.create();
     registry.register(ABORT_KEY.usageStats("u1"), scope);
 
     registry.abort("not-registered");
@@ -44,9 +44,9 @@ describe("AbortRegistry 泛化语义（T-S8）", () => {
   });
 
   it("abortAll(reason) 取消全部登记项，且不改变登记表", () => {
-    const registry = createAbortRegistry();
-    const first = createAbortScope();
-    const second = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const first = AbortScopeFactory.create();
+    const second = AbortScopeFactory.create();
     registry.register(ABORT_KEY.backup("r1"), first);
     registry.register(ABORT_KEY.dbMaintenance("m1"), second);
 
@@ -59,9 +59,9 @@ describe("AbortRegistry 泛化语义（T-S8）", () => {
   });
 
   it("unregister 所有权比对：旧 scope 的反注册不误删覆盖后的新 scope", () => {
-    const registry = createAbortRegistry();
-    const oldScope = createAbortScope();
-    const newScope = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const oldScope = AbortScopeFactory.create();
+    const newScope = AbortScopeFactory.create();
     registry.register(ABORT_KEY.compaction("s1"), oldScope);
     registry.register(ABORT_KEY.compaction("s1"), newScope);
 
@@ -74,9 +74,9 @@ describe("AbortRegistry 泛化语义（T-S8）", () => {
   });
 
   it("register 覆盖语义：同 key 后写生效，abort 只命中新 scope", () => {
-    const registry = createAbortRegistry();
-    const first = createAbortScope();
-    const second = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const first = AbortScopeFactory.create();
+    const second = AbortScopeFactory.create();
     registry.register("same-key", first);
     registry.register("same-key", second);
 
@@ -91,9 +91,9 @@ describe("AbortRegistry 泛化语义（T-S8）", () => {
   });
 
   it("tryRegister / registerIfAbsent 冲突返回 false 且不覆盖既有 scope", () => {
-    const registry = createAbortRegistry();
-    const winner = createAbortScope();
-    const loser = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const winner = AbortScopeFactory.create();
+    const loser = AbortScopeFactory.create();
 
     assert.equal(registry.tryRegister("k", winner), true);
     assert.equal(registry.tryRegister("k", loser), false);
@@ -110,8 +110,8 @@ describe("AbortRegistry 泛化语义（T-S8）", () => {
   });
 
   it("entries() 暴露当前登记项（应用退出侧 abortAll 的遍历底表）", () => {
-    const registry = createAbortRegistry();
-    const scope = createAbortScope();
+    const registry = AbortRegistryFactory.create();
+    const scope = AbortScopeFactory.create();
     registry.register(ABORT_KEY.agent("s1"), scope);
     const entries = [...registry.entries()];
     assert.equal(entries.length, 1);

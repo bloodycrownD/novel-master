@@ -8,8 +8,8 @@
 
 import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import {Coerce} from "@/common/coerce.js";
-import {type AnnotateDraft, isMessageAnnotatePath} from "../../model/annotate-draft.schema.js";
-import {attachmentStorageName, type MessageAttachment} from "../../model/message-attachment.schema.js";
+import {AnnotateDraftSchema, type AnnotateDraft} from "../../model/annotate-draft.schema.js";
+import {MessageAttachmentSchema, type MessageAttachment} from "../../model/message-attachment.schema.js";
 import {userVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
 
 type AttachmentDisplayKind = "full" | "filename" | "header";
@@ -61,7 +61,7 @@ class AttachmentXmlCodec {
         }
         const xml = UserVfsActionXml.build("annotate", params);
         return {
-            name: attachmentStorageName(path),
+            name: MessageAttachmentSchema.storageName(path),
             source: "user_ops",
             type: "text",
             content: xml,
@@ -110,7 +110,7 @@ class AttachmentXmlCodec {
                     endCol = Coerce.integerAtLeast(annotate.params.endCol, 1);
                 }
             }
-            if (!path || isMessageAnnotatePath(path)) {
+            if (!path || AnnotateDraftSchema.isMessagePath(path)) {
                 continue;
             }
             const renderOk = renderStart != null && renderEnd != null && renderStart < renderEnd;

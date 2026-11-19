@@ -10,21 +10,12 @@
  * @module public/provider
  */
 
-export {
-  parseApplicationModelId,
-  normalizeVendorModelId,
-} from "../domain/provider/logic/application-model-id.js";
-export {
-  assertSavedModelUuid,
-  isSavedModelUuidFormat,
-} from "../domain/provider/logic/assert-saved-model-uuid.js";
-export { formatSavedModelDisplayName } from "../domain/provider/logic/format-saved-model-display-name.js";
-export {
-  inferLlmProtocolFromSavedModelId,
-  inferLlmProtocolFromApplicationModelId,
-} from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
+export { ApplicationModelId } from "../domain/provider/logic/application-model-id.js";
+export { SavedModelUuid } from "../domain/provider/logic/assert-saved-model-uuid.js";
+export { SavedModelDisplayName } from "../domain/provider/logic/format-saved-model-display-name.js";
+export { LlmProtocol } from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
 export type { LlmProvider } from "../domain/provider/model/provider.js";
-export { providerApiKeyRef } from "../domain/provider/model/provider.js";
+export { ProviderModel } from "../domain/provider/model/provider.js";
 export type {
   ModelSamplingParams,
   OpenAiSamplingParams,
@@ -32,26 +23,18 @@ export type {
   GeminiSamplingParams,
 } from "../domain/provider/model/model-sampling-params.js";
 export {
-  mergeSamplingWithDefaults,
+  ProtocolSamplingDefaults,
   OPENAI_SAMPLING_DEFAULTS,
   ANTHROPIC_SAMPLING_DEFAULTS,
   GEMINI_SAMPLING_DEFAULTS,
 } from "../domain/provider/model/protocol-sampling-defaults.js";
-export type { SavedModel } from "../domain/provider/model/saved-model.js";
-export { savedModelDisplayName } from "../domain/provider/model/saved-model.js";
+export { SavedModel } from "../domain/provider/model/saved-model.js";
 export type {
-  SavedModelSettings,
   SavedModelSamplingSettings,
   ThinkingLevel,
   SavedModelSettingsPatch,
 } from "../domain/provider/model/saved-model-settings.js";
-export {
-  savedModelContextWindowTokens,
-  savedModelTokenCounterMode,
-  savedModelSampling,
-  savedModelThinkingLevel,
-  applySavedModelSettingsPatch,
-} from "../domain/provider/model/saved-model-settings.js";
+export { SavedModelSettings } from "../domain/provider/model/saved-model-settings.js";
 export {
   THINKING_LEVEL_SELECT_OPTIONS,
 } from "../domain/provider/model/thinking-level-options.js";
@@ -62,13 +45,10 @@ export type {
   GeminiThinkingParams,
   GeminiThinkingConfig,
 } from "../domain/provider/model/model-thinking-params.js";
-export { resolveEffectiveMaxTokens } from "../domain/provider/logic/resolve-thinking-wire.js";
-export { thinkingLevelToModelThinkingParams } from "../domain/provider/logic/thinking-level-presets.js";
-export { defaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
-export {
-  savedModelSettingsFromJson,
-  savedModelSettingsToJson,
-} from "../domain/provider/model/saved-model-settings-from-json.js";
+export { ThinkingWire } from "../domain/provider/logic/resolve-thinking-wire.js";
+export { ThinkingLevelPresets } from "../domain/provider/logic/thinking-level-presets.js";
+export { DefaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
+export { SavedModelSettingsJson } from "../domain/provider/model/saved-model-settings-from-json.js";
 export {
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
 } from "../domain/provider/model/token-counter-mode-options.js";

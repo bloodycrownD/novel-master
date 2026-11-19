@@ -4,8 +4,8 @@
  * @module infra/llm-protocol/impl/gemini.adapter
  */
 
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
-import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
+import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter } from "../ports/adapter.port.js";
 import { blocksToGeminiParts, chatMessagesToGeminiContents, geminiPartsToBlocks, toolsToGeminiFunctionDeclarations } from "../logic/gemini-content-mapper.js";
 import { createGeminiSseParser } from "../logic/gemini-sse-parser.js";
@@ -56,7 +56,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       const aborted = req.scope?.signal.aborted === true;
       const finishResult = aborted ? parser.finishPartial() : parser.finish();
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
-      const assistantText = messageBodyTextFromBlocks(blocks);
+      const assistantText = MessageBodyText.fromBlocks(blocks);
       const usage = parseUsage("gemini", streamRaw);
       const result: LlmChatResult = {
         assistantText,
@@ -77,7 +77,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     const record = raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> };
     const parts = record.candidates?.[0]?.content?.parts ?? [];
     const blocks = geminiPartsToBlocks(parts);
-    const assistantText = messageBodyTextFromBlocks(blocks);
+    const assistantText = MessageBodyText.fromBlocks(blocks);
     const usage = parseUsage("gemini", raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -89,7 +89,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       if (!mapped.ok) throw mapped.error;
       contents = mapped.value;
     } else {
-      const parts = blocksToGeminiParts(textBlocks(req.userContent).blocks);
+      const parts = blocksToGeminiParts(TextBlocks.of(req.userContent).blocks);
       if (!parts.ok) throw parts.error;
       contents = [{ role: "user", parts: parts.value }];
     }

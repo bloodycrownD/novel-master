@@ -6,7 +6,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { RevisionAwareVfsService } from "@/service/vfs/impl/revision-aware-vfs.service.js";
@@ -41,7 +41,7 @@ describe("rollback execution redesign", () => {
       anchorAssistant.id,
     ));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
     const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "tail" }],
     }));
@@ -139,21 +139,21 @@ describe("rollback execution redesign", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp1" }],
     }));
     await svfs.write("/stable.md", "chapter-1", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp2" }],
     }));
     await svfs.write("/stable.md", "chapter-2", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
     const assistant3 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp3" }],
     }));

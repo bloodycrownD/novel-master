@@ -12,7 +12,7 @@ import type {ChatMessageData} from "../../model/message.js";
 import type {MessageAttachment} from "../../model/message-attachment.schema.js";
 import type {MessageContent} from "../../model/content-block.js";
 import type {MessageUsage} from "../../model/message-usage.js";
-import {readMessageMetadata} from "../../model/message-metadata.js";
+import {MessageMetadata} from "../../model/message-metadata.js";
 
 /** 单条消息的领域对象。 */
 export class ChatMessage {
@@ -86,7 +86,7 @@ export class ChatMessage {
     /** 是否为 plain text user Undo Send 锚点。 */
     isUndoSendEligible(): boolean {
         if (this.role !== "user" || this.hasToolResult()) return false;
-        if (readMessageMetadata(this.raw)?.kind === "user_vfs_action") return false;
+        if (MessageMetadata.read(this.raw)?.kind === "user_vfs_action") return false;
         return this.editableText() != null || this.hasAnnotateAttachment();
     }
 

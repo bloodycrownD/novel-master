@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { type TdbcConnection } from "@novel-master/core";
 
 import { type MessageContent } from "@novel-master/core/chat";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -103,7 +103,7 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const m = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messages.delete(m.id));
     const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 0);
@@ -113,9 +113,9 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const u1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("partial")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tool_results")));
+    const u1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("partial")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tool_results")));
 
     unwrap(await ctx.messages.truncateAfter(session.id, u1.id));
     const list = outcomeValue(await ctx.messages.listBySession(session.id));
@@ -127,8 +127,8 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("b")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("b")));
 
     unwrap(await ctx.messages.truncateAfter(session.id, null));
     const list = outcomeValue(await ctx.messages.listBySession(session.id));
@@ -139,8 +139,8 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const u1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
-    const a1 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("partial")));
+    const u1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+    const a1 = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("partial")));
 
     const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
     await checkpointRepo.insertCheckpoint({
@@ -165,10 +165,10 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const m = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     const updated = unwrap(await ctx.messages.updateContent(
       m.id,
-      textBlocks("edited"),
+      TextBlocks.of("edited"),
     ));
     assert.equal(firstTextBlock(updated.content), "edited");
     const loaded = unwrap(await ctx.messages.get(m.id));
@@ -179,8 +179,8 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("hey")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("hey")));
     const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 2);
     assert.equal(list[0]!.seq, 1);
@@ -192,7 +192,7 @@ describe("Chat services", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     for (let i = 1; i <= 8; i += 1) {
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`m${i}`)));
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`m${i}`)));
     }
     const all = outcomeValue(await ctx.messages.listBySession(session.id));
     const tail = outcomeValue(await ctx.messages.listBySessionTail(session.id, { limit: 3 }));
@@ -222,9 +222,9 @@ describe("Chat services", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "edited");
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
     assert.equal(forked.title, "会话_ckpt_1");
@@ -243,7 +243,7 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "新会话1"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
 
     const first = unwrap(await ctx.messages.fork(session.id, m1.id));
     assert.equal(first.title, "新会话1_ckpt_1");
@@ -256,7 +256,7 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
     // 先设一个非默认配置（agentId + modelId 都改掉），再 fork 验证继承。
     unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "agent-fk-src",
@@ -274,7 +274,7 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
     // service 层 updateSessionAgentConfig 不允许置空 agentId，
     // 这里走 repo 层直接把源会话 agent_config_json 清成 NULL。
     const sessionRepo = new SqliteSessionRepository(ctx.conn);
@@ -293,12 +293,12 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
-    unwrap(await ctx.messages.append(forked.id, "user", textBlocks("fork-only")));
+    unwrap(await ctx.messages.append(forked.id, "user", TextBlocks.of("fork-only")));
 
     const sourceMsgs = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(sourceMsgs.length, 3);
@@ -318,8 +318,8 @@ describe("Chat services", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "body");
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("hey")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("hey")));
 
     const copy = unwrap(await ctx.sessions.copy(session.id));
     const copyVfs = ctx.sessionVfs(project.id, copy.id);
@@ -342,7 +342,7 @@ describe("Chat services", () => {
     const assistant = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("checkpoint"),
+      TextBlocks.of("checkpoint"),
     ));
     await ctx.sessionVfs(project.id, session.id).write("/cp.md", "v1", {
       versionCheck: false,
@@ -368,7 +368,7 @@ describe("Chat services", () => {
       const assistant = unwrap(await ctx.messages.append(
         session.id,
         "assistant",
-        textBlocks("checkpoint"),
+        TextBlocks.of("checkpoint"),
       ));
       await ctx.sessionVfs(project.id, session.id).write("/cp.md", "v1", {
         versionCheck: false,

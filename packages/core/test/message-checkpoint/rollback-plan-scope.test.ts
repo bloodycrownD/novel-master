@@ -13,7 +13,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import {
@@ -31,7 +31,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
 
     // 锚点之前的历史（不参与 plan，但必须原样保留）。
-    const user0 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("旧对话")));
+    const user0 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("旧对话")));
     const assistant0 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "旧回复" }],
     }));
@@ -73,11 +73,11 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     const project = unwrap(await ctx.projects.create(`P-tr1b-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const user0 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("保留")));
+    const user0 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("保留")));
     const assistant0 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
     }));
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("锚点")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("锚点")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "被截" }],
     }));
@@ -98,11 +98,11 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     const project = unwrap(await ctx.projects.create(`P-tr1c-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
     const assistant0 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("c")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("c")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "d" }],
     }));

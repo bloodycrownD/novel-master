@@ -6,7 +6,7 @@
 
 import { Random } from "@/common/random.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { parseMessageContentValue } from "@/domain/chat/content/parse-message-content.js";
+import { MessageContentParse } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData, ChatMessageHeader } from "@/domain/chat/model/message.js";
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
@@ -18,11 +18,11 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import type { Outcome } from "@/errors/outcome.js";
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
@@ -34,14 +34,14 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { TruncateTail } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteUsageRecordRepository } from "@/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
 import { createLogger } from "@/infra/log/logger.js";
-import { buildUsageRecordFromMessage } from "@/domain/usage/logic/build-usage-record.js";
+import { UsageRecord } from "@/domain/usage/logic/build-usage-record.js";
 import type { MessageService } from "../message.port.js";
 
 const log = createLogger("chat.message");
@@ -131,7 +131,7 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
-    const parsedContent = parseMessageContentValue(content);
+    const parsedContent = MessageContentParse.parseValue(content);
     if (!parsedContent.ok) {
       return Result.err(parsedContent.error);
     }
@@ -160,7 +160,7 @@ export class DefaultMessageService implements MessageService {
     // （永续，删除链不碰），统计读口改打账本后数字不再随删除归零。
     // 无 token 真值（prompt/completion 皆空）与无 usage 的消息不写账本——
     // 与旧统计口径 USAGE_NOT_NULL_SQL 同源，普通消息走原直通插入零额外开销。
-    const usageRecord = buildUsageRecordFromMessage(message);
+    const usageRecord = UsageRecord.buildFromMessage(message);
     if (usageRecord == null) {
       await this.deps.messages.insert(message);
     } else {
@@ -211,7 +211,7 @@ export class DefaultMessageService implements MessageService {
       // 位移），残留会让下次 backfill 判定错位——清掉走保守全量自愈。
       await new SqliteSessionKkvRepository(tx).clearDomain(message.sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
       await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
-      await sweepSessionRevisions(revisions, session.projectId, message.sessionId);
+      await RevisionGc.sweepSession(revisions, session.projectId, message.sessionId);
     });
     await DeferredBlobGc.run(this.deps.conn);
     await this.invalidatePromptTokens(message.sessionId);
@@ -220,7 +220,7 @@ export class DefaultMessageService implements MessageService {
   }
 
   async updateContent(messageId: string, content: MessageContent): Promise<Result<ChatMessageData, AppError>> {
-    const parsedContent = parseMessageContentValue(content);
+    const parsedContent = MessageContentParse.parseValue(content);
     if (!parsedContent.ok) {
       return Result.err(parsedContent.error);
     }
@@ -260,7 +260,7 @@ export class DefaultMessageService implements MessageService {
     const allRead = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq, hooks);
     if (allRead.kind === "failed") return Result.err(allRead.error);
     // 中断不是错误：本方法出口是边界，转抛 AbortError 交给上层（IPC / CLI）收口。
-    if (allRead.kind !== "completed") throw createAbortError();
+    if (allRead.kind !== "completed") throw AbortError.create();
     const all = allRead.value;
     if (all.length === 0) {
       // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
@@ -312,7 +312,7 @@ export class DefaultMessageService implements MessageService {
       const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
       const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
       if (vfsCopied.kind === "failed") throw vfsCopied.error;
-      if (vfsCopied.kind !== "completed") throw createAbortError();
+      if (vfsCopied.kind !== "completed") throw AbortError.create();
 
       const newMessages: { id: string }[] = [];
       let seq = 1;
@@ -329,7 +329,7 @@ export class DefaultMessageService implements MessageService {
       // 事务边界（平台协议例外）：中断/失败都必须抛错才能让驱动整体回滚，
       // 不能把 Outcome 直接 return——那样外层事务会 commit 半批 fork。
       if (inserted.kind === "failed") throw inserted.error;
-      if (inserted.kind !== "completed") throw createAbortError();
+      if (inserted.kind !== "completed") throw AbortError.create();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
       await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
@@ -424,10 +424,10 @@ export class DefaultMessageService implements MessageService {
       return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId }));
     }
 
-    // tail 截断核心与回滚 / 批量删共用 `truncateTailInTransaction`：删除链、backfill
+    // tail 截断核心与回滚 / 批量删共用 `TruncateTail.truncate`：删除链、backfill
     // 游标、Composer 状态条域的清理只有一份实现（读也一并留在事务内，产出写集合）。
     await this.deps.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
     });
     await this.invalidatePromptTokens(sessionId);
     await this.invalidateToolUseCount(sessionId);

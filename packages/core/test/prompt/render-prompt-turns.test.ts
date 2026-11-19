@@ -3,7 +3,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { textBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock } from "@novel-master/core/chat";
+import { TextBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock } from "@novel-master/core/chat";
 import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import { tCore } from "../helpers/core-i18n.js";
 
@@ -12,12 +12,12 @@ const summaryOf = (m: unknown) => tCore(m as Parameters<typeof tCore>[0]);
 const metaOf = (parts: readonly unknown[]) => parts.map((m) => summaryOf(m)).join(" · ");
 import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 
-import { PromptBuilder, messageBodyTextFromBlocks, type AgentPromptLayout, type  PromptPreviewTurn, type  PromptRenderContext, type  PromptToolGroupCardData, type  PromptTurnCardData } from "@novel-master/core/prompt";
+import { PromptBuilder, MessageBodyText, type AgentPromptLayout, type  PromptPreviewTurn, type  PromptRenderContext, type  PromptToolGroupCardData, type  PromptTurnCardData } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
 function message(role: string, content: string, seq: number): ChatMessageData {
-  return blocksMessage(role, textBlocks(content).blocks, seq);
+  return blocksMessage(role, TextBlocks.of(content).blocks, seq);
 }
 
 function blocksMessage(
@@ -484,7 +484,7 @@ function userMessageWithAttachments(
   count: number
 ): ChatMessageData {
   return {
-    ...blocksMessage("user", textBlocks(content).blocks, seq),
+    ...blocksMessage("user", TextBlocks.of(content).blocks, seq),
     attachments: Array.from({ length: count }, (_, index) => ({
       name: `a${index}.md`,
       source: "attach" as const,
@@ -1276,7 +1276,7 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
     };
     const wire = unwrap(await PromptBuilder.llmInput(workplaceLayout, ctx));
     const workplaceMsg = wire.messages.find((m) => m.role === "user")!;
-    const body = messageBodyTextFromBlocks(workplaceMsg.content.blocks);
+    const body = MessageBodyText.fromBlocks(workplaceMsg.content.blocks);
     assert.match(body, /1\|第一行\n2\|第二行/);
     // 同一次组装产出的 cards 侧已剥——两条通道各自独立。
     const turns = unwrap(await PromptBuilder.previewTurns(workplaceLayout, ctx));
@@ -1390,7 +1390,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   /** user 轮 text 卡正文（唯一的 user 轮卡片）。 */
   async function userCardBody(text: string): Promise<string> {
     const messages: ChatMessageData[] = [
-      blocksMessage("user", textBlocks(text).blocks, 1),
+      blocksMessage("user", TextBlocks.of(text).blocks, 1),
       message("assistant", "好", 2),
     ];
     const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
@@ -1411,7 +1411,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     // 本用例的 items/body 断言立刻红。
     const wrapped = userAttachBody("1|第一行\n2|第二行");
     const messages: ChatMessageData[] = [
-      blocksMessage("user", textBlocks(wrapped).blocks, 1),
+      blocksMessage("user", TextBlocks.of(wrapped).blocks, 1),
       message("assistant", "好", 2),
     ];
     const turns = unwrap(await PromptBuilder.previewTurns(
@@ -1474,7 +1474,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     const messages: ChatMessageData[] = [
       blocksMessage(
         "user",
-        textBlocks(userAttachBody("1|附件行")).blocks,
+        TextBlocks.of(userAttachBody("1|附件行")).blocks,
         1
       ),
       message("assistant", "好", 2),

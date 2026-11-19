@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
-import { inferLlmProtocolFromSavedModelId } from "../../src/domain/provider/logic/infer-llm-protocol-from-model-id.js";
+import { LlmProtocol } from "../../src/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import {
   BUILTIN_KEY_TO_UUID,
   BUILTIN_PROVIDER_UUID_OPENAI,
@@ -54,7 +54,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
       const providerId = BUILTIN_KEY_TO_UUID[key]!;
       const saved = unwrap(await bundle.providerModels.create(providerId, vendorModelId));
       assert.equal(
-        await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),
+        await LlmProtocol.fromSavedModelId(saved.id, bundle.savedModelRepo),
         expected,
       );
     });
@@ -68,7 +68,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
       "gpt-4o",
     ));
     assert.equal(
-      await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),
+      await LlmProtocol.fromSavedModelId(saved.id, bundle.savedModelRepo),
       "openai",
     );
   });
@@ -84,11 +84,11 @@ describe("inferLlmProtocolFromSavedModelId", () => {
     }));
     const saved = unwrap(await bundle.providerModels.create(created.id, "some-model"));
     assert.equal(
-      await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),
+      await LlmProtocol.fromSavedModelId(saved.id, bundle.savedModelRepo),
       "anthropic",
     );
     assert.equal(
-      await inferLlmProtocolFromSavedModelId(
+      await LlmProtocol.fromSavedModelId(
         saved.id,
         bundle.savedModelRepo,
         bundle.providerRepo,
@@ -101,7 +101,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     assert.equal(
-      await inferLlmProtocolFromSavedModelId(
+      await LlmProtocol.fromSavedModelId(
         "00000000-0000-4000-8000-000000000000",
         bundle.savedModelRepo,
       ),

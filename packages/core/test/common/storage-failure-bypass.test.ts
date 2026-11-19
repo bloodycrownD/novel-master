@@ -19,7 +19,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseText } from "@novel-master/core";
-import { decodeSmartSortRuleBundle } from "@novel-master/core/smart-sort-rule";
+import { SmartSortRuleIo } from "@novel-master/core/smart-sort-rule";
 // TdbcError 与 Errors.normalizeSmartSortImport 同源（src）：barrel 走 dist 副本，
 // 跨模块副本 instanceof 会漏判、DB 故障会被误套「YAML 无效」标签（本文件 D1 的牙齿）。
 import { TdbcError } from "../../src/infra/tdbc/errors.js";
@@ -55,7 +55,7 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
     assert.match(tCore(syntaxDescriptor), /YAML 无效/);
 
     // schema 违规（缺 rules 字段）。四期签名：decode 失败沿 Result.err 回传，不再 throw。
-    const schemaParsed = decodeSmartSortRuleBundle({ nope: 1 });
+    const schemaParsed = SmartSortRuleIo.decodeBundle({ nope: 1 });
     const schemaErr: unknown = schemaParsed.ok ? null : schemaParsed.error;
     assert.ok(schemaErr != null, "夹具必须真的失败（否则本条无牙齿）");
     const schemaDescriptor = userMessageOf(Errors.normalizeSmartSortImport(schemaErr));

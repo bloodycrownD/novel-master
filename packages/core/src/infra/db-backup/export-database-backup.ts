@@ -10,7 +10,7 @@
  */
 
 import type {Interrupt} from "@/errors/outcome.js";
-import {createAbortError} from "@/domain/abort/logic/create-abort-error.js";
+import {AbortError} from "@/domain/abort/logic/create-abort-error.js";
 import type {TdbcConnection} from "../tdbc/ports/connection.port.js";
 import {ProviderTableSnapshotIo} from "./provider-table-snapshot.js";
 
@@ -38,7 +38,7 @@ export async function exportDatabaseBackupToPath(conn: TdbcConnection, destPath:
     await deps.checkpointDatabase(conn);
     const dbPath = await deps.resolveDbPath();
     if (checkpoint?.() != null) {
-        throw createAbortError();
+        throw AbortError.create();
     }
     await deps.copyFile(dbPath, destPath);
     await ProviderTableSnapshotIo.scrubInDatabase(conn, destPath, EXPORT_ATTACH_ALIAS);

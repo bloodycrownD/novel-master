@@ -5,7 +5,7 @@
  * 项目里原本散落三套「不一致兜底」逻辑，签名和调用时机各不相同：
  *   1. **repair** —— vfs 的 `RevisionRefCount.repair`，重算 checkpoint 指针 + live head，
  *      把偏低的 `vfs_revision.ref_count` 上调（保守纠偏，只增不减）；
- *   2. **backfill** —— chat-message 的 `backfillBaselineCheckpoints`，给空窗消息
+ *   2. **backfill** —— chat-message 的 `BackfillBaselineCheckpoints.backfill`，给空窗消息
  *      补一条 baseline checkpoint；
  *   3. **rename** —— provider migration 的双身份键重写（id → uuid 时同步搬运
  *      sksp 密钥 ref、kkv 建议 key、current provider 指针）。
@@ -78,7 +78,7 @@ interface IntegrityRepairReport {
  * ```ts
  * const registry = new IntegrityRepairRegistry();
  * registry.register(createRevisionRefCountRepairOperation({ ... }));
- * registry.register(createBaselineCheckpointBackfillOperation({ ... }));
+ * registry.register(BackfillBaselineCheckpoints.createOperation({ ... }));
  * const reports = await registry.runAll();
  * for (const r of reports) {
  *   if (r.error) logger.warn({ name: r.name }, "integrity repair failed");

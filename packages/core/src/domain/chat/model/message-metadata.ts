@@ -35,14 +35,16 @@ interface MessageMetadata {
   readonly toolInputCompressed?: boolean;
 }
 
-/** 从 `raw` 对象读取 metadata（无则 undefined）。 */
-export function readMessageMetadata(raw: Record<string, unknown> | null | undefined): MessageMetadata | undefined {
-  if (raw == null) {
-    return undefined;
-  }
-  const meta = raw.metadata;
-  if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
-    return undefined;
-  }
-  return meta as MessageMetadata;
-}
+export const MessageMetadata = {
+  /** 从 `raw` 对象读取 metadata（无则 undefined）。 */
+  read(raw: Record<string, unknown> | null | undefined): MessageMetadata | undefined {
+    if (raw == null) {
+      return undefined;
+    }
+    const meta = raw.metadata;
+    if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
+      return undefined;
+    }
+    return meta as MessageMetadata;
+  },
+} as const;

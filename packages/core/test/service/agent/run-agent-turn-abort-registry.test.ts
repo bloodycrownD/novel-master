@@ -15,7 +15,7 @@ import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import type { LlmChatResult, LlmStreamEvent } from "@novel-master/core/llm-protocol";
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
@@ -26,8 +26,8 @@ import {
   RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { serializeRuleSnapshot } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { createAbortScope, scopeFromController } from "@/domain/abort/logic/create-abort-scope.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
@@ -425,7 +425,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
           abortRegistry.abort(session.id);
           assert.ok(rootController != null, "主 run 应已把 internalController 注册进 registry");
           assert.equal(
-            scopeFromController(rootController!).reason,
+            AbortScopeFactory.fromController(rootController!).reason,
             "user-stop",
             "registry.abort 命中后根 scope 的 reason 必须是 user-stop（T-S24）"
           );
@@ -601,7 +601,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       session.id,
       SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
       RULE_SNAPSHOT_CANON_KEY,
-      serializeRuleSnapshot([
+      RuleSnapshotCodec.serialize([
         { path: "/a.md", status: "full" },
         { path: "/b.md", status: "full" },
       ])
@@ -701,7 +701,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     // 入口就带一个已 aborted 的 caller signal（等价于「受理瞬间用户已按停止」）。
-    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, scope: createAbortScope({ signal: AbortSignal.abort() }) }));
+    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, scope: AbortScopeFactory.create({ signal: AbortSignal.abort() }) }));
 
     assert.equal(result.stopReason, "cancelled", "入口已 aborted 必须由检查点⓪兑现为 cancelled");
     assert.equal(backfillCalls, 0, "⓪ 必须在 backfill 之前兑现（backfill 是前奏第一站、大会话秒级）");
@@ -899,7 +899,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await svfs.write("/a.md", "v1", { versionCheck: false });
     const MSG_COUNT = 20;
     for (let i = 0; i < MSG_COUNT; i++) {
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`第 ${i} 条`)));
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`第 ${i} 条`)));
     }
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });

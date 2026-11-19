@@ -92,11 +92,13 @@ export type AnnotateDraft = z.infer<typeof annotateDraftSchema>;
 
 /**
  * 发送管线批注草稿（仅文件形）。
- * 历史消息批注伪 path 仍由 `isMessageAnnotatePath` 识别并跳过 Undo。
+ * 历史消息批注伪 path 仍由 `isMessagePath` 识别并跳过 Undo。
  */
 export type SendAnnotateDraft = AnnotateDraft;
 
-/** `path.includes('__message__:')` → 历史消息批注伪 path（Undo 恢复须跳过）。 */
-export function isMessageAnnotatePath(path: string | null | undefined): boolean {
-  return typeof path === "string" && path.includes("__message__:");
-}
+export const AnnotateDraftSchema = {
+  /** `path.includes('__message__:')` → 历史消息批注伪 path（Undo 恢复须跳过）。 */
+  isMessagePath(path: string | null | undefined): boolean {
+    return typeof path === "string" && path.includes("__message__:");
+  },
+} as const;

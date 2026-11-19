@@ -4,8 +4,8 @@
  * @module service/message-checkpoint/impl/message-checkpoint.service
  */
 
-import { decideBackfillShortCircuit, scanBackfillGap, writeBackfillGap } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
@@ -26,14 +26,14 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
   constructor(private readonly deps: MessageCheckpointServiceDeps) {}
 
   /**
-   * @remarks listSessionFileHeads 移入事务内执行，持锁扫描避免并发 capture 捕获陈旧 head。
+   * @remarks `SessionFiles.listHeads` 移入事务内执行，持锁扫描避免并发 capture 捕获陈旧 head。
    */
   async capture(sessionId: string, projectId: string, messageId: string): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
-      // listSessionFileHeads 在事务内调：用绑定 tx 的 entry repo 持锁扫描，
+      // listHeads 在事务内调：用绑定 tx 的 entry repo 持锁扫描，
       // 避免并发 capture 读到未提交的 head（V8）。
       const { entryRepo, checkpointRepo } = MessageCheckpointFactory.createRepoDeps(tx);
-      const files = await listSessionFileHeads(entryRepo, projectId, sessionId);
+      const files = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
       if (files.length === 0) {
         return;
       }
@@ -58,10 +58,10 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
    * 同一条写事务里，而这条路径**每轮发送都跑**——大会话上正是「用户消息落库
    * 要等几秒」的第一站。
    *
-   * 段 1 的 `listSessionFileHeads` 是 stale-by-one 的**有意**取舍：backfill 要
+   * 段 1 的 `SessionFiles.listHeads` 是 stale-by-one 的**有意**取舍：backfill 要
    * 的是**基线**指针快照（checkpoint 的定义就是某一时刻的快照，晚一版合法），
    * 不是最新态 —— 需要最新 head 的是 `capture`，它的扫描仍留在事务内。
-   * 段 1/段 2 之间的写由**连续前缀复核**闭合（见 `writeBackfillGap`），
+   * 段 1/段 2 之间的写由**连续前缀复核**闭合（见 `BackfillBaselineCheckpoints.writeGap`），
    * 而段 2 一旦开始到提交之前不存在并发写（本仓单 `TdbcConnection` 串行化写）。
    * ⚠️ 该结论**仅对本仓单连接形态成立**，别的连接形态不要照抄。
    *
@@ -82,7 +82,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     // 段 0（事务外，只读）：两段式短路判定。
     const { entryRepo, checkpointRepo } = MessageCheckpointFactory.createRepoDeps(conn);
     const messageRepo = new SqliteMessageRepository(conn);
-    const decision = await decideBackfillShortCircuit({ sessionKkv: new SqliteSessionKkvRepository(conn), messageRepo, checkpointRepo, sessionId });
+    const decision = await BackfillBaselineCheckpoints.decideShortCircuit({ sessionKkv: new SqliteSessionKkvRepository(conn), messageRepo, checkpointRepo, sessionId });
 
     if (decision.kind === "short-circuit") {
       // 弃权点（r3-run-4）：短路判定本身就是几次单行读、窗口极短，但把它放在
@@ -102,7 +102,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     }
 
     // 段 1（事务外，只读）：定位空窗 + 取 live head 指针快照。
-    const scan = await scanBackfillGap({entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal: scope?.signal});
+    const scan = await BackfillBaselineCheckpoints.scanGap({entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal: scope?.signal});
     if (scan.gapMessageIds.length === 0 && !scan.confirmedNoGap) {
       // 无 live 文件：无法建点也无法验证，不算确认——游标留空让下次继续走全量。
       return;
@@ -112,7 +112,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     await conn.transaction(async (tx) => {
       // 事务回调里**所有** repo 都必须用回调传入的 tx 构造；用外层 conn 会撞
       // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-      const result = await writeBackfillGap({ checkpointRepo: MessageCheckpointFactory.createRepoDeps(tx).checkpointRepo, sessionId, scan, signal: scope?.signal });
+      const result = await BackfillBaselineCheckpoints.writeGap({ checkpointRepo: MessageCheckpointFactory.createRepoDeps(tx).checkpointRepo, sessionId, scan, signal: scope?.signal });
       if (result.confirmedNoGap) {
         const kkv = new SqliteSessionKkvRepository(tx);
         await kkv.set(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, String(decision.count));

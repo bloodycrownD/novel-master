@@ -10,7 +10,7 @@ import { assert } from "@/common/assert.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
-import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { TruncateTail } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -33,7 +33,7 @@ export class DefaultMessageTranscriptEffectsService implements MessageTranscript
   /** nm-style: keep-public — MessageTranscriptEffectsService 端口方法，desktop IPC handler 经 runtime 调用；内联会拆掉端口契约。 */
   async truncateMessagesAfter(projectId: string, sessionId: string, afterSeq: number, options?: { sweepRevisions?: boolean }): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId,
         sessionId,
         afterSeq,

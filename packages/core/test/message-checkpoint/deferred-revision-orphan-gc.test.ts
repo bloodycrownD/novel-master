@@ -15,9 +15,9 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
-import { scheduleDeferredRevisionOrphanGc } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
+import { DeferredRevisionOrphanGc } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import {
@@ -48,11 +48,11 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     const project = unwrap(await ctx.projects.create(`P-tr4a-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
     const anchor = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
     //（content_hash 置 NULL 且 status=deleted，避开 INSERT 触发器与
@@ -104,11 +104,11 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     const project = unwrap(await ctx.projects.create(`P-tr4b-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
     const anchor = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     // 受控连接：孤儿 DELETE 挂起在 gate 上，直到测试放行。
     const releases: Array<() => void> = [];
@@ -137,7 +137,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     );
 
     // 第一次调度：清扫挂在 gate 上（进行中）。
-    scheduleDeferredRevisionOrphanGc(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
     await drainMicrotasks();
     assert.equal(orphanDeleteCalls, 1, "第一次调度应发出孤儿 DELETE");
     assert.equal(releases.length, 1);
@@ -152,8 +152,8 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     assert.equal(left[1]!.id, anchor.id);
 
     // 清扫进行中重复调度：直接丢弃（不重入、不发第二条 DELETE）。
-    scheduleDeferredRevisionOrphanGc(gatedConn);
-    scheduleDeferredRevisionOrphanGc(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
     await drainMicrotasks();
     assert.equal(
       orphanDeleteCalls,
@@ -164,7 +164,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     // 放行第一次清扫后，守卫复位——新一轮调度可再次发出。
     releases[0]!();
     await drainMicrotasks();
-    scheduleDeferredRevisionOrphanGc(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
     await drainMicrotasks();
     assert.equal(orphanDeleteCalls, 2, "守卫复位后新调度应可再次发出");
     // 放行挂起的第二次 DELETE（gate 连接只挂起不真执行），随后以真连接
@@ -173,7 +173,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
       release();
     }
     await drainMicrotasks();
-    scheduleDeferredRevisionOrphanGc(ctx.conn);
+    DeferredRevisionOrphanGc.schedule(ctx.conn);
     await drainMicrotasks();
 
     const orphans = await ctx.conn.query(

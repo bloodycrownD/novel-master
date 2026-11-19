@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
 import { AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { type ModelRequestOptions, type  ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { SimpleEventBus } from "@novel-master/core/events";
@@ -78,7 +78,7 @@ function runnerDeps(
 describe("AgentRunner dynamic 区 once 语义", () => {
   it("R1: dynamic block only on step 0 history", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "kick-agent",
@@ -197,7 +197,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
 
     // 第一轮 run：step0 注入、step1 跳过
     const session1 = new InMemoryAgentSession();
-    await session1.append("user", textBlocks("go"));
+    await session1.append("user", TextBlocks.of("go"));
     await makeRunner(session1).run({
       definition,
       sessionId: SESSION_ID,
@@ -213,7 +213,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     );
 
     // 第二轮新 run（同一 session 续接）：step0 重新注入
-    await session1.append("user", textBlocks("go again"));
+    await session1.append("user", TextBlocks.of("go again"));
     await makeRunner(session1).run({
       definition,
       sessionId: SESSION_ID,
@@ -234,7 +234,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
 
   it("R3: system 来自 layout.system 字段", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "sys-agent",

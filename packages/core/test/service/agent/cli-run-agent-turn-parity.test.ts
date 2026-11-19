@@ -18,8 +18,8 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
 import { AgentServiceFactory, agentDefinitionSchema, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import {
   ChatServiceFactory,
-  readMessageMetadata,
-  textBlocks,
+  MessageMetadata,
+  TextBlocks,
   } from "@novel-master/core/chat";
 import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createSessionKkvService } from "../../../src/service/session-kkv/create-session-kkv-service.js";
@@ -183,11 +183,11 @@ describe("cli-run-agent-turn parity", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const runtime = makeRuntime(ctx, registry);
 
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("模型回复")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("模型回复")));
     const originalUser = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("用户续跑"),
+      TextBlocks.of("用户续跑"),
     ));
     await runtime.userVfsTurn!.executeOp(
       session.id,
@@ -207,7 +207,7 @@ describe("cli-run-agent-turn parity", () => {
     assert.equal(listed[1]!.role, "user");
     assert.equal(
       listed.some(
-        (m) => readMessageMetadata(m.raw)?.kind === "user_vfs_action",
+        (m) => MessageMetadata.read(m.raw)?.kind === "user_vfs_action",
       ),
       false,
     );
@@ -228,7 +228,7 @@ describe("cli-run-agent-turn parity", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("已有 user")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("已有 user")));
     const before = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(before.length, 1);
 

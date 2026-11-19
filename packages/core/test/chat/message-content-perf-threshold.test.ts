@@ -21,7 +21,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
   getNovelMasterTestContext,
@@ -94,7 +94,7 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
         sessionId: plainSession.id,
         seq: i,
         role: roleAt(i),
-        content: textBlocks(body),
+        content: TextBlocks.of(body),
         provider: null,
         raw: null,
         createdAtMs: Date.now() + i,

@@ -106,7 +106,7 @@ describe("AgentRegistryService", () => {
     assert.deepEqual(loaded.prompts.dynamic, []);
   });
 
-  // 非对象形状不兜底：字符串 / 数组 / 数字都是脏输入，交 validateAgentDefinition
+  // 非对象形状不兜底：字符串 / 数组 / 数字都是脏输入，交 AgentDefinitionValidator.validate
   // 报 INVALID_SCHEMA，禁止静默洗白成畸形对象后落盘空布局。
   it("prompts 为字符串时 upsert 拒绝且不落盘（不兜底）", async () => {
     const ctx = getNovelMasterTestContext();

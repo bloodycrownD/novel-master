@@ -10,7 +10,7 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import type { Row } from "@/infra/tdbc/types.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { savedModelSettingsFromJson, savedModelSettingsToJson } from "../../model/saved-model-settings-from-json.js";
+import { SavedModelSettingsJson } from "../../model/saved-model-settings-from-json.js";
 import type { SavedModel } from "../../model/saved-model.js";
 import type { SavedModelRepository } from "../saved-model.port.js";
 
@@ -24,7 +24,7 @@ const DELETE_BY_PROVIDER_SQL = "DELETE FROM llm_saved_model WHERE provider_id = 
 
 /** 行 → 实体转码：settings 解码失败经 `Result.err` 原样接力（坏行按仓储边界上报）。 */
 function rowToSaved(row: Row): Result<SavedModel, AppError> {
-  const settings = savedModelSettingsFromJson(JSON.parse(String(row.settings_json)) as unknown);
+  const settings = SavedModelSettingsJson.fromJson(JSON.parse(String(row.settings_json)) as unknown);
   if (!settings.ok) return Result.err(settings.error);
   return Result.ok({
     id: String(row.id),
@@ -66,7 +66,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       providerId: model.providerId,
       vendorModelId: model.vendorModelId,
       modelName: model.modelName,
-      settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
+      settingsJson: JSON.stringify(SavedModelSettingsJson.toJson(model.settings)),
       createdAtMs: model.createdAtMs,
       updatedAtMs: model.updatedAtMs,
     });
@@ -76,7 +76,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
     await executeTemplate(this.conn, this.parser, UPDATE_SQL, {
       id: model.id,
       modelName: model.modelName,
-      settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
+      settingsJson: JSON.stringify(SavedModelSettingsJson.toJson(model.settings)),
       updatedAtMs: model.updatedAtMs,
     });
   }

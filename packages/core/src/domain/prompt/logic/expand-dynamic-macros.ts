@@ -25,36 +25,38 @@ interface DynamicMacroContext {
 /** 本模块的领域失败：dynamic 宏模板非法。 */
 type DynamicMacroError = AppError<"PROMPT_INVALID_MACRO">;
 
-/**
- * 展开 dynamic 文本中的白名单宏；每轮 assembly 实时计算。
- *
- * @returns 宏模板非法时返回 `PROMPT_INVALID_MACRO`，不把 infra 的 AppError 漏出本层。
- */
-export async function expandDynamicMacros(content: string, ctx: DynamicMacroContext): Promise<Result<string, DynamicMacroError>> {
-  const now = ctx.now ?? new Date();
-  let filetree = "";
-  if (content.includes("$filetree")) {
-    if (ctx.filetree != null) {
-      filetree = ctx.filetree;
-    } else if (ctx.workplace != null) {
-      const rendered = await ctx.workplace.renderFileTree();
-      if (!rendered.ok) {
-        // 本层契约：不把 infra 的 AppError 漏出（见 @returns），统一收口为 PROMPT_INVALID_MACRO。
-        return Result.err(new AppError("PROMPT_INVALID_MACRO", { detail: `$filetree render failed: ${rendered.error.message}`, cause: rendered.error }));
+export const DynamicMacrosExpansion = {
+  /**
+   * 展开 dynamic 文本中的白名单宏；每轮 assembly 实时计算。
+   *
+   * @returns 宏模板非法时返回 `PROMPT_INVALID_MACRO`，不把 infra 的 AppError 漏出本层。
+   */
+  expand: async (content: string, ctx: DynamicMacroContext): Promise<Result<string, DynamicMacroError>> => {
+    const now = ctx.now ?? new Date();
+    let filetree = "";
+    if (content.includes("$filetree")) {
+      if (ctx.filetree != null) {
+        filetree = ctx.filetree;
+      } else if (ctx.workplace != null) {
+        const rendered = await ctx.workplace.renderFileTree();
+        if (!rendered.ok) {
+          // 本层契约：不把 infra 的 AppError 漏出（见 @returns），统一收口为 PROMPT_INVALID_MACRO。
+          return Result.err(new AppError("PROMPT_INVALID_MACRO", { detail: `$filetree render failed: ${rendered.error.message}`, cause: rendered.error }));
+        }
+        filetree = rendered.value;
       }
-      filetree = rendered.value;
     }
-  }
-  const root = {
-    time: DateTime.localDateTime(now),
-    week_cn: formatWeekCn(now),
-    filetree,
-  };
-  // renderMacro 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，
-  // 不把 infra 的 AppError 漏出），detail/cause 与旧 catch 路径一致。
-  const rendered = renderMacro(content, { dot: {}, root });
-  if (!rendered.ok) {
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.macro_expand_failed", params: { detail: rendered.error.message } }, cause: rendered.error }));
-  }
-  return Result.ok(rendered.value);
-}
+    const root = {
+      time: DateTime.localDateTime(now),
+      week_cn: formatWeekCn(now),
+      filetree,
+    };
+    // renderMacro 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，
+    // 不把 infra 的 AppError 漏出），detail/cause 与旧 catch 路径一致。
+    const rendered = renderMacro(content, { dot: {}, root });
+    if (!rendered.ok) {
+      return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.macro_expand_failed", params: { detail: rendered.error.message } }, cause: rendered.error }));
+    }
+    return Result.ok(rendered.value);
+  },
+} as const;

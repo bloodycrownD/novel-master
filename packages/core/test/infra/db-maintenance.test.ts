@@ -10,7 +10,7 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { DbMaintenanceService } from "@/infra/db-maintenance/index.js";
 
@@ -95,14 +95,14 @@ describe("数据库维护（infra/db-maintenance）", () => {
         bulkSession,
         SESSION_KKV_DOMAIN_FILE_CACHE,
         `${bulkKey}:${i}`,
-        serializeFileCachePayload({ body, mtimeMs: i })
+        RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: i })
       );
     }
     await sk.set(
       keepSession,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       "full:/dm1-keep.md",
-      serializeFileCachePayload({
+      RuleSnapshotCodec.serializeFileCachePayload({
         body: "dm1-keep-body",
         mtimeMs: 42,
       })
@@ -168,7 +168,7 @@ describe("数据库维护（infra/db-maintenance）", () => {
         SESSION_KKV_DOMAIN_FILE_CACHE,
         "full:/dm1-keep.md"
       ),
-      serializeFileCachePayload({ body: "dm1-keep-body", mtimeMs: 42 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: "dm1-keep-body", mtimeMs: 42 })
     );
   });
 
@@ -214,7 +214,7 @@ describe("数据库维护（infra/db-maintenance）", () => {
         session,
         SESSION_KKV_DOMAIN_FILE_CACHE,
         `full:/dm4-${i}.md`,
-        serializeFileCachePayload({
+        RuleSnapshotCodec.serializeFileCachePayload({
           body: pseudoRandomBody(i + 1, 8 * 1024),
           mtimeMs: i,
         })

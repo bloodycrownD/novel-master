@@ -12,7 +12,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -51,7 +51,7 @@ async function assertColdReadRejects(
   assert.ok(!r.ok, "行已缺失 + 池冷态 ⇒ get 必须返回 Err");
 }
 
-describe("sweepSessionRevisions + blob gc", () => {
+describe("RevisionGc.sweepSession + blob gc", () => {
   it("T-GC1: 不可达 revision 删除后，无引用 blob 被 gc（经唯一入口）", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
@@ -89,7 +89,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     assert.ok(midKeys.some((k) => k.entryId === entry.entryId && k.version === 2));
     assert.equal(unwrap(await contentStore.get(orphanHash)), "orphan-mid");
 
-    await sweepSessionRevisions(revisions, project.id, session.id);
+    await RevisionGc.sweepSession(revisions, project.id, session.id);
     await DeferredBlobGc.run(ctx.conn);
 
     const afterKeys = await revisions.listKeysUnderScope(
@@ -128,7 +128,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     const sharedHash = ContentHash.hash(sharedPlain);
 
     // A 的 v1(onlyA) 在 live 已是 sharedPlain 且无 checkpoint → sweep A 应删 onlyA revision+blob
-    await sweepSessionRevisions(revisions, project.id, sessionA.id);
+    await RevisionGc.sweepSession(revisions, project.id, sessionA.id);
     await DeferredBlobGc.run(ctx.conn);
 
     assert.equal(await blobRowCount(ctx.conn, onlyAHash), 0, "无引用 blob 行已被 gc");

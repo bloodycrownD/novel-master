@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
-import { parseAttachmentsJson } from "../../src/domain/chat/model/message-attachment.schema.js";
+import { MessageAttachmentSchema } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 function makeMsg(
@@ -51,7 +51,7 @@ describe("isUserInputMessage (T-S2)", () => {
   // 消费链 #2 的观测面：批注附件被整数组判废 ⇒ hasAnnotateAttachment 恒 false
   // ⇒ isPlainUserText 语义偏移 ⇒ 回滚拿不到批注意见。逐条降级后应只认存活那条。
   it("MA-5: 部分非法附件下 hasAnnotateAttachment 仍认存活的那条批注", () => {
-    const attachments = parseAttachmentsJson(
+    const attachments = MessageAttachmentSchema.parseJson(
       JSON.stringify([
         {
           name: "/bad.md",

@@ -2,7 +2,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { isSessionFsError } from "../../src/errors/guards.js";
 import {
   getNovelMasterTestContext,
@@ -29,7 +29,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     // 模拟 Step 9 之前的旧会话：写文件 + 写消息，但全程不 capture。
     await svfs.write("/anchor.md", "at-send", { versionCheck: false });
     const user1 = (
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks("anchor")))
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")))
     ).id;
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hi" }],
@@ -69,7 +69,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
 
     // 前半段：正常 capture，建立 baseline 快照 v1。
     await svfs.write("/keep.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("first")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
     const assistant1 = (
       unwrap(await ctx.messages.append(session.id, "assistant", {
         blocks: [{ type: "text", text: "ok" }],
@@ -109,7 +109,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
 
     await svfs.write("/a.md", "a", { versionCheck: false });
     const user1 = (
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")))
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")))
     ).id;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1));
 
@@ -130,7 +130,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     ));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
 
     // 会话里没有任何文件，backfill 应直接返回，不写入 checkpoint。
     unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));

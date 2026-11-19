@@ -7,23 +7,25 @@
 import { seedContextWindowTokens } from "@/infra/tokenizer/logic/seed-context-window-tokens.js";
 import type { SavedModelSettings } from "./saved-model-settings.js";
 
-/**
- * 按 vendor model id 生成默认设置（上下文窗口来自 seed map）。
- *
- * 仅用于 **首次 insert 已保存模型**；读盘缺 `thinkingLevel` 仍由 schema 回填为 `off`。
- *
- * @param vendorModelId Provider 模型名。
- */
-export function defaultSavedModelSettings(vendorModelId: string): SavedModelSettings {
-  return {
-    schemaVersion: 2,
-    internal: {
-      contextWindowTokens: seedContextWindowTokens(vendorModelId),
-      tokenCounterMode: "auto",
-    },
-    generation: {
-      sampling: { enabled: false },
-      thinkingLevel: "high",
-    },
-  };
-}
+export const DefaultSavedModelSettings = {
+  /**
+   * 按 vendor model id 生成默认设置（上下文窗口来自 seed map）。
+   *
+   * 仅用于 **首次 insert 已保存模型**；读盘缺 `thinkingLevel` 仍由 schema 回填为 `off`。
+   *
+   * @param vendorModelId Provider 模型名。
+   */
+  of(vendorModelId: string): SavedModelSettings {
+    return {
+      schemaVersion: 2,
+      internal: {
+        contextWindowTokens: seedContextWindowTokens(vendorModelId),
+        tokenCounterMode: "auto",
+      },
+      generation: {
+        sampling: { enabled: false },
+        thinkingLevel: "high",
+      },
+    };
+  },
+} as const;

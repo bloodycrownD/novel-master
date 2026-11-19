@@ -9,8 +9,8 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { mapProjectWorkplacePathToSession } from "@/domain/workplace/logic/workplace-path-map.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import { WorkplacePathMap } from "@/domain/workplace/logic/workplace-path-map.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
 
@@ -34,5 +34,5 @@ export async function initializeSessionWorkspace(tx: TdbcConnection, projectId: 
     contentStore: new SqliteVfsContentStore(tx),
     // 技能已重定位到独立 meta 域，project 域全部内容都带入 session，无需排除项
   });
-  await worktree.copyScope(workplaceScopeKey({ kind: "project", projectId }), workplaceScopeKey({ kind: "session", projectId, sessionId }), mapProjectWorkplacePathToSession);
+  await worktree.copyScope(WorkplaceScope.key({ kind: "project", projectId }), WorkplaceScope.key({ kind: "session", projectId, sessionId }), WorkplacePathMap.mapProjectToSession);
 }

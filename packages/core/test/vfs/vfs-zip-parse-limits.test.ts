@@ -32,7 +32,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
 import { VfsZipParse } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
-import { previewSkillZip } from "@/domain/skills/logic/preview-skill-zip.js";
+import { SkillZip } from "@/domain/skills/logic/preview-skill-zip.js";
 import { VFS_ZIP_MAX_ENTRY_COUNT, VFS_ZIP_MAX_ENTRY_PATH_LEN, VFS_ZIP_MAX_UNCOMPRESSED_BYTES } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 
 const EOCD_SIG = 0x06054b50;
@@ -111,7 +111,7 @@ function unwrapZip(result: ReturnType<typeof VfsZipParse.parse>) {
   return result.value;
 }
 
-function unwrapPreview(result: ReturnType<typeof previewSkillZip>) {
+function unwrapPreview(result: ReturnType<typeof SkillZip.preview>) {
   assert.ok(result.ok);
   return result.value;
 }
@@ -200,7 +200,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
 
   it("H3: 技能预检走同一个解析器 ⇒ 同款 PAYLOAD_TOO_LARGE", () => {
     const zip = manyEmptyEntries(VFS_ZIP_MAX_ENTRY_COUNT + 1);
-    expectZipError(previewSkillZip(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
+    expectZipError(SkillZip.preview(zip), "VFS_ZIP_PAYLOAD_TOO_LARGE");
 
     // 对照：合法技能 zip 预检照常工作（断言不是恒真）。
     const good = zipSync(
@@ -209,7 +209,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
       },
       { level: 0 }
     );
-    const preview = unwrapPreview(previewSkillZip(good));
+    const preview = unwrapPreview(SkillZip.preview(good));
     assert.equal(preview.name, "demo");
   });
 

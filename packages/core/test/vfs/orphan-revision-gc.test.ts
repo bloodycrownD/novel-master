@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import {
   getNovelMasterTestContext,
@@ -31,7 +31,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 novelMasterTestFixture();
 
 describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
-  it("删全部文件后，sweepSessionRevisions 清掉孤儿 active revision 与 blob", async () => {
+  it("删全部文件后，RevisionGc.sweepSession 清掉孤儿 active revision 与 blob", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`P-orphan-${suffix}`);
@@ -94,7 +94,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     );
 
     // 跑 revision GC：path-scoped 扫不到（entry 已删），靠 deleteGlobalOrphans 兜底。
-    const swept = await sweepSessionRevisions(revRepo, project.id, session.id);
+    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
 
     // 触发器已连带回收归零 blob，再跑一次延期 blob GC 兜底（应无残留可清）。
     const gcBlobs = await DeferredBlobGc.run(ctx.conn);
@@ -114,7 +114,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     // swept 应包含全部 20 条 active 孤儿 revision（v1 旧版 + v2 旧 head，ref_count 均归 0）。
     assert.ok(
       swept >= totalFiles * 2,
-      `sweepSessionRevisions 应清掉至少 ${totalFiles * 2} 条 revision（含全局孤儿），实际 ${swept}`,
+      `RevisionGc.sweepSession 应清掉至少 ${totalFiles * 2} 条 revision（含全局孤儿），实际 ${swept}`,
     );
     // 核心断言：有 content_hash 的 active revision 全清（之前的 20 条 JOIN 孤儿不再残留）。
     assert.equal(
@@ -158,7 +158,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
       await vfs.delete(`/orphan-partial/file-${i}.txt`);
     }
 
-    const swept = await sweepSessionRevisions(revRepo, project.id, session.id);
+    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
     await DeferredBlobGc.run(ctx.conn);
 
     // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
@@ -219,7 +219,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     );
     const revisionsBefore = Number(beforeRev[0]!.cnt);
 
-    const swept = await sweepSessionRevisions(revRepo, project.id, session.id);
+    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
 
     assert.equal(
       swept,

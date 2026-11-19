@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
 import { BASELINE_MIGRATION_IDS, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import {
@@ -352,7 +352,7 @@ describe("schema 列对齐（T-B3）", () => {
       sessionId,
       seq: 2,
       role: "assistant" as const,
-      content: textBlocks("timed"),
+      content: TextBlocks.of("timed"),
       provider: "openai",
       modelName: null,
       raw: null,

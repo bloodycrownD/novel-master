@@ -3,8 +3,8 @@ import { Result } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { evaluateWorkplaceRuleView } from "@/domain/workplace/logic/workplace-rule-engine.js";
-import { materializeBlockFromView } from "@/domain/workplace/logic/workplace-materialize-engine.js";
+import { WorkplaceRuleEngine } from "@/domain/workplace/logic/workplace-rule-engine.js";
+import { WorkplaceMaterializeEngine } from "@/domain/workplace/logic/workplace-materialize-engine.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
 
 function createSpyVfs(
@@ -108,7 +108,7 @@ describe("worktree materialize engine", () => {
       allDirs: new Set(["/", "/show", "/hdr", "/hid", "/fn"]),
     };
 
-    const view = unwrap(evaluateWorkplaceRuleView(scope, ctx));
+    const view = unwrap(WorkplaceRuleEngine.evaluateView(scope, ctx));
     assert.equal(view.displayByPath.get("/show/a.md"), "full");
     assert.equal(view.displayByPath.get("/hdr/b.md"), "header");
     assert.equal(view.displayByPath.get("/hid/c.md"), "hidden");
@@ -121,7 +121,7 @@ describe("worktree materialize engine", () => {
       ]),
     );
 
-    const block = unwrap(await materializeBlockFromView(
+    const block = unwrap(await WorkplaceMaterializeEngine.materializeBlockFromView(
       view,
       vfs,
       scope,

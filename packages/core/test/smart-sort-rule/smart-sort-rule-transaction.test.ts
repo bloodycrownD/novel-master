@@ -17,7 +17,7 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { BUILTIN_SMART_SORT_RULE_ROWS } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
-import { isBuiltinSmartSortRuleId } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+import { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
 import { SqliteSmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.js";
 import type { SmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/smart-sort-rule.port.js";
 import { DefaultSmartSortRuleService } from "@/service/smart-sort-rule/impl/smart-sort-rule.service.js";
@@ -115,7 +115,7 @@ async function resetToClean(): Promise<Harness> {
   const ctx = getNovelMasterTestContext();
   const svc = createRawService(ctx.conn);
   for (const rule of await svc.listRules()) {
-    if (!isBuiltinSmartSortRuleId(rule.ruleId)) {
+    if (!SmartSortRule.isBuiltinId(rule.ruleId)) {
       unwrap(await svc.deleteRule(rule.ruleId));
     }
   }
@@ -368,7 +368,7 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
     const ctx = getNovelMasterTestContext();
     const svc = createRawService(ctx.conn);
     for (const r of await svc.listRules()) {
-      if (!isBuiltinSmartSortRuleId(r.ruleId)) {
+      if (!SmartSortRule.isBuiltinId(r.ruleId)) {
         unwrap(await svc.deleteRule(r.ruleId));
       }
     }

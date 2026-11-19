@@ -2,7 +2,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { isSessionFsError } from "../../src/errors/guards.js";
 import {
   getNovelMasterTestContext,
@@ -28,7 +28,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     await svfs.write("/keep-a.md", "a", { versionCheck: false });
     await svfs.write("/keep-b.md", "b", { versionCheck: false });
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hello" }],
     }));
@@ -72,7 +72,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/keep.md", "stable", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hello" }],
     }));
@@ -95,7 +95,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/anchor.md", "at-send", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("anchor")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
 
     await svfs.write("/anchor.md", "after-send", { versionCheck: false });

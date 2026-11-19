@@ -2,7 +2,7 @@
  * 「上次生成」冻结速率的持久化快照（session KKV 值编解码，双端共用）。
  *
  * 语义：run 收尾时把实时速率采样器的**末值快照**（窗口以最后一个样本时刻
- * 收尾，见 `createTokenRateSampler().freeze`）写一次 session KKV，冻结态
+ * 收尾，见 `SlidingTokenRate.createSampler().freeze`）写一次 session KKV，冻结态
  * （「上次生成 · Ns · 输出 M t · R t/s」）在会话内与跨重启水合后读到同一份
  * 数据。属展示派生值——行缺失/损坏一律解析为 null，调用方省略速率段，
  * 不做兜底造数（与 session KKV「丢了不致命」的定位一致）。
@@ -34,49 +34,51 @@ interface StreamFinalRateSnapshot {
   readonly runId?: string;
 }
 
-/**
- * 序列化为 KKV 值（紧凑 JSON）。
- *
- * runId 缺省/空串（run 身份未知）时省略该字段——写出的就是旧格式值，
- * 读回侧自然按「无身份可比对」的兼容路径处理。
- */
-export function serializeStreamFinalRateSnapshot(snapshot: StreamFinalRateSnapshot): string {
-  return JSON.stringify({
-    rate: snapshot.rate,
-    tokens: snapshot.tokens,
-    atMs: snapshot.atMs,
-    ...(snapshot.runId != null && snapshot.runId.length > 0 ? { runId: snapshot.runId } : {}),
-  });
-}
+export const StreamFinalRate = {
+  /**
+   * 序列化为 KKV 值（紧凑 JSON）。
+   *
+   * runId 缺省/空串（run 身份未知）时省略该字段——写出的就是旧格式值，
+   * 读回侧自然按「无身份可比对」的兼容路径处理。
+   */
+  serializeSnapshot(snapshot: StreamFinalRateSnapshot): string {
+    return JSON.stringify({
+      rate: snapshot.rate,
+      tokens: snapshot.tokens,
+      atMs: snapshot.atMs,
+      ...(snapshot.runId != null && snapshot.runId.length > 0 ? { runId: snapshot.runId } : {}),
+    });
+  },
 
-/**
- * 解析 KKV 值；缺失/损坏/非有限速率一律 null（展示层据此省略速率段）。
- * tokens/atMs 缺字段退化为 0——它们只服务自检，不影响速率段渲染。
- * runId 缺字段/非字符串/空串即省略该键（旧格式值照常解析成功，不判坏数据）。
- */
-export function parseStreamFinalRateSnapshot(raw: string | null | undefined): StreamFinalRateSnapshot | null {
-  if (raw == null || raw.length === 0) {
-    return null;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (parsed == null || typeof parsed !== "object") {
-    return null;
-  }
-  const { rate, tokens, atMs, runId } = parsed as Partial<Record<keyof StreamFinalRateSnapshot, unknown>>;
-  if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0) {
-    return null;
-  }
-  return {
-    rate,
-    tokens: typeof tokens === "number" && Number.isFinite(tokens) ? tokens : 0,
-    atMs: typeof atMs === "number" && Number.isFinite(atMs) ? atMs : 0,
-    // 只在真拿到非空字符串时带上该键：旧格式值（无 runId）解析出的对象
-    // 与加固前逐字段一致，不给消费方多出 `runId: undefined` 的形状差异。
-    ...(typeof runId === "string" && runId.length > 0 ? { runId } : {}),
-  };
-}
+  /**
+   * 解析 KKV 值；缺失/损坏/非有限速率一律 null（展示层据此省略速率段）。
+   * tokens/atMs 缺字段退化为 0——它们只服务自检，不影响速率段渲染。
+   * runId 缺字段/非字符串/空串即省略该键（旧格式值照常解析成功，不判坏数据）。
+   */
+  parseSnapshot(raw: string | null | undefined): StreamFinalRateSnapshot | null {
+    if (raw == null || raw.length === 0) {
+      return null;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (parsed == null || typeof parsed !== "object") {
+      return null;
+    }
+    const { rate, tokens, atMs, runId } = parsed as Partial<Record<keyof StreamFinalRateSnapshot, unknown>>;
+    if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0) {
+      return null;
+    }
+    return {
+      rate,
+      tokens: typeof tokens === "number" && Number.isFinite(tokens) ? tokens : 0,
+      atMs: typeof atMs === "number" && Number.isFinite(atMs) ? atMs : 0,
+      // 只在真拿到非空字符串时带上该键：旧格式值（无 runId）解析出的对象
+      // 与加固前逐字段一致，不给消费方多出 `runId: undefined` 的形状差异。
+      ...(typeof runId === "string" && runId.length > 0 ? { runId } : {}),
+    };
+  },
+} as const;

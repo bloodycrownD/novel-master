@@ -8,7 +8,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
 import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { BuiltinTools, ToolRegistry } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
@@ -103,7 +103,7 @@ function mutatingToolRoundModel(): ModelRequestService {
 describe("AgentRunner message checkpoint", () => {
   it("capture 失败时抛错且不 append tool_results", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const captureError = new Error("capture failed");
     const messageCheckpoint: MessageCheckpointService = {
@@ -152,7 +152,7 @@ describe("AgentRunner message checkpoint", () => {
 
   it("capture 成功时正常 append tool_results", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const messageCheckpoint: MessageCheckpointService = {
       capture: mock.fn(async () => {}),

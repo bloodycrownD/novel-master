@@ -14,8 +14,8 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { mapSessionWorkplacePathToProject } from "@/domain/workplace/logic/workplace-path-map.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import { WorkplacePathMap } from "@/domain/workplace/logic/workplace-path-map.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 
 /**
@@ -29,5 +29,5 @@ export async function pushSessionWorkspace(tx: TdbcConnection, projectId: string
     revisions,
     contentStore: new SqliteVfsContentStore(tx),
   });
-  await worktree.copyScope(workplaceScopeKey({ kind: "session", projectId, sessionId }), workplaceScopeKey({ kind: "project", projectId }), mapSessionWorkplacePathToProject);
+  await worktree.copyScope(WorkplaceScope.key({ kind: "session", projectId, sessionId }), WorkplaceScope.key({ kind: "project", projectId }), WorkplacePathMap.mapSessionToProject);
 }

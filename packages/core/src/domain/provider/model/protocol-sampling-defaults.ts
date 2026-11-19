@@ -33,44 +33,46 @@ export const GEMINI_SAMPLING_DEFAULTS = {
   maxOutputTokens: 16_000,
 } as const;
 
-/** Merges saved params over protocol defaults (for forms and max-token display). */
-export function mergeSamplingWithDefaults(protocol: LlmProtocolKind, params: ModelSamplingParams | undefined): ModelSamplingParams {
-  switch (protocol) {
-    case "openai":
-      return {
-        protocol: "openai",
-        openai: {
-          ...OPENAI_SAMPLING_DEFAULTS,
-          ...(params?.protocol === "openai" ? params.openai : {}),
-        },
-      };
-    case "anthropic":
-      return {
-        protocol: "anthropic",
-        anthropic: {
-          ...ANTHROPIC_SAMPLING_DEFAULTS,
-          ...(params?.protocol === "anthropic" ? params.anthropic : {}),
-        },
-      };
-    case "gemini":
-      return {
-        protocol: "gemini",
-        gemini: {
-          ...GEMINI_SAMPLING_DEFAULTS,
-          ...(params?.protocol === "gemini" ? params.gemini : {}),
-        },
-      };
-  }
-}
+export const ProtocolSamplingDefaults = {
+  /** Merges saved params over protocol defaults (for forms and max-token display). */
+  mergeSamplingWithDefaults(protocol: LlmProtocolKind, params: ModelSamplingParams | undefined): ModelSamplingParams {
+    switch (protocol) {
+      case "openai":
+        return {
+          protocol: "openai",
+          openai: {
+            ...OPENAI_SAMPLING_DEFAULTS,
+            ...(params?.protocol === "openai" ? params.openai : {}),
+          },
+        };
+      case "anthropic":
+        return {
+          protocol: "anthropic",
+          anthropic: {
+            ...ANTHROPIC_SAMPLING_DEFAULTS,
+            ...(params?.protocol === "anthropic" ? params.anthropic : {}),
+          },
+        };
+      case "gemini":
+        return {
+          protocol: "gemini",
+          gemini: {
+            ...GEMINI_SAMPLING_DEFAULTS,
+            ...(params?.protocol === "gemini" ? params.gemini : {}),
+          },
+        };
+    }
+  },
 
-/** Output token cap from effective sampling params (for prompt usage %). */
-export function maxOutputTokensFromSampling(params: ModelSamplingParams): number | undefined {
-  switch (params.protocol) {
-    case "openai":
-      return params.openai.max_tokens;
-    case "anthropic":
-      return params.anthropic.max_tokens;
-    case "gemini":
-      return params.gemini.maxOutputTokens;
-  }
-}
+  /** Output token cap from effective sampling params (for prompt usage %). */
+  maxOutputTokensFromSampling(params: ModelSamplingParams): number | undefined {
+    switch (params.protocol) {
+      case "openai":
+        return params.openai.max_tokens;
+      case "anthropic":
+        return params.anthropic.max_tokens;
+      case "gemini":
+        return params.gemini.maxOutputTokens;
+    }
+  },
+} as const;

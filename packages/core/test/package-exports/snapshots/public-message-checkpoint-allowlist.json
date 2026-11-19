@@ -1,6 +1,4 @@
 [
   "MessageCheckpointFactory",
-  "isRollbackRevisionBackfillRequiredError",
-  "isRollbackVfsDegradableError",
-  "readRollbackRevisionBackfillMissingPaths"
+  "RollbackErrorGuards"
 ]

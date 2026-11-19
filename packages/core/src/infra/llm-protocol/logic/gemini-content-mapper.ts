@@ -5,7 +5,7 @@
  */
 
 import { Guards } from "@/common/guards.js";
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { ContentBlock, ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
@@ -88,7 +88,7 @@ function toolResultToGeminiPart(block: ToolResultBlock, ctx: ResolveContext): Ge
     };
   }
   // Orphaned after compaction: same plain-text shape as token counting / prompt preview.
-  const text = messageBodyTextFromBlocks([block]);
+  const text = MessageBodyText.fromBlocks([block]);
   return { text: text !== "" ? text : "[tool_result]" };
 }
 

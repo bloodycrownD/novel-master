@@ -23,7 +23,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsZipImportOptions, VfsZipIoService, ZipPathOptions } from "@/domain/vfs/ports/vfs-zip-io.port.js";
-import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -266,7 +266,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints({
+          await BackfillBaselineCheckpoints.backfill({
             entryRepo: new SqliteVfsEntryRepository(tx),
             messageRepo: new SqliteMessageRepository(tx),
             checkpointRepo: new SqliteMessageCheckpointRepository(tx),

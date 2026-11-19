@@ -44,7 +44,7 @@ import type { VfsService } from "@novel-master/core/vfs";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey, parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -665,16 +665,16 @@ describe("T-SS-7：子会话首次装配 workplace 的 KKV 快照隔离", () => 
     assert.ok(childSnapshotRaw != null && childSnapshotRaw.includes("/outline.md"), "子 session 的 rule_snapshot 应已写入且含 /outline.md");
 
     // 子 session 自己的 KKV：file_cache 缓存了来自父 VFS 的文件内容。
-    const childCacheRaw = unwrap(await ctx.sessionKkv.get(childId, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/outline.md")));
+    const childCacheRaw = unwrap(await ctx.sessionKkv.get(childId, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/outline.md")));
     assert.ok(childCacheRaw != null, "子 session 的 file_cache 应已写入");
-    const parsed = parseFileCachePayload(childCacheRaw);
+    const parsed = RuleSnapshotCodec.parseFileCachePayload(childCacheRaw);
     assert.ok(parsed.ok);
     assert.equal(parsed.value.body, "# 子代理产出", "file_cache 内容应来自父 VFS 中的文件");
 
     // 父 session 的 KKV：两域均未写入（快照隔离——父的 KKV 不被子会话装配触碰）。
     const parentSnapshot = unwrap(await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
     assert.equal(parentSnapshot, null, "父 session 的 rule_snapshot 不应被子会话装配写入");
-    const parentCache = unwrap(await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/outline.md")));
+    const parentCache = unwrap(await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/outline.md")));
     assert.equal(parentCache, null, "父 session 的 file_cache 不应被子会话装配写入");
 
     // 文件本体在父 VFS（快照指向的内容来自父工作区）。

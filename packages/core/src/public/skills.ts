@@ -16,15 +16,15 @@ export type {
   SkillEditMatch,
   SkillLocation,
 } from "../service/skills/skills.port.js";
-export { computeEffectiveSkills } from "../domain/skills/logic/effective-skills.js";
+export { EffectiveSkills } from "../domain/skills/logic/effective-skills.js";
 export type {
   EffectiveSkill,
   EffectiveSkillsInput,
 } from "../domain/skills/logic/effective-skills.js";
-export { parseSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
-export { withSkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
-export { buildNewSkillDoc } from "../domain/skills/logic/build-new-skill-doc.js";
-export { previewSkillZip } from "../domain/skills/logic/preview-skill-zip.js";
+export { SkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
+export { SkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
+export { NewSkillDoc } from "../domain/skills/logic/build-new-skill-doc.js";
+export { SkillZip } from "../domain/skills/logic/preview-skill-zip.js";
 export type { SkillZipPreview } from "../domain/skills/logic/preview-skill-zip.js";
 export type {
   SkillDomain,
@@ -35,5 +35,5 @@ export { skillFrontMatterSchema } from "../domain/skills/model/skill.schema.js";
 export { BUILTIN_SKILL_NAMES } from "../bootstrap/skills/seed-builtin-skills.js";
 export {
   SKILL_NAME_PATTERN,
-  validateSkillName,
+  SkillName,
 } from "../domain/skills/model/skill-name.js";

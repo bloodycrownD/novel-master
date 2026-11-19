@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {
-  isMessageAnnotatePath,
+  AnnotateDraftSchema,
   type AnnotateDraft,
 } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
@@ -56,7 +56,7 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
 
   it("跳过 path.includes('__message__:')（含前导 /）", () => {
     const msgAtt = fakeMessageAnnotateAttachment("m-99", "d1");
-    assert.ok(isMessageAnnotatePath(msgAtt.path));
+    assert.ok(AnnotateDraftSchema.isMessagePath(msgAtt.path));
     assert.ok(msgAtt.path!.includes("__message__:"));
 
     const withSlash: MessageAttachment = {
@@ -64,7 +64,7 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
       path: `/${msgAtt.path}`,
       name: `/${msgAtt.path}`,
     };
-    assert.ok(isMessageAnnotatePath(withSlash.path));
+    assert.ok(AnnotateDraftSchema.isMessagePath(withSlash.path));
 
     const parsed = attachmentXmlCodec.decodeAnnotateDrafts([
       msgAtt,
@@ -84,7 +84,7 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     const att = fakeMessageAnnotateAttachment("msg-y", "draft-x");
     assert.equal(att.path, "__message__:msg-y:draft-x");
     assert.equal(att.name, att.path);
-    assert.ok(isMessageAnnotatePath(att.path));
+    assert.ok(AnnotateDraftSchema.isMessagePath(att.path));
     assert.equal(attachmentXmlCodec.decodeAnnotateDrafts([att]).length, 0);
   });
 

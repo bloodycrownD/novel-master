@@ -4,11 +4,10 @@ import { decode, encode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import {
   AGENT_LIST_LABELS,
-  assessAgentDefinitionWire,
-  buildDefaultAgentDefinitionPreservingName,
+  AgentDefinitionWire,
+  DefaultAgentDefinition,
   STORED_CONFIG_LABELS,
 } from "../../src/domain/agent/stored-config-validity/index.js";
-import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,
@@ -16,14 +15,14 @@ import {
 } from "../helpers/novel-master-fixture.js";
 import { tCore } from "../helpers/core-i18n.js";
 
-describe("assessAgentDefinitionWire", () => {
+describe("AgentDefinitionWire.assess", () => {
   it("T-A1: prompts.blocks agent wire → invalid(removed_feature)", () => {
     const wire = {
       schemaVersion: 1,
       name: "legacy",
       prompts: { blocks: {} },
     };
-    const health = assessAgentDefinitionWire(wire);
+    const health = AgentDefinitionWire.assess(wire);
     assert.equal(health.status, "invalid");
     if (health.status === "invalid") {
       assert.equal(health.code, "removed_feature");
@@ -42,7 +41,7 @@ describe("assessAgentDefinitionWire", () => {
       },
       runtime: { maxSteps: 5 },
     };
-    const health = assessAgentDefinitionWire(wire);
+    const health = AgentDefinitionWire.assess(wire);
     assert.equal(health.status, "valid");
     if (health.status === "valid") {
       assert.equal(health.value.name, "writer");
@@ -51,19 +50,19 @@ describe("assessAgentDefinitionWire", () => {
   });
 });
 
-describe("resolveAgentDefinitionFromStorage", () => {
+describe("AgentDefinitionWire.resolveFromStorage", () => {
   it("已解析领域对象（persist 为数组）→ valid", () => {
     const wire = {
       schemaVersion: 1,
       name: "writer",
       prompts: { persist: {}, dynamic: {} },
     };
-    const parsed = assessAgentDefinitionWire(wire);
+    const parsed = AgentDefinitionWire.assess(wire);
     assert.equal(parsed.status, "valid");
     if (parsed.status !== "valid") {
       return;
     }
-    const health = resolveAgentDefinitionFromStorage(parsed.value);
+    const health = AgentDefinitionWire.resolveFromStorage(parsed.value);
     assert.equal(health.status, "valid");
     if (health.status === "valid") {
       assert.equal(health.value.name, "writer");
@@ -76,14 +75,14 @@ describe("resolveAgentDefinitionFromStorage", () => {
       name: "writer",
       prompts: { persist: {}, dynamic: {} },
     };
-    const health = resolveAgentDefinitionFromStorage(wire);
+    const health = AgentDefinitionWire.resolveFromStorage(wire);
     assert.equal(health.status, "valid");
   });
 });
 
-describe("buildDefaultAgentDefinitionPreservingName", () => {
+describe("DefaultAgentDefinition.build", () => {
   it("T-A3: 保留 name、默认 prompts 与 maxSteps", () => {
-    const def = buildDefaultAgentDefinitionPreservingName("  我的 Agent  ");
+    const def = DefaultAgentDefinition.build("  我的 Agent  ");
     assert.equal(def.name, "我的 Agent");
     // 等价表单侧 layoutFromFormInput(createDefaultAgentEditorPrompts())（全空表单 → 空 layout）
     assert.deepEqual(def.prompts, { persist: [], dynamic: [] });
@@ -130,7 +129,7 @@ describe("getRawWire + assess 集成", () => {
     const raw = await repo.getRawWire("legacy-agent");
     assert.deepEqual(raw, legacyWire);
 
-    const health = assessAgentDefinitionWire(raw);
+    const health = AgentDefinitionWire.assess(raw);
     assert.equal(health.status, "invalid");
     assert.equal(await repo.getRawWire("missing"), null);
   });

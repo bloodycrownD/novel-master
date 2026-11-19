@@ -28,7 +28,7 @@ import { SqliteAgentDefinitionRepository } from "@/domain/agent/repositories/imp
 import type { PersistentState } from "../persistent-state/persistent-state.port.js";
 import { DefaultAgentRegistryService } from "./impl/agent-registry.service.js";
 import type { AgentRegistryService } from "./agent-registry.port.js";
-import { scopeFromController } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { AgentAbortRegistry } from "./agent-abort-registry.port.js";
 
@@ -91,7 +91,7 @@ export const AgentServiceFactory = {
   /**
    * 创建一个进程内的 AgentAbortRegistry（scope 薄包装）。（原 createAgentAbortRegistry）
    *
-   * register/tryRegister 内部走 `scopeFromController(controller)`，与 run 根 scope
+   * register/tryRegister 内部走 `AbortScopeFactory.fromController(controller)`，与 run 根 scope
    * 共用同一 WeakMap memoize 实例（spec §二：**不另建缓存 Map**）——因此
    * `abort(sessionId)` 命中的 scope 就是 run-agent-turn 里的根 scope，
    * `reason` 会如实记为 `"user-stop"`（T-S24）。
@@ -101,14 +101,14 @@ export const AgentServiceFactory = {
 
     return {
       register(sessionId, controller) {
-        scopes.set(sessionId, scopeFromController(controller));
+        scopes.set(sessionId, AbortScopeFactory.fromController(controller));
       },
       tryRegister(sessionId, controller) {
         // 判重与写入同同步段完成：已占用则一个字节都不动（不覆盖既有 scope）。
         if (scopes.has(sessionId)) {
           return false;
         }
-        scopes.set(sessionId, scopeFromController(controller));
+        scopes.set(sessionId, AbortScopeFactory.fromController(controller));
         return true;
       },
       abort(sessionId) {
@@ -118,7 +118,7 @@ export const AgentServiceFactory = {
       },
       unregister(sessionId, controller) {
         // 所有权比对：只有同一 controller 对应的 memoize 实例才删，防误删新 run。
-        if (scopes.get(sessionId) === scopeFromController(controller)) {
+        if (scopes.get(sessionId) === AbortScopeFactory.fromController(controller)) {
           scopes.delete(sessionId);
         }
       },

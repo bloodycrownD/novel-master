@@ -5,9 +5,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  attachmentStorageName,
+  MessageAttachmentSchema,
   messageAttachmentSchema,
-  parseAttachmentsJson,
 } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("messageAttachmentSchema", () => {
@@ -37,15 +36,15 @@ describe("messageAttachmentSchema", () => {
     assert.equal(withPath.action, "write");
 
     const emptyPath = messageAttachmentSchema.parse({
-      name: attachmentStorageName(undefined),
+      name: MessageAttachmentSchema.storageName(undefined),
       source: "user_ops",
       type: "text",
       content: null,
       action: "mkdir",
     });
     assert.equal(emptyPath.name, "__no_path__");
-    assert.equal(attachmentStorageName(""), "__no_path__");
-    assert.equal(attachmentStorageName(undefined), "__no_path__");
+    assert.equal(MessageAttachmentSchema.storageName(""), "__no_path__");
+    assert.equal(MessageAttachmentSchema.storageName(undefined), "__no_path__");
 
     assert.throws(() =>
       messageAttachmentSchema.parse({
@@ -58,7 +57,7 @@ describe("messageAttachmentSchema", () => {
       }),
     );
 
-    // 有 action 时 name 须 === attachmentStorageName(path)
+    // 有 action 时 name 须 === MessageAttachmentSchema.storageName(path)
     assert.throws(() =>
       messageAttachmentSchema.parse({
         name: "/wrong.md",
@@ -159,7 +158,7 @@ describe("messageAttachmentSchema", () => {
     );
   });
 
-  it("parseAttachmentsJson round-trip（含 skillAttach）", () => {
+  it("MessageAttachmentSchema.parseJson round-trip（含 skillAttach）", () => {
     const list = [
       {
         name: "/ops.md",
@@ -179,10 +178,10 @@ describe("messageAttachmentSchema", () => {
       },
     ];
     const json = JSON.stringify(list);
-    assert.deepEqual(parseAttachmentsJson(json), list);
-    assert.deepEqual(parseAttachmentsJson("[]"), []);
-    assert.equal(parseAttachmentsJson(null), null);
-    assert.equal(parseAttachmentsJson("not-json"), null);
+    assert.deepEqual(MessageAttachmentSchema.parseJson(json), list);
+    assert.deepEqual(MessageAttachmentSchema.parseJson("[]"), []);
+    assert.equal(MessageAttachmentSchema.parseJson(null), null);
+    assert.equal(MessageAttachmentSchema.parseJson("not-json"), null);
   });
 
   // ---- 逐条降级：一条不合规不牵连其余（append-only 历史数据的宽容读法）----
@@ -206,7 +205,7 @@ describe("messageAttachmentSchema", () => {
   };
 
   it("MA-1: 单条非法附件不牵连其余（保序）", () => {
-    const parsed = parseAttachmentsJson(
+    const parsed = MessageAttachmentSchema.parseJson(
       JSON.stringify([
         legalA,
         // 未知键（.strict() 拒）
@@ -221,7 +220,7 @@ describe("messageAttachmentSchema", () => {
   });
 
   it("MA-2: 全部非法 ⇒ 空数组（不是 undefined、不是 null）", () => {
-    const parsed = parseAttachmentsJson(
+    const parsed = MessageAttachmentSchema.parseJson(
       JSON.stringify([{ source: "attach", type: "text", extra: 1 }]),
     );
     assert.deepEqual(
@@ -232,17 +231,17 @@ describe("messageAttachmentSchema", () => {
   });
 
   it("MA-3: 非 JSON / 非数组 ⇒ 返回 null（非法输入的无值口径）", () => {
-    assert.equal(parseAttachmentsJson(null), null);
-    assert.equal(parseAttachmentsJson(""), null);
-    assert.equal(parseAttachmentsJson("not-json"), null);
+    assert.equal(MessageAttachmentSchema.parseJson(null), null);
+    assert.equal(MessageAttachmentSchema.parseJson(""), null);
+    assert.equal(MessageAttachmentSchema.parseJson("not-json"), null);
     // 非数组（无粒度可 salv，整体降级）
-    assert.equal(parseAttachmentsJson('{"a":1}'), null);
-    assert.equal(parseAttachmentsJson("null"), null);
-    assert.equal(parseAttachmentsJson("123"), null);
+    assert.equal(MessageAttachmentSchema.parseJson('{"a":1}'), null);
+    assert.equal(MessageAttachmentSchema.parseJson("null"), null);
+    assert.equal(MessageAttachmentSchema.parseJson("123"), null);
   });
 
   it("MA-D2: 标量元素数组 ⇒ []（元素不是对象，逐条全丢）", () => {
-    assert.deepEqual(parseAttachmentsJson("[1,2]"), []);
-    assert.deepEqual(parseAttachmentsJson("[null]"), []);
+    assert.deepEqual(MessageAttachmentSchema.parseJson("[1,2]"), []);
+    assert.deepEqual(MessageAttachmentSchema.parseJson("[null]"), []);
   });
 });

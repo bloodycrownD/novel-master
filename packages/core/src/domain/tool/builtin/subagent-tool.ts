@@ -150,7 +150,7 @@ ${callableList}
     if (subagent == null) {
       return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）" }));
     }
-    // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 resolveAgentToolRegistry）。
+    // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 AgentTools.resolveRegistry）。
     if (subagent.depth >= SUBAGENT_MAX_DEPTH) {
       return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `已达子代理递归上限（depth=${subagent.depth}），不允许再派生` }));
     }

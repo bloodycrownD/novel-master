@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import {
   buildBrokenPngBytes,
   buildPngWithOnlyItxtChara,
@@ -16,7 +16,7 @@ const SAMPLE_CARD = {
   },
 };
 
-function expectUnrecognized(result: ReturnType<typeof parseCharacterCardToMdTree>): void {
+function expectUnrecognized(result: ReturnType<typeof CharacterCardToMdTree.parse>): void {
   assert.equal(result.ok, false);
   if (result.ok) {
     return;
@@ -24,9 +24,9 @@ function expectUnrecognized(result: ReturnType<typeof parseCharacterCardToMdTree
   assert.equal(result.error.key, "VFS_CHARACTER_CARD_UNRECOGNIZED");
 }
 
-describe("parseCharacterCardToMdTree PNG", () => {
-  it("fixture PNG（IHDR+tEXt chara+IEND）经 parseCharacterCardToMdTree 取出角色描述与开场", () => {
-    const result = parseCharacterCardToMdTree(buildPngWithTextChara(SAMPLE_CARD));
+describe("CharacterCardToMdTree.parse PNG", () => {
+  it("fixture PNG（IHDR+tEXt chara+IEND）经 CharacterCardToMdTree.parse 取出角色描述与开场", () => {
+    const result = CharacterCardToMdTree.parse(buildPngWithTextChara(SAMPLE_CARD));
     assert.equal(result.ok, true);
     if (!result.ok) {
       return;
@@ -36,14 +36,14 @@ describe("parseCharacterCardToMdTree PNG", () => {
   });
 
   it("T-C6: 仅 iTXt chara → VFS_CHARACTER_CARD_UNRECOGNIZED，且不 JSON 回退成功", () => {
-    expectUnrecognized(parseCharacterCardToMdTree(buildPngWithOnlyItxtChara(SAMPLE_CARD)));
+    expectUnrecognized(CharacterCardToMdTree.parse(buildPngWithOnlyItxtChara(SAMPLE_CARD)));
   });
 
   it("T-C6: 仅 zTXt chara → VFS_CHARACTER_CARD_UNRECOGNIZED", () => {
-    expectUnrecognized(parseCharacterCardToMdTree(buildPngWithOnlyZtxtChara(SAMPLE_CARD)));
+    expectUnrecognized(CharacterCardToMdTree.parse(buildPngWithOnlyZtxtChara(SAMPLE_CARD)));
   });
 
   it("T-C6: 坏 PNG → VFS_CHARACTER_CARD_UNRECOGNIZED", () => {
-    expectUnrecognized(parseCharacterCardToMdTree(buildBrokenPngBytes()));
+    expectUnrecognized(CharacterCardToMdTree.parse(buildBrokenPngBytes()));
   });
 });

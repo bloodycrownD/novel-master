@@ -11,7 +11,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -32,8 +32,8 @@ describe("fork/copy parity (F1)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "fork-body", { versionCheck: false });
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
 
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const sk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });

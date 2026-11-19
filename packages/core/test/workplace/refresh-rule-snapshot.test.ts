@@ -8,7 +8,7 @@ import { createSessionKkvService } from "../../src/service/session-kkv/create-se
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { refreshRuleSnapshot } from "../../src/service/workplace/refresh-rule-snapshot.js";
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey, parseRuleSnapshotJson } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -29,7 +29,7 @@ describe("refreshRuleSnapshot (T-CR2)", () => {
     await wt.setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
     // 预填 file_cache，确认 refresh 会清空
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md"), JSON.stringify({ body: "stale", mtimeMs: 1 }));
+    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md"), JSON.stringify({ body: "stale", mtimeMs: 1 }));
 
     await refreshRuleSnapshot(session.id, {
       sessionKkv: sk,
@@ -38,7 +38,7 @@ describe("refreshRuleSnapshot (T-CR2)", () => {
 
     const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
     assert.ok(raw != null && raw !== "");
-    const entries = parseRuleSnapshotJson(raw!);
+    const entries = RuleSnapshotCodec.parseJson(raw!);
     assert.ok(entries.ok);
     assert.ok(entries.value.some((e) => e.path === "/note.md"));
 

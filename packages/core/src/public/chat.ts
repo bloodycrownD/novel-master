@@ -17,21 +17,17 @@ export type {
   MessageContent,
 } from "../domain/chat/model/message.js";
 export {
-  attachmentStorageName,
+  MessageAttachmentSchema,
   messageAttachmentSchema,
   messageAttachmentsSchema,
-  parseAttachmentsJson,
 } from "../domain/chat/model/message-attachment.schema.js";
 export type { MessageAttachmentAction } from "../domain/chat/model/message-attachment.schema.js";
-export { isMessageAnnotatePath } from "../domain/chat/model/annotate-draft.schema.js";
+export { AnnotateDraftSchema } from "../domain/chat/model/annotate-draft.schema.js";
 export type {
   AnnotateDraft,
   SendAnnotateDraft,
 } from "../domain/chat/model/annotate-draft.schema.js";
-export {
-  parseComposerDraftJson,
-  serializeComposerDraftJson,
-} from "../domain/chat/model/composer-draft.schema.js";
+export { ComposerDraftSchema } from "../domain/chat/model/composer-draft.schema.js";
 export type {
   ComposerDraft,
   /** Composer 草稿中的确认胶囊区间（`[start, end)`，UTF-16 码元偏移）。 */
@@ -56,13 +52,10 @@ export type {
   ThinkingBlock,
   RedactedThinkingBlock,
 } from "../domain/chat/model/content-block.js";
-export { textBlocks } from "../domain/chat/content/text-blocks.js";
-export {
-  parseMessageContent,
-  parseMessageContentValue,
-} from "../domain/chat/content/parse-message-content.js";
-export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
-export { readMessageMetadata } from "../domain/chat/model/message-metadata.js";
+export { TextBlocks } from "../domain/chat/content/text-blocks.js";
+export { MessageContentParse } from "../domain/chat/content/parse-message-content.js";
+export { MessageCliFormat } from "../domain/chat/content/format-message-cli.js";
+export { MessageMetadata } from "../domain/chat/model/message-metadata.js";
 export { chatLinkResolver } from "../domain/chat/logic/resolve-chat-link-target.js";
 export { composerSendPolicy } from "../domain/chat/logic/composer/composer-send-policy.js";
 export { composerChips } from "../domain/chat/logic/composer/composer-chips.js";

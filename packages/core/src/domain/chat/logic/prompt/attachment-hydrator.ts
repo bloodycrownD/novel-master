@@ -6,15 +6,15 @@
  */
 
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { parseRuleSnapshotJson } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
+import { FileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { WorkplaceDisplay } from "@/domain/workplace/logic/workplace-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { SkillFileContent, SkillService } from "@/service/skills/skills.port.js";
 import { Guards } from "@/common/guards.js";
-import { messageBodyTextFromBlocks } from "../../content/message-body-text.js";
-import { textBlocks } from "../../content/text-blocks.js";
+import { MessageBodyText } from "../../content/message-body-text.js";
+import { TextBlocks } from "../../content/text-blocks.js";
 import type { ChatMessageData } from "../../model/message.js";
 import type { MessageAttachment } from "../../model/message-attachment.schema.js";
 import { AttachBudget, BINARY_ATTACH_NOTE, OVERSIZED_ATTACH_NOTE } from "../attachment/attach-budget.js";
@@ -41,7 +41,7 @@ const SKILL_ATTACH_MISSING_NOTE = "技能不存在或已删除";
 async function resolveWorkplaceStatus(path: string, runtime: AttachmentHydratorRuntime): Promise<WorkplaceDisplayStatus> {
   const raw = await runtime.sessionKkv.get(runtime.sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY);
   if (raw == null || raw === "") return "full";
-  const entries = parseRuleSnapshotJson(raw);
+  const entries = RuleSnapshotCodec.parseJson(raw);
   if (!entries.ok) return "full";
   return entries.value.find((entry) => entry.path === path)?.status ?? "full";
 }
@@ -81,7 +81,7 @@ function fileRefAction(source: "attach" | "workplace", logicalPath: string, disp
       display: "filename",
     });
   }
-  const lineBody = opts?.bodyIsRendered === true ? rawContent : renderFileBlockBody({ logicalPath, display, content: rawContent });
+  const lineBody = opts?.bodyIsRendered === true ? rawContent : WorkplaceDisplay.renderFileBlockBody({ logicalPath, display, content: rawContent });
   return attachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: lineBody, display });
 }
 
@@ -149,10 +149,10 @@ export class AttachmentHydrator {
       hydrated[i] = await this.hydrateFileFull({ ...attachment, path: logicalPath }, logicalPath);
     }
 
-    const plainText = messageBodyTextFromBlocks(message.content.blocks);
+    const plainText = MessageBodyText.fromBlocks(message.content.blocks);
     return {
       ...message,
-      content: textBlocks(userMessageFormatter.wrapForLlm(plainText, hydrated, effectiveExtraInfo)),
+      content: TextBlocks.of(userMessageFormatter.wrapForLlm(plainText, hydrated, effectiveExtraInfo)),
       attachments: hydrated,
     };
   }
@@ -294,7 +294,7 @@ export class AttachmentHydrator {
       path: logicalPath,
       status,
     };
-    const cached = await loadOrFillFileCache(cacheRequest);
+    const cached = await FileCache.loadOrFill(cacheRequest);
     const noteText = attachBinaryNote(attachment, status);
     const refOpts: FileRefActionOpts = {
       oversized: isOversizedAttach(attachment, cached.body.length, this.budget),

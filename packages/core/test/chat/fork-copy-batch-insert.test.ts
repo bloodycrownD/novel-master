@@ -16,7 +16,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
 import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -85,7 +85,7 @@ describe("T-FK2 fork/copy 消息批量化", () => {
       const m = unwrap(await c.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`m${i}`),
+        TextBlocks.of(`m${i}`),
       ));
       lastId = m.id;
     }
@@ -133,7 +133,7 @@ describe("T-FK2 fork/copy 消息批量化", () => {
       unwrap(await c.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`c${i}`),
+        TextBlocks.of(`c${i}`),
       ));
     }
 

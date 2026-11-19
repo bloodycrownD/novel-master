@@ -12,7 +12,7 @@ import {
   BUILTIN_PROVIDER_UUID_OPENAI,
   BUILTIN_PROVIDER_UUID_OPENCODE,
 } from "../../src/domain/provider/logic/builtin-providers.js";
-import { savedModelDisplayName } from "../../src/domain/provider/model/saved-model.js";
+import { SavedModel } from "../../src/domain/provider/model/saved-model.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
@@ -89,7 +89,7 @@ describe("ProviderService", () => {
       apiKey: "k",
     }));
     const saved = unwrap(await bundle.providerModels.create(provider.id, "m1"));
-    assert.equal(savedModelDisplayName(saved, provider.displayName), "旧名称/m1");
+    assert.equal(SavedModel.displayName(saved, provider.displayName), "旧名称/m1");
 
     await rejectsErr(
       () => bundle.providers.edit(provider.id, { displayName: "  " }),
@@ -100,7 +100,7 @@ describe("ProviderService", () => {
       displayName: "新名称",
     }));
     assert.equal(
-      savedModelDisplayName(saved, renamed.displayName),
+      SavedModel.displayName(saved, renamed.displayName),
       "新名称/m1",
     );
   });

@@ -16,17 +16,19 @@ import { stringifyText } from "@/infra/serialization/stringify-text.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 import { agentDefinitionSchema } from "../model/agent-definition.schema.js";
 
-/** YAML 文本 → {@link AgentDefinition}；语法错与 schema 违规沿 `Result.err` 返回。 */
-export function decodeAgentYamlText(yaml: string): Result<AgentDefinition, AppError> {
-  const parsed = parseText(yaml, "yaml");
-  if (!parsed.ok) return Result.err(parsed.error);
-  const decoded = decode(parsed.value, agentDefinitionSchema);
-  if (!decoded.ok) return Result.err(decoded.error);
-  return Result.ok(decoded.value);
-}
+export const AgentYamlCodec = {
+  /** YAML 文本 → {@link AgentDefinition}；语法错与 schema 违规沿 `Result.err` 返回。 */
+  decode(yaml: string): Result<AgentDefinition, AppError> {
+    const parsed = parseText(yaml, "yaml");
+    if (!parsed.ok) return Result.err(parsed.error);
+    const decoded = decode(parsed.value, agentDefinitionSchema);
+    if (!decoded.ok) return Result.err(decoded.error);
+    return Result.ok(decoded.value);
+  },
 
-/** {@link AgentDefinition} → YAML 文本。 */
-export function encodeAgentYamlText(def: AgentDefinition): string {
-  const doc = encode(def, agentDefinitionSchema);
-  return stringifyText(doc, "yaml");
-}
+  /** {@link AgentDefinition} → YAML 文本。 */
+  encode(def: AgentDefinition): string {
+    const doc = encode(def, agentDefinitionSchema);
+    return stringifyText(doc, "yaml");
+  },
+} as const;

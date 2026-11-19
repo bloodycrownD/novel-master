@@ -9,12 +9,12 @@ import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { describe, it } from "node:test";
 
-import { signalView } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("signalView：裸 AbortSignal 只读适配（T-S8）", () => {
   it("reason 恒为 null，即使 signal 已中断", () => {
     const controller = new AbortController();
-    const view = signalView(controller.signal);
+    const view = AbortScopeFactory.signalView(controller.signal);
     assert.equal(view.reason, null);
     controller.abort("timeout");
     assert.equal(controller.signal.aborted, true);
@@ -29,7 +29,7 @@ describe("signalView：裸 AbortSignal 只读适配（T-S8）", () => {
         throw new Error("实现不应读取 signal.reason");
       },
     });
-    const view = signalView(controller.signal);
+    const view = AbortScopeFactory.signalView(controller.signal);
     assert.equal(view.checkpoint(), null);
     controller.abort("shutdown");
     const hit = view.checkpoint();
@@ -41,7 +41,7 @@ describe("signalView：裸 AbortSignal 只读适配（T-S8）", () => {
 
   it("onCancel：提前注册在中断时收到保守原因；注销后不再触发", () => {
     const controller = new AbortController();
-    const view = signalView(controller.signal);
+    const view = AbortScopeFactory.signalView(controller.signal);
     const reasons: string[] = [];
     const off = view.onCancel((reason) => reasons.push(reason));
     assert.equal(getEventListeners(controller.signal, "abort").length, 1);
@@ -54,7 +54,7 @@ describe("signalView：裸 AbortSignal 只读适配（T-S8）", () => {
   it("onCancel：已中断后注册立即同步执行，并给保守 user-stop", () => {
     const controller = new AbortController();
     controller.abort("timeout");
-    const view = signalView(controller.signal);
+    const view = AbortScopeFactory.signalView(controller.signal);
     const reasons: string[] = [];
     const off = view.onCancel((reason) => reasons.push(reason));
     assert.deepEqual(reasons, ["user-stop"]);

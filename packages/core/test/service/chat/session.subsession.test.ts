@@ -16,7 +16,7 @@ import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { type TdbcConnection } from "@novel-master/core";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import {
   getNovelMasterTestContext,
@@ -130,8 +130,8 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
     ));
 
     // 给子 / 孙 各写一条消息，验证级联清消息。
-    unwrap(await ctx.messages.append(child.id, "user", textBlocks("子消息")));
-    unwrap(await ctx.messages.append(grandchild.id, "assistant", textBlocks("孙消息")));
+    unwrap(await ctx.messages.append(child.id, "user", TextBlocks.of("子消息")));
+    unwrap(await ctx.messages.append(grandchild.id, "assistant", TextBlocks.of("孙消息")));
 
     unwrap(await ctx.sessions.delete(parent.id));
 
@@ -174,7 +174,7 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
       project.id,
       "c",
     ));
-    unwrap(await ctx.messages.append(child.id, "user", textBlocks("子消息")));
+    unwrap(await ctx.messages.append(child.id, "user", TextBlocks.of("子消息")));
 
     unwrap(await ctx.projects.delete(project.id));
 
@@ -214,8 +214,8 @@ describe("SessionSubsession T-S4（P2-13）：copy/fork 不继承 parent 关系"
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const parent = unwrap(await ctx.sessions.create(project.id, "父"));
     unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "子"));
-    const m1 = unwrap(await ctx.messages.append(parent.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(parent.id, "assistant", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(parent.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(parent.id, "assistant", TextBlocks.of("2")));
 
     const forked = unwrap(await ctx.messages.fork(parent.id, m1.id));
 

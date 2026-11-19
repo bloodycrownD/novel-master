@@ -9,7 +9,7 @@ import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { DateTime } from "@/common/datetime.js";
-import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import { MessageContentParse } from "@/domain/chat/content/parse-message-content.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { AppError } from "@/errors/app-error.js";
@@ -373,7 +373,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     let toolUseCount = 0;
     // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
-      const parsed = parseMessageContent(String(row.content_json));
+      const parsed = MessageContentParse.parse(String(row.content_json));
       if (!parsed.ok) {
         log.warn(`工具调用现算遇坏行（按 0 计）：${parsed.error.message}`);
         continue;

@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createProviderIdentityRepairOperation, createProviderSecretRenameOperation } from "@/domain/provider/logic/provider-identity-repair.js";
+import { ProviderIdentityRepair } from "@/domain/provider/logic/provider-identity-repair.js";
 import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -80,7 +80,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     const ctx = getNovelMasterTestContext();
     // bootstrap 已种了内置 provider（openai / anthropic / ...），形态正常
     const providerRepo = new SqliteProviderRepository(ctx.conn);
-    const op = createProviderIdentityRepairOperation({ providerRepo });
+    const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo });
 
     const detection = await op.detect();
     assert.equal(detection.needsRepair, false);
@@ -97,7 +97,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     assert.ok(target != null, "bootstrap 应已种内置 provider");
     await ctx.conn.execute(`UPDATE llm_provider SET builtin_key = NULL WHERE id = ?`, [target.id]);
 
-    const op = createProviderIdentityRepairOperation({ providerRepo });
+    const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo });
     const detection = await op.detect();
     assert.equal(detection.needsRepair, true);
     assert.match(detection.details ?? "", /builtin_key/);
@@ -120,7 +120,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
         displayName: "",
       },
     ]);
-    const op = createProviderIdentityRepairOperation({ providerRepo: mockRepo });
+    const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo: mockRepo });
 
     const detection = await op.detect();
     assert.equal(detection.needsRepair, true);
@@ -142,7 +142,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
     const newRef = `provider/${newId}/apiKey`;
     await store.set(oldRef, "sk-secret");
 
-    const op = createProviderSecretRenameOperation({
+    const op = ProviderIdentityRepair.createSecretRenameOperation({
       secretStore: store,
       oldId,
       newId,
@@ -164,7 +164,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
   it("oldId === newId 时 detect=false（无需搬运）", async () => {
     const store = inMemorySecretStore();
     const id = `same-${testIsolationSuffix()}`;
-    const op = createProviderSecretRenameOperation({
+    const op = ProviderIdentityRepair.createSecretRenameOperation({
       secretStore: store,
       oldId: id,
       newId: id,
@@ -181,7 +181,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
     await store.set(`provider/${oldId}/apiKey`, "old-val");
     await store.set(`provider/${newId}/apiKey`, "existing-val");
 
-    const op = createProviderSecretRenameOperation({
+    const op = ProviderIdentityRepair.createSecretRenameOperation({
       secretStore: store,
       oldId,
       newId,

@@ -9,7 +9,7 @@ import { Result } from "@/errors/either.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import { Json } from "@/common/json.js";
 import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agent-definition.port.js";
-import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
+import { AgentDefinitionValidator } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import { DEFAULT_SUBAGENT_DEFINITION } from "../default-subagent-definition.js";
@@ -27,7 +27,7 @@ interface DefaultAgentRegistryServiceDeps {
  *（含 persist / dynamic 数组）缺省时补 `[]`，让 `{name}` 成为最小合法
  * create（与内置 general 的空 persist/dynamic 同构）。非对象形状
  *（字符串 / 数字 / 数组、显式 null）不兜底——原样返回 def，直接交
- * validateAgentDefinition 报 INVALID_SCHEMA，禁止静默洗白后落盘空布局。
+ * AgentDefinitionValidator.validate 报 INVALID_SCHEMA，禁止静默洗白后落盘空布局。
  */
 // nm-style: keep-local — prompts 缺省补空布局是 create 前独立的四段形状归一化（undefined/null/对象/半缺省），内联会让 upsert 同时承担归一化与校验。
 function withDefaultPromptLayouts(def: AgentDefinition): AgentDefinition {
@@ -92,7 +92,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
   async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<Result<void, AppError>> {
     const defaulted = withDefaultPromptLayouts(def);
-    const validation = await validateAgentDefinition(defaulted, options);
+    const validation = await AgentDefinitionValidator.validate(defaulted, options);
     if (!validation.ok) return validation;
     const trimmedName = defaulted.name.trim();
     if (trimmedName.length === 0) {

@@ -51,7 +51,7 @@ describe("projectAgentConfigSchema", () => {
 
   it("configToWire 对重名块 definition 返回 Err（第二份同款循环已被收敛点覆盖）", () => {
     // configToWire 转调 agentDefinitionSchema.toWire，两条塌缩循环的收敛点
-    // 就是 definitionToDocument；这条钉住「即便绕过 validateAgentDefinition
+    // 就是 definitionToDocument；这条钉住「即便绕过 AgentDefinitionValidator.validate
     // 直接走 projectAgentConfigSchema.toWire，收敛点仍能兜住」。
     // toWire 已改返回 Result（五期门⑦）：块名唯一性门禁失败沿 Result.err
     // 回传，不再抛——错误本体（key / messageKey）与旧 throw 契约一致。

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import { PromptBuilder, type AgentPromptLayout } from "@novel-master/core/prompt";
 
@@ -20,7 +20,7 @@ function message(role: string, content: string, seq: number): ChatMessageData {
     sessionId: "s1",
     seq,
     role,
-    content: textBlocks(content),
+    content: TextBlocks.of(content),
     provider: null,
     raw: null,
     createdAtMs: seq,

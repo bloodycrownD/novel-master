@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { AgentServiceFactory, type AgentDefinition } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
@@ -91,7 +91,7 @@ function createMockModel(
 describe("AgentRunner workplace assemble (retire capture)", () => {
   it("T-WEC9: Agent run 内 VFS write 不调 materialize；可 upsert file_cache", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("write file"));
+    await session.append("user", TextBlocks.of("write file"));
 
     const sessionKkv = createMemorySessionKkv();
     await sessionKkv.set(

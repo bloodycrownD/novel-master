@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
   PromptBuilder,
-  messageBodyTextFromBlocks,
+  MessageBodyText,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
 
@@ -20,7 +20,7 @@ function message(role: string, content: string, seq: number): ChatMessageData {
     sessionId: "s1",
     seq,
     role,
-    content: textBlocks(content),
+    content: TextBlocks.of(content),
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -110,7 +110,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     ));
     assert.equal(renderFileTree.mock.callCount(), 1);
     assert.equal(list.mock.callCount(), 0);
-    assert.match(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), /x\.md 全部加载/);
+    assert.match(MessageBodyText.fromBlocks(input.messages[0]!.content.blocks), /x\.md 全部加载/);
   });
 });
 

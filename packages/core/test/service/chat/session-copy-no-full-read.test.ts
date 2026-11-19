@@ -31,7 +31,7 @@ import { outcomeValue } from "../../helpers/outcome-value.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { openSqlCountingNovelMasterTestConnection } from "../../helpers/sql-counting-connection.js";
 import { testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
@@ -230,7 +230,7 @@ async function seedSession(prefix: string): Promise<{
     const m = unwrap(await ctx.messages.append(
       session.id,
       i % 2 === 0 ? "user" : "assistant",
-      textBlocks(`${prefix}-m${i}`),
+      TextBlocks.of(`${prefix}-m${i}`),
     ));
     lastMessageId = m.id;
   }
@@ -356,7 +356,7 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
     const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
 
     // ① user + attachments
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("第一条"), {
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("第一条"), {
       attachments: [
         {
           name: "/notes/a.md",
@@ -371,7 +371,7 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
     unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("第二条"),
+      TextBlocks.of("第二条"),
       {
         provider: "anthropic",
         providerId: "prov-1",
@@ -385,7 +385,7 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
       }
     ));
     // ③ hidden 行（明文；V1' 后全库单形态明文读，布局内不再造压缩行）。
-    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("第三条")));
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("第三条")));
     await ctx.conn.execute(
       `UPDATE chat_message SET hidden = 1 WHERE id = ?`,
       [m3.id]
@@ -439,7 +439,7 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
     // 第三条的明文正文与源一致。
     assert.deepEqual(
       JSON.parse(copyRows[2]!.content_json),
-      textBlocks("第三条"),
+      TextBlocks.of("第三条"),
       "副本正文与源一致"
     );
 

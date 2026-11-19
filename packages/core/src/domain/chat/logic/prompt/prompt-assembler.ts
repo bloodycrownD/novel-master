@@ -20,7 +20,7 @@
  */
 
 import type {WorkplaceService} from "@/service/workplace/workplace.port.js";
-import {expandDynamicMacros} from "@/domain/prompt/logic/expand-dynamic-macros.js";
+import {DynamicMacrosExpansion} from "@/domain/prompt/logic/expand-dynamic-macros.js";
 import {attachmentScanner} from "../attachment/attachment-scanner.js";
 import {promptPathSeen} from "../attachment/prompt-path-seen.js";
 import {ChatMessage} from "../message/chat-message.js";
@@ -85,7 +85,7 @@ class PromptAssembler {
         const extraInfoRaw = runtime.extraInfo;
         const hasExtraInfo = typeof extraInfoRaw === "string" && extraInfoRaw.trim().length > 0;
         const macroContext = {now: runtime.now, workplace: runtime.workplace, filetree: runtime.filetree};
-        const extraInfoResolved = hasExtraInfo ? await expandDynamicMacros(extraInfoRaw, macroContext) : undefined;
+        const extraInfoResolved = hasExtraInfo ? await DynamicMacrosExpansion.expand(extraInfoRaw, macroContext) : undefined;
         if (extraInfoResolved !== undefined && !extraInfoResolved.ok) {
             return Result.err(extraInfoResolved.error);
         }

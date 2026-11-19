@@ -2,7 +2,7 @@
  * backfill 弃权信号（r3-run-4 步骤 2：[改 core 签名]）。
  *
  * 覆盖三件事：
- * 1. **纯逻辑单测（mock 仓储）**：`backfillBaselineCheckpoints` 的两个扫描
+ * 1. **纯逻辑单测（mock 仓储）**：`BackfillBaselineCheckpoints` 的两个扫描
  *    循环（倒扫 hasCheckpoint / 正插 insertCheckpoint）在 signal 翻真后
  *    **有限步退出**，且退出时 `confirmedNoGap` 恒为 false——中断态绝不能被
  *    当成「确认无空窗」，否则调用方把游标写到 count，下一轮短路成「已确认」，
@@ -17,9 +17,9 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -113,7 +113,7 @@ function makeScanHarness(args: {
     hasCalls: () => hasCalls,
     insertCalls: () => insertCalls,
     run: () =>
-      backfillBaselineCheckpoints({
+      BackfillBaselineCheckpoints.backfill({
         entryRepo,
         messageRepo,
         checkpointRepo,
@@ -124,7 +124,7 @@ function makeScanHarness(args: {
   };
 }
 
-describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () => {
+describe("BackfillBaselineCheckpoints.backfill 弃权信号（r3-run-4 步骤 2）", () => {
   it("入场即 aborted：定位空窗与插入都不跑（0 次定位查询 / 0 次 insert）", async () => {
     // 模拟「进 backfill 前用户已经按了停止」：signal 一进场就是 aborted。
     const findLastCheckpointedMessageId = mock.fn(
@@ -132,7 +132,7 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
     );
     const hasCheckpoint = mock.fn(async (): Promise<boolean> => false);
     const insertCheckpoint = mock.fn(async (): Promise<void> => undefined);
-    const result = await backfillBaselineCheckpoints({
+    const result = await BackfillBaselineCheckpoints.backfill({
       entryRepo: {
         listFileHeadsUnderPrefix: async () => [
           { entryId: "e1", path: "/a.md", headVersion: 1 },
@@ -197,7 +197,7 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
     );
     const hasCheckpoint = mock.fn(async (): Promise<boolean> => false);
     const insertCheckpoint = mock.fn(async (): Promise<void> => undefined);
-    const result = await backfillBaselineCheckpoints({
+    const result = await BackfillBaselineCheckpoints.backfill({
       entryRepo: {
         listFileHeadsUnderPrefix: async () => [
           { entryId: "e1", path: "/a.md", headVersion: 1 },
@@ -255,7 +255,7 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
     // 起点若靠「最后一个 checkpointed id」单点收敛会把 m1..m9 永久跳过。
     let insertCalls = 0;
     const inserted: string[] = [];
-    const result = await backfillBaselineCheckpoints({
+    const result = await BackfillBaselineCheckpoints.backfill({
       entryRepo: {
         listFileHeadsUnderPrefix: async () => [
           { entryId: "e1", path: "/a.md", headVersion: 1 },
@@ -314,14 +314,14 @@ describe("backfillMissingBaselines(service) 弃权信号", () => {
 
     const msgs = [];
     for (const text of ["1", "2", "3", "4"]) {
-      msgs.push(unwrap(await ctx.messages.append(session.id, "user", textBlocks(text))));
+      msgs.push(unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(text))));
     }
 
     // 第一轮：已 aborted 的 signal 进场 → 立即弃权。
     unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id,
-      createAbortScope({ signal: AbortSignal.abort() })
+      AbortScopeFactory.create({ signal: AbortSignal.abort() })
     ));
     assert.equal(
       await readCursor(session.id),
@@ -335,7 +335,7 @@ describe("backfillMissingBaselines(service) 弃权信号", () => {
     );
 
     // 第二轮：正常 backfill（不传 signal）→ 幂等补齐全部 4 条 + 游标落库。
-    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id, createAbortScope()));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id, AbortScopeFactory.create()));
     for (const m of msgs) {
       assert.ok(
         await hasCheckpoint(session.id, m.id),

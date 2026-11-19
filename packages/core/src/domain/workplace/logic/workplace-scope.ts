@@ -4,36 +4,41 @@
  * @module domain/workplace/workplace-scope
  */
 
-import type { WorkplaceScope } from "../model/workplace-types.js";
+import type { WorkplaceScope as WorkplaceScopeType } from "../model/workplace-types.js";
 
-/**
- * Stable storage key for a workplace scope.
- */
-export function workplaceScopeKey(scope: WorkplaceScope): string {
-  switch (scope.kind) {
-    case "global":
-      return "global";
-    case "project":
-      return `project:${scope.projectId}`;
-    case "session":
-      return `session:${scope.sessionId}`;
-    case "global-meta":
-      return "global:meta";
-    case "project-meta":
-      return `project:${scope.projectId}:meta`;
-  }
-}
+/** 本文件同时以「类型别名 + namespace const」双含义导出 `WorkplaceScope`（type=模型类型，value=键位助手）。 */
+export type WorkplaceScope = WorkplaceScopeType;
 
-/**
- * Root logical path for workplace rules in this scope (unified `/` for all domains).
- */
-export function workplaceRootLogicalPath(_scope: WorkplaceScope): string {
-  return "/";
-}
+export const WorkplaceScope = {
+  /**
+   * Stable storage key for a workplace scope.
+   */
+  key(scope: WorkplaceScopeType): string {
+    switch (scope.kind) {
+      case "global":
+        return "global";
+      case "project":
+        return `project:${scope.projectId}`;
+      case "session":
+        return `session:${scope.sessionId}`;
+      case "global-meta":
+        return "global:meta";
+      case "project-meta":
+        return `project:${scope.projectId}:meta`;
+    }
+  },
 
-/**
- * Whether `logicalPath` is the scope root (rule cannot be turned off).
- */
-export function isWorkplaceRootPath(scope: WorkplaceScope, logicalPath: string): boolean {
-  return logicalPath === workplaceRootLogicalPath(scope);
-}
+  /**
+   * Root logical path for workplace rules in this scope (unified `/` for all domains).
+   */
+  rootLogicalPath(_scope: WorkplaceScopeType): string {
+    return "/";
+  },
+
+  /**
+   * Whether `logicalPath` is the scope root (rule cannot be turned off).
+   */
+  isRootPath(scope: WorkplaceScopeType, logicalPath: string): boolean {
+    return logicalPath === WorkplaceScope.rootLogicalPath(scope);
+  },
+} as const;

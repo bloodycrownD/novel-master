@@ -61,7 +61,7 @@ const { AgentServiceFactory } = await import("@novel-master/core/agent");
 const { InMemoryAgentSession } = await import(
   "../../src/domain/agent/session/impl/in-memory-agent-session.js"
 );
-const { textBlocks } = await import("@novel-master/core/chat");
+const { TextBlocks } = await import("@novel-master/core/chat");
 const { SimpleEventBus } = await import("@novel-master/core/events");
 const { BuiltinTools, ToolRegistry } = await import("@novel-master/core");
 const { createMemorySessionKkv } = await import(
@@ -166,7 +166,7 @@ after(() => {
 describe("AgentRunner compaction (T-AR1)", () => {
   it("条件压缩命中时直调 runCompaction，传入 evaluator 的 hideStartDepth，不经事件编排器", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model = createMockModel([
       {
@@ -328,7 +328,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
 
   it("T-RT02-a（计数）：visibleFloor 配置下每个 step 只发一次全会话读", async () => {
     const session = new CountingAgentSession(MOCK_SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     // visibleFloor: 999 —— 刻意不触发压缩：runCompaction 桩若真跑会改变步数、
     // 干扰 stepCompactionEmitted 的门控语义，把「读次数」这口锅搅浑。
@@ -383,7 +383,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
 
   it("T-RT02-b（语义）：visibleMessageCount 透传后压缩仍按 visibleFloor 命中", async () => {
     const session = new CountingAgentSession(MOCK_SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     // visibleFloor: 0 —— 任一可见消息即命中，防止「少读一次」被误实现成「不读」。
     const compactionConditions = realVisibleFloorEvaluator(0);
@@ -477,7 +477,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
     async function runOnce(visibleFloor: number, visibleCount: number) {
       const session = new CountingAgentSession(MOCK_SESSION_ID);
       for (let i = 0; i < visibleCount; i++) {
-        await session.append("user", textBlocks(`go-${i}`));
+        await session.append("user", TextBlocks.of(`go-${i}`));
       }
       // N = 装配后 session 里的可见条数本身（与 runner 取值点同口径）
       const n = (await session.list()).length;

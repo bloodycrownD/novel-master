@@ -16,9 +16,9 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import type { SessionKkvEntry } from "../../model/session-kkv-entry.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../model/session-kkv-domains.js";
-import { compressFileCacheBodyForBlob, decodeFileCacheBlobBody, hashFileCachePayload } from "../../logic/file-cache-blob-codec.js";
+import { FileCacheBlobCodec } from "../../logic/file-cache-blob-codec.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
-import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvRepository } from "../session-kkv.port.js";
 
 /** getMany IN 子句分片大小（双驱动绑参上限的保守值）。 */
@@ -45,9 +45,9 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
 
   async get(sessionId: string, domain: string, key: string): Promise<SessionKkvEntry | null> {
     if (domain === SESSION_KKV_DOMAIN_FILE_CACHE) {
-      // entry 引用行拿 hash+mtime，两跳查 blob 解压，用 serializeFileCachePayload
+      // entry 引用行拿 hash+mtime，两跳查 blob 解压，用 RuleSnapshotCodec.serializeFileCachePayload
       // 还原出与 set 时逐字节相同的 JSON 字符串（set 侧 value 均为
-      // serializeFileCachePayload 产物，键序固定）。entry 行缺失时回退旧表
+      // RuleSnapshotCodec.serializeFileCachePayload 产物，键序固定）。entry 行缺失时回退旧表
       //（退化路径存储位置）；blob 缺失 / 解压失败返回 null（上层当 miss 自愈重读）。
       const entrySql = `SELECT content_hash, mtime_ms FROM session_file_cache_entry WHERE session_id = #{sessionId} AND key = #{key}`;
       const entries = await queryTemplate<{ content_hash: string; mtime_ms: number }>(this.conn, this.parser, entrySql, { sessionId, key });
@@ -61,7 +61,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // inflate，直接用 entry 行的 mtime 还原出与 set 时同形的 JSON。
       const cachedBody = decodedContentCache.get(contentHash);
       if (cachedBody != null) {
-        return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: serializeFileCachePayload({ body: cachedBody, mtimeMs }) };
+        return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: RuleSnapshotCodec.serializeFileCachePayload({ body: cachedBody, mtimeMs }) };
       }
       const blobSql = `SELECT encoding, bytes FROM session_file_cache_blob WHERE content_hash = #{contentHash}`;
       const blobs = await queryTemplate<{ encoding: string; bytes: SqlValue }>(this.conn, this.parser, blobSql, { contentHash });
@@ -69,14 +69,14 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
         return null;
       }
       const blob = blobs[0]!;
-      const decoded = decodeFileCacheBlobBody(String(blob.encoding), blob.bytes);
+      const decoded = FileCacheBlobCodec.decodeBlobBody(String(blob.encoding), blob.bytes);
       if (!decoded.ok) {
         // 解压 / 解码失败：按 miss 自愈返回 null，不向调用方抛异常。
         return null;
       }
       const body = decoded.value;
       decodedContentCache.set(contentHash, body);
-      return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: serializeFileCachePayload({ body, mtimeMs }) };
+      return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs }) };
     }
     return this.getLegacyEntry(sessionId, domain, key);
   }
@@ -141,7 +141,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
             if (blob == null) {
               continue;
             }
-            const decoded = decodeFileCacheBlobBody(String(blob.encoding), blob.bytes);
+            const decoded = FileCacheBlobCodec.decodeBlobBody(String(blob.encoding), blob.bytes);
             if (!decoded.ok) {
               // 解压 / 解码失败：按 miss 跳过（上层自愈重读），与单键 get 同口径。
               continue;
@@ -155,7 +155,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
           if (body == null) {
             continue;
           }
-          out.set(String(entry.key), serializeFileCachePayload({ body, mtimeMs: Number(entry.mtime_ms) }));
+          out.set(String(entry.key), RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: Number(entry.mtime_ms) }));
         }
       }
       // 退化路径（旧表行）批量补齐：新表没命中的键查一次 legacy。
@@ -191,7 +191,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // 压缩后回填（置位/压缩清域后的常规路径）内容多数未变，blob 已在库
       // 里时压缩产物会被 INSERT OR IGNORE 整体丢弃——Hermes 纯 JS deflate
       // 一个大文件几十 ms、N 个文件串起来就是可感知的卡顿。
-      const hashed = hashFileCachePayload(value);
+      const hashed = FileCacheBlobCodec.hashPayload(value);
       if (hashed == null) {
         // 退化分支（理论不发生）：value 非 FileCachePayload 形态 JSON 时
         // codec 返回 null，退回旧表存储，保证 get 对任意字符串逐字节还原。
@@ -205,7 +205,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       const blobExistsSql = `SELECT 1 AS hit FROM session_file_cache_blob WHERE content_hash = #{contentHash}`;
       const existing = await queryTemplate<{ hit: number }>(this.conn, this.parser, blobExistsSql, { contentHash: hashed.contentHash });
       if (existing.length === 0) {
-        const blob = compressFileCacheBodyForBlob(hashed.body);
+        const blob = FileCacheBlobCodec.compressBodyForBlob(hashed.body);
         const insertBlobSql = `INSERT OR IGNORE INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`;
         await executeTemplate(this.conn, this.parser, insertBlobSql, { contentHash: hashed.contentHash, encoding: blob.encoding, bytes: blob.bytes, byteLen: blob.byteLen });
       }
@@ -218,7 +218,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
 
   async delete(sessionId: string, domain: string, key: string): Promise<boolean> {
     if (domain === SESSION_KKV_DOMAIN_FILE_CACHE) {
-      // 只删 entry 引用行，blob 留给 runDeferredFileCacheGc 回收；
+      // 只删 entry 引用行，blob 留给 DeferredFileCacheGc.run 回收；
       // 旧表行一并防御性删除（覆盖退化路径写入的理论行）。
       const deleteEntrySql = `DELETE FROM session_file_cache_entry WHERE session_id = #{sessionId} AND key = #{key}`;
       const entryResult = await executeTemplate(this.conn, this.parser, deleteEntrySql, { sessionId, key });

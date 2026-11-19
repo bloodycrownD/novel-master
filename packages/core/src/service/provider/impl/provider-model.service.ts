@@ -11,21 +11,21 @@ import { Result } from "@/errors/either.js";
 import type { ModelSuggestion } from "@/domain/provider/model/model-suggestion.js";
 import type { SavedModel } from "@/domain/provider/model/saved-model.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
-import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
-import { applySavedModelSettingsPatch, savedModelContextWindowTokens, savedModelTokenCounterMode, type SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
-import { assertSavedModelSettingsPersistable } from "@/domain/provider/model/saved-model-settings-from-json.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
+import { DefaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
+import { SavedModelSettings, type SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
+import { SavedModelSettingsJson } from "@/domain/provider/model/saved-model-settings-from-json.js";
 import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
-import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
-import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import { findSavedModelReferences } from "@/domain/provider/logic/find-saved-model-references.js";
+import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
+import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
+import { SavedModelReferences } from "@/domain/provider/logic/find-saved-model-references.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import { normalizeVendorModelId } from "@/domain/provider/logic/application-model-id.js";
+import { ApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import type { ProviderModelService } from "../provider-model.port.js";
 import type { ProviderService } from "../provider.port.js";
 
@@ -41,7 +41,7 @@ interface DefaultProviderModelServiceDeps {
 
 /** 解包 domain 的 Result，保持 service 对 app 的 AppError 契约（五期门⑦走返回值）。 */
 async function requireSavedModel(savedModelId: string, savedModels: SavedModelRepository): Promise<Result<SavedModel, AppError>> {
-  const asserted = await assertSavedModelUuid(savedModelId, savedModels);
+  const asserted = await SavedModelUuid.assert(savedModelId, savedModels);
   if (!asserted.ok) {
     return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: asserted.error.message, modelId: savedModelId }));
   }
@@ -64,18 +64,18 @@ export class DefaultProviderModelService implements ProviderModelService {
     const got = await this.deps.providers.get(providerId);
     if (!got.ok) return Result.err(got.error);
     const provider = got.value;
-    const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
+    const apiKeyResult = await ProviderApiKey.resolve(provider, this.deps.secretStore);
     if (!apiKeyResult.ok) {
       return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId }));
     }
     const apiKey = apiKeyResult.value;
     const adapter = getProtocolAdapter(provider.protocol);
     // 缺省 scope = 不可取消（CLI / 旧调用点）；desktop handler 会传入带 deadline 的 scope。
-    const result = await adapter.listModels({ baseUrl: provider.baseUrl, apiKey, extraHeaders: provider.headers, scope: scope ?? createAbortScope() });
+    const result = await adapter.listModels({ baseUrl: provider.baseUrl, apiKey, extraHeaders: provider.headers, scope: scope ?? AbortScopeFactory.create() });
 
     const seen = new Set<string>();
     for (const m of result.models) {
-      const vendorModelId = normalizeVendorModelId(providerId, m.vendorModelId);
+      const vendorModelId = ApplicationModelId.normalizeVendorModelId(providerId, m.vendorModelId);
       seen.add(vendorModelId);
       await this.deps.suggestions.upsert({
         providerId,
@@ -92,7 +92,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   async save(providerId: string, vendorModelId: string, modelName?: string): Promise<Result<SavedModel, AppError>> {
     const got = await this.deps.providers.get(providerId);
     if (!got.ok) return Result.err(got.error);
-    const normalizedVendorModelId = normalizeVendorModelId(providerId, vendorModelId);
+    const normalizedVendorModelId = ApplicationModelId.normalizeVendorModelId(providerId, vendorModelId);
     const trimmedModelName = modelName?.trim();
     if (trimmedModelName != null && trimmedModelName.length === 0) return Result.err(new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty" }));
     const persistedModelName = trimmedModelName ?? normalizedVendorModelId;
@@ -102,7 +102,7 @@ export class DefaultProviderModelService implements ProviderModelService {
       providerId,
       vendorModelId: normalizedVendorModelId,
       modelName: persistedModelName,
-      settings: defaultSavedModelSettings(normalizedVendorModelId),
+      settings: DefaultSavedModelSettings.of(normalizedVendorModelId),
       createdAtMs: now,
       updatedAtMs: now,
     };
@@ -151,7 +151,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     const found = await requireSavedModel(savedModelId, this.deps.savedModels);
     if (!found.ok) return Result.err(found.error);
     const existing = found.value;
-    const refs = await findSavedModelReferences(this.deps.conn, savedModelId);
+    const refs = await SavedModelReferences.find(this.deps.conn, savedModelId);
     if (refs.length > 0) {
       return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { detail: `Saved model is in use: ${refs.join(", ")}`, modelId: savedModelId, providerId: existing.providerId }));
     }
@@ -175,8 +175,8 @@ export class DefaultProviderModelService implements ProviderModelService {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, modelId: savedModelId, providerId: existing.providerId }));
     }
 
-    const mergedSettings = applySavedModelSettingsPatch(existing.settings, patch);
-    const persistable = assertSavedModelSettingsPersistable(mergedSettings);
+    const mergedSettings = SavedModelSettings.applyPatch(existing.settings, patch);
+    const persistable = SavedModelSettingsJson.assertPersistable(mergedSettings);
     if (!persistable.ok) {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: persistable.error.message }));
     }
@@ -195,7 +195,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     const found = await requireSavedModel(savedModelId, this.deps.savedModels);
     if (!found.ok) return Result.err(found.error);
     const existing = found.value;
-    const defaults = defaultSavedModelSettings(existing.vendorModelId);
+    const defaults = DefaultSavedModelSettings.of(existing.vendorModelId);
     return this.updateSettings(savedModelId, {
       contextWindowTokens: defaults.internal.contextWindowTokens,
     });
@@ -210,12 +210,12 @@ export class DefaultProviderModelService implements ProviderModelService {
   async getContextWindow(savedModelId: string): Promise<Result<number | null, AppError>> {
     const saved = await this.getSavedById(savedModelId);
     if (!saved.ok) return Result.err(saved.error);
-    return Result.ok(saved.value != null ? savedModelContextWindowTokens(saved.value.settings) : null);
+    return Result.ok(saved.value != null ? SavedModelSettings.contextWindowTokens(saved.value.settings) : null);
   }
 
   async getTokenCounterMode(savedModelId: string): Promise<Result<TokenizerOverride, AppError>> {
     const saved = await this.getSavedById(savedModelId);
     if (!saved.ok) return Result.err(saved.error);
-    return Result.ok(saved.value != null ? savedModelTokenCounterMode(saved.value.settings) : "auto");
+    return Result.ok(saved.value != null ? SavedModelSettings.tokenCounterMode(saved.value.settings) : "auto");
   }
 }

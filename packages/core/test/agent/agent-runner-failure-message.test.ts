@@ -20,8 +20,8 @@ import { describe, it } from "node:test";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, SimpleEventBus, type AgentRunFailedPayload, type  AgentRunFinishedPayload } from "@novel-master/core/events";
 import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
@@ -116,7 +116,7 @@ function firstText(message: { content: { blocks: ReadonlyArray<{ type: string; t
 describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
   it("请求抛错：落 assistant 错误消息（含原始错误信息）、FAILED 事件仍发、落库先于事件、原错误仍抛出", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model: ModelRequestService = {
       request: async () => {
@@ -174,7 +174,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
 
   it("abort 路径（catch 命中 AbortError）：不落错误消息，保持 partial 语义", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const controller = new AbortController();
     const model: ModelRequestService = {
@@ -195,7 +195,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -207,7 +207,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
 
   it("persistMessages=false（EphemeralOverlay）：失败不落库", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model: ModelRequestService = {
       request: async () => {
@@ -239,7 +239,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
 
   it("T-T5: 流中断超时（idle）不重试——落 [生成失败] assistant 占位、发 FAILED 事件、原错误上抛", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     let calls = 0;
     const model: ModelRequestService = {
@@ -292,7 +292,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
 
   it("幂等防御：多步 run 已有 assistant 落库后再失败，不追加错误消息", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     // step1 成功返回 tool_use（assistant 落库 + tool_results 回传），step2 抛错
     const responses: LlmChatResult[] = [
@@ -345,7 +345,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
 describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）", () => {
   it("成功但 blocks 为空：占位消息落库（不带 usage/raw）、FINISHED 照发（completed）、尾部解锁", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model: ModelRequestService = {
       request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
@@ -389,7 +389,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
 
   it("成功但 blocks 仅空白文本：同样落占位（hasMeaningfulAssistantBlocks 判空口径）", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model: ModelRequestService = {
       request: async () => (Result.ok({
@@ -419,7 +419,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
 
   it("幂等防御：多步 run 已有 assistant 落库后再遇空回复，不追加占位", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     // step1 返回 tool_use（assistant 落库 + tool_results 回传），step2 空回复
     const responses: LlmChatResult[] = [
@@ -462,7 +462,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
 
   it("persistMessages=false（EphemeralOverlay）：成功空回复不落占位", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model: ModelRequestService = {
       request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
@@ -489,7 +489,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
 
   it("不回归：正常成功（meaningful text）照常落原样 assistant，不出现占位文案", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model: ModelRequestService = {
       request: async () => (Result.ok({
@@ -522,7 +522,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
 
   it("不回归：post-model abort 且空 blocks：cancelled 收尾、不落占位（保留 abort 语义）", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const controller = new AbortController();
     const model: ModelRequestService = {
@@ -542,7 +542,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");

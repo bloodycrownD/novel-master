@@ -26,15 +26,15 @@ import type { ModelRequestOptions, ModelRequestService } from "../../provider/mo
 import { PromptBuilder } from "../../prompt/render-prompt.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
-import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
+import { LlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
 import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
-import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
+import { LlmProtocol } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -153,7 +153,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // 取消 scope：run-agent-turn 传根 scope；CLI / 测试直接调用时缺省为不可取消。
     // 本片暂只桥接 `scope.signal` 给既有检查点与 toolCtx（检查点换 `scope.checkpoint()`
     // 属 phase-port-migration Step 5 的后续改动）。
-    const scope = options.scope ?? createAbortScope();
+    const scope = options.scope ?? AbortScopeFactory.create();
     const signal = scope.signal;
     let vfsMutatedInRun = false;
 
@@ -464,9 +464,9 @@ export class DefaultAgentRunner implements AgentRunner {
           workplaceDisplay,
           skillsIndex,
         });
-        const protocol = await inferLlmProtocolFromSavedModelId(options.savedModelId, this.deps.savedModels, this.deps.providers);
-        const exportMessages = normalizeForLlmExport(llmInput.messages, protocol, zones);
-        // 思考上下文剥离：normalizeForLlmExport 之后、orphan 归一化之前。
+        const protocol = await LlmProtocol.fromSavedModelId(options.savedModelId, this.deps.savedModels, this.deps.providers);
+        const exportMessages = LlmExport.normalize(llmInput.messages, protocol, zones);
+        // 思考上下文剥离：LlmExport.normalize 之后、orphan 归一化之前。
         // 容量 1 判定只看 assistant 消息，与 orphan 归一化顺序无耦合，
         // 此处保持既有插入位置（历史顺序、避免无关行为差异）。
         const strippedMessages = applyThinkingContextForLlm(exportMessages, {

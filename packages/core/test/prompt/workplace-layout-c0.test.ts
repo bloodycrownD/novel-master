@@ -10,10 +10,9 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
   return unwrap(decodeRaw(raw, schema));
 }
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { PromptBuilder, layoutHasWorkplace } from "@novel-master/core/prompt";
+import { AgentPromptLayout, PromptBuilder } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
-import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
-import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
+import { AgentDefinitionWire } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
 import {
   createMemorySessionKkv,
   mockWorkplaceService,
@@ -33,7 +32,7 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    assert.equal(layoutHasWorkplace(layout), false);
+    assert.equal(AgentPromptLayout.hasWorkplace(layout), false);
 
     const sk = createMemorySessionKkv();
     const wt = mockWorkplaceService("WT");
@@ -179,7 +178,7 @@ describe("Workplace C0 协议", () => {
     );
   });
 
-  it("T-W9: resolveAgentDefinitionFromStorage 域形态 strip worktree", async () => {
+  it("T-W9: AgentDefinitionWire.resolveFromStorage 域形态 strip worktree", async () => {
     const stored = {
       name: "domain",
       prompts: {
@@ -187,7 +186,7 @@ describe("Workplace C0 协议", () => {
         dynamic: [],
       },
     };
-    const health = resolveAgentDefinitionFromStorage(stored);
+    const health = AgentDefinitionWire.resolveFromStorage(stored);
     assert.equal(health.status, "valid");
     if (health.status !== "valid") {
       return;

@@ -21,28 +21,30 @@ import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
  */
 type EnsureDirectoryChainError = AppError;
 
-/**
- * Creates parent directories from root down (idempotent mkdir).
- *
- * 从根往下逐级重建 `logicalPath` 的父目录链（幂等 mkdir，已存在的目录静默
- * 跳过），供回滚 restore 写盘前确保父目录在位——被删文件复活时其父目录
- * 可能已被一并删除。
- */
-export async function ensureDirectoryChain(vfs: VfsRestorePort, logicalPath: string): Promise<Result<void, EnsureDirectoryChainError>> {
-  const normalized = PathNormalizer.normalize(logicalPath);
-  if (!normalized.ok) return Result.err(normalized.error);
-  const dirs: string[] = [];
-  let current = ParentDir.resolve(normalized.value);
-  while (current.ok && current.value !== "/") {
-    dirs.unshift(current.value);
-    current = ParentDir.resolve(current.value);
-  }
-  if (!current.ok) return Result.err(current.error);
-  for (const dir of dirs) {
-    const mkdir = await VfsMove.mkdirIgnoreExistingDirectory(vfs, dir);
-    if (!mkdir.ok) {
-      return Result.err(mkdir.error);
+export const DirectoryChain = {
+  /**
+   * Creates parent directories from root down (idempotent mkdir).
+   *
+   * 从根往下逐级重建 `logicalPath` 的父目录链（幂等 mkdir，已存在的目录静默
+   * 跳过），供回滚 restore 写盘前确保父目录在位——被删文件复活时其父目录
+   * 可能已被一并删除。
+   */
+  async ensure(vfs: VfsRestorePort, logicalPath: string): Promise<Result<void, EnsureDirectoryChainError>> {
+    const normalized = PathNormalizer.normalize(logicalPath);
+    if (!normalized.ok) return Result.err(normalized.error);
+    const dirs: string[] = [];
+    let current = ParentDir.resolve(normalized.value);
+    while (current.ok && current.value !== "/") {
+      dirs.unshift(current.value);
+      current = ParentDir.resolve(current.value);
     }
-  }
-  return Result.ok(undefined);
-}
+    if (!current.ok) return Result.err(current.error);
+    for (const dir of dirs) {
+      const mkdir = await VfsMove.mkdirIgnoreExistingDirectory(vfs, dir);
+      if (!mkdir.ok) {
+        return Result.err(mkdir.error);
+      }
+    }
+    return Result.ok(undefined);
+  },
+} as const;

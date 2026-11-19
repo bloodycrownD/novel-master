@@ -8,7 +8,7 @@ import { SentencePieceProcessor } from "@agnai/sentencepiece-js";
 import { type ChatMessage } from "@novel-master/core/chat";
 
 import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/tokenizer";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { MessageBodyText } from "@novel-master/core/prompt";
 
 import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/tokenizer";
 import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
@@ -83,7 +83,7 @@ class SentencePieceTokenCounter implements TokenCounter {
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {
-      chars += messageBodyTextFromBlocks(m.content.blocks).length;
+      chars += MessageBodyText.fromBlocks(m.content.blocks).length;
     }
     return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }

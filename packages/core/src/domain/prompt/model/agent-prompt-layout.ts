@@ -49,19 +49,21 @@ export const DEFAULT_WORKPLACE_ASSISTANT_TEXT = "我看到工作区了";
 /** 技能索引段默认前缀语（`prompts.skillsPrefix` 缺省/空时使用）。 */
 export const DEFAULT_SKILLS_INDEX_PREFIX = "当前可用技能（每条为 名称：描述（来源域），正文经 skill 工具按需读取）：";
 
-/**
- * 布局是否启用常驻工作区（开 = 非空 string）。
- */
-export function layoutHasWorkplace(layout: Pick<AgentPromptLayout, "workplace">): boolean {
-  return typeof layout.workplace === "string" && layout.workplace.length > 0;
-}
+export const AgentPromptLayout = {
+  /**
+   * 布局是否启用常驻工作区（开 = 非空 string）。
+   */
+  hasWorkplace(layout: Pick<AgentPromptLayout, "workplace">): boolean {
+    return typeof layout.workplace === "string" && layout.workplace.length > 0;
+  },
 
-/**
- * 布局是否带自定义附加信息（开 = trim 后非空 string；缺省 = 关）。
- */
-export function layoutHasCustomAttach(layout: Pick<AgentPromptLayout, "customAttach">): boolean {
-  return typeof layout.customAttach === "string" && layout.customAttach.trim().length > 0;
-}
+  /**
+   * 布局是否带自定义附加信息（开 = trim 后非空 string；缺省 = 关）。
+   */
+  hasCustomAttach(layout: Pick<AgentPromptLayout, "customAttach">): boolean {
+    return typeof layout.customAttach === "string" && layout.customAttach.trim().length > 0;
+  },
+} as const;
 
 /**
  * Agent Prompt 布局（本域现行形态）。
@@ -86,7 +88,7 @@ export interface AgentPromptLayout {
   readonly customAttach?: string;
   /**
    * 技能能力总开关；缺省视为 `true`（注入技能索引 + 注册 skill 工具）。
-   * `false` = 不注入索引且不注册 skill 工具（resolveAgentToolRegistry 摘除，
+   * `false` = 不注入索引且不注册 skill 工具（AgentTools.resolveRegistry 摘除，
    * D4 联动随之生效）；用户显式 `$` 引用不受影响。
    */
   readonly skillsEnabled?: boolean;

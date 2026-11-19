@@ -4,7 +4,7 @@
  * @module service/persistent-state/impl/persistent-state.service
  */
 
-import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
+import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
@@ -79,7 +79,7 @@ export class DefaultPersistentState implements PersistentState {
   async setCurrentModelId(id: string): Promise<Result<void, AppError>> {
     const trimmed = id.trim();
     if (trimmed.includes("/")) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (legacy path not accepted): ${id}`, modelId: id }));
-    if (!isSavedModelUuidFormat(trimmed)) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${id}`, modelId: id }));
+    if (!SavedModelUuid.isFormat(trimmed)) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${id}`, modelId: id }));
     return this.setPointer("currentModelId", trimmed);
   }
 

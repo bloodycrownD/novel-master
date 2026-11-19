@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { renderWorkplaceFileTree, workplaceFileTreeRootLabel } from "@novel-master/core/workplace";
+import { WorkplaceFileTree } from "@novel-master/core/workplace";
 import { unwrap } from "../helpers/result-unwrap.js";
 
 describe("worktree file tree", () => {
@@ -13,7 +13,7 @@ describe("worktree file tree", () => {
       "/package.json",
       "/README.md",
     ]);
-    const tree = unwrap(renderWorkplaceFileTree({
+    const tree = unwrap(WorkplaceFileTree.render({
       scope: { kind: "session", projectId: "p1", sessionId: "s1" },
       allDirs,
       fileSet,
@@ -37,13 +37,13 @@ describe("worktree file tree", () => {
 
   it("uses / root label for project scope", () => {
     assert.equal(
-      workplaceFileTreeRootLabel({ kind: "project", projectId: "p1" }),
+      WorkplaceFileTree.rootLabel({ kind: "project", projectId: "p1" }),
       "/",
     );
   });
 
   it("returns root line only when empty", () => {
-    const tree = unwrap(renderWorkplaceFileTree({
+    const tree = unwrap(WorkplaceFileTree.render({
       scope: { kind: "session", projectId: "p1", sessionId: "s1" },
       allDirs: new Set(["/"]),
       fileSet: new Set(),

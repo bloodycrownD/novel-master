@@ -5,7 +5,7 @@
  */
 
 import { type ChatMessage } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { MessageBodyText } from "@novel-master/core/prompt";
 
 import { isGpt0301TiktokenModel } from "@novel-master/core/tokenizer";
 import type { Tiktoken } from "tiktoken";
@@ -24,7 +24,7 @@ export function countOpenAiMessages(encoding: Tiktoken, messages: readonly ChatM
 
   for (const m of messages) {
     tokens += perMessageOverhead;
-    tokens += encoding.encode(messageBodyTextFromBlocks(m.content.blocks)).length;
+    tokens += encoding.encode(MessageBodyText.fromBlocks(m.content.blocks)).length;
   }
 
   tokens += 3;

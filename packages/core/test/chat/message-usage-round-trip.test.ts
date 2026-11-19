@@ -17,7 +17,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
@@ -59,7 +59,7 @@ describe("message usage round-trip (T-S1)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("hello"),
+      TextBlocks.of("hello"),
       {
         usage: {
           promptTokens: 12,
@@ -101,7 +101,7 @@ describe("message usage round-trip (T-S1)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hi"),
+      TextBlocks.of("hi"),
     ));
     assert.equal(appended.usage, undefined);
 
@@ -123,7 +123,7 @@ describe("message usage round-trip (T-S1)", () => {
       sessionId: session.id,
       seq: 1,
       role: "assistant",
-      content: textBlocks("legacy"),
+      content: TextBlocks.of("legacy"),
       provider: null,
       raw: null,
       createdAtMs: Date.now(),
@@ -146,7 +146,7 @@ describe("message usage round-trip (T-S1)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("partial"),
+      TextBlocks.of("partial"),
       {
         usage: { promptTokens: 99 },
       },
@@ -174,7 +174,7 @@ describe("message timing fields round-trip (T-MU1)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("timed"),
+      TextBlocks.of("timed"),
       { usage },
     ));
     assert.deepEqual(appended.usage, usage);
@@ -191,7 +191,7 @@ describe("message timing fields round-trip (T-MU1)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("token-only"),
+      TextBlocks.of("token-only"),
       {
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       },
@@ -217,7 +217,7 @@ describe("message timing fields round-trip (T-MU1)", () => {
       sessionId: session.id,
       seq: 1,
       role: "assistant",
-      content: textBlocks("timing-only"),
+      content: TextBlocks.of("timing-only"),
       provider: "openai",
       modelName: "gpt-5.2",
       raw: null,
@@ -259,7 +259,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("cached"),
+      TextBlocks.of("cached"),
       {
         provider: "anthropic",
         modelName: "claude-sonnet-4-5",
@@ -291,7 +291,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("no-model"),
+      TextBlocks.of("no-model"),
     ));
     assert.equal(appended.modelName, null);
 
@@ -307,7 +307,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("no-cache"),
+      TextBlocks.of("no-cache"),
       {
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       },
@@ -328,7 +328,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const session = unwrap(await ctx.sessions.create(project.id, "invariant-new-msg"));
 
     // append 带 provider + cache 的正常路径消息。
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("inv"), {
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("inv"), {
       provider: "anthropic",
       modelName: "claude-sonnet-4-5",
       usage: {
@@ -345,7 +345,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
       sessionId: session.id,
       seq: 2,
       role: "assistant",
-      content: textBlocks("inv-repo"),
+      content: TextBlocks.of("inv-repo"),
       provider: "openai",
       modelName: "gpt-5.2",
       raw: null,
@@ -373,7 +373,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const appended = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("no-provider"),
+      TextBlocks.of("no-provider"),
       {
         usage: {
           promptTokens: 10,
@@ -411,7 +411,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
       sessionId: session.id,
       seq: 1,
       role: "assistant",
-      content: textBlocks("cache-only"),
+      content: TextBlocks.of("cache-only"),
       provider: "openai",
       modelName: "gpt-5.2",
       raw: null,
@@ -439,7 +439,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
       sessionId: session.id,
       seq: 1,
       role: "assistant",
-      content: textBlocks("legacy"),
+      content: TextBlocks.of("legacy"),
       provider: null,
       raw: null,
       createdAtMs: Date.now(),

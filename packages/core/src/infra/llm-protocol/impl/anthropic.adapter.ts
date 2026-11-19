@@ -6,9 +6,9 @@
  * @module infra/llm-protocol/impl/anthropic.adapter
  */
 
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import { ANTHROPIC_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sampling-defaults.js";
-import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter, LlmToolDefinition } from "../ports/adapter.port.js";
 import { anthropicContentToBlocks, blocksToAnthropicContent, chatMessagesToAnthropic } from "../logic/anthropic-content-mapper.js";
 import { createAnthropicSseParser } from "../logic/anthropic-sse-parser.js";
@@ -76,7 +76,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       const aborted = req.scope?.signal.aborted === true;
       const finishResult = aborted ? parser.finishPartial() : parser.finish();
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
-      const assistantText = messageBodyTextFromBlocks(blocks);
+      const assistantText = MessageBodyText.fromBlocks(blocks);
       const usage = parseUsage("anthropic", streamRaw);
       const result: LlmChatResult = {
         assistantText,
@@ -97,7 +97,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     const raw = fetched.value;
     const record = raw as { content?: unknown[] };
     const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
-    const assistantText = messageBodyTextFromBlocks(blocks);
+    const assistantText = MessageBodyText.fromBlocks(blocks);
     const usage = parseUsage("anthropic", raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -107,7 +107,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     if (req.history != null && req.history.length > 0) {
       messages = chatMessagesToAnthropic(req.history, toolNames);
     } else {
-      messages = [{ role: "user", content: blocksToAnthropicContent(textBlocks(req.userContent).blocks, toolNames) }];
+      messages = [{ role: "user", content: blocksToAnthropicContent(TextBlocks.of(req.userContent).blocks, toolNames) }];
     }
     const body: Record<string, unknown> = {
       model: req.vendorModelId,

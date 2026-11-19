@@ -4,11 +4,7 @@
  * @module public/message-checkpoint
  */
 
-export {
-  isRollbackVfsDegradableError,
-  isRollbackRevisionBackfillRequiredError,
-  readRollbackRevisionBackfillMissingPaths,
-} from "../domain/message-checkpoint/logic/rollback-error-guards.js";
+export { RollbackErrorGuards } from "../domain/message-checkpoint/logic/rollback-error-guards.js";
 export { MessageCheckpointFactory } from "../service/message-checkpoint/message-checkpoint-factory.js";
 export type { MessageCheckpointService } from "../service/message-checkpoint/message-checkpoint.port.js";
 export type {

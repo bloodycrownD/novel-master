@@ -14,8 +14,8 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
@@ -166,7 +166,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 1 loop_start：循环开头已 abort，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
@@ -186,7 +186,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -197,7 +197,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 2 after_session_list：session.list() 后 abort，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // 包一层 session，让 list() 解析后再 abort
     const wrappedSession: typeof session = {
@@ -225,7 +225,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -236,7 +236,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 6 after_compaction_eval：compaction 评估后 abort，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model = singleTextModel("x");
@@ -262,7 +262,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -273,7 +273,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 7 post_model：模型返回后 abort，未写入 partial（append 前退出）", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
@@ -302,7 +302,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -322,7 +322,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 model_request_catch：模型 throw AbortError，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
@@ -349,7 +349,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -360,7 +360,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 8 before_tool_run：assistant 已写、tool 未跑前 abort，保留 partial", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model = singleToolUseModel();
@@ -388,7 +388,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -400,7 +400,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 9 after_tool_checkpoint：tool 跑完、checkpoint 后 abort，保留 partial", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
@@ -447,7 +447,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -461,7 +461,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     // 用 ChatAgentSession 路径模拟：让 checkpoint.capture 抛 AbortError，
     // 此时 assistant 已写入；catch 应识别为 abort 并回滚到 turn 起点。
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
@@ -514,7 +514,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -525,7 +525,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("catch 分支：非 AbortError 不回滚，错误向上抛", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,

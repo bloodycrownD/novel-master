@@ -18,7 +18,7 @@ import type {
   SkillService,
 } from "../../src/service/skills/skills.port.js";
 import { assembleSkillsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import { AgentTools } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 /** 构造 fake SkillService：实现 skill 工具用到的服务方法，按调用记录断言。 */
@@ -512,7 +512,7 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
     const base = new ToolRegistry<BuiltinToolContext>();
     BuiltinTools.register(base);
     if (!denySkillOpt) return base;
-    return resolveAgentToolRegistry(
+    return AgentTools.resolveRegistry(
       base,
       { ...def, tools: { deny: [SKILL_TOOL_NAME] } },
       { depth: 0 },

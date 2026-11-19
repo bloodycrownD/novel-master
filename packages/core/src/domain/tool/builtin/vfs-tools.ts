@@ -14,7 +14,7 @@ import { ToolOutputLimits, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey, serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { backfillMissingDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import { createLogger } from "@/infra/log/logger.js";
@@ -433,8 +433,8 @@ export const FileTools = {
     if (ctx.sessionKkv == null) {
       return;
     }
-    const key = fileCacheKey("full", logicalPath);
-    await ctx.sessionKkv.set(ctx.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body: content, mtimeMs: Date.now() }));
+    const key = RuleSnapshotCodec.fileCacheKey("full", logicalPath);
+    await ctx.sessionKkv.set(ctx.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload({ body: content, mtimeMs: Date.now() }));
   },
 
   /**

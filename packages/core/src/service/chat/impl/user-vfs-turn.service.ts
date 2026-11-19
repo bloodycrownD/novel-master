@@ -6,7 +6,7 @@
 
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -107,7 +107,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         }
       }
       // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
-      await sweepSessionRevisions(this.deps.revisions, session.projectId, sessionId);
+      await RevisionGc.sweepSession(this.deps.revisions, session.projectId, sessionId);
       await DeferredBlobGc.run(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {

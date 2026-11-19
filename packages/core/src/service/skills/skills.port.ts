@@ -162,7 +162,7 @@ export interface SkillService {
   /**
    * 编辑技能信息（重命名 + 描述同一提交）：单事务完成校验门 → 目录
    * 迁移（renamePrefix，entry_id / revision 历史跟随）→ front matter
-   * 同步（parseSkillFrontMatter 成功才重写；invalid 技能跳过重写）→
+   * 同步（SkillFrontMatter.parse 成功才重写；invalid 技能跳过重写）→
    * 负清单行迁移。
    *
    * 校验门（撞错返回 `Result.err`）：newName 须过技能名校验；global 域内置

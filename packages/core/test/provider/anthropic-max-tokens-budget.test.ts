@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
-import { thinkingLevelToModelThinkingParams } from "../../src/domain/provider/logic/thinking-level-presets.js";
+import { ThinkingLevelPresets } from "../../src/domain/provider/logic/thinking-level-presets.js";
 import { ANTHROPIC_BODY_DEFAULT_MAX_TOKENS } from "../../src/domain/provider/logic/resolve-thinking-wire.js";
 import { ANTHROPIC_SAMPLING_DEFAULTS } from "../../src/domain/provider/model/protocol-sampling-defaults.js";
 import type { SavedModelSamplingSettings } from "../../src/domain/provider/model/saved-model-settings.js";
@@ -64,7 +64,7 @@ describe("anthropic max_tokens / thinking budget", () => {
       enabled: true,
       params: { protocol: "anthropic", anthropic: { max_tokens: 8000 } },
     };
-    const params = thinkingLevelToModelThinkingParams(
+    const params = ThinkingLevelPresets.toModelThinkingParams(
       "high",
       "anthropic",
       "claude",
@@ -80,7 +80,7 @@ describe("anthropic max_tokens / thinking budget", () => {
       enabled: true,
       params: { protocol: "anthropic", anthropic: { max_tokens: 1 } },
     };
-    const params = thinkingLevelToModelThinkingParams(
+    const params = ThinkingLevelPresets.toModelThinkingParams(
       "low",
       "anthropic",
       "claude",

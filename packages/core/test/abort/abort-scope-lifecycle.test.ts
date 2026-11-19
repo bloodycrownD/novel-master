@@ -10,11 +10,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("onCancel 与 dispose 生命周期（T-S7）", () => {
   it("deadline 到点自动 abort(\"timeout\") 并通知 onCancel", async () => {
-    const scope = createAbortScope({ timeoutMs: 20 });
+    const scope = AbortScopeFactory.create({ timeoutMs: 20 });
     const reason = await Promise.race([
       new Promise<string>((resolve) => {
         scope.onCancel((r) => resolve(r));
@@ -29,7 +29,7 @@ describe("onCancel 与 dispose 生命周期（T-S7）", () => {
   });
 
   it("onCancel：abort 前注册的只收到一次；注销后不再触发；abort 后注册立即执行", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     const reasons: string[] = [];
     const offKept = scope.onCancel((reason) => reasons.push(reason));
     const offDropped = scope.onCancel(() => reasons.push("dropped"));
@@ -46,7 +46,7 @@ describe("onCancel 与 dispose 生命周期（T-S7）", () => {
   });
 
   it("单个 onCancel 抛错不阻断其余回调，也不改变 reason", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     const called: string[] = [];
     scope.onCancel(() => {
       throw new Error("cleanup boom");
@@ -58,7 +58,7 @@ describe("onCancel 与 dispose 生命周期（T-S7）", () => {
   });
 
   it("dispose 幂等：清定时器、不触发自身 onCancel、不 abort 自身 signal", async () => {
-    const scope = createAbortScope({ timeoutMs: 20 });
+    const scope = AbortScopeFactory.create({ timeoutMs: 20 });
     const reasons: string[] = [];
     scope.onCancel((reason) => reasons.push(reason));
     scope.dispose();
@@ -70,7 +70,7 @@ describe("onCancel 与 dispose 生命周期（T-S7）", () => {
   });
 
   it("dispose 会中止未结束的子 scope，重复 dispose 只级联一次", () => {
-    const parent = createAbortScope();
+    const parent = AbortScopeFactory.create();
     const child = parent.fork();
     const reasons: string[] = [];
     child.onCancel((reason) => reasons.push(reason));

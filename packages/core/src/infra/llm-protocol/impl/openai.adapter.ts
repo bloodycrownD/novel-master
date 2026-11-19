@@ -10,8 +10,8 @@
  * @module infra/llm-protocol/impl/openai.adapter
  */
 
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
-import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
+import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter } from "../ports/adapter.port.js";
 import { chatMessagesToOpenAi, openAiChoiceToBlocks } from "../logic/openai-content-mapper.js";
 import { isRequestAborted } from "../logic/request-abort.js";
@@ -39,7 +39,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     if (req.thinking == null && !req.stream && (req.tools == null || req.tools.length === 0) && (req.system == null || req.system === "") && (req.history == null || isTextOnlyHistory(req.history))) {
       const url = joinUrl(req.baseUrl, "/chat/completions");
-      const userText = req.history != null && req.history.length > 0 ? chatMessagesToTextOnly(req.history) : blocksToTextOnly(textBlocks(req.userContent).blocks);
+      const userText = req.history != null && req.history.length > 0 ? chatMessagesToTextOnly(req.history) : blocksToTextOnly(TextBlocks.of(req.userContent).blocks);
       if (!userText.ok) throw userText.error;
 
       const body: Record<string, unknown> = {
@@ -58,7 +58,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       const raw = fetched.value;
       const record = raw as { choices?: Array<{ message?: unknown }> };
       const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
-      const assistantText = messageBodyTextFromBlocks(blocks);
+      const assistantText = MessageBodyText.fromBlocks(blocks);
       const usage = parseUsage("openai", raw);
       return { assistantText, blocks, raw, usage };
     }
@@ -83,7 +83,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       const partialResult = parser.finishPartial();
       const finishResult = aborted ? partialResult : parser.finish();
       const { blocks, streamRaw, degradedToolCalls } = finishResult;
-      const assistantText = messageBodyTextFromBlocks(blocks);
+      const assistantText = MessageBodyText.fromBlocks(blocks);
       const usage = parseUsage("openai", streamRaw);
       const result: LlmChatResult = {
         assistantText,
@@ -103,7 +103,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     const raw = fetched.value;
     const record = raw as { choices?: Array<{ message?: unknown }> };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
-    const assistantText = messageBodyTextFromBlocks(blocks);
+    const assistantText = MessageBodyText.fromBlocks(blocks);
     const usage = parseUsage("openai", raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -122,7 +122,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       if (!mapped.ok) throw mapped.error;
       messages = this.withSystemMessage(req, mapped.value);
     } else {
-      const content = blocksToTextOnly(textBlocks(req.userContent).blocks);
+      const content = blocksToTextOnly(TextBlocks.of(req.userContent).blocks);
       if (!content.ok) throw content.error;
       messages = this.withSystemMessage(req, [{ role: "user", content: content.value }]);
     }

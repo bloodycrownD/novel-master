@@ -23,60 +23,62 @@ interface ParsedSkillFrontMatter {
   readonly description: string | null;
 }
 
-/** 尽力从原始映射里提取字段（无效时也保留可展示的部分元数据）。 */
-function pickStringField(raw: unknown, key: string): string | null {
-  if (!Guards.isRecord(raw)) {
-    return null;
-  }
-  const value = Coerce.strictText(raw[key]);
-  return value != null && value.length > 0 ? value : null;
-}
+export const SkillFrontMatter = {
+  /** 尽力从原始映射里提取字段（无效时也保留可展示的部分元数据）。 */
+  pickStringField(raw: unknown, key: string): string | null {
+    if (!Guards.isRecord(raw)) {
+      return null;
+    }
+    const value = Coerce.strictText(raw[key]);
+    return value != null && value.length > 0 ? value : null;
+  },
 
-/**
- * 解析 SKILL.md 全文，产出 front matter 元数据与有效性。
- *
- * 有效 = front matter 存在、YAML 可解析、且通过 skillFrontMatterSchema
- * （name 与 description 非空，无未知键）。
- */
-export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
-  const split = splitMarkdownFrontMatter(source);
-  if (split.frontMatterLines === null) {
+  /**
+   * 解析 SKILL.md 全文，产出 front matter 元数据与有效性。
+   *
+   * 有效 = front matter 存在、YAML 可解析、且通过 skillFrontMatterSchema
+   * （name 与 description 非空，无未知键）。
+   */
+  parse(source: string): ParsedSkillFrontMatter {
+    const split = splitMarkdownFrontMatter(source);
+    if (split.frontMatterLines === null) {
+      return {
+        valid: false,
+        invalidReason: { key: "error.skill.front_matter_missing" },
+        name: null,
+        description: null,
+      };
+    }
+
+    // parseText 四期起沿 Result 回传解析失败（不再 throw）；Err.error 即原
+    // AppError，message 口径与旧 catch 分支一致。
+    const text = parseText(split.frontMatterLines.join("\n"), "yaml");
+    if (!text.ok) {
+      const message = text.error instanceof Error ? text.error.message : "invalid YAML";
+      return {
+        valid: false,
+        invalidReason: { key: "error.skill.front_matter_unparsable", params: { message } },
+        name: null,
+        description: null,
+      };
+    }
+    const raw: unknown = text.value;
+
+    const parsed = skillFrontMatterSchema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return {
+        valid: false,
+        invalidReason: { key: "error.skill.front_matter_field_invalid", params: { message: messageParamOf(issue?.message ?? "unknown") } },
+        name: SkillFrontMatter.pickStringField(raw, "name"),
+        description: SkillFrontMatter.pickStringField(raw, "description"),
+      };
+    }
+
     return {
-      valid: false,
-      invalidReason: { key: "error.skill.front_matter_missing" },
-      name: null,
-      description: null,
+      valid: true,
+      name: parsed.data.name,
+      description: parsed.data.description,
     };
-  }
-
-  // parseText 四期起沿 Result 回传解析失败（不再 throw）；Err.error 即原
-  // AppError，message 口径与旧 catch 分支一致。
-  const text = parseText(split.frontMatterLines.join("\n"), "yaml");
-  if (!text.ok) {
-    const message = text.error instanceof Error ? text.error.message : "invalid YAML";
-    return {
-      valid: false,
-      invalidReason: { key: "error.skill.front_matter_unparsable", params: { message } },
-      name: null,
-      description: null,
-    };
-  }
-  const raw: unknown = text.value;
-
-  const parsed = skillFrontMatterSchema.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return {
-      valid: false,
-      invalidReason: { key: "error.skill.front_matter_field_invalid", params: { message: messageParamOf(issue?.message ?? "unknown") } },
-      name: pickStringField(raw, "name"),
-      description: pickStringField(raw, "description"),
-    };
-  }
-
-  return {
-    valid: true,
-    name: parsed.data.name,
-    description: parsed.data.description,
-  };
-}
+  },
+} as const;

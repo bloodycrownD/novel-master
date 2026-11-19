@@ -16,7 +16,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
   getNovelMasterTestContext,
@@ -69,7 +69,7 @@ describe("message repository 行解析分片让步（T-R2）", () => {
         session.id,
         i % 2 === 0 ? "user" : "assistant",
         i % 2 === 0
-          ? textBlocks(`消息 ${i}`)
+          ? TextBlocks.of(`消息 ${i}`)
           : { blocks: [{ type: "text", text: `回复 ${i}` }] },
       ));
     }
@@ -125,7 +125,7 @@ describe("message repository 行解析分片让步（T-R2）", () => {
       unwrap(await ctx.messages.append(
         session.id,
         "user",
-        textBlocks(`行 ${i}`),
+        TextBlocks.of(`行 ${i}`),
       ));
     }
 
@@ -144,7 +144,7 @@ describe("message repository 行解析分片让步（T-R2）", () => {
 
     // 61 条时 tail（61 行）恰出现 1 个让步点，结果与直通逐条等价。
     for (let i = 50; i < 61; i++) {
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`)));
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`行 ${i}`)));
     }
     const plain = new SqliteMessageRepository(ctx.conn);
     const tailBaseline = outcomeValue(await plain.listBySessionTail(session.id, 61));
@@ -158,7 +158,7 @@ describe("message repository 行解析分片让步（T-R2）", () => {
     const project = unwrap(await ctx.projects.create(`P-tr2c-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     for (let i = 0; i < 60; i++) {
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`)));
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`行 ${i}`)));
     }
 
     // desktop/cli 形态：构造缺省不传 yieldFn → mapRows 直通同步 map。

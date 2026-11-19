@@ -12,12 +12,12 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
-import { buildWorkplaceDirSet } from "@/domain/workplace/logic/workplace-tree.js";
-import { materializeBlockFromView } from "@/domain/workplace/logic/workplace-materialize-engine.js";
-import { renderWorkplaceFileTreeForMacro } from "@/domain/workplace/logic/workplace-file-tree.js";
-import { evaluateWorkplaceRuleView } from "@/domain/workplace/logic/workplace-rule-engine.js";
-import { isWorkplaceRootPath, workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
-import type { SetDirRuleInput, SetFileRuleInput, WorkplaceDirRule, WorkplaceListRow, WorkplaceScope } from "@/domain/workplace/model/workplace-types.js";
+import { WorkplaceTree } from "@/domain/workplace/logic/workplace-tree.js";
+import { WorkplaceMaterializeEngine } from "@/domain/workplace/logic/workplace-materialize-engine.js";
+import { WorkplaceFileTree } from "@/domain/workplace/logic/workplace-file-tree.js";
+import { WorkplaceRuleEngine } from "@/domain/workplace/logic/workplace-rule-engine.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
+import type { SetDirRuleInput, SetFileRuleInput, WorkplaceDirRule, WorkplaceListRow, WorkplaceScope as WorkplaceScopeType } from "@/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRuleContext, WorkplaceRuleView } from "@/domain/workplace/model/workplace-rule-view.js";
 import type { WorkplaceLiveView, WorkplaceMaterialized, WorkplacePersistBlock, WorkplaceService } from "../workplace.port.js";
 import type { SmartRuleRowsProvider, SmartRulesProvider } from "../workplace.port.js";
@@ -25,7 +25,7 @@ import { ensureWorkplaceViewEntry, getCachedWorkplaceView, publishWorkplaceView,
 
 /** Dependencies for {@link DefaultWorkplaceService}. */
 interface WorkplaceServiceDeps {
-  readonly scope: WorkplaceScope;
+  readonly scope: WorkplaceScopeType;
   /** conn 级 L1 memo 的 WeakMap key（见 workplace-view-cache.ts）。 */
   readonly conn: TdbcConnection;
   readonly vfs: VfsEntryRepository;
@@ -40,7 +40,7 @@ interface WorkplaceServiceDeps {
  * Workplace service backed by vfs_entry and workplace tables.
  */
 export class DefaultWorkplaceService implements WorkplaceService {
-  readonly scope: WorkplaceScope;
+  readonly scope: WorkplaceScopeType;
 
   constructor(private readonly deps: WorkplaceServiceDeps) {
     this.scope = deps.scope;
@@ -52,15 +52,15 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const logicalPath = resolved.value;
     const allowed = LogicalPath.validate(this.scope, logicalPath);
     if (!allowed.ok) return Result.err(allowed.error);
-    if (input.ruleEnabled === false && isWorkplaceRootPath(this.scope, logicalPath)) {
+    if (input.ruleEnabled === false && WorkplaceScope.isRootPath(this.scope, logicalPath)) {
       return Result.err(new AppError("WORKPLACE_ROOT_RULE_LOCKED", { detail: "cannot disable rules on root directory" }));
     }
-    const existingRule = await this.deps.workplace.findDirRule(workplaceScopeKey(this.scope), logicalPath);
+    const existingRule = await this.deps.workplace.findDirRule(WorkplaceScope.key(this.scope), logicalPath);
     if (!existingRule.ok) return Result.err(existingRule.error);
     const existing = existingRule.value;
     // Any save without explicit --rule off enables rules (do not preserve prior rule_off).
     const rule: WorkplaceDirRule = {
-      scopeKey: workplaceScopeKey(this.scope),
+      scopeKey: WorkplaceScope.key(this.scope),
       logicalPath,
       ruleEnabled: input.ruleEnabled === false ? false : true,
       sortField: input.sortField ?? existing?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField,
@@ -80,13 +80,13 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const normalized = resolved.value;
     const allowed = LogicalPath.validate(this.scope, normalized);
     if (!allowed.ok) return Result.err(allowed.error);
-    const rule = await this.deps.workplace.findDirRule(workplaceScopeKey(this.scope), normalized);
+    const rule = await this.deps.workplace.findDirRule(WorkplaceScope.key(this.scope), normalized);
     if (!rule.ok) return Result.err(rule.error);
     return Result.ok(rule.value ?? undefined);
   }
 
   async listDirRules(): Promise<WorkplaceDirRule[]> {
-    return this.deps.workplace.listDirRules(workplaceScopeKey(this.scope));
+    return this.deps.workplace.listDirRules(WorkplaceScope.key(this.scope));
   }
 
   async setFileRule(input: SetFileRuleInput): Promise<Result<void, AppError>> {
@@ -95,7 +95,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const logicalPath = resolved.value;
     const allowed = LogicalPath.validate(this.scope, logicalPath);
     if (!allowed.ok) return Result.err(allowed.error);
-    const upserted = await this.deps.workplace.upsertFileRule({ scopeKey: workplaceScopeKey(this.scope), logicalPath, inclusionMode: input.inclusionMode });
+    const upserted = await this.deps.workplace.upsertFileRule({ scopeKey: WorkplaceScope.key(this.scope), logicalPath, inclusionMode: input.inclusionMode });
     if (!upserted.ok) return Result.err(upserted.error);
     return Result.ok(undefined);
   }
@@ -106,7 +106,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const normalized = resolved.value;
     const allowed = LogicalPath.validate(this.scope, normalized);
     if (!allowed.ok) return Result.err(allowed.error);
-    const deleted = await this.deps.workplace.deleteRulesUnderLogicalPrefix(workplaceScopeKey(this.scope), normalized);
+    const deleted = await this.deps.workplace.deleteRulesUnderLogicalPrefix(WorkplaceScope.key(this.scope), normalized);
     if (!deleted.ok) return Result.err(deleted.error);
     return Result.ok(undefined);
   }
@@ -122,7 +122,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     if (!allowedOld.ok) return Result.err(allowedOld.error);
     const allowedNew = LogicalPath.validate(this.scope, newNormalized);
     if (!allowedNew.ok) return Result.err(allowedNew.error);
-    const renamed = await this.deps.workplace.renameRulesUnderLogicalPrefix(workplaceScopeKey(this.scope), oldNormalized, newNormalized);
+    const renamed = await this.deps.workplace.renameRulesUnderLogicalPrefix(WorkplaceScope.key(this.scope), oldNormalized, newNormalized);
     if (!renamed.ok) return Result.err(renamed.error);
     return Result.ok(undefined);
   }
@@ -152,7 +152,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     if (!value.ok) return Result.err(value.error);
     // 缓存命中时复用缓存 ctx 的 mtimeByPath：mtime 变化必然改变 vfs 签名
     // 触发整条重算，读-改-写一致性不受损。
-    const workplaceDisplay = await materializeBlockFromView(value.value.view, this.deps.vfs, this.scope, value.value.ctx.mtimeByPath);
+    const workplaceDisplay = await WorkplaceMaterializeEngine.materializeBlockFromView(value.value.view, this.deps.vfs, this.scope, value.value.ctx.mtimeByPath);
     if (!workplaceDisplay.ok) return Result.err(workplaceDisplay.error);
     return Result.ok({ workplaceDisplay: workplaceDisplay.value });
   }
@@ -194,7 +194,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
    */
   private async evaluateCachedView(): Promise<Result<WorkplaceViewCacheValue, AppError>> {
     const conn = this.deps.conn;
-    const cacheKey = workplaceScopeKey(this.scope);
+    const cacheKey = WorkplaceScope.key(this.scope);
     const vfsKey = LogicalPath.scopeKey(this.scope);
     const vfs = await this.deps.vfs.computeEntrySignature(vfsKey);
     const dirRules = await this.deps.workplace.listDirRules(cacheKey);
@@ -213,9 +213,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const computing = (async (): Promise<Result<WorkplaceViewCacheValue, AppError>> => {
       const ctx = await this.loadContextMetadata();
       if (!ctx.ok) return Result.err(ctx.error);
-      const evaluated = evaluateWorkplaceRuleView(this.scope, ctx.value);
+      const evaluated = WorkplaceRuleEngine.evaluateView(this.scope, ctx.value);
       if (!evaluated.ok) return Result.err(evaluated.error);
-      const filetree = renderWorkplaceFileTreeForMacro({
+      const filetree = WorkplaceFileTree.renderForMacro({
         scope: this.scope,
         allDirs: ctx.value.allDirs,
         fileSet: ctx.value.fileSet,
@@ -246,7 +246,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
    * 内联进 evaluateCachedView 的 inFlight 闭包会把 IO 阶段与并发去重状态机搅在一起。
    */
   private async loadContextMetadata(): Promise<Result<WorkplaceRuleContext, AppError>> {
-    const scopeKey = workplaceScopeKey(this.scope);
+    const scopeKey = WorkplaceScope.key(this.scope);
     const vfsKey = LogicalPath.scopeKey(this.scope);
     // entry_id 化后 path 列直接存逻辑路径，整个 scope 列在 "/" 前缀下
     const fileMeta = await this.deps.vfs.listFileMetaUnderPrefix(vfsKey, "/");
@@ -293,7 +293,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     for (const row of fileMeta) {
       mtimeByPath.set(row.path, row.mtimeMs);
     }
-    const allDirs = buildWorkplaceDirSet({
+    const allDirs = WorkplaceTree.buildDirSet({
       scope: this.scope,
       filePaths: [...fileSet],
       configuredPaths: keptPaths,

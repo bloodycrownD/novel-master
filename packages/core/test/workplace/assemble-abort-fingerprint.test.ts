@@ -18,8 +18,8 @@ import { createSessionKkvService } from "../../src/service/session-kkv/create-se
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey, parseRuleSnapshotJson, serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { FileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
@@ -72,7 +72,7 @@ async function seedTwoFiles() {
   };
   // 预热 assemble 的后台回填（deferBackfillWrite）落定后再交还——否则调用方
   // 紧接着的 clearDomain 可能被迟到的回填复活，逼不出逐文件重读。
-  await settlePendingFileCacheBackfills();
+  await FileCache.settlePendingBackfills();
   return { ctx, scope, sk, wt, realVfs };
 }
 
@@ -153,7 +153,7 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
     // 「mtime 同、正文异」的现实路径：树复制（vfs-tree-copy）保留源 mtime、
     // 写侧只有毫秒精度。直接在 file_cache 里造这个形态——固定 mtime，只让
     // 正文长度变。
-    const snapshotResult = parseRuleSnapshotJson((unwrap(await sk.get(scope.sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) ?? "");
+    const snapshotResult = RuleSnapshotCodec.parseJson((unwrap(await sk.get(scope.sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) ?? "");
     assert.ok(snapshotResult.ok, "前提不成立：规则快照未就绪（seedTwoFiles 应先预热）");
     assert.ok(snapshotResult.value.length > 0, "前提不成立：规则快照为空");
     const snapshot = snapshotResult.value;
@@ -163,7 +163,7 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
     assert.notEqual(shortBody.length, longBody.length, "前提：两份正文长度不同");
     const seedFixedMtimeCache = async (body: string): Promise<void> => {
       for (const entry of snapshot) {
-        await sk.set(scope.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey(entry.status, entry.path), serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME }));
+        await sk.set(scope.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey(entry.status, entry.path), RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME }));
       }
     };
     const assembleOnce = () =>

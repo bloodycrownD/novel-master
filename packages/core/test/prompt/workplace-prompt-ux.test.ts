@@ -15,9 +15,9 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
 }
 import { isAppError } from "@novel-master/core/errors";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, PromptBuilder, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay, joinFileBlocks, renderFileBlock } from "@novel-master/core/workplace";
-import { validateAgentPromptLayoutFromMaps } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
+import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, PromptBuilder, MessageBodyText } from "@novel-master/core/prompt";
+import { assembleWorkplaceDisplay, WorkplaceDisplay } from "@novel-master/core/workplace";
+import { AgentPromptLayoutValidate } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import { createMemorySessionKkv, mockWorkplaceService } from "../helpers/prompt-layout-test-helpers.js";
 import { tCore } from "../helpers/core-i18n.js";
@@ -91,10 +91,10 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
           agentDefinitionSchema
         ),
       // 空白 workplace 的拒绝统一收进布局校验（PROMPT_INVALID_LAYOUT），与后半段
-      // validateAgentPromptLayoutFromMaps 的断言同一条通道（五期 schema 收敛）。
+      // AgentPromptLayoutValidate.validateFromMaps 的断言同一条通道（五期 schema 收敛）。
       (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT")
     );
-    const blank = validateAgentPromptLayoutFromMaps({}, {}, undefined, {
+    const blank = AgentPromptLayoutValidate.validateFromMaps({}, {}, undefined, {
       workplace: "   ",
     });
     assert.ok(!blank.ok);
@@ -109,13 +109,13 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
 
 describe("workplace assemble / render（T-WP4–T-WP5）", () => {
   it("T-WP4: render 路径 user body 恰好一层 <workplace>；renderFileBlock 本身不包", async () => {
-    const file = renderFileBlock({
+    const file = WorkplaceDisplay.renderFileBlock({
       logicalPath: "/a.md",
       mtimeMs: 1,
       display: "full",
       content: "hello",
     });
-    const inner = joinFileBlocks([file]);
+    const inner = WorkplaceDisplay.joinFileBlocks([file]);
     assert.ok(inner.includes("<file "));
     assert.equal(inner.includes("<workplace>"), false);
 
@@ -130,7 +130,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       messages: [],
       now: fixedNow,
     }));
-    const userBody = messageBodyTextFromBlocks(input.messages[0]!.content.blocks);
+    const userBody = MessageBodyText.fromBlocks(input.messages[0]!.content.blocks);
     assert.equal(countTag(userBody, "<workplace>"), 1);
     assert.equal(countTag(userBody, "</workplace>"), 1);
     assert.ok(userBody.includes("<file "));
@@ -166,8 +166,8 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       now: fixedNow,
     }));
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
-    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), custom);
-    assert.notEqual(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
+    assert.equal(MessageBodyText.fromBlocks(input.messages[1]!.content.blocks), custom);
+    assert.notEqual(MessageBodyText.fromBlocks(input.messages[1]!.content.blocks), "【done】");
 
     const segments = unwrap(await PromptBuilder.assemble(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",

@@ -11,7 +11,7 @@ import { SKILL_NAME_PATTERN } from "@/domain/skills/model/skill-name.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { attachmentStorageName, type MessageAttachment } from "../../model/message-attachment.schema.js";
+import { MessageAttachmentSchema, type MessageAttachment } from "../../model/message-attachment.schema.js";
 import { promptPathSeen } from "./prompt-path-seen.js";
 
 const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
@@ -120,7 +120,7 @@ class AttachmentScanner {
       const base = attachFromPath(raw, resolved.value);
       materialized.push({
         ...base,
-        name: attachmentStorageName(base.path),
+        name: MessageAttachmentSchema.storageName(base.path),
         action: "userAttach",
       });
     }

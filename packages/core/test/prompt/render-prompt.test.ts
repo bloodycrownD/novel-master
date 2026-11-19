@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
   PromptBuilder,
-  messageBodyTextFromBlocks,
+  MessageBodyText,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
 
@@ -17,7 +17,7 @@ function message(role: string, content: string, seq: number): ChatMessageData {
     sessionId: "s1",
     seq,
     role,
-    content: textBlocks(content),
+    content: TextBlocks.of(content),
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -44,7 +44,7 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(input.messages.length, 2);
     assert.equal(input.messages[0]!.id, "prompt:u");
     assert.equal(input.messages[1]!.id, "m1");
-    assert.equal(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), "ask");
+    assert.equal(MessageBodyText.fromBlocks(input.messages[0]!.content.blocks), "ask");
   });
 
   it("T-WT4: worktree 块注入 user 树 + assistant done 双消息", async () => {
@@ -64,10 +64,10 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[0]!.role, "user");
-    assert.equal(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), "WT");
+    assert.equal(MessageBodyText.fromBlocks(input.messages[0]!.content.blocks), "WT");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
+    assert.equal(MessageBodyText.fromBlocks(input.messages[1]!.content.blocks), "【done】");
   });
 
   it("T-WT5: 无 worktree 块时不注入双消息", async () => {
@@ -256,7 +256,7 @@ describe("buildPromptAssemblyFromLayout", () => {
         sessionId: "s1",
         seq: 10,
         role: "user",
-        content: textBlocks(wrapped),
+        content: TextBlocks.of(wrapped),
         provider: null,
         raw: { metadata: { kind: "user_vfs_action" } },
         createdAtMs: 10,
@@ -267,7 +267,7 @@ describe("buildPromptAssemblyFromLayout", () => {
         sessionId: "s1",
         seq: 11,
         role: "assistant",
-        content: textBlocks("收到通知"),
+        content: TextBlocks.of("收到通知"),
         provider: null,
         raw: { metadata: { kind: "user_vfs_ack" } },
         createdAtMs: 11,
@@ -405,7 +405,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const input = unwrap(await PromptBuilder.llmInput(layout, ctx));
     assert.equal(input.messages[0]!.role, "user");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
+    assert.equal(MessageBodyText.fromBlocks(input.messages[1]!.content.blocks), "【done】");
 
     const segments = unwrap(await PromptBuilder.assemble(layout, ctx));
     const wt = segments.find((s) => s.id === "prompt-workplace");

@@ -2,7 +2,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { createTemplatePullService } from "../../src/service/template/create-template-pull-service.js";
@@ -18,7 +18,7 @@ import { createSessionKkvService } from "@/service/session-kkv/create-session-kk
 //
 // ⚠️ 该 pending 集合是**按进程共享**的：settle 会连带等掉本进程其它用例的在途
 // 回填。这在本文件无害（多等而已），但别把它当「只等本次组装」。
-import { settlePendingFileCacheBackfills } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { FileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
@@ -111,11 +111,11 @@ describe("template pull", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only.md", "local");
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     const assistant = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("wrote"),
+      TextBlocks.of("wrote"),
     ));
     await svfs.write("/x.md", "snap", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
@@ -187,7 +187,7 @@ describe("template pull", () => {
     // 先组装一次，让 rule_snapshot + file_cache 两域都有真实行
     const before = await assembleWorkplace(project.id, session.id);
     assert.ok(before.includes("A-"), "前置条件：组装应命中 /a.md 的正文");
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
     const kkv = createSessionKkvService(ctx.conn);
     assert.ok(
       (await kkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT)).length > 0,
@@ -255,7 +255,7 @@ describe("template pull", () => {
     );
     // 关键前置条件：file_cache 必须真的落了行，否则第二次组装是走 miss 回填、
     // 本用例就成了一条测不到「陈旧缓存续命」的废断言。
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
     assert.ok(
       (
         await createSessionKkvService(ctx.conn).listKeys(

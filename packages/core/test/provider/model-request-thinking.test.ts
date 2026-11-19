@@ -7,7 +7,7 @@ import type { ProviderRepository } from "../../src/domain/provider/repositories/
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
-import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
+import { DefaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
 import type { SavedModelSettings } from "../../src/domain/provider/model/saved-model-settings.js";
 
 const secretStore: SecretStore = {
@@ -91,7 +91,7 @@ describe("DefaultModelRequestService thinking", () => {
   it("thinkingLevel 为 off 时不向 adapter 传 thinking", async () => {
     let captured: LlmChatRequest | undefined;
     const settings: SavedModelSettings = {
-      ...defaultSavedModelSettings("gpt-4o"),
+      ...DefaultSavedModelSettings.of("gpt-4o"),
       generation: {
         sampling: { enabled: false },
         thinkingLevel: "off",
@@ -108,7 +108,7 @@ describe("DefaultModelRequestService thinking", () => {
 
   it("新建默认 thinkingLevel 为 high 时解析并传给 adapter", async () => {
     let captured: LlmChatRequest | undefined;
-    const settings = defaultSavedModelSettings("gpt-4o");
+    const settings = DefaultSavedModelSettings.of("gpt-4o");
     const svc = createService(settings, "openai", (req) => {
       captured = req;
     });
@@ -124,7 +124,7 @@ describe("DefaultModelRequestService thinking", () => {
   it("thinkingLevel medium 时解析并传给 adapter", async () => {
     let captured: LlmChatRequest | undefined;
     const settings: SavedModelSettings = {
-      ...defaultSavedModelSettings("gpt-4o"),
+      ...DefaultSavedModelSettings.of("gpt-4o"),
       generation: {
         sampling: { enabled: false },
         thinkingLevel: "medium",
@@ -145,7 +145,7 @@ describe("DefaultModelRequestService thinking", () => {
   it("GLM vendorModelId 与 gpt-* 解析结果一致", async () => {
     let captured: LlmChatRequest | undefined;
     const settings: SavedModelSettings = {
-      ...defaultSavedModelSettings("glm-4.7"),
+      ...DefaultSavedModelSettings.of("glm-4.7"),
       generation: {
         sampling: { enabled: false },
         thinkingLevel: "medium",
@@ -167,7 +167,7 @@ describe("DefaultModelRequestService thinking", () => {
   it("GLM vendorModelId 档位为 off 时不向 adapter 传 thinking", async () => {
     let captured: LlmChatRequest | undefined;
     const settings: SavedModelSettings = {
-      ...defaultSavedModelSettings("glm-4.7"),
+      ...DefaultSavedModelSettings.of("glm-4.7"),
       generation: {
         sampling: { enabled: false },
         thinkingLevel: "off",
@@ -185,7 +185,7 @@ describe("DefaultModelRequestService thinking", () => {
   it("options.thinking 覆盖已保存设置", async () => {
     let captured: LlmChatRequest | undefined;
     const settings: SavedModelSettings = {
-      ...defaultSavedModelSettings("gpt-4o"),
+      ...DefaultSavedModelSettings.of("gpt-4o"),
       generation: {
         sampling: { enabled: false },
         thinkingLevel: "off",

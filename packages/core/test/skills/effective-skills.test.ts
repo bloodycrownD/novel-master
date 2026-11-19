@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
+import { EffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillSummary } from "@/domain/skills/model/skill.schema.js";
 
 function skill(
@@ -23,9 +23,9 @@ function skill(
   };
 }
 
-describe("computeEffectiveSkills（T-SK4）", () => {
+describe("EffectiveSkills.compute（T-SK4）", () => {
   it("global ∪ project 合并，按名称排序", () => {
-    const result = computeEffectiveSkills({
+    const result = EffectiveSkills.compute({
       global: [skill("alpha", "global"), skill("gamma", "global")],
       project: [skill("beta", "project")],
     });
@@ -42,7 +42,7 @@ describe("computeEffectiveSkills（T-SK4）", () => {
   });
 
   it("同名时 project 副本覆盖 global 版并标 overridden，global 原件不出现", () => {
-    const result = computeEffectiveSkills({
+    const result = EffectiveSkills.compute({
       global: [skill("helper", "global", { description: "global 版" })],
       project: [skill("helper", "project", { description: "project 版" })],
     });
@@ -53,7 +53,7 @@ describe("computeEffectiveSkills（T-SK4）", () => {
   });
 
   it("负清单过滤：禁用技能保留但不计入生效", () => {
-    const result = computeEffectiveSkills({
+    const result = EffectiveSkills.compute({
       global: [skill("alpha", "global"), skill("beta", "global")],
       project: [],
       disabledNames: ["alpha"],
@@ -68,7 +68,7 @@ describe("computeEffectiveSkills（T-SK4）", () => {
   });
 
   it("同名覆盖时禁用按名字命中（覆盖后的副本为准）", () => {
-    const result = computeEffectiveSkills({
+    const result = EffectiveSkills.compute({
       global: [skill("helper", "global")],
       project: [skill("helper", "project")],
       disabledNames: new Set(["helper"]),
@@ -81,7 +81,7 @@ describe("computeEffectiveSkills（T-SK4）", () => {
   });
 
   it("无效技能保留并标 invalid，不计入生效", () => {
-    const result = computeEffectiveSkills({
+    const result = EffectiveSkills.compute({
       global: [
         skill("broken", "global", {
           valid: false,
@@ -99,7 +99,7 @@ describe("computeEffectiveSkills（T-SK4）", () => {
   });
 
   it("无效技能的同名 project 副本有效时按副本生效", () => {
-    const result = computeEffectiveSkills({
+    const result = EffectiveSkills.compute({
       global: [
         skill("helper", "global", { valid: false, invalidReason: "YAML 坏了" }),
       ],
@@ -112,6 +112,6 @@ describe("computeEffectiveSkills（T-SK4）", () => {
   });
 
   it("空输入返回空数组", () => {
-    assert.deepEqual(computeEffectiveSkills({ global: [], project: [] }), []);
+    assert.deepEqual(EffectiveSkills.compute({ global: [], project: [] }), []);
   });
 });

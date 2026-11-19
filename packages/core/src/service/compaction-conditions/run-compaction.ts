@@ -26,9 +26,8 @@
  * @module service/compaction-conditions/run-compaction
  */
 
-import { messageIdsInSlice } from "@/domain/depth/logic/depth-slice.js";
-import { resolveHideMessageRange } from "@/domain/depth/logic/resolve-hide-message-range.js";
-import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
+import { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
+import { HideMessageRange } from "@/domain/depth/logic/resolve-hide-message-range.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
@@ -106,7 +105,7 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
     const headers = await deps.messages.listMessageHeadersBySession(params.sessionId);
     const stubAll = headers.map((header) => ({ id: header.id, sessionId: header.sessionId, seq: header.seq, role: header.role, content: { blocks: [] }, provider: null, raw: null, createdAtMs: header.createdAtMs, hidden: header.hidden }));
     const visible = stubAll.filter((m) => !m.hidden);
-    const ids = messageIdsInSlice(visible, slice);
+    const ids = DepthSlice.messageIds(visible, slice);
     // 错误通道迁移四期：切片失败不再借 throw 走下方 catch，直接按本函数
     // 既有失败形态返回（行为与原「抛出即被相邻 catch 吞成 ok:false」逐位等价）。
     if (!ids.ok) return { ok: false };
@@ -120,7 +119,7 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
       const fullRows = fullRowsOutcome.value;
       const fullById = new Map(fullRows.map((m) => [m.id, m]));
       const mergedVisible = visible.map((m) => fullById.get(m.id) ?? m);
-      const range = resolveHideMessageRange(mergedVisible, slice, ids.value);
+      const range = HideMessageRange.resolve(mergedVisible, slice, ids.value);
       if (range != null) {
         // hide 前最后一个检查点：从这里开始进入不可中断尾段（hide → token cache
         // 失效 → KKV 清理），中途抛错会留下半应用态。

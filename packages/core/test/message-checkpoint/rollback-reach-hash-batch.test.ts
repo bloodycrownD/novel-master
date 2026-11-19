@@ -2,8 +2,8 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
-import { restorePathToRevision, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
+import { MissingRevisions } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
+import { RestorePath, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import { RevisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -46,7 +46,7 @@ describe("rollback reach hash batch", () => {
     assert.ok(typeof distinct[0]!.entryId === "number");
   });
 
-  it("findMissingRevisionPointers：批量 findMetasByEntryVersions，零逐条 exists", async () => {
+  it("MissingRevisions.findPointers：批量 findMetasByEntryVersions，零逐条 exists", async () => {
     const scope = {
       kind: "session" as const,
       projectId: "p1",
@@ -110,7 +110,7 @@ describe("rollback reach hash batch", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = unwrap(await findMissingRevisionPointers({ revisionRepo, entryRepo }, {
+    const missing = unwrap(await MissingRevisions.findPointers({ revisionRepo, entryRepo }, {
       scope,
       targetTree: new Map([
         ["/a.md", 1],
@@ -124,7 +124,7 @@ describe("rollback reach hash batch", () => {
     assert.equal(findCalls, 0);
   });
 
-  it("restorePathToRevision：prefetch 命中时零逐条 findMeta / findContentHash", async () => {
+  it("RestorePath.restoreToRevision：prefetch 命中时零逐条 findMeta / findContentHash", async () => {
     let findMetaCalls = 0;
     let findFullCalls = 0;
     let findHashCalls = 0;
@@ -174,7 +174,7 @@ describe("rollback reach hash batch", () => {
       liveHashByPath: new Map([["/hash-same.md", "same-hash"]]),
     };
 
-    const result = await restorePathToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath: new Map([["/hash-same.md", 3]]), prefetch });
+    const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath: new Map([["/hash-same.md", 3]]), prefetch });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;

@@ -32,7 +32,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     const pending = runner.call("hang", {}, { signal: controller.signal });
     controller.abort();
     await assert.rejects(pending, (err: unknown) => {
-      // 八期：在途竞速的取消载荷换 createAbortError()（race 是平台协议例外），
+      // 八期：在途竞速的取消载荷换 AbortError.create()（race 是平台协议例外），
       // 不再伪装成 TOOL_CANCELLED AppError。
       assert.equal((err as { name?: unknown }).name, "AbortError");
       assert.ok(isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
@@ -164,7 +164,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       const pending = runner.call("late-reject", {}, { signal: controller.signal });
       controller.abort();
       await assert.rejects(pending, (err: unknown) => {
-        // 八期：竞速以 createAbortError() reject，isAbortLikeError 统一识别。
+        // 八期：竞速以 AbortError.create() reject，isAbortLikeError 统一识别。
         assert.equal((err as { name?: unknown }).name, "AbortError");
         assert.ok(isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
         return true;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatChatMessageForCliPreview } from "../../src/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
 import { userVfsTurns, USER_VFS_TURN_ACK_TEXT } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-view.js";
 import { userVfsTurnStorage } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
@@ -127,9 +127,9 @@ describe("matchUserVfsTurnAt", () => {
   });
 });
 
-describe("formatChatMessageForCliPreview", () => {
+describe("MessageBodyText.formatForCliPreview", () => {
   it("同一消息多条 tool_result 合并为一个 tool 段", () => {
-    const segments = formatChatMessageForCliPreview(
+    const segments = MessageBodyText.formatForCliPreview(
       msg("u2", 3, "user", [
         { type: "tool_result", toolUseId: "tu1", content: "ok", ok: true },
         { type: "tool_result", toolUseId: "tu2", content: "ok", ok: true },
@@ -140,7 +140,7 @@ describe("formatChatMessageForCliPreview", () => {
   });
 
   it("assistant 的 tool_use 与正文拆成独立段", () => {
-    const segments = formatChatMessageForCliPreview(
+    const segments = MessageBodyText.formatForCliPreview(
       msg("a1", 20, "assistant", [
         { type: "text", text: "已完成删除。" },
         {
@@ -160,7 +160,7 @@ describe("formatChatMessageForCliPreview", () => {
 
   it("剥离 text 块中泄漏的闭合思考标签", () => {
     const closeTag = "</" + "redacted_thinking" + ">";
-    const segments = formatChatMessageForCliPreview(
+    const segments = MessageBodyText.formatForCliPreview(
       msg("a2", 21, "assistant", [
         { type: "text", text: `回复正文${closeTag}` },
       ]),

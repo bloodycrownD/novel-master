@@ -13,7 +13,7 @@ import { Json } from "../../src/common/json.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import { AgentTools } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import { tCore } from "../helpers/core-i18n.js";
 
 /** 最小合法 AgentDefinition 形状（照 agent-tool-policy.test.ts 的 BASE_DEF）。 */
@@ -553,7 +553,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     BuiltinTools.register(probe);
 
     // 摘除路径 1：mode === "subagent"
-    const subRegistry = resolveAgentToolRegistry(
+    const subRegistry = AgentTools.resolveRegistry(
       probe,
       def("child", { mode: "subagent" }),
     );
@@ -569,7 +569,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     );
 
     // 摘除路径 2：depth >= 2（孙 agent）
-    const grandRegistry = resolveAgentToolRegistry(probe, def("grand"), {
+    const grandRegistry = AgentTools.resolveRegistry(probe, def("grand"), {
       depth: 2,
     });
     assert.ok(!grandRegistry.list().includes("agent"));
@@ -584,7 +584,7 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     );
 
     // 摘除路径 3：用户 policy 显式 deny agent
-    const deniedRegistry = resolveAgentToolRegistry(
+    const deniedRegistry = AgentTools.resolveRegistry(
       probe,
       def("main", { tools: { deny: ["agent"] } }),
     );

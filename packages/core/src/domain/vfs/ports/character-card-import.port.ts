@@ -32,7 +32,7 @@ export interface CharacterCardImportService {
 
   /**
    * 便捷：bytes → 解析 → import；解析失败不写库。
-   * PNG/JSON 判别与 {@link parseCharacterCardToMdTree} 同一套顺序。
+   * PNG/JSON 判别与 {@link CharacterCardToMdTree.parse} 同一套顺序。
    * confirmed / 体积闸门 / 解析失败与导入事务链失败全走返回值 `Result.err`。
    */
   importFromBytes(

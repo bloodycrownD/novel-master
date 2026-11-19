@@ -6,7 +6,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import type { MessageAttachment } from "../../src/domain/chat/model/message.js";
 import {
   getNovelMasterTestContext,
@@ -25,7 +25,7 @@ describe("message attachments round-trip (Step 5)", () => {
     const plain = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hello"),
+      TextBlocks.of("hello"),
     ));
     assert.equal(plain.attachments, undefined);
 
@@ -47,7 +47,7 @@ describe("message attachments round-trip (Step 5)", () => {
     const withAtt = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("你好"),
+      TextBlocks.of("你好"),
       { attachments },
     ));
     assert.equal(withAtt.content.blocks[0]?.type, "text");
@@ -88,7 +88,7 @@ describe("message attachments round-trip (Step 5)", () => {
     const msg = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("body"),
+      TextBlocks.of("body"),
       { attachments },
     ));
     const forked = unwrap(await ctx.messages.fork(session.id, msg.id));
@@ -113,12 +113,12 @@ describe("message attachments round-trip (Step 5)", () => {
     const msg = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("old"),
+      TextBlocks.of("old"),
       { attachments },
     ));
     const updated = unwrap(await ctx.messages.updateContent(
       msg.id,
-      textBlocks("new"),
+      TextBlocks.of("new"),
     ));
     assert.equal(
       updated.content.blocks[0]?.type === "text"
@@ -147,7 +147,7 @@ describe("message attachments round-trip (Step 5)", () => {
     const msg = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("正文"),
+      TextBlocks.of("正文"),
       { attachments: legal },
     ));
 

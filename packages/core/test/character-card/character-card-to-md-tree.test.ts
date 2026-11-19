@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { buildPngWithTextChara } from "./helpers/png-chara-fixture.js";
 
 function treeKeys(tree: ReadonlyMap<string, string>): string[] {
@@ -8,7 +8,7 @@ function treeKeys(tree: ReadonlyMap<string, string>): string[] {
 }
 
 function cardTree(card: unknown): ReadonlyMap<string, string> {
-  const result = parseCharacterCardToMdTree(JSON.stringify(card));
+  const result = CharacterCardToMdTree.parse(JSON.stringify(card));
   if (!result.ok) {
     throw result.error;
   }
@@ -16,7 +16,7 @@ function cardTree(card: unknown): ReadonlyMap<string, string> {
 }
 
 function parseTree(input: Uint8Array | string): ReadonlyMap<string, string> {
-  const result = parseCharacterCardToMdTree(input);
+  const result = CharacterCardToMdTree.parse(input);
   if (!result.ok) {
     throw result.error;
   }
@@ -155,7 +155,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C6: 非卡 JSON → VFS_CHARACTER_CARD_UNRECOGNIZED", () => {
-    const result = parseCharacterCardToMdTree(JSON.stringify({ foo: 1 }));
+    const result = CharacterCardToMdTree.parse(JSON.stringify({ foo: 1 }));
     assert.equal(result.ok, false);
     if (result.ok) {
       return;
@@ -172,7 +172,7 @@ describe("character-card-to-md-tree", () => {
     assert.equal(tree.get("角色描述.md"), "bom");
   });
 
-  it("T-C16: fixture PNG 经 parseCharacterCardToMdTree 成功", () => {
+  it("T-C16: fixture PNG 经 CharacterCardToMdTree.parse 成功", () => {
     const bytes = buildPngWithTextChara({
       spec: "chara_card_v2",
       data: { description: "来自PNG" },

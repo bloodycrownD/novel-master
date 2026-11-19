@@ -7,17 +7,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("checkpoint：两态与不抛错（T-S4）", () => {
   it("未 abort 时严格返回 null（不是 undefined）", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     const hit = scope.checkpoint();
     assert.equal(hit, null);
   });
 
   it("abort 后返回 cancelled Interrupt，reason 与首因一致", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     scope.abort("timeout");
     scope.abort("shutdown");
     const hit = scope.checkpoint();
@@ -27,7 +27,7 @@ describe("checkpoint：两态与不抛错（T-S4）", () => {
   });
 
   it("全程不抛、返回纯数据对象而非 Error 实例", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     assert.doesNotThrow(() => scope.checkpoint());
     assert.doesNotThrow(() => scope.abort("user-stop"));
     assert.doesNotThrow(() => scope.checkpoint());
@@ -41,7 +41,7 @@ describe("checkpoint：两态与不抛错（T-S4）", () => {
   });
 
   it("重复读取稳定：每次都是同一语义的 cancelled 快照", () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     scope.abort("shutdown");
     const first = scope.checkpoint();
     const second = scope.checkpoint();

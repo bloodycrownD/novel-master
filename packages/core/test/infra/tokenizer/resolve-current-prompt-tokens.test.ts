@@ -30,7 +30,7 @@ import {
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
 import { SessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { estimateTokensCjkAware } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
-import { formatChatMessageForCliPreview } from "../../../src/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "../../../src/domain/chat/content/message-body-text.js";
 import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
@@ -352,7 +352,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     // 期望值：按读口的序列化口径复算 tail（seq > 9 且非 hidden）的 CJK 下限。
     const expectedTail = [msg(10, "十号消息正文")]
       .map((m) =>
-        formatChatMessageForCliPreview(m)
+        MessageBodyText.formatForCliPreview(m)
           .map((segment) => `${segment.role}: ${segment.body}`)
           .join("\n\n")
       )

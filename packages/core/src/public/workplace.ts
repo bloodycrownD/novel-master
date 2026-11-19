@@ -1,5 +1,4 @@
 export type {
-  WorkplaceScope,
   RuleState,
   InclusionMode,
   DisplayState,
@@ -16,33 +15,14 @@ export type {
   WorkplaceRuleContext,
   WorkplaceRuleView,
 } from "../domain/workplace/model/workplace-rule-view.js";
-export { evaluateWorkplaceRuleView } from "../domain/workplace/logic/workplace-rule-engine.js";
-export {
-  mapProjectWorkplacePathToSession,
-  mapSessionWorkplacePathToProject,
-} from "../domain/workplace/logic/workplace-path-map.js";
-export {
-  evaluateFileDisplay,
-  sortDirPaths,
-  sortFilesForDir,
-} from "../domain/workplace/logic/workplace-eval.js";
+export { WorkplaceRuleEngine } from "../domain/workplace/logic/workplace-rule-engine.js";
+export { WorkplacePathMap } from "../domain/workplace/logic/workplace-path-map.js";
+export { WorkplaceEval } from "../domain/workplace/logic/workplace-eval.js";
 export { DEFAULT_WORKPLACE_DIR_RULE } from "../domain/workplace/logic/default-dir-rule.js";
-export {
-  ruleStateLabel,
-  inclusionModeLabel,
-  displayStateLabel,
-  filetreeMacroLoadStateLabel,
-} from "../domain/workplace/logic/workplace-labels.js";
-export {
-  renderFileBlock,
-  renderFileBlockBody,
-  joinFileBlocks,
-} from "../domain/workplace/logic/workplace-display.js";
-export {
-  renderWorkplaceFileTree,
-  workplaceFileTreeRootLabel,
-} from "../domain/workplace/logic/workplace-file-tree.js";
-export { parseMarkdownFrontMatter } from "../domain/workplace/logic/front-matter.js";
+export { WorkplaceLabels } from "../domain/workplace/logic/workplace-labels.js";
+export { WorkplaceDisplay } from "../domain/workplace/logic/workplace-display.js";
+export { WorkplaceFileTree } from "../domain/workplace/logic/workplace-file-tree.js";
+export { FrontMatter } from "../domain/workplace/logic/front-matter.js";
 export { createWorkplaceService } from "../service/workplace/create-workplace-service.js";
 export type {
   WorkplaceService,
@@ -61,10 +41,8 @@ export {
   type RefreshRuleSnapshotDeps,
 } from "../service/workplace/refresh-rule-snapshot.js";
 export {
-  ruleViewToSnapshotEntries,
-  parseRuleSnapshotJson,
-  serializeRuleSnapshot,
+  RuleSnapshotCodec,
   type RuleSnapshotEntry,
 } from "../domain/workplace/logic/rule-snapshot-codec.js";
-export { isWorkplacePathLoadedInCache } from "../domain/workplace/logic/diff-workplace-paths.js";
-export { workplaceRootLogicalPath } from "../domain/workplace/logic/workplace-scope.js";
+export { WorkplacePaths } from "../domain/workplace/logic/diff-workplace-paths.js";
+export { WorkplaceScope } from "../domain/workplace/logic/workplace-scope.js";

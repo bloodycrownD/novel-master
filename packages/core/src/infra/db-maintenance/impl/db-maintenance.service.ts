@@ -9,7 +9,7 @@
  * @module infra/db-maintenance/impl/db-maintenance.service
  */
 
-import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
+import { DeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } from "../db-maintenance.port.js";
 
@@ -54,7 +54,7 @@ export function createDbMaintenanceService(conn: TdbcConnection): DbMaintenanceS
       // 1. 缓存 GC：回收无 entry 引用行的 session_file_cache_blob。
       //    删除释放的页挂 freelist，因此 before 采样放在 GC 之后，
       //    让 reclaimedBytes 把 GC 的产出也计入（口径见 port 注释）。
-      await runDeferredFileCacheGc(conn);
+      await DeferredFileCacheGc.run(conn);
 
       const before = await readStorageStats(conn);
 

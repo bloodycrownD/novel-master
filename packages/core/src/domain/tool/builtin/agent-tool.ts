@@ -4,7 +4,7 @@
  * 形态照 `skill` 工具样板——单工具多 action 分发 + 扁平定位字段
  * （name / agentId）；create / update 的定义体是深层结构，扁平化不现实，
  * 用单个 `definition` 对象字段承载（D5）。schema 层宽松（passthrough），
- * 语义校验全部交 `AgentRegistryService.upsert` → `validateAgentDefinition`
+ * 语义校验全部交 `AgentRegistryService.upsert` → `AgentDefinitionValidator.validate`
  * （闭包携带 probe 注册表的 registeredToolNames）。
  *
  * description 是 lambda（照 `subagent-tool` 先例）：从装配期同步预算好的
@@ -139,7 +139,7 @@ async function saveWithTranslatedError<T>(action: () => Promise<Result<T, AppErr
 /**
  * 静态 `agent` 工具实例。
  *
- * 是否对 LLM 可见由 `resolveAgentToolRegistry` 控制：子 / 孙 agent 与
+ * 是否对 LLM 可见由 `AgentTools.resolveRegistry` 控制：子 / 孙 agent 与
  * 摘 `task` 的同一分支一并摘除（D6），闭包不注入；主 agent（depth=0）
  * 默认可见（除非用户 policy 显式 deny）。
  */
@@ -251,7 +251,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
         let agentId = `agent-${Date.now()}`;
         for (let i = 1; existingAgentIds.has(agentId); i++) agentId = `agent-${Date.now()}-${i}`;
         // D5：schema 宽松收包，类型收窄只是把 Record 视作 AgentDefinition，
-        // 字段级校验完全交 upsert → validateAgentDefinition。
+        // 字段级校验完全交 upsert → AgentDefinitionValidator.validate。
         const saved = await saveWithTranslatedError(() => agentsCtx.registry.upsert(agentId, definition as unknown as AgentDefinition, buildValidateOptions(agentsCtx)));
         if (!saved.ok) return Result.err(saved.error);
         return Result.ok({

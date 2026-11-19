@@ -1,7 +1,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { RevisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";

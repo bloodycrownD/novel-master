@@ -14,8 +14,8 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatRequest, type  ModelRequestService } from "@novel-master/core/provider";
 import { type LlmChatResult } from "@novel-master/core/llm-protocol";
@@ -131,7 +131,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
     const { clock, restore } = installFakeClock();
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      await session.append("user", TextBlocks.of("go"));
 
       const model: ModelRequestService = {
         request: async (_id, _prompt, req: LlmChatRequest) => {
@@ -180,7 +180,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
     const { clock, restore } = installFakeClock();
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      await session.append("user", TextBlocks.of("go"));
 
       const model: ModelRequestService = {
         request: async (_id, _prompt, _req: LlmChatRequest) => {
@@ -221,7 +221,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
     const { clock, restore } = installFakeClock();
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      await session.append("user", TextBlocks.of("go"));
 
       const controller = new AbortController();
       const model: ModelRequestService = {
@@ -243,7 +243,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
       const result = unwrap(await runner.run({
         maxSteps: 2,
         definition: minimalDefinition(),
-        scope: createAbortScope({ controller }),
+        scope: AbortScopeFactory.create({ controller }),
         ...defaultRunScope,
       }));
 

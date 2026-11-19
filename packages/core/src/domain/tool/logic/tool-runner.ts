@@ -4,8 +4,8 @@
  * @module domain/tool/tool-runner
  */
 
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
-import { signalView } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AbortReason } from "@/errors/outcome.js";
@@ -62,7 +62,7 @@ export class ToolRunner<Ctx = unknown> {
    *   与工具闭包 Err 共用 {@link normalizeToolFailure} 归一化出口（TOOL_* 直通、
    *   其余包 TOOL_FAILED），模型可见错误不变（五期门⑦：返回值通道）。
    * - 取消：进入时 signal 已 abort 直接 `Result.err(TOOL_CANCELLED)`（七期，返回值
-   *   通道）；在途竞速以 `createAbortError()` reject（平台协议例外，`isAbortLikeError`
+   *   通道）；在途竞速以 `AbortError.create()` reject（平台协议例外，`isAbortLikeError`
    *   统一识别），由 {@link runParallel} 的 catch 收编。`TOOL_CANCELLED` 码保留作
    *   展示标签（UI 不弹错误文案）。
    */
@@ -97,9 +97,9 @@ export class ToolRunner<Ctx = unknown> {
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
       // 工具内部仍应把 ctx.signal 传给 fetch / 子进程，让底层资源尽早释放。
       // 竞速交给 signalView（只读视图，不把 scope 传染进工具 API）；取消载荷用
-      // createAbortError()——race 的 reject 是平台协议例外（Promise 没有 Result 通道）。
+      // AbortError.create()——race 的 reject 是平台协议例外（Promise 没有 Result 通道）。
       const work = tool.run(parsedIn.data, ctx);
-      const out: Result<unknown, AppError> = signal == null ? await work : await signalView(signal).race(work, () => createAbortError());
+      const out: Result<unknown, AppError> = signal == null ? await work : await AbortScopeFactory.signalView(signal).race(work, () => AbortError.create());
 
       // 工具闭包不再解包 throw（门⑦）：Err 交回 runner，与未知异常走同一条
       // 归一化出口（TOOL_* 直通、其余包 TOOL_FAILED），已知失败沿 Result.err
@@ -171,7 +171,7 @@ export class ToolRunner<Ctx = unknown> {
             // （保留 error 供展示层沿用 isAppError 分类），其余原样落失败。
             outcomes[index] = result.ok ? { ok: true, output: result.value } : failedOutcome(result.error);
           } catch (error: unknown) {
-            // 在途竞速的 reject（八期载荷 createAbortError，平台协议例外）与未知异常
+            // 在途竞速的 reject（八期载荷 AbortError.create，平台协议例外）与未知异常
             // 同口收编，不再向上抛；AbortError 载荷原样保留，供上层用 isAbortLikeError
             // 识别取消（取消 outcome 形态只留给 TOOL_CANCELLED 返回值通道）。
             outcomes[index] = failedOutcome(error);

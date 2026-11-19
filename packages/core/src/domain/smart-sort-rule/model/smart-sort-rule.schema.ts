@@ -28,33 +28,6 @@ const captureKindSchema = z.enum(SMART_SORT_CAPTURE_KINDS as [SmartSortCaptureKi
 const flagsCharsSchema = z.string().regex(/^[gimsuy]*$/, "flags may only contain characters g/i/m/s/u/y");
 const flagsSchema = flagsCharsSchema.refine((s) => new Set(s).size === s.length, { message: "flags must not repeat characters" });
 
-/**
- * flags 合法性纯谓词（C-4 单源）：仅 g/i/m/s/u/y 字符、不重复，非 throw。
- * schema 校验（{@link assertFlagsValid}）与 logic 层（parse-pattern-input
- * 等）共用本谓词，勿另写平行实现。
- */
-export function isFlagsValid(flags: string): boolean {
-  return flagsSchema.safeParse(flags).success;
-}
-
-/**
- * flags 合法性单源校验（C-1：schema 层与 logic 层共用，勿另写平行实现）。
- *
- * @param flags - 待检 flags 字符串
- * @param detail - 错误 details（如 { ruleId }），缺省不携带
- * @returns 合法时 Ok；否则 Err INVALID_ARGUMENT（非 gimsuy 字符或重复）
- */
-export function assertFlagsValid(flags: string, detail?: { ruleId?: string }): Result<void, SmartSortRuleInputError> {
-  if (isFlagsValid(flags)) {
-    return Result.ok(undefined);
-  }
-  // 冷路径（仅非法 flags 触发）：判定已由 isFlagsValid 单源给出，此处
-  // 重跑一次 safeParse 仅为取 zod issue 文案（保持既有错误消息不变）。
-  const checked = flagsSchema.safeParse(flags);
-  const issue = checked.success ? undefined : checked.error.issues[0]?.message;
-  return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: `Invalid flags '${flags}': ${issue ?? "invalid"}`, ...detail }));
-}
-
 /** Create payload: name/pattern 必填，flags 缺省 ''，description 可选。 */
 export const createSmartSortRuleSchema = z.object({ name: z.string().min(1), pattern: z.string().min(1), flags: z.string().optional(), captureKind: captureKindSchema.optional(), description: z.string().nullable().optional(), enabled: z.boolean().optional() }).strict();
 
@@ -75,38 +48,67 @@ interface CreateSmartSortRuleFields {
   readonly enabled: boolean;
 }
 
-/** Parses create payload; applies flags default + syntax check (Err on bad flags/schema). */
-export function parseCreateSmartSortRuleInput(raw: unknown): Result<CreateSmartSortRuleFields, SmartSortRuleInputError> {
-  const parsed = createSmartSortRuleSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
-  }
-  const flags = parsed.data.flags ?? "";
-  const flagsValid = assertFlagsValid(flags);
-  if (!flagsValid.ok) {
-    return Result.err(flagsValid.error);
-  }
-  return Result.ok({
-    name: parsed.data.name,
-    pattern: parsed.data.pattern,
-    flags,
-    captureKind: parsed.data.captureKind ?? "smart",
-    description: parsed.data.description ?? null,
-    enabled: parsed.data.enabled ?? true,
-  });
-}
+export const SmartSortRuleSchema = {
+  /**
+   * flags 合法性纯谓词（C-4 单源）：仅 g/i/m/s/u/y 字符、不重复，非 throw。
+   * schema 校验（{@link SmartSortRuleSchema.assertFlagsValid}）与 logic 层（parse-pattern-input
+   * 等）共用本谓词，勿另写平行实现。
+   */
+  isFlagsValid(flags: string): boolean {
+    return flagsSchema.safeParse(flags).success;
+  },
 
-/** Parses update payload; validates flags syntax when present (Err on bad flags/schema). */
-export function parseUpdateSmartSortRuleInput(raw: unknown): Result<UpdateSmartSortRuleInput, SmartSortRuleInputError> {
-  const parsed = updateSmartSortRuleSchema.safeParse(raw);
-  if (!parsed.success) {
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
-  }
-  if (parsed.data.flags !== undefined) {
-    const flagsValid = assertFlagsValid(parsed.data.flags);
+  /**
+   * flags 合法性单源校验（C-1：schema 层与 logic 层共用，勿另写平行实现）。
+   *
+   * @param flags - 待检 flags 字符串
+   * @param detail - 错误 details（如 { ruleId }），缺省不携带
+   * @returns 合法时 Ok；否则 Err INVALID_ARGUMENT（非 gimsuy 字符或重复）
+   */
+  assertFlagsValid(flags: string, detail?: { ruleId?: string }): Result<void, SmartSortRuleInputError> {
+    if (SmartSortRuleSchema.isFlagsValid(flags)) {
+      return Result.ok(undefined);
+    }
+    // 冷路径（仅非法 flags 触发）：判定已由 isFlagsValid 单源给出，此处
+    // 重跑一次 safeParse 仅为取 zod issue 文案（保持既有错误消息不变）。
+    const checked = flagsSchema.safeParse(flags);
+    const issue = checked.success ? undefined : checked.error.issues[0]?.message;
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: `Invalid flags '${flags}': ${issue ?? "invalid"}`, ...detail }));
+  },
+
+  /** Parses create payload; applies flags default + syntax check (Err on bad flags/schema). */
+  parseCreateInput(raw: unknown): Result<CreateSmartSortRuleFields, SmartSortRuleInputError> {
+    const parsed = createSmartSortRuleSchema.safeParse(raw);
+    if (!parsed.success) {
+      return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
+    }
+    const flags = parsed.data.flags ?? "";
+    const flagsValid = SmartSortRuleSchema.assertFlagsValid(flags);
     if (!flagsValid.ok) {
       return Result.err(flagsValid.error);
     }
-  }
-  return Result.ok(parsed.data);
-}
+    return Result.ok({
+      name: parsed.data.name,
+      pattern: parsed.data.pattern,
+      flags,
+      captureKind: parsed.data.captureKind ?? "smart",
+      description: parsed.data.description ?? null,
+      enabled: parsed.data.enabled ?? true,
+    });
+  },
+
+  /** Parses update payload; validates flags syntax when present (Err on bad flags/schema). */
+  parseUpdateInput(raw: unknown): Result<UpdateSmartSortRuleInput, SmartSortRuleInputError> {
+    const parsed = updateSmartSortRuleSchema.safeParse(raw);
+    if (!parsed.success) {
+      return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
+    }
+    if (parsed.data.flags !== undefined) {
+      const flagsValid = SmartSortRuleSchema.assertFlagsValid(parsed.data.flags);
+      if (!flagsValid.ok) {
+        return Result.err(flagsValid.error);
+      }
+    }
+    return Result.ok(parsed.data);
+  },
+} as const;

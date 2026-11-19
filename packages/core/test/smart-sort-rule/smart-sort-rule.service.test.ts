@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { isAppError } from "@/errors/app-error.js";
 import { seedBuiltinSmartSortRules } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
-import { isBuiltinSmartSortRuleId } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+import { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
 import { createSmartSortRuleService } from "@/service/smart-sort-rule/create-smart-sort-rule.service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
 
@@ -17,7 +17,7 @@ beforeEach(async () => {
   const ctx = getNovelMasterTestContext();
   const svc = createSmartSortRuleService(ctx.conn);
   for (const rule of await svc.listRules()) {
-    if (!isBuiltinSmartSortRuleId(rule.ruleId)) {
+    if (!SmartSortRule.isBuiltinId(rule.ruleId)) {
       unwrap(await svc.deleteRule(rule.ruleId));
     }
   }

@@ -8,7 +8,7 @@
  * @module domain/tool/logic/fs-command
  */
 
-import { SKILLS_ROOT, resolveSkillRelPathCore } from "@/domain/skills/logic/skill-paths.js";
+import { SKILLS_ROOT, SkillPaths } from "@/domain/skills/logic/skill-paths.js";
 import { VfsCopy } from "@/domain/vfs/logic/vfs-copy.js";
 import { VfsMove } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
@@ -273,7 +273,7 @@ export const FsCommand = {
       return { mutating: true, paths: null };
     }
     const path = record?.path;
-    const resolved = resolveSkillRelPathCore(skillName, typeof path === "string" ? path : undefined);
+    const resolved = SkillPaths.resolveRelPathCore(skillName, typeof path === "string" ? path : undefined);
     if (!resolved.ok) {
       return { mutating: true, paths: null };
     }

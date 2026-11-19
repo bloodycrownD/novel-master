@@ -12,7 +12,7 @@
  * @module service/prompt/normalize-orphan-tool-results-for-llm
  */
 
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
@@ -31,7 +31,7 @@ export function normalizeOrphanToolResultsForLlm(messages: readonly ChatMessageD
     for (const block of msg.content.blocks) {
       if (block.type === "tool_result" && !messages.some((other) => other.content.blocks.some((candidate) => candidate.type === "tool_use" && candidate.id === block.toolUseId))) {
         changed = true;
-        const text = messageBodyTextFromBlocks([block]);
+        const text = MessageBodyText.fromBlocks([block]);
         blocks.push({
           type: "text",
           text: text !== "" ? text : "[tool_result]",

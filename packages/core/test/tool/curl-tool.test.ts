@@ -11,7 +11,7 @@ import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-l
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import { ToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import { AgentTools } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 afterEach(() => {
@@ -592,13 +592,13 @@ describe("curl 工具", () => {
       prompts: { persist: [], dynamic: [] },
     };
 
-    const denied = resolveAgentToolRegistry(registry, {
+    const denied = AgentTools.resolveRegistry(registry, {
       ...def,
       tools: { deny: ["curl"] },
     });
     assert.ok(!denied.list().includes("curl"));
 
-    const grandchild = resolveAgentToolRegistry(registry, def, { depth: 2 });
+    const grandchild = AgentTools.resolveRegistry(registry, def, { depth: 2 });
     assert.ok(grandchild.list().includes("curl"));
     // 对照：孙 agent 摘 task / agent。
     assert.ok(!grandchild.list().includes("task"));

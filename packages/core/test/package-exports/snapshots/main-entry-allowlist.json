@@ -6,6 +6,7 @@
   "DB_BACKUP_PROVIDER_TABLES",
   "DEFAULT_LEASE_SECONDS",
   "DatabaseReplacedError",
+  "DeferredFileCacheGc",
   "EMPTY_CLOUD_SYNC_STATUS",
   "FILE_OPEN_TOOL_NAMES",
   "FILE_TOOL_NAMES",
@@ -63,7 +64,6 @@
   "parseUrl",
   "queryTemplate",
   "renewLease",
-  "runDeferredFileCacheGc",
   "snapshotKey",
   "statusKey",
   "stringifyText"

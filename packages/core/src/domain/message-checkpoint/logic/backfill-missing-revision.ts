@@ -14,7 +14,7 @@ import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 
-/** {@link backfillMissingRevisionIfNeeded} 依赖。 */
+/** `BackfillMissingRevision.backfillIfNeeded` 依赖。 */
 export type BackfillRevisionDeps = {
   readonly revisionRepo: VfsRevisionRepository;
   readonly entryRepo: VfsEntryRepository;
@@ -22,53 +22,55 @@ export type BackfillRevisionDeps = {
   readonly contentStore?: VfsContentStore;
 };
 
-/**
- * checkpoint 目标 revision 缺失时，用 live head 追加 placeholder 行，使 restore 可继续。
- *
- * @returns Result.ok 是否写入了回补行
- * @remarks 不 bump live entry 版本，仅补历史 revision 行；只落 content_hash，不 put 明文副本。
- */
-export async function backfillMissingRevisionIfNeeded(deps: BackfillRevisionDeps, scopeKey: string, logicalPath: string, entryId: number | null, targetVersion: number): Promise<Result<boolean, AppError>> {
-  if (entryId == null) {
-    // entry 已不存在（hardDelete）：无 entry_id 可挂 revision，无法回补。
-    return Result.ok(false);
-  }
-
-  const exists = await deps.revisionRepo.existsByEntryAndVersion(entryId, targetVersion);
-  if (exists) {
-    return Result.ok(false);
-  }
-
-  const entry = await deps.entryRepo.findByPath(scopeKey, logicalPath);
-  if (!entry.ok) return Result.err(entry.error);
-  const mtimeMs = Date.now();
-
-  if (entry.value != null && entry.value.entryKind === "file") {
-    const hash = await deps.entryRepo.findContentHash(scopeKey, logicalPath);
-    if (!hash.ok) return Result.err(hash.error);
-    const contentHash = hash.value;
-    if (contentHash != null && deps.contentStore != null) {
-      await deps.contentStore.ensureBlob(contentHash, null);
+export const BackfillMissingRevision = {
+  /**
+   * checkpoint 目标 revision 缺失时，用 live head 追加 placeholder 行，使 restore 可继续。
+   *
+   * @returns Result.ok 是否写入了回补行
+   * @remarks 不 bump live entry 版本，仅补历史 revision 行；只落 content_hash，不 put 明文副本。
+   */
+  async backfillIfNeeded(deps: BackfillRevisionDeps, scopeKey: string, logicalPath: string, entryId: number | null, targetVersion: number): Promise<Result<boolean, AppError>> {
+    if (entryId == null) {
+      // entry 已不存在（hardDelete）：无 entry_id 可挂 revision，无法回补。
+      return Result.ok(false);
     }
+
+    const exists = await deps.revisionRepo.existsByEntryAndVersion(entryId, targetVersion);
+    if (exists) {
+      return Result.ok(false);
+    }
+
+    const entry = await deps.entryRepo.findByPath(scopeKey, logicalPath);
+    if (!entry.ok) return Result.err(entry.error);
+    const mtimeMs = Date.now();
+
+    if (entry.value != null && entry.value.entryKind === "file") {
+      const hash = await deps.entryRepo.findContentHash(scopeKey, logicalPath);
+      if (!hash.ok) return Result.err(hash.error);
+      const contentHash = hash.value;
+      if (contentHash != null && deps.contentStore != null) {
+        await deps.contentStore.ensureBlob(contentHash, null);
+      }
+      await deps.revisionRepo.append({
+        entryId,
+        version: targetVersion,
+        content: null,
+        contentHash,
+        status: "active",
+        mtimeMs,
+      });
+      await RevisionRefCount.adjust(deps.revisionRepo, entryId, targetVersion, +1);
+      return Result.ok(true);
+    }
+
     await deps.revisionRepo.append({
       entryId,
       version: targetVersion,
       content: null,
-      contentHash,
-      status: "active",
+      status: "deleted",
       mtimeMs,
     });
     await RevisionRefCount.adjust(deps.revisionRepo, entryId, targetVersion, +1);
     return Result.ok(true);
-  }
-
-  await deps.revisionRepo.append({
-    entryId,
-    version: targetVersion,
-    content: null,
-    status: "deleted",
-    mtimeMs,
-  });
-  await RevisionRefCount.adjust(deps.revisionRepo, entryId, targetVersion, +1);
-  return Result.ok(true);
-}
+  },
+} as const;

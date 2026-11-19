@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { type ChatMessageData } from "@novel-master/core/chat";
-import { resolveRollbackAnchorMessage } from "../../src/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
+import { RollbackAnchor } from "../../src/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 
 function msg(
   id: string,
@@ -25,7 +25,7 @@ function msg(
   };
 }
 
-describe("resolveRollbackAnchorMessage", () => {
+describe("RollbackAnchor.resolve", () => {
   it("maps assistant with paired tool_result to tool_result message", () => {
     const messages = [
       msg("a1", "assistant", [
@@ -35,7 +35,7 @@ describe("resolveRollbackAnchorMessage", () => {
         { type: "tool_result", toolUseId: "tu1", content: "ok" },
       ], 2),
     ];
-    const effective = resolveRollbackAnchorMessage(messages, "a1");
+    const effective = RollbackAnchor.resolve(messages, "a1");
     assert.equal(effective?.id, "u1");
   });
 
@@ -44,7 +44,7 @@ describe("resolveRollbackAnchorMessage", () => {
       msg("u1", "user", [{ type: "text", text: "hi" }], 1),
       msg("a1", "assistant", [{ type: "text", text: "hello" }], 2),
     ];
-    const effective = resolveRollbackAnchorMessage(messages, "u1");
+    const effective = RollbackAnchor.resolve(messages, "u1");
     assert.equal(effective?.id, "u1");
   });
 
@@ -52,7 +52,7 @@ describe("resolveRollbackAnchorMessage", () => {
     const messages = [
       msg("a1", "assistant", [{ type: "text", text: "hello" }], 1),
     ];
-    const effective = resolveRollbackAnchorMessage(messages, "a1");
+    const effective = RollbackAnchor.resolve(messages, "a1");
     assert.equal(effective?.id, "a1");
   });
 
@@ -62,7 +62,7 @@ describe("resolveRollbackAnchorMessage", () => {
         { type: "tool_use", id: "tu1", name: "read", input: {} },
       ], 1),
     ];
-    const effective = resolveRollbackAnchorMessage(messages, "a1");
+    const effective = RollbackAnchor.resolve(messages, "a1");
     assert.equal(effective?.id, "a1");
   });
 });

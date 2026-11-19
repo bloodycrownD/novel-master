@@ -2,7 +2,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { createSessionFsService } from "@novel-master/core/session-fs";
 import type { TdbcConnection } from "@novel-master/core";
 import { isSessionFsError } from "../../src/errors/guards.js";
@@ -62,7 +62,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
 
     // 锡点消息：使其有 checkpoint 可回滚，避免被 S-13 护栏拦下。
     await svfs.write("/a.md", "at-anchor", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
@@ -116,7 +116,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
     await svfs.write("/a.md", "v2", { versionCheck: false });
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -152,7 +152,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
     await svfs.write("/a.md", "v2", { versionCheck: false });
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {

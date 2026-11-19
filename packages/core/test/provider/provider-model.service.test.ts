@@ -10,16 +10,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { decode as decodeRaw } from "@novel-master/core";
 import { agentDefinitionSchema, AgentServiceFactory } from "@novel-master/core/agent";
-import { formatSavedModelDisplayName } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
-import { savedModelDisplayName } from "../../src/domain/provider/model/saved-model.js";
+import { SavedModelDisplayName } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
+import { SavedModel } from "../../src/domain/provider/model/saved-model.js";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import { isAppError } from "../../src/errors/app-error.js";
-import {
-  savedModelContextWindowTokens,
-  savedModelThinkingLevel,
-  savedModelTokenCounterMode,
-} from "../../src/domain/provider/model/saved-model-settings.js";
+import { SavedModelSettings } from "../../src/domain/provider/model/saved-model-settings.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
@@ -109,8 +105,8 @@ describe("ProviderModelService fetch", () => {
     assert.equal(saved.vendorModelId, "glm-4-flash");
     assert.equal(saved.modelName, "glm-4-flash");
     assert.equal(
-      savedModelDisplayName(saved, "智谱"),
-      formatSavedModelDisplayName("智谱", "glm-4-flash"),
+      SavedModel.displayName(saved, "智谱"),
+      SavedModelDisplayName.format("智谱", "glm-4-flash"),
     );
     clearProtocolAdapters();
   });
@@ -124,14 +120,14 @@ describe("ProviderModelService settings", () => {
       BUILTIN_PROVIDER_UUID_OPENAI,
       "claude-3-5-sonnet",
     ));
-    assert.equal(savedModelContextWindowTokens(saved.settings), 200_000);
+    assert.equal(SavedModelSettings.contextWindowTokens(saved.settings), 200_000);
   });
 
   it("save unknown model gets contextWindowTokens 128_000", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "unknown-model"));
-    assert.equal(savedModelContextWindowTokens(saved.settings), 128_000);
+    assert.equal(SavedModelSettings.contextWindowTokens(saved.settings), 128_000);
   });
 
   it("updateSettings rejects non-positive contextWindowTokens", async () => {
@@ -151,14 +147,14 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    assert.equal(savedModelTokenCounterMode(saved.settings), "auto");
+    assert.equal(SavedModelSettings.tokenCounterMode(saved.settings), "auto");
   });
 
   it("new saved model defaults thinkingLevel to high", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    assert.equal(savedModelThinkingLevel(saved.settings), "high");
+    assert.equal(SavedModelSettings.thinkingLevel(saved.settings), "high");
   });
 
   it("updateSettings persists tokenCounterMode round-trip", async () => {
@@ -168,7 +164,7 @@ describe("ProviderModelService settings", () => {
     const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
       tokenCounterMode: "gemma",
     }));
-    assert.equal(savedModelTokenCounterMode(updated.settings), "gemma");
+    assert.equal(SavedModelSettings.tokenCounterMode(updated.settings), "gemma");
     assert.equal(
       unwrap(await bundle.providerModels.getTokenCounterMode(saved.id)),
       "gemma",
@@ -252,8 +248,8 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     assert.equal(saved.modelName, "gpt-4o");
     assert.equal(
-      savedModelDisplayName(saved, "OpenAI"),
-      formatSavedModelDisplayName("OpenAI", "gpt-4o"),
+      SavedModel.displayName(saved, "OpenAI"),
+      SavedModelDisplayName.format("OpenAI", "gpt-4o"),
     );
   });
 

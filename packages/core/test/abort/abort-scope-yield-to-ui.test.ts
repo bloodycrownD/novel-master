@@ -7,11 +7,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("yieldToUi：让出事件循环与两态（T-S5）", () => {
   it("未中断：先让出宏任务，随后返回 null", async () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     const order: string[] = [];
     const pending = scope.yieldToUi().then((hit) => {
       order.push("yield");
@@ -30,7 +30,7 @@ describe("yieldToUi：让出事件循环与两态（T-S5）", () => {
   });
 
   it("abort 后：立即返回 cancelled Interrupt，不再等待宏任务", async () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     scope.abort("shutdown");
     let macrotaskRan = false;
     const macrotask = new Promise<void>((resolve) => {
@@ -49,7 +49,7 @@ describe("yieldToUi：让出事件循环与两态（T-S5）", () => {
   });
 
   it("中断后返回的同样是纯数据对象，不是 Error 实例", async () => {
-    const scope = createAbortScope();
+    const scope = AbortScopeFactory.create();
     scope.abort("user-stop");
     const hit = await scope.yieldToUi();
     assert.ok(hit != null);

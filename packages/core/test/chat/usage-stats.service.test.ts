@@ -20,11 +20,11 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteUsageRecordRepository } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
-import { buildUsageRecordFromMessage } from "../../src/domain/usage/logic/build-usage-record.js";
+import { UsageRecord } from "../../src/domain/usage/logic/build-usage-record.js";
 import { DefaultUsageStatsService } from "../../src/service/chat/impl/usage-stats.service.js";
 import type { UsageStatsRange } from "../../src/service/chat/usage-stats.port.js";
 import {
@@ -147,7 +147,7 @@ async function seedMsg(
     content:
       seed.blocks != null
         ? { blocks: seed.blocks }
-        : textBlocks("usage-stats-seed"),
+        : TextBlocks.of("usage-stats-seed"),
     provider: seed.provider ?? null,
     providerId: seed.providerId ?? null,
     modelName: seed.modelName ?? null,
@@ -158,10 +158,10 @@ async function seedMsg(
   };
   await new SqliteMessageRepository(ctx.conn).insert(message);
   // 账本行同步 seed：统计读口打 usage_record（v20 起唯一数据源），seed 走与
-  // 生产记账点同一构建/写入链（buildUsageRecordFromMessage +
+  // 生产记账点同一构建/写入链（UsageRecord.buildFromMessage +
   // SqliteUsageRecordRepository），保证测试数据形态与落库形态逐列一致；
   // user 行 / 无 usage 行 / 只有耗时无 token 真值的行同样不入账本。
-  const usageRecord = buildUsageRecordFromMessage(message);
+  const usageRecord = UsageRecord.buildFromMessage(message);
   if (usageRecord != null) {
     await new SqliteUsageRecordRepository(ctx.conn).insert(usageRecord);
   }
@@ -1825,7 +1825,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     const appended = unwrap(await messages.append(
       session.id,
       "assistant",
-      textBlocks("hello"),
+      TextBlocks.of("hello"),
       {
         provider: "anthropic",
         providerId: "prov-1",
@@ -1873,11 +1873,11 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(Number(msgRow[0]?.prompt_tokens), 100);
 
     // 不入账本的三类：无 usage 的 assistant、带 usage 的 user、只有耗时无 token 真值。
-    unwrap(await messages.append(session.id, "assistant", textBlocks("no usage")));
-    unwrap(await messages.append(session.id, "user", textBlocks("user with usage"), {
+    unwrap(await messages.append(session.id, "assistant", TextBlocks.of("no usage")));
+    unwrap(await messages.append(session.id, "user", TextBlocks.of("user with usage"), {
       usage: { promptTokens: 7, completionTokens: 3 },
     }));
-    unwrap(await messages.append(session.id, "assistant", textBlocks("timing only"), {
+    unwrap(await messages.append(session.id, "assistant", TextBlocks.of("timing only"), {
       usage: { firstTokenMs: 5, durationMs: 10 },
     }));
     const count = await ctx.conn.query<{ n: number }>(

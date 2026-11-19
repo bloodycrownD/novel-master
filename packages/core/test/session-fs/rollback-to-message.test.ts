@@ -2,7 +2,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
@@ -18,7 +18,7 @@ describe("rollbackToMessage", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "here" }],
     }));
@@ -26,7 +26,7 @@ describe("rollbackToMessage", () => {
     const v1 = unwrap(await svfs.read("/rb1.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -59,14 +59,14 @@ describe("rollbackToMessage", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "here" }],
     }));
     unwrap(await svfs.write("/poem.md", "roses", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -92,13 +92,13 @@ describe("rollbackToMessage", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("write poem")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("write poem")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
     }));
     unwrap(await svfs.write("/poem.md", "draft", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("nice")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("nice")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "thanks" }],
     }));
@@ -122,11 +122,11 @@ describe("rollbackToMessage", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     unwrap(await svfs.write("/keep.md", "stable", { versionCheck: false }));
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hello" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("bye")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("bye")));
 
     // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝删除。
     await rejectsErr(
@@ -143,9 +143,9 @@ describe("rollbackToMessage", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     const repo = new SqliteMessageRepository(ctx.conn);
     await repo.deleteAfterSeq(session.id, m1.seq);
@@ -164,7 +164,7 @@ describe("rollbackToMessage", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "bye" }],
     }));
@@ -181,8 +181,8 @@ describe("rollbackToMessage", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     await rollback.rollbackToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
@@ -196,11 +196,11 @@ describe("rollbackToMessage", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "bye" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
     const left = outcomeValue(await ctx.messages.listBySession(session.id));

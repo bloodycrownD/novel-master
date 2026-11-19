@@ -10,7 +10,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { MessageCheckpointFactory, type MessageRollbackService } from "@novel-master/core/message-checkpoint";
 import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";

@@ -1,7 +1,7 @@
 /**
  * baseline checkpoint backfill 操作的 detect → repair 端到端测试（S-8 / Step 20）。
  *
- * 验证把 {@link backfillBaselineCheckpoints} 包成 {@link IntegrityRepairOperation} 后：
+ * 验证把 {@link BackfillBaselineCheckpoints.backfill} 包成 {@link IntegrityRepairOperation} 后：
  * - 空会话 / 没 live 文件时 detect 返回 needsRepair=false；
  * - 有空窗消息时 detect 返回 needsRepair=true；
  * - repair 真补上 baseline checkpoint；
@@ -10,8 +10,8 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createBaselineCheckpointBackfillOperation } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -28,13 +28,13 @@ import {
 
 novelMasterTestFixture();
 
-describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperation", () => {
+describe("rollback-backfill-baseline-op: BackfillBaselineCheckpoints.createOperation", () => {
   it("空会话（无消息）detect 返回 needsRepair=false", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-op-empty-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const op = createBaselineCheckpointBackfillOperation({
+    const op = BackfillBaselineCheckpoints.createOperation({
       entryRepo: new SqliteVfsEntryRepository(ctx.conn),
       messageRepo: new SqliteMessageRepository(ctx.conn),
       checkpointRepo: new SqliteMessageCheckpointRepository(ctx.conn),
@@ -56,12 +56,12 @@ describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperati
 
     // 模拟 Step 9 之前的旧会话：写文件 + 写消息，全程不 capture → 所有消息都是空窗
     await svfs.write("/anchor.md", "at-send", { versionCheck: false });
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("anchor")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hi" }],
     }));
 
-    const op = createBaselineCheckpointBackfillOperation({
+    const op = BackfillBaselineCheckpoints.createOperation({
       entryRepo: new SqliteVfsEntryRepository(ctx.conn),
       messageRepo: new SqliteMessageRepository(ctx.conn),
       checkpointRepo: new SqliteMessageCheckpointRepository(ctx.conn),
@@ -87,7 +87,7 @@ describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperati
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
     }));
@@ -105,7 +105,7 @@ describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperati
       "前置：游标已落库"
     );
 
-    const op = createBaselineCheckpointBackfillOperation({
+    const op = BackfillBaselineCheckpoints.createOperation({
       entryRepo: new SqliteVfsEntryRepository(ctx.conn),
       messageRepo: new SqliteMessageRepository(ctx.conn),
       checkpointRepo: new SqliteMessageCheckpointRepository(ctx.conn),

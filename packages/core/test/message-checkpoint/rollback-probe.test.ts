@@ -11,7 +11,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { MessageCheckpointFactory, type MessageRollbackServiceOptions } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { RollbackProbe } from "../../src/service/message-checkpoint/message-rollback.port.js";
 import {
@@ -50,13 +50,13 @@ describe("rollback chain probe (T-R0)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "bye" }],
     }));
     await svfs.write("/tr0.md", "v1", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     const collector = collectProbe();
     const rollback = MessageCheckpointFactory.createRollback(ctx.conn, collector.options);
@@ -104,11 +104,11 @@ describe("rollback chain probe (T-R0)", () => {
     ));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("c")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("c")));
 
     // 不传 options（desktop/cli 形态）——不应抛错、行为与既有一致。
     const rollback = MessageCheckpointFactory.createRollback(ctx.conn);

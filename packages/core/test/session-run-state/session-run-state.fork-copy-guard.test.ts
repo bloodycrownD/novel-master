@@ -13,7 +13,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { createSessionRunStateService } from "../../src/service/session-run-state/create-session-run-state-service.js";
 import { ChatServiceFactory } from "../../src/service/chat/chat-service-factory.js";
 import type { SessionRunState } from "../../src/domain/session-run-state/model/session-run-state.js";
@@ -55,11 +55,11 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
     const svc = createSessionRunStateService(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
     const m2 = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("2")
+      TextBlocks.of("2")
     ));
 
     const row = makeRunningRow(session.id, project.id);
@@ -80,7 +80,7 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
     const svc = createSessionRunStateService(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("u")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u")));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);
@@ -100,9 +100,9 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
     const anchor = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("锚点")
+      TextBlocks.of("锚点")
     ));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a")));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);
@@ -118,9 +118,9 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);

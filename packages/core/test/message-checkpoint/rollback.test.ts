@@ -3,7 +3,7 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { VfsServiceFactory } from "@novel-master/core/vfs";
 
 import { isSessionFsError } from "../../src/errors/guards.js";
@@ -20,14 +20,14 @@ describe("MessageRollbackService (revision model)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "here" }],
     }));
     await svfs.write("/poem.md", "roses", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -54,7 +54,7 @@ describe("MessageRollbackService (revision model)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/anchor.md", "at-send", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("anchor")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
 
     await svfs.write("/anchor.md", "after-send", { versionCheck: false });
@@ -79,13 +79,13 @@ describe("MessageRollbackService (revision model)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("write poem")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("write poem")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
     }));
     await svfs.write("/poem.md", "draft", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("nice")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("nice")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "thanks" }],
     }));
@@ -115,11 +115,11 @@ describe("MessageRollbackService (revision model)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/keep.md", "stable", { versionCheck: false });
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hello" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("bye")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("bye")));
 
     // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝 reconcile。
     await rejectsErr(
@@ -144,13 +144,13 @@ describe("MessageRollbackService (revision model)", () => {
     }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("prompt")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("prompt")));
     const asst1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
     }));
     await svfs.write("/state.md", "after-user1", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("follow-up")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("follow-up")));
 
     await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
 
@@ -167,7 +167,7 @@ describe("MessageRollbackService (revision model)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/solo.md", "only", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("first")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hi" }],
     }));
@@ -197,7 +197,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     // 先发一条消息（纯文本，无 capture），再导入角色卡——导入 backfill
     // 会给这条消息补 baseline checkpoint。
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("你好")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("你好")));
 
     const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
     const tree = new Map<string, string>([
@@ -235,7 +235,7 @@ describe("MessageRollbackService (revision model)", () => {
     };
 
     // 消息 1-2：纯文本，无 checkpoint。
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("first")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hi" }],
     }));
@@ -248,7 +248,7 @@ describe("MessageRollbackService (revision model)", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
 
     // 消息 4-5：纯文本，无 checkpoint（空窗开始）。
-    const user4 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("chat")));
+    const user4 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("chat")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
     }));
@@ -296,7 +296,7 @@ describe("MessageRollbackService (revision model)", () => {
     await svfs.write("/file.md", "prior-content", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("send")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("send")));
     await svfs.write("/file.md", "at-user-checkpoint", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
     unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -321,7 +321,7 @@ describe("MessageRollbackService (revision model)", () => {
     const vfsUser = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("<user_vfs_action>write /a.md</user_vfs_action>"),
+      TextBlocks.of("<user_vfs_action>write /a.md</user_vfs_action>"),
       {
         raw: {
           metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
@@ -333,7 +333,7 @@ describe("MessageRollbackService (revision model)", () => {
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "done" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, vfsUser.id);
 
@@ -368,7 +368,7 @@ describe("MessageRollbackService (revision model)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "nested" }],
     }));
@@ -390,14 +390,14 @@ describe("MessageRollbackService (revision model)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "nested" }],
     }));
     await svfs.write("/dir/file.md", "v1", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "update" }],
     }));
@@ -445,7 +445,7 @@ describe("MessageRollbackService (revision model)", () => {
     const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "legacy" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant.id);
 
@@ -466,7 +466,7 @@ describe("MessageRollbackService (revision model)", () => {
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "hello" }],
     }));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
 
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
@@ -510,7 +510,7 @@ describe("MessageRollbackService (revision model)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("read file")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("read file")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [
         { type: "text", text: "reading" },
@@ -523,7 +523,7 @@ describe("MessageRollbackService (revision model)", () => {
       blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
     }));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));

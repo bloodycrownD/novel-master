@@ -21,7 +21,7 @@ import {
   agentDefinitionSchema,
   AgentServiceFactory,
 } from "@novel-master/core/agent";
-import { ChatServiceFactory, textBlocks } from "@novel-master/core/chat";
+import { ChatServiceFactory, TextBlocks } from "@novel-master/core/chat";
 import { VfsServiceFactory } from "@novel-master/core/vfs";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
@@ -37,12 +37,12 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 
 const DB_PATH = "/tmp/nm-session-copy-bench.db";
 
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
       await messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`msg ${i}: ${"body".repeat(120)}`),
+        TextBlocks.of(`msg ${i}: ${"body".repeat(120)}`),
       );
     }
     for (let round = 1; round <= 3; round++) {
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
       await messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`msg ${i}: ${"body".repeat(120)}`),
+        TextBlocks.of(`msg ${i}: ${"body".repeat(120)}`),
       );
     }
 
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
         const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id });
 
         let t1 = performance.now();
-        const heads = await listSessionFileHeads(entries2, project.id, copySession.id);
+        const heads = await SessionFiles.listHeads(entries2, project.id, copySession.id);
         phases.push(`sp-list-heads=${fmt(performance.now() - t1)}`);
 
         t1 = performance.now();
@@ -236,8 +236,8 @@ async function main(): Promise<void> {
 
         t1 = performance.now();
         await workplace2.copyScope(
-          workplaceScopeKey({ kind: "session", projectId: project.id, sessionId: session.id }),
-          workplaceScopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id }),
+          WorkplaceScope.key({ kind: "session", projectId: project.id, sessionId: session.id }),
+          WorkplaceScope.key({ kind: "session", projectId: project.id, sessionId: copySession.id }),
           (p) => PathNormalizer.normalize(p),
         );
         phases.push(`sp-workplace=${fmt(performance.now() - t1)}`);

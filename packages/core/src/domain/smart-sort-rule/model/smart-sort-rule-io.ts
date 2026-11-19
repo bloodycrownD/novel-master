@@ -35,72 +35,74 @@ export const smartSortRuleBundleDocumentSchema = z.object({ schemaVersion: z.lit
 
 export type SmartSortRuleBundleDocument = z.infer<typeof smartSortRuleBundleDocumentSchema>;
 
-/** Domain rules → bundle document（全量、按 sortOrder；description null 省略）。 */
-export function encodeSmartSortRuleBundle(rules: readonly SmartSortRule[]): SmartSortRuleBundleDocument {
-  return {
-    schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
-    rules: rules.map((rule) => ({
+export const SmartSortRuleIo = {
+  /** Domain rules → bundle document（全量、按 sortOrder；description null 省略）。 */
+  encodeBundle(rules: readonly SmartSortRule[]): SmartSortRuleBundleDocument {
+    return {
+      schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
+      rules: rules.map((rule) => ({
+        ruleId: rule.ruleId,
+        name: rule.name,
+        pattern: rule.pattern,
+        flags: rule.flags,
+        captureKind: rule.captureKind,
+        ...(rule.description != null ? { description: rule.description } : {}),
+        enabled: rule.enabled,
+        sortOrder: rule.sortOrder,
+      })),
+    };
+  },
+
+  /**
+   * Parses + validates an unknown payload as a bundle document.
+   *
+   * 这里是 bundle 文档的 schema 入口边界：decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
+   * 沿 `Result.err` 回传，由 service / app 的导入通道贴「YAML 无效」标签，保持既有错误契约。
+   */
+  decodeBundle(raw: unknown): Result<SmartSortRuleBundleDocument, AppError> {
+    // v1 兼容映射：旧文档的 `example` 字段挪到 `description`，schemaVersion
+    // 改写为 2。仅识别 schemaVersion===1 且逐条规则只做字段搬运（无 example
+    // 的规则原样通过，description 与 example 同时存在时以 description 为准）。
+    let migrated = raw;
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      const doc = raw as { schemaVersion?: unknown; rules?: unknown; [key: string]: unknown };
+      if (doc.schemaVersion === 1 && Array.isArray(doc.rules)) {
+        migrated = {
+          ...doc,
+          schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
+          rules: doc.rules.map((rule) => {
+            if (typeof rule !== "object" || rule === null || Array.isArray(rule)) {
+              return rule;
+            }
+            const r = rule as Record<string, unknown>;
+            if (r.description !== undefined || r.example === undefined) {
+              return r;
+            }
+            const { example, ...rest } = r;
+            return { ...rest, description: example };
+          }),
+        };
+      }
+    }
+    // decode 已 Result 化（错误通道迁移四期）；decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
+    // 原样接力，由 service / app 的导入通道贴「YAML 无效」标签。
+    const decoded = decode(migrated, smartSortRuleBundleDocumentSchema);
+    return decoded;
+  },
+
+  /** Bundle rules → domain entities（时间戳由导入方重新分配；captureKind 缺省 smart，D13）。 */
+  bundleRulesToEntities(doc: SmartSortRuleBundleDocument, nowMs: number): SmartSortRule[] {
+    return doc.rules.map((rule, index) => ({
       ruleId: rule.ruleId,
       name: rule.name,
       pattern: rule.pattern,
       flags: rule.flags,
-      captureKind: rule.captureKind,
-      ...(rule.description != null ? { description: rule.description } : {}),
+      captureKind: rule.captureKind ?? "smart",
+      description: rule.description ?? null,
       enabled: rule.enabled,
-      sortOrder: rule.sortOrder,
-    })),
-  };
-}
-
-/**
- * Parses + validates an unknown payload as a bundle document.
- *
- * 这里是 bundle 文档的 schema 入口边界：decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
- * 沿 `Result.err` 回传，由 service / app 的导入通道贴「YAML 无效」标签，保持既有错误契约。
- */
-export function decodeSmartSortRuleBundle(raw: unknown): Result<SmartSortRuleBundleDocument, AppError> {
-  // v1 兼容映射：旧文档的 `example` 字段挪到 `description`，schemaVersion
-  // 改写为 2。仅识别 schemaVersion===1 且逐条规则只做字段搬运（无 example
-  // 的规则原样通过，description 与 example 同时存在时以 description 为准）。
-  let migrated = raw;
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
-    const doc = raw as { schemaVersion?: unknown; rules?: unknown; [key: string]: unknown };
-    if (doc.schemaVersion === 1 && Array.isArray(doc.rules)) {
-      migrated = {
-        ...doc,
-        schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
-        rules: doc.rules.map((rule) => {
-          if (typeof rule !== "object" || rule === null || Array.isArray(rule)) {
-            return rule;
-          }
-          const r = rule as Record<string, unknown>;
-          if (r.description !== undefined || r.example === undefined) {
-            return r;
-          }
-          const { example, ...rest } = r;
-          return { ...rest, description: example };
-        }),
-      };
-    }
-  }
-  // decode 已 Result 化（错误通道迁移四期）；decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
-  // 原样接力，由 service / app 的导入通道贴「YAML 无效」标签。
-  const decoded = decode(migrated, smartSortRuleBundleDocumentSchema);
-  return decoded;
-}
-
-/** Bundle rules → domain entities（时间戳由导入方重新分配；captureKind 缺省 smart，D13）。 */
-export function bundleRulesToEntities(doc: SmartSortRuleBundleDocument, nowMs: number): SmartSortRule[] {
-  return doc.rules.map((rule, index) => ({
-    ruleId: rule.ruleId,
-    name: rule.name,
-    pattern: rule.pattern,
-    flags: rule.flags,
-    captureKind: rule.captureKind ?? "smart",
-    description: rule.description ?? null,
-    enabled: rule.enabled,
-    sortOrder: index + 1,
-    createdAtMs: nowMs,
-    updatedAtMs: nowMs,
-  }));
-}
+      sortOrder: index + 1,
+      createdAtMs: nowMs,
+      updatedAtMs: nowMs,
+    }));
+  },
+} as const;

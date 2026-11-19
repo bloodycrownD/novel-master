@@ -16,10 +16,10 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { Interrupt } from "../../src/errors/outcome.js";
-import { createAbortError } from "../../src/domain/abort/logic/create-abort-error.js";
+import { AbortError } from "../../src/domain/abort/logic/create-abort-error.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -45,7 +45,7 @@ function makeMessages(sessionId: string, count: number): ChatMessageData[] {
     sessionId,
     seq: index + 1,
     role: index % 2 === 0 ? "user" : "assistant",
-    content: textBlocks(`批量消息 ${index}`),
+    content: TextBlocks.of(`批量消息 ${index}`),
     provider: null,
     raw: null,
     createdAtMs: now,
@@ -69,7 +69,7 @@ describe("message repository 分片取消（T-S12 / T-S13）", () => {
     const project = unwrap(await ctx.projects.create(`P-ts12-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     for (let i = 0; i < 120; i++) {
-      unwrap(await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", textBlocks(`消息 ${i}`)));
+      unwrap(await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", TextBlocks.of(`消息 ${i}`)));
     }
 
     // 直通基准：不传 hooks（`hooks?.checkpoint?.()` 得 undefined）必须走 completed。
@@ -130,7 +130,7 @@ describe("message repository 分片取消（T-S12 / T-S13）", () => {
           const inserted = await new SqliteMessageRepository(tx).batchInsert(messages, { checkpoint: gate.checkpoint });
           assert.equal(inserted.kind, "cancelled");
           // 外层事务边界（copy/fork）：不 throw 就会 commit 半批，必须抛错回滚。
-          throw createAbortError();
+          throw AbortError.create();
         }),
       isAbortErrorLike
     );

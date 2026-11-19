@@ -12,7 +12,7 @@
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { createSkillsService } from "@novel-master/core/skills";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -120,7 +120,7 @@ describe("session create / workspace initialize (core 层)", () => {
     const assistant = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("wrote"),
+      TextBlocks.of("wrote"),
     ));
     await ctx.sessionVfs(project.id, session.id).write("/x.md", "snap", {
       versionCheck: false,

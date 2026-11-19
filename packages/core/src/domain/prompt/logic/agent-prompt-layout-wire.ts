@@ -23,22 +23,24 @@ type DynamicPromptBlockWire = {
   readonly content: string;
 };
 
-/**
- * 将 persist 文本块序列化为 wire map 条目。
- */
-export function persistBlockToWire(block: PersistTextPromptBlock): PersistPromptBlockWire {
-  return { type: "text", role: block.role, content: block.content };
-}
+export const AgentPromptLayoutWire = {
+  /**
+   * 将 persist 文本块序列化为 wire map 条目。
+   */
+  persistBlock(block: PersistTextPromptBlock): PersistPromptBlockWire {
+    return { type: "text", role: block.role, content: block.content };
+  },
 
-/**
- * 将 dynamic 区块序列化为 wire map 条目。
- *
- * @remarks lifecycle 已下线：写出的块恒不含该键（存量读入侧由 schema preprocess 剥除）。
- */
-export function dynamicBlockToWire(block: DynamicPromptBlock): DynamicPromptBlockWire {
-  return {
-    type: "text",
-    role: block.role,
-    content: block.content,
-  };
-}
+  /**
+   * 将 dynamic 区块序列化为 wire map 条目。
+   *
+   * @remarks lifecycle 已下线：写出的块恒不含该键（存量读入侧由 schema preprocess 剥除）。
+   */
+  dynamicBlock(block: DynamicPromptBlock): DynamicPromptBlockWire {
+    return {
+      type: "text",
+      role: block.role,
+      content: block.content,
+    };
+  },
+} as const;

@@ -6,8 +6,8 @@ import { describe, it, mock } from "node:test";
 import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { AppError } from "@novel-master/core/errors";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type  AgentRunFinishedPayload, type  AgentRunStartedPayload, type  AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { Random } from "../../src/common/random.js";
 import { BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
@@ -156,7 +156,7 @@ describe("AgentRunner", () => {
   // 在发给 LLM 的 history 中附 SKILL.md 全文（skillAttach 附件不吞不漏）。
   it("skillAttach hydrate：$技能 首次引用在 LLM history 附 SKILL.md 全文", async () => {
     const session = new InMemoryAgentSession();
-    const userMsg = unwrap(await session.append("user", textBlocks("用 $demo 改一下")));
+    const userMsg = unwrap(await session.append("user", TextBlocks.of("用 $demo 改一下")));
     // InMemoryAgentSession.append 不收 attachments；返回对象与内部存储同
     // 引用，直接补字段（skillAttach 附件：无 path、skillName 为准）。
     Object.assign(userMsg, {
@@ -214,7 +214,7 @@ describe("AgentRunner", () => {
 
   it("returns stopReason=cancelled when aborted before run", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -241,7 +241,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -253,7 +253,7 @@ describe("AgentRunner", () => {
   // 改落占位 assistant——core/B-2：尾部停在 user 会锁死双端 composer。
   it("T-SR5: 空文本 blocks 不落原始 assistant，改落占位消息", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -298,7 +298,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C1: abort + text/thinking blocks 落库 partial assistant，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
@@ -337,7 +337,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -355,7 +355,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C2: abort + tool_use blocks 落库 assistant，不跑 runParallel，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     let runParallelInvoked = false;
@@ -402,7 +402,7 @@ describe("AgentRunner", () => {
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -421,7 +421,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C3: abort 后无第二次 model request，stepsExecuted===0", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     let calls = 0;
@@ -453,7 +453,7 @@ describe("AgentRunner", () => {
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -464,7 +464,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C4: abort 在 tool 执行完成后 append 前仍无 tool_results", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model = createMockModel([
@@ -507,7 +507,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      scope: createAbortScope({ controller }),
+      scope: AbortScopeFactory.create({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -524,7 +524,7 @@ describe("AgentRunner", () => {
 
   it("生命周期与 stream 事件携带一致 runId", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("hi")));
+    unwrap(await session.append("user", TextBlocks.of("hi")));
     const bus = new SimpleEventBus();
     let started: AgentRunStartedPayload | undefined;
     const runIds: string[] = [];
@@ -593,7 +593,7 @@ describe("AgentRunner", () => {
 
   it("maxSteps=1: runs tool once, no second model call", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -643,7 +643,7 @@ describe("AgentRunner", () => {
 
   it("maxSteps=3: two tool rounds then text completion", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("multi")));
+    unwrap(await session.append("user", TextBlocks.of("multi")));
 
     const model = createMockModel([
       {
@@ -701,7 +701,7 @@ describe("AgentRunner", () => {
 
   it("T-AR2: does not emit session.message.received after successful assistant append", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("hi")));
+    unwrap(await session.append("user", TextBlocks.of("hi")));
     const bus = new SimpleEventBus();
     const model = createMockModel([
       {
@@ -739,7 +739,7 @@ describe("AgentRunner", () => {
 
   it("emits agent.step.committed after each assistant and tool_results append", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const bus = new SimpleEventBus();
     const phases: AgentStepCommittedPayload["phase"][] = [];
     bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
@@ -793,7 +793,7 @@ describe("AgentRunner", () => {
 
   it("tool_results 与 run_finished 携带 vfsMutated", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const bus = new SimpleEventBus();
     const toolResultSteps: AgentStepCommittedPayload[] = [];
     let runFinished: AgentRunFinishedPayload | undefined;
@@ -870,7 +870,7 @@ describe("AgentRunner", () => {
 
   it("propagates doom_loop from identical tool_use blocks", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("loop")));
+    unwrap(await session.append("user", TextBlocks.of("loop")));
 
     const sameInput = { path: "/x" };
     const model = createMockModel([
@@ -913,7 +913,7 @@ describe("AgentRunner", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("go")));
+    unwrap(await chatSession.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -1000,7 +1000,7 @@ describe("AgentRunner", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/seed.md", "seed");
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("list")));
+    unwrap(await chatSession.append("user", TextBlocks.of("list")));
 
     const model = createMockModel([
       {
@@ -1064,7 +1064,7 @@ describe("AgentRunner", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("read")));
+    unwrap(await chatSession.append("user", TextBlocks.of("read")));
 
     const model = createMockModel([
       {
@@ -1153,7 +1153,7 @@ describe("AgentRunner", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("edit fail")));
+    unwrap(await chatSession.append("user", TextBlocks.of("edit fail")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write(
@@ -1223,7 +1223,7 @@ describe("AgentRunner", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("write conflict")));
+    unwrap(await chatSession.append("user", TextBlocks.of("write conflict")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/conflict.txt", "v1", { versionCheck: false });
@@ -1291,7 +1291,7 @@ describe("AgentRunner", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("edit lcs")));
+    unwrap(await chatSession.append("user", TextBlocks.of("edit lcs")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write(
@@ -1359,7 +1359,7 @@ describe("AgentRunner", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    unwrap(await chatSession.append("user", textBlocks("edit bare")));
+    unwrap(await chatSession.append("user", TextBlocks.of("edit bare")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write(
@@ -1423,7 +1423,7 @@ describe("AgentRunner", () => {
 
   it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("loop")));
+    unwrap(await session.append("user", TextBlocks.of("loop")));
     const model = createMockModel([
       {
         assistantText: "",
@@ -1469,7 +1469,7 @@ describe("AgentRunner", () => {
 
   it("T-ITA-03: degraded tool args → no RUN_FAILED, tool_result ok:false, run continues", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const bus = new SimpleEventBus();
     let runFailed = false;
     bus.subscribe(EVENT_AGENT_RUN_FAILED, () => {
@@ -1531,7 +1531,7 @@ describe("AgentRunner", () => {
 
   it("T-ITA-04: degraded + valid tool mixed, id-aligned, only valid runs", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("go")));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const vfs = mockVfs();
 
     const model = createMockModel([
@@ -1600,7 +1600,7 @@ describe("AgentRunner", () => {
   // T-CA4：runner 注入 extraInfo（prompts.customAttach）零覆盖补齐。
   it("T-CA4a: definition prompts.customAttach 非空 → 只有最新一条 user 消息含 extra-info", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("第一问")));
+    unwrap(await session.append("user", TextBlocks.of("第一问")));
 
     const model = createMockModel([
       { assistantText: "ok", blocks: [{ type: "text", text: "ok-1" }], raw: {} },
@@ -1630,7 +1630,7 @@ describe("AgentRunner", () => {
     }));
 
     // 第二轮：再追一条 user 消息，此时 history 含两条 user（中间隔 assistant），不会被合并。
-    unwrap(await session.append("user", textBlocks("第二问")));
+    unwrap(await session.append("user", TextBlocks.of("第二问")));
     unwrap(await runner.run({
       maxSteps: 1,
       definition,
@@ -1656,7 +1656,7 @@ describe("AgentRunner", () => {
 
   it("T-CA4b: definition 无 customAttach → user 消息 body 不出现 extra-info 段", async () => {
     const session = new InMemoryAgentSession();
-    unwrap(await session.append("user", textBlocks("第一问")));
+    unwrap(await session.append("user", TextBlocks.of("第一问")));
 
     const model = createMockModel([
       { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} },
@@ -1692,7 +1692,7 @@ describe("AgentRunner", () => {
     setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       const session = new InMemoryAgentSession();
-      unwrap(await session.append("user", textBlocks("go")));
+      unwrap(await session.append("user", TextBlocks.of("go")));
       // 历史含一条无 tool_use 的 assistant thinking：回退关态时被剥离。
       unwrap(await session.append("assistant", {
         blocks: [

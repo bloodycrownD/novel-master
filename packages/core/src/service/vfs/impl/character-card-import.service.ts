@@ -11,7 +11,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MdTree } from "@/domain/character-card/model/character-card.js";
-import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/character-card-to-md-tree.js";
+import { CharacterCardToMdTree } from "@/domain/character-card/logic/character-card-to-md-tree.js";
 import {
   CHARACTER_CARD_MAX_FILE_COUNT,
   CHARACTER_CARD_MAX_INPUT_BYTES,
@@ -29,7 +29,7 @@ import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { VfsZipPath } from "@/domain/vfs/logic/vfs-zip-path.js";
-import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -260,7 +260,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints({
+          await BackfillBaselineCheckpoints.backfill({
             entryRepo: new SqliteVfsEntryRepository(tx),
             messageRepo: new SqliteMessageRepository(tx),
             checkpointRepo: new SqliteMessageCheckpointRepository(tx),
@@ -296,7 +296,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
       const oversizedInput = { descriptor: { key: "error.vfs.character_card_too_large.input" as const, params: { size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES } } };
       return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", oversizedInput));
     }
-    const parsed = parseCharacterCardToMdTree(bytes);
+    const parsed = CharacterCardToMdTree.parse(bytes);
     if (!parsed.ok) return Result.err(parsed.error);
     const imported = await this.import(scope, parsed.value, options);
     if (!imported.ok) return imported;

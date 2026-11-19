@@ -36,7 +36,7 @@ const ZH_CN: MessageCatalog<CoreMessageKey> = {
   "error.chat.composer_token_range_order": "tokenRange 需满足 start < end（零长度区间拒收）",
   "error.chat.attachment_skill_name_required": "skillAttach 附件必须携带非空 skillName",
   "error.chat.attachment_name_display_tag_forbidden": "name 禁止为 action:path 展示 tag（须 name=path）",
-  "error.chat.attachment_name_storage_mismatch": "有 action 时 name 须等于 attachmentStorageName(path)（期望 {expected}）",
+  "error.chat.attachment_name_storage_mismatch": "有 action 时 name 须等于 MessageAttachmentSchema.storageName(path)（期望 {expected}）",
   "error.chat.project_agent_definition_required": "mode 为 custom 时 definition 必填",
   "error.chat.session_create_agent_missing": "新建会话失败：workspace 未配置 Agent，且 registry 为空",
   "error.chat.not_found": "会话数据不存在：{kind} {id}",

@@ -7,7 +7,7 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { textBlocks } from '@novel-master/core/chat';
+import { TextBlocks } from '@novel-master/core/chat';
 import { ChatServiceFactory } from '../../src/service/chat/chat-service-factory.js';
 import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
@@ -33,7 +33,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u')));
     const assistant = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
     }));
@@ -50,7 +50,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
     }));
@@ -70,13 +70,13 @@ describe('MessageTranscriptEffectsService', () => {
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
-    const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('1')));
+    const m1 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('1')));
     const m2 = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: '2' }],
     }));
     await svfs.write('/tail.md', 'tail', { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
-    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('3')));
+    unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('3')));
 
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
@@ -111,7 +111,7 @@ describe('MessageTranscriptEffectsService', () => {
       USER_VFS_PENDING_QUEUE_KEY,
       JSON.stringify([{ op: 'mkdir', path: '/keep-dir' }]),
     );
-    const anchor = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    const anchor = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u')));
     unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id));
     assert.equal(
       unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md')),
@@ -141,11 +141,11 @@ describe('MessageTranscriptEffectsService', () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
-    const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
+    const m1 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u1')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
     }));
-    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u2')));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u2')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
     }));
@@ -176,7 +176,7 @@ describe('MessageTranscriptEffectsService', () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
-    const anchor = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    const anchor = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
     }));
@@ -192,12 +192,12 @@ describe('MessageTranscriptEffectsService', () => {
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
-    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('1')));
+    unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('1')));
     const m2 = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: '2' }],
     }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
-    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('3')));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('3')));
 
     const before = outcomeValue(await ctx.messages.listBySession(session.id));
     unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, m3.id));
@@ -213,11 +213,11 @@ describe('MessageTranscriptEffectsService', () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
-    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
+    unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u1')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
     }));
-    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u2')));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u2')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
     }));
@@ -242,11 +242,11 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
+    const m1 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u1')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
     }));
-    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u2')));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u2')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
     }));
@@ -301,7 +301,7 @@ describe('MessageTranscriptEffectsService', () => {
     const system = unwrap(await ctx.messages.append(
       session.id,
       'system',
-      textBlocks('sys'),
+      TextBlocks.of('sys'),
     ));
 
     await rejectsErr(
@@ -320,7 +320,7 @@ describe('MessageTranscriptEffectsService', () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
-    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    unwrap(await ctx.messages.append(session.id, 'user', TextBlocks.of('u')));
     const assistant = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
     }));
@@ -360,7 +360,7 @@ describe('MessageTranscriptEffectsService', () => {
     const sk = createSessionKkvService(ctx.conn);
 
     // 会话 A：user + assistant 两条（若副作用发生，前缀会被错误 hide）。
-    unwrap(await ctx.messages.append(sessionA.id, 'user', textBlocks('a1')));
+    unwrap(await ctx.messages.append(sessionA.id, 'user', TextBlocks.of('a1')));
     unwrap(await ctx.messages.append(sessionA.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
     }));
@@ -368,7 +368,7 @@ describe('MessageTranscriptEffectsService', () => {
     const anchorB = unwrap(await ctx.messages.append(
       sessionB.id,
       'user',
-      textBlocks('b1'),
+      TextBlocks.of('b1'),
     ));
 
     // 预置 A 的 rule_snapshot / file_cache，验证拒绝时不会被清。

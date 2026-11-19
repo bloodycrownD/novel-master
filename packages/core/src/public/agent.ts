@@ -4,12 +4,12 @@ export {
   promptsDocumentSchema,
 } from "../domain/agent/model/agent-definition.schema.js";
 export {
-  validateAgentDefinition,
+  AgentDefinitionValidator,
   type ValidateAgentDefinitionOptions,
 } from "../domain/agent/logic/validate-agent-definition.js";
-export { decodeAgentYamlText, encodeAgentYamlText } from "../domain/agent/logic/agent-yaml-codec.js";
-export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tools.js";
-export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
+export { AgentYamlCodec } from "../domain/agent/logic/agent-yaml-codec.js";
+export { AgentTools } from "../domain/agent/logic/resolve-agent-tools.js";
+export { AgentToolPolicyValidator } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";
 export type { AgentSession } from "../domain/agent/session/agent-session.port.js";
 export type {

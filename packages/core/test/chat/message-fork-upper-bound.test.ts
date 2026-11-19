@@ -10,7 +10,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
   getNovelMasterTestContext,
@@ -63,7 +63,7 @@ async function seedSession(
     const m = unwrap(await ctx.messages.append(
       sessionId,
       i % 2 === 0 ? "user" : "assistant",
-      textBlocks(`消息 ${i}`)
+      TextBlocks.of(`消息 ${i}`)
     ));
     ids.push(m.id);
     seqs.push(m.seq);

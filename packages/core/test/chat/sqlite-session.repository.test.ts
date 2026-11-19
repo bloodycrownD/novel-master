@@ -5,8 +5,7 @@ import { describe, it } from "node:test";
 import { bootstrapNovelMaster, open } from "@novel-master/core";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import {
-  parseComposerDraftJson,
-  serializeComposerDraftJson,
+  ComposerDraftSchema,
 } from "../../src/domain/chat/model/composer-draft.schema.js";
 import { chatAnnotateDraftStore } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
 import {
@@ -80,18 +79,18 @@ describe("SqliteSessionRepository", () => {
         },
       ],
     };
-    const draftJson = serializeComposerDraftJson(draft);
+    const draftJson = ComposerDraftSchema.serializeJson(draft);
     assert.ok(draftJson != null);
     assert.equal(unwrap(await repo.setComposerDraftJson(session.id, draftJson)), true);
 
     const raw = unwrap(await repo.getComposerDraftJson(session.id));
     assert.equal(raw, draftJson);
-    assert.deepEqual(parseComposerDraftJson(raw), draft);
+    assert.deepEqual(ComposerDraftSchema.parseJson(raw), draft);
 
     // 模拟「重启」：新 repo 实例读同一连接
     const repoAfterRestart = new SqliteSessionRepository(ctx.conn);
     const again = unwrap(await repoAfterRestart.getComposerDraftJson(session.id));
-    assert.deepEqual(parseComposerDraftJson(again), draft);
+    assert.deepEqual(ComposerDraftSchema.parseJson(again), draft);
   });
 
   it("T-LF1：clearSession（手动重置/删会话口径）后 composer_draft 仍保留；状态投影空", async () => {
@@ -115,7 +114,7 @@ describe("SqliteSessionRepository", () => {
     assert.equal(
       unwrap(await repo.setComposerDraftJson(
         session.id,
-        serializeComposerDraftJson(draft),
+        ComposerDraftSchema.serializeJson(draft),
       )),
       true,
     );
@@ -136,7 +135,7 @@ describe("SqliteSessionRepository", () => {
     await ctx.sessionKkv.clearSession(session.id);
 
     assert.deepEqual(
-      parseComposerDraftJson(unwrap(await repo.getComposerDraftJson(session.id))),
+      ComposerDraftSchema.parseJson(unwrap(await repo.getComposerDraftJson(session.id))),
       draft,
     );
     assert.equal(
@@ -226,14 +225,14 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
     assert.equal(unwrap(await repo.setComposerDraftJson(session.id, poisoned)), true);
 
     // 读 → 解析 → 序列化 往返（两端水合 + 后续持久化都走这条路）
-    const readBack = parseComposerDraftJson(
+    const readBack = ComposerDraftSchema.parseJson(
       unwrap(await repo.getComposerDraftJson(session.id)),
     );
     assert.equal(readBack.text, "我写了一半的正文", "读侧不应因坏附件丢正文");
 
-    const rewritten = serializeComposerDraftJson(readBack);
+    const rewritten = ComposerDraftSchema.serializeJson(readBack);
     assert.ok(rewritten != null);
-    const again = parseComposerDraftJson(rewritten);
+    const again = ComposerDraftSchema.parseJson(rewritten);
     assert.equal(again.text, "我写了一半的正文", "写回后正文仍在");
     assert.equal(again.attachments.length, 0, "坏附件在写回时被净化掉");
   });

@@ -1,7 +1,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { evaluateWorkplaceRuleView } from "@/domain/workplace/logic/workplace-rule-engine.js";
+import { WorkplaceRuleEngine } from "@/domain/workplace/logic/workplace-rule-engine.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
 
 describe("worktree rule engine (unit)", () => {
@@ -52,7 +52,7 @@ describe("worktree rule engine (unit)", () => {
       allDirs: new Set(["/", "/batch"]),
     };
 
-    const view = unwrap(evaluateWorkplaceRuleView({ kind: "global" }, ctx));
+    const view = unwrap(WorkplaceRuleEngine.evaluateView({ kind: "global" }, ctx));
 
     for (const row of view.rows) {
       if (row.kind === "dir") {

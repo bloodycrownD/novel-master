@@ -1,7 +1,11 @@
 [
   "AGENT_RUN_RESOLVE_KEYS",
   "AgentActivityTracker",
+  "AgentDefinitionValidator",
   "AgentServiceFactory",
+  "AgentToolPolicyValidator",
+  "AgentTools",
+  "AgentYamlCodec",
   "ChatAgentSession",
   "DEFAULT_AGENT_MAX_STEPS",
   "DEFAULT_SUBAGENT_DEFINITION",
@@ -10,16 +14,11 @@
   "RunLifecycle",
   "agentDefinitionSchema",
   "assembleAgentRunnerDeps",
-  "decodeAgentYamlText",
-  "encodeAgentYamlText",
   "mapResolveError",
   "promptsDocumentSchema",
   "resolveAgentForProject",
-  "resolveAgentToolRegistry",
   "resolveApplicationModelIdForRun",
   "resolveCurrentAgentDefinition",
   "resolveCurrentAgentId",
-  "runAgentTurn",
-  "validateAgentDefinition",
-  "validateAgentToolPolicy"
+  "runAgentTurn"
 ]

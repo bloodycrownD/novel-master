@@ -15,9 +15,9 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
 import { Result } from "@/errors/either.js";
 import { AppError } from "@/errors/app-error.js";
-import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { FileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import type { TdbcConnection } from "@novel-master/core";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
@@ -791,7 +791,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
     const sessionId = `tvp6b-${suffix}`;
     const sessionKkv = createMemorySessionKkv();
-    const placeholder = await loadOrFillFileCache({
+    const placeholder = await FileCache.loadOrFill({
       sessionId,
       sessionKkv,
       vfs,
@@ -800,9 +800,9 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     });
     assert.equal(placeholder.body, `（文件过大，已跳过，约 ${overBytes * 4} 字符）`, "member 形态的超限文件必须走占位（数字取compressed_byte_len 的 4× 折算）");
     assert.equal(readCalls, 0, "超限组不得触发全文读取");
-    assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", pathOver)), null, "占位结果不得写进 file_cache");
+    assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", pathOver)), null, "占位结果不得写进 file_cache");
 
-    const under = await loadOrFillFileCache({
+    const under = await FileCache.loadOrFill({
       sessionId,
       sessionKkv,
       vfs,

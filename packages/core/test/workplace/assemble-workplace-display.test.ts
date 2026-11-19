@@ -6,12 +6,11 @@ import { createSessionKkvService } from "../../src/service/session-kkv/create-se
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey, parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { FileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { FileTools } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
-import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
+import { TextBlocks } from "../../src/domain/chat/content/text-blocks.js";
+import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
 import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -98,8 +97,8 @@ describe("assembleWorkplaceDisplay", () => {
     // file_cache 回填是 fire-and-forget（2026-09-30 冷路径优化：压缩+落库
     // 推迟到宏任务，不挡 assemble 返回），所以「最终被回填」要在 settle
     // 闸门之后断言，而不是 assemble 返回那一刻。
-    await settlePendingFileCacheBackfills();
-    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md")))) != null);
+    await FileCache.settlePendingBackfills();
+    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")))) != null);
   });
 
   // T-SR4：kkv canon=[] 后 assemble 仍能对有规则文件产出非空 display（空 [] 不粘住）
@@ -182,7 +181,7 @@ describe("assembleWorkplaceDisplay", () => {
     // 不等的话第二次仍会 miss 而多读一次 VFS——那是「后台写还在跑时又
     // miss」的已知边界（与现状 miss 行为一致，非回归），不是本用例的考点。
     // 本用例考点是：缓存落定后，命中路径不再读 VFS。
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
     await assembleDisplay(scope, deps);
     assert.equal(read.mock.callCount(), firstReads);
   });
@@ -232,7 +231,7 @@ describe("assembleWorkplaceDisplay", () => {
     const out = await assembleDisplay(scope, deps);
     assert.match(out.workplaceDisplay, /body/, "重读也要出正文，不能空");
     assert.equal(read.mock.callCount(), firstReads + 1, "miss 时重读一次 VFS");
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
   });
 
   it("T-FC1: write 工具成功 upsert full:{path}", async () => {
@@ -252,9 +251,9 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
       }
     );
-    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/w.md")));
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/w.md")));
     assert.ok(raw != null);
-    const payload = parseFileCachePayload(raw!);
+    const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
     assert.ok(payload.ok);
     assert.equal(payload.value.body, "full-content");
   });
@@ -266,7 +265,7 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/e.md", "alpha");
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
+    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
     const editTool = FileTools.create().find((t) => t.name === "edit");
     assert.ok(editTool != null);
     await editTool!.run(
@@ -278,7 +277,7 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
       }
     );
-    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md")));
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md")));
     assert.equal(raw, JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
     assert.equal(unwrap(await vfs.read("/e.md")).content, "beta");
   });
@@ -332,8 +331,8 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const cachedBody = JSON.stringify({ body: "keep-me", mtimeMs: 42 });
-    const delKey = fileCacheKey("full", "/del.md");
-    const mvKey = fileCacheKey("full", "/old.md");
+    const delKey = RuleSnapshotCodec.fileCacheKey("full", "/del.md");
+    const mvKey = RuleSnapshotCodec.fileCacheKey("full", "/old.md");
     await vfs.write("/del.md", "will-delete");
     await vfs.write("/old.md", "will-move");
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey, cachedBody);
@@ -353,7 +352,7 @@ describe("assembleWorkplaceDisplay", () => {
     assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey)), cachedBody);
     assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey)), cachedBody);
     // 新 path 不自动拷贝 cache
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/new.md"))), null);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/new.md"))), null);
   });
 
   // huge-card-import-crash：误导入巨型角色卡的存量用户重启后，workplace
@@ -402,12 +401,12 @@ describe("assembleWorkplaceDisplay", () => {
     assert.ok(placeholderBlock, "占位块带 file 头属性");
     assert.equal(placeholderBlock[1]!.startsWith("1970"), false, `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`);
     assert.equal(out.workplaceDisplay.includes("poison-body"), false);
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/毒卡/巨型设定.md"))), null);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/毒卡/巨型设定.md"))), null);
     // 正常文件不受降级影响：正文照常进 display 并写 cache
     // （回填是 fire-and-forget，落定后再断言缓存）
     assert.equal(out.workplaceDisplay.includes("hello-world"), true);
-    await settlePendingFileCacheBackfills();
-    assert.notEqual(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/正常.md"))), null);
+    await FileCache.settlePendingBackfills();
+    assert.notEqual(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/正常.md"))), null);
   });
 
   it("filename 档不得渲染 1970 假时间戳", async () => {
@@ -499,7 +498,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
       session.id,
       SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
       RULE_SNAPSHOT_CANON_KEY,
-      serializeRuleSnapshot([
+      RuleSnapshotCodec.serialize([
         { path: "/full.md", status: "full" },
         { path: "/hdr.md", status: "header" },
       ])
@@ -576,7 +575,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
           sessionId: session.id,
           seq: 1,
           role: "user",
-          content: textBlocks("看设定"),
+          content: TextBlocks.of("看设定"),
           provider: null,
           raw: null,
           createdAtMs: 0,
@@ -600,13 +599,13 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
         workplaceSeenPaths: out.visiblePaths,
       }
     ));
-    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
+    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);
     assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
     assert.equal(body.includes("alreadyReferenced"), false, "header 档不在 prefixPaths 里，不该被 S0 判成已引用");
     // 组装侧的后台回填是 fire-and-forget，落定后再出本用例，别把在途宏
     // 任务带进后面的用例。
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
   });
 });

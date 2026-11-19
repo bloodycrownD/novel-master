@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import { TextBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
   PromptBuilder,
   type AgentPromptLayout,
   type PromptSkillIndexEntry,
 } from "@novel-master/core/prompt";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { MessageBodyText } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
@@ -18,7 +18,7 @@ function message(role: string, content: string, seq: number): ChatMessageData {
     sessionId: "s1",
     seq,
     role,
-    content: textBlocks(content),
+    content: TextBlocks.of(content),
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -93,7 +93,7 @@ describe("T-SK9: 技能索引段（两套遍历）", () => {
     ]);
     const segment = segments.find((s) => s.id === "prompt-skills")!;
     const synthetic = input.messages.find((m) => m.id === "prompt:skills")!;
-    assert.equal(messageBodyTextFromBlocks(synthetic.content.blocks), segment.body);
+    assert.equal(MessageBodyText.fromBlocks(synthetic.content.blocks), segment.body);
   });
 
   it("空清单 / 缺省不产生技能索引段", async () => {

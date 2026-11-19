@@ -72,10 +72,12 @@ export const BUILTIN_PROVIDER_ROWS: readonly BuiltinProviderSeedRow[] = [
 
 const BUILTIN_DEFAULT_API_KEY_BY_KEY: Readonly<Record<string, string>> = Object.fromEntries(BUILTIN_PROVIDER_ROWS.flatMap((row) => (row.defaultApiKey != null ? [[row.key, row.defaultApiKey]] : [])));
 
-/** 内置 provider 在无 SKSP 密钥时的默认 apiKey；按 builtin_key 查；无则 undefined。 */
-export function builtinDefaultApiKey(builtinKey: string): string | undefined {
-  return BUILTIN_DEFAULT_API_KEY_BY_KEY[builtinKey];
-}
+export const BuiltinProviders = {
+  /** 内置 provider 在无 SKSP 密钥时的默认 apiKey；按 builtin_key 查；无则 undefined。 */
+  defaultApiKey(builtinKey: string): string | undefined {
+    return BUILTIN_DEFAULT_API_KEY_BY_KEY[builtinKey];
+  },
+} as const;
 
 /** builtin_key → LLM 协议种类（由 BUILTIN_PROVIDER_ROWS 派生）。 */
 export const BUILTIN_PROVIDER_PROTOCOLS: Readonly<Record<string, LlmProtocolKind>> = Object.fromEntries(BUILTIN_PROVIDER_ROWS.map((row) => [row.key, row.protocol])) as Readonly<Record<string, LlmProtocolKind>>;

@@ -11,12 +11,11 @@ import { ChatMessage } from "../../domain/chat/logic/message/chat-message.js";
 import type { ChatMessageData } from "../../domain/chat/model/message.js";
 import type { MessageLike } from "../../common/i18n.js";
 import { Text } from "../../common/text.js";
-import { textBlocks } from "../../domain/chat/content/text-blocks.js";
-import { formatChatMessageForCliPreview, messageBodyTextFromBlocks } from "../../domain/chat/content/message-body-text.js";
+import { TextBlocks } from "../../domain/chat/content/text-blocks.js";
+import { MessageBodyText } from "../../domain/chat/content/message-body-text.js";
 import type { ContentBlock, ToolResultBlock as ChatToolResultBlock } from "../../domain/chat/model/content-block.js";
-import type { AgentPromptLayout } from "../../domain/prompt/model/agent-prompt-layout.js";
-import { DEFAULT_SKILLS_INDEX_PREFIX, layoutHasWorkplace } from "../../domain/prompt/model/agent-prompt-layout.js";
-import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
+import { AgentPromptLayout, DEFAULT_SKILLS_INDEX_PREFIX } from "../../domain/prompt/model/agent-prompt-layout.js";
+import { DynamicMacrosExpansion } from "../../domain/prompt/logic/expand-dynamic-macros.js";
 import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
 import type { PromptLlmInput, PromptRenderContext, PromptSkillIndexEntry } from "../../domain/prompt/model/prompt-render-context.js";
 import { ToolResultBlock } from "../../domain/tool/logic/build-tool-result-block.js";
@@ -72,7 +71,7 @@ interface LlmExportZonesOptions extends PromptAssemblyOptions {
  */
 function computeLlmExportZonesFromLayout(layout: AgentPromptLayout, options?: LlmExportZonesOptions): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
-  const injectWorkplace = layoutHasWorkplace(layout) && (options?.workplaceDisplay === undefined || options.workplaceDisplay.trim() !== "");
+  const injectWorkplace = AgentPromptLayout.hasWorkplace(layout) && (options?.workplaceDisplay === undefined || options.workplaceDisplay.trim() !== "");
   const textBlockCount = layout.persist.length;
   const persistCount = (options?.skillsIndex?.length ? 1 : 0) + (injectWorkplace ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
   // dynamic 区一律 once 语义：仅 step 0 注入（缺省 0 ⇒ preview/token 链恒含）。
@@ -91,7 +90,7 @@ function syntheticPromptMessage(id: string, role: string, body: string, ctx: Pro
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
     role,
-    content: textBlocks(body),
+    content: TextBlocks.of(body),
     provider: null,
     raw: null,
     createdAtMs: 0,
@@ -145,7 +144,7 @@ async function buildPromptAssemblyFromLayout(layout: AgentPromptLayout, ctx: Pro
   }
 
   // `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语两段。
-  if (layoutHasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
+  if (AgentPromptLayout.hasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
     segments.push({
       id: "prompt-workplace",
       role: "user",
@@ -179,7 +178,7 @@ async function buildPromptAssemblyFromLayout(layout: AgentPromptLayout, ctx: Pro
     if (message.hidden) {
       continue;
     }
-    const messageSegments = formatChatMessageForCliPreview(message, {
+    const messageSegments = MessageBodyText.formatForCliPreview(message, {
       includeThinking: options?.includeThinkingBlocks === true,
     });
     for (let i = 0; i < messageSegments.length; i++) {
@@ -199,7 +198,7 @@ async function buildPromptAssemblyFromLayout(layout: AgentPromptLayout, ctx: Pro
 
   if (layout.dynamicEnabled === true && agentStepIndex === 0) {
     for (const block of layout.dynamic) {
-      const expanded = await expandDynamicMacros(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
+      const expanded = await DynamicMacrosExpansion.expand(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
       if (!expanded.ok) {
         return Result.err(expanded.error);
       }
@@ -225,7 +224,7 @@ async function buildPromptAssemblyFromLayout(layout: AgentPromptLayout, ctx: Pro
  * @remarks 本函数**不能**由 assembly 段转出（刻意保留独立实现）：`PromptLlmInput.messages`
  * 是 `ChatMessageData`，而 assembly 段是面向预览的文本投影——段里没有 `sessionId` /
  * `content`（blocks 结构）/ `provider` / `providerId` / `modelName` / `raw` /
- * `createdAtMs` / `hidden` / `attachments` / `usage`；`formatChatMessageForCliPreview`
+ * `createdAtMs` / `hidden` / `attachments` / `usage`；`MessageBodyText.formatForCliPreview`
  * 还会 trim 文本、默认丢弃 thinking、把 tool_result 段 unshift 到消息段首，并且
  * 只含 thinking 的可见消息产出 0 段。按段反推消息必然失真。两处 gating 的语义
  * 由 lifecycle 测试（zones/assembly/llmInput 三组）共同钉住。
@@ -239,7 +238,7 @@ async function buildPromptLlmInputFromLayout(layout: AgentPromptLayout, ctx: Pro
   }
 
   // `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语（assemble 已包 `<workplace>`，此处勿再包）。
-  if (layoutHasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
+  if (AgentPromptLayout.hasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
     messages.push(syntheticPromptMessage("prompt:workplace", "user", ctx.workplaceDisplay, ctx));
     messages.push(syntheticPromptMessage("prompt:workplace:done", "assistant", layout.workplace!, ctx));
   }
@@ -254,7 +253,7 @@ async function buildPromptLlmInputFromLayout(layout: AgentPromptLayout, ctx: Pro
 
   if (layout.dynamicEnabled === true && agentStepIndex === 0) {
     for (const block of layout.dynamic) {
-      const expanded = await expandDynamicMacros(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
+      const expanded = await DynamicMacrosExpansion.expand(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
       if (!expanded.ok) {
         return Result.err(expanded.error);
       }
@@ -434,12 +433,12 @@ const EMPTY_SUMMARY_TEXT = { key: "label.prompt_preview.empty_text" } as const;
 const USER_INPUT_OPEN = "<user-input>";
 const USER_INPUT_CLOSE = "</user-input>";
 
-/** 单块的纯文本（复用 `messageBodyTextFromBlocks` 的清洗口径：剥离孤立闭合思考标签）。 */
+/** 单块的纯文本（复用 `MessageBodyText.fromBlocks` 的清洗口径：剥离孤立闭合思考标签）。 */
 function blockTextForCard(block: ContentBlock): string | null {
   if (block.type !== "text" && block.type !== "image") {
     return null;
   }
-  const text = messageBodyTextFromBlocks([block]);
+  const text = MessageBodyText.fromBlocks([block]);
   return text === "" ? null : text;
 }
 

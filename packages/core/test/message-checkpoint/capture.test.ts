@@ -1,7 +1,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -52,7 +52,7 @@ describe("MessageCheckpointService.capture", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/manual.md", "hand", { versionCheck: false });
-    const user = unwrap(await ctx.messages.append(session.id, "user", textBlocks("send")));
+    const user = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("send")));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user.id));
 
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
@@ -68,7 +68,7 @@ describe("MessageCheckpointService.capture", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("edit")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("edit")));
     await svfs.write("/manual.md", "hand", { versionCheck: false });
 
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);

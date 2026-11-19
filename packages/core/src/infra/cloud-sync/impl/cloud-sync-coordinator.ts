@@ -8,7 +8,7 @@ import { createLogger } from "@/infra/log/logger.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Interrupt } from "@/errors/outcome.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { buildLease, canAcquireLock, DEFAULT_LEASE_SECONDS, isEffectiveLock, renewLease } from "../logic/lock.js";
 import { PushAgentMutex, type PushAgentLockHandle } from "../logic/push-agent-mutex.js";
 import { snapshotKey, statusKey } from "../logic/paths.js";
@@ -225,7 +225,7 @@ export class CloudSyncCoordinator {
       return;
     }
     log.info("cloud sync interrupted", { phase, kind: hit.kind, ...(hit.kind === "cancelled" ? { reason: hit.reason } : {}) });
-    throw createAbortError();
+    throw AbortError.create();
   }
 
   /**

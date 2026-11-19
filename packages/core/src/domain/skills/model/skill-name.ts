@@ -24,32 +24,34 @@ export const SKILL_NAME_PATTERN = new RegExp(`^(?:${SKILL_NAME_PATTERN_SOURCE})$
 /** 保留名（大小写不敏感）：技能目录入口文件名，不能当技能名。 */
 export const SKILL_RESERVED_NAME = "skill.md";
 
-/**
- * 校验技能名，合法返回 `null`，非法返回错误 descriptor（供 UI 翻译提示）。
- */
-export function validateSkillName(name: string): CoreMessageDescriptor | null {
-  if (name.length === 0) {
-    return { key: "error.skill.invalid_name.empty" };
-  }
-  if (name.toLowerCase() === SKILL_RESERVED_NAME) {
-    return { key: "error.skill.invalid_name.skill_md_reserved" };
-  }
-  if (!SKILL_NAME_PATTERN.test(name)) {
-    if (name.startsWith(".")) {
-      return { key: "error.skill.invalid_name.leading_dot" };
+export const SkillName = {
+  /**
+   * 校验技能名，合法返回 `null`，非法返回错误 descriptor（供 UI 翻译提示）。
+   */
+  validate(name: string): CoreMessageDescriptor | null {
+    if (name.length === 0) {
+      return { key: "error.skill.invalid_name.empty" };
     }
-    if (/\s/.test(name)) {
-      return { key: "error.skill.invalid_name.whitespace" };
+    if (name.toLowerCase() === SKILL_RESERVED_NAME) {
+      return { key: "error.skill.invalid_name.skill_md_reserved" };
     }
-    if (name.includes("/")) {
-      return { key: "error.skill.invalid_name.slash" };
+    if (!SKILL_NAME_PATTERN.test(name)) {
+      if (name.startsWith(".")) {
+        return { key: "error.skill.invalid_name.leading_dot" };
+      }
+      if (/\s/.test(name)) {
+        return { key: "error.skill.invalid_name.whitespace" };
+      }
+      if (name.includes("/")) {
+        return { key: "error.skill.invalid_name.slash" };
+      }
+      return { key: "error.skill.invalid_name.unsupported_chars" };
     }
-    return { key: "error.skill.invalid_name.unsupported_chars" };
-  }
-  return null;
-}
+    return null;
+  },
 
-/** 校验技能名是否合法。 */
-export function isValidSkillName(name: string): boolean {
-  return validateSkillName(name) === null;
-}
+  /** 校验技能名是否合法。 */
+  isValid(name: string): boolean {
+    return SkillName.validate(name) === null;
+  },
+} as const;

@@ -5,7 +5,7 @@
  */
 
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { ruleViewToSnapshotEntries, serializeRuleSnapshot } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -24,8 +24,8 @@ export type RefreshRuleSnapshotDeps = {
 export async function refreshRuleSnapshot(sessionId: string, deps: RefreshRuleSnapshotDeps): Promise<Result<void, AppError>> {
   const view = await deps.workplace.evaluateRuleView();
   if (!view.ok) return Result.err(view.error);
-  const entries = ruleViewToSnapshotEntries(view.value);
-  await deps.sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, serializeRuleSnapshot(entries));
+  const entries = RuleSnapshotCodec.ruleViewToEntries(view.value);
+  await deps.sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, RuleSnapshotCodec.serialize(entries));
   await deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
   return Result.ok(undefined);
 }

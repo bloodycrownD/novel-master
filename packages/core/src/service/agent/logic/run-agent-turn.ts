@@ -20,8 +20,8 @@
  * @module service/agent/logic/run-agent-turn
  */
 
-import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
-import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
+import { AgentTools } from "@/domain/agent/logic/resolve-agent-tools.js";
+import { AgentDefinitionValidator } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
@@ -33,11 +33,11 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { CoreMessageKey } from "@/i18n/keys.js";
 import { Result } from "@/errors/either.js";
-import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
 
 /**
  * runner.run / session.append 已知失败转异常：复用调用方 catch 的既有收口
@@ -405,7 +405,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
   // task 工具内子 agent run 的 parentSignal，让 registry.abort(sessionId) 也能级联
   // 到子 run。
   const internalController = new AbortController();
-  const rootScope = createAbortScope({
+  const rootScope = AbortScopeFactory.create({
     controller: internalController,
     ...(options?.scope !== undefined ? { parent: options.scope } : {}),
   });
@@ -676,7 +676,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         coordinatedWrite.register({
           name: "append-user-message",
           execute: async () => {
-            const appended = await runtime.messages.append(scope.sessionId, "user", textBlocks(trimmed), mergedAttachments.length > 0 ? { attachments: mergedAttachments } : undefined);
+            const appended = await runtime.messages.append(scope.sessionId, "user", TextBlocks.of(trimmed), mergedAttachments.length > 0 ? { attachments: mergedAttachments } : undefined);
             // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
             // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
             // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
@@ -744,7 +744,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       stage = "validate-agent-definition";
       const toolProbe = new ToolRegistry<BuiltinToolContext>();
       BuiltinTools.register(toolProbe);
-      const validation = await validateAgentDefinition(definition, { registeredToolNames: toolProbe.list() });
+      const validation = await AgentDefinitionValidator.validate(definition, { registeredToolNames: toolProbe.list() });
       if (!validation.ok) {
         // 前奏期校验已知失败（四期门⑦沿 Result 到达）：终态记账与下方 catch 同款。
         safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
@@ -788,7 +788,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
 
       const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
       // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
-      const registry = resolveAgentToolRegistry(toolProbe, definition, {
+      const registry = AgentTools.resolveRegistry(toolProbe, definition, {
         depth: 0,
       });
       // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
@@ -1098,7 +1098,7 @@ function subscribeQuietly(runtime: AgentTurnRuntimePort, type: string, handler: 
  * - abort 派生（P1-6）：子 scope 以父 scope 为 parent 派生（等价 `parentScope.fork()`；
  *   额外带 controller 供 agent 门面做所有权登记），父 abort → 子以 `"parent"` 级联，
  *   子退出/完成不反向影响父。
- * - registry（P1-10）：`resolveAgentToolRegistry(baseRegistry, def, { depth: parentDepth + 1 })`；
+ * - registry（P1-10）：`AgentTools.resolveRegistry(baseRegistry, def, { depth: parentDepth + 1 })`；
  *   孙 agent（depth >= 2）强制 deny task。
  * - 装配期 vs run 期（P0-2）：`assembleAgentRunnerDeps({ ..., includeCompactionOrchestrator: false })`
  *   是装配期字段，不在 `AgentRunOptions`。
@@ -1143,7 +1143,7 @@ async function runChildAgent(args: {
   // fork 出的 scope 无法登记进 registry。父 abort → 本 scope 以 `"parent"` 级联；
   // registry.abort(childSessionId) → controller.abort() → `"user-stop"`。
   const childController = new AbortController();
-  const childAbortScope = createAbortScope({ controller: childController, parent: parentScope });
+  const childAbortScope = AbortScopeFactory.create({ controller: childController, parent: parentScope });
 
   /**
    * 子 run 的前奏检查点（主 run 的同款，判据是子 scope 的 reason）。
@@ -1199,14 +1199,14 @@ async function runChildAgent(args: {
     const baseRegistry = new ToolRegistry<BuiltinToolContext>();
     BuiltinTools.register(baseRegistry);
     // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
-    // task 是否对 LLM 可见由下方 resolveAgentToolRegistry 的 depth 判断控制（depth>=2 deny）。
+    // task 是否对 LLM 可见由下方 AgentTools.resolveRegistry 的 depth 判断控制（depth>=2 deny）。
     const childAllDefsResult = await runtime.agentRegistry.list();
     // 毒行 decode 失败（五期门⑦沿 Result 到达）转 catch 通道：streamHandle 的
     // finally 反注册与终态记账由外层 run 的既有 catch 收口。
     if (!childAllDefsResult.ok) rethrowRunFailure(childAllDefsResult.error);
     const childAllDefs = childAllDefsResult.value;
     const callable = childAllDefs.filter((d) => d.mode !== "primary" && d.name !== def.name).map((d) => ({ name: d.name, description: d.description }));
-    const registry = resolveAgentToolRegistry(baseRegistry, def, {
+    const registry = AgentTools.resolveRegistry(baseRegistry, def, {
       depth: childDepth,
     });
 
@@ -1250,7 +1250,7 @@ async function runChildAgent(args: {
         // prepare 链，子代理开箱即得全文，省掉自己 read 一遍。
         ...(opts.attachments != null && opts.attachments.length > 0 ? { attachments: opts.attachments } : {}),
       };
-      const appended = await session.append("user", textBlocks(opts.prompt ?? ""), appendOptions);
+      const appended = await session.append("user", TextBlocks.of(opts.prompt ?? ""), appendOptions);
       // prompt / 附件落库失败必须中断子 run：静默返回会让附件蒸发、模型毫不知情。
       if (!appended.ok) rethrowRunFailure(appended.error);
     }

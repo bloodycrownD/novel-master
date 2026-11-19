@@ -16,7 +16,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createTemplatePullService } from "@/service/template/create-template-pull-service.js";
@@ -26,7 +26,7 @@ import { decode } from "@/infra/serialization/decode.js";
 import { deleteSessionFsData, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
+import { DeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
@@ -168,7 +168,7 @@ export class DefaultSessionService implements SessionService {
     });
     await DeferredBlobGc.run(this.deps.conn);
     // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
-    await runDeferredFileCacheGc(this.deps.conn);
+    await DeferredFileCacheGc.run(this.deps.conn);
     return Result.ok(undefined);
   }
 
@@ -308,7 +308,7 @@ export class DefaultSessionService implements SessionService {
     const messagesRead = await ChatServiceFactory.createRepoDeps(this.deps.conn).messages.listBySession(src.id, undefined, hooks);
     if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
     // 中断不是错误：本方法出口是边界，转抛 AbortError（未注入 hooks 时不可达）。
-    if (messagesRead.kind !== "completed") throw createAbortError();
+    if (messagesRead.kind !== "completed") throw AbortError.create();
     const messages = messagesRead.value;
     const now = Date.now();
     const copy: ChatSession = {
@@ -346,10 +346,10 @@ export class DefaultSessionService implements SessionService {
       const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
       const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", copyOptions);
       if (vfsCopied.kind === "failed") throw vfsCopied.error;
-      if (vfsCopied.kind !== "completed") throw createAbortError();
+      if (vfsCopied.kind !== "completed") throw AbortError.create();
       const inserted = await r.messages.batchInsert(copyMessages, hooks);
       if (inserted.kind === "failed") throw inserted.error;
-      if (inserted.kind !== "completed") throw createAbortError();
+      if (inserted.kind !== "completed") throw AbortError.create();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 copy，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
       await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));

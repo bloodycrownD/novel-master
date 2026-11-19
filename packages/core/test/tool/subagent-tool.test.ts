@@ -14,7 +14,7 @@ import type {
   BuiltinToolSubagentContext,
   RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
+import { AgentTools } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { BuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
@@ -333,7 +333,7 @@ describe("subagent-tool / task", () => {
   });
 });
 
-describe("resolveAgentToolRegistry 递归上限", () => {
+describe("AgentTools.resolveRegistry 递归上限", () => {
   function makeBaseRegistry(): ToolRegistry<BuiltinToolContext> {
     const r = new ToolRegistry<BuiltinToolContext>();
     BuiltinTools.register(r);
@@ -344,11 +344,11 @@ describe("resolveAgentToolRegistry 递归上限", () => {
   it("T-T2: depth=0/1 保留 task；depth>=2（孙）强制 deny task", () => {
     const base = makeBaseRegistry();
     assert.ok(base.list().includes("task"));
-    const r0 = resolveAgentToolRegistry(base, def, { depth: 0 });
+    const r0 = AgentTools.resolveRegistry(base, def, { depth: 0 });
     assert.ok(r0.list().includes("task"));
-    const r1 = resolveAgentToolRegistry(base, def, { depth: 1 });
+    const r1 = AgentTools.resolveRegistry(base, def, { depth: 1 });
     assert.ok(r1.list().includes("task"));
-    const r2 = resolveAgentToolRegistry(base, def, { depth: 2 });
+    const r2 = AgentTools.resolveRegistry(base, def, { depth: 2 });
     assert.ok(!r2.list().includes("task"), "孙 agent 不应有 task");
   });
 });

@@ -9,7 +9,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatProject } from "@/domain/chat/model/project.js";
 import { DEFAULT_PROJECT_AGENT_CONFIG, type ProjectAgentConfig, type ProjectAgentConfigPatch } from "@/domain/chat/model/project-agent-config.js";
 import { projectAgentConfigSchema } from "@/domain/chat/model/project-agent-config.schema.js";
-import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
+import { AgentDefinitionValidator } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -24,7 +24,7 @@ import { decode } from "@/infra/serialization/decode.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
+import { DeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import { ChatServiceFactory } from "../chat-service-factory.js";
@@ -142,7 +142,7 @@ export class DefaultProjectService implements ProjectService {
     });
     await DeferredBlobGc.run(this.deps.conn);
     // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
-    await runDeferredFileCacheGc(this.deps.conn);
+    await DeferredFileCacheGc.run(this.deps.conn);
     return Result.ok(undefined);
   }
 
@@ -177,7 +177,7 @@ export class DefaultProjectService implements ProjectService {
     if (!validated.ok) return validated;
     const config = validated.value;
     if (config.mode === "custom") {
-      const validation = await validateAgentDefinition(config.definition!, options);
+      const validation = await AgentDefinitionValidator.validate(config.definition!, options);
       if (!validation.ok) return Result.err(validation.error);
     }
     const updatedAtMs = Date.now();

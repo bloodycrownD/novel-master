@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { joinFileBlocks, parseMarkdownFrontMatter, renderFileBlock } from "@novel-master/core/workplace";
+import { FrontMatter, WorkplaceDisplay } from "@novel-master/core/workplace";
 import { splitMarkdownFrontMatter } from "@novel-master/core/common";
 
 describe("worktree display", () => {
   it("escapes XML in path attribute", () => {
-    const block = renderFileBlock({
+    const block = WorkplaceDisplay.renderFileBlock({
       logicalPath: '/a&b"c.md',
       mtimeMs: 1_700_000_000_000,
       display: "filename",
@@ -17,7 +17,7 @@ describe("worktree display", () => {
   });
 
   it("parses valid front matter", () => {
-    const lines = parseMarkdownFrontMatter("---\ntitle: x\n---\nbody");
+    const lines = FrontMatter.parseMarkdown("---\ntitle: x\n---\nbody");
     assert.deepEqual(lines, ["1|title: x"]);
   });
 
@@ -36,7 +36,7 @@ describe("worktree display", () => {
   });
 
   it("treats unclosed front matter as no front matter", () => {
-    const lines = parseMarkdownFrontMatter("---\nno close");
+    const lines = FrontMatter.parseMarkdown("---\nno close");
     assert.deepEqual(lines, ["1|（无 Front Matter）"]);
   });
 
@@ -62,18 +62,18 @@ describe("worktree display", () => {
   });
 
   it("joins blocks with blank line", () => {
-    const a = renderFileBlock({
+    const a = WorkplaceDisplay.renderFileBlock({
       logicalPath: "/a.md",
       mtimeMs: 0,
       display: "filename",
       content: "",
     });
-    const b = renderFileBlock({
+    const b = WorkplaceDisplay.renderFileBlock({
       logicalPath: "/b.md",
       mtimeMs: 0,
       display: "filename",
       content: "",
     });
-    assert.equal(joinFileBlocks([a, b]).split("\n\n").length, 2);
+    assert.equal(WorkplaceDisplay.joinFileBlocks([a, b]).split("\n\n").length, 2);
   });
 });

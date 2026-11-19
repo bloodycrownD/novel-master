@@ -231,7 +231,7 @@ export type BuiltinToolContext = {
    * 可选：仅 `task` 工具读取。vfs-tools 完全不感知。
    *
    * 主 agent run 装配 depth=0；子 agent run 装配 depth=parent+1。
-   * depth >= 2 时 `resolveAgentToolRegistry` 已强制 deny `task`，
+   * depth >= 2 时 `AgentTools.resolveRegistry` 已强制 deny `task`，
    * 故孙 agent 的 LLM 看不到 `task` 工具，不会尝试调用。
    */
   readonly subagent?: BuiltinToolSubagentContext;
@@ -240,7 +240,7 @@ export type BuiltinToolContext = {
    *
    * 主 agent run 与子 agent run 两个装配点都会注入（D2）；未注入时
    * skill 的 run 抛 ToolError（FAILED）。是否对 LLM 可见由
-   * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
+   * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制。
    */
   readonly skills?: BuiltinToolSkillsContext;
   /**
@@ -248,7 +248,7 @@ export type BuiltinToolContext = {
    *
    * 主 agent run 与子 agent run 两个装配点都会按「resolve 后注册表含
    * `agent` 才注入」注入（照 skills 的 D4 闭包模式）；子 / 孙 agent 由
-   * `resolveAgentToolRegistry` 在摘 `task` 的同一分支强制摘除（D6），
+   * `AgentTools.resolveRegistry` 在摘 `task` 的同一分支强制摘除（D6），
    * 闭包不注入，run 抛 ToolError（FAILED）。
    */
   readonly agents?: BuiltinToolAgentsContext;
@@ -264,7 +264,7 @@ export type BuiltinToolContext = {
    * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见，
    * description 走中性「未装配搜索能力」文案（不承诺「返回配置指引」）。
    *
-   * 是否对 LLM 可用由 `resolveAgentToolRegistry` 的 tools.allow/deny 控制
+   * 是否对 LLM 可用由 `AgentTools.resolveRegistry` 的 tools.allow/deny 控制
    * （search 不在任何摘除分支内，主/子/孙 agent 全深度可用，照 curl）。
    */
   readonly search?: BuiltinToolSearchContext;

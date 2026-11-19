@@ -24,7 +24,7 @@ import { AppError, isAppError } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {
-  attachmentStorageName,
+  MessageAttachmentSchema,
   messageAttachmentsSchema,
 } from "@/domain/chat/model/message-attachment.schema.js";
 import {
@@ -40,8 +40,8 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attachment/attach-budget.js";
 import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -491,8 +491,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     for (const [i, path] of ["/notes/a.md", "/notes/b.md"].entries()) {
       const a = atts[i]!;
       assert.equal(a.path, path);
-      // 牙齿：name 必须等于 attachmentStorageName(path)，写成 basename 会被 zod refine 拒绝
-      assert.equal(a.name, attachmentStorageName(a.path));
+      // 牙齿：name 必须等于 MessageAttachmentSchema.storageName(path)，写成 basename 会被 zod refine 拒绝
+      assert.equal(a.name, MessageAttachmentSchema.storageName(a.path));
       assert.notEqual(a.name, "a.md");
       assert.equal(a.action, "userAttach");
       assert.equal(a.content, null);
@@ -666,7 +666,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       sessionId: session.id,
       seq: 1,
       role: "user",
-      content: textBlocks("正文"),
+      content: TextBlocks.of("正文"),
       provider: null,
       raw: null,
       createdAtMs: 0,
@@ -681,7 +681,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         vfs,
       },
     ));
-    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
+    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
     assert.match(body, /"display": "filename"/);
     assert.equal(body.includes("1|HHHH"), false);

@@ -5,8 +5,8 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { MessageBodyText } from "../../src/domain/chat/content/message-body-text.js";
 import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { formatStatusChipLabelFromAttachment } from "../../src/presentation/chat/attachment-chip.js";
@@ -17,7 +17,7 @@ import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { refreshRuleSnapshot } from "../../src/service/workplace/refresh-rule-snapshot.js";
 import {
@@ -38,7 +38,7 @@ function userMsg(
     sessionId,
     seq: 1,
     role: "user",
-    content: textBlocks(text),
+    content: TextBlocks.of(text),
     provider: null,
     raw: null,
     createdAtMs: 0,
@@ -87,7 +87,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     await sk.set(
       session.id,
       SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/rule.md"),
+      RuleSnapshotCodec.fileCacheKey("full", "/rule.md"),
       JSON.stringify({ body: "stale", mtimeMs: 1 }),
     );
 
@@ -139,7 +139,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     ));
 
-    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
+    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="workplaceChange">/);
     assert.match(body, /hist-body/);
     assert.ok(!body.includes("<workplace>"));

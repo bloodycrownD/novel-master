@@ -8,7 +8,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -52,7 +52,7 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("msg1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("msg1")));
 
     unwrap(await ctx.messages.hide(m1.id));
     const hidden = unwrap(await ctx.messages.get(m1.id));
@@ -67,10 +67,10 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("4")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("4")));
 
     const count = unwrap(await ctx.messages.hideRange(session.id, 2, 3));
     assert.equal(count, 2);
@@ -86,9 +86,9 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("visible-1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("hidden-1")));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("visible-2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("visible-1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("hidden-1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("visible-2")));
     unwrap(await ctx.messages.hide(m2.id));
 
     const visibleOnly = outcomeValue(await ctx.messages.listBySession(session.id, {
@@ -111,9 +111,9 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("h1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("h2")));
-    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("h3")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("h1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("h2")));
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("h3")));
     unwrap(await ctx.messages.hide(m3.id));
 
     const headers = await ctx.messages.listMessageHeadersBySession(session.id);
@@ -135,9 +135,9 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("o1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("o2")));
-    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("o3")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("o1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("o2")));
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("o3")));
     unwrap(await ctx.messages.hide(m3.id));
 
     const { conn, sqls } = recordingConnection(ctx.conn);
@@ -186,13 +186,13 @@ describe("Message visibility", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
     // seq1 user / seq2 assistant / seq3-5 user / seq6-8 assistant
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a1")));
     for (let i = 0; i < 3; i++) {
-      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`u${i + 2}`)));
+      unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`u${i + 2}`)));
     }
     for (let i = 0; i < 3; i++) {
-      unwrap(await ctx.messages.append(session.id, "assistant", textBlocks(`a${i + 2}`)));
+      unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of(`a${i + 2}`)));
     }
 
     const { conn, sqls } = recordingConnection(ctx.conn);
@@ -235,7 +235,7 @@ describe("Message visibility", () => {
       "user tail 取最近 3 条"
     );
     const other = unwrap(await ctx.sessions.create(project.id, "S2"));
-    unwrap(await ctx.messages.append(other.id, "assistant", textBlocks("other")));
+    unwrap(await ctx.messages.append(other.id, "assistant", TextBlocks.of("other")));
     const leaked = outcomeValue(await repo.listBySessionTailOfRole(session.id, "assistant", 10));
     assert.equal(
       leaked.some((m) => m.sessionId === other.id),
@@ -251,8 +251,8 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
 
     unwrap(await ctx.messages.hide(m1.id));
     unwrap(await ctx.messages.hide(m2.id));
@@ -269,8 +269,8 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
 
     unwrap(await ctx.messages.hide(m1.id));
 
@@ -286,8 +286,8 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
 
     unwrap(await ctx.messages.hide(m1.id));
 
@@ -303,7 +303,7 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
 
     const count = unwrap(await ctx.messages.hideRange(session.id, 5, 3));
     assert.equal(count, 0);
@@ -313,8 +313,8 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
 
     const count = unwrap(await ctx.messages.hideRange(session.id, 1, 10));
     assert.equal(count, 2); // Only 2 messages exist
@@ -324,8 +324,8 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
-    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
 
     const first = unwrap(await ctx.messages.hideRange(session.id, 1, 2));
     assert.equal(first, 2);
@@ -338,7 +338,7 @@ describe("Message visibility", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S"));
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("msg1")));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("msg1")));
 
     assert.equal(m1.hidden, false);
   });

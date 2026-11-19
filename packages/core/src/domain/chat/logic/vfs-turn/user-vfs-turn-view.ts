@@ -4,11 +4,11 @@
  * @module domain/chat/logic/vfs-turn/user-vfs-turn-view
  */
 
-import {messageBodyTextFromBlocks} from "../../content/message-body-text.js";
+import {MessageBodyText} from "../../content/message-body-text.js";
 import {Coerce} from "@/common/coerce.js";
 import type {ToolResultBlock, ToolUseBlock} from "../../model/content-block.js";
 import type {ChatMessageData} from "../../model/message.js";
-import {readMessageMetadata} from "../../model/message-metadata.js";
+import {MessageMetadata} from "../../model/message-metadata.js";
 import {ActionXmlToolUses, type DerivedToolUseInput} from "../../../vfs/logic/action-xml-to-tool-uses.js";
 import { UserVfsActionXml } from "../../../vfs/logic/user-vfs-action-xml.js";
 import {attachmentPath} from "../message/attachment-path.js";
@@ -99,14 +99,14 @@ class UserVfsTurns {
         const m1 = messages[startIndex + 1];
         if (m0 == null || m1 == null) return null;
         if (m0.hidden || m1.hidden) return null;
-        if (readMessageMetadata(m0.raw)?.kind !== "user_vfs_action") return null;
-        if (!messageBodyTextFromBlocks(m0.content.blocks).includes("<action")) return null;
+        if (MessageMetadata.read(m0.raw)?.kind !== "user_vfs_action") return null;
+        if (!MessageBodyText.fromBlocks(m0.content.blocks).includes("<action")) return null;
         if (m1.role !== "assistant") return null;
-        if (readMessageMetadata(m1.raw)?.kind !== "user_vfs_ack") return null;
+        if (MessageMetadata.read(m1.raw)?.kind !== "user_vfs_ack") return null;
         const ackBlocks = m1.content.blocks ?? [];
         if (ackBlocks.length === 0) return null;
         if (ackBlocks.some((block) => block.type !== "text")) return null;
-        if (messageBodyTextFromBlocks(ackBlocks) !== USER_VFS_TURN_ACK_TEXT) return null;
+        if (MessageBodyText.fromBlocks(ackBlocks) !== USER_VFS_TURN_ACK_TEXT) return null;
         return [m0, m1];
     }
 
@@ -114,7 +114,7 @@ class UserVfsTurns {
     /** nm-style: keep-public — core-shim / UI 测试的 VFS 视图构建入口。 */
     buildView(turn: readonly [ChatMessageData, ChatMessageData]): UserVfsTurnView {
         const [actionMsg, ackMsg] = turn;
-        const actionText = messageBodyTextFromBlocks(actionMsg.content.blocks);
+        const actionText = MessageBodyText.fromBlocks(actionMsg.content.blocks);
         const actions = this.parseActions(actionText);
         const toolUses = this.deriveToolUses(actions).map((toolUse, index) => ({
             type: "tool_use" as const,
@@ -133,7 +133,7 @@ class UserVfsTurns {
                 content: "ok",
                 ok: true
             })),
-            bridgeText: messageBodyTextFromBlocks(ackMsg.content.blocks),
+            bridgeText: MessageBodyText.fromBlocks(ackMsg.content.blocks),
         };
     }
 }

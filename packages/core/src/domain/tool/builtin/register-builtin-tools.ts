@@ -22,7 +22,7 @@ export const BuiltinTools = {
    * task / skill / agent 是静态对象，description 是 lambda，装配期由
    * `toolsFromRegistry` 分别读 `ctx.subagent.callableAgents` /
    * `ctx.skills.effective` / `ctx.agents.agents` 求值。task 是否对 LLM
-   * 可见由 `resolveAgentToolRegistry` 的 depth 判断控制（孙 agent depth>=2 deny）；
+   * 可见由 `AgentTools.resolveRegistry` 的 depth 判断控制（孙 agent depth>=2 deny）；
    * agent 与 task 同分支摘除（子/孙 agent 不可管理 agent，D6）；skill 由
    * tools.allow/deny 与技能总开关控制（与 task 同机制，无静态白名单）；
    * curl / search 不在任何摘除分支内，主/子/孙 agent 全深度可用，网络入口

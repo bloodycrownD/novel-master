@@ -16,7 +16,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { VfsServiceFactory } from "@novel-master/core/vfs";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
@@ -128,7 +128,7 @@ describe("CS-05b backfill 事务边界", () => {
       "backfill 段必须真的在补 checkpoint 行"
     );
     // ⚠️ 断言口径是「零 vfs_entry **写**」：导入侧段 C 按 spec 的形态就是
-    // `conn.transaction(backfillBaselineCheckpoints)`——判定/扫描读（列表 vfs_entry
+    // `conn.transaction(BackfillBaselineCheckpoints.backfill)`——判定/扫描读（列表 vfs_entry
     // + 头投影 + JOIN 定位）仍在**这条**短事务内。要治的是「它们与 3 万条导入语句
     // 同一条事务」，不是「这段读必须零事务」。
     const entryWrites = inBackfill.filter((s) =>

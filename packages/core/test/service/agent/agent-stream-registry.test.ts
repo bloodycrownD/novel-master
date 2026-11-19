@@ -18,7 +18,7 @@ import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import { AgentServiceFactory, type AgentDefinition } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { BuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type ModelRequestService } from "@novel-master/core/provider";
@@ -236,7 +236,7 @@ function scriptedModel(
 describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
   it("T-SR4：多 step run，step1 commit 后 registry 被重置，step2 delta 不含 step1 文本", async () => {
     const session = new InMemoryAgentSession(SESSION_ID, SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const sessionKkv = createMemorySessionKkv();
     await sessionKkv.set(SESSION_ID, "rule_snapshot", "canon", "[]");

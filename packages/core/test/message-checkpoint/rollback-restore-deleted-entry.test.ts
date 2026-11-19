@@ -24,8 +24,8 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/message-checkpoint";
+import { TextBlocks } from "@novel-master/core/chat";
+import { RollbackErrorGuards } from "@novel-master/core/message-checkpoint";
 
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
@@ -44,7 +44,7 @@ describe("rollback-restore-deleted-entry", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
     }));
@@ -64,7 +64,7 @@ describe("rollback-restore-deleted-entry", () => {
     assert.ok(entryA != null);
 
     // tail：删除 → 同路径重建（entryB 新内容）
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -125,7 +125,7 @@ describe("rollback-restore-deleted-entry", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
     }));
@@ -134,7 +134,7 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.write("/docs/sub/c.md", "gamma", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -174,7 +174,7 @@ describe("rollback-restore-deleted-entry", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // tail 期 rename 到 /renamed.md（entry 不变、path 变更）。
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     await svfs.renamePath("/origin.md", "/renamed.md");
 
     await ctx.sessionFs.rollbackFilesToMessage(
@@ -221,7 +221,7 @@ describe("rollback-restore-deleted-entry", () => {
 
     // tail：删除 → 同路径重建一次（entryB 只有 v1，checkpoint 指针仍指
     // (entryA, 2)——按 live entryB 寻址 (entryB, 2) 必查不到）。
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -275,7 +275,7 @@ describe("rollback-restore-deleted-entry", () => {
     // tail：删除 → 同路径重建也写两次（entryB 到 v2）——(entryB, 2) 恰好
     // 存在，missing 探测若误按 live entryB 寻址会漏检，直接进 restore 后
     // 复活读不到 (entryA, 2) 被包成 VFS_RESTORE_FAILED，绕过 backfill 确认流。
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -294,7 +294,7 @@ describe("rollback-restore-deleted-entry", () => {
     await rejectsErr(
       () =>
         ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
-      (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
+      (error: unknown) => RollbackErrorGuards.isRevisionBackfillRequired(error),
     );
   });
 
@@ -325,7 +325,7 @@ describe("rollback-restore-deleted-entry", () => {
     assert.ok(entryA != null);
 
     // tail：删除 → 同路径重建一次（entryB 只有 v1）→ 手工删 (entryA, 2)。
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -343,7 +343,7 @@ describe("rollback-restore-deleted-entry", () => {
     await rejectsErr(
       () =>
         ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
-      (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
+      (error: unknown) => RollbackErrorGuards.isRevisionBackfillRequired(error),
     );
 
     // 双端 UI 确认后带 revisionHeadBackfill 重试：回补必须打在旧 entryA 上
@@ -401,7 +401,7 @@ describe("rollback-restore-deleted-entry", () => {
     const entry = unwrap(await entries.findByPath(sk, "/gone3.md"));
     assert.ok(entry != null);
 
-    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
@@ -418,7 +418,7 @@ describe("rollback-restore-deleted-entry", () => {
     await rejectsErr(
       () =>
         ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
-      (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
+      (error: unknown) => RollbackErrorGuards.isRevisionBackfillRequired(error),
     );
   });
 });

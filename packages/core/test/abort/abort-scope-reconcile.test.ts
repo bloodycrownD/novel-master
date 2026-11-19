@@ -8,24 +8,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAbortScope, scopeFromController } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("controller memoize 后向 reconcile（T-S28）", () => {
-  it("scopeFromController 之后 createAbortScope({controller,parent}) 返回同一引用", () => {
+  it("AbortScopeFactory.fromController 之后 create({controller,parent}) 返回同一引用", () => {
     const controller = new AbortController();
-    const parent = createAbortScope();
-    const first = scopeFromController(controller);
-    const second = createAbortScope({ controller, parent });
+    const parent = AbortScopeFactory.create();
+    const first = AbortScopeFactory.fromController(controller);
+    const second = AbortScopeFactory.create({ controller, parent });
 
     assert.equal(second, first);
-    assert.equal(scopeFromController(controller), first);
+    assert.equal(AbortScopeFactory.fromController(controller), first);
   });
 
   it("命中后补挂的 parent 级联不丢：parent.abort → 既有实例 reason=parent", () => {
     const controller = new AbortController();
-    const parent = createAbortScope();
-    const existing = scopeFromController(controller);
-    createAbortScope({ controller, parent });
+    const parent = AbortScopeFactory.create();
+    const existing = AbortScopeFactory.fromController(controller);
+    AbortScopeFactory.create({ controller, parent });
 
     parent.abort("parent");
 
@@ -43,8 +43,8 @@ describe("controller memoize 后向 reconcile（T-S28）", () => {
     };
     try {
       const controller = new AbortController();
-      const existing = scopeFromController(controller);
-      const again = createAbortScope({ controller, timeoutMs: 1000 });
+      const existing = AbortScopeFactory.fromController(controller);
+      const again = AbortScopeFactory.create({ controller, timeoutMs: 1000 });
       assert.equal(again, existing);
       assert.equal(warnings.length, 1, "不一致 opts 必须留下 dev warn");
       assert.match(String(warnings[0]![0]), /复用既有实例/);

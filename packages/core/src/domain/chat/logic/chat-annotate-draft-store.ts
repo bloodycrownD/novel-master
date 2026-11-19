@@ -8,7 +8,7 @@
  * @module domain/chat/logic/chat-annotate-draft-store
  */
 
-import {type AnnotateDraft, isMessageAnnotatePath} from "../model/annotate-draft.schema.js";
+import {AnnotateDraftSchema, type AnnotateDraft} from "../model/annotate-draft.schema.js";
 import type {MessageAttachment} from "../model/message-attachment.schema.js";
 
 type AnnotateListener = (sessionId: string) => void;
@@ -56,7 +56,7 @@ class ChatAnnotateDraftStore {
         const chips: MessageAttachment[] = [];
         for (const d of drafts) {
             // 消息批注永不进 chip（防御误写入文件 store 的伪 path）
-            if (isMessageAnnotatePath(d.path)) {
+            if (AnnotateDraftSchema.isMessagePath(d.path)) {
                 continue;
             }
             if (seen.has(d.path)) {

@@ -15,7 +15,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
+import { TextBlocks } from "../../src/domain/chat/content/text-blocks.js";
 import { ChatAgentSession } from "../../src/service/agent/impl/chat-agent-session.js";
 import { runCompaction } from "../../src/service/compaction-conditions/run-compaction.js";
 import { CompactionFactory } from "../../src/service/compaction-conditions/compaction-factory.js";
@@ -63,7 +63,7 @@ async function appendMany(
 ): Promise<void> {
   const session = new ChatAgentSession(messages, sessionId);
   for (const role of roles) {
-    unwrap(await session.append(role, textBlocks(`${role}-${Math.random()}`)));
+    unwrap(await session.append(role, TextBlocks.of(`${role}-${Math.random()}`)));
   }
 }
 
@@ -368,7 +368,7 @@ describe("runCompaction", () => {
     const sessionId = sessionRow.id;
 
     // 只放 3 条消息：startDepth=10 远超可见深度，
-    // messageIdsInSlice 会返回空 → hide-messages 不 hide 任何消息，
+    // DepthSlice.messageIds 会返回空 → hide-messages 不 hide 任何消息，
     // 但 runCompaction 仍走完整流程（清 kkv + invalidate cache）并返回 ok。
     await appendMany(ctx.messages, sessionId, [
       "user",

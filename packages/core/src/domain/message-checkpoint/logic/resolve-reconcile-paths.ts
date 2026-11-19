@@ -5,17 +5,10 @@
  * 扫描（已带 entryId）解析，缺时退化为 entryRepo.findByPath。targetTree 仍是
  * `Map<logicalPath, version>`，reconcile 输出仍是逻辑路径集（vfs 操作吃逻辑路径）。
  *
- * ⚠️ **本函数只被调用 plan 半段**（CD-01 第 3 步）：`pathsNeedWrite` 依赖
- * checkpoint 侧的不可变快照 + revision meta，stale 最多多一次 restore 短路，
- * 而 {@link resolveReconcilePathSets} 的 `pathsNeedDelete` 那一半**已经搬进
- * 事务内**——删集合就是写集合，移出事务即 TOCTOU（间隙里新增/改名的文件会被
- * 按旧集合误删）。见 `reconcileVfsPaths` 与
- * {@link resolvePathsNeedDeleteInTransaction}。
- *
  * @module domain/message-checkpoint/logic/resolve-reconcile-paths
  */
 
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { RevisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
@@ -29,134 +22,143 @@ type ReconcilePathSets = {
   readonly pathsNeedDelete: ReadonlySet<string>;
 };
 
-/** {@link resolveReconcilePathSets} 依赖（共享底座里只取 entry / revision 两项）。 */
+/** `ReconcilePaths.resolve` 依赖（共享底座里只取 entry / revision 两项）。 */
 export type ResolveReconcilePathDeps = Pick<CheckpointRepoDeps, "entryRepo" | "revisionRepo">;
 
-/** {@link resolveReconcilePathSets} 的定位参数。 */
+/** `ReconcilePaths.resolve` 的定位参数。 */
 export type ResolveReconcilePathParams = {
   readonly scope: Extract<VfsScope, { kind: "session" }>;
   readonly targetTree: ReadonlyMap<string, number>;
   readonly checkpointEntryIdByPath?: ReadonlyMap<string, number>;
 };
 
-/**
- * 「需删除路径」半段的**事务内**实现（CD-01 第 3 步）。
- *
- * 消费的是调用方**事务内**已经取到的 live head 快照（`reconcileVfsPaths` 的
- * `liveHeadRows`），**不新增第二次 live 扫描**。
- *
- * @param extraTailDeletePaths plan 段由 tail 指针反解出的、落在 targetTree 外
- *        的路径；它们同样要过事务内 live 判定——间隙里已被删掉的文件没有「物」
- *        可删，跳过即可（`deletePathIfExists` 本来也吞 NOT_FOUND）。
- */
-export function resolvePathsNeedDeleteInTransaction(args: { readonly liveHeads: ReadonlyArray<SessionFileHead>; readonly targetTree: ReadonlyMap<string, number>; readonly hasDirectTargetTree: boolean; readonly extraTailDeletePaths: ReadonlySet<string> }): ReadonlySet<string> {
-  const { liveHeads, targetTree, hasDirectTargetTree, extraTailDeletePaths } = args;
-  const pathsNeedDelete = new Set<string>();
-  // 与 rollbackToMessage 的空树护栏（S-13）同口径：rewind 分支在 targetTree
-  // 为空时拿不到任何删除（这一路是漏删而非误删，误删由空树护栏兜住）——
-  // **两处门口径必须同改**，只放宽护栏会让 undo_send 侧反过来多删。
-  if (!hasDirectTargetTree) {
-    return pathsNeedDelete;
-  }
-  for (const { logicalPath } of liveHeads) {
-    if (!targetTree.has(logicalPath)) {
-      pathsNeedDelete.add(logicalPath);
+export const ReconcilePaths = {
+  /**
+   * 「需删除路径」半段的**事务内**实现（CD-01 第 3 步）。
+   *
+   * 消费的是调用方**事务内**已经取到的 live head 快照（`reconcileVfsPaths` 的
+   * `liveHeadRows`），**不新增第二次 live 扫描**。
+   *
+   * @param extraTailDeletePaths plan 段由 tail 指针反解出的、落在 targetTree 外
+   *        的路径；它们同样要过事务内 live 判定——间隙里已被删掉的文件没有「物」
+   *        可删，跳过即可（`deletePathIfExists` 本来也吞 NOT_FOUND）。
+   */
+  resolveNeedDelete(args: { readonly liveHeads: ReadonlyArray<SessionFileHead>; readonly targetTree: ReadonlyMap<string, number>; readonly hasDirectTargetTree: boolean; readonly extraTailDeletePaths: ReadonlySet<string> }): ReadonlySet<string> {
+    const { liveHeads, targetTree, hasDirectTargetTree, extraTailDeletePaths } = args;
+    const pathsNeedDelete = new Set<string>();
+    // 与 rollbackToMessage 的空树护栏（S-13）同口径：rewind 分支在 targetTree
+    // 为空时拿不到任何删除（这一路是漏删而非误删，误删由空树护栏兜住）——
+    // **两处门口径必须同改**，只放宽护栏会让 undo_send 侧反过来多删。
+    if (!hasDirectTargetTree) {
+      return pathsNeedDelete;
     }
-  }
-  for (const logicalPath of extraTailDeletePaths) {
-    if (!targetTree.has(logicalPath)) {
-      pathsNeedDelete.add(logicalPath);
-    }
-  }
-  return pathsNeedDelete;
-}
-
-/**
- * 从 target 树与 live 状态筛出真正需写盘的逻辑路径（plan 半段）。
- *
- * 同 version 或同 content_hash 不进 pathsNeedWrite（对齐 restore 短路语义）。
- *
- * @param params.checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
- *        entry 行已被物理删除的路径靠它寻址 revision（rollback-restore-deleted-entry），
- *        不再一律标 -1 判「必写盘+必 missing」。
- */
-export async function resolveReconcilePathSets(deps: ResolveReconcilePathDeps, params: ResolveReconcilePathParams): Promise<Result<ReconcilePathSets, AppError>> {
-  const { entryRepo, revisionRepo } = deps;
-  const { scope, targetTree, checkpointEntryIdByPath } = params;
-  const { projectId, sessionId } = scope;
-  const scopeKeyStr = LogicalPath.scopeKey(scope);
-  const liveHeads = await listSessionFileHeads(entryRepo, projectId, sessionId);
-  const liveHeadByPath = new Map(liveHeads.map((head) => [head.logicalPath, head.headVersion]));
-  const entryIdByPath = new Map<string, number>();
-  for (const head of liveHeads) {
-    entryIdByPath.set(head.logicalPath, head.entryId);
-  }
-
-  const reconcilePairs: Array<{
-    logicalPath: string;
-    entryId: number;
-    version: number;
-  }> = [];
-  const pathsNeedWrite = new Set<string>();
-  for (const [logicalPath, version] of targetTree) {
-    let entryId = entryIdByPath.get(logicalPath) ?? null;
-    if (entryId == null) {
-      // 非-live 路径（可能已删）：退化为 entryRepo 探测拿 entryId。
-      const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
-      if (!entry.ok) return Result.err(entry.error);
-      entryId = entry.value?.entryId ?? null;
-    }
-    const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? null;
-    if (entryId != null && cpEntryId != null && entryId !== cpEntryId) {
-      // live entry 与 checkpoint 指针不同源（删除后同路径重建）：两边版本空间
-      // 各自独立，version/content_hash 短路全部失效，一律写盘——restore 阶段
-      // 墓碑新 entry 并复活 checkpoint 旧 entry（目标检查点完成态语义）。
-      pathsNeedWrite.add(logicalPath);
-      continue;
-    }
-    if (entryId == null) {
-      // entry 行已被物理删除：优先用 checkpoint 旧 entryId 寻址 revision（被删
-      // 文件仍要参与 meta 比对判「是否需写盘」）；无快照上下文的老指针维持
-      // entryId=-1（meta 必查不到 → 标记需写盘，restore 阶段降级）。
-      entryId = cpEntryId ?? -1;
-    }
-    reconcilePairs.push({ logicalPath, entryId, version });
-  }
-
-  const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
-  const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
-  const hashes = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
-  if (!hashes.ok) return Result.err(hashes.error);
-  const liveHashByPath = hashes.value;
-
-  for (const pair of reconcilePairs) {
-    const liveHead = liveHeadByPath.get(pair.logicalPath);
-    if (liveHead === pair.version) {
-      continue;
-    }
-    if (pair.entryId < 0) {
-      pathsNeedWrite.add(pair.logicalPath);
-      continue;
-    }
-    const meta = revisionMetaByKey.get(RevisionPairKey.build(pair.entryId, pair.version));
-    if (meta == null) {
-      pathsNeedWrite.add(pair.logicalPath);
-      continue;
-    }
-    if (meta.status === "deleted") {
-      if (liveHead != null) {
-        pathsNeedWrite.add(pair.logicalPath);
+    for (const { logicalPath } of liveHeads) {
+      if (!targetTree.has(logicalPath)) {
+        pathsNeedDelete.add(logicalPath);
       }
-      continue;
     }
-    const liveHash = liveHashByPath.get(pair.logicalPath) ?? null;
-    if (meta.contentHash != null && meta.contentHash.length > 0 && liveHash != null && liveHash === meta.contentHash) {
-      continue;
+    for (const logicalPath of extraTailDeletePaths) {
+      if (!targetTree.has(logicalPath)) {
+        pathsNeedDelete.add(logicalPath);
+      }
     }
-    pathsNeedWrite.add(pair.logicalPath);
-  }
+    return pathsNeedDelete;
+  },
 
-  // 删集合半段已搬进事务内（CD-01 第 3 步）；这里恒为空集合，调用方拿它只当
-  // 「plan 半段」的占位。返回值保留是为了不破坏既有调用面。
-  return Result.ok({ pathsNeedWrite, pathsNeedDelete: new Set<string>() });
-}
+  /**
+   * ⚠️ **本函数只被调用 plan 半段**（CD-01 第 3 步）：`pathsNeedWrite` 依赖
+   * checkpoint 侧的不可变快照 + revision meta，stale 最多多一次 restore 短路，
+   * 而 {@link ReconcilePaths.resolve} 的 `pathsNeedDelete` 那一半**已经搬进
+   * 事务内**——删集合就是写集合，移出事务即 TOCTOU（间隙里新增/改名的文件会被
+   * 按旧集合误删）。见 `reconcileVfsPaths` 与
+   * {@link ReconcilePaths.resolveNeedDelete}。
+   *
+   * 从 target 树与 live 状态筛出真正需写盘的逻辑路径（plan 半段）。
+   *
+   * 同 version 或同 content_hash 不进 pathsNeedWrite（对齐 restore 短路语义）。
+   *
+   * @param params.checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
+   *        entry 行已被物理删除的路径靠它寻址 revision（rollback-restore-deleted-entry），
+   *        不再一律标 -1 判「必写盘+必 missing」。
+   */
+  async resolve(deps: ResolveReconcilePathDeps, params: ResolveReconcilePathParams): Promise<Result<ReconcilePathSets, AppError>> {
+    const { entryRepo, revisionRepo } = deps;
+    const { scope, targetTree, checkpointEntryIdByPath } = params;
+    const { projectId, sessionId } = scope;
+    const scopeKeyStr = LogicalPath.scopeKey(scope);
+    const liveHeads = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
+    const liveHeadByPath = new Map(liveHeads.map((head) => [head.logicalPath, head.headVersion]));
+    const entryIdByPath = new Map<string, number>();
+    for (const head of liveHeads) {
+      entryIdByPath.set(head.logicalPath, head.entryId);
+    }
+
+    const reconcilePairs: Array<{
+      logicalPath: string;
+      entryId: number;
+      version: number;
+    }> = [];
+    const pathsNeedWrite = new Set<string>();
+    for (const [logicalPath, version] of targetTree) {
+      let entryId = entryIdByPath.get(logicalPath) ?? null;
+      if (entryId == null) {
+        // 非-live 路径（可能已删）：退化为 entryRepo 探测拿 entryId。
+        const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
+        if (!entry.ok) return Result.err(entry.error);
+        entryId = entry.value?.entryId ?? null;
+      }
+      const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? null;
+      if (entryId != null && cpEntryId != null && entryId !== cpEntryId) {
+        // live entry 与 checkpoint 指针不同源（删除后同路径重建）：两边版本空间
+        // 各自独立，version/content_hash 短路全部失效，一律写盘——restore 阶段
+        // 墓碑新 entry 并复活 checkpoint 旧 entry（目标检查点完成态语义）。
+        pathsNeedWrite.add(logicalPath);
+        continue;
+      }
+      if (entryId == null) {
+        // entry 行已被物理删除：优先用 checkpoint 旧 entryId 寻址 revision（被删
+        // 文件仍要参与 meta 比对判「是否需写盘」）；无快照上下文的老指针维持
+        // entryId=-1（meta 必查不到 → 标记需写盘，restore 阶段降级）。
+        entryId = cpEntryId ?? -1;
+      }
+      reconcilePairs.push({ logicalPath, entryId, version });
+    }
+
+    const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
+    const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
+    const hashes = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
+    if (!hashes.ok) return Result.err(hashes.error);
+    const liveHashByPath = hashes.value;
+
+    for (const pair of reconcilePairs) {
+      const liveHead = liveHeadByPath.get(pair.logicalPath);
+      if (liveHead === pair.version) {
+        continue;
+      }
+      if (pair.entryId < 0) {
+        pathsNeedWrite.add(pair.logicalPath);
+        continue;
+      }
+      const meta = revisionMetaByKey.get(RevisionPairKey.build(pair.entryId, pair.version));
+      if (meta == null) {
+        pathsNeedWrite.add(pair.logicalPath);
+        continue;
+      }
+      if (meta.status === "deleted") {
+        if (liveHead != null) {
+          pathsNeedWrite.add(pair.logicalPath);
+        }
+        continue;
+      }
+      const liveHash = liveHashByPath.get(pair.logicalPath) ?? null;
+      if (meta.contentHash != null && meta.contentHash.length > 0 && liveHash != null && liveHash === meta.contentHash) {
+        continue;
+      }
+      pathsNeedWrite.add(pair.logicalPath);
+    }
+
+    // 删集合半段已搬进事务内（CD-01 第 3 步）；这里恒为空集合，调用方拿它只当
+    // 「plan 半段」的占位。返回值保留是为了不破坏既有调用面。
+    return Result.ok({ pathsNeedWrite, pathsNeedDelete: new Set<string>() });
+  },
+} as const;

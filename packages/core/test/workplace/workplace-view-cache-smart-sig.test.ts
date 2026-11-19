@@ -18,7 +18,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { SqliteSmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.js";
-import { compileSmartSortRule } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
+import { SmartSortRuleCompiler } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
 import { DefaultWorkplaceService } from "@/service/workplace/impl/workplace.service.js";
 import { clearAllWorkplaceViewCache } from "@/service/workplace/impl/workplace-view-cache.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -77,7 +77,7 @@ function createSpyingWorkplaceService(conn: import("@novel-master/core").TdbcCon
       const compiled = [];
       for (const rule of await smartRepo.listOrdered()) {
         if (rule.enabled) {
-          const compiledRule = compileSmartSortRule(rule);
+          const compiledRule = SmartSortRuleCompiler.compile(rule);
           if (!compiledRule.ok) throw compiledRule.error;
           compiled.push(compiledRule.value);
         }

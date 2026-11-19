@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
 import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } from "../../src/domain/character-card/logic/character-card-limits.js";
-import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
@@ -36,7 +36,7 @@ import { tCore } from "../helpers/core-i18n.js";
 novelMasterTestFixture();
 
 function parseTree(input: Uint8Array | string): ReadonlyMap<string, string> {
-  const result = parseCharacterCardToMdTree(input);
+  const result = CharacterCardToMdTree.parse(input);
   if (!result.ok) {
     throw result.error;
   }

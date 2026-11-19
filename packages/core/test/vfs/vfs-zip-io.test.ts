@@ -5,14 +5,14 @@ import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
 import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
 import { isAppError } from "@novel-master/core/errors";
-import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
+import { CharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { VfsZipBuild } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
-import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
+import { VfsZipValidate } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -121,7 +121,7 @@ describe("VfsZipIoService", () => {
   it("markdown front matter passes UTF-8 zip validation", () => {
     const content = "---\ntitle: x\n---\n# Hi\n";
     const bytes = new TextEncoder().encode(content);
-    const decoded = decodeUtf8Entry(bytes, "xxx.md");
+    const decoded = VfsZipValidate.decodeUtf8Entry(bytes, "xxx.md");
     assert.ok(decoded.ok);
     assert.equal(decoded.value, content);
   });
@@ -779,7 +779,7 @@ describe("VfsZipIoService", () => {
       sessionId: session2.id,
     };
     await ctx.sessionKkv.set(session2.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
-    const parsedCard = parseCharacterCardToMdTree(
+    const parsedCard = CharacterCardToMdTree.parse(
       JSON.stringify({
         spec: "chara_card_v2",
         data: { description: "d" },

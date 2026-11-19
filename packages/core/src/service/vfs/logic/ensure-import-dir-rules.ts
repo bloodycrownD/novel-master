@@ -21,7 +21,7 @@ import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 import type { WorkplaceDirRule } from "@/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { createLogger } from "@/infra/log/logger.js";
@@ -109,7 +109,7 @@ export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Prom
       return;
     }
     const prefix = normalizedPrefix.value;
-    const targetScopeKey = workplaceScopeKey(scope);
+    const targetScopeKey = WorkplaceScope.key(scope);
     const directories = await vfsRepo.listDirectoryPathsUnderPrefix(LogicalPath.scopeKey(scope), prefix);
     const existing = new Set<string>();
     for (const rule of await workplaceRepo.listDirRules(targetScopeKey)) {

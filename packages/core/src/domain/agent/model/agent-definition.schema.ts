@@ -7,9 +7,9 @@
 import { z } from "zod";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { dynamicBlockToWire, persistBlockToWire } from "@/domain/prompt/logic/agent-prompt-layout-wire.js";
-import { validateAgentPromptLayout, validateAgentPromptLayoutFromMaps } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
-import { stripLegacyAgentWire, stripLegacyPrompts, stripLifecycleFromTextBlock } from "./agent-definition-preprocess.js";
+import { AgentPromptLayoutWire } from "@/domain/prompt/logic/agent-prompt-layout-wire.js";
+import { AgentPromptLayoutValidate } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
+import { AgentDefinitionPreprocess } from "./agent-definition-preprocess.js";
 import type { AgentDefinition } from "./agent-definition.js";
 
 /**
@@ -22,7 +22,7 @@ import type { AgentDefinition } from "./agent-definition.js";
  */
 const textBlockStrictSchema = z.object({ type: z.literal("text"), role: z.enum(["user", "assistant"]), content: z.string() }).strict();
 
-const textBlockValueSchema = z.preprocess(stripLifecycleFromTextBlock, textBlockStrictSchema);
+const textBlockValueSchema = z.preprocess(AgentDefinitionPreprocess.stripLifecycleFromTextBlock, textBlockStrictSchema);
 
 const promptsWorkplaceSchema = z.union([z.boolean(), z.string().refine((s) => s.trim().length > 0, { message: "error.agent.invalid_schema.workplace_nonempty_string" })]).optional();
 const promptsCustomAttachSchema = z.string().refine((s) => s.trim().length > 0, { message: "error.agent.invalid_schema.custom_attach_nonempty_string" }).optional();
@@ -47,7 +47,7 @@ const promptsObjectShape = {
 const promptsObjectSchema = z.object(promptsObjectShape).strict();
 
 export const promptsDocumentSchema = z.preprocess((raw, ctx) => {
-  const stripped = stripLegacyPrompts(raw);
+  const stripped = AgentDefinitionPreprocess.stripLegacyPrompts(raw);
   if (!stripped.ok) {
     // zod 回调签名由框架锁定，无法返 Result（五期门⑦同款）：removed-feature
     // 拦截的域 AppError 挂进 issue params 走**数据通道**出 zod 管道，decode()
@@ -86,7 +86,7 @@ export const agentDefinitionDocumentSchema = z.object(agentDefinitionDocumentSha
 type AgentDefinitionDocument = z.infer<typeof agentDefinitionDocumentSchema>;
 
 const agentDefinitionWireSchema = z.preprocess((raw, ctx) => {
-  const stripped = stripLegacyAgentWire(raw);
+  const stripped = AgentDefinitionPreprocess.stripLegacyAgentWire(raw);
   if (!stripped.ok) {
     // 数据通道同款（见 promptsDocumentSchema）：preferredModelId / legacy nested
     // model 拦截的 AppError 原样进 decode() 的 Err。
@@ -99,7 +99,7 @@ const agentDefinitionWireSchema = z.preprocess((raw, ctx) => {
 /** Domain parser: wire document → {@link AgentDefinition}（toWire 由下面的 {@link agentDefinitionSchema} 挂载）。 */
 const agentDefinitionBaseSchema = agentDefinitionWireSchema
   .superRefine((doc, ctx) => {
-    const prompts = validateAgentPromptLayoutFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
+    const prompts = AgentPromptLayoutValidate.validateFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
       persistEnabled: doc.prompts.persistEnabled,
       dynamicEnabled: doc.prompts.dynamicEnabled,
       workplace: doc.prompts.workplace,
@@ -118,7 +118,7 @@ const agentDefinitionBaseSchema = agentDefinitionWireSchema
   .transform((doc) => {
     // superRefine 段已用同一入参跑过同一校验并拒绝非法布局（纯函数，两遍同结果），
     // 此处恒 Ok；unwrapOr 的空布局仅为类型兜底，不会出现在输出里。
-    const prompts = validateAgentPromptLayoutFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
+    const prompts = AgentPromptLayoutValidate.validateFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
       persistEnabled: doc.prompts.persistEnabled,
       dynamicEnabled: doc.prompts.dynamicEnabled,
       workplace: doc.prompts.workplace,
@@ -141,20 +141,20 @@ const agentDefinitionBaseSchema = agentDefinitionWireSchema
 export const agentDefinitionSchema = Object.assign(agentDefinitionBaseSchema, {
   toWire: (def: AgentDefinition): Result<AgentDefinitionDocument, AppError> => {
     // 块名唯一性门禁（RT-04）：wire 形态是「块名 → 块」的对象映射，同名块在这里
-    // 会被后写静默覆盖（正文永久丢失、零报错）。读侧 validateAgentPromptLayoutFromMaps
+    // 会被后写静默覆盖（正文永久丢失、零报错）。读侧 AgentPromptLayoutValidate.validateFromMaps
     // 天然唯一、写侧此前是裸的 ⇒ 只补写侧这一处。
-    // 落点选这里而不是 configToWire：toWire 的三个调用点（validateAgentDefinition /
+    // 落点选这里而不是 configToWire：toWire 的三个调用点（AgentDefinitionValidator.validate /
     // ProjectAgentConfig.updateAgentConfig / 注册表持久化）唯一收敛在 toWire，
     // 一处改动全覆盖，同一条规则插两遍将来必漏改一处。
-    const validated = validateAgentPromptLayout(def.prompts);
+    const validated = AgentPromptLayoutValidate.validate(def.prompts);
     if (!validated.ok) return Result.err(validated.error);
     const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
     for (const block of def.prompts.persist) {
-      persist[block.name] = persistBlockToWire(block);
+      persist[block.name] = AgentPromptLayoutWire.persistBlock(block);
     }
     const dynamic: AgentDefinitionDocument["prompts"]["dynamic"] = {};
     for (const block of def.prompts.dynamic) {
-      dynamic[block.name] = dynamicBlockToWire(block);
+      dynamic[block.name] = AgentPromptLayoutWire.dynamicBlock(block);
     }
     return Result.ok({
       schemaVersion: 1,

@@ -1,10 +1,8 @@
 [
   "CompactionFactory",
   "DEFAULT_HIDE_START_DEPTH",
+  "DepthSlice",
+  "HideMessageRange",
   "compactionConditionsSchema",
-  "matchDepth",
-  "messageIdsInSlice",
-  "resolveHideMessageRange",
-  "runCompaction",
-  "validateDepthSlice"
+  "runCompaction"
 ]

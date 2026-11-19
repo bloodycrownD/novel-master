@@ -10,11 +10,11 @@ import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { Coerce } from "@/common/coerce.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AppError } from "@/errors/app-error.js";
 import type { Interrupt, Outcome } from "@/errors/outcome.js";
-import { parseMessageContent } from "../../content/parse-message-content.js";
-import { parseAttachmentsJson } from "../../model/message-attachment.schema.js";
+import { MessageContentParse } from "../../content/parse-message-content.js";
+import { MessageAttachmentSchema } from "../../model/message-attachment.schema.js";
 import type { ChatMessageData, ChatMessageHeader } from "../../model/message.js";
 import { ChatMessage } from "../../logic/message/chat-message.js";
 import type { MessageContent } from "../../model/content-block.js";
@@ -79,11 +79,11 @@ function corruptMessageRow(row: Row, field: string, cause: unknown): AppError<"C
 
 function rowToMessage(row: Row): ChatMessage {
   // 正文只有明文一种形态：content_json 直接 parse；解析失败按 repository 边界抛。
-  const content = parseMessageContent(String(row.content_json));
+  const content = MessageContentParse.parse(String(row.content_json));
   if (!content.ok) {
     throw corruptMessageRow(row, "content_json", content.error);
   }
-  const attachments = parseAttachmentsJson(Coerce.nullableText(row.attachments_json));
+  const attachments = MessageAttachmentSchema.parseJson(Coerce.nullableText(row.attachments_json));
   // usage 列全空时保持「无 usage 属性」形状（条件 spread 保证空对象没有 key）。
   const usageFields: MessageUsage = {
     ...(row.prompt_tokens != null ? { promptTokens: Number(row.prompt_tokens) } : {}),
@@ -271,9 +271,9 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     return Number(rows[0]!.n);
   }
 
-  /** nm-style: keep-public — MessageRepository 端口读口；decideBackfillShortCircuit 单点消费。 */
+  /** nm-style: keep-public — MessageRepository 端口读口；BackfillBaselineCheckpoints.decideShortCircuit 单点消费。 */
   async listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessageHeader[]> {
-    // 头投影：唯一调用方 decideBackfillShortCircuit（backfill 增量段判定）只消费 `id`，
+    // 头投影：唯一调用方 BackfillBaselineCheckpoints.decideShortCircuit（backfill 增量段判定）只消费 `id`，
     // 不取正文字节。原先按 19 列全量取并逐条 JSON.parse——会话导入 / 复制 /
     // 首次回填时 offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
     const clampedOffset = Math.max(0, Math.floor(offset));
@@ -354,7 +354,7 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
           const hit = hooks?.checkpoint?.();
           if (hit != null) {
             interrupt = hit;
-            throw createAbortError();
+            throw AbortError.create();
           }
           await this.yieldFn?.();
         }

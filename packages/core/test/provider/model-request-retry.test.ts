@@ -4,14 +4,14 @@ import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/bu
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
-import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
+import { DefaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
 
 const providerRepo: ProviderRepository = {
   list: async () => Result.ok([]),
@@ -43,7 +43,7 @@ const savedModels: SavedModelRepository = {
           providerId: BUILTIN_PROVIDER_UUID_OPENAI,
           vendorModelId: "gpt-4o-mini",
           modelName: "gpt-4o-mini",
-          settings: defaultSavedModelSettings("gpt-4o-mini"),
+          settings: DefaultSavedModelSettings.of("gpt-4o-mini"),
           createdAtMs: 0,
           updatedAtMs: 0,
         })
@@ -214,7 +214,7 @@ describe("DefaultModelRequestService retry", () => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(() =>
-      svc.request(SAVED_MODEL_ID, "hello", { scope: createAbortScope({ controller }) }),
+      svc.request(SAVED_MODEL_ID, "hello", { scope: AbortScopeFactory.create({ controller }) }),
     );
     assert.equal(calls, 1);
   });

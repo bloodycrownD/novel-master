@@ -10,13 +10,13 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
-import { providerApiKeyRef, resolveProviderApiKeySecretRef } from "@/domain/provider/model/provider.js";
+import { ProviderModel } from "@/domain/provider/model/provider.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
-import { findSavedModelReferences } from "@/domain/provider/logic/find-saved-model-references.js";
+import { SavedModelReferences } from "@/domain/provider/logic/find-saved-model-references.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import { providerApiKeyIsConfigured } from "@/domain/provider/logic/resolve-provider-api-key.js";
+import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
 import type { CreateProviderInput, EditProviderPatch, ProviderListItem, ProviderService } from "../provider.port.js";
 
@@ -26,7 +26,7 @@ interface DefaultProviderServiceDeps {
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
   /**
-   * 仅供 `delete` 的 in-use 拒绝用（`findSavedModelReferences` 的首参）。
+   * 仅供 `delete` 的 in-use 拒绝用（`SavedModelReferences.find` 的首参）。
    *
    * ⚠️ **不得**改走 `providerModels` 反向注入来拿：`ProviderModelService` 已持有
    * `providers`，反向注入会成循环 import。`conn` 由工厂直接传，链路现成。
@@ -51,7 +51,7 @@ export class DefaultProviderService implements ProviderService {
     const rows = await this.deps.providers.list();
     if (!rows.ok) return Result.err(rows.error);
     const { secretStore } = this.deps;
-    const items = await Promise.all(rows.value.map(async (p): Promise<ProviderListItem> => ({ ...p, apiKeyStatus: (await providerApiKeyIsConfigured(p, secretStore)) ? "set" : "not set" })));
+    const items = await Promise.all(rows.value.map(async (p): Promise<ProviderListItem> => ({ ...p, apiKeyStatus: (await ProviderApiKey.isConfigured(p, secretStore)) ? "set" : "not set" })));
     return Result.ok(items);
   }
 
@@ -70,7 +70,7 @@ export class DefaultProviderService implements ProviderService {
     const displayName = name.value;
     const id = Random.uuid();
     const now = Date.now();
-    const secretRef = input.apiKey ? providerApiKeyRef(id) : null;
+    const secretRef = input.apiKey ? ProviderModel.apiKeyRef(id) : null;
     const provider: LlmProvider = {
       id,
       builtinKey: null,
@@ -130,7 +130,7 @@ export class DefaultProviderService implements ProviderService {
 
     // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
     // 只能在应用层用「读到旧值 → 失败时写回」来补偿）。
-    const originalSecretRef = resolveProviderApiKeySecretRef(provider);
+    const originalSecretRef = ProviderModel.resolveApiKeySecretRef(provider);
     const originalSecretValue = await this.deps.secretStore.get(originalSecretRef);
 
     let secretRef = provider.secretRef;
@@ -142,7 +142,7 @@ export class DefaultProviderService implements ProviderService {
         secretRef = null;
       } else {
         secretOp = "set";
-        secretRef = providerApiKeyRef(id);
+        secretRef = ProviderModel.apiKeyRef(id);
         newSecretValue = patch.apiKey;
       }
     }
@@ -216,7 +216,7 @@ export class DefaultProviderService implements ProviderService {
 
     // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
     // 先把待删数据快照下来，失败时逆序恢复，保证不留半套。
-    const ref = resolveProviderApiKeySecretRef(provider);
+    const ref = ProviderModel.resolveApiKeySecretRef(provider);
     const listedSuggestions = await this.deps.suggestions.listByProvider(id);
     if (!listedSuggestions.ok) return Result.err(listedSuggestions.error);
     const suggestions = listedSuggestions.value;
@@ -231,7 +231,7 @@ export class DefaultProviderService implements ProviderService {
     // 补全了，这条路依然能静默清空被引用的模型。拒绝发生在任何删除动作之前，
     // 因此不破坏既有五步 CoordinatedWrite 的 rollback 配对。
     for (const m of savedModels) {
-      const refs = await findSavedModelReferences(this.deps.conn, m.id);
+      const refs = await SavedModelReferences.find(this.deps.conn, m.id);
       // ⚠️ `currentModelId` 是**软指针**，不是内容引用。真实契约分两半，缺一不可：
       //   ① 【本处】把它从 blockingRefs 里滤掉——把它当硬引用会把这层既有契约打死，
       //      provider 只要是当前模型就永远删不掉。真正必须前置拒绝的内容引用只有

@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
 import { SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import type { Row } from "../../src/infra/tdbc/types.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
@@ -160,7 +160,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       const repo = new SqliteMessageRepository(conn);
       const read = await repo.findById(legacyMessageId);
       assert.ok(read);
-      assert.deepEqual(read!.content, textBlocks("legacy-plaintext"));
+      assert.deepEqual(read!.content, TextBlocks.of("legacy-plaintext"));
 
       // 新写入在新列就位后可正常 INSERT/SELECT（压缩形态断言由
       // T-C1 往返用例覆盖，此处只锁 schema 语义）。
@@ -169,7 +169,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
         sessionId,
         seq: 2,
         role: "user" as const,
-        content: textBlocks("compressed-new"),
+        content: TextBlocks.of("compressed-new"),
         provider: null,
         raw: null,
         createdAtMs: now + 1,
@@ -178,7 +178,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       await repo.insert(message);
       const readNew = await repo.findById(message.id);
       assert.ok(readNew);
-      assert.deepEqual(readNew!.content, textBlocks("compressed-new"));
+      assert.deepEqual(readNew!.content, TextBlocks.of("compressed-new"));
 
       // ALIGN 补列必须带 CHECK 值域（防 align SQL 与 canonical DDL 漂移——
       // 值域放宽/收紧测不出就是这里的缺口）：'gzip' 不在值域内被拒，

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  createAbortError,
+  AbortError,
   isAbortLikeError,
   isRequestAborted,
 } from "../../../src/infra/llm-protocol/logic/request-abort.js";
@@ -24,13 +24,13 @@ describe("request-abort", () => {
     }
   });
 
-  it("createAbortError works without DOMException global", () => {
+  it("AbortError.create works without DOMException global", () => {
     const g = globalThis as { DOMException?: typeof DOMException };
     const saved = g.DOMException;
     // @ts-expect-error Hermes has no DOMException
     delete g.DOMException;
     try {
-      const err = createAbortError("cancelled");
+      const err = AbortError.create("cancelled");
       assert.equal(err.name, "AbortError");
       assert.equal(err.message, "cancelled");
       assert.equal(isRequestAborted(err), true);

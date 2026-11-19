@@ -8,11 +8,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { loadOrFillFileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import { FileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { fileCacheKey } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { RuleSnapshotCodec } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import {
   CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES,
   CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
@@ -67,7 +67,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       },
     });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.match(result.body, /^（文件过大，已跳过，约 \d+ 字符）$/);
     assert.equal(result.body.includes(`${CHARACTER_CARD_MAX_SINGLE_FILE_BYTES + 1}`), true);
@@ -75,7 +75,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     assert.equal(result.mtimeMs, 1751718000000);
     assert.equal(vfs.readCalls(), 0, "不得触发 vfs.read 全文");
     assert.equal(
-      await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md")),
+      await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")),
       null,
       "占位结果不得写入 file_cache"
     );
@@ -91,13 +91,13 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       },
     });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.match(result.body, /^（文件过大，已跳过，约 \d+ 字符）$/);
     assert.equal(result.mtimeMs, 1751718000000, "blob 占位同样携带真实 mtime");
     assert.equal(vfs.readCalls(), 0);
     assert.equal(
-      await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md")),
+      await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")),
       null
     );
   });
@@ -109,12 +109,12 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       content: "正常正文",
     });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.equal(result.body, "正常正文");
     assert.equal(vfs.readCalls(), 1);
     assert.notEqual(
-      await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md")),
+      await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")),
       null
     );
   });
@@ -123,7 +123,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     const sessionKkv = createMemorySessionKkv();
     const vfs = fakeVfs({ contentSize: "throw", content: "回退正文" });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.equal(result.body, "回退正文");
     assert.equal(vfs.readCalls(), 1);
@@ -133,7 +133,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     const sessionKkv = createMemorySessionKkv();
     const vfs = fakeVfs({ contentSize: null, content: "兜底正文" });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.equal(result.body, "兜底正文");
     assert.equal(vfs.readCalls(), 1);
@@ -144,14 +144,14 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     await sessionKkv.set(
       "s1",
       SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/note.md"),
+      RuleSnapshotCodec.fileCacheKey("full", "/note.md"),
       JSON.stringify({ body: "缓存正文", mtimeMs: 42 })
     );
     const vfs = fakeVfs({
       contentSize: { kind: "inlineChars", size: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES + 1 },
     });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.equal(result.body, "缓存正文");
     assert.equal(result.mtimeMs, 42);
@@ -166,7 +166,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       contentSize: { kind: "inlineChars", size: 1024, mtimeMs: 1751718000000 },
     });
 
-    const result = await loadOrFillFileCache({
+    const result = await FileCache.loadOrFill({
       ...BASE,
       sessionKkv,
       vfs,
@@ -180,7 +180,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       await sessionKkv.get(
         "s1",
         SESSION_KKV_DOMAIN_FILE_CACHE,
-        fileCacheKey("filename", "/note.md")
+        RuleSnapshotCodec.fileCacheKey("filename", "/note.md")
       ),
       null
     );
@@ -190,7 +190,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     // 探测抛错 / 返回 null 两种形态都退 0，但组装必须继续走下去。
     const forThrow = createMemorySessionKkv();
     const vfsThrow = fakeVfs({ contentSize: "throw" });
-    const r1 = await loadOrFillFileCache({
+    const r1 = await FileCache.loadOrFill({
       ...BASE,
       sessionKkv: forThrow,
       vfs: vfsThrow,
@@ -202,7 +202,7 @@ describe("loadOrFillFileCache 读取侧降级", () => {
 
     const forNull = createMemorySessionKkv();
     const vfsNull = fakeVfs({ contentSize: null });
-    const r2 = await loadOrFillFileCache({
+    const r2 = await FileCache.loadOrFill({
       ...BASE,
       sessionKkv: forNull,
       vfs: vfsNull,
@@ -221,14 +221,14 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     (vfs as unknown as { read: () => Promise<unknown> }).read = async () =>
       Result.err(new Error("EIO"));
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.equal(result.body, "(missing)");
     assert.equal(
       await sessionKkv.get(
         "s1",
         SESSION_KKV_DOMAIN_FILE_CACHE,
-        fileCacheKey("full", "/note.md")
+        RuleSnapshotCodec.fileCacheKey("full", "/note.md")
       ),
       null,
       "降级来源的 payload 不得写入 file_cache"
@@ -242,14 +242,14 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       content: "上一轮提示词里写着 (missing) 占位符",
     });
 
-    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+    const result = await FileCache.loadOrFill({ ...BASE, sessionKkv, vfs });
 
     assert.equal(result.body, "上一轮提示词里写着 (missing) 占位符");
     assert.notEqual(
       await sessionKkv.get(
         "s1",
         SESSION_KKV_DOMAIN_FILE_CACHE,
-        fileCacheKey("full", "/note.md")
+        RuleSnapshotCodec.fileCacheKey("full", "/note.md")
       ),
       null,
       "正常读取的正文即便含 (missing) 也必须落 cache"

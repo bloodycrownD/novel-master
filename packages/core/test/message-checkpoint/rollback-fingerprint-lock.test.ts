@@ -25,7 +25,7 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { TextBlocks } from "@novel-master/core/chat";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { isSessionFsError } from "@/errors/guards.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
@@ -94,13 +94,13 @@ async function seedRollbackFixture(prefix: string): Promise<Fixture> {
   const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  unwrap(await ctx.messages.append(session.id, "user", textBlocks("q1")));
-  const anchorA = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a1")));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("q1")));
+  const anchorA = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a1")));
   await svfs.write("/base.md", "anchor-body", { versionCheck: false });
   unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, anchorA.id));
 
-  unwrap(await ctx.messages.append(session.id, "user", textBlocks("q2")));
-  const anchorB = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a2")));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("q2")));
+  const anchorB = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a2")));
   await svfs.write("/base.md", "tail-body", { versionCheck: false });
   await svfs.write("/extra.md", "created-after-anchor", { versionCheck: false });
   unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, anchorB.id));
@@ -242,7 +242,7 @@ describe("C2-10 R5: 间隙换掉一条 tail 消息 ⇒ ROLLBACK_TAIL_DRIFT 且�
       const fresh = unwrap(await ctx.messages.append(
         fx.sessionId,
         "user",
-        textBlocks("gap-injected")
+        TextBlocks.of("gap-injected")
       ));
       injectedId = fresh.id;
     });
