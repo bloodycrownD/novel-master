@@ -65,7 +65,28 @@ test("T-HY1 对象成员 DEAD：object-method / object-arrow 死成员必报（�
   assert.equal(bySymbol.get("Legacy.persist").form, "object-method");
   assert.equal(bySymbol.get("Legacy.drain").form, "object-arrow");
   assert.equal(bySymbol.get("Legacy.persist").face, "exported");
-  assert.equal(bySymbol.get("Inner.run").face, "private");
+  // 非导出 object 容器成员走 exported face（globalRefs 保守归因，cr-func-hygiene P0 修复后口径）。
+  assert.equal(bySymbol.get("Inner.run").face, "exported");
+});
+
+test("P0 回归·工厂返回对象：成员经接收者变量跨文件消费不判 DEAD（cr-func-hygiene 复现 logger.ts 形态）", () => {
+  const findings = scan([
+    unit("packages/demo/src/logger.ts", "export function create() {\n  return { debug() {}, info() {} };\n}\n"),
+    unit("packages/demo/src/app.ts", 'import { create } from "./logger";\nconst log = create();\nlog.debug();\nlog.info();\nlog.debug();\n'),
+  ], { mode: "all" });
+  const dead = findings.filter((finding) => finding.verdict === "DEAD");
+  assert.ok(!dead.some((finding) => finding.symbol.startsWith("create.")), "经接收者变量消费的工厂对象成员不得判 DEAD");
+  assert.ok(!findings.some((finding) => finding.symbol === "create.debug" && finding.verdict === "DEAD"));
+});
+
+test("P0 回归·数组元素对象：成员经迭代变量消费不判 DEAD（保守归因命中全部同名成员）", () => {
+  const findings = scan([
+    unit("packages/demo/src/handlers.ts", "export const handlers = [{ run() {} }, { stop() {} }];\n"),
+    unit("packages/demo/src/loop.ts", 'import { handlers } from "./handlers";\nfor (const h of handlers) {\n  h.run();\n}\n'),
+  ], { mode: "all" });
+  const dead = findings.filter((finding) => finding.verdict === "DEAD");
+  assert.ok(!dead.some((finding) => finding.symbol.endsWith(".run")), "run 经迭代变量 h.run() 消费，保守归因必须救回");
+  assert.ok(dead.some((finding) => finding.symbol.endsWith(".stop")), "stop 全仓零消费仍判 DEAD");
 });
 
 test("T-HY2 对象成员单点 INLINE_CANDIDATE：一处消费者判内联，两点消费不报", () => {

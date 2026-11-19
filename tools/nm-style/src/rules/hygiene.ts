@@ -16,9 +16,10 @@
  * 白名单）；exported 的 FAKE_PUBLIC / DEAD / TEST_ONLY / INLINE_CANDIDATE 仅 changed/all/strict 阻断
  * （旧 check-style 的 fakeTargets 口径）。
  *
- * face 判定：private（私有顶层/嵌套函数、private class 方法、未导出容器的成员）用 localRefs
- * （同文件计数，自包含）；class-public（公有 class 方法）与 exported（顶层导出、namespace/object
- * 容器的导出成员）用 globalRefs（prod/test 分桶）。
+ * face 判定：private（私有顶层/嵌套函数、private class 方法、未导出 namespace 成员）用 localRefs
+ * （同文件计数）；class-public（公有 class 方法）与 exported（顶层导出、namespace 导出成员、
+ * object 容器全部成员——工厂返回对象/数组元素对象走 globalRefs 保守归因，见 faceOf 注释）
+ * 用 globalRefs（prod/test 分桶）。
  *
  * 审计口径树：仅审计 packages/ 或 apps/ 前缀下的定义。引用模型（import 感知、prod-test 分桶、
  * 成员归因）以 packages+apps 工作区为界校准，树外定义的跨文件消费结构性不可见，审计必然误报
@@ -210,6 +211,11 @@ function inModeledTree(file: string): boolean {
 function faceOf(symbol: SymbolInfo): HygieneFace {
   if (symbol.container == null) return symbol.exported ? "exported" : "private";
   if (symbol.container.kind === "class") return symbol.isPrivate ? "private" : "class-public";
+  if (symbol.container.kind === "object") return "exported";
+  // 工厂返回对象 / 数组元素对象（object 容器）：接收者变量（const log = create() → log.debug()）
+  // 结构上归因不到容器名，localRefs 的同文件精确归因会连真实消费都看不见（cr-func-hygiene P0：
+  // 真仓 52 条假 DEAD）。按 §3.2 统一走 exported 面 = globalRefs 保守归因（不可归因按属性名命中
+  // 全部同名成员，宁漏报不误杀），阻断也随之收窄到 strict 通道——该形态无旧口径可保，取保守。
   return symbol.exported ? "exported" : "private";
 }
 
