@@ -2,3 +2,4 @@ dist/
 dist-tmp/
 dist-old/
 .build-lock
+tmp-git-test/
