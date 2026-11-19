@@ -109,7 +109,7 @@ test("T-RS1 PARAMS：多行参数报（函数声明与箭头），单行参数�
   assert.ok(!findings.some((finding) => finding.detail === "ok(1)" || finding.detail === "fine(2)"), "单行参数不得报");
 });
 
-test("T-RS2 ARGS：普通实参拆行报，回调实参不报、相邻实参不报", () => {
+test("T-RS2 ARGS：普通实参拆行报（相邻行即拆行，旧语义），回调实参与单行调用不报", () => {
   const findings = scanText([
     "foo(",
     '  "x",',

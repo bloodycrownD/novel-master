@@ -74,7 +74,7 @@ test("T-KF3 suppressPrefixes：前缀与目录本身命中，其他路径不命�
   assert.equal(isSuppressed("packages/core/src/errors/guards.ts", FIXTURE), false);
 });
 
-test("signatures 匹配修正：detail 包含 entry.symbol 即命中（旧精确/后缀从未命中过）", () => {
+test("signatures 匹配修正：detail 包含 entry.symbol 即命中（includes 是旧后缀匹配的严格超集；旧后缀对 .raceWithCancel 本就命中，见 cr-func-signatures P2-1）", () => {
   const detail = "scope.raceWithCancel(signal, work, rejectWith)";
   assert.ok(matchEntry({ rule: "signatures", file: "packages/core/src/domain/abort/logic/create-abort-scope.ts", line: 206, symbol: detail, detail }, FIXTURE) != null);
   assert.equal(matchEntry({ rule: "signatures", file: "packages/core/src/domain/abort/logic/create-abort-scope.ts", line: 206, symbol: detail, detail: "scope.fork(signal)" }, FIXTURE), null);

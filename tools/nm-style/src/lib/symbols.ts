@@ -249,7 +249,7 @@ function isExcludedRefPosition(node: ts.Identifier, parent: ts.Node): boolean {
 function isDeclarationNamePosition(node: ts.Identifier, parent: ts.Node): boolean {
   const named = parent as ts.Declaration & { name?: ts.Node };
   if (named.name !== node) return false;
-  return ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) || ts.isClassExpression(parent) || ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent) || ts.isModuleDeclaration(parent) || ts.isTypeAliasDeclaration(parent) || ts.isInterfaceDeclaration(parent) || ts.isEnumDeclaration(parent) || ts.isEnumMember(parent) || ts.isNamespaceImport(parent) || ts.isCatchClause(parent);
+  return ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) || ts.isClassExpression(parent) || ts.isFunctionExpression(parent) || ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent) || ts.isModuleDeclaration(parent) || ts.isTypeAliasDeclaration(parent) || ts.isInterfaceDeclaration(parent) || ts.isEnumDeclaration(parent) || ts.isEnumMember(parent) || ts.isNamespaceImport(parent) || ts.isCatchClause(parent);
 }
 
 function enclosingClassNameOf(node: ts.Node): string | null {
@@ -637,7 +637,7 @@ export function buildSymbolIndex(units: readonly SymbolUnit[], options: SymbolIn
         if (targets == null || targets.includes(container)) bump(u, site.isCall); // 无法归因 → 保守命中全部同名成员；跨容器同名不互算
       });
       if (container.kind === "namespace") {
-        // namespace 成员在本 namespace 内是裸名作用域，同文件裸名用法照计（防误杀）。
+        // namespace 成员在本 namespace 内是裸名作用域，全仓参与文件的裸名用法都照计（防误杀；cr-func 实测跨文件无 import 的裸调用也计，保守方向）。
         bareOccurrencesIn(def, u, (isCall, isSelf) => {
           if (!isSelf) bump(u, isCall);
         });

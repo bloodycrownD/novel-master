@@ -402,3 +402,30 @@ test("导出面补标：export { x } 重导出与 export default x 都算导出�
   assert.equal(local.exported, true);
   assert.equal(index.topLevelNameCount("local"), 1);
 });
+
+test("具名函数表达式的名字标识符不计引用（cr-func-symbols P1-1 负例：与 ClassExpression 名字位同口径）", () => {
+  const index = buildSymbolIndex([
+    unit('packages/demo/src/u2.ts', 'export function shadow() {}\n'),
+    unit('packages/demo/src/main.ts', 'import { shadow } from "./u2";\nconst f = function shadow() {};\nshadow();\n'),
+  ]);
+  const [def] = index.find("shadow", null);
+  assert.equal(def.file, "packages/demo/src/u2.ts");
+  const refs = index.globalRefs(def);
+  // 只有 main.ts 的显式调用计 1；函数表达式自己的名字 shadow() {} 不得再加。
+  assert.equal(refs.prodCalls + refs.prodRefs, 1);
+});
+
+test("简写绑定 { helper }：注册为容器成员且绑定位不计消费（cr-func-symbols P2-5 补测）", () => {
+  const index = buildSymbolIndex([
+    unit('packages/demo/src/factory.ts', 'export function helper() {}\nexport const Sink = { helper };\nconst out = Sink.helper();\n'),
+  ]);
+  const [helper] = index.find("helper", null);
+  assert.equal(helper.form, "bare-fn");
+  // 函数本体零裸名消费（绑定位豁免），经 Sink.helper 成员存活。
+  const refs = index.globalRefs(helper);
+  assert.equal(refs.prodCalls + refs.prodRefs, 0);
+  const [member] = index.find("helper", "Sink");
+  assert.equal(member.form, "object-binding");
+  const memberRefs = index.globalRefs(member);
+  assert.ok(memberRefs.prodCalls + memberRefs.prodRefs >= 1, "Sink.helper() 调用须命中成员");
+});
