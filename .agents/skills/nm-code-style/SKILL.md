@@ -71,24 +71,27 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 4. 只有测试直接 import → 不构成保留理由；测试改走公开入口/service，或随内联删除；
 5. service→domain 这类跨层唯一入口可以保留**一个内部 export**，但它不该出现在 public allowlist 里。
 
-`find-fake-exports.mjs` 的 verdict 与处理：
+`nm-style check` hygiene 段的 verdict 与处理（旧 inline / methods / find-fake-exports 三检测器已并成一段）：
 
 | verdict | 含义 | 处理 |
 |---|---|---|
 | `FAKE_PUBLIC` | public 有名字但生产引用 0 | 撤 public → 决定删不删 |
 | `TEST_ONLY` | 非 public、生产 0、只有测试引用 | 测试不是保留理由；改走公开入口或删 |
 | `DEAD` | 生产/测试都 0 | 沿死链删到底 |
-| `INLINE_CANDIDATE` | 非 public、生产 1 处（函数） | **默认内联**；`public=yes` 只是撤导出时要同步 barrel/allowlist，**不是保留理由**。确认不能内联才写 `nm-style: keep-public — 理由` |
-| `AMBIGUOUS` | 同名多定义，计数按名字合并 | 人工看 |
-| `KEEP` / 类 / 常量 | 类保留状态边界，大写常量是命名契约 | 不做 inline 候选 |
+| `INLINE_CANDIDATE` | 非 public、生产 1 处（函数/方法） | **默认内联**；`public=yes` 只是撤导出时要同步 barrel/allowlist，**不是保留理由**。确认不能内联才写 `nm-style: keep-public — 理由` |
+| `PASS_THROUGH` | 单行转手（函数体只有 `return g(x)` / `return new G(x)`，含 this/super 转发与实参派生形态） | 删 wrapper，调用点直呼 g |
+| `AMBIGUOUS` | 同名多定义（跨类/跨容器），按名计数不可靠 | 人工看，不自动判死 |
+| `KEEP_PUBLIC` | 多处生产消费，公开合理 | 不处理 |
+| `KEEP_LOCAL` | 命中 `nm-style: keep-local` 指令 | 见 §1.1；理由不成立时仍要处理 |
+| 类 / 常量 | 类保留状态边界，大写常量是命名契约 | 不做 inline 候选 |
 
 先例：`parseCharacterCardToMdTree` 曾在 public allowlist、service 一处调用、测试多处直引；public 是假的，已撤导出并把解析并回 domain 单文件。
 
-`--strict` 时 `DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE` 退出码 1。仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核。
+`--strict` 时 `DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE`（含 public 单点）退出码 1。仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核。
 
 #### 引用别名：`export const A = B.c`
 
-`find-fake-exports.mjs` **抓不到这一种**——它按标识符计数，`formatCharCount` 有 5 个调用方，所以判 `KEEP`。`check-inline` 的 `PASS_THROUGH` 只匹配 `function f() { return g(x) }`，也匹配不了 `const f = g.member`。
+hygiene 段**抓不到这一种**——它按标识符计数，`formatCharCount` 有 5 个调用方，所以判 `KEEP_PUBLIC`；`PASS_THROUGH` 只认「单 return 调用/new」的转手函数，`export const A = B.c` 这种没有函数体的别名不在其内，仍要靠下面的 grep 兜底。
 
 判据：**A 与 `B.c` 是不是同一件事换名**。
 
@@ -108,7 +111,7 @@ export const serializePromptLlmInput = PromptBuilder.cliText;
 
 **「有消费者」不构成保留理由，要问「消费者改得动吗」。** `formatCharCount` 的 5 个调用方全是一行改（`formatCharCount(x)` → `Number.charCount(x)`），却被「有消费者」挡住了好几轮。
 
-扫描命令（`check-style` 不含此项，要单独跑）：
+扫描命令（hygiene 段按标识符计数，抓不到别名形态，要单独跑）：
 
 ```bash
 grep -rnE "^export const [a-zA-Z_][a-zA-Z0-9_]* *(:[^=]+)?= *[A-Z][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]* *;" --include=*.ts packages/core/src
@@ -135,10 +138,10 @@ grep -rnE "^export const [a-zA-Z_][a-zA-Z0-9_]* *(:[^=]+)?= *[A-Z][a-zA-Z0-9_]*\
 「发现第二份就收敛」不能靠通读代码——语义相同的函数往往**名字不同**，肉眼扫不出来。固定流程：
 
 ```bash
-node scripts/list-dup-signatures.mjs <repo-root> --all --json > D:/tmp/sig.json
+nm-style baseline write dup --baseline D:/tmp/sig.json
 ```
 
-三种视图各有用途：`dupByName`（同名不同文件）、`dupByShape`（名字不同但参数形态相同）、`dupBySignature`（完整签名相同）。**扫描含 export**——跨域重复的典型形态是「一处 export、另一处私有」。
+JSON 里两个视图各有用途：`named`（同名不同文件，含同名同签名——完整签名重复自然落在同名组里）、`shaped`（名字不同但参数形态相同）。**扫描含 export**——跨域重复的典型形态是「一处 export、另一处私有」。
 
 **按语义族归类，不按文件名归类**。已确认的高频族：
 
@@ -226,7 +229,7 @@ export const Coerce = {
 
 调用点：`import {Coerce} from "@novel-master/core/common"` → `Coerce.nullableText(x)`。
 
-**理由**：`common/index.ts` 曾平铺 25 个裸导出（`isRecord` 与 `truncateText` 并列），同类不同源看不出；object namespace 让「这是哪一类工具」在调用点可见，同时规避 `check-oop.mjs` 的 `MANY_EXPORTS`。
+**理由**：`common/index.ts` 曾平铺 25 个裸导出（`isRecord` 与 `truncateText` 并列），同类不同源看不出；object namespace 让「这是哪一类工具」在调用点可见，同时规避 oop 段的 `MANY_EXPORTS`。
 
 **两个例外**：
 
@@ -238,7 +241,7 @@ export const Coerce = {
 出现「私有 helper 与某个已 export 的函数签名完全相同」时，**删私有、改 import**：
 
 ```bash
-node scripts/list-dup-signatures.mjs <repo> --all --json   # dupBySignature 里一方 export、一方 local 的条目
+nm-style baseline write dup --baseline D:/tmp/dup.json     # named 里一方 export、一方 local 的条目
 ```
 
 先例（2026-11-17 实测）：`vfs-tree-copy.ts` 的私有 `normalizePrefix` 与 `sqlite-workplace.repository.ts` 的私有 `escapeLike`，各自重写了 `scope-prefix-helpers.ts` 里已 export 的同名同签名函数——已删私有改 import。
@@ -260,36 +263,39 @@ node scripts/list-dup-signatures.mjs <repo> --all --json   # dupBySignature 里�
 
 ## 8. 脚本化检查（改完必跑，循环到 PASS）
 
-不要只靠通读代码找违规；先跑脚本，按报告改，再跑。**至少循环 2 次**，直到 signatures/inline 都是 0 处；**每轮收尾至少跑一次 `--all`**（`--changed` 看不到未改动文件里的死导出）。
+不要只靠通读代码找违规；先跑脚本，按报告改，再跑。**至少循环 2 次**，直到 signatures/hygiene 都是 0 处（KFP 命中降级的 INFO 行不算）；**每轮收尾至少跑一次 `--all`**（`--changed` 看不到未改动文件里的死导出）。
 
 ```bash
-node .agents/skills/nm-code-style/scripts/check-style.mjs --changed          # 只扫本次改动
-node .agents/skills/nm-code-style/scripts/check-style.mjs --all             # 全 core 体检
-node .agents/skills/nm-code-style/scripts/check-style.mjs <dir>             # 扫指定目录
-node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-tests
+nm-style check --changed                      # 只扫本次改动（diff 新增行）
+nm-style check --all                          # 缺省扫 packages/core/src 全量体检
+nm-style check <dir|file>                     # 扫指定目录/文件
+nm-style check --changed --include-tests      # 连测试文件一起扫
+nm-style check --range <spec> | --since <base> # 按区间扫（CI 用）
+nm-style gate dup                              # dup 键集合门禁（新增重复组 exit 1）
+nm-style gate bare                             # bare-exports 基线门禁（新增裸导出 exit 1）
 ```
 
-| 脚本 | 检测 | 处理 |
+| 段 | 检测 | 处理 |
 | --- | --- | --- |
-| `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行、const/赋值 RHS 拆行 | 参数并回一行；RHS 并回一行或抽有名字的中间变量 |
-| `check-inline.mjs` | `DEAD_LOCAL` 零引用、`INLINE_LOCAL` 单点私有、`PASS_THROUGH` 单行转手、`KEEP_LOCAL` 豁免 | 删除 / 内联 / 删 wrapper；`KEEP_LOCAL` 见 §1.1 |
-| `check-methods.mjs` | `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD` / `DEPRECATED_*` / `AMBIGUOUS_METHOD` | 与自由函数同口径；同名跨类需人工看，不直接判死 |
-| `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 见 §4.1 的 verdict 表 |
-| `check-oop.mjs` | `OOP_CANDIDATE`（共享状态 + 多导出）、`MANY_EXPORTS`（导出 ≥6） | 见 §9.3；`OOP_CANDIDATE` 必须处理或说明理由 |
-| `list-all-signatures.mjs`（主仓 `scripts/`） | 导出仓库全部函数签名（含 export） | 按 §9.4 做 OOP 聚合审查；配合 §5.1 做语义重复审查 |
-| `list-dup-signatures.mjs`（主仓 `scripts/`） | `dupByName` / `dupByShape` / `dupBySignature` | 按 §5.1 语义族归类；`--gate` 增量判据（新增重复组才红），基线在 `scripts/dup-signatures-baseline.json` |
+| `signatures` | 多行函数参数、调用参数、1–3 个具名 import 拆行、const/赋值 RHS 拆行 | 参数并回一行；RHS 并回一行或抽有名字的中间变量 |
+| `hygiene` | `DEAD` / `INLINE_CANDIDATE` / `PASS_THROUGH` / `FAKE_PUBLIC` / `TEST_ONLY` / `AMBIGUOUS` / `KEEP_*`（旧 inline+methods+find-fake-exports 三合一） | 见 §4.1 的 verdict 表 |
+| `bare-exports` | `--changed` 拦新增裸顶层 export function；`--all`/指定目录报存量计数（INFO） | 收进主体 namespace（§9.7）或写 `nm-style: keep-bare` |
+| `dup` | 增量判据透传（新增重复组才红），基线在 `scripts/dup-signatures-baseline.json` | 按 §5.1 语义族归类；不阻断（门禁走独立 `gate dup`） |
+| `oop` | `OOP_CANDIDATE`（共享状态 + 多导出）、`MANY_EXPORTS`（导出 ≥6） | INFO 呈现；`--strict` 才阻断；见 §9.3 |
 
-**两个签名扫描脚本口径不同**：`check-inline` **只扫非 export**（export 的交给 `find-fake-exports`），`list-dup-signatures` **扫全部含 export**。一个函数既是 export 又重复时，前者不管、后者报。
+**汇总行记法**：`nm-style: PASS|FINDINGS（signatures=N hygiene=N bare-exports=INFO(N)|N dup=… oop=INFO(N)|N）`。`INFO(N)` 表示该段只计数不阻断——bare-exports 在非增量模式（`--all`/指定目录）恒 `INFO(N)`，`--range`/`--since` 下 bare 段恒 INFO（增量按 hunk 语义不可判）；`|` 右侧是阻断数。hygiene 一个数并入旧 inline/methods/exports 三段的阻断合计。
 
-脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-{find-fake-exports,check-signatures,check-methods,check-oop,check-inline}.mjs`。
+**bare-exports 全域口径**（`gate bare` / `list bare` / `check` 该段一致）：`packages/*/src` + `apps/(desktop|mobile)/src`、排除 `apps/cli` 与 `.d.ts`、未跟踪文件计入、同名重载去重保留首行；`nm-style: keep-bare` 豁免看符号上方 3 行内的注释。
 
-脚本是按标识符/import 计数的启发式：barrel 转发、同名遮蔽、动态引用需人工复核。**不要用脚本自动改文件**——报告只给位置，改动按本 skill 的语义判断。
+脚本自测：`cd tools/nm-style && node --test --test-concurrency=1 "test/*.test.mjs"`（glob 必须带引号、并发钉死串行——bootstrap 用例有约 2s 的坏文件窗口，并发会连累邻居假红）。
 
-**已知假阳性清单**：`scripts/known-false-positives.json` 登记「报出但不该改」的条目（跨类同名 `DEAD_METHOD`、接口实现、序列化钩子、导出 API 等），命中清单的从 `FIND` 降为 `INFO`。新增条目必须附理由与判定依据；`suppressPrefixes` 里的路径整体跳过（`apps/cli/` 已停止维护）。
+工具是按标识符/import 计数的启发式：barrel 转发、同名遮蔽、动态引用需人工复核（同名多定义已收敛为 `AMBIGUOUS` 档，不再按名判死）。**不要用脚本自动改文件**——报告只给位置，改动按本 skill 的语义判断。
 
-### 8.1 exports 段的数字不是假阳性
+**已知假阳性清单**：`tools/nm-style/known-false-positives.json` 登记「报出但不该改」的条目（跨类同名、接口实现、序列化钩子、导出 API 等），命中清单的从阻断降为 `INFO`。新增条目必须附理由与判定依据；确认已不触发的条目移入文件尾部 `retired` 段留档（不参与匹配）；`suppressPrefixes` 里的路径整体跳过（`apps/cli/` 已停止维护）。
 
-`signatures` / `inline` / `methods` 三段 PASS **不覆盖 exports 段**——它们只管「单点私有函数 / 一行 wrapper / 重复方法」，而 `FAKE_PUBLIC` / `DEAD` / `TEST_ONLY` 管的是「导出了但没人用」。
+### 8.1 hygiene 段导出面的数字不是假阳性
+
+`signatures` PASS **不覆盖 hygiene 段**——它只管「一行写完」，而 `FAKE_PUBLIC` / `DEAD` / `TEST_ONLY` 管的是「导出了但没人用」。
 
 所以不能写成「三段 PASS 所以 exports 的 FIND 是假阳性」。那是护身符。实测一轮清理前后：
 
@@ -308,7 +314,7 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 
 **桶间会迁移**：撤掉一批冗余 export 后，原本算 DEAD 的符号如果测试还在用，会滑进 TEST_ONLY。单看某个数字涨了没意义，要看**各桶内容**。
 
-读表还要注意列含义：`find-fake-exports.mjs` 输出 `verdict prod test public kind name location`，**第二对数字是 test 列**，不是「core 内部调用」。`FAKE_PUBLIC` 判据就是 prod===0，所以它恒为 `0c/0r`；看到 `5c/38c/81c` 时那是**测试**计数。
+读表还要注意列含义：hygiene 段输出 `verdict location rule face form symbol detail`——`face` 是该符号的公开面（private / class-public / exported），`exported` 面的引用计数来自全仓 globalRefs（生产与测试合一）；`FAKE_PUBLIC` 判据就是生产引用 0。要看分桶计数（生产/测试各多少）用 `--json`。
 
 ## 9. 对象化（最后一步）
 
@@ -374,7 +380,7 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 
 ```bash
 node scripts/list-all-signatures.mjs <repo-root> --all --out D:/tmp/all-signatures.txt
-node scripts/list-dup-signatures.mjs <repo-root> --all --json     # 交叉验证语义重复
+nm-style baseline write dup --baseline D:/tmp/dup.json            # 交叉验证语义重复（named/shaped 视图）
 ```
 
 **三种 OOP 信号：**
@@ -433,14 +439,14 @@ async function saveMessage(conn, ...)  { const r = reposFor(conn); ... }
 
 每个方法都先 `reposFor(conn)` 再干活 → `repos` 每次重建，对象持有状态的好处没吃到。判据：模块级有 `xxxFor(conn|runtime)` + 同文件 3 个以上函数以它的返回值开头。实测先例：`project.service.ts:36` / `session.service.ts:39`。
 
-**与 `check-oop.mjs` 的关系是「交叉看」，不是「各自出报告」**：
+**与 oop 段的关系是「交叉看」，不是「各自出报告」**：
 
-- `check-oop.mjs` 的 `OOP_CANDIDATE` = **已确认有共享状态**（模块顶层 `let`/`Map`/`Set`）的清单，但它看不到「三个不同文件在操作同一实体」
+- oop 段的 `OOP_CANDIDATE` = **已确认有共享状态**（模块顶层 `let`/`Map`/`Set`）的清单，但它看不到「三个不同文件在操作同一实体」
 - 签名审查看得到跨文件的名词族/元组族，但看不到模块顶层变量
 
-正确用法：**先跑 `check-oop.mjs` 拿 `OOP_CANDIDATE`，再用签名审查找它漏的跨文件聚合，然后交叉**——一个模块被 `check-oop` 报 `OOP_CANDIDATE`、同时签名上与其他两处同构，就是三处一起改的强信号。
+正确用法：**先跑 `nm-style check --all` 看 oop 段的 `OOP_CANDIDATE`，再用签名审查找它漏的跨文件聚合，然后交叉**——一个模块被 oop 段报 `OOP_CANDIDATE`、同时签名上与其他两处同构，就是三处一起改的强信号。
 
-实测反例：十四期的三个 driver registry 各自被 `check-oop` 报 `OOP_CANDIDATE`（因为有 `drivers` Map），但当时的处理是「三者各自保留现状」；直到签名审计发现三份 `resolve` 兜底逻辑完全一样，才做泛型化。**两套结果不交叉就必然漏。**
+实测反例：十四期的三个 driver registry 各自被 oop 段报 `OOP_CANDIDATE`（因为有 `drivers` Map），但当时的处理是「三者各自保留现状」；直到签名审计发现三份 `resolve` 兜底逻辑完全一样，才做泛型化。**两套结果不交叉就必然漏。**
 
 **签名审查只提供线索，不做定论。** 实测过的三类误判：
 
@@ -457,8 +463,8 @@ async function saveMessage(conn, ...)  { const r = reposFor(conn); ... }
 - 然后把 service 按角色命名（scanner / policy / use case / codec / seeder）；
 - 状态放 class private 字段，操作放实例方法；进程级单例导出 `xxxStore`，不要模块顶层 `const map` + 一堆 free functions；
 - 先对象化内部并保留方法引用兼容，再切消费者，最后撤别名 / public / allowlist；不要一次性把 API 和状态迁移混在一起；
-- `check-oop.mjs` 的 `OOP_CANDIDATE` 必须处理或按「未处理项报告」给理由；`MANY_EXPORTS` 只表示人工 review，纯函数模块可以不 OOP；
-- `check-methods.mjs` 的 `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD` 与自由函数同口径处理；类方法不能成为新的死角。
+- oop 段的 `OOP_CANDIDATE` 必须处理或按「未处理项报告」给理由；`MANY_EXPORTS` 只表示人工 review，纯函数模块可以不 OOP；
+- hygiene 段的类方法判定（`DEAD` / `INLINE_CANDIDATE` / `PASS_THROUGH`）与自由函数同口径处理；类方法不能成为新的死角。
 
 ### 9.6 数据包装类反模式
 
@@ -503,25 +509,25 @@ class ChatMessageEntity {
 
 豁免（默认不允许，必须显式）：React 组件（`.tsx` + PascalCase）、`use*` hooks（React 顶层调用规则）、test 目录、其余确有理由的写 `// nm-style: keep-bare: <理由>` 进 baseline。
 
-检测器：`node scripts/list-bare-exports.mjs <repo> --summary|--bucket <桶>` 圈精确清单；`node scripts/list-subject-clusters.mjs <repo> --gate` 守增量（新增裸导出 exit 1）；`check-style` 第四段 `bare-exports` 在 `--changed` 模式拦新增。
+检测器：`nm-style list bare --summary|--bucket <桶>` 圈精确清单；`nm-style gate bare` 守增量（新增裸导出 exit 1；全域口径见 §8）；`nm-style check --changed` 的 bare-exports 段拦新增。
 
 ## 交付前检查
 
-- 跑过 `check-style.mjs --changed` 并循环到 0 处？收尾再跑一次 `--all`。
-- `check-oop.mjs` 的 `OOP_CANDIDATE` 处理了吗？`MANY_EXPORTS` 看过并说明纯函数/该 OOP 了吗？
+- 跑过 `nm-style check --changed` 并循环到 0 处？收尾再跑一次 `--all`。
+- oop 段的 `OOP_CANDIDATE` 处理了吗？`MANY_EXPORTS` 看过并说明纯函数/该 OOP 了吗？
 - 只调用一次的 private / 模块级函数内联了吗？类方法有没有 `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD`？
 - 这个 export 的生产引用有几处？测试 import / allowlist 都不算消费者。`INLINE_CANDIDATE` 默认内联（`public=yes` 也一样）。
 - 死链的 caller 也一起删了吗？有没有 `return f(x)` 这种单行转手 wrapper？
 - 签名、调用参数、错误构造，是否还有多行？
 - 域逻辑里还有 throw 吗？throw 是否都收在边界？不变量破坏用 `assert` 了吗？
 - 这个 `Result` 真的有失败分支吗，还是为了"统一"硬加的？
-- 有没有第二份通用工具/守卫/纯映射该进 `core/common`？（跑 §5.1 的 `list-dup-signatures`）
+- 有没有第二份通用工具/守卫/纯映射该进 `core/common`？（跑 §5.1 的 dup 扫描）
 - 有没有「同一首参反复出现 / createXxxState + fn(state) / clear·ForTests 痕迹」该收成对象？（跑 §9.4 的 `list-all-signatures`）
 - 改完 typecheck、相关测试、lint 都跑了吗？测试红先降并发复跑过吗？
 
 ## 未处理项报告（强制）
 
-`DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE` 只要本轮没改掉，交付说明必须逐条列出：
+`DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE` / `PASS_THROUGH`（nm-style hygiene 段 verdict）只要本轮没改掉，交付说明必须逐条列出：
 
 | 符号 | verdict | prod/test | 不处理理由 | 证据 |
 | --- | --- | --- | --- | --- |

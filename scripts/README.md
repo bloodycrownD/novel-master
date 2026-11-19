@@ -1,6 +1,6 @@
 # scripts/
 
-仓库级开发 / 调试 / 排障工具（**手动执行，不进 CI**，唯一例外见下）。全部零依赖或只用仓库已有 devDependency，直接 `node` / `powershell` 跑。
+仓库级开发 / 调试 / 排障工具（**手动执行，不进 CI**，唯一例外见下）。全部零依赖或只用仓库已有 devDependency，直接 `node` / `powershell` 跑。**例外**：`tools/nm-style` 是 workspace 编译型包（TS→ESM，npm link 后全局 `nm-style` 命令），不在本目录、不守本节脚本约定，见包内 README 与 SKILL §8。
 
 ## 命名与代码约定（新增脚本必须遵守）
 
@@ -14,16 +14,16 @@
 
 **代码**
 
-- ESM + `node:` 前缀：`import {readFileSync} from "node:fs"`；禁止 `require`
+- ESM + `node:` 前缀：`import {readFileSync} from "node:fs"`；禁止 `require`（`tools/nm-style` 这类编译型包自声明 `"type": "module"`，不受本条约束）
 - 双引号、2 空格缩进（与 prettier 默认一致）。改完**只对单文件 / 单包**跑 `node scripts/prettier-guard.mjs -- --write --print-width 200 <files>`；不要直接对全仓跑 prettier（原因见下面「prettier guard」一节）
-- 可执行脚本首行 `#!/usr/bin/env node`
-- **文件头注释必须包含：用途 / 用法 / 退出码**（范式见 `scan-spread-await-risk.mjs`）
+- 可执行脚本首行 `#!/usr/bin/env node`（编译型包的落点是 bin 启动器，`tools/nm-style/bin/nm-style.mjs` 同款）
+- **文件头注释必须包含：用途 / 用法 / 退出码**（范式见 `scan-spread-await-risk.mjs`；编译型包的落点是包内 `--help` 命令面）
 - CLI：位置参数取实参，可选参数用 `--flag value`；缺参时打印用法并 `exit 2`
-- 退出码：成功 `0`、业务判定失败 `1`、用法错误 `2`。门禁脚本必须能返回非 0
+- 退出码：成功 `0`、业务判定失败 `1`、用法错误 `2`。门禁脚本必须能返回非 0（编译型工具多一档 `3`=构建失败，如 `nm-style`）
 - 输出：人读信息走 `console.log`，错误走 `console.error`；不要静默吞异常
 - 临时产物只写 `tmp/`（已 gitignore），用完删掉；不要在仓库根留 `*.log` / `*.png`
 
-## prettier guard — 别让格式化把 check-signatures 打红
+## prettier guard — 别让格式化把 signatures 段打红
 
 `nm-code-style` §2 要求函数签名、调用参数、`new` 构造、短 import、简单右值都写一行，而 prettier 按 `printWidth` 拆行，两者天然冲突。**六期实测**：对全仓跑
 
@@ -31,12 +31,12 @@
 npx prettier --write --print-width 200
 ```
 
-之后，`check-signatures` 从 **0 反弹到 148 处**；`--print-width 200` 也挡不住，最后只能 `git restore .` 回滚。这类纯重排混进 diff 会淹没真正的评审点，所以写操作必须收窄。
+之后，signatures 段从 **0 反弹到 148 处**；`--print-width 200` 也挡不住，最后只能 `git restore .` 回滚。这类纯重排混进 diff 会淹没真正的评审点，所以写操作必须收窄。
 
-正确流程：先让 `check-signatures` 确认目标文件本来就有 0 处发现（有发现的文件不要跑 prettier——那是规范冲突，不是格式不整），再只对这些文件单独跑：
+正确流程：先让 `nm-style check` 确认目标文件本来就有 0 处发现（有发现的文件不要跑 prettier——那是规范冲突，不是格式不整），再只对这些文件单独跑：
 
 ```
-node .agents/skills/nm-code-style/scripts/check-signatures.mjs packages/core/src/foo.ts
+nm-style check packages/core/src/foo.ts
 node scripts/prettier-guard.mjs -- --write --print-width 200 packages/core/src/foo.ts
 ```
 
@@ -62,6 +62,8 @@ node scripts/prettier-guard.mjs -- --check --print-width 200 packages/core/src
 | `check-ci-gates.mjs` | 根 `check:ci-gates` | 解析 `ci.yml`，校验门禁步登记表没漏项/没多登记（只解析 ci.yml，不覆盖 nightly） |
 | `collect-check.mjs` | `packages/tdbc-driver-*`、`tokenizer-driver-node` 的 scripts | 校验测试「收集数非零」；现状断言在 `lib/zero-collect-guard.mjs` |
 | `link-hooks.mjs` | 根 `prepare` | 装 `.githooks` 到 `.git/hooks` |
+
+风格门禁已迁到 `tools/nm-style`（`nm-style gate dup` / `gate bare` / `check`，全局命令，npm link 安装），本表只收 scripts/ 目录内的挂载门禁。
 
 ## 诊断 / 排障
 
