@@ -22,6 +22,8 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { IntegrityRepairDetection, IntegrityRepairOperation } from "@/service/integrity-repair.js";
 
 const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
@@ -46,23 +48,24 @@ export const EntrySequenceRepair = {
     return {
       name: VFS_ENTRY_SEQUENCE_REPAIR_NAME,
       kind: "repair",
-      async detect(): Promise<IntegrityRepairDetection> {
+      async detect(): Promise<Result<IntegrityRepairDetection, AppError>> {
         const { seq, needed } = await EntrySequenceRepair.readSequenceBoundaries(conn);
-        return {
+        return Result.ok({
           needsRepair: seq < needed,
           details: `sqlite_sequence(vfs_entry)=${seq} < needed=${needed}（含孤儿 revision 占号）`,
-        };
+        });
       },
-      async repair(): Promise<void> {
+      async repair(): Promise<Result<void, AppError>> {
         const { seq, needed } = await EntrySequenceRepair.readSequenceBoundaries(conn);
         if (seq >= needed) {
-          return;
+          return Result.ok(undefined);
         }
         // sqlite_sequence 可直接写入；无行（表从未自发递增过）时补一行
         const updated = await conn.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'vfs_entry'", [needed]);
         if (updated.changes === 0) {
           await conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('vfs_entry', ?)", [needed]);
         }
+        return Result.ok(undefined);
       },
     };
   },

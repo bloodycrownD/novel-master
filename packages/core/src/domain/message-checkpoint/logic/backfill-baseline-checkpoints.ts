@@ -15,6 +15,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { ChatMessageHeader } from "@/domain/chat/model/message.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import { BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { Result } from "@/errors/either.js";
 import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
 
 /**
@@ -329,31 +330,32 @@ export const BackfillBaselineCheckpoints = {
       async detect() {
         const files = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
         if (files.length === 0) {
-          return { needsRepair: false };
+          return Result.ok({ needsRepair: false });
         }
         // 两段式判定先行：短路即确认无空窗，无需全量找空窗。
         const decisionInput = { sessionKkv, messageRepo, checkpointRepo, sessionId };
         const decision = await BackfillBaselineCheckpoints.decideShortCircuit(decisionInput);
         if (decision.kind === "short-circuit") {
-          return { needsRepair: false };
+          return Result.ok({ needsRepair: false });
         }
         // 回退全量分支同样只要 id 与顺序：用头投影，避免为了「找最后一个有
         // checkpoint 的消息」把全会话正文解压一遍（见 BackfillBaselineCheckpoints.backfill 注释）。
         const messages = await messageRepo.listMessageHeadersBySession(sessionId);
         if (messages.length === 0) {
-          return { needsRepair: false };
+          return Result.ok({ needsRepair: false });
         }
         const firstGapIndex = await BackfillBaselineCheckpoints.resolveFirstGapIndex(checkpointRepo, sessionId, messages);
         if (firstGapIndex >= messages.length) {
-          return { needsRepair: false };
+          return Result.ok({ needsRepair: false });
         }
-        return {
+        return Result.ok({
           needsRepair: true,
           details: `session=${sessionId} 在第 ${firstGapIndex + 1} 条消息处开始有空窗，共 ${messages.length - firstGapIndex} 条缺 baseline checkpoint`,
-        };
+        });
       },
       async repair() {
         await BackfillBaselineCheckpoints.backfill({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId });
+        return Result.ok(undefined);
       },
     };
   },

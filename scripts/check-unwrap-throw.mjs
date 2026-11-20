@@ -63,9 +63,6 @@ const ALLOW_FILES = [
   /^packages\/core\/src\/infra\/llm-protocol\/logic\/anthropic-sse-parser\.ts$/,
   /^packages\/core\/src\/infra\/llm-protocol\/logic\/gemini-sse-parser\.ts$/,
   /^packages\/core\/src\/infra\/llm-protocol\/logic\/openai-sse-parser\.ts$/,
-  // IntegrityRepairOperation 报告契约（2026-11-16 六期收口裁决，总纲 §五 例外 6）：
-  // detect/repair 只认报告/异常，runAll 捕异常进修复报告。
-  /provider-identity-repair\.ts$/,
   // p26 R1 边界转码登记（总纲 §五 例外 7，2026-11-20 裁决）——
   // a. runner 前奏终态漏斗与 OrThrow 转码：run 的 throw 喂同函数 catch 的统一
   //    收口（FAILED('') 补发 + onRunFailed），直接 return 会跳过终态事件；

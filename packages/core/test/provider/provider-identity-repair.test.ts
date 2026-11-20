@@ -82,7 +82,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     const providerRepo = new SqliteProviderRepository(ctx.conn);
     const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
   });
 
@@ -98,7 +98,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     await ctx.conn.execute(`UPDATE llm_provider SET builtin_key = NULL WHERE id = ?`, [target.id]);
 
     const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo });
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, true);
     assert.match(detection.details ?? "", /builtin_key/);
 
@@ -122,7 +122,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     ]);
     const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo: mockRepo });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, true);
     assert.match(detection.details ?? "", /display_name/);
 
@@ -148,7 +148,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
       newId,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, true);
 
     await op.repair();
@@ -157,7 +157,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
     assert.equal(store._dump().get(newRef), "sk-secret", "新 ref 应有值");
 
     // 再 detect 应为 false（幂等）
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false);
   });
 
@@ -170,7 +170,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
       newId: id,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
   });
 
@@ -187,7 +187,7 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
       newId,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
     assert.match(detection.details ?? "", /跳过 rename/);
   });

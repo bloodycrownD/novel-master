@@ -30,6 +30,8 @@
  */
 
 import { assert } from "@/common/assert.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /** 兜底种类：修复 / 重命名引用迁移 / 补缺。 */
 type IntegrityRepairKind = "repair" | "rename" | "backfill";
@@ -47,6 +49,8 @@ export interface IntegrityRepairDetection {
  *
  * `detect` 只读不写，用于判断是否需要修复；`repair` 执行实际修复，应当尽量幂等
  * （重复执行不产生副作用）。两者都是 `async`，因为底下要读 DB / 文件系统。
+ * 已知失败沿 `Result.err` 上行（p26 R4：接口原「只认报告/异常」契约退役，
+ * runAll 捕异常降级为平台兜网）；repo 失败不再解包转 throw。
  */
 export interface IntegrityRepairOperation {
   /** 操作名，仅用于报告可读性，需在单个 registry 内唯一。 */
@@ -54,9 +58,9 @@ export interface IntegrityRepairOperation {
   /** 兜底种类，用于按种类过滤调度。 */
   readonly kind: IntegrityRepairKind;
   /** 只读检测：当前是否处于不一致状态、需要修复。 */
-  detect(): Promise<IntegrityRepairDetection>;
+  detect(): Promise<Result<IntegrityRepairDetection, AppError>>;
   /** 执行修复；应当幂等。 */
-  repair(): Promise<void>;
+  repair(): Promise<Result<void, AppError>>;
 }
 
 /** 单次操作跑完后的报告条目。 */
@@ -66,7 +70,7 @@ interface IntegrityRepairReport {
   readonly detection: IntegrityRepairDetection;
   /** 是否真的执行了 repair（detect 返回 true 时才跑 repair）。 */
   readonly repaired: boolean;
-  /** repair 阶段抛错时挂在 这里，runAll 不会因为单步失败而中断后续操作。 */
+  /** repair 阶段失败（Result.err）或平台异常时挂在这里，runAll 不会因为单步失败而中断后续操作。 */
   readonly error?: unknown;
 }
 
@@ -117,13 +121,8 @@ export class IntegrityRepairRegistry {
   async detectAll(): Promise<ReadonlyArray<IntegrityRepairOperation>> {
     const pending: IntegrityRepairOperation[] = [];
     for (const op of this.operations.values()) {
-      try {
-        const detection = await op.detect();
-        if (detection.needsRepair) {
-          pending.push(op);
-        }
-      } catch {
-        // detect 抛错时保守地加入待修复队列，让 runAll 的 repair 阶段再尝试并记录错误。
+      const read = await IntegrityRepair.safeDetect(op);
+      if (read.needsRepair) {
         pending.push(op);
       }
     }
@@ -163,38 +162,44 @@ export class IntegrityRepairRegistry {
 /** 完整性修复单操作执行集合（detect → repair 流程）。 */
 export const IntegrityRepair = {
   /**
+   * detect 的统一收口（run / detectAll 共用）：`Result.err`（已知失败）与平台异常
+   * （兜网）都保守视为 needsRepair=true（让 repair 阶段再尝试），details 记下
+   * 失败来源。措辞契约：异常沿用「detect 阶段抛错」（测试锁定），失败用「detect 阶段失败」。
+   */
+  async safeDetect(op: IntegrityRepairOperation): Promise<IntegrityRepairDetection> {
+    let read: Result<IntegrityRepairDetection, AppError>;
+    try {
+      read = await op.detect();
+    } catch (err) {
+      // detect 本身炸了（平台异常兜网），保守地尝试 repair。
+      return { needsRepair: true, details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (!read.ok) {
+      return { needsRepair: true, details: `detect 阶段失败：${read.error.message}` };
+    }
+    return read.value;
+  },
+
+  /**
    * 跑单个操作的 detect → repair 流程，返回报告。
    *
-   * detect 抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
-   * repair 抛错时挂到报告的 `error` 字段，不向上传播。
+   * detect 失败/抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
+   * repair 的 `Result.err` 与平台异常挂到报告的 `error` 字段，不向上传播。
    */
   async run(op: IntegrityRepairOperation): Promise<IntegrityRepairReport> {
-    let detection: IntegrityRepairDetection;
-    try {
-      detection = await op.detect();
-    } catch (err) {
-      // detect 本身炸了，保守地尝试 repair，并在报告里挂上 detect 阶段的错误。
-      detection = {
-        needsRepair: true,
-        details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-
+    const detection = await IntegrityRepair.safeDetect(op);
     if (!detection.needsRepair) {
       return { name: op.name, kind: op.kind, detection, repaired: false };
     }
-
+    let repaired: Result<void, AppError>;
     try {
-      await op.repair();
-      return { name: op.name, kind: op.kind, detection, repaired: true };
+      repaired = await op.repair();
     } catch (err) {
-      return {
-        name: op.name,
-        kind: op.kind,
-        detection,
-        repaired: false,
-        error: err,
-      };
+      return { name: op.name, kind: op.kind, detection, repaired: false, error: err };
     }
+    if (!repaired.ok) {
+      return { name: op.name, kind: op.kind, detection, repaired: false, error: repaired.error };
+    }
+    return { name: op.name, kind: op.kind, detection, repaired: true };
   },
 } as const;

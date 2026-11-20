@@ -36,7 +36,7 @@ describe("rollback-backfill-baseline-op: BackfillBaselineCheckpoints.createOpera
       sessionId: session.id,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
   });
 
@@ -63,12 +63,12 @@ describe("rollback-backfill-baseline-op: BackfillBaselineCheckpoints.createOpera
       sessionId: session.id,
     });
 
-    const before = await op.detect();
+    const before = unwrap(await op.detect());
     assert.equal(before.needsRepair, true, "有空窗消息时应标记需修复");
 
     await op.repair();
 
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false, "补齐 baseline 后应不再需要修复");
   });
 
@@ -106,7 +106,7 @@ describe("rollback-backfill-baseline-op: BackfillBaselineCheckpoints.createOpera
       projectId: project.id,
       sessionId: session.id,
     });
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false, "两段式短路时 detect 无需修复");
   });
 });

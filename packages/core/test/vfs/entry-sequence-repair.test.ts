@@ -59,7 +59,7 @@ describe("vfs entry-sequence repair", () => {
     const maxOrphan = Math.max(...orphanIds);
 
     const op = EntrySequenceRepair.create(ctx.conn);
-    const det = await op.detect();
+    const det = unwrap(await op.detect());
     assert.equal(det.needsRepair, true, "应检出发号器低于孤儿占号");
 
     const skills = SkillsServiceFactory.create(ctx.conn);
@@ -79,7 +79,7 @@ describe("vfs entry-sequence repair", () => {
     );
 
     await op.repair();
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false, "修复后不再检出");
 
     const ok = `healed-${testIsolationSuffix()}`;
@@ -99,10 +99,10 @@ describe("vfs entry-sequence repair", () => {
   it("健康库：detect 为 false，repair 无副作用", async () => {
     const ctx = getNovelMasterTestContext();
     const op = EntrySequenceRepair.create(ctx.conn);
-    const det = await op.detect();
+    const det = unwrap(await op.detect());
     assert.equal(det.needsRepair, false);
     await op.repair();
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false);
   });
 
