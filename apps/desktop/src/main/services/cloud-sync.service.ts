@@ -231,7 +231,7 @@ class DesktopCloudSyncService {
         return Result.err(metaResult.error);
       }
       meta = metaResult.value;
-      const built = await this.buildCoordinator(storageOverrideForTest);
+      const built = await this.buildCoordinator(storageOverrideSlot.current);
       if (!built.ok) {
         await this.configStore.recordPull(false, built.error.message).catch(() => undefined);
         return Result.err(built.error);
@@ -463,7 +463,8 @@ class DesktopCloudSyncService {
  * `buildCoordinator` 内部现场构造的，没有可 patch 的缝 ⇒ 端到端断言
  * （真库 + 内存远端）只能靠这个注入点。传 null 恢复生产路径。
  */
-let storageOverrideForTest: ObjectStoragePort | undefined;
+/** 测试注入槽（模块内 holder，对象管理）：current = 生效的 storage 覆盖（undefined = 生产路径）。 */
+const storageOverrideSlot = { current: undefined as ObjectStoragePort | undefined };
 
 /**
  * 云同步单例——**与 runtime 同寿命；runtime 换代时必须重建**。
@@ -475,11 +476,12 @@ let storageOverrideForTest: ObjectStoragePort | undefined;
  * 现在按 runtime 对象身份比较换代，两条 rebootstrap 生产路径（pull 之后、
  * 本地备份导入之后）都被自动覆盖。
  */
-let service: DesktopCloudSyncService | undefined;
+/** 单例槽（模块内 holder，对象管理）：与 runtime 同寿命，换代时整槽重建（见上）。 */
+const serviceSlot = { current: undefined as DesktopCloudSyncService | undefined };
 
 export namespace CloudSyncService {
   export function setStorageOverrideForTest(storage: ObjectStoragePort | null): void {
-    storageOverrideForTest = storage ?? undefined;
+    storageOverrideSlot.current = storage ?? undefined;
   }
 
   export async function get(): Promise<Result<DesktopCloudSyncService, AppError>> {
@@ -487,16 +489,16 @@ export namespace CloudSyncService {
     const built = await DesktopRuntimeSingleton.get();
     if (!built.ok) return Result.err(built.error);
     const runtime = built.value;
-    if (service == null || !service.isForRuntime(runtime)) {
-      service = new DesktopCloudSyncService(runtime);
+    if (serviceSlot.current == null || !serviceSlot.current.isForRuntime(runtime)) {
+      serviceSlot.current = new DesktopCloudSyncService(runtime);
     }
-    return Result.ok(service);
+    return Result.ok(serviceSlot.current);
   }
 
   /** 测试用：重置单例与忙碌状态 */
   export function resetForTest(): void {
-    service = undefined;
+    serviceSlot.current = undefined;
     syncBusy.resetForTest();
-    storageOverrideForTest = undefined;
+    storageOverrideSlot.current = undefined;
   }
 }

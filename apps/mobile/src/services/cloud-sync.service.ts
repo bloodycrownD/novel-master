@@ -4,7 +4,7 @@
  * @module services/cloud-sync.service
  */
 import {CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, DatabaseReplacedError} from '@novel-master/core';
-import {Path} from '@novel-master/core/common';
+import {Concurrency, Path} from '@novel-master/core/common';
 import {RequestAbort} from '@novel-master/core/llm-protocol';
 import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
 import {AppError, AppErrorOps} from '@novel-master/core/errors';
@@ -58,7 +58,8 @@ type CoordinatorBundle = {
   importTempPath: string;
 };
 
-let syncBusy = false;
+/** 云同步（pull/push）是否进行中：pull/push 共用的全局互斥守卫（对齐 desktop 侧同款 BusyFlag）。 */
+const syncBusy: ReturnType<typeof Concurrency.createBusyFlag> = Concurrency.createBusyFlag();
 
 export namespace CloudSyncService {
   async function readFileBytes(path: string): Promise<Uint8Array> {
@@ -291,10 +292,10 @@ export namespace CloudSyncService {
       return Result.err(new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'}));
     }
 
-    if (syncBusy) {
+    if (syncBusy.isBusy()) {
       return Result.err(new AppError('AGENT_BUSY', {detail: '云同步进行中，请稍后再试'}));
     }
-    syncBusy = true;
+    syncBusy.set(true);
     // 任务级取消作用域：key 固定 `sync:local`（S3 配置无 provider 概念，
     // syncBusy 全局互斥）。pull/push 各自建 scope 并登记，finally 反注册 + dispose。
     const abortScope = AbortScopeFactory.create();
@@ -416,7 +417,7 @@ export namespace CloudSyncService {
       progress?.fail(error);
       return Result.err(CloudSyncSdkErrorMapper.map(error));
     } finally {
-      syncBusy = false;
+      syncBusy.set(false);
       runtime.abortRegistry.unregister(ABORT_KEY.cloudSync('local'), abortScope);
       abortScope.dispose();
       releasePullBusy();
@@ -438,10 +439,10 @@ export namespace CloudSyncService {
       return Result.err(new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'}));
     }
 
-    if (syncBusy) {
+    if (syncBusy.isBusy()) {
       return Result.err(new AppError('AGENT_BUSY', {detail: '云同步进行中，请稍后再试'}));
     }
-    syncBusy = true;
+    syncBusy.set(true);
     // 任务级取消作用域：与 pull 共用 `sync:local`（syncBusy 全局互斥，同一时刻
     // 只有一个云同步任务在册）。
     const abortScope = AbortScopeFactory.create();
@@ -516,7 +517,7 @@ export namespace CloudSyncService {
       }
       throw error;
     } finally {
-      syncBusy = false;
+      syncBusy.set(false);
       runtime.abortRegistry.unregister(ABORT_KEY.cloudSync('local'), abortScope);
       abortScope.dispose();
     }
