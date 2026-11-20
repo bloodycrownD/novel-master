@@ -66,9 +66,7 @@ export namespace RowMapper {
     return [];
   }
 
-  function resolveColumnNames(
-    result: OpSqliteResult,
-  ): readonly string[] | undefined {
+  function resolveColumnNames(result: OpSqliteResult,): readonly string[] | undefined {
     if (result.columnNames && result.columnNames.length > 0) {
       return result.columnNames;
     }

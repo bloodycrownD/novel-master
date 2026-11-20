@@ -18,9 +18,7 @@ export namespace OpSqliteBindings {
    * **不要与 core 的 `normalizeBindings` 合并**：那个只把 undefined 映射成 null，
    * 这里额外把 Uint8Array 拷成独立 ArrayBuffer（语义不同，合并会改 op-sqlite 绑参行为）。
    */
-  export function normalize(
-    parameters?: readonly unknown[],
-  ): unknown[] | undefined {
+  export function normalize(parameters?: readonly unknown[],): unknown[] | undefined {
     if (parameters === undefined) {
       return undefined;
     }

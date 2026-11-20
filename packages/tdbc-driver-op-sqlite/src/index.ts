@@ -29,13 +29,7 @@ export type { OpSqliteOpenOptions } from "./driver.js";
  *   {@link OpSqliteSharedRegister.registerWith}。
  */
 export namespace OpSqliteRegister {
-  export function register(
-    adapter?: import("./adapter.js").OpSqliteAdapter,
-    isBackground?: () => boolean,
-  ): void {
-    OpSqliteSharedRegister.registerWith(
-      adapter ?? new OpSqliteDynamicAdapter(),
-      isBackground,
-    );
+  export function register(adapter?: import("./adapter.js").OpSqliteAdapter, isBackground?: () => boolean,): void {
+    OpSqliteSharedRegister.registerWith(adapter ?? new OpSqliteDynamicAdapter(), isBackground,);
   }
 }

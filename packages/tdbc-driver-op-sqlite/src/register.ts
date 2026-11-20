@@ -27,10 +27,7 @@ import { OpSqliteDriver } from "./driver.js";
  *   保持零依赖、不 import RN API，探测函数由 app 层经此注入。
  */
 export namespace OpSqliteSharedRegister {
-  export function registerWith(
-    adapter: OpSqliteAdapter,
-    isBackground?: () => boolean,
-  ): void {
+  export function registerWith(adapter: OpSqliteAdapter, isBackground?: () => boolean,): void {
     TdbcRegistry.register(new OpSqliteDriver(adapter, isBackground));
   }
 }
