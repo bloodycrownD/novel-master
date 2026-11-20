@@ -29,11 +29,7 @@ export namespace Dpapi {
       return new Uint8Array(data);
     }
     if (!isWin32()) {
-      throw new SkspError(
-        "ENCRYPT_FAILED",
-        "DPAPI is only available on Windows",
-        { ref },
-      );
+      throw new SkspError("ENCRYPT_FAILED", "DPAPI is only available on Windows", { ref },);
     }
     try {
       const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
@@ -54,19 +50,12 @@ export namespace Dpapi {
    * Unprotects DPAPI ciphertext to UTF-8 string.
    * @throws SkspError DECRYPT_FAILED on failure
    */
-  export async function unprotect(
-    ciphertext: Uint8Array,
-    ref: string,
-  ): Promise<string> {
+  export async function unprotect(ciphertext: Uint8Array, ref: string,): Promise<string> {
     if (testPassthrough) {
       return Buffer.from(ciphertext).toString("utf8");
     }
     if (!isWin32()) {
-      throw new SkspError(
-        "DECRYPT_FAILED",
-        `DPAPI decrypt failed for ${ref} (not on Windows). Re-run: nm provider edit --apiKey`,
-        { ref },
-      );
+      throw new SkspError("DECRYPT_FAILED", `DPAPI decrypt failed for ${ref} (not on Windows). Re-run: nm provider edit --apiKey`, { ref },);
     }
     try {
       const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
@@ -77,11 +66,7 @@ export namespace Dpapi {
       const out = Dpapi.unprotectData(Buffer.from(ciphertext), null, "CurrentUser");
       return Buffer.from(out).toString("utf8");
     } catch (cause) {
-      throw new SkspError(
-        "DECRYPT_FAILED",
-        `DPAPI decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`,
-        { ref, cause },
-      );
+      throw new SkspError("DECRYPT_FAILED", `DPAPI decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause },);
     }
   }
 }
