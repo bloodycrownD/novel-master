@@ -15,21 +15,21 @@ export type AgentMode = "primary" | "subagent" | "all";
 const PROMPT_BLOCK_ROLES = ["user", "assistant"] as const;
 
 export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
-  { value: "default", label: "默认（全部工具）" },
+  { value: "default", label: coreT({key: "ui.agent.tool_mode_default"}) },
   // 注：task 工具始终注册、始终可用，不进 allow/deny 策略（AC-9）。
-  { value: "allow", label: "白名单" },
-  { value: "deny", label: "黑名单" },
+  { value: "allow", label: coreT({key: "ui.agent.tool_mode_allow"}) },
+  { value: "deny", label: coreT({key: "ui.agent.tool_mode_deny"}) },
 ];
 
 export const MODE_OPTIONS: Array<{ value: AgentMode; label: string }> = [
-  { value: "all", label: "默认（全部）" },
-  { value: "primary", label: "仅主智能体" },
-  { value: "subagent", label: "仅子智能体" },
+  { value: "all", label: coreT({key: "ui.agent.tool_mode_default_all"}) },
+  { value: "primary", label: coreT({key: "ui.agent.scope_primary"}) },
+  { value: "subagent", label: coreT({key: "ui.agent.scope_subagent"}) },
 ];
 
 const ROLE_LABELS: Record<(typeof PROMPT_BLOCK_ROLES)[number], string> = {
-  user: "用户",
-  assistant: "助手",
+  user: coreT({key: "ui.transcript.role.user"}),
+  assistant: coreT({key: "ui.transcript.role.assistant"}),
 };
 
 export const ROLE_OPTIONS = PROMPT_BLOCK_ROLES.map((role) => ({
@@ -71,59 +71,59 @@ export type AgentEditorFormInput = {
 };
 
 /** 常驻工作区在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
-export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
+export const WORKPLACE_BLOCK_LABEL = coreT({key: "ui.agent.workplace_label"});
 
 /** 常驻工作区开启态说明（仅讲可编辑项；机制描述留给关闭态）。 */
-export const WORKPLACE_BLOCK_HINT = "可编辑助手确认语。";
+export const WORKPLACE_BLOCK_HINT = coreT({key: "ui.agent.workplace_hint"});
 
 /** 常驻工作区关闭态说明。 */
-export const WORKPLACE_DISABLED_HINT = "关闭时不注入项目文件树。";
+export const WORKPLACE_DISABLED_HINT = coreT({key: "ui.agent.workplace_disabled_hint"});
 
 /** 常驻工作区助手确认语字段标签。 */
-export const WORKPLACE_ASSISTANT_TEXT_LABEL = "助手确认语";
+export const WORKPLACE_ASSISTANT_TEXT_LABEL = coreT({key: "ui.agent.assistant_text_label"});
 
 /** 开态但确认语为空时的保存失败文案（W9 显式阻断，不依赖区域门闩）。 */
-const WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE = "请填写常驻工作区助手确认语";
+const WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE = coreT({key: "ui.agent.assistant_text_required"});
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
-  layoutTitle: "提示词模版",
-  system: "系统",
-  systemBlocks: "系统区",
-  systemContent: "系统内容",
-  enableSystem: "启用系统",
-  enablePersist: "启用持久区",
-  enableDynamic: "启用动态区",
-  apiSystemField: "系统提示词",
-  systemPromptTitle: "系统提示词",
-  persistBlocks: "持久区",
-  dynamicBlocks: "动态区",
-  persistRegionHint: "持久区禁止使用宏。",
-  layoutOrder: "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区",
-  layoutOrderPrefix: "纵向顺序与模型组装一致：",
-  layoutOrderPrefixShort: "纵向顺序：",
-  systemDisabledHint: "关闭时不写入系统提示词。",
-  persistDisabledHint: "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。",
-  dynamicDisabledHint: "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。",
-  systemPlaceholder: "单段系统级指令…",
-  systemPlaceholderShort: "单段系统级指令…",
-  maxStepsLabel: "最大步数",
-  maxStepsHint: "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。",
-  emptyPersistHint: "暂无块，点击添加",
-  emptyDynamicHint: "暂无块，点击添加",
-  chat: "会话历史",
-  chatTag: "会话消息",
-  chatBlocks: "会话区",
-  chatReadonlyHint: "运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。",
-  skills: "技能索引",
-  skillsTag: "技能",
-  skillsBlocks: "技能索引区",
-  skillsReadonlyHint: "运行时注入生效技能索引。",
-  skillsDisabledHint: "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。",
+  layoutTitle: coreT({key: "ui.agent.prompt_template_title"}),
+  system: coreT({key: "ui.agent.system_label"}),
+  systemBlocks: coreT({key: "ui.agent.system_blocks_label"}),
+  systemContent: coreT({key: "ui.agent.system_content_label"}),
+  enableSystem: coreT({key: "ui.agent.enable_system"}),
+  enablePersist: coreT({key: "ui.agent.enable_persist"}),
+  enableDynamic: coreT({key: "ui.agent.enable_dynamic"}),
+  apiSystemField: coreT({key: "ui.agent.system_prompt_label"}),
+  systemPromptTitle: coreT({key: "ui.agent.system_prompt_label"}),
+  persistBlocks: coreT({key: "ui.agent.persist_blocks_label"}),
+  dynamicBlocks: coreT({key: "ui.agent.dynamic_blocks_label"}),
+  persistRegionHint: coreT({key: "ui.agent.persist_macro_hint"}),
+  layoutOrder: coreT({key: "ui.agent.layout_order"}),
+  layoutOrderPrefix: coreT({key: "ui.agent.layout_order_prefix"}),
+  layoutOrderPrefixShort: coreT({key: "ui.agent.layout_order_prefix_short"}),
+  systemDisabledHint: coreT({key: "ui.agent.system_disabled_hint"}),
+  persistDisabledHint: coreT({key: "ui.agent.persist_disabled_hint"}),
+  dynamicDisabledHint: coreT({key: "ui.agent.dynamic_disabled_hint"}),
+  systemPlaceholder: coreT({key: "ui.agent.system_placeholder"}),
+  systemPlaceholderShort: coreT({key: "ui.agent.system_placeholder"}),
+  maxStepsLabel: coreT({key: "ui.agent.max_steps_label"}),
+  maxStepsHint: coreT({key: "ui.agent.max_steps_hint"}),
+  emptyPersistHint: coreT({key: "ui.agent.blocks_empty_hint"}),
+  emptyDynamicHint: coreT({key: "ui.agent.blocks_empty_hint"}),
+  chat: coreT({key: "ui.agent.chat_blocks_label"}),
+  chatTag: coreT({key: "ui.agent.chat_tag"}),
+  chatBlocks: coreT({key: "ui.agent.chat_blocks_short"}),
+  chatReadonlyHint: coreT({key: "ui.agent.chat_readonly_hint"}),
+  skills: coreT({key: "ui.agent.skills_label"}),
+  skillsTag: coreT({key: "ui.nav.skills"}),
+  skillsBlocks: coreT({key: "ui.agent.skills_blocks_label"}),
+  skillsReadonlyHint: coreT({key: "ui.agent.skills_readonly_hint"}),
+  skillsDisabledHint: coreT({key: "ui.agent.skills_disabled_hint"}),
 } as const;
 
 export function blockTypeLabel(_type: EditorPersistPromptBlock["type"] | DynamicPromptBlock["type"]): string {
-  return "文本";
+  return coreT({key: "ui.common.text"});
 }
 
 function persistTextBlocksFromEditor(persist: readonly EditorPersistPromptBlock[]): PersistTextPromptBlock[] {
@@ -330,7 +330,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
 
 export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok: true; definition: AgentDefinition } | { ok: false; message: string } {
   if (!input.name.trim()) {
-    return { ok: false, message: "请填写 Agent 名称" };
+    return { ok: false, message: coreT({key: "ui.agent.name_required"}) };
   }
   // W9：开态空文案显式阻断（hasAnyPromptRegionEnabled 不含 workplace）
   if (input.workplaceEnabled && input.workplaceAssistantText.trim() === "") {
@@ -340,7 +340,7 @@ export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok:
     };
   }
   if (hasAnyPromptRegionEnabled(input) && countEffectiveFormPromptSources(input) === 0) {
-    return { ok: false, message: "至少保留一个 Prompt 块" };
+    return { ok: false, message: coreT({key: "ui.agent.prompt_block_min"}) };
   }
   const layout = layoutFromFormInput(input);
   const validated = AgentPromptLayoutValidate.validate(layout);
@@ -356,7 +356,7 @@ export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok:
   if (input.modelEnabled && input.savedModelId.trim()) {
     const trimmed = input.savedModelId.trim();
     if (!SavedModelUuid.isFormat(trimmed)) {
-      return { ok: false, message: "专属模型须为已保存模型的 UUID" };
+      return { ok: false, message: coreT({key: "ui.agent.dedicated_model_uuid_invalid"}) };
     }
     modelPin = trimmed;
   }

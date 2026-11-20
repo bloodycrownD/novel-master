@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import {
   ipcAgentListPicker,
   ipcAgentResolveCurrent,
@@ -140,7 +141,7 @@ export function WorkspaceSettingsView() {
         },
       });
       if (res.ok) {
-        toastSettingsSuccess("已保存");
+        toastSettingsSuccess(coreT({key: "ui.common.saved"}));
       } else {
         toastSettingsError(res.error.message);
       }
@@ -187,17 +188,17 @@ export function WorkspaceSettingsView() {
   return (
     <SettingsPanel>
       <SettingsSection
-        title="默认选择"
-        desc="新建会话时使用的工作区默认值，也可在会话底部随时切换。"
+        title={coreT({key: "ui.chat_config.default_section"})}
+        desc={coreT({key: "ui.chat_config.default_hint"})}
       >
         <SettingsRows>
           <SettingsRow
-            label="当前大模型"
+            label={coreT({key: "ui.session.current_model"})}
             value={modelLabel}
             onClick={() => void openPicker("model")}
           />
           <SettingsRow
-            label="当前智能体"
+            label={coreT({key: "ui.session.current_agent"})}
             value={agentLabel}
             onClick={() => void openPicker("agent")}
           />
@@ -205,10 +206,12 @@ export function WorkspaceSettingsView() {
       </SettingsSection>
 
       <SettingsSection
-        title="聊天偏好"
-        desc="影响消息展示与 LLM 请求行为。达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。"
+        title={coreT({key: "ui.chat_config.chat_prefs_section"})}
+        desc={coreT({key: "ui.chat_config.chat_prefs_hint"})}
       >
         <SettingsRows>
+          {/* 两行开关的 label+desc 被 workspace-settings-subagent-stream.test.ts 以 JSX 属性形态
+              readFileSync+正则锁死（波 3c 对齐测试前保留原字面量）。 */}
           <SettingsSwitchRow
             label="父会话流式"
             desc="主对话的实时输出；关闭后回复完成后一次性显示"
@@ -228,8 +231,8 @@ export function WorkspaceSettingsView() {
             }}
           />
           <SettingsSwitchRow
-            label="思考提示词"
-            desc="开启后，模型的思考内容进入后续提示词，关闭则不进入。"
+            label={coreT({key: "ui.chat_config.thinking_prompt"})}
+            desc={coreT({key: "ui.chat_config.thinking_prompt_hint"})}
             checked={thinkingContext}
             onChange={async (next) => {
               setThinkingContext(next);
@@ -237,7 +240,7 @@ export function WorkspaceSettingsView() {
             }}
           />
           <SettingsSwitchRow
-            label="富文本消息"
+            label={coreT({key: "ui.chat_config.rich_text"})}
             checked={chatRichText}
             onChange={async (next) => {
               setChatRichText(next);
@@ -247,7 +250,7 @@ export function WorkspaceSettingsView() {
         </SettingsRows>
 
         <div className="compaction-card">
-          <SettingsField label="隐藏起始深度" row>
+          <SettingsField label={coreT({key: "ui.chat_config.hidden_start_depth"})} row>
             <input
               type="number"
               min="0"
@@ -258,7 +261,7 @@ export function WorkspaceSettingsView() {
               }}
             />
           </SettingsField>
-          <SettingsField label="启用自动压缩" row>
+          <SettingsField label={coreT({key: "ui.chat_config.auto_compact"})} row>
             <Switch
               checked={compactionEnabled}
               onChange={(next) => {
@@ -272,7 +275,7 @@ export function WorkspaceSettingsView() {
             />
           </SettingsField>
           {compactionEnabled ? (
-            <SettingsField label="Token 比例" row>
+            <SettingsField label={coreT({key: "ui.chat_config.token_ratio"})} row>
               <input
                 type="number"
                 step="0.01"
@@ -291,7 +294,7 @@ export function WorkspaceSettingsView() {
 
       <PickerModal
         open={picker === "model"}
-        title="选择模型"
+        title={coreT({key: "ui.chat_config.select_model"})}
         rows={modelRows}
         currentId={currentModelId}
         onClose={() => setPicker(null)}
@@ -305,7 +308,7 @@ export function WorkspaceSettingsView() {
       />
       <PickerModal
         open={picker === "agent"}
-        title="选择 Agent"
+        title={coreT({key: "ui.session.agent_picker_title"})}
         rows={agentRows}
         currentId={currentAgentId}
         onClose={() => setPicker(null)}

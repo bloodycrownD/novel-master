@@ -8,6 +8,7 @@
  * - 技能被删（清单不再含）时安全踢回上一级。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { ipcProjectsList, ipcSkillsList, ipcSkillsRead, ipcSkillsWrite, ipcVfsDelete } from "@/ipc/client";
 import { CodeEditor } from "@/components/ui/CodeEditor";
 import { Button } from "@/components/ui/Button";
@@ -169,11 +170,11 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
         content,
       });
       if (!res.ok) {
-        showToast(`保存失败：${res.error.message}`);
+        showToast(`${coreT({key: "ui.common.save_failed"})}：${res.error.message}`);
         return;
       }
       setSavedContent(content);
-      showToast("已保存技能文件");
+      showToast(coreT({key: "ui.skills.file_saved"}));
     } finally {
       setSaving(false);
     }
@@ -182,19 +183,19 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   const createFile = async (rawPath: string) => {
     const path = rawPath.trim().replace(/^\/+/, "");
     if (path.length === 0) {
-      showToast("请输入相对路径。");
+      showToast(coreT({key: "ui.skills.path_relative_required"}));
       return;
     }
     if (path.includes("..")) {
-      showToast("路径不能包含「..」。");
+      showToast(coreT({key: "ui.skills.path_no_dotdot"}));
       return;
     }
     if (path === SKILL_ENTRY_FILE) {
-      showToast("SKILL.md 是保留入口文件，不可新建同名文件。");
+      showToast(coreT({key: "ui.skills.file_entry_protected"}));
       return;
     }
     if (files.includes(path)) {
-      showToast("该文件已存在。");
+      showToast(coreT({key: "ui.skills.file_exists"}));
       return;
     }
     const res = await ipcSkillsWrite({
@@ -216,7 +217,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   const deleteFile = async (path: string) => {
     // SKILL.md 为保留入口，列表行不提供删除；此处仅兜底
     if (path === SKILL_ENTRY_FILE) {
-      showToast("SKILL.md 是保留入口文件，不可删除。");
+      showToast(coreT({key: "ui.skills.file_entry_delete_protected"}));
       return;
     }
     // 技能文件 = VFS 文件（逻辑路径 /meta/skills/{name}/{rel}，已重定位到 meta 域）；
@@ -234,6 +235,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
     if (selected === path) {
       setSelected(SKILL_ENTRY_FILE);
     }
+    // 键面无「已删除辅助文件」键（波 3-2a 披露漏键，待波 3c 补），保留原字面量。
     showToast("已删除辅助文件");
   };
 
@@ -245,7 +247,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   if (ref == null) {
     return (
       <SettingsPanel>
-        <p className="settings-error">未指定技能。</p>
+        <p className="settings-error">{coreT({key: "ui.skills.unspecified"})}</p>
       </SettingsPanel>
     );
   }
@@ -253,9 +255,9 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   if (missing) {
     return (
       <SettingsPanel>
-        <p className="settings-error">技能不存在或已删除。</p>
+        <p className="settings-error">{coreT({key: "ui.skills.missing_panel"})}</p>
         <Button variant="primary" onClick={() => nav.pop()}>
-          返回技能管理
+          {coreT({key: "ui.skills.back_to_manage"})}
         </Button>
       </SettingsPanel>
     );
@@ -267,18 +269,18 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
         <span className="skill-detail__name">{ref.name}</span>
         <span className="skill-domain-badge">
           {domain === "project"
-            ? `项目域 · ${projectName ?? ref.projectId ?? ""}`
-            : "全局域 · 所有项目生效"}
+            ? coreT({key: "ui.skills.domain_project_line", params: {project: projectName ?? ref.projectId ?? ""}})
+            : coreT({key: "ui.skills.domain_global_line"})}
         </span>
       </div>
       <div className="skill-detail__body">
         <aside className="skill-detail__files">
           <div className="skill-detail__files-head">
-            <span>文件</span>
+            <span>{coreT({key: "ui.common.file"})}</span>
             <button
               type="button"
               className="skill-detail__file-add"
-              aria-label="新建辅助文件"
+              aria-label={coreT({key: "ui.skills.new_aux_file"})}
               onClick={() => setCreateFileOpen(true)}
             >
               ＋
@@ -299,14 +301,14 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
                 <span aria-hidden>{path === SKILL_ENTRY_FILE ? "⚡" : "📄"}</span>
                 <span>{path}</span>
                 {path === SKILL_ENTRY_FILE ? (
-                  <span className="skill-detail__entry-tag">入口文件</span>
+                  <span className="skill-detail__entry-tag">{coreT({key: "ui.skills.entry_file_tag"})}</span>
                 ) : null}
               </button>
               {path !== SKILL_ENTRY_FILE ? (
                 <button
                   type="button"
                   className="skill-detail__file-delete"
-                  aria-label={`删除 ${path}`}
+                  aria-label={coreT({key: "ui.skills.delete_file_aria", params: {path}})}
                   onClick={() => setDeleteFileConfirm(path)}
                 >
                   ×
@@ -321,11 +323,11 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
               {visiblePath}
             </span>
             <SegmentedControl
-              aria-label="技能文件模式"
+              aria-label={coreT({key: "ui.skills.file_mode_label"})}
               value={mode}
               options={[
-                { value: "read", label: "查看" },
-                { value: "edit", label: "编辑" },
+                { value: "read", label: coreT({key: "ui.common.view"}) },
+                { value: "edit", label: coreT({key: "ui.common.edit"}) },
               ]}
               onChange={setMode}
             />
@@ -335,27 +337,27 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
                 disabled={!isDirty || saving}
                 onClick={() => void save()}
               >
-                {saving ? "保存中…" : "保存"}
+                {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
               </Button>
             ) : null}
-            <Button onClick={() => guarded(() => nav.pop())}>返回</Button>
+            <Button onClick={() => guarded(() => nav.pop())}>{coreT({key: "ui.common.back"})}</Button>
           </div>
           {loading ? (
-            <p className="skill-detail__empty">加载中…</p>
+            <p className="skill-detail__empty">{coreT({key: "ui.common.loading"})}</p>
           ) : mode === "read" ? (
-            <pre className="skill-detail__content">{content || "（空文件）"}</pre>
+            <pre className="skill-detail__content">{content || coreT({key: "ui.common.empty_file"})}</pre>
           ) : (
             <>
               <CodeEditor
                 id="skill-editor"
-                aria-label="技能文件编辑"
+                aria-label={coreT({key: "ui.skills.editor_title"})}
                 value={content}
                 languagePath={selected}
                 onChange={setContent}
                 onSave={() => void save()}
               />
               <div className="skill-detail__status">
-                <span>{isDirty ? "未保存（Ctrl+S 保存）" : "已保存"}</span>
+                <span>{isDirty ? coreT({key: "ui.skills.unsaved_hint"}) : coreT({key: "ui.common.saved"})}</span>
               </div>
             </>
           )}
@@ -364,18 +366,19 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
 
       <TextPromptModal
         open={createFileOpen}
-        title="新建辅助文件"
+        title={coreT({key: "ui.skills.new_aux_file"})}
+        // 键面无「相对路径（支持子目录，如 references/x.md）」键（漏键待波 3c），保留原字面量。
         label="相对路径（支持子目录，如 references/x.md）"
         placeholder="references/x.md"
-        confirmLabel="创建并编辑"
+        confirmLabel={coreT({key: "ui.skills.create_and_edit"})}
         onClose={() => setCreateFileOpen(false)}
         onConfirm={createFile}
       />
 
       <ConfirmModal
         open={deleteFileConfirm != null}
-        title="删除辅助文件"
-        message={`删除「${deleteFileConfirm ?? ""}」？`}
+        title={coreT({key: "ui.skills.delete_aux_title"})}
+        message={coreT({key: "ui.skills.delete_confirm_named", params: {name: deleteFileConfirm ?? "", scope: ""}})}
         danger
         onConfirm={() => {
           const path = deleteFileConfirm;
@@ -389,8 +392,9 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
 
       <ConfirmModal
         open={leaveConfirm != null}
+        // 键面无「未保存的更改」标题键（漏键待波 3c），保留原字面量。
         title="未保存的更改"
-        message="有未保存的更改，离开将丢弃。是否继续？"
+        message={coreT({key: "ui.common.unsaved_discard_msg"})}
         danger
         onConfirm={() => {
           const action = leaveConfirm;

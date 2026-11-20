@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 import { Button } from "@/components/ui/Button";
 import {
@@ -125,7 +126,7 @@ export function FetchModelsModal({
     // 全选重置为「过滤后可选行全选」；全不选清空全部勾选。
     selectRange( allFilteredSelected ? [] : selectableFilteredRows.map((r) => r.vendorModelId) );
   };
-  const confirmLabel = selectedCount > 0 ? `添加 (${selectedCount})` : "添加";
+  const confirmLabel = selectedCount > 0 ? coreT({key: "ui.provider.add_count_confirm", params: {count: selectedCount}}) : coreT({key: "ui.common.add"});
 
   const handleConfirm = async () => {
     if (selectedCount === 0 || saving) {
@@ -171,15 +172,15 @@ export function FetchModelsModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="fetch-models-title" className="fetch-models-modal__title">
-          拉取模型
+          {coreT({key: "ui.provider.fetch_models_title"})}
         </h3>
         <p className="fetch-models-modal__hint">
-          从服务商获取可用模型，勾选后批量添加
+          {coreT({key: "ui.provider.fetch_models_hint"})}
         </p>
 
         {loading ? (
           <div className="fetch-models-modal__status fetch-models-modal__status--loading">
-            <p>拉取中…</p>
+            <p>{coreT({key: "ui.provider.fetching"})}</p>
             <button
               type="button"
               className="fetch-models-modal__cancel"
@@ -213,7 +214,7 @@ export function FetchModelsModal({
               className="fetch-models-modal__retry"
               onClick={() => void load()}
             >
-              重试
+              {coreT({key: "ui.common.retry"})}
             </button>
           </div>
         ) : error ? (
@@ -224,12 +225,12 @@ export function FetchModelsModal({
               className="fetch-models-modal__retry"
               onClick={() => void load()}
             >
-              重试
+              {coreT({key: "ui.common.retry"})}
             </button>
           </div>
         ) : rows.length === 0 ? (
           <p className="fetch-models-modal__status">
-            未拉取到可用模型，请检查 API Key 与 Base URL。
+            {coreT({key: "ui.provider.no_models_fetched"})}
           </p>
         ) : (
           <>
@@ -239,7 +240,7 @@ export function FetchModelsModal({
                 className="fetch-models-modal__filter"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="过滤模型…"
+                placeholder={coreT({key: "ui.provider.filter_models_placeholder"})}
               />
               <button
                 type="button"
@@ -247,11 +248,11 @@ export function FetchModelsModal({
                 disabled={saving || selectableFilteredRows.length === 0}
                 onClick={handleSelectAll}
               >
-                {allFilteredSelected ? "全不选" : "全选"}
+                {allFilteredSelected ? coreT({key: "ui.common.select_none"}) : coreT({key: "ui.common.select_all"})}
               </button>
             </div>
             {filteredRows.length === 0 ? (
-              <p className="fetch-models-modal__status">无匹配模型</p>
+              <p className="fetch-models-modal__status">{coreT({key: "ui.provider.no_matching_models"})}</p>
             ) : (
               <ul className="fetch-models-modal__list">
                 {filteredRows.map((row) => {
@@ -286,7 +287,7 @@ export function FetchModelsModal({
                           ) : null}
                         </span>
                         {saved ? (
-                          <span className="fetch-models-modal__row-badge">已添加</span>
+                          <span className="fetch-models-modal__row-badge">{coreT({key: "ui.common.added"})}</span>
                         ) : null}
                       </button>
                     </li>
@@ -298,19 +299,19 @@ export function FetchModelsModal({
         )}
 
         {!loading && selectableRows.length > 0 ? (
-          <p className="fetch-models-modal__count">已选 {selectedCount} 项</p>
+          <p className="fetch-models-modal__count">{coreT({key: "ui.common.selected_count", params: {count: selectedCount}})}</p>
         ) : null}
 
         <div className="confirm-modal__actions">
           <Button variant="secondary" disabled={saving} onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           <Button
             variant="primary"
             disabled={selectedCount === 0 || saving || loading}
             onClick={() => void handleConfirm()}
           >
-            {saving ? "添加中…" : confirmLabel}
+            {saving ? coreT({key: "ui.common.adding"}) : confirmLabel}
           </Button>
         </div>
       </div>

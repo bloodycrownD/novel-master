@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import {
   THINKING_LEVEL_SELECT_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
@@ -114,13 +115,14 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   }, [load]);
 
   if (!savedModelId) {
+    // 键面无「缺少模型」键（漏键待波 3c），保留原字面量。
     return <p className="settings-hint">缺少模型</p>;
   }
 
   const saveModelName = async () => {
     const trimmed = modelName.trim();
     if (!trimmed) {
-      toastSettingsError("模型名称不能为空");
+      toastSettingsError(coreT({key: "ui.sampling.name_required"}));
       return;
     }
     setRenaming(true);
@@ -135,6 +137,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
       }
       setModelName(res.data.modelName);
       setDisplayName(res.data.displayName);
+      // 键面无「已更新模型名称」键（漏键待波 3c），保留原字面量。
       toastSettingsSuccess("已更新模型名称");
     } finally {
       setRenaming(false);
@@ -144,7 +147,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   const save = async () => {
     const contextWindow = Number(contextWindowTokens);
     if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-      toastSettingsError("上下文上限须为正整数");
+      toastSettingsError(coreT({key: "ui.sampling.context_limit_positive"}));
       return;
     }
     setSaving(true);
@@ -161,6 +164,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         toastSettingsError(res.error.message);
         return;
       }
+      // 键面无「已保存模型设置」键（漏键待波 3c），保留原字面量。
       toastSettingsSuccess("已保存模型设置");
     } finally {
       setSaving(false);
@@ -188,31 +192,32 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         setContextWindowTokens(String(saved.settings.internal.contextWindowTokens));
       }
       setParams(undefined);
+      // 键面无「已恢复默认采样参数」键（漏键待波 3c），保留原字面量。
       toastSettingsSuccess("已恢复默认采样参数");
     } finally {
       setResetting(false);
     }
   };
 
-  const sectionHint = `${displayName || savedModelId}\n厂商 ID：${vendorModelId}\n展示协议推荐默认值；保存后以本页为准。`;
+  const sectionHint = `${displayName || savedModelId}\n${coreT({key: "ui.sampling.vendor_id_line", params: {id: vendorModelId}})}\n${coreT({key: "ui.sampling.section_hint_plain"})}`;
 
   return (
     <SettingsPanel>
-      {loading ? <p className="settings-hint">加载中…</p> : null}
+      {loading ? <p className="settings-hint">{coreT({key: "ui.common.loading"})}</p> : null}
 
       <SettingsSection
-        title="模型名称"
-        desc="用于列表与选择器展示；派生 displayName 为 服务商/模型名称。"
+        title={coreT({key: "ui.common.model_name"})}
+        desc={coreT({key: "ui.sampling.model_name_hint"})}
       >
         <div className="settings-fields">
-          <SettingsField label="模型名称">
+          <SettingsField label={coreT({key: "ui.common.model_name"})}>
             <input
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
-              placeholder="默认同厂商模型 ID"
+              placeholder={coreT({key: "ui.sampling.model_name_placeholder_hint"})}
             />
           </SettingsField>
-          <SettingsField label="展示名称（派生）">
+          <SettingsField label={coreT({key: "ui.sampling.display_name_derived"})}>
             <input value={displayName} readOnly disabled />
           </SettingsField>
         </div>
@@ -221,23 +226,23 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
           disabled={renaming || loading}
           onClick={() => void saveModelName()}
         >
-          {renaming ? "保存中…" : "保存名称"}
+          {renaming ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.sampling.save_name_label"})}
         </Button>
       </SettingsSection>
 
       <SettingsSection
-        title="内部预算"
-        desc="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。"
+        title={coreT({key: "ui.sampling.internal_budget_section"})}
+        desc={coreT({key: "ui.sampling.internal_budget_hint"})}
       >
         <div className="settings-fields">
-          <SettingsField label="上下文上限 (tokens)">
+          <SettingsField label={coreT({key: "ui.sampling.context_limit_label"})}>
             <input
               type="number"
               value={contextWindowTokens}
               onChange={(e) => setContextWindowTokens(e.target.value)}
             />
           </SettingsField>
-          <SettingsField label="计数方式">
+          <SettingsField label={coreT({key: "ui.sampling.counting_method_label"})}>
             <select
               value={tokenCounterMode}
               onChange={(e) => setTokenCounterMode(e.target.value as TokenizerOverride)}
@@ -253,7 +258,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
       </SettingsSection>
 
       <SettingsFormSection
-        title="生成参数"
+        title={coreT({key: "ui.sampling.generation_section"})}
         desc={sectionHint}
         toolbar={
           <button
@@ -262,19 +267,19 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
             disabled={resetting || loading}
             onClick={() => void resetDefaults()}
           >
-            {resetting ? "恢复中…" : "恢复默认"}
+            {resetting ? coreT({key: "ui.common.restoring"}) : coreT({key: "ui.common.reset_default"})}
           </button>
         }
         footer={
           <Button variant="primary" disabled={saving || loading} onClick={() => void save()}>
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </Button>
         }
       >
         <SamplingForm protocol={protocol} params={params} onChange={setParams} />
-        <SettingsField label="思考强度">
+        <SettingsField label={coreT({key: "ui.sampling.thinking_effort_label"})}>
           <SegmentedControl
-            aria-label="思考强度"
+            aria-label={coreT({key: "ui.sampling.thinking_effort_label"})}
             value={thinkingLevel}
             options={THINKING_LEVEL_SELECT_OPTIONS}
             onChange={setThinkingLevel}

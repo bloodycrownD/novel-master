@@ -4,13 +4,14 @@
  * 会话技能面板（SessionDetailDrawer 内）与设置·技能管理页共用。
  */
 import type { SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
+import { coreT } from "@shared/logic/core-i18n";
 
 /** 域徽标文案：项目副本覆盖同名全局技能时标「项目 · 覆盖全局」。 */
 export function skillDomainLabel( domain: SkillDomainDto, overridden: boolean ): string {
   if (domain === "project") {
-    return overridden ? "项目 · 覆盖全局" : "项目";
+    return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_project"});
   }
-  return "全局";
+  return coreT({key: "ui.skills.domain_tag_global"});
 }
 
 /** 新建技能的 SKILL.md 模板：front matter（name/description）+ 辅助文件引导。 */

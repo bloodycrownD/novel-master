@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BUILTIN_TOOL_CATALOG } from "@shared/config-forms/agent";
+import { coreT } from "@shared/logic/core-i18n";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 type Props = {
@@ -67,10 +68,10 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
       >
         <span className="tool-policy-picker__trigger-label">
           {selected.length === 0
-            ? `未选择工具（0/${TOTAL}）`
+            ? coreT({key: "ui.agent.no_tools_selected", params: {total: TOTAL}})
             : selected.length >= TOTAL
-            ? `全部工具（${TOTAL}/${TOTAL}）`
-            : `已选工具（${selected.length}/${TOTAL}）`}
+            ? coreT({key: "ui.agent.all_tools_selected", params: {total: TOTAL}})
+            : coreT({key: "ui.agent.selected_tools_aria", params: {selected: selected.length, total: TOTAL}})}
         </span>
         <span className="tool-policy-picker__trigger-caret" aria-hidden>
           ▼
@@ -80,12 +81,12 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
         <div className="picker-modal" role="dialog" aria-modal="true">
           <div className="picker-modal__backdrop" onClick={close} />
           <div className="picker-modal__panel tool-policy-picker__panel">
-            <h3 className="picker-modal__title">选择工具</h3>
+            <h3 className="picker-modal__title">{coreT({key: "ui.agent.select_tools"})}</h3>
             <div className="tool-policy-picker__panel-body">
               <input
                 type="search"
                 className="tool-policy-picker__search"
-                placeholder="搜索工具…"
+                placeholder={coreT({key: "ui.agent.search_tools_placeholder"})}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -123,7 +124,7 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
                 className="tool-policy-picker__modal-cancel"
                 onClick={close}
               >
-                取消
+                {coreT({key: "ui.common.cancel"})}
               </button>
               <button
                 type="button"
@@ -133,7 +134,7 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
                   close();
                 }}
               >
-                确定
+                {coreT({key: "ui.common.confirm"})}
               </button>
             </div>
           </div>

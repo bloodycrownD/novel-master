@@ -9,6 +9,7 @@ import {
 import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
 import type { AgentDefinition } from "@shared/logic/agent";
 import type { AgentDefinitionPatch } from "@shared/logic/agent";
+import { coreT } from "@shared/logic/core-i18n";
 
 import {
   DEFAULT_SKILLS_INDEX_PREFIX,
@@ -392,7 +393,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   useEffect(() => void loadAgent(), [loadAgent]);
 
-  const displayName = name.trim() || "未命名 Agent";
+  const displayName = name.trim() || coreT({key: "ui.agent.unnamed"});
 
   // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
@@ -441,13 +442,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }, [agentId, invalidHealth, loadError, savedBaseline, snapshot, nav]);
 
   if (!agentId) {
+    // 键面无「缺少 agentId」键（漏键待波 3c），保留原字面量。
     return <p className="settings-hint">缺少 agentId</p>;
   }
 
   const handleDeleteBrokenAgent = async () => {
     const res = await ipcAgentRegistryDelete({ agentId });
     if (res.ok) {
-      toastSettingsSuccess("已删除 Agent");
+      toastSettingsSuccess(coreT({key: "ui.agent.deleted_done"}));
       nav.pop();
     } else {
       toastSettingsError(res.error.message);
@@ -469,7 +471,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       const args = { agentId, patch: toAgentDefinitionPatch(def) };
       const saveRes = await ipcAgentRegistryUpdate(args);
       if (saveRes.ok) {
-        toastSettingsSuccess("已用默认模板覆盖并保存");
+        toastSettingsSuccess(coreT({key: "ui.agent.template_overwritten"}));
         await loadAgent();
       } else {
         toastSettingsError(saveRes.error.message);
@@ -519,17 +521,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
+          {/* 键面无「无法加载智能体配置」键（漏键待波 3c），保留原字面量。 */}
           <p className="settings-error-panel__title">无法加载智能体配置</p>
           <p className="settings-error-panel__message">{loadError}</p>
           <div className="settings-error-panel__actions">
             <Button variant="secondary" onClick={() => nav.pop()}>
-              返回列表
+              {coreT({key: "ui.agent.back_to_list"})}
             </Button>
             <Button
               variant="danger"
               onClick={() => void handleDeleteBrokenAgent()}
             >
-              删除 Agent
+              {coreT({key: "ui.agent.delete_agent_title"})}
             </Button>
           </div>
         </div>
@@ -581,7 +584,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       const saveRes = await ipcAgentRegistryUpdate(args);
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
-        toastSettingsSuccess("已保存智能体配置");
+        toastSettingsSuccess(coreT({key: "ui.agent.saved_done"}));
       } else {
         toastSettingsError(saveRes.error.message);
       }
@@ -610,7 +613,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       return;
     }
     if (countFormPromptSources(nextForm) < 1) {
-      showToast("至少保留一个 Prompt 块");
+      showToast(coreT({key: "ui.agent.prompt_block_min"}));
       return;
     }
     setPersist(nextPersist);
@@ -625,7 +628,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       return;
     }
     if (countEffectiveFormPromptSources(nextForm) < 1) {
-      showToast("至少保留一个 Prompt 块");
+      showToast(coreT({key: "ui.agent.prompt_block_min"}));
       return;
     }
     setDynamic(nextDynamic);
@@ -684,7 +687,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           className="icon-btn"
           disabled={isBuiltin}
           onClick={() => onMove(index, -1)}
-          aria-label="上移"
+          aria-label={coreT({key: "ui.common.move_up"})}
         >
           ↑
         </button>
@@ -695,7 +698,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           className="icon-btn"
           disabled={isBuiltin}
           onClick={() => onMove(index, 1)}
-          aria-label="下移"
+          aria-label={coreT({key: "ui.common.move_down"})}
         >
           ↓
         </button>
@@ -705,7 +708,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         className="icon-btn"
         disabled={isBuiltin}
         onClick={() => onDelete(index)}
-        aria-label="删除"
+        aria-label={coreT({key: "ui.common.delete"})}
       >
         ×
       </button>
@@ -733,13 +736,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   return (
     <SettingsPanel>
-      {loading ? <p className="settings-hint">加载中…</p> : null}
+      {loading ? <p className="settings-hint">{coreT({key: "ui.common.loading"})}</p> : null}
       <SettingsFormSection
-        title="智能体配置"
+        title={coreT({key: "ui.nav.agent_settings"})}
         desc={
           isBuiltin
-            ? "内置智能体，不可编辑——general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。"
-            : `编辑 ${displayName}${dirty ? " · 未保存" : ""}`
+            ? // 内置说明被源码契约测试锁（settings-agents-tabs.test.ts /内置智能体，不可编辑/），波 3c 对齐前保留原字面量。
+              "内置智能体，不可编辑——general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。"
+            : coreT({key: "ui.agent.edit_title", params: {name: displayName, dirty: dirty ? coreT({key: "ui.agent.unsaved_suffix"}) : ""}})
         }
         toolbar={
           <div className="settings-yaml-links">
@@ -748,7 +752,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               disabled={isBuiltin}
               onClick={() => setConfirmImport(true)}
             >
-              导入 YAML
+              {coreT({key: "ui.agent.import_yaml"})}
             </Button>
             <Button
               variant="secondary"
@@ -756,12 +760,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               onClick={() =>
                 void ipcAgentYamlExport({ agentId }).then((r) => {
                   if (r.ok && r.data === "saved")
-                    showToast("已导出 Agent YAML");
+                    showToast(coreT({key: "ui.agent.yaml_exported"}));
                   else if (!r.ok) showToast(r.error.message);
                 })
               }
             >
-              导出 YAML
+              {coreT({key: "ui.agent.export_yaml"})}
             </Button>
           </div>
         }
@@ -771,12 +775,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             disabled={saving || isBuiltin}
             onClick={() => void save()}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </Button>
         }
       >
-        <SettingsSection title="基本信息">
-          <SettingsField label="名称">
+        <SettingsSection title={coreT({key: "ui.agent.basic_info"})}>
+          <SettingsField label={coreT({key: "ui.common.name"})}>
             <input
               type="text"
               value={name}
@@ -784,19 +788,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               onChange={(e) => setName(e.target.value)}
             />
           </SettingsField>
-          <SettingsField label="描述">
+          <SettingsField label={coreT({key: "ui.common.description"})}>
             <textarea
               rows={3}
               value={description}
               disabled={isBuiltin}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="向 task 工具说明这个智能体擅长什么，可留空。"
+              placeholder={coreT({key: "ui.agent.description_hint"})}
             />
           </SettingsField>
           <p className="settings-hint settings-hint--compact">
-            用于在 task 工具中向主智能体介绍本智能体的能力。
+            {coreT({key: "ui.agent.description_task_hint"})}
           </p>
-          <SettingsField label="作用域">
+          <SettingsField label={coreT({key: "ui.agent.scope"})}>
             <select
               value={mode}
               disabled={isBuiltin}
@@ -811,10 +815,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </SettingsField>
         </SettingsSection>
 
-        <SettingsSection title="模型">
+        <SettingsSection title={coreT({key: "ui.common.model"})}>
           <SettingsField
-            label="专属模型"
-            hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
+            label={coreT({key: "ui.agent.model_dedicated"})}
+            hint={coreT({key: "ui.agent.model_follow_hint"})}
           >
             <select
               value={
@@ -827,15 +831,15 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               disabled={isBuiltin}
               onChange={(e) => handleModelSelect(e.target.value)}
             >
-              <option value="">默认(跟随)</option>
+              <option value="">{coreT({key: "ui.agent.model_follow_option"})}</option>
               {unresolvedId != null ? (
                 <option value={UNRESOLVED_MODEL_OPTION_VALUE}>
-                  ⚠ 原绑定模型当前不可用（{unresolvedId}）
+                  {coreT({key: "ui.agent.unresolved_model_warn", params: {id: unresolvedId}})}
                 </option>
               ) : null}
               {savedModels.map((m) => {
                 const found = providers.find((p) => p.id === m.providerId);
-                const providerLabel = found?.label ?? "未知服务商";
+                const providerLabel = found?.label ?? coreT({key: "ui.provider.unknown_provider"});
                 return (
                   <option key={m.id} value={m.id}>
                     {providerLabel} / {m.displayName}
@@ -846,12 +850,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </SettingsField>
           {unresolvedId != null ? (
             <p className="settings-hint settings-hint--compact">
-              原绑定模型当前不可用（服务商可能已删除或模型列表加载失败），保存将保留原绑定；选择「默认(跟随)」可解除。
+              {coreT({key: "ui.agent.unresolved_model_hint"})}
             </p>
           ) : null}
         </SettingsSection>
 
-        <SettingsSection title="运行时">
+        <SettingsSection title={coreT({key: "ui.agent.runtime_section"})}>
           <SettingsField label={PROMPT_REGION_LABELS.maxStepsLabel}>
             <input
               type="number"
@@ -864,8 +868,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <p className="settings-hint">{PROMPT_REGION_LABELS.maxStepsHint}</p>
         </SettingsSection>
 
-        <SettingsSection title="工具策略">
-          <SettingsField label="模式">
+        <SettingsSection title={coreT({key: "ui.agent.tools_section"})}>
+          <SettingsField label={coreT({key: "ui.agent.tools_mode_label"})}>
             <select
               value={toolsMode}
               disabled={isBuiltin}
@@ -880,7 +884,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </SettingsField>
           {toolsMode !== "default" ? (
             <SettingsField
-              label={toolsMode === "allow" ? "白名单工具" : "黑名单工具"}
+              label={toolsMode === "allow" ? coreT({key: "ui.agent.allowlist_label"}) : coreT({key: "ui.agent.denylist_label"})}
             >
               <ToolPolicyPicker
                 selected={toolsSelected}
@@ -889,8 +893,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部内置工具（11
-              个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search。
+              {coreT({key: "ui.agent.builtin_tools_hint", params: {count: 11}})}
             </p>
           )}
         </SettingsSection>
@@ -953,7 +956,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 checked={skillsEnabled}
                 onChange={setSkillsEnabled}
                 disabled={isBuiltin}
-                aria-label="开启技能注入与 skill 工具"
+                aria-label={coreT({key: "ui.agent.skill_injection_toggle"})}
               />
             </div>
             {skillsEnabled ? (
@@ -961,12 +964,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 <p className="config-block-card__hint">
                   {PROMPT_REGION_LABELS.skillsReadonlyHint}
                 </p>
-                <SettingsField label="索引前缀语">
+                <SettingsField label={coreT({key: "ui.agent.skills_prefix_label"})}>
                   <PromptCollapsibleField
                     value={skillsPrefix}
                     onChange={setSkillsPrefix}
                     disabled={isBuiltin}
-                    ariaLabel="索引前缀语"
+                    ariaLabel={coreT({key: "ui.agent.skills_prefix_label"})}
                   >
                     <textarea
                       rows={2}
@@ -1015,7 +1018,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 <>
                   <div className="config-block-card__section-head">
                     <span className="config-block-card__section-label">
-                      块列表
+                      {coreT({key: "ui.agent.blocks_list_label"})}
                     </span>
                     <button
                       type="button"
@@ -1028,7 +1031,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         ])
                       }
                     >
-                      添加
+                      {coreT({key: "ui.common.add"})}
                     </button>
                   </div>
                   <div
@@ -1072,7 +1075,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             })}
                           </div>
                           <div className="config-block-card__body">
-                            <SettingsField label="名称">
+                            <SettingsField label={coreT({key: "ui.common.name"})}>
                               <input
                                 value={block.name}
                                 disabled={isBuiltin}
@@ -1087,7 +1090,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                 }
                               />
                             </SettingsField>
-                            <SettingsField label="角色">
+                            <SettingsField label={coreT({key: "ui.common.role"})}>
                               <select
                                 value={block.role}
                                 disabled={isBuiltin}
@@ -1115,7 +1118,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             <p className="config-block-card__hint">
                               {PROMPT_REGION_LABELS.persistRegionHint}
                             </p>
-                            <SettingsField label="内容">
+                            <SettingsField label={coreT({key: "ui.common.content"})}>
                               <PromptCollapsibleField
                                 value={block.content}
                                 onChange={(content) =>
@@ -1126,7 +1129,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                   )
                                 }
                                 disabled={isBuiltin}
-                                ariaLabel={`常驻块 ${block.name} 内容`}
+                                ariaLabel={coreT({key: "ui.agent.block_content_aria_persist", params: {name: block.name}})}
                               >
                                 <textarea
                                   rows={4}
@@ -1171,20 +1174,20 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 checked={customAttachEnabled}
                 onChange={setCustomAttachEnabled}
                 disabled={isBuiltin}
-                aria-label="开启自定义附加信息"
+                aria-label={coreT({key: "ui.agent.attach_toggle_label"})}
               />
             </div>
             <div className="config-block-card__body">
               <p className="config-block-card__hint">
-                用户聊天历史，开启后可给每次输入附加额外内容
+                {coreT({key: "ui.agent.attach_toggle_hint"})}
               </p>
               {customAttachEnabled ? (
-                <SettingsField label="附加信息文本">
+                <SettingsField label={coreT({key: "ui.agent.attach_text_label"})}>
                   <PromptCollapsibleField
                     value={customAttachText}
                     onChange={setCustomAttachText}
                     disabled={isBuiltin}
-                    ariaLabel="附加信息文本"
+                    ariaLabel={coreT({key: "ui.agent.attach_text_label"})}
                   >
                     <textarea
                       rows={4}
@@ -1192,7 +1195,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       disabled={isBuiltin}
                       onChange={(e) => setCustomAttachText(e.target.value)}
                       onKeyDown={handlePromptTextareaKeyDown}
-                      placeholder="每条用户消息都会附带这段文本给模型"
+                      placeholder={coreT({key: "ui.agent.attach_text_hint"})}
                     />
                   </PromptCollapsibleField>
                 </SettingsField>
@@ -1222,7 +1225,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 <>
                   <div className="config-block-card__section-head">
                     <span className="config-block-card__section-label">
-                      块列表
+                      {coreT({key: "ui.agent.blocks_list_label"})}
                     </span>
                     <button
                       type="button"
@@ -1235,7 +1238,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         ])
                       }
                     >
-                      添加
+                      {coreT({key: "ui.common.add"})}
                     </button>
                   </div>
                   <div
@@ -1280,7 +1283,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           })}
                         </div>
                         <div className="config-block-card__body">
-                          <SettingsField label="名称">
+                          <SettingsField label={coreT({key: "ui.common.name"})}>
                             <input
                               value={block.name}
                               disabled={isBuiltin}
@@ -1295,7 +1298,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                               }
                             />
                           </SettingsField>
-                          <SettingsField label="角色">
+                          <SettingsField label={coreT({key: "ui.common.role"})}>
                             <select
                               value={block.role}
                               disabled={isBuiltin}
@@ -1320,7 +1323,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                               ))}
                             </select>
                           </SettingsField>
-                          <SettingsField label="内容">
+                          <SettingsField label={coreT({key: "ui.common.content"})}>
                             <PromptCollapsibleField
                               value={block.content}
                               onChange={(content) =>
@@ -1331,7 +1334,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                 )
                               }
                               disabled={isBuiltin}
-                              ariaLabel={`动态块 ${block.name} 内容`}
+                              ariaLabel={coreT({key: "ui.agent.block_content_aria_dynamic", params: {name: block.name}})}
                             >
                               <PromptMacroTextarea
                                 textareaRef={
@@ -1356,7 +1359,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           </SettingsField>
                           <div className="config-dep-chips">
                             <span className="config-block-card__hint">
-                              宏：
+                              {coreT({key: "ui.agent.macro_prefix"})}
                             </span>
                             {PROMPT_INSERTABLE_MACROS.map((macro) => (
                               <button
@@ -1388,14 +1391,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       </SettingsFormSection>
       <ConfirmModal
         open={confirmImport}
-        title="导入 YAML"
-        message="将覆盖当前智能体配置，是否继续？"
+        title={coreT({key: "ui.agent.import_yaml"})}
+        message={coreT({key: "ui.agent.yaml_import_confirm"})}
         onConfirm={() => {
           setConfirmImport(false);
           void ipcAgentYamlImport({ agentId }).then((r) => {
             if (r.ok && r.data === "imported") {
               void loadAgent();
-              showToast("已导入 Agent YAML");
+              showToast(coreT({key: "ui.agent.yaml_imported"}));
             } else if (!r.ok) {
               showToast(r.error.message);
             }

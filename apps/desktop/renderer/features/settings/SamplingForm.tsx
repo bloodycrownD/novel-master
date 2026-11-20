@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { ProtocolSamplingDefaults, type LlmProtocolKind, type ModelSamplingParams } from "@shared/logic/provider";
 import { SettingsField } from "./settings-ui";
 
@@ -74,7 +75,7 @@ export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) 
     return (
       <>
         <NumberField
-          label="温度"
+          label={coreT({key: "ui.sampling.temperature_label"})}
           value={numStr(openai.temperature)}
           onChange={(v) => onChange(patchOpenAi(params, { temperature: parseNumber(v) }))}
         />
@@ -84,7 +85,7 @@ export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) 
           onChange={(v) => onChange(patchOpenAi(params, { top_p: parseNumber(v) }))}
         />
         <NumberField
-          label="输出最大长度"
+          label={coreT({key: "ui.sampling.max_output_label"})}
           value={numStr(openai.max_tokens)}
           onChange={(v) => onChange(patchOpenAi(params, { max_tokens: parseNumber(v) }))}
         />
@@ -96,7 +97,7 @@ export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) 
     return (
       <>
         <NumberField
-          label="温度"
+          label={coreT({key: "ui.sampling.temperature_label"})}
           value={numStr(anthropic.temperature)}
           onChange={(v) => onChange(patchAnthropic(params, { temperature: parseNumber(v) }))}
         />
@@ -111,7 +112,7 @@ export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) 
           onChange={(v) => onChange(patchAnthropic(params, { top_k: parseNumber(v) }))}
         />
         <NumberField
-          label="输出最大长度"
+          label={coreT({key: "ui.sampling.max_output_label"})}
           value={numStr(anthropic.max_tokens)}
           onChange={(v) => onChange(patchAnthropic(params, { max_tokens: parseNumber(v) }))}
         />
@@ -122,7 +123,7 @@ export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) 
   return (
     <>
       <NumberField
-        label="温度"
+        label={coreT({key: "ui.sampling.temperature_label"})}
         value={numStr(gemini.temperature)}
         onChange={(v) => onChange(patchGemini(params, { temperature: parseNumber(v) }))}
       />
@@ -137,7 +138,7 @@ export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) 
         onChange={(v) => onChange(patchGemini(params, { topK: parseNumber(v) }))}
       />
       <NumberField
-        label="输出最大长度"
+        label={coreT({key: "ui.sampling.max_output_label"})}
         value={numStr(gemini.maxOutputTokens)}
         onChange={(v) =>
           onChange(patchGemini(params, { maxOutputTokens: parseNumber(v) }))

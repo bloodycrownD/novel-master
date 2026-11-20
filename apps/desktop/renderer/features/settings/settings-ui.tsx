@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { API_KEY_STATUS_LABELS } from "@shared/config-forms/ui-labels";
 import { Switch } from "@/components/ui/Switch";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
@@ -108,7 +109,7 @@ export function ApiKeyStatusTag({ status }: { status: string }) {
 /** 内置引擎徽标：duckduckgo 无 set/not set 二态（恒可用），主题色胶囊
  * 标「内置」，与 ApiKeyStatusTag 同形状（双端同构口径）。 */
 export function BuiltinEngineTag() {
-  return <span className="settings-tag settings-tag--primary">内置</span>;
+  return <span className="settings-tag settings-tag--primary">{coreT({key: "ui.common.builtin"})}</span>;
 }
 
 export function SettingsListItem({
@@ -169,7 +170,7 @@ export function SettingsListItem({
       <button
         type="button"
         className="settings-list-item__menu-btn"
-        aria-label="更多"
+        aria-label={coreT({key: "ui.common.more"})}
         onClick={(e) => {
           e.stopPropagation();
           onMenu(e);

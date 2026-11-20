@@ -8,6 +8,7 @@
  *   编辑信息对 invalid 技能禁用：先修复 SKILL.md 再改信息）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type {
   ProjectDto,
   SkillListItemDto,
@@ -132,6 +133,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     if (menu == null) {
       return [];
     }
+    // 菜单四项标签被源码契约测试锁（skills-manage-export-menu.test.ts / skill-zip-import.test.tsx
+    // 以 readFileSync+正则锁死精确串与顺序），波 3c 对齐测试前保留原字面量。
     const items: ContextMenuItem[] = [
       { label: "编辑", action: "edit" },
       {
@@ -177,7 +180,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
           fileName: `${current.ref.name}.zip`,
         });
         if (res.ok && res.data === "saved") {
-          showToast(`已导出「${current.ref.name}.zip」`);
+          showToast(coreT({key: "ui.skills.exported_zip", params: {name: current.ref.name}}));
         } else if (!res.ok) {
           showToast(res.error.message);
         }
@@ -185,7 +188,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
       return;
     }
     if (action === "delete") {
-      const scopeLabel = current.ref.domain === "global" ? "该技能影响所有项目，删除后全部会话不再注入。" : "该技能仅所属项目生效，删除后其他项目不受影响。";
+      const scopeLabel = current.ref.domain === "global" ? coreT({key: "ui.skills.global_delete_warn"}) : coreT({key: "ui.skills.project_delete_warn"});
       setDeleteConfirm({
         refs: [current.ref],
         label: current.label,
@@ -214,10 +217,10 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     const allGlobal = refs.every((r) => r.domain === "global");
     setDeleteConfirm({
       refs,
-      label: `选中的 ${refs.length} 个技能`,
+      label: coreT({key: "ui.skills.selected_skills_label", params: {count: refs.length}}),
       scopeLabel: allGlobal
-        ? "其中的全局技能影响所有项目，删除后全部会话不再注入。"
-        : "项目技能仅所属项目生效，删除后其他项目不受影响。",
+        ? coreT({key: "ui.skills.batch_delete_warn_global"})
+        : coreT({key: "ui.skills.batch_delete_warn_project"}),
     });
   };
 
@@ -234,13 +237,13 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
             {ref.domain === "global" && overriddenGlobalNames.has(row.name) ? (
               <span
                 className="skill-override-tag"
-                title="该全局版仅对没有同名副本的项目生效；有副本的项目使用项目版。"
+                title={coreT({key: "ui.skills.global_shadow_note"})}
               >
-                被项目副本覆盖
+                {coreT({key: "ui.skills.overridden_tag"})}
               </span>
             ) : null}
             {!row.valid ? (
-              <span className="skill-invalid-tag">{`无效 · ${row.invalidReason ?? "front matter 不可解析"}`}</span>
+              <span className="skill-invalid-tag">{coreT({key: "ui.skills.invalid_tag", params: {reason: row.invalidReason ?? coreT({key: "ui.skills.invalid_default_reason"})}})}</span>
             ) : null}
             <span>{row.description ?? "—"}</span>
           </>
@@ -268,17 +271,17 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     <SettingsPanel>
       <div className="skills-manage__tabs">
         <SegmentedControl
-          aria-label="技能域"
+          aria-label={coreT({key: "ui.skills.domain_section"})}
           value={tab}
           options={[
-            { value: "global", label: "全局技能" },
-            { value: "project", label: "项目技能" },
+            { value: "global", label: coreT({key: "ui.skills.global_tab"}) },
+            { value: "project", label: coreT({key: "ui.skills.project_tab"}) },
           ]}
           onChange={(next) => switchTab(next as SkillTab)}
         />
       </div>
       <ManageHeader
-        title={tab === "global" ? "全局技能" : "项目技能"}
+        title={tab === "global" ? coreT({key: "ui.skills.global_tab"}) : coreT({key: "ui.skills.project_tab"})}
         batchMode={batch.active}
         selectedCount={batch.selectedCount}
         onEnterBatch={batch.enter}
@@ -286,8 +289,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
         onDelete={handleBatchDelete}
         hint={
           tab === "global"
-            ? "全局技能对所有项目生效；同名项目副本会覆盖全局版（仅对无副本的项目生效）。"
-            : "项目技能仅所属项目生效；按所有项目分组展示。"
+            ? coreT({key: "ui.skills.global_hint"})
+            : coreT({key: "ui.skills.project_hint"})
         }
         normalActions={
           <button
@@ -295,7 +298,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
             className="list-manage-header__btn list-manage-header__btn--primary"
             onClick={() => setCreateOpen(true)}
           >
-            新建
+            {coreT({key: "ui.common.new"})}
           </button>
         }
       />
@@ -303,7 +306,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
       {tab === "global" ? (
         <SettingsListSection>
           {globalRows.length === 0 ? (
-            <SettingsListEmpty>暂无全局技能，点击上方「新建」创建。</SettingsListEmpty>
+            <SettingsListEmpty>{coreT({key: "ui.skills.empty_global"})}</SettingsListEmpty>
           ) : null}
           {globalRows.map((row) =>
             renderRow(row, { domain: "global", name: row.name }),
@@ -313,7 +316,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
         <>
           {projects.length === 0 ? (
             <SettingsListSection>
-              <SettingsListEmpty>暂无项目，先在主导航创建项目。</SettingsListEmpty>
+              <SettingsListEmpty>{coreT({key: "ui.skills.empty_projects_desktop"})}</SettingsListEmpty>
             </SettingsListSection>
           ) : null}
           {projectGroups.map((group) => (
@@ -326,7 +329,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
               }
             >
               {group.rows.length === 0 ? (
-                <SettingsListEmpty>该项目暂无技能。</SettingsListEmpty>
+                <SettingsListEmpty>{coreT({key: "ui.skills.empty_project_desktop"})}</SettingsListEmpty>
               ) : null}
               {group.rows.map((row) =>
                 renderRow(row, {
@@ -351,8 +354,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
 
       <ConfirmModal
         open={deleteConfirm != null}
-        title="删除技能"
-        message={`删除「${deleteConfirm?.label ?? ""}」？${deleteConfirm?.scopeLabel ?? ""}`}
+        title={coreT({key: "ui.skills.delete_title"})}
+        message={coreT({key: "ui.skills.delete_confirm_named", params: {name: deleteConfirm?.label ?? "", scope: deleteConfirm?.scopeLabel ?? ""}})}
         danger
         onConfirm={() => {
           const target = deleteConfirm;
@@ -369,7 +372,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
               }
             }
             batch.exit();
-            showToast("已删除技能");
+            showToast(coreT({key: "ui.skills.deleted_done"}));
             await reload();
           })();
         }}
@@ -397,7 +400,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
           if (nav.navState.viewingSkillRef?.name === infoEdit?.ref.name) {
             nav.navState.viewingSkillRef = ref;
           }
-          showToast("已保存技能信息");
+          showToast(coreT({key: "ui.skills.info_saved"}));
           void reload();
         }}
       />

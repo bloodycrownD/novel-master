@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { handleSingleLineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 
 type AddModelModalProps = {
@@ -50,15 +51,15 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="add-model-title" className="text-prompt-modal__title">
-          添加模型
+          {coreT({key: "ui.provider.add_model_title"})}
         </h3>
-        <p className="text-prompt-modal__label">厂商模型 ID</p>
+        <p className="text-prompt-modal__label">{coreT({key: "ui.provider.vendor_model_id_label"})}</p>
         <input
           className="text-prompt-modal__input"
           type="text"
           value={vendorModelId}
           onChange={(e) => setVendorModelId(e.target.value)}
-          placeholder="如 gpt-4o"
+          placeholder={coreT({key: "ui.provider.vendor_model_id_placeholder"})}
           autoFocus
           onKeyDown={(e) => {
             handleSingleLineSubmitKeyDown(e, () => {
@@ -68,13 +69,13 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
             });
           }}
         />
-        <p className="text-prompt-modal__label">模型名称（可选）</p>
+        <p className="text-prompt-modal__label">{coreT({key: "ui.provider.model_name_optional_label"})}</p>
         <input
           className="text-prompt-modal__input"
           type="text"
           value={modelName}
           onChange={(e) => setModelName(e.target.value)}
-          placeholder="留空则使用厂商 ID"
+          placeholder={coreT({key: "ui.provider.model_name_keep_hint"})}
           onKeyDown={(e) => {
             handleSingleLineSubmitKeyDown(e, () => {
               if (canSubmit) {
@@ -85,7 +86,7 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
         />
         <div className="text-prompt-modal__actions">
           <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -93,7 +94,7 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
             disabled={!canSubmit}
             onClick={() => void handleConfirm()}
           >
-            {saving ? "添加中…" : "添加"}
+            {saving ? coreT({key: "ui.common.adding"}) : coreT({key: "ui.common.add"})}
           </button>
         </div>
       </div>
