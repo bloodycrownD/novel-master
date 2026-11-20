@@ -2,9 +2,10 @@
 
 > 目标仓库：`D:/Dev/Js/novel-master`（main @ `dc9ed7efd`，p1-p26 已合并）
 > 目标 tag：`p27-backlog`
-> 前置：无（六项相互独立，可并行派片；R1-R4 是结构/迁移线，R5/R6 是工具与文案线）
+> 范围：R1-R7（R7 为用户授权 agent 自判的 renderer signatures 收敛）
+> 前置：无（七项相互独立，可并行派片；R1-R4 与 R7 是结构/迁移线，R5/R6 是工具与文案线）
 
-## 零、六项总览与侦察数据（2026-11-21 实测）
+## 零、七项总览与侦察数据（2026-11-21 实测）
 
 | 编号 | 主题 | 实测规模 | 性质 |
 |---|---|---|---|
@@ -14,6 +15,7 @@
 | R4 | 拼接 SQL 迁 SqlTemplate | 62 处 `${}` 插值 + filter 三函数 | 迁移（**底座已存在**） |
 | R5 | SQL 常量格式化 | 29 个 `*_SQL` 常量，最长单行 1061 字符 | 可读性 + 规则豁免 |
 | R6 | UI 硬编码文案 i18n 化 | mobile 862 + desktop 578 ≈ 1440 处 | 迁移工程 |
+| R7 | renderer signatures 自判收敛 | desktop/renderer 374 条（ARGS 140 / VARDECL 119 / PARAMS 100 / IMPORT 9 / ASSIGN 6） | 规则边界裁决 + 执行 |
 
 ## 一、R1：throw-audit 欠账清算
 
@@ -169,25 +171,59 @@
 - 双端切语言冒烟：en 环境无中文残留（抽 20 屏人工核）
 ```
 
-## 七、执行编排
+## 七、R7：renderer signatures 自判收敛
+
+### 7.1 裁决授权（用户拍板：由执行 agent 自己判断）
+
+desktop/renderer 374 条 signatures findings（renderer 此前不在旧 check-style 扫描面，nm-style 扩面后首次可见）。**不预设「豁免 vs 全适用」**——执行 agent 逐类定性、自己裁决边界、然后执行自己裁决的清法。
+
+### 7.2 形态盘点（执行者先读这个）
+
+| verdict | 条数 | 典型形态 |
+|---|---|---|
+| VARDECL | 119 | `const [workspacePrompt, setWorkspacePrompt] = useState(...)` 解构声明 |
+| ARGS | 140 | JSX 回调/事件处理实参跨行（`onClick={() => ...}` 链） |
+| PARAMS | 100 | 组件 props 解构 / hook 形参多行 |
+| IMPORT | 9 | 多具名导入 |
+| ASSIGN | 6 | 赋值 RHS 跨行 |
+
+### 7.3 判断框架（授权但给锚点，防一刀切）
+
+逐类产出三列裁决表：`形态 | 判定（豁免/收一行）| 理由`，判断锚点：
+
+- **豁免候选**：React 生态惯用且一行化会伤可读性的——`useState` 解构若 RHS 本身要拆行、深嵌 JSX 内联回调、组件 props 解构（一行塞不下是常态）。nm-code-style 的一行规则本意为**逻辑代码可读性**，不是逼 UI 代码对齐。
+- **收一行候选**：与 React 无关的纯 TS 逻辑行（工具调用、`const x = fn(a, b)` 被无谓拆行）——这些与 core 同规则，该收。
+- **两不管**：import 合并（IMPORT 9 条）按 nm style 既有 import 规则处理。
+
+**硬约束**：裁决表先出后动码；豁免判定必须落进 nm-style 的规则层（`SKIP` 机制或 known-false-positives），不是口头豁免——否则 gate 永远红；清理不得与 prettier 默认宽度冲突（#244/#275：不跑全局 prettier，改完用 `--print-width 200` 自检）；裁决与执行同一 agent 闭环，收尾交 `--changed` 自检数字。
+
+### 7.4 验收
 
 ```
-波 0  探针三路并行：R1 定性表（29 UNTRIAGED）/ R2 139 类定性表 / R6 webview translator 可用性
+- 裁决表落 docs/apm/memory（形态 × 判定 × 理由）
+- 豁免进规则层；收一行桶清零
+- nm-style check desktop/renderer --changed 无新增；三端测试绿
+```
+
+## 八、执行编排
+
+```
+波 0  探针四路并行：R1 定性表（29 UNTRIAGED）/ R2 139 类定性表 / R6 webview translator 可用性 / R7 renderer 裁决表（374 条逐形态判定）
 波 1  R1 修复 ∥ R4 A 桶迁移 ∥ R3 收编（三线文件零交集）
-波 2  R2 收编（依赖波 0 定性）∥ R5 规则豁免 + 重排
+波 2  R2 收编（依赖波 0 定性）∥ R5 规则豁免 + 重排 ∥ R7 收一行桶执行（依赖波 0 裁决表）
 波 3  R6 分片迁移（依赖波 0 探针；量最大，允许超出本 tag 单独收）
-波 4  收敛：typecheck + 三端 + nm-style 五段 + throw-audit gate + dup-gate
-波 5  tag p27-backlog（R6 未完则 tag 写明「R6 partial」）
+波 4  收敛：typecheck + 三端 + nm-style 五段 + throw-audit gate + dup-gate + renderer 裁决表生效
+波 5  tag p27-backlog（R6/R7 未完则 tag 写明对应 partial 项）
 ```
 
-分片纪律（#277）：每片确定文件清单；R4 与 R3 有同文件风险（usage-stats.service.ts 既有裸 let 又有拼接 SQL）——R4 先动、R3 后动。
+分片纪律（#277）：每片确定文件清单；R4 与 R3 有同文件风险（usage-stats.service.ts 既有裸 let 又有拼接 SQL）——R4 先动、R3 后动；R7 与 R6 都动 renderer 但文件集不同（R7 全 renderer、R6 按屏），R7 先出裁决表并落规则层后 R6 才动 renderer 文件。
 
-## 八、明确不做
+## 九、明确不做
 
 - `apps/cli`（#276）；接口实现 class 的端口契约改造（p17 V4 已裁保留）；B 桶受信 `${}` 表名插值；测试断言文案；日志文案 i18n。
 - 不改任何 SQL 查询语义；不动 `SqlTemplateParser` 本体（除非探针发现五标签能力缺口——那是新迭代）。
 
-## 九、风险
+## 十、风险
 
 | 风险 | 缓解 |
 |---|---|
