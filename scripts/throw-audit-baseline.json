@@ -1,15 +1,9 @@
 {
   "note": "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-20T15:35:02.495Z",
+  "generatedAt": "2026-11-20T17:26:20.402Z",
   "includeTests": false,
   "sites": {
-    "apps/desktop/renderer/features/settings/SettingsViews.tsx#throw new Error(\"自定义参数必须是 JSON 对象\");": {
-      "form": "T4",
-      "line": 1349,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(picked.error.message || \"选择文件失败\");": {
       "form": "T4",
       "line": 266,
@@ -49,26 +43,26 @@
     "apps/desktop/renderer/main.tsx#throw new Error(\"Missing #root element\");": {
       "form": "T4",
       "line": 8,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "进程入口装配不变量：index.html 缺 #root 属宿主装配错误，启动期无 Result 通道可返回。"
     },
     "apps/desktop/renderer/providers/NovelMasterProvider.tsx#throw new Error(\"useNovelMaster must be used within NovelMasterProvider\");": {
       "form": "T4",
       "line": 158,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/desktop/renderer/providers/ShellNavProvider.tsx#throw new Error(\"useShellNav must be used within ShellNavProvider\");": {
       "form": "T4",
       "line": 1001,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/desktop/renderer/providers/ThemeProvider.tsx#throw new Error(\"useTheme must be used within ThemeProvider\");": {
       "form": "T4",
       "line": 84,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/desktop/renderer/shims/node-crypto.ts#throw new Error(\"crypto.randomUUID is unavailable in this environment\");": {
       "form": "T4",
@@ -112,29 +106,11 @@
       "disposition": "KEEP",
       "reason": "同步访问器的不变量：调用方契约保证 bootstrap 已完成（名字即契约），未初始化属编程错误。"
     },
-    "apps/desktop/src/main/services/cloud-sync.service.ts#throw new AppError(\"CLOUD_SYNC_AUTH\", { detail: \"云存储凭据无效或权限不足\" }, { cause: error });": {
-      "form": "T3",
-      "line": 124,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/src/main/services/cloud-sync.service.ts#throw new AppError(\"CLOUD_SYNC_NETWORK\", { detail: \"无法连接云存储，请检查网络与 Endpoint\" }, { cause: error });": {
-      "form": "T3",
-      "line": 127,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/src/main/services/cloud-sync.service.ts#throw new AppError(\"CLOUD_SYNC_NETWORK\", { detail: message }, { cause: error });": {
-      "form": "T3",
-      "line": 129,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
     "apps/desktop/src/main/services/db-backup.service.ts#throw new AppError(\"INFRA_UNEXPECTED_ERROR\", { detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${Errors.text(rollbackError)}` }, { cause: [error, rollbackError] });": {
       "form": "T3",
       "line": 168,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "替换链按整体保持 throw 通道：DatabaseReplacedError 必须以异常类型跨 importFromPath 抵达 IPC handler（instanceof 判定 + 记账分支）；仅回滚双失败一处改 Result 会造成同函数混合双通道。"
     },
     "apps/desktop/src/main/services/vfs-batch.service.ts#throw new Error(\"拖出图标无效\");": {
       "form": "T4",
@@ -228,7 +204,7 @@
     },
     "apps/mobile/src/db/db-file-path.ts#throw new Error('无法定位应用数据库目录');": {
       "form": "T4",
-      "line": 37,
+      "line": 40,
       "disposition": "KEEP",
       "reason": "平台边界：设备未返回可用的数据库根目录，同步路径解析无失败位"
     },
@@ -241,14 +217,14 @@
     "apps/mobile/src/navigation/ChatTabNavContext.tsx#throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');": {
       "form": "T4",
       "line": 47,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）；严格版即刻意的强不变量入口（另有 Optional 弱版本并存）。"
     },
     "apps/mobile/src/navigation/HeaderContext.tsx#throw new Error('useHeaderContext requires HeaderProvider');": {
       "form": "T4",
       "line": 53,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/mobile/src/runtime/mobile-sksp.ts#throw new Error(`当前平台（${platform}）暂不支持加密存储驱动`);": {
       "form": "T4",
@@ -259,8 +235,8 @@
     "apps/mobile/src/runtime/novel-master-context.tsx#throw new Error('useNovelMaster must be used within NovelMasterProvider');": {
       "form": "T4",
       "line": 418,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/mobile/src/screens/stack/FileEditorScreen.tsx#throw new Error('缺少 projectId');": {
       "form": "T4",
@@ -418,12 +394,6 @@
       "disposition": "BOUNDARY",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/services/db-backup.service.ts#throw new AppError('INFRA_UNEXPECTED_ERROR', {detail: rollbackFailureDetail}, {cause: [error, rollbackError]});": {
-      "form": "T3",
-      "line": 141,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
     "apps/mobile/src/services/document-io.ts#throw new Error(result.error);": {
       "form": "T4",
       "line": 96,
@@ -432,21 +402,21 @@
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);": {
       "form": "T4",
-      "line": 192,
+      "line": 193,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）"
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);": {
       "form": "T4",
-      "line": 201,
+      "line": 202,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错"
     },
     "apps/mobile/src/services/rn-file-io.ts#throw new AppError('INFRA_UNSUPPORTED_PLATFORM', {detail: 'react-native-blob-util.fs unavailable'});": {
       "form": "T3",
       "line": 45,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "native bridge 依赖装配边界：react-native-blob-util.fs 未注入属平台能力缺失（同 LlmSseNative/sksp keep 族先例）；返回值即 fs 模块，Result 化会毒化全部调用点。"
     },
     "apps/mobile/src/services/vfs-character-card.service.ts#throw check.error;": {
       "form": "T1",
@@ -463,8 +433,8 @@
     "apps/mobile/src/theme/ThemeProvider.tsx#throw new Error('useTheme must be used within ThemeProvider');": {
       "form": "T4",
       "line": 96,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/mobile/src/web/chat-transcript/webview/runtime/util/vfs-tool-path.ts#throw new Error('invalid path');": {
       "form": "T4",
@@ -516,9 +486,9 @@
     },
     "apps/mobile/test-utils/react-native-webview-mock.tsx#throw new Error(`WebView mock 未找到域「${domain}」的实例`);": {
       "form": "T4",
-      "line": 113,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 114,
+      "disposition": "KEEP",
+      "reason": "测试夹具断言：定位不到 mock 实例必须打断测试，非业务错误。"
     },
     "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts#throw new Error(`S3 GetObject 未返回 ETag: ${key}`);": {
       "form": "T4",
@@ -601,32 +571,32 @@
     "packages/core/src/domain/tool/logic/tool-registry.ts#throw new AppError(\"TOOL_CONFLICT\", {toolName: tool.name, detail: `Tool already registered: ${tool.name}`});": {
       "form": "T3",
       "line": 26,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "装配期编程错误不变量：同名重复注册属 bug（类注释明言 safer than last-wins）；调用方仅 bootstrap 装配（register-builtin-tools 固定清单）与同源复制（resolve-agent-tools）。"
     },
     "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts#throw new AppError(\"VFS_CONTENT_BLOB_MISSING\", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });": {
       "form": "T3",
       "line": 273,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "blob 缺失且无回退明文=数据受损域失败；消费方均在事务回调内（restore-path 持 tx、vfs-tree-copy replaceSubtree/Outcome 边界转 createAbortError、seed 链），抛错即回滚，service 边界 unwrapTxDomainError 收进 Result.err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: oldBase, detail: `Path not found: ${oldBase}` });": {
       "form": "T3",
       "line": 682,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "幽灵路径按既定设计抛错回滚：唯一消费链 renamePrefix（revision-aware-vfs）注释明言 repo 抛 VFS_NOT_FOUND，边界已 unwrapTxDomainError 转 Err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });": {
       "form": "T3",
       "line": 271,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "守护 T-RB-REF-MISSING 不变量（ref_count 不得悬空）：adjustRefCount delta>0 命中 0 行即单条缺失；消费方 RevisionRefCount.adjust 链全部落在事务回调内，抛错回滚 + service 边界转码。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing });": {
       "form": "T3",
       "line": 297,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "同 adjustRefCount：batchAdjustRefCountWithDelta 批量 +1 前置存在性校验，守护 T-RB-REF-MISSING 不变量；事务回调内抛错回滚 + service 边界转码。"
     },
     "packages/core/src/errors/either.ts#throw new Error(\"Result.revive 收到非 Result 线上形态：调用方对载荷的形状断言不成立\");": {
       "form": "T4",
@@ -816,19 +786,19 @@
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw new AppError(\"CHAT_NOT_FOUND\", { detail: `session not found: ${session.id}`, kind: \"session\", id: session.id });": {
       "form": "T3",
-      "line": 209,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 229,
+      "disposition": "BOUNDARY",
+      "reason": "事务回调内必须靠抛错回滚——改 return 会在「子树已删、根删失败」时提交半删事务；delete() 边界已补 unwrapTxDomainError 收进 Result.err（p27 R1 修复）。"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw vfsCopied.error;": {
       "form": "T1",
-      "line": 348,
+      "line": 368,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw inserted.error;": {
       "form": "T1",
-      "line": 351,
+      "line": 371,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
@@ -889,26 +859,26 @@
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `Path not found: ${normalized}` });": {
       "form": "T3",
       "line": 120,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（非递归删根不存在）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });": {
       "form": "T3",
       "line": 173,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（entry 缺失）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });": {
       "form": "T3",
       "line": 179,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（revision 缺失/已删）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}` });": {
       "form": "T3",
       "line": 182,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（active revision 无内容）"
     },
     "packages/core/src/service/vfs/impl/vfs-batch-io.service.ts#throw new AppError(\"VFS_NOT_A_DIRECTORY\", { detail: `path is a file, not a directory: ${dirLogical}`, path: dirLogical });": {
       "form": "T3",
@@ -925,8 +895,8 @@
     "packages/core/src/service/vfs/impl/vfs-zip-io.service.ts#throw new AppError(\"VFS_NOT_A_DIRECTORY\", { path: logical, detail: `Not a directory: ${logical}` });": {
       "form": "T3",
       "line": 67,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "只在 import 段 B0 的 conn.transaction 回调内调用，失败靠抛错回滚（函数 doc 明言）；import 外层 catch 收口，方法内 unwrapOrRollback 同款形态。"
     },
     "packages/core/src/service/vfs/impl/vfs-zip-io.service.ts#throw new Error(\"test import failure\");": {
       "form": "T4",
@@ -948,7 +918,7 @@
     },
     "packages/sksp-windows/src/dpapi.ts#throw new Error(\"DPAPI platform not supported\");": {
       "form": "T4",
-      "line": 64,
+      "line": 67,
       "disposition": "KEEP",
       "reason": "OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。"
     },
@@ -997,8 +967,8 @@
     "tools/nm-style/src/lib/symbols.ts#throw new Error(\"nm-style: symbol 不属于本索引\");": {
       "form": "T4",
       "line": 678,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "BOUNDARY",
+      "reason": "nm-style 自身 CLI 工具内部不变量：入参 symbol 必然取自同一索引，查不到=调用方编程错误；工具进程边界直接 throw 合理。"
     }
   }
 }

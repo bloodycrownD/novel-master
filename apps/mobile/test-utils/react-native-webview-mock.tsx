@@ -110,6 +110,7 @@ export function findMockWebViewByDomain(
       return uri != null && resolveDomain({uri}) === domain;
     });
   if (node == null) {
+    // nm-throw: keep — 测试夹具断言：定位不到 mock 实例必须打断测试，非业务错误。
     throw new Error(`WebView mock 未找到域「${domain}」的实例`);
   }
   return node;

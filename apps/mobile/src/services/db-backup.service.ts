@@ -138,7 +138,7 @@ export namespace DbBackupService {
         }
         if (rollbackError != null) {
           const rollbackFailureDetail = `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}（原始错误：${errorDetail(error)}）`;
-          throw new AppError('INFRA_UNEXPECTED_ERROR', {detail: rollbackFailureDetail}, {cause: [error, rollbackError]});
+          return Result.err(new AppError('INFRA_UNEXPECTED_ERROR', {detail: rollbackFailureDetail}, {cause: [error, rollbackError]}));
         }
         throw error;
       }

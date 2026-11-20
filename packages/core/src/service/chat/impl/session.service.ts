@@ -20,7 +20,7 @@ import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { TemplatePullServiceFactory } from "@/service/template/create-template-pull-service.js";
-import { AppError } from "@/errors/app-error.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { SessionFsServiceFactory, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
@@ -163,9 +163,19 @@ export class DefaultSessionService implements SessionService {
   async delete(id: string): Promise<Result<void, AppError>> {
     const session = await this.get(id);
     if (!session.ok) return Result.err(session.error);
-    await this.deps.conn.transaction(async (tx) => {
-      await this.deleteSessionTree(tx, session.value);
-    });
+    // 事务回调内的域失败走「抛错回滚」（deleteSessionTree 根行删除落空抛 CHAT_NOT_FOUND，
+    // 改 return 会在「子树已删、根删失败」时提交半删事务）；到本方法边界把**域失败**
+    // 收进 Err——签名承诺 Result，调用方按 `!r.ok` 消费（RB4b 边界转码，unwrapTxDomainError
+    // 与 revision-aware-vfs 同款：过驱动事务边界后 AppError 被包进 TdbcError.cause）。
+    try {
+      await this.deps.conn.transaction(async (tx) => {
+        await this.deleteSessionTree(tx, session.value);
+      });
+    } catch (cause) {
+      const domain = AppErrorOps.is(cause) ? cause : (cause as { cause?: unknown } | null)?.cause;
+      if (domain != null && AppErrorOps.is(domain)) return Result.err(domain);
+      throw cause;
+    }
     await DeferredBlobGc.run(this.deps.conn);
     // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
     await DeferredFileCacheGc.run(this.deps.conn);

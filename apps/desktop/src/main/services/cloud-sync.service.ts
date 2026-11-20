@@ -121,12 +121,12 @@ class DesktopCloudSyncService {
         const message = error instanceof Error ? error.message : String(error);
         const lower = message.toLowerCase();
         if (lower.includes("access denied") || lower.includes("invalidaccesskeyid") || lower.includes("signaturedoesnotmatch") || lower.includes("403")) {
-          throw new AppError("CLOUD_SYNC_AUTH", { detail: "云存储凭据无效或权限不足" }, { cause: error });
+          return Result.err(new AppError("CLOUD_SYNC_AUTH", { detail: "云存储凭据无效或权限不足" }, { cause: error }));
         }
         if (lower.includes("network") || lower.includes("timeout") || lower.includes("econnrefused") || lower.includes("enotfound")) {
-          throw new AppError("CLOUD_SYNC_NETWORK", { detail: "无法连接云存储，请检查网络与 Endpoint" }, { cause: error });
+          return Result.err(new AppError("CLOUD_SYNC_NETWORK", { detail: "无法连接云存储，请检查网络与 Endpoint" }, { cause: error }));
         }
-        throw new AppError("CLOUD_SYNC_NETWORK", { detail: message }, { cause: error });
+        return Result.err(new AppError("CLOUD_SYNC_NETWORK", { detail: message }, { cause: error }));
       }
     }
     return Result.ok(undefined);

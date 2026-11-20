@@ -16,6 +16,7 @@ import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { showToast } from "@/components/ui/show-toast";
 import { toastSettingsError } from "@/utils/settings-feedback";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
+import { AppError, Result } from "@shared/logic/errors";
 // 取消终态判定与调用方同源（invoke-registry）：IPC_ABORTED 不弹错误 toast。
 import { isIpcAborted } from "@/ipc/client";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
@@ -1336,24 +1337,26 @@ export function ProviderFormView({
 
   const submit = async () => {
     try {
-      // 自定义参数：必须是 JSON 对象（值任意 JSON）；解析失败拖 toast 阻止保存
-      const parseBodyParams = (raw: string) => {
+      // 自定义参数：必须是 JSON 对象（值任意 JSON）；校验失败本地提前 return + toast
+      // （p27 R1：不再 throw 穿外层 catch——INFRA_VALIDATION_FAILED 同款码，UI toast 收口不静默）。
+      const parseBodyParams = (raw: string): Result<Record<string, unknown> | undefined, AppError> => {
         const trimmed = raw.trim();
-        if (!trimmed) return undefined;
+        if (!trimmed) return Result.ok(undefined);
         const parsed = JSON.parse(trimmed) as unknown;
-        if (
-          parsed == null ||
-          typeof parsed !== "object" ||
-          Array.isArray(parsed)
-        ) {
-          throw new Error("自定义参数必须是 JSON 对象");
+        if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "自定义参数必须是 JSON 对象" }));
         }
-        return parsed as Record<string, unknown>;
+        return Result.ok(parsed as Record<string, unknown>);
       };
       if (mode === "create") {
         const name = displayName.trim();
         if (!name) {
           toastSettingsError("请填写服务商名称");
+          return;
+        }
+        const body = parseBodyParams(bodyParamsJson);
+        if (!body.ok) {
+          toastSettingsError(body.error.message);
           return;
         }
         const payload = {
@@ -1362,7 +1365,7 @@ export function ProviderFormView({
           displayName: name,
           apiKey: apiKey.trim(),
           headers: headersJson.trim() ? JSON.parse(headersJson) : undefined,
-          bodyParams: parseBodyParams(bodyParamsJson),
+          bodyParams: body.value,
         };
         const res = await ipcProvidersCreate(payload);
         if (!res.ok) {
@@ -1382,8 +1385,13 @@ export function ProviderFormView({
         patch.displayName = name;
         if (apiKey.trim()) patch.apiKey = apiKey.trim();
         if (headersJson.trim()) patch.headers = JSON.parse(headersJson);
+        const body = parseBodyParams(bodyParamsJson);
+        if (!body.ok) {
+          toastSettingsError(body.error.message);
+          return;
+        }
         // 空文本保存 = 显式清空自定义参数（区别于 headers 的「空文本不修改」）
-        patch.bodyParams = parseBodyParams(bodyParamsJson) ?? {};
+        patch.bodyParams = body.value ?? {};
         if (!isBuiltin) patch.protocol = protocol;
         const res = await ipcProvidersEdit({ providerId, ...patch });
         if (res.ok) {
