@@ -1,9 +1,6 @@
 import { ToolSummary } from "@shared/logic/chat";
 import type { ToolCallView } from "./message-blocks";
-import {
-  skillToolRef,
-  vfsToolFilePath,
-} from "./message-blocks";
+import { skillToolRef, vfsToolFilePath } from "./message-blocks";
 import { dispatchOpenSettingsView } from "@/features/skills/skill-ui";
 import {
   dispatchOpenToolResultView,
@@ -51,15 +48,13 @@ export function ToolCallCard({
   const subagentSessionId = tool.subagentSessionId;
   const skillRef = skillToolRef(tool, projectId);
   const canOpenFile = filePath != null && onOpenFile != null;
-  const canOpenSubagent =
-    subagentSessionId != null && onOpenSubagentSession != null;
+  const canOpenSubagent = subagentSessionId != null && onOpenSubagentSession != null;
   const canOpenSkill = skillRef != null;
   // 结果阅读兜底：正文在手即读（任何工具通用），摆在跳转门控最后一级——
   // 文件/子会话/技能的专属跳转优先，其余（fs/agent/search/…）点了至少
   // 有反应，进阅读页看工具返回全文。
   const resultView = toolResultViewFor(tool);
-  const canOpen =
-    canOpenFile || canOpenSubagent || canOpenSkill || resultView != null;
+  const canOpen = canOpenFile || canOpenSubagent || canOpenSkill || resultView != null;
   // 工具卡摘要（原 toolCallSummary 内联）：失败取首行截断；否则 core 输入摘要；再退 resultContent 截断。
   const summary = (() => {
     if (tool.status === "error" && tool.summary) {
@@ -78,17 +73,9 @@ export function ToolCallCard({
     }
     return "";
   })();
-  const detail = showFullParams
-    ? JSON.stringify(tool.input, null, 2)
-    : summary;
+  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : summary;
 
-  const openHint = canOpenSubagent
-    ? "点击查看 · 子智能体会话"
-    : canOpenSkill
-      ? "点击查看 · 技能"
-      : resultView != null
-        ? "点击查看 · 结果"
-        : "点击查看 · 聊天工作区";
+  const openHint = canOpenSubagent ? "点击查看 · 子智能体会话" : canOpenSkill ? "点击查看 · 技能" : resultView != null ? "点击查看 · 结果" : "点击查看 · 聊天工作区";
 
   const handleClick = () => {
     // 文件路径优先（同一张卡理论上不会同时具备多种入口，仍以文件优先兜底）
@@ -110,15 +97,7 @@ export function ToolCallCard({
     }
   };
 
-  const ariaLabel = canOpenFile
-    ? `打开文件 ${filePath}`
-    : canOpenSubagent
-      ? `查看子智能体会话 ${subagentSessionId}`
-      : canOpenSkill
-        ? `查看技能 ${skillRef?.name}`
-        : resultView != null
-          ? `查看工具结果 ${tool.name}`
-          : "";
+  const ariaLabel = canOpenFile ? `打开文件 ${filePath}` : canOpenSubagent ? `查看子智能体会话 ${subagentSessionId}` : canOpenSkill ? `查看技能 ${skillRef?.name}` : resultView != null ? `查看工具结果 ${tool.name}` : "";
 
   const content = (
     <>

@@ -31,6 +31,8 @@ import {
   zipDirectoryPathForTarget,
 } from "./workspace-context";
 
+type VfsActionResult = { ok: true } | { ok: false; message: string };
+
 /**
  * VFS 动作失败时把 IPC payload（{code,message}）转成终端用户可见的中文文案；
  * main 侧只透传 VfsError 原文（英文），直接弹给用户看不懂。
@@ -44,20 +46,11 @@ function vfsActionErrorMessage(error: {
   return formatVfsErrorForUser(error);
 }
 
-export function scopeRequestFromTarget(
-  target: WorkspaceContextTarget,
-  projectId?: string,
-  sessionId?: string,
-): VfsScopeRequest {
+export function scopeRequestFromTarget( target: WorkspaceContextTarget, projectId?: string, sessionId?: string ): VfsScopeRequest {
   return vfsScope(target.panelScope, projectId, sessionId);
 }
 
-export async function saveFileInclusion(
-  target: WorkspaceContextTarget,
-  inclusionMode: "auto" | "show" | "hide",
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function saveFileInclusion( target: WorkspaceContextTarget, inclusionMode: "auto" | "show" | "hide", projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
   if (target.kind !== "row" || target.row.kind !== "file") {
     return { ok: false, message: "无效操作" };
   }
@@ -69,13 +62,7 @@ export async function saveFileInclusion(
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
-export async function createWorkspaceEntry(
-  target: WorkspaceContextTarget,
-  kind: "file" | "folder",
-  name: string,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function createWorkspaceEntry( target: WorkspaceContextTarget, kind: "file" | "folder", name: string, projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
   // 与 core 服务层同规则的前置校验（控制字符/纯空白/首尾空格/./..），
   // 不合法时直接返回中文 reason，不发 IPC；main 进程侧仍会兕底拦。
   const nameCheck = validateVfsEntryName(name);
@@ -101,12 +88,7 @@ export async function createWorkspaceEntry(
     : { ok: false, message: ruleResult.error.message };
 }
 
-export async function renameWorkspaceEntry(
-  target: WorkspaceContextTarget,
-  newName: string,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function renameWorkspaceEntry( target: WorkspaceContextTarget, newName: string, projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
   if (target.kind !== "row") {
     return { ok: false, message: "无效操作" };
   }
@@ -116,10 +98,7 @@ export async function renameWorkspaceEntry(
   }
   const req = scopeRequestFromTarget(target, projectId, sessionId);
   const row = target.row;
-  const parent =
-    row.path === "/"
-      ? ""
-      : row.path.slice(0, row.path.lastIndexOf("/")) || "";
+  const parent = row.path === "/" ? "" : row.path.slice(0, row.path.lastIndexOf("/")) || "";
   const newPath = `${parent}/${newName.trim()}`.replace(/\/+/g, "/");
   const result = await ipcVfsRename({ ...req, oldPath: row.path, newPath });
   return result.ok
@@ -127,11 +106,7 @@ export async function renameWorkspaceEntry(
     : { ok: false, message: vfsActionErrorMessage(result.error) };
 }
 
-export async function deleteWorkspaceEntry(
-  target: WorkspaceContextTarget,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function deleteWorkspaceEntry( target: WorkspaceContextTarget, projectId: string | undefined, sessionId: string | undefined ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (target.kind !== "row") {
     return { ok: false, message: "无效操作" };
   }
@@ -147,10 +122,7 @@ export async function deleteWorkspaceEntry(
 }
 
 /** 新建目录时持久化的默认规则（规则启用）。 */
-export function defaultDirRuleRequest(
-  logicalPath: string,
-  scope: VfsScopeRequest,
-): WorkplaceSetDirRuleRequest {
+export function defaultDirRuleRequest( logicalPath: string, scope: VfsScopeRequest ): WorkplaceSetDirRuleRequest {
   return {
     ...scope,
     logicalPath,
@@ -166,10 +138,7 @@ export function defaultDirRuleRequest(
 /**
  * 无持久化规则记录时弹窗展示的表单初值（规则关闭，其余字段同 Core 默认）。
  */
-export function emptyDirRuleForm(
-  logicalPath: string,
-  scope: VfsScopeRequest,
-): WorkplaceSetDirRuleRequest {
+export function emptyDirRuleForm( logicalPath: string, scope: VfsScopeRequest ): WorkplaceSetDirRuleRequest {
   return {
     ...scope,
     logicalPath,
@@ -182,11 +151,7 @@ export function emptyDirRuleForm(
   };
 }
 
-export async function loadDirRuleForm(
-  target: WorkspaceContextTarget,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<WorkplaceSetDirRuleRequest | null> {
+export async function loadDirRuleForm( target: WorkspaceContextTarget, projectId: string | undefined, sessionId: string | undefined ): Promise<WorkplaceSetDirRuleRequest | null> {
   if (target.kind !== "row" || target.row.kind !== "dir") {
     return null;
   }
@@ -210,9 +175,7 @@ export async function loadDirRuleForm(
   return emptyDirRuleForm(target.row.path, req);
 }
 
-export async function saveDirRule(
-  input: WorkplaceSetDirRuleRequest,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function saveDirRule( input: WorkplaceSetDirRuleRequest ): Promise<{ ok: true } | { ok: false; message: string }> {
   const result = await ipcWorkplaceSetDirRule(input);
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
@@ -238,6 +201,15 @@ type SingleFileImportApplied = {
   readonly skippedBinary: readonly string[];
 };
 
+type SingleFileImportOutcome =
+  | { readonly status: "cancelled" }
+  | {
+      readonly status: "needs-confirm";
+      readonly hostPaths: string[];
+      readonly conflictCount: number;
+    }
+  | SingleFileImportApplied;
+
 /**
  * 单文件导入首段：弹框选文件 → 走既有批量 ingest 通道（**未**确认覆盖）。
  *
@@ -248,18 +220,7 @@ type SingleFileImportApplied = {
  * IPC 失败一律抛出（错误文案由 main 侧给出）：本模块是纯编排，toast 归 Step 3 的
  * App 接线，不在这里做 UI。
  */
-export async function startSingleFileImport(
-  scope: VfsScopeRequest,
-  targetDir: string,
-): Promise<
-  | { readonly status: "cancelled" }
-  | {
-      readonly status: "needs-confirm";
-      readonly hostPaths: string[];
-      readonly conflictCount: number;
-    }
-  | SingleFileImportApplied
-> {
+export async function startSingleFileImport( scope: VfsScopeRequest, targetDir: string ): Promise<SingleFileImportOutcome> {
   const picked = await ipcVfsFilePick();
   if (!picked.ok) {
     // nm-throw: keep — renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch
@@ -295,11 +256,7 @@ export async function startSingleFileImport(
 }
 
 /** 单文件导入次段：同一通道二次提交（`overwriteConfirmed: true`）。 */
-export async function confirmSingleFileImport(
-  scope: VfsScopeRequest,
-  targetDir: string,
-  hostPaths: string[],
-): Promise<SingleFileImportApplied> {
+export async function confirmSingleFileImport( scope: VfsScopeRequest, targetDir: string, hostPaths: string[] ): Promise<SingleFileImportApplied> {
   const result = await ipcVfsBatchIngestFromPaths({
     ...scope,
     targetDir,
@@ -332,10 +289,7 @@ export async function confirmSingleFileImport(
  * `zipDirectoryPathForTarget`（blank → `/`、dir → 其 path），该 helper 对文件行返回
  * null 而文件行已在上面分流，故 `?? "/"` 只是防御。
  */
-export async function exportWorkspaceTarget(
-  scope: VfsScopeRequest,
-  target: WorkspaceContextTarget,
-): Promise<"saved" | "cancelled"> {
+export async function exportWorkspaceTarget( scope: VfsScopeRequest, target: WorkspaceContextTarget ): Promise<"saved" | "cancelled"> {
   const logicalPath = exportFilePathForTarget(target);
   if (logicalPath != null) {
     const single = await ipcVfsFileExport({

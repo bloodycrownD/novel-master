@@ -81,10 +81,7 @@ export function DirectoryRuleModal({
     DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
   );
 
-  const logicalPath =
-    target?.kind === "row" && target.row.kind === "dir"
-      ? target.row.path
-      : null;
+  const logicalPath = target?.kind === "row" && target.row.kind === "dir" ? target.row.path : null;
   const rootRuleLocked = logicalPath === "/";
 
   useEffect(() => {

@@ -91,18 +91,9 @@ export function WorkspaceHeaderActions({
   }
 
   // 拉取与推送的确认文案分别明示各自影响面（覆盖哪个工作区、谁丢修改）。
-  const confirmCopy =
-    confirmKind === "push-template"
-      ? {
-          message:
-            "将用当前聊天工作区覆盖项目工作区。项目工作区是该项目所有会话的模板母本，之后新建的会话与其它会话的「从上级同步」都会拿到覆盖后的内容。",
-          danger: true,
-        }
-      : {
-          message:
-            "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？",
-          danger: false,
-        };
+  const pushTemplateConfirmMessage = "将用当前聊天工作区覆盖项目工作区。项目工作区是该项目所有会话的模板母本，之后新建的会话与其它会话的「从上级同步」都会拿到覆盖后的内容。";
+  const pullTemplateConfirmMessage = "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？";
+  const confirmCopy = confirmKind === "push-template" ? { message: pushTemplateConfirmMessage, danger: true } : { message: pullTemplateConfirmMessage, danger: false };
 
   return (
     <>

@@ -23,6 +23,7 @@ import {
   type ChatMessageDto,
   type CloudSyncPushRequest,
   type CloudSyncPushResult,
+  type CloudSyncSetConfigRequest,
   type CompactionManualRequest,
   type DbMaintenanceResult,
   type DbStatsResult,
@@ -123,6 +124,7 @@ import {
   type SkillsToggleRequest,
   type SkillsUpdateInfoRequest,
   type SkillsWriteRequest,
+  type ShellMenuPopupRequest,
   type SearchConfigDto,
   type SearchCreateCustomEngineRequest,
   type SearchDeleteCustomEngineRequest,
@@ -296,19 +298,7 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcDbStats: noArg<IpcResult<DbStatsResult>>(invoke, IPC_CHANNELS.DB_STATS),
     ipcDbMaintenance: (req?: RunRequest) => invoke<IpcResult<DbMaintenanceResult>>(IPC_CHANNELS.DB_MAINTENANCE, req),
     ipcCloudSyncGetConfig: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG),
-    ipcCloudSyncSetConfig: withReq<
-      {
-        endpoint: string;
-        bucket: string;
-        region: string;
-        pathPrefix: string;
-        accessKeyId: string;
-        secretAccessKey?: string;
-        forcePathStyle: boolean;
-        deviceLabel?: string;
-      },
-      unknown
-    >(invoke, IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG),
+    ipcCloudSyncSetConfig: withReq<CloudSyncSetConfigRequest, unknown>(invoke, IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG),
     ipcCloudSyncSetEnabled: withBool<unknown>(invoke, IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED),
     ipcCloudSyncTestConnection: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION),
     ipcCloudSyncGetLocalStatus: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS),
@@ -325,14 +315,7 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcSearchDeleteCustomEngine: withReq<SearchDeleteCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE),
     ipcSearchUpdatePresetOverride: withReq<SearchUpdatePresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE),
     ipcSearchResetPresetOverride: withReq<SearchResetPresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE),
-    ipcShellMenuPopup: withReq<
-      {
-        menuId: "file" | "edit" | "view" | "window" | "help";
-        x: number;
-        y: number;
-      },
-      IpcResult<null>
-    >(invoke, IPC_CHANNELS.SHELL_MENU_POPUP),
+    ipcShellMenuPopup: withReq<ShellMenuPopupRequest, IpcResult<null>>(invoke, IPC_CHANNELS.SHELL_MENU_POPUP),
     ipcShellSetTitleBarTheme: (theme: "light" | "dark") => invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme),
     ipcAppOpenExternal: (url: string) => {
       const req: AppOpenExternalRequest = { url };

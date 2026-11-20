@@ -81,17 +81,9 @@ export function PreviewAnnotateAddModal({
   }
 
   const trimmed = value.trim();
-  const hasRenderRange =
-    renderStart != null &&
-    renderEnd != null &&
-    Number.isFinite(renderStart) &&
-    Number.isFinite(renderEnd) &&
-    renderStart < renderEnd;
+  const hasRenderRange = renderStart != null && renderEnd != null && Number.isFinite(renderStart) && Number.isFinite(renderEnd) && renderStart < renderEnd;
   const canSubmit = trimmed.length > 0 && hasRenderRange && !saving;
-  const label =
-    selectedText.length > 80
-      ? `${selectedText.slice(0, 80)}…`
-      : selectedText;
+  const label = selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText;
 
   const handleConfirm = () => {
     if (!canSubmit || renderStart == null || renderEnd == null) {

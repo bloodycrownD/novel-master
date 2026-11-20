@@ -259,11 +259,7 @@ export function SessionDetailDrawer({
     if (agentLocked) {
       // meta 尚未加载完，先锁住防误点；已失败时给错误文案，不再误导
       // 「加载中请稍候」永不发生（au/B-3）。
-      showToast(
-        metaLoadFailed
-          ? "智能体信息加载失败"
-          : "智能体信息加载中，请稍候再试。",
-      );
+      showToast( metaLoadFailed ? "智能体信息加载失败" : "智能体信息加载中，请稍候再试。" );
       return;
     }
     // 原绑定智能体已被删除（agentDeleted）：卡片 badge 已提示「已删除 · 点击重选」，
@@ -325,12 +321,7 @@ export function SessionDetailDrawer({
     setDraftName(sessionName);
   };
 
-  const barPct =
-    tokenStats?.pct != null
-      ? Math.min(100, Math.max(0, tokenStats.pct))
-      : tokenStats != null
-        ? Math.min(100, Math.max(2, tokenStats.tokenCount > 0 ? 8 : 0))
-        : 0;
+  const barPct = tokenStats?.pct != null ? Math.min(100, Math.max(0, tokenStats.pct)) : tokenStats != null ? Math.min(100, Math.max(2, tokenStats.tokenCount > 0 ? 8 : 0)) : 0;
 
   return (
     <div className="session-detail-drawer" id="session-detail-drawer">

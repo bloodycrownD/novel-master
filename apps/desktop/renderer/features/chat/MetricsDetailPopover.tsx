@@ -25,8 +25,7 @@ const ANCHOR_GAP = 8;
 
 /** 单行计费口径输入（与 core BILLED_INPUT_SUM_SQL 的单行版一致）。 */
 function lastRowBilledInput(last: NonNullable<SessionUsageDetailDto["last"]>): number {
-  const hasCacheColumns =
-    last.cacheReadTokens != null || last.cacheCreationTokens != null;
+  const hasCacheColumns = last.cacheReadTokens != null || last.cacheCreationTokens != null;
   if (!hasCacheColumns) {
     return last.promptTokens;
   }
@@ -43,9 +42,7 @@ function lastRowBilledInput(last: NonNullable<SessionUsageDetailDto["last"]>): n
  * 会话维度详情自取 hook：mount 即查（弹窗外壳按 open 条件挂载），
  * 竞态守卫（sessionId 切换后旧响应后到不覆盖）。
  */
-export function useSessionUsageDetail(
-  sessionId: string
-): { detail: SessionUsageDetailDto | null; loading: boolean; error: string | null } {
+export function useSessionUsageDetail( sessionId: string ): { detail: SessionUsageDetailDto | null; loading: boolean; error: string | null } {
   const [detail, setDetail] = useState<SessionUsageDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -235,10 +232,7 @@ export function MetricsDetailPopover({
   // 定位：锚点正下方、与锚点左对齐（右侧越界时钳回视口），Tooltip 先例。
   useLayoutEffect(() => {
     const rect = anchorEl.getBoundingClientRect();
-    const top = Math.min(
-      rect.bottom + ANCHOR_GAP,
-      window.innerHeight - VIEWPORT_MARGIN
-    );
+    const top = Math.min( rect.bottom + ANCHOR_GAP, window.innerHeight - VIEWPORT_MARGIN );
     const left = Math.max(VIEWPORT_MARGIN, rect.left);
     setPosition({ top, left });
   }, [anchorEl]);

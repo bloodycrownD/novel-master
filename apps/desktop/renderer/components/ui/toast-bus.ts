@@ -29,11 +29,7 @@ function emit(state: ToastState | null): void {
   }
 }
 
-export function showToast(
-  message: string,
-  durationMs = 3200,
-  options?: ToastOptions,
-): void {
+export function showToast(message: string, durationMs = 3200, options?: ToastOptions): void {
   emit({
     message,
     actionLabel: options?.actionLabel,

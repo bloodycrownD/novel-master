@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/show-toast";
-import {
-  entryLabelForTarget,
-  saveFileInclusion,
-} from "./workspace-actions";
+import { entryLabelForTarget, saveFileInclusion } from "./workspace-actions";
 import type { WorkspaceContextTarget } from "./workspace-context";
 
 type InclusionMode = "auto" | "show" | "hide";
@@ -51,10 +48,7 @@ export function FileInclusionModal({
   const [saving, setSaving] = useState(false);
   const [inclusionMode, setInclusionMode] = useState<InclusionMode>("auto");
 
-  const logicalPath =
-    target?.kind === "row" && target.row.kind === "file"
-      ? target.row.path
-      : null;
+  const logicalPath = target?.kind === "row" && target.row.kind === "file" ? target.row.path : null;
 
   useEffect(() => {
     if (!open || !target || target.kind !== "row" || target.row.kind !== "file") {
@@ -70,12 +64,7 @@ export function FileInclusionModal({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await saveFileInclusion(
-        target,
-        inclusionMode,
-        projectId,
-        sessionId,
-      );
+      const result = await saveFileInclusion( target, inclusionMode, projectId, sessionId );
       if (result.ok) {
         onSaved();
         onClose();

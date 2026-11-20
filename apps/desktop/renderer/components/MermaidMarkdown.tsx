@@ -1,11 +1,4 @@
-import {
-  memo,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import bash from "highlight.js/lib/languages/bash";
@@ -118,9 +111,7 @@ export function mermaidCacheKey(theme: MermaidTheme, source: string): string {
  * Error 取 message；mermaid 的 DetailedError 非Error形态取 str 字段，其余 String() 兑底。
  */
 function extractMermaidErrorMessage(err: unknown): string {
-  return err instanceof Error
-    ? err.message
-    : String((err as { str?: string }).str ?? err);
+  return err instanceof Error ? err.message : String((err as { str?: string }).str ?? err);
 }
 
 /** svgCache 的 LRU 上限：超出淘汰最旧（spec desktop/C-1，建议 100~200 取中）。 */
@@ -161,10 +152,7 @@ function writeCacheKey(key: string, value: string): void {
   }
 }
 
-export function lookupMermaidSvg(
-  theme: MermaidTheme,
-  source: string,
-): string | null {
+export function lookupMermaidSvg(theme: MermaidTheme, source: string): string | null {
   const key = mermaidCacheKey(theme, source);
   const cached = svgCache.get(key);
   if (cached == null || cached === FAILED_PLACEHOLDER) {
@@ -174,10 +162,7 @@ export function lookupMermaidSvg(
   return cached;
 }
 
-export function isMermaidKnownFailed(
-  theme: MermaidTheme,
-  source: string,
-): boolean {
+export function isMermaidKnownFailed(theme: MermaidTheme, source: string): boolean {
   const key = mermaidCacheKey(theme, source);
   if (svgCache.get(key) !== FAILED_PLACEHOLDER) {
     return false;
@@ -195,25 +180,14 @@ export function isMermaidKnownFailed(
 }
 
 /** 查询已缓存的失败错误消息（静态渲染不跑 effect，失败态文案靠这条兜底）。 */
-export function lookupMermaidFailedError(
-  theme: MermaidTheme,
-  source: string,
-): string | null {
+export function lookupMermaidFailedError(theme: MermaidTheme, source: string): string | null {
   return failedErrorCache.get(mermaidCacheKey(theme, source)) ?? null;
 }
 
 /** 可注入的渲染实现（默认动态 import mermaid；测试替换以断言调用次数）。 */
-type MermaidSvgRenderer = (
-  id: string,
-  source: string,
-  theme: MermaidTheme,
-) => Promise<string>;
+type MermaidSvgRenderer = (id: string, source: string, theme: MermaidTheme) => Promise<string>;
 
-async function defaultRenderMermaidSvg(
-  id: string,
-  source: string,
-  theme: MermaidTheme,
-): Promise<string> {
+async function defaultRenderMermaidSvg(id: string, source: string, theme: MermaidTheme): Promise<string> {
   const mermaid = (await import("mermaid")).default;
   mermaid.initialize({ startOnLoad: false, theme, securityLevel: "strict" });
   try {
@@ -238,10 +212,7 @@ export function setMermaidSvgRendererForTests(fn: MermaidSvgRenderer | null) {
 }
 
 /** 缓存感知的渲染入口：命中缓存 / 合并并发同源请求，失败写入失败占位。 */
-export async function resolveMermaidSvg(
-  source: string,
-  theme: MermaidTheme,
-): Promise<string> {
+export async function resolveMermaidSvg(source: string, theme: MermaidTheme): Promise<string> {
   const key = mermaidCacheKey(theme, source);
   const cached = svgCache.get(key);
   if (cached != null && cached !== FAILED_PLACEHOLDER) {
@@ -252,7 +223,8 @@ export async function resolveMermaidSvg(
   if (pending) {
     return pending;
   }
-  const job = rendererSlot.impl(nextMermaidId(), source, theme)
+  const job = rendererSlot
+    .impl(nextMermaidId(), source, theme)
     .then((svg) => {
       writeCacheKey(key, svg);
       failedAtCache.delete(key);
@@ -282,9 +254,7 @@ export function resetMermaidCacheForTests(): void {
 
 /** 读取并监听 html[data-theme]；无 DOM 环境（静态渲染）安全降级。 */
 function useMermaidTheme(): MermaidTheme {
-  const [theme, setTheme] = useState<MermaidTheme>(() =>
-    resolveMermaidTheme(readDataTheme()),
-  );
+  const [theme, setTheme] = useState<MermaidTheme>(() => resolveMermaidTheme(readDataTheme()));
   useEffect(() => {
     if (typeof document === "undefined") {
       return;
@@ -310,22 +280,12 @@ interface MermaidBlockProps {
   theme: MermaidTheme;
 }
 
-const MermaidBlock = memo(function MermaidBlock({
-  source,
-  pending,
-  theme,
-}: MermaidBlockProps) {
-  const [svg, setSvg] = useState<string | null>(() =>
-    pending ? null : lookupMermaidSvg(theme, source),
-  );
-  const [failed, setFailed] = useState(() =>
-    pending ? false : isMermaidKnownFailed(theme, source),
-  );
+const MermaidBlock = memo(function MermaidBlock({ source, pending, theme }: MermaidBlockProps) {
+  const [svg, setSvg] = useState<string | null>(() => (pending ? null : lookupMermaidSvg(theme, source)));
+  const [failed, setFailed] = useState(() => (pending ? false : isMermaidKnownFailed(theme, source)));
   // 错误文案双通道：静态渲染（renderToStaticMarkup 不跑 effect）靠初始化查缓存；
   // 挂载后置 effect 路径靠 catch 时 setState。
-  const [failedError, setFailedError] = useState<string | null>(() =>
-    pending ? null : lookupMermaidFailedError(theme, source),
-  );
+  const [failedError, setFailedError] = useState<string | null>(() => (pending ? null : lookupMermaidFailedError(theme, source)));
 
   useEffect(() => {
     if (pending) {
@@ -365,30 +325,17 @@ const MermaidBlock = memo(function MermaidBlock({
     };
   }, [source, theme, pending]);
 
-  const cls = [
-    "mermaid-block",
-    failed ? "mermaid-failed" : "",
-    pending ? "mermaid-block--pending" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const cls = ["mermaid-block", failed ? "mermaid-failed" : "", pending ? "mermaid-block--pending" : ""].filter(Boolean).join(" ");
 
   return (
     <div className={cls}>
       {failed ? (
         <>
           <span className="mermaid-block__failed-badge">图表渲染失败，已显示源码</span>
-          {failedError ? (
-            <pre className="mermaid-block__failed-reason">{failedError}</pre>
-          ) : null}
+          {failedError ? <pre className="mermaid-block__failed-reason">{failedError}</pre> : null}
         </>
       ) : null}
-      {svg ? (
-        <div
-          className="mermaid-block__chart"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ) : null}
+      {svg ? <div className="mermaid-block__chart" dangerouslySetInnerHTML={{ __html: svg }} /> : null}
       {/* 源码始终保留在 DOM：成功态 display:none 隐藏（批注文本流不偏移），失败/占位态可见 */}
       <pre className="mermaid-block__source">
         <code>{source}</code>
@@ -405,10 +352,8 @@ function extractChildCode(children: ReactNode): {
   if (child == null || typeof child !== "object" || !("props" in child)) {
     return { className: undefined, source: "" };
   }
-  const props = (child as { props?: { className?: unknown; children?: unknown } })
-    .props;
-  const className =
-    typeof props?.className === "string" ? props.className : undefined;
+  const props = (child as { props?: { className?: unknown; children?: unknown } }).props;
+  const className = typeof props?.className === "string" ? props.className : undefined;
   const raw = props?.children;
   const source = Array.isArray(raw) ? raw.join("") : String(raw ?? "");
   return { className, source };
@@ -455,10 +400,7 @@ const rehypePlugins: PluggableList = [
   ],
 ];
 
-export function MermaidMarkdown({
-  content,
-  onLinkClick,
-}: MermaidMarkdownProps) {
+export function MermaidMarkdown({ content, onLinkClick }: MermaidMarkdownProps) {
   const theme = useMermaidTheme();
   const scan = useMemo(() => scanMermaidFences(content), [content]);
   // 本轮渲染已遇到的 mermaid 块序号：流式未闭合时只让最后一个块走占位
@@ -473,8 +415,7 @@ export function MermaidMarkdown({
         if (className?.includes("language-mermaid")) {
           const index = mermaidIndexRef.current;
           mermaidIndexRef.current += 1;
-          const pending =
-            scan.unclosedMermaid && index === scan.mermaidCount - 1;
+          const pending = scan.unclosedMermaid && index === scan.mermaidCount - 1;
           return <MermaidBlock source={source} pending={pending} theme={theme} />;
         }
         return renderCodeBlock(children);
@@ -503,11 +444,7 @@ export function MermaidMarkdown({
   }, [theme, scan, onLinkClick]);
 
   return (
-    <Markdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={rehypePlugins}
-      components={components}
-    >
+    <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
       {content}
     </Markdown>
   );

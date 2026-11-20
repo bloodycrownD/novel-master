@@ -415,10 +415,7 @@ export function ChatRail({
     }
   })();
 
-  const showBack =
-    viewId === 'sessions' ||
-    viewId === 'conversation' ||
-    viewId === 'subagent-conversation';
+  const showBack = viewId === 'sessions' || viewId === 'conversation' || viewId === 'subagent-conversation';
 
   return (
     <>

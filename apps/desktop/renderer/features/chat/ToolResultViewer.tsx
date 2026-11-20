@@ -49,8 +49,7 @@ export function toolResultViewFor(tool: {
 }): ToolResultViewDetail | undefined {
   const pickReadable = (value: unknown): string | undefined =>
     typeof value === "string" && value.trim() !== "" ? value : undefined;
-  const content =
-    pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
+  const content = pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
   if (content == null) {
     return undefined;
   }
@@ -67,12 +66,8 @@ export function toolResultViewFor(tool: {
   return inputJson != null ? { title: tool.name, content, inputJson } : { title: tool.name, content };
 }
 
-export function dispatchOpenToolResultView(
-  detail: ToolResultViewDetail
-): void {
-  window.dispatchEvent(
-    new CustomEvent<ToolResultViewDetail>(OPEN_TOOL_RESULT_EVENT, { detail })
-  );
+export function dispatchOpenToolResultView( detail: ToolResultViewDetail ): void {
+  window.dispatchEvent( new CustomEvent<ToolResultViewDetail>(OPEN_TOOL_RESULT_EVENT, { detail }) );
 }
 
 /** 纯展示层（给定 target 渲染），监听壳薄层复用；static render 可直测。 */

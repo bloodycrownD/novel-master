@@ -47,11 +47,7 @@ interface WorkspaceTreeProps {
   onBlankContextMenu?: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
 
-function scopeRequest(
-  panelScope: WorkspacePanelScope,
-  projectId?: string,
-  sessionId?: string,
-): VfsScopeRequest {
+function scopeRequest( panelScope: WorkspacePanelScope, projectId?: string, sessionId?: string ): VfsScopeRequest {
   return vfsScope(panelScope, projectId, sessionId);
 }
 
@@ -90,19 +86,11 @@ export function WorkspaceTree({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const result = isPhysical
-        ? await ipcPhysicalList({ path: "/" })
-        : await ipcWorkplaceBuildListRows(req);
+      const result = isPhysical ? await ipcPhysicalList({ path: "/" }) : await ipcWorkplaceBuildListRows(req);
       if (result.ok) {
         setRows(result.data);
         onRowsLoaded?.(result.data);
-        setExpandedDirs(
-          new Set(
-            result.data
-              .filter((row) => row.kind === "dir")
-              .map((row) => row.path),
-          ),
-        );
+        setExpandedDirs( new Set( result.data .filter((row) => row.kind === "dir") .map((row) => row.path) ) );
       }
     } finally {
       setLoading(false);
@@ -155,9 +143,7 @@ export function WorkspaceTree({
         types.includes(NM_VFS_PATHS_MIME)
       ) {
         e.preventDefault();
-        e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME)
-          ? "move"
-          : "copy";
+        e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME) ? "move" : "copy";
         setDropHighlight(resolveDropTargetDir(row.path, row.kind));
       }
     },
@@ -212,10 +198,7 @@ export function WorkspaceTree({
         return;
       }
       try {
-        e.dataTransfer.setData(
-          NM_VFS_PATHS_MIME,
-          encodeVfsDragPayload([row.path]),
-        );
+        e.dataTransfer.setData( NM_VFS_PATHS_MIME, encodeVfsDragPayload([row.path]) );
         e.dataTransfer.effectAllowed = "copyMove";
       } catch {
         // ignore
@@ -246,9 +229,7 @@ export function WorkspaceTree({
           const isDir = row.kind === "dir";
           const depth = pathDepth(row.path);
           const expanded = isDir && expandedDirs.has(row.path);
-          const active =
-            previewFile?.path === row.path &&
-            previewFile.workspaceScope === panelScope;
+          const active = previewFile?.path === row.path && previewFile.workspaceScope === panelScope;
           const targetDir = resolveDropTargetDir(row.path, row.kind);
           const isDropTarget = dropHighlight === targetDir;
           return (

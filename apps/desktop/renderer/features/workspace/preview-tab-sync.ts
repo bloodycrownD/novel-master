@@ -7,14 +7,8 @@ import type {
 /**
  * 用 worktree 文件行校验已打开预览 tab：不在列表中的文件标为已删除。
  */
-export function syncPreviewTabsWithFileRows(
-  tabs: PreviewFileSelection[],
-  rows: WorkplaceListRowDto[],
-  scope: WorkspacePanelScope,
-): PreviewFileSelection[] {
-  const filePaths = new Set(
-    rows.filter((row) => row.kind === "file").map((row) => row.path),
-  );
+export function syncPreviewTabsWithFileRows( tabs: PreviewFileSelection[], rows: WorkplaceListRowDto[], scope: WorkspacePanelScope ): PreviewFileSelection[] {
+  const filePaths = new Set( rows.filter((row) => row.kind === "file").map((row) => row.path) );
   let changed = false;
   const next = tabs.map((tab) => {
     if (tab.workspaceScope !== scope) {
@@ -39,11 +33,7 @@ export function syncPreviewTabsWithFileRows(
 /**
  * 将指定路径及其子路径下的预览 tab 标为已删除（保留 tab，不关闭）。
  */
-export function markPreviewTabsDeletedUnderPathInList(
-  tabs: PreviewFileSelection[],
-  scope: WorkspacePanelScope,
-  path: string,
-): PreviewFileSelection[] {
+export function markPreviewTabsDeletedUnderPathInList( tabs: PreviewFileSelection[], scope: WorkspacePanelScope, path: string ): PreviewFileSelection[] {
   let changed = false;
   const next = tabs.map((tab) => {
     if (tab.workspaceScope !== scope) {

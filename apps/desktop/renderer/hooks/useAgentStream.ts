@@ -86,9 +86,7 @@ interface UseAgentStreamResult {
   readonly onStreamReset: () => void;
 }
 
-export function useAgentStream(
-  options: UseAgentStreamOptions,
-): UseAgentStreamResult {
+export function useAgentStream( options: UseAgentStreamOptions ): UseAgentStreamResult {
   const { sessionId, callbacksRef, batchEnabled } = options;
 
   const [streamingText, setStreamingText] = useState("");

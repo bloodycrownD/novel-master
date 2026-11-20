@@ -60,9 +60,7 @@ type ComposerSendState = {
 };
 
 /** 取会话列表中末条未隐藏消息（对应 spec `lastVisible`）。 */
-export function findLastVisibleMessageDto(
-  messages: readonly ChatMessageDto[],
-): ChatMessageDto | undefined {
+export function findLastVisibleMessageDto( messages: readonly ChatMessageDto[] ): ChatMessageDto | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg != null && !msg.hidden) {
@@ -73,9 +71,7 @@ export function findLastVisibleMessageDto(
 }
 
 /** 由末条可见消息推导 Composer 发送规则。 */
-export function deriveComposerSendState(
-  lastMessage: ChatMessageDto | undefined,
-): ComposerSendState {
+export function deriveComposerSendState( lastMessage: ChatMessageDto | undefined ): ComposerSendState {
   if (lastMessage == null) {
     return {
       canResumeWithoutInput: false,

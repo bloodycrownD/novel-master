@@ -101,10 +101,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
       const { internal, generation } = settings;
       setContextWindowTokens(String(internal.contextWindowTokens));
       setTokenCounterMode(internal.tokenCounterMode);
-      const stored =
-        generation.sampling.enabled && generation.sampling.params != null
-          ? generation.sampling.params
-          : undefined;
+      const stored = generation.sampling.enabled && generation.sampling.params != null ? generation.sampling.params : undefined;
       setParams(stored);
       setThinkingLevel(generation.thinkingLevel);
     } finally {
@@ -152,10 +149,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
     }
     setSaving(true);
     try {
-      const sampling =
-        paramsEmpty(params) || !params
-          ? { enabled: false as const }
-          : { enabled: true as const, params };
+      const sampling = paramsEmpty(params) || !params ? { enabled: false as const } : { enabled: true as const, params };
       const res = await ipcProviderModelsUpdateSettings({
         savedModelId,
         contextWindowTokens: contextWindow,

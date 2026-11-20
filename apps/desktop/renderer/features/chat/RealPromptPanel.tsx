@@ -186,11 +186,7 @@ export function RealPromptPanel({
       // 无组头：轮展开即见文件列表（用户拍板，不再嵌 workplace 组）。
       // 文件级展开态落在同一 expanded map：key 前缀 `${turnId}::${cardId}:`。
       const filePrefix = `${turnId}::${card.id}:`;
-      const openFilePaths = new Set(
-        Object.keys(expanded)
-          .filter((key) => key.startsWith(filePrefix))
-          .map((key) => key.slice(filePrefix.length)),
-      );
+      const openFilePaths = new Set( Object.keys(expanded) .filter((key) => key.startsWith(filePrefix)) .map((key) => key.slice(filePrefix.length)) );
       return (
         <PromptWorkplaceCard
           key={card.id}

@@ -3,10 +3,7 @@
  * 文件引用不再使用 attach chip（认正文 `@路径`）；userAttach 不进状态条。
  * 判定 / partition 单点：`@shared/logic/chat`。
  */
-import {
-  AttachmentChip,
-  composerChips,
-} from '@shared/logic/chat';
+import { AttachmentChip, composerChips } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 type AttachmentDraftChipsProps = {

@@ -185,10 +185,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
       return;
     }
     if (action === "delete") {
-      const scopeLabel =
-        current.ref.domain === "global"
-          ? "该技能影响所有项目，删除后全部会话不再注入。"
-          : "该技能仅所属项目生效，删除后其他项目不受影响。";
+      const scopeLabel = current.ref.domain === "global" ? "该技能影响所有项目，删除后全部会话不再注入。" : "该技能仅所属项目生效，删除后其他项目不受影响。";
       setDeleteConfirm({
         refs: [current.ref],
         label: current.label,

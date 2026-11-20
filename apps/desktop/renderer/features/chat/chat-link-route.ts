@@ -44,6 +44,14 @@ type ChatLinkSessionContext = {
 /** 非侵入日志（renderer 侧 console 语义，测试可注入捕获）。 */
 type ChatLinkLogger = (message: string, detail?: unknown) => void;
 
+/** resolveChatLinkAction 的注入依赖：会话/项目上下文 + VFS 探针 + 可选日志。 */
+type ChatLinkDeps = {
+  sessionContext: ChatLinkSessionContext;
+  projectContext: { projectId: string } | null;
+  vfsRead: ChatLinkProbeRead;
+  log?: ChatLinkLogger;
+};
+
 /**
  * 解析链接点击意图。
  *
@@ -51,15 +59,7 @@ type ChatLinkLogger = (message: string, detail?: unknown) => void;
  * chat 域探测（需会话上下文齐全）→ session 域探测 → 命中即 preview；
  * 双未命中 not-found（调用方弹「路径不存在」提示——用户拍板）。
  */
-export async function resolveChatLinkAction(
-  href: string,
-  deps: {
-    sessionContext: ChatLinkSessionContext;
-    projectContext: { projectId: string } | null;
-    vfsRead: ChatLinkProbeRead;
-    log?: ChatLinkLogger;
-  },
-): Promise<ChatLinkAction> {
+export async function resolveChatLinkAction(href: string, deps: ChatLinkDeps): Promise<ChatLinkAction> {
   const log = deps.log ?? (() => undefined);
   const trimmed = href.trim();
   if (ChatLinkResolver.isHttp(trimmed)) {

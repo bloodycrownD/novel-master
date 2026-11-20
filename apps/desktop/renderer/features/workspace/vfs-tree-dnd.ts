@@ -33,10 +33,7 @@ export function decodeVfsDragPayload(raw: string): VfsDragPayload | null {
 }
 
 /** source 是否为 target 自身或祖先（禁止拖到自身/后代）。 */
-export function isSelfOrAncestorPath(
-  sourcePath: string,
-  targetDir: string,
-): boolean {
+export function isSelfOrAncestorPath( sourcePath: string, targetDir: string ): boolean {
   if (sourcePath === targetDir) {
     return true;
   }
@@ -50,14 +47,8 @@ export function isSelfOrAncestorPath(
  * 将 `sourcePath` 移动到 `targetDir` 下，保留 basename。
  * 例：/a/b.txt → /c  ⇒ /c/b.txt；/a → /  ⇒ /a
  */
-export function resolveMoveDestination(
-  sourcePath: string,
-  targetDir: string,
-): string {
-  const name =
-    sourcePath === "/"
-      ? ""
-      : sourcePath.slice(sourcePath.lastIndexOf("/") + 1);
+export function resolveMoveDestination( sourcePath: string, targetDir: string ): string {
+  const name = sourcePath === "/" ? "" : sourcePath.slice(sourcePath.lastIndexOf("/") + 1);
   if (!name) {
     return targetDir;
   }
@@ -70,10 +61,7 @@ export function resolveMoveDestination(
 /**
  * drop 落点目录：目录行 → 该目录；文件行 → 其父目录；空白 → `/`。
  */
-export function dropTargetDir(
-  rowPath: string | null,
-  rowKind: "dir" | "file" | null,
-): string {
+export function dropTargetDir( rowPath: string | null, rowKind: "dir" | "file" | null ): string {
   if (rowPath == null || rowKind == null) {
     return "/";
   }

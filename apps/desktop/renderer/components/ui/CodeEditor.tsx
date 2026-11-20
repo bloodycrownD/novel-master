@@ -3,10 +3,7 @@ import { defaultKeymap, historyKeymap } from "@codemirror/commands";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { useMemo, useRef } from "react";
-import {
-  novelEditorTheme,
-  novelSyntaxHighlighting,
-} from "./codemirror-theme";
+import { novelEditorTheme, novelSyntaxHighlighting } from "./codemirror-theme";
 import { languageExtensionForPath } from "./language-for-path";
 
 /**

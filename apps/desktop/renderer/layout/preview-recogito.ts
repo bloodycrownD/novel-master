@@ -14,9 +14,7 @@ type RecogitoRenderRange = {
 };
 
 /** 草稿是否具备可投影的 Recogito 渲染坐标（R8：旧 offset 稿可不投影）。 */
-export function hasRecogitoRenderRange(
-  draft: Pick<AnnotateDraft, "renderStart" | "renderEnd">,
-): boolean {
+export function hasRecogitoRenderRange( draft: Pick<AnnotateDraft, "renderStart" | "renderEnd"> ): boolean {
   return (
     draft.renderStart != null &&
     draft.renderEnd != null &&
@@ -27,25 +25,13 @@ export function hasRecogitoRenderRange(
 /**
  * AnnotateDraft → Recogito 注解；缺 render 坐标则 null（不投影）。
  */
-export function draftToRecogitoAnnotation(
-  draft: AnnotateDraft,
-): TextAnnotation | null {
+export function draftToRecogitoAnnotation( draft: AnnotateDraft ): TextAnnotation | null {
   if (!hasRecogitoRenderRange(draft)) {
     return null;
   }
   const renderStart = draft.renderStart!;
   const renderEnd = draft.renderEnd!;
-  const bodies =
-    draft.userAnnotation.trim().length > 0
-      ? [
-          {
-            id: `${draft.id}-body`,
-            annotation: draft.id,
-            purpose: "commenting" as const,
-            value: draft.userAnnotation,
-          },
-        ]
-      : [];
+  const bodies = draft.userAnnotation.trim().length > 0 ? [ { id: `${draft.id}-body`, annotation: draft.id, purpose: "commenting" as const, value: draft.userAnnotation } ] : [];
   return {
     id: draft.id,
     bodies,
@@ -63,9 +49,7 @@ export function draftToRecogitoAnnotation(
 }
 
 /** 同源草稿列表 → Recogito setAnnotations 入参（跳过无 render 坐标的旧稿）。 */
-export function draftsToRecogitoAnnotations(
-  drafts: readonly AnnotateDraft[],
-): TextAnnotation[] {
+export function draftsToRecogitoAnnotations( drafts: readonly AnnotateDraft[] ): TextAnnotation[] {
   const out: TextAnnotation[] = [];
   for (const draft of drafts) {
     const ann = draftToRecogitoAnnotation(draft);
@@ -80,13 +64,7 @@ export function draftsToRecogitoAnnotations(
  * 从 Recogito createAnnotation / selection 载荷抽出 quote + [start, end)。
  * selector 可能是单对象或数组（库类型与运行时不完全一致）。
  */
-export function extractRecogitoRenderRange(
-  annotation: {
-    readonly target?: {
-      readonly selector?: unknown;
-    };
-  } | null | undefined,
-): RecogitoRenderRange | null {
+export function extractRecogitoRenderRange( annotation: { readonly target?: { readonly selector?: unknown; }; } | null | undefined ): RecogitoRenderRange | null {
   if (annotation?.target == null) {
     return null;
   }
@@ -95,18 +73,9 @@ export function extractRecogitoRenderRange(
   if (sel == null || typeof sel !== "object") {
     return null;
   }
-  const quote =
-    "quote" in sel && typeof (sel as { quote: unknown }).quote === "string"
-      ? (sel as { quote: string }).quote
-      : "";
-  const start =
-    "start" in sel && typeof (sel as { start: unknown }).start === "number"
-      ? (sel as { start: number }).start
-      : NaN;
-  const end =
-    "end" in sel && typeof (sel as { end: unknown }).end === "number"
-      ? (sel as { end: number }).end
-      : NaN;
+  const quote = "quote" in sel && typeof (sel as { quote: unknown }).quote === "string" ? (sel as { quote: string }).quote : "";
+  const start = "start" in sel && typeof (sel as { start: unknown }).start === "number" ? (sel as { start: number }).start : NaN;
+  const end = "end" in sel && typeof (sel as { end: unknown }).end === "number" ? (sel as { end: number }).end : NaN;
   if (
     !Number.isFinite(start) ||
     !Number.isFinite(end) ||
@@ -129,12 +98,7 @@ export function extractRecogitoRenderRange(
  * 策略 (b)：quote 做 trim，并按首尾空白收缩 renderStart/renderEnd，
  * 使容器正文 `slice(renderStart, renderEnd) === quote`（R4）。
  */
-export function getSelectionOffsetsInElement(
-  element: Element,
-  selection: Selection | null = typeof window !== "undefined"
-    ? window.getSelection()
-    : null,
-): RecogitoRenderRange | null {
+export function getSelectionOffsetsInElement( element: Element, selection: Selection | null = typeof window !== "undefined" ? window.getSelection() : null ): RecogitoRenderRange | null {
   if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
     return null;
   }

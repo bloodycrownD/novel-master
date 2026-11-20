@@ -27,10 +27,7 @@ function basename(path: string): string {
 
 /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
 // nm-style: keep-local — file-reference-picker.test 直引断言直子行过滤语义（4 个调用点）；内联会破坏测试锁名。
-export function listPickerChildRows(
-  rows: readonly WorkplaceListRowDto[],
-  currentPath: string,
-): WorkplaceListRowDto[] {
+export function listPickerChildRows( rows: readonly WorkplaceListRowDto[], currentPath: string ): WorkplaceListRowDto[] {
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
@@ -63,9 +60,7 @@ export function FileReferencePicker({
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
-    const result = await ipcWorkplaceBuildListRows(
-      vfsScope('session', projectId, sessionId),
-    );
+    const result = await ipcWorkplaceBuildListRows( vfsScope('session', projectId, sessionId) );
     setLoading(false);
     if (!result.ok) {
       setError(result.error.message);

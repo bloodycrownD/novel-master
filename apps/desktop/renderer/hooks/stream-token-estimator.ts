@@ -17,9 +17,7 @@
  *
  * @module renderer/hooks/stream-token-estimator
  */
-import {
-  IncrementalTokenCounter,
-} from "@shared/logic/format";
+import { IncrementalTokenCounter } from "@shared/logic/format";
 import { EncodingRegistry, type EncodingHandle } from "@shared/logic/encoding";
 import { Tiktoken } from "js-tiktoken/lite";
 import cl100kRanks from "js-tiktoken/ranks/cl100k_base";

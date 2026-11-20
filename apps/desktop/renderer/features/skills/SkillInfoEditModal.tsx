@@ -59,10 +59,8 @@ export function SkillInfoEditModal({
   const nameChanged = !builtin && trimmedName !== currentName;
   const descChanged = trimmedDesc !== (currentDescription ?? "");
   // 与 mobile 同口径：输入期即出 core 校验 reason（含保留名 SKILL.md）
-  const nameIssue =
-    nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
-  const canSubmit =
-    !saving && (nameChanged || descChanged) && nameIssue == null && name.length > 0;
+  const nameIssue = nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
+  const canSubmit = !saving && (nameChanged || descChanged) && nameIssue == null && name.length > 0;
 
   const handleConfirm = async () => {
     if (!canSubmit) {
@@ -84,11 +82,7 @@ export function SkillInfoEditModal({
         setError(res.error.message);
         return;
       }
-      onSaved(
-        nameChanged
-          ? toSkillRef(skillRef.domain, trimmedName, skillRef.projectId)
-          : skillRef,
-      );
+      onSaved( nameChanged ? toSkillRef(skillRef.domain, trimmedName, skillRef.projectId) : skillRef );
       onClose();
     } catch (err) {
       // 对齐 mobile：IPC 极端失败（如 bridge 断连）以页面错误提示，不静默

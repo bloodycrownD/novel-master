@@ -49,10 +49,7 @@ async function persistSuccessfulCheck(data: UpdateCheckData): Promise<void> {
   const now = new Date().toISOString();
   await ipcAppUiSet(KEY_LAST_CHECK_AT, now);
   await ipcAppUiSet(KEY_LAST_REMOTE, data.remoteVersion);
-  await ipcAppUiSet(
-    KEY_LAST_STATUS,
-    data.status === "update-available" ? "available" : "up-to-date",
-  );
+  await ipcAppUiSet( KEY_LAST_STATUS, data.status === "update-available" ? "available" : "up-to-date" );
 }
 
 async function persistFailedCheck(): Promise<void> {

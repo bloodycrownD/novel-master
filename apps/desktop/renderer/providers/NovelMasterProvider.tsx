@@ -12,10 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { AutoUpdateCheckHost } from "../hooks/useAutoUpdateCheck";
-import {
-  getBootstrapStatus,
-  rebootstrap,
-} from "../ipc/client";
+import { getBootstrapStatus, rebootstrap } from "../ipc/client";
 import type { BootstrapStatusResponse } from "@shared/ipc-types";
 
 type RuntimeStatus = "loading" | "ready" | "error";
@@ -28,9 +25,7 @@ interface NovelMasterContextValue {
   retry: (options?: { skipRebootstrap?: boolean }) => void;
 }
 
-const NovelMasterContext = createContext<NovelMasterContextValue | undefined>(
-  undefined,
-);
+const NovelMasterContext = createContext<NovelMasterContextValue | undefined>( undefined );
 
 function formatBootstrapError(response: BootstrapStatusResponse): string {
   if (response.ok) {
@@ -64,10 +59,7 @@ export function NovelMasterProvider({ children }: { children: ReactNode }) {
     setError(undefined);
 
     (async () => {
-      const response =
-        bootToken > 0 && !skipRebootstrap
-          ? await rebootstrap()
-          : await getBootstrapStatus();
+      const response = bootToken > 0 && !skipRebootstrap ? await rebootstrap() : await getBootstrapStatus();
       if (cancelled) {
         return;
       }

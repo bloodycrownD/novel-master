@@ -21,10 +21,7 @@ function parseNumber(raw: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function patchOpenAi(
-  prev: ModelSamplingParams | undefined,
-  patch: Record<string, number | undefined>,
-): ModelSamplingParams {
+function patchOpenAi( prev: ModelSamplingParams | undefined, patch: Record<string, number | undefined> ): ModelSamplingParams {
   const base = prev?.protocol === "openai" ? { ...prev.openai } : {};
   return {
     protocol: "openai",
@@ -32,10 +29,7 @@ function patchOpenAi(
   };
 }
 
-function patchAnthropic(
-  prev: ModelSamplingParams | undefined,
-  patch: Record<string, number | undefined>,
-): ModelSamplingParams {
+function patchAnthropic( prev: ModelSamplingParams | undefined, patch: Record<string, number | undefined> ): ModelSamplingParams {
   const base = prev?.protocol === "anthropic" ? { ...prev.anthropic } : {};
   return {
     protocol: "anthropic",
@@ -43,10 +37,7 @@ function patchAnthropic(
   };
 }
 
-function patchGemini(
-  prev: ModelSamplingParams | undefined,
-  patch: Record<string, number | undefined>,
-): ModelSamplingParams {
+function patchGemini( prev: ModelSamplingParams | undefined, patch: Record<string, number | undefined> ): ModelSamplingParams {
   const base = prev?.protocol === "gemini" ? { ...prev.gemini } : {};
   return {
     protocol: "gemini",

@@ -25,9 +25,7 @@ export function parentPathForTarget(target: WorkspaceContextTarget): string {
 /**
  * ZIP 子树目标：blank ≡ `/`；目录行（含域根 `/`）为其 path；文件行无 ZIP。
  */
-export function zipDirectoryPathForTarget(
-  target: WorkspaceContextTarget,
-): string | null {
+export function zipDirectoryPathForTarget( target: WorkspaceContextTarget ): string | null {
   if (target.kind === "blank") {
     return "/";
   }
@@ -43,9 +41,7 @@ export function zipDirectoryPathForTarget(
  * 与 `zipDirectoryPathForTarget` 互为镜像：目录目标走 ZIP 子树导出、文件目标走
  * 单文件另存，两者各管一半，测试对称断言。
  */
-export function exportFilePathForTarget(
-  target: WorkspaceContextTarget,
-): string | null {
+export function exportFilePathForTarget( target: WorkspaceContextTarget ): string | null {
   if (target.kind === "row" && target.row.kind === "file") {
     return target.row.path;
   }
@@ -107,9 +103,7 @@ export function zipImportConfirmMessage(directoryPath: string): string {
  * 角色卡是「解析角色卡并写入目标目录」，两者对工作区的影响面不同，合并文案会让用户
  * 按错误的预期点确认。
  */
-export function characterCardImportConfirmMessage(
-  directoryPath: string,
-): string {
+export function characterCardImportConfirmMessage( directoryPath: string ): string {
   if (directoryPath === "/") {
     return "将把角色卡内容写入目录「当前目录（工作区根）」，其中同名文件会被覆盖。确定继续？";
   }

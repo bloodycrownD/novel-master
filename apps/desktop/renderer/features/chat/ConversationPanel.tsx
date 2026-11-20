@@ -107,6 +107,14 @@ type ConfirmState =
     } & RollbackConfirmContext)
   | null;
 
+type ExecuteRollbackOptions = {
+  skipVfsReconcile?: boolean;
+  revisionHeadBackfill?: boolean;
+  rollbackMode?: RollbackMode;
+  restoreText?: string | null;
+  restoreAttachments?: readonly MessageAttachmentDto[] | null;
+};
+
 export function ConversationPanel({
   projectId,
   sessionId,
@@ -683,16 +691,7 @@ export function ConversationPanel({
   );
 
   const executeRollback = useCallback(
-    async (
-      messageId: string,
-      options?: {
-        skipVfsReconcile?: boolean;
-        revisionHeadBackfill?: boolean;
-        rollbackMode?: RollbackMode;
-        restoreText?: string | null;
-        restoreAttachments?: readonly MessageAttachmentDto[] | null;
-      },
-    ) => {
+    async ( messageId: string, options?: ExecuteRollbackOptions ) => {
       const rollbackMode = options?.rollbackMode ?? 'rewind';
       const restoreText = options?.restoreText ?? null;
       const restoreAttachments = options?.restoreAttachments ?? null;
@@ -744,15 +743,9 @@ export function ConversationPanel({
       // D8：main 已推空 ops；renderer 仅正文 + annotate ∪（禁止用 prev 盖回旧 user_ops chip）
       setComposerText(prevText => {
         const next = resolveComposerDraftAfterRollbackSuccess( { text: prevText, attachments: [] }, rollbackMode, { text: restoreText, attachments: restoreAttachments } );
-        setComposerAttachments(
-          applyUndoAnnotateRestore(
-            sessionId,
-            // undo_send ↔ user 锚点：保留未发送草稿 + 反投影；rewind ↔ assistant 锚点：清空。
-            rollbackMode === 'undo_send' ? 'user' : 'assistant',
-            rollbackMode === 'undo_send' ? restoreAttachments : null,
-            [],
-          ),
-        );
+        // undo_send ↔ user 锚点：保留未发送草稿 + 反投影；rewind ↔ assistant 锚点：清空。
+        const restored = applyUndoAnnotateRestore( sessionId, rollbackMode === 'undo_send' ? 'user' : 'assistant', rollbackMode === 'undo_send' ? restoreAttachments : null, [] );
+        setComposerAttachments(restored);
         return next.text;
       });
       showToast(options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功');

@@ -51,10 +51,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   const [leaveConfirm, setLeaveConfirm] = useState<null | (() => void)>(null);
 
   const domain = ref?.domain ?? "global";
-  const listRequest =
-    domain === "global"
-      ? { domain: "global" as const }
-      : { domain: "project" as const, projectId: ref?.projectId };
+  const listRequest = domain === "global" ? { domain: "global" as const } : { domain: "project" as const, projectId: ref?.projectId };
 
   const reloadFiles = useCallback(async () => {
     if (ref == null) {

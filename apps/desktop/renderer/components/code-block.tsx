@@ -38,9 +38,7 @@ const FENCE_LANG_ALIAS: Record<string, string> = {
  * fence 原始语言名 → 规范名（语言标签显示值）。
  * 不在清单（如 rust）或无语言返回 null：纯文本块级形态、无 data-lang。
  */
-export function normalizeFenceLang(
-  lang: string | null | undefined,
-): string | null {
+export function normalizeFenceLang( lang: string | null | undefined ): string | null {
   if (!lang) {
     return null;
   }
@@ -59,9 +57,7 @@ function collectNodeText(node: ReactNode): string {
     return node.map((child) => collectNodeText(child)).join("");
   }
   if (typeof node === "object" && "props" in node) {
-    return collectNodeText(
-      (node as { props?: { children?: ReactNode } }).props?.children,
-    );
+    return collectNodeText( (node as { props?: { children?: ReactNode } }).props?.children );
   }
   return "";
 }
@@ -139,12 +135,7 @@ function extractLangFromClass(className: string | undefined): string | null {
  */
 export function renderCodeBlock(children: ReactNode): ReactNode {
   const child = Array.isArray(children) ? children[0] : children;
-  const source =
-    child != null && typeof child === "object" && "props" in child
-      ? collectNodeText(
-          (child as { props?: { children?: ReactNode } }).props?.children,
-        )
-      : "";
+  const source = child != null && typeof child === "object" && "props" in child ? collectNodeText( (child as { props?: { children?: ReactNode } }).props?.children ) : "";
   const copyBtn = <CodeCopyButton source={source} />;
   if (child == null || typeof child !== "object" || !("props" in child)) {
     return (
@@ -155,8 +146,7 @@ export function renderCodeBlock(children: ReactNode): ReactNode {
     );
   }
   const props = (child as { props?: { className?: unknown } }).props;
-  const className =
-    typeof props?.className === "string" ? props.className : undefined;
+  const className = typeof props?.className === "string" ? props.className : undefined;
   const normalized = normalizeFenceLang(extractLangFromClass(className));
   if (normalized) {
     return (
@@ -167,11 +157,7 @@ export function renderCodeBlock(children: ReactNode): ReactNode {
     );
   }
   if (className && /(?:^|\s)hljs(?:\s|$)/.test(className)) {
-    const stripped =
-      className
-        .split(/\s+/)
-        .filter((cls) => cls && cls !== "hljs")
-        .join(" ") || undefined;
+    const stripped = className .split(/\s+/) .filter((cls) => cls && cls !== "hljs") .join(" ") || undefined;
     return (
       <pre data-lang="plain">
         {copyBtn}

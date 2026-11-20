@@ -43,11 +43,7 @@ export function useChatMessagesScrollFollow(
     if (!el) {
       return;
     }
-    nearBottomRef.current = isNearBottom(
-      el.scrollTop,
-      el.scrollHeight,
-      el.clientHeight,
-    );
+    nearBottomRef.current = isNearBottom( el.scrollTop, el.scrollHeight, el.clientHeight );
   }, [scrollRef]);
 
   const stickToBottom = useCallback(() => {

@@ -74,12 +74,7 @@ export function WorkspaceSettingsView() {
       setCurrentAgentId(agentRes.data.agentId);
     }
     if (modelRes.ok) {
-      setModelRows(
-        modelRes.data.rows.map((r) => ({
-          id: r.savedModelId,
-          label: r.label,
-        })),
-      );
+      setModelRows( modelRes.data.rows.map((r) => ({ id: r.savedModelId, label: r.label })) );
       setCurrentModelId(modelRes.data.currentId);
       const current = modelRes.data.rows.find(
         (r) => r.savedModelId === modelRes.data.currentId,
@@ -96,22 +91,12 @@ export function WorkspaceSettingsView() {
       setThinkingContext(thinkingRes.data);
     }
     if (richRes.ok) {
-      setChatRichText(
-        richRes.data != null ? richRes.data !== "false" : true,
-      );
+      setChatRichText( richRes.data != null ? richRes.data !== "false" : true );
     }
     if (compactionRes.ok && compactionRes.data) {
       setCompactionEnabled(compactionRes.data.enabled);
-      setCompactionTokenRatio(
-        compactionRes.data.tokenRatio != null
-          ? String(compactionRes.data.tokenRatio)
-          : "",
-      );
-      setCompactionHideStartDepth(
-        compactionRes.data.hideStartDepth != null
-          ? String(compactionRes.data.hideStartDepth)
-          : "6",
-      );
+      setCompactionTokenRatio( compactionRes.data.tokenRatio != null ? String(compactionRes.data.tokenRatio) : "" );
+      setCompactionHideStartDepth( compactionRes.data.hideStartDepth != null ? String(compactionRes.data.hideStartDepth) : "6" );
     }
   }, []);
 

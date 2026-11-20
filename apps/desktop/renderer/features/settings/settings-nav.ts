@@ -116,10 +116,7 @@ export interface SettingsNavState {
 }
 
 /** skillRef 三元组（domain/projectId/name）等价判定；双方均缺省视为等价。 */
-export function isSameSkillRef(
-  a: import("@shared/ipc-types").SkillRefDto | undefined,
-  b: import("@shared/ipc-types").SkillRefDto | undefined,
-): boolean {
+export function isSameSkillRef( a: import("@shared/ipc-types").SkillRefDto | undefined, b: import("@shared/ipc-types").SkillRefDto | undefined ): boolean {
   if (a == null && b == null) {
     return true;
   }

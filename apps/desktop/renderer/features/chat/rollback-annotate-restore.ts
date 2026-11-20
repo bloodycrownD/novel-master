@@ -9,6 +9,9 @@ import {
   unionComposerStatusWithAnnotate,
 } from "./chat-annotate-draft";
 
+type AttachmentDtos = readonly MessageAttachmentDto[];
+type MaybeAttachments = AttachmentDtos | null | undefined;
+
 function toMessageAttachment(a: MessageAttachmentDto): MessageAttachment {
   return {
     name: a.name,
@@ -33,14 +36,9 @@ function toMessageAttachment(a: MessageAttachmentDto): MessageAttachment {
  * main 侧仍按 Bug1 既定逻辑无条件清；本函数只负责 renderer 侧的语义对齐。
  *
  * @param anchorRole 锚点消息角色，决定「清空」还是「保留未发送 + 反投影」
- * @param existingStatusAttachments main suggest 已推的状态条（Undo 时通常为空 ops）
+ * @param existingStatus main suggest 已推的状态条（Undo 时通常为空 ops）
  */
-export function applyUndoAnnotateRestore(
-  sessionId: string,
-  anchorRole: "user" | "assistant",
-  attachments: readonly MessageAttachmentDto[] | null | undefined,
-  existingStatusAttachments: readonly MessageAttachmentDto[] = [],
-): MessageAttachmentDto[] {
+export function applyUndoAnnotateRestore(sessionId: string, anchorRole: "user" | "assistant", attachments: MaybeAttachments, existingStatus: AttachmentDtos = []): MessageAttachmentDto[] {
   if (anchorRole === "assistant") {
     // 锚点为 assistant：清空 renderer 侧全部批注草稿，且没有附件可反投影。
     chatAnnotateDraftStore.clear(sessionId);
@@ -55,7 +53,7 @@ export function applyUndoAnnotateRestore(
     }
   }
   // Undo 时 main 已推空状态条；仅 ∪ annotate（D8）
-  const opsHalf = existingStatusAttachments.filter(
+  const opsHalf = existingStatus.filter(
     (a) => a.action !== "annotate",
   );
   return unionComposerStatusWithAnnotate(opsHalf, sessionId);

@@ -26,16 +26,11 @@ export async function loadDesktopScope(): Promise<DesktopScopeSnapshot> {
 }
 
 /** Persists project scope (clears or picks first session when project changes). */
-export async function setDesktopProject(
-  projectId: string,
-): Promise<DesktopScopeSnapshot> {
+export async function setDesktopProject( projectId: string ): Promise<DesktopScopeSnapshot> {
   return unwrap(await ipcScopeSetProject({ projectId }));
 }
 
 /** Persists session pointer for the current project. */
-export async function setDesktopSession(
-  projectId: string,
-  sessionId: string,
-): Promise<DesktopScopeSnapshot> {
+export async function setDesktopSession( projectId: string, sessionId: string ): Promise<DesktopScopeSnapshot> {
   return unwrap(await ipcScopeSetSession({ projectId, sessionId }));
 }

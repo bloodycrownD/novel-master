@@ -31,10 +31,7 @@ type ComposerDraftPersistPayload = {
  * 不能被写成 `[]`（`[]` 表示确认无胶囊、禁止扫描）。
  */
 // nm-style: keep-local — composer-draft-passthrough.test 直引断言透传/省略语义（8 个调用点）；内联会破坏测试锁名。
-export function resolveComposerDraftPersistPayload(
-  hydrated: HydratedComposerDraft | null,
-  composerText: string,
-): ComposerDraftPersistPayload {
+export function resolveComposerDraftPersistPayload( hydrated: HydratedComposerDraft | null, composerText: string ): ComposerDraftPersistPayload {
   const base: ComposerDraftPersistPayload = {
     text: composerText,
     attachments: [],

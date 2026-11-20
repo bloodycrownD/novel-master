@@ -41,10 +41,7 @@ import { NovelMasterProvider } from './providers/NovelMasterProvider';
 import { ShellNavProvider, useShellNav } from './providers/ShellNavProvider';
 import { ToastHost } from './components/ui/ToastHost';
 import { ThemeProvider } from './providers/ThemeProvider';
-import {
-  ipcVfsCharacterCardImport,
-  ipcVfsZipImport,
-} from './ipc/client';
+import { ipcVfsCharacterCardImport, ipcVfsZipImport } from './ipc/client';
 import {
   OPEN_SETTINGS_VIEW_EVENT,
   type OpenSettingsViewDetail,
@@ -78,10 +75,7 @@ type WorkspaceConfirmState =
     };
 
 /** 批量 ingest 成功后的两条 toast（写入汇总 + 非 UTF-8 跳过明示），菜单与拖拽同口径。 */
-function showBatchIngestAppliedToast(
-  report: Parameters<typeof formatBatchApplyToast>[0],
-  skippedBinary: readonly string[],
-): void {
+function showBatchIngestAppliedToast( report: Parameters<typeof formatBatchApplyToast>[0], skippedBinary: readonly string[] ): void {
   showToast(formatBatchApplyToast(report));
   if (skippedBinary.length > 0) {
     showToast(skippedBinaryToastMessage(skippedBinary.length));
@@ -239,16 +233,11 @@ function DesktopOverlays() {
         // 导出类型直达：文件行单文件另存、目录/空白行 ZIP 子树，由编排函数分流，
         // 这里不判类型也不弹确认（导出无库写入，无覆盖风险）。
         try {
-          const status = await exportWorkspaceTarget(
-            scopeRequestFromTarget(target, projectId, workspaceSessionId),
-            target,
-          );
+          const status = await exportWorkspaceTarget( scopeRequestFromTarget(target, projectId, workspaceSessionId), target );
           if (status === 'saved') {
             // 文案按分流来源走：文件行导的是单文件、目录/空白行导的是 ZIP 子树，
             // 共用一句「已导出」用户分辨不出落盘的是什么。
-            showToast(
-              exportFilePathForTarget(target) == null ? '已导出 ZIP' : '已导出文件',
-            );
+            showToast( exportFilePathForTarget(target) == null ? '已导出 ZIP' : '已导出文件' );
           }
         } catch (err) {
           showToast(err instanceof Error ? err.message : '导出失败');
@@ -269,34 +258,14 @@ function DesktopOverlays() {
       }
       let result: { ok: true } | { ok: false; message: string };
       if (prompt.kind === 'create-file') {
-        result = await createWorkspaceEntry(
-          prompt.target,
-          'file',
-          value,
-          projectId,
-          workspaceSessionId,
-        );
+        result = await createWorkspaceEntry( prompt.target, 'file', value, projectId, workspaceSessionId );
       } else if (prompt.kind === 'create-folder') {
-        result = await createWorkspaceEntry(
-          prompt.target,
-          'folder',
-          value,
-          projectId,
-          workspaceSessionId,
-        );
+        result = await createWorkspaceEntry( prompt.target, 'folder', value, projectId, workspaceSessionId );
       } else {
-        result = await renameWorkspaceEntry(
-          prompt.target,
-          value,
-          projectId,
-          workspaceSessionId,
-        );
+        result = await renameWorkspaceEntry( prompt.target, value, projectId, workspaceSessionId );
         if (result.ok && prompt.target.kind === 'row') {
           const row = prompt.target.row;
-          const parent =
-            row.path === '/'
-              ? ''
-              : row.path.slice(0, row.path.lastIndexOf('/')) || '';
+          const parent = row.path === '/' ? '' : row.path.slice(0, row.path.lastIndexOf('/')) || '';
           const newPath = `${parent}/${value.trim()}`.replace(/\/+/g, '/');
           renamePreviewTab(prompt.target.panelScope, row.path, newPath);
         }
@@ -323,17 +292,10 @@ function DesktopOverlays() {
       return;
     }
     if (confirm.kind === 'delete') {
-      const result = await deleteWorkspaceEntry(
-        confirm.target,
-        projectId,
-        workspaceSessionId,
-      );
+      const result = await deleteWorkspaceEntry( confirm.target, projectId, workspaceSessionId );
       if (result.ok) {
         if (confirm.target.kind === 'row') {
-          markPreviewTabsDeletedUnderPath(
-            confirm.target.panelScope,
-            confirm.target.row.path,
-          );
+          markPreviewTabsDeletedUnderPath( confirm.target.panelScope, confirm.target.row.path );
         }
         notifyWorkspaceMutated();
       } else {
@@ -407,10 +369,7 @@ function DesktopOverlays() {
         }
 
         try {
-          const result = await startSingleFileImport(
-            scopeRequestFromTarget(target, projectId, workspaceSessionId),
-            directoryPath,
-          );
+          const result = await startSingleFileImport( scopeRequestFromTarget(target, projectId, workspaceSessionId), directoryPath );
           if (result.status === 'cancelled') {
             // 用户在系统文件框点了取消：静默返回，不打扰。
             return;
@@ -448,11 +407,7 @@ function DesktopOverlays() {
     ingestFileBusyRef.current = true;
     setIngestFileBusy(true);
     try {
-      const applied = await confirmSingleFileImport(
-        scopeRequestFromTarget(confirm.target, projectId, workspaceSessionId),
-        confirm.targetDir,
-        confirm.hostPaths,
-      );
+      const applied = await confirmSingleFileImport( scopeRequestFromTarget(confirm.target, projectId, workspaceSessionId), confirm.targetDir, confirm.hostPaths );
       notifyWorkspaceMutated();
       showBatchIngestAppliedToast(applied.report, applied.skippedBinary);
     } catch (err) {

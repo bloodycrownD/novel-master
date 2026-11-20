@@ -64,13 +64,8 @@ export function AboutView() {
     const now = new Date().toISOString();
     await ipcAppUiSet("updates.lastCheckAt", now);
     await ipcAppUiSet(KEY_LAST_REMOTE, data.remoteVersion);
-    await ipcAppUiSet(
-      KEY_LAST_STATUS,
-      data.status === "update-available" ? "available" : "up-to-date",
-    );
-    setLastStatus(
-      data.status === "update-available" ? "available" : "up-to-date",
-    );
+    await ipcAppUiSet( KEY_LAST_STATUS, data.status === "update-available" ? "available" : "up-to-date" );
+    setLastStatus( data.status === "update-available" ? "available" : "up-to-date" );
     setLastRemote(data.remoteVersion);
   }, []);
 

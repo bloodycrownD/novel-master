@@ -58,21 +58,13 @@ function getDefaultColumnWidths(workspace: HTMLElement) {
   };
 }
 
-function getWorkspaceUsableWidth(
-  workspace: HTMLElement,
-  vis: Record<ColumnKey, boolean>,
-): number {
+function getWorkspaceUsableWidth( workspace: HTMLElement, vis: Record<ColumnKey, boolean> ): number {
   return (
     workspace.clientWidth - countWorkspaceSplitters(vis) * COLUMN_SPLITTER_SIZE
   );
 }
 
-function clampColumnWidths(
-  workspace: HTMLElement,
-  widths: { preview: number; explorer: number },
-  vis: Record<ColumnKey, boolean>,
-  columnLayoutMaterialized: boolean,
-) {
+function clampColumnWidths( workspace: HTMLElement, widths: { preview: number; explorer: number }, vis: Record<ColumnKey, boolean>, columnLayoutMaterialized: boolean ) {
   const splitterCount = countWorkspaceSplitters(vis);
   const total = workspace.clientWidth - COLUMN_SPLITTER_SIZE * splitterCount;
   let preview = Math.round(widths.preview);
@@ -86,10 +78,8 @@ function clampColumnWidths(
     preview = Math.max(COLUMN_PREVIEW_MIN_WIDTH, preview);
     explorer = Math.max(COLUMN_EXPLORER_MIN_WIDTH, explorer);
 
-    const maxPreview =
-      total - COLUMN_EXPLORER_MIN_WIDTH - COLUMN_CHAT_MIN_WIDTH;
-    const maxExplorer =
-      total - COLUMN_PREVIEW_MIN_WIDTH - COLUMN_CHAT_MIN_WIDTH;
+    const maxPreview = total - COLUMN_EXPLORER_MIN_WIDTH - COLUMN_CHAT_MIN_WIDTH;
+    const maxExplorer = total - COLUMN_PREVIEW_MIN_WIDTH - COLUMN_CHAT_MIN_WIDTH;
     if (maxPreview >= COLUMN_PREVIEW_MIN_WIDTH) {
       preview = Math.min(preview, maxPreview);
     }
@@ -98,40 +88,25 @@ function clampColumnWidths(
     }
 
     if (total - preview - explorer < COLUMN_CHAT_MIN_WIDTH) {
-      explorer = Math.max(
-        COLUMN_EXPLORER_MIN_WIDTH,
-        total - preview - COLUMN_CHAT_MIN_WIDTH,
-      );
+      explorer = Math.max( COLUMN_EXPLORER_MIN_WIDTH, total - preview - COLUMN_CHAT_MIN_WIDTH );
     }
     if (total - preview - explorer < COLUMN_CHAT_MIN_WIDTH) {
-      preview = Math.max(
-        COLUMN_PREVIEW_MIN_WIDTH,
-        total - explorer - COLUMN_CHAT_MIN_WIDTH,
-      );
+      preview = Math.max( COLUMN_PREVIEW_MIN_WIDTH, total - explorer - COLUMN_CHAT_MIN_WIDTH );
     }
 
     preview = Math.max(COLUMN_PREVIEW_MIN_WIDTH, preview);
     explorer = Math.max(COLUMN_EXPLORER_MIN_WIDTH, explorer);
   } else if (vis.preview && vis.explorer && !vis.chat) {
-    preview = Math.max(
-      COLUMN_PREVIEW_MIN_WIDTH,
-      Math.min(preview, total - COLUMN_EXPLORER_MIN_WIDTH),
-    );
+    preview = Math.max( COLUMN_PREVIEW_MIN_WIDTH, Math.min(preview, total - COLUMN_EXPLORER_MIN_WIDTH) );
     explorer = Math.max(COLUMN_EXPLORER_MIN_WIDTH, total - preview);
     preview = Math.max(COLUMN_PREVIEW_MIN_WIDTH, total - explorer);
   } else if (vis.preview && !vis.explorer && vis.chat) {
     if (columnLayoutMaterialized) {
-      preview = Math.max(
-        COLUMN_PREVIEW_MIN_WIDTH,
-        Math.min(preview, total - COLUMN_CHAT_MIN_WIDTH),
-      );
+      preview = Math.max( COLUMN_PREVIEW_MIN_WIDTH, Math.min(preview, total - COLUMN_CHAT_MIN_WIDTH) );
     }
   } else if (!vis.preview && vis.explorer && vis.chat) {
     if (columnLayoutMaterialized) {
-      explorer = Math.max(
-        COLUMN_EXPLORER_MIN_WIDTH,
-        Math.min(explorer, total - COLUMN_CHAT_MIN_WIDTH),
-      );
+      explorer = Math.max( COLUMN_EXPLORER_MIN_WIDTH, Math.min(explorer, total - COLUMN_CHAT_MIN_WIDTH) );
     }
   } else if (vis.preview && !vis.explorer && !vis.chat) {
     preview = Math.max(COLUMN_PREVIEW_MIN_WIDTH, Math.min(preview, total));
@@ -142,10 +117,7 @@ function clampColumnWidths(
   return { preview, explorer };
 }
 
-function getFlexibleWorkspaceColumn(
-  vis: Record<ColumnKey, boolean>,
-  columnLayoutMaterialized: boolean,
-): ColumnKey | null {
+function getFlexibleWorkspaceColumn( vis: Record<ColumnKey, boolean>, columnLayoutMaterialized: boolean ): ColumnKey | null {
   if (columnLayoutMaterialized) return null;
   if (countVisibleWorkspaceColumns(vis) === 3) return "chat";
   if (vis.preview) return "preview";
@@ -171,11 +143,7 @@ function resolveFlexColumn(vis: Record<ColumnKey, boolean>): ColumnKey | null {
   return null;
 }
 
-function trackForColumn(
-  key: ColumnKey,
-  widths: { preview: number; explorer: number },
-  vis: Record<ColumnKey, boolean>,
-): string {
+function trackForColumn( key: ColumnKey, widths: { preview: number; explorer: number }, vis: Record<ColumnKey, boolean> ): string {
   const flexKey = resolveFlexColumn(vis);
   if (flexKey === key) {
     return `minmax(${getColumnMinWidth(key)}px, 1fr)`;
@@ -201,12 +169,7 @@ function setWorkspaceGridItem(id: string, gridCol: number, visible: boolean) {
   }
 }
 
-function applyWorkspaceLayout(
-  workspace: HTMLElement,
-  vis: Record<ColumnKey, boolean>,
-  widths: { preview: number; explorer: number },
-  columnLayoutMaterialized: boolean,
-) {
+function applyWorkspaceLayout( workspace: HTMLElement, vis: Record<ColumnKey, boolean>, widths: { preview: number; explorer: number }, columnLayoutMaterialized: boolean ) {
   const tracks: string[] = [];
   let col = 1;
   const visibleColumns: ColumnKey[] = [];
@@ -293,23 +256,9 @@ export function useColumnSplitters(): UseColumnSplittersResult {
   );
 
   const commitColumnWidths = useCallback(
-    (
-      workspace: HTMLElement,
-      widths: { preview: number; explorer: number },
-      vis: Record<ColumnKey, boolean>,
-    ) => {
-      widthsRef.current = clampColumnWidths(
-        workspace,
-        widths,
-        vis,
-        materializedRef.current,
-      );
-      applyWorkspaceLayout(
-        workspace,
-        vis,
-        widthsRef.current,
-        materializedRef.current,
-      );
+    ( workspace: HTMLElement, widths: { preview: number; explorer: number }, vis: Record<ColumnKey, boolean> ) => {
+      widthsRef.current = clampColumnWidths( workspace, widths, vis, materializedRef.current );
+      applyWorkspaceLayout( workspace, vis, widthsRef.current, materializedRef.current );
     },
     [],
   );
@@ -317,12 +266,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
   const snapColumnWidthsForVisibility = useCallback(
     (workspace: HTMLElement, vis: Record<ColumnKey, boolean>) => {
       if (countVisibleWorkspaceColumns(vis) === 3) {
-        return clampColumnWidths(
-          workspace,
-          getDefaultColumnWidths(workspace),
-          vis,
-          materializedRef.current,
-        );
+        return clampColumnWidths( workspace, getDefaultColumnWidths(workspace), vis, materializedRef.current );
       }
       const flexKey = getFlexibleWorkspaceColumn(vis, materializedRef.current);
       return {
@@ -349,11 +293,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
         materializedRef.current = false;
         const workspace = workspaceRef.current;
         if (workspace) {
-          commitColumnWidths(
-            workspace,
-            snapColumnWidthsForVisibility(workspace, next),
-            next,
-          );
+          commitColumnWidths( workspace, snapColumnWidthsForVisibility(workspace, next), next );
         }
         return next;
       });
@@ -372,11 +312,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
     if (!workspace) return;
 
     materializedRef.current = false;
-    commitColumnWidths(
-      workspace,
-      getDefaultColumnWidths(workspace),
-      layoutVisibility,
-    );
+    commitColumnWidths( workspace, getDefaultColumnWidths(workspace), layoutVisibility );
 
     const clampPreviewExplorerDragDelta = (deltaX: number) => {
       const preview = widthsRef.current.preview;
@@ -446,17 +382,12 @@ export function useColumnSplitters(): UseColumnSplittersResult {
         widths.preview = Math.round(previewPane.getBoundingClientRect().width);
       }
       if (vis.explorer && explorerPane) {
-        widths.explorer = Math.round(
-          explorerPane.getBoundingClientRect().width,
-        );
+        widths.explorer = Math.round( explorerPane.getBoundingClientRect().width );
       }
       commitColumnWidths(workspace, widths, vis);
     };
 
-    const bindSplitter = (
-      splitterEl: HTMLElement | null,
-      onDrag: (deltaX: number) => void,
-    ) => {
+    const bindSplitter = ( splitterEl: HTMLElement | null, onDrag: (deltaX: number) => void ) => {
       if (!splitterEl) return () => {};
       const onMouseDown = (e: MouseEvent) => {
         if (e.button !== 0) return;
@@ -492,27 +423,13 @@ export function useColumnSplitters(): UseColumnSplittersResult {
         if (vis.preview && vis.explorer) {
           deltaX = clampPreviewExplorerDragDelta(deltaX);
           if (deltaX === 0) return;
-          commitColumnWidths(
-            workspace,
-            {
-              preview: widthsRef.current.preview + deltaX,
-              explorer: widthsRef.current.explorer - deltaX,
-            },
-            vis,
-          );
+          commitColumnWidths( workspace, { preview: widthsRef.current.preview + deltaX, explorer: widthsRef.current.explorer - deltaX }, vis );
           return;
         }
         if (vis.preview && vis.chat) {
           deltaX = clampPreviewChatDragDelta(deltaX);
           if (deltaX === 0) return;
-          commitColumnWidths(
-            workspace,
-            {
-              preview: widthsRef.current.preview + deltaX,
-              explorer: widthsRef.current.explorer,
-            },
-            vis,
-          );
+          commitColumnWidths( workspace, { preview: widthsRef.current.preview + deltaX, explorer: widthsRef.current.explorer }, vis );
         }
       },
     );
@@ -523,14 +440,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
         if (vis.explorer && vis.chat) {
           deltaX = clampExplorerChatDragDelta(deltaX);
           if (deltaX === 0) return;
-          commitColumnWidths(
-            workspace,
-            {
-              preview: widthsRef.current.preview,
-              explorer: widthsRef.current.explorer + deltaX,
-            },
-            vis,
-          );
+          commitColumnWidths( workspace, { preview: widthsRef.current.preview, explorer: widthsRef.current.explorer + deltaX }, vis );
         }
       },
     );
@@ -540,11 +450,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
         commitColumnWidths(workspace, widthsRef.current, vis);
         return;
       }
-      commitColumnWidths(
-        workspace,
-        snapColumnWidthsForVisibility(workspace, vis),
-        vis,
-      );
+      commitColumnWidths( workspace, snapColumnWidthsForVisibility(workspace, vis), vis );
     };
 
     window.addEventListener("resize", onResize);

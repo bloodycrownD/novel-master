@@ -31,11 +31,7 @@ interface ExplorerPaneProps {
 // projects 视图换只读物理树浏览器；global 面板不再展示，session/chat 面板行为不变
 const PANEL_SCOPES = ["physical", "session", "chat"] as const;
 
-function scopeRequest(
-  panelScope: WorkspacePanelScope,
-  projectId?: string,
-  sessionId?: string,
-): VfsScopeRequest {
+function scopeRequest( panelScope: WorkspacePanelScope, projectId?: string, sessionId?: string ): VfsScopeRequest {
   return vfsScope(panelScope, projectId, sessionId);
 }
 
@@ -69,9 +65,7 @@ export function ExplorerPane({
     const types = Array.from(e.dataTransfer.types);
     if (types.includes("Files") || types.includes(NM_VFS_PATHS_MIME)) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME)
-        ? "move"
-        : "copy";
+      e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME) ? "move" : "copy";
       setDropHighlightRoot(true);
     }
   }, []);

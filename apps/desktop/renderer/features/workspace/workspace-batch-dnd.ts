@@ -5,25 +5,10 @@
  * 回落到树内且路径属于 stagingRoot → 按原逻辑路径 move；外部 Files → ingest。
  * 物化 / startDrag 失败 → toast（Spec Step 3）。
  */
-import type {
-  VfsBatchApplyReportDto,
-  VfsBatchExportSkippedDto,
-  VfsScopeRequest,
-} from "@shared/ipc-types";
-import {
-  getDesktopBridge,
-  ipcVfsBatchClearStaging,
-  ipcVfsBatchExportStage,
-  ipcVfsBatchIngestFromPaths,
-  ipcVfsRename,
-  onVfsStartDragFailed,
-} from "@/ipc/client";
+import type { VfsBatchApplyReportDto, VfsBatchExportSkippedDto, VfsScopeRequest } from "@shared/ipc-types";
+import { getDesktopBridge, ipcVfsBatchClearStaging, ipcVfsBatchExportStage, ipcVfsBatchIngestFromPaths, ipcVfsRename, onVfsStartDragFailed } from "@/ipc/client";
 import { showToast } from "@/components/ui/show-toast";
-import {
-  dropTargetDir,
-  isSelfOrAncestorPath,
-  resolveMoveDestination,
-} from "./vfs-tree-dnd";
+import { dropTargetDir, isSelfOrAncestorPath, resolveMoveDestination } from "./vfs-tree-dnd";
 
 type ActiveNativeDrag = {
   readonly logicalPaths: readonly string[];
@@ -85,10 +70,7 @@ export function releaseStagedExport(logicalPath: string): void {
 
 /** dragEnd / 取消：清理 dndRuntime.active 与对应 staging。 */
 export function finalizeRowDrag(logicalPath: string): void {
-  prefetchGeneration.set(
-    logicalPath,
-    (prefetchGeneration.get(logicalPath) ?? 0) + 1,
-  );
+  prefetchGeneration.set(logicalPath, (prefetchGeneration.get(logicalPath) ?? 0) + 1);
   releaseStagedExport(logicalPath);
   if (dndRuntime.active != null) {
     clearStagingOnMain(dndRuntime.active.stagingRoot);
@@ -165,11 +147,7 @@ function hostPathsFromDataTransfer(dt: DataTransfer): string[] {
 function isPathUnderRoot(filePath: string, root: string): boolean {
   const normalizedRoot = root.replace(/[/\\]+$/, "");
   const normalizedPath = filePath.replace(/[/\\]+$/, "");
-  return (
-    normalizedPath === normalizedRoot ||
-    normalizedPath.startsWith(`${normalizedRoot}\\`) ||
-    normalizedPath.startsWith(`${normalizedRoot}/`)
-  );
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}\\`) || normalizedPath.startsWith(`${normalizedRoot}/`);
 }
 
 export type BatchIngestConfirmRequest = {
@@ -180,10 +158,7 @@ export type BatchIngestConfirmRequest = {
 };
 
 /** pointerdown 时预物化，供随后 dragstart 同步 startDrag。失败须 toast。 */
-export async function prefetchExportStage(options: {
-  readonly scope: VfsScopeRequest;
-  readonly logicalPath: string;
-}): Promise<void> {
+export async function prefetchExportStage(options: { readonly scope: VfsScopeRequest; readonly logicalPath: string }): Promise<void> {
   releaseStagedExport(options.logicalPath);
   const generation = prefetchGeneration.get(options.logicalPath) ?? 0;
   prefetchInFlight.add(options.logicalPath);
@@ -225,10 +200,7 @@ export async function prefetchExportStage(options: {
  * dragstart：若已 prefetch 则 preventDefault + startDrag；否则保留 HTML5 MIME 供树内移动。
  * prefetch 已失败且无 staged → toast（不可静默）。
  */
-export function startPrefetchedNativeDrag(options: {
-  readonly logicalPath: string;
-  readonly dragEvent: DragEvent;
-}): boolean {
+export function startPrefetchedNativeDrag(options: { readonly logicalPath: string; readonly dragEvent: DragEvent }): boolean {
   if (prefetchInFlight.has(options.logicalPath)) {
     showToast("导出准备中…");
     return false;
@@ -299,10 +271,7 @@ export async function handleFilesDropIngest(options: {
   }
 }
 
-export async function confirmAndApplyBatchIngest(
-  req: BatchIngestConfirmRequest,
-  onApplied: () => void,
-): Promise<void> {
+export async function confirmAndApplyBatchIngest(req: BatchIngestConfirmRequest, onApplied: () => void): Promise<void> {
   const result = await ipcVfsBatchIngestFromPaths({
     ...req.scope,
     targetDir: req.targetDir,
@@ -370,11 +339,7 @@ export async function handleTreeDrop(options: {
   const active = dndRuntime.active;
   const hostPaths = hostPathsFromDataTransfer(options.dataTransfer);
 
-  if (
-    active != null &&
-    hostPaths.length > 0 &&
-    hostPaths.every((p) => isPathUnderRoot(p, active.stagingRoot))
-  ) {
+  if (active != null && hostPaths.length > 0 && hostPaths.every((p) => isPathUnderRoot(p, active.stagingRoot))) {
     clearStagingOnMain(active.stagingRoot);
     removeStagedByRoot(active.stagingRoot);
     dndRuntime.active = null;
@@ -400,9 +365,6 @@ export async function handleTreeDrop(options: {
   }
 }
 
-export function resolveDropTargetDir(
-  rowPath: string | null,
-  rowKind: "dir" | "file" | null,
-): string {
+export function resolveDropTargetDir(rowPath: string | null, rowKind: "dir" | "file" | null): string {
   return dropTargetDir(rowPath, rowKind);
 }

@@ -125,10 +125,7 @@ export function MessageList({
     return <p className="chat-messages__empty">暂无消息</p>;
   }
 
-  const openMenu = (
-    message: ChatMessageDto,
-    event: React.MouseEvent | MouseEvent,
-  ) => {
+  const openMenu = (message: ChatMessageDto, event: React.MouseEvent | MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     onOpenMessageMenu?.(message, { x: event.clientX, y: event.clientY });

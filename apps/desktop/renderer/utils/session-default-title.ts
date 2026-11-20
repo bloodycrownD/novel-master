@@ -4,9 +4,7 @@ const DEFAULT_SESSION_TITLE_PREFIX = "会话";
 const NUMBERED_TITLE_RE = /^会话(\d+)$/;
 
 /** Next unused default session title within a project. */
-export function nextDefaultSessionTitle(
-  existingTitles: ReadonlyArray<string | null | undefined>,
-): string {
+export function nextDefaultSessionTitle( existingTitles: ReadonlyArray<string | null | undefined> ): string {
   const used = new Set<number>();
   for (const raw of existingTitles) {
     if (raw == null || raw === "") {

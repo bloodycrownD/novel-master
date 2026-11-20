@@ -12,9 +12,7 @@ interface MessageActionMenuItem {
 }
 
 /** Re-export Core 规则；DTO 经 {@link chatMessageFromDto} 适配。 */
-export function editableTextFromMessage(
-  message: ChatMessageDto,
-): string | null {
+export function editableTextFromMessage( message: ChatMessageDto ): string | null {
   return ChatMessage.from(chatMessageFromDto(message)).editableText();
 }
 
@@ -23,9 +21,7 @@ export function isSetFloorEligibleMessage(message: ChatMessageDto): boolean {
 }
 
 /** 长按菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
-export function buildMessageActionItems(
-  message: ChatMessageDto,
-): MessageActionMenuItem[] {
+export function buildMessageActionItems( message: ChatMessageDto ): MessageActionMenuItem[] {
   const items: MessageActionMenuItem[] = [];
   if (editableTextFromMessage(message) != null) {
     items.push({ label: '编辑', action: 'edit' });

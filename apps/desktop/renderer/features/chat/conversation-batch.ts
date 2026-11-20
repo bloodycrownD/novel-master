@@ -31,9 +31,7 @@ interface UseConversationBatchOptions {
   readonly onThinkingFlush: (delta: string) => void;
 }
 
-export function useConversationBatch(
-  options: UseConversationBatchOptions,
-): ConversationBatchSink {
+export function useConversationBatch( options: UseConversationBatchOptions ): ConversationBatchSink {
   const { enabled, onTextFlush, onThinkingFlush } = options;
 
   const enabledRef = useRef(enabled);

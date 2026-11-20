@@ -40,11 +40,7 @@ import {
   PreviewAnnotatePickModal,
 } from "./PreviewAnnotateUi";
 
-function toCoreVfsScope(
-  workspaceScope: WorkspacePanelScope,
-  projectId: string,
-  sessionId: string,
-): VfsScope {
+function toCoreVfsScope( workspaceScope: WorkspacePanelScope, projectId: string, sessionId: string ): VfsScope {
   switch (workspaceScope) {
     case "chat":
       return { kind: "session", projectId, sessionId };
@@ -94,10 +90,7 @@ export function PreviewPane() {
   const mdRootRef = useRef<HTMLDivElement | null>(null);
   const annotatorRef = useRef<TextAnnotator | null>(null);
 
-  const isMarkdown =
-    previewFile != null
-      ? shouldRenderMarkdownPreview(previewFile.path, content)
-      : false;
+  const isMarkdown = previewFile != null ? shouldRenderMarkdownPreview(previewFile.path, content) : false;
 
   // physical 面板只读预览：无编辑模式、无保存，仅读内容展示
   const physicalReadOnly = previewFile?.workspaceScope === "physical";
@@ -135,16 +128,7 @@ export function PreviewPane() {
     setLoading(true);
     setFileMissing(false);
     try {
-      const result = physicalReadOnly
-        ? await ipcPhysicalRead({ path: previewFile.path })
-        : await ipcVfsRead({
-            ...vfsScope(
-              previewFile.workspaceScope,
-              projectId,
-              sessionId,
-            ),
-            path: previewFile.path,
-          });
+      const result = physicalReadOnly ? await ipcPhysicalRead({ path: previewFile.path }) : await ipcVfsRead({ ...vfsScope( previewFile.workspaceScope, projectId, sessionId ), path: previewFile.path });
       if (result.ok) {
         setContent(result.data.content);
         setSavedContent(result.data.content);
@@ -324,11 +308,7 @@ export function PreviewPane() {
     setSaving(true);
     try {
       const result = await ipcVfsWrite({
-        ...vfsScope(
-          previewFile.workspaceScope,
-          projectId,
-          sessionId,
-        ),
+        ...vfsScope( previewFile.workspaceScope, projectId, sessionId ),
         path: previewFile.path,
         content,
         lastKnownContent: savedContent,
@@ -338,15 +318,8 @@ export function PreviewPane() {
         await loadFile();
         notifyWorkspaceMutated();
       } else {
-        const scope = toCoreVfsScope(
-          previewFile.workspaceScope,
-          projectId,
-          sessionId,
-        );
-        const msg = formatVfsErrorForUser(
-          { code: result.error.code, message: result.error.message },
-          scope,
-        );
+        const scope = toCoreVfsScope( previewFile.workspaceScope, projectId, sessionId );
+        const msg = formatVfsErrorForUser( { code: result.error.code, message: result.error.message }, scope );
         showToast(`保存失败：${msg}`);
       }
     } finally {

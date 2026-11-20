@@ -91,14 +91,7 @@ export function FetchModelsModal({
         setError(sugRes.error.message);
         return;
       }
-      setRows(
-        sugRes.data
-          .filter((s) => !s.stale)
-          .map((s) => ({
-            vendorModelId: s.vendorModelId,
-            displayName: s.displayName ?? s.vendorModelId,
-          })),
-      );
+      setRows( sugRes.data .filter((s) => !s.stale) .map((s) => ({ vendorModelId: s.vendorModelId, displayName: s.displayName ?? s.vendorModelId })) );
     } finally {
       setLoading(false);
     }
@@ -127,17 +120,12 @@ export function FetchModelsModal({
   const selectableFilteredRows = filteredRows.filter(
     (r) => !savedSet.has(r.vendorModelId),
   );
-  const allFilteredSelected =
-    selectableFilteredRows.length > 0 &&
-    selectableFilteredRows.every((r) => isSelected(r.vendorModelId));
+  const allFilteredSelected = selectableFilteredRows.length > 0 && selectableFilteredRows.every((r) => isSelected(r.vendorModelId));
   const handleSelectAll = () => {
     // 全选重置为「过滤后可选行全选」；全不选清空全部勾选。
-    selectRange(
-      allFilteredSelected ? [] : selectableFilteredRows.map((r) => r.vendorModelId),
-    );
+    selectRange( allFilteredSelected ? [] : selectableFilteredRows.map((r) => r.vendorModelId) );
   };
-  const confirmLabel =
-    selectedCount > 0 ? `添加 (${selectedCount})` : "添加";
+  const confirmLabel = selectedCount > 0 ? `添加 (${selectedCount})` : "添加";
 
   const handleConfirm = async () => {
     if (selectedCount === 0 || saving) {
@@ -270,8 +258,7 @@ export function FetchModelsModal({
                   const saved = savedSet.has(row.vendorModelId);
                   const selected = isSelected(row.vendorModelId);
                   const title = row.displayName.trim() || row.vendorModelId;
-                  const showMeta =
-                    row.displayName.trim() && row.displayName.trim() !== row.vendorModelId;
+                  const showMeta = row.displayName.trim() && row.displayName.trim() !== row.vendorModelId;
                   return (
                     <li key={row.vendorModelId}>
                       <button

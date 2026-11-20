@@ -15,10 +15,7 @@ export function logicalPathSegments(path: string): string[] {
 }
 
 /** 段 index 对应的绝对逻辑路径，如 index=0 → `/notes` */
-export function logicalPathForSegmentIndex(
-  segments: readonly string[],
-  index: number,
-): string {
+export function logicalPathForSegmentIndex( segments: readonly string[], index: number ): string {
   if (index < 0 || index >= segments.length) {
     throw new RangeError(`segment index 越界: ${index}`);
   }
@@ -56,10 +53,7 @@ export function isDirectChild(dirPath: string, childPath: string): boolean {
 }
 
 /** Row visible when every ancestor directory is expanded. */
-export function isTreeRowVisible(
-  path: string,
-  expandedDirs: ReadonlySet<string>,
-): boolean {
+export function isTreeRowVisible( path: string, expandedDirs: ReadonlySet<string> ): boolean {
   let current = parentLogicalPath(path);
   while (current !== null) {
     if (!expandedDirs.has(current)) {

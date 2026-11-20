@@ -28,10 +28,7 @@ export function isLikelyMarkdownContent(content: string): boolean {
   );
 }
 
-export function shouldRenderMarkdownPreview(
-  path: string,
-  content: string,
-): boolean {
+export function shouldRenderMarkdownPreview( path: string, content: string ): boolean {
   if (isMarkdownPreviewPath(path)) {
     return true;
   }

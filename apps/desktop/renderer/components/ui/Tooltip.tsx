@@ -38,11 +38,7 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
   };
 }
 
-function resolvePlacement(
-  preferred: TooltipPlacement,
-  anchorRect: DOMRect,
-  tipHeight: number,
-): TooltipPlacement {
+function resolvePlacement( preferred: TooltipPlacement, anchorRect: DOMRect, tipHeight: number ): TooltipPlacement {
   const spaceBelow = window.innerHeight - anchorRect.bottom - ANCHOR_GAP - VIEWPORT_MARGIN;
   const spaceAbove = anchorRect.top - ANCHOR_GAP - VIEWPORT_MARGIN;
 
@@ -92,10 +88,7 @@ export function Tooltip({
 
     const top = resolved === "top" ? rect.top - ANCHOR_GAP : rect.bottom + ANCHOR_GAP;
     const halfWidth = tipWidth / 2;
-    const left = Math.max(
-      halfWidth + VIEWPORT_MARGIN,
-      Math.min(window.innerWidth - halfWidth - VIEWPORT_MARGIN, rect.left + rect.width / 2),
-    );
+    const left = Math.max( halfWidth + VIEWPORT_MARGIN, Math.min(window.innerWidth - halfWidth - VIEWPORT_MARGIN, rect.left + rect.width / 2) );
 
     setResolvedPlacement(resolved);
     setPosition({ top, left });
@@ -134,10 +127,7 @@ export function Tooltip({
   }, [open, reposition]);
 
   const child = cloneElement(children, {
-    ref: mergeRefs(
-      anchorRef,
-      (children as ReactElement & { ref?: Ref<HTMLElement> }).ref,
-    ),
+    ref: mergeRefs( anchorRef, (children as ReactElement & { ref?: Ref<HTMLElement> }).ref ),
     "aria-describedby": open ? tooltipId : undefined,
     title: undefined,
     onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {

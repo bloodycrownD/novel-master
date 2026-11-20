@@ -131,11 +131,7 @@ export function NewSkillModal({
     setError(undefined);
     try {
       // 域内查重（后端也会拒，但这里先给出行级报错）
-      const listRes = await ipcSkillsList(
-        domain === "global"
-          ? { domain }
-          : { domain, projectId },
-      );
+      const listRes = await ipcSkillsList( domain === "global" ? { domain } : { domain, projectId } );
       if (listRes.ok) {
         if (listRes.data.some((s) => s.name === trimmedName)) {
           setError(domain === "global" ? "全局域已存在同名技能。" : "该项目已存在同名技能。");

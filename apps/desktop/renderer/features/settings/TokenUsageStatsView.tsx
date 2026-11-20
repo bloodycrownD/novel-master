@@ -51,9 +51,7 @@ const MODEL_OPTION_UNLOGGED = "__unlogged__";
 /** 今天偏移 N 天的本地日期键（命名窗口由应用层换算：「近 7 天」= {D-6, D} 共 7 桶）。 */
 function dayKeyOffset(offsetDays: number): string {
   const now = new Date();
-  return toLocalDayKey(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays).getTime(),
-  );
+  return toLocalDayKey( new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays).getTime() );
 }
 
 /** `YYYY-MM-DD` → 本地 0 点 Date（非法输入返回 null）。 */
@@ -95,9 +93,7 @@ function formatTokensPerSecond(v: number | null): string {
  * 图表不展示命中率——命中率出口仅保留在汇总卡片与当天汇总行。
  */
 function bucketTooltip(key: string, b: UsageStatsBucketDto): string {
-  return `${key} · 输入 ${formatTokenCount(b.promptTokens)} · 输出 ${formatTokenCount(
-    b.completionTokens,
-  )} · 调用 ${b.calls} 次`;
+  return `${key} · 输入 ${formatTokenCount(b.promptTokens)} · 输出 ${formatTokenCount( b.completionTokens )} · 调用 ${b.calls} 次`;
 }
 
 /** 零值桶（「今天」无数据时当天汇总行的兜底形态）。 */
@@ -137,14 +133,8 @@ function TokenStatsChart({
   const maxValue = Math.max(1, ...buckets.map((b) => b.promptTokens + b.completionTokens));
   // 受控 hover 卡片：activeKey 记当前柱，null 不渲染；容器级 onMouseLeave 统一清除。
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const activeBucketIndex =
-    activeKey == null
-      ? -1
-      : buckets.findIndex((b, index) => keyOf(b, index) === activeKey);
-  const activeText =
-    activeKey != null && activeBucketIndex >= 0
-      ? bucketTooltip(activeKey, buckets[activeBucketIndex]!)
-      : null;
+  const activeBucketIndex = activeKey == null ? -1 : buckets.findIndex((b, index) => keyOf(b, index) === activeKey);
+  const activeText = activeKey != null && activeBucketIndex >= 0 ? bucketTooltip(activeKey, buckets[activeBucketIndex]!) : null;
   return (
     <div
       className={`token-stats-chart${chart === "hourly" ? " token-stats-chart--hourly" : ""}`}
@@ -603,10 +593,7 @@ export function TokenUsageStatsView() {
     setSelectedSliceKey((prev) => (prev === key ? null : key));
   }, []);
 
-  const selectedDayBucket =
-    selectedDay != null
-      ? dailyBuckets.find((b) => toLocalDayKey(b.bucketStartMs) === selectedDay)
-      : undefined;
+  const selectedDayBucket = selectedDay != null ? dailyBuckets.find((b) => toLocalDayKey(b.bucketStartMs) === selectedDay) : undefined;
 
   const sortedModelRows = useMemo(
     () => [...modelRows].sort((a, b) => b.totalTokens - a.totalTokens),
@@ -623,10 +610,7 @@ export function TokenUsageStatsView() {
       sortedModelRows.map((row, index) => {
         const modelPart = row.modelName ?? "其他模型";
         // label 斜杠格式（{服务商}/{模型}）与聊天侧模型选择下拉一致（2026-09-28 统一）。
-        const label =
-          row.providerId == null
-            ? "未记录服务商"
-            : `${providerNames.get(row.providerId) ?? "未知服务商"}/${modelPart}`;
+        const label = row.providerId == null ? "未记录服务商" : `${providerNames.get(row.providerId) ?? "未知服务商"}/${modelPart}`;
         return {
           key: `${row.providerId ?? "__no_provider__"}::${row.modelName ?? "__other_model__"}`,
           label,
@@ -643,26 +627,11 @@ export function TokenUsageStatsView() {
     [sortedModelRows, providerNames, summary],
   );
 
-  const selectedSlice =
-    selectedSliceKey != null
-      ? (pieSlices.find((s) => s.key === selectedSliceKey) ?? null)
-      : null;
+  const selectedSlice = selectedSliceKey != null ? (pieSlices.find((s) => s.key === selectedSliceKey) ?? null) : null;
 
-  const modelSelectValue =
-    modelFilter === undefined
-      ? MODEL_OPTION_ALL
-      : modelFilter === null
-        ? MODEL_OPTION_UNLOGGED
-        : modelFilter;
+  const modelSelectValue = modelFilter === undefined ? MODEL_OPTION_ALL : modelFilter === null ? MODEL_OPTION_UNLOGGED : modelFilter;
 
-  const rangeLabel =
-    rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0
-      ? `${customFrom} — ${customTo}`
-      : rangeKind === "today"
-        ? "今天"
-        : rangeKind === "last30"
-          ? "近 30 天"
-          : "近 7 天";
+  const rangeLabel = rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0 ? `${customFrom} — ${customTo}` : rangeKind === "today" ? "今天" : rangeKind === "last30" ? "近 30 天" : "近 7 天";
 
   const empty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
@@ -689,10 +658,7 @@ export function TokenUsageStatsView() {
         sum != null &&
         "totalTokens" in sum
       ) {
-        setLibraryEmpty(
-          (sum as UsageStatsSummaryDto).calls === 0 &&
-            (sum as UsageStatsSummaryDto).totalTokens === 0,
-        );
+        setLibraryEmpty( (sum as UsageStatsSummaryDto).calls === 0 && (sum as UsageStatsSummaryDto).totalTokens === 0 );
       }
     });
     return () => {
