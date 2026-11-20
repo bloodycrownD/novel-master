@@ -119,7 +119,7 @@ describe('chat-session-view-cache', () => {
       });
       const {unit, tailCalls} = makeUnit(seqMessages(0));
 
-      const rows = await unit.loadTailMessages();
+      const rows = (await unit.loadTailMessages()).value;
 
       // 采纳 40 条（尾部一屏），不是整面 120 条；缓存命中不回源 DB
       expect(rows).toHaveLength(SESSION_VIEW_HYDRATE_WINDOW);
@@ -148,7 +148,7 @@ describe('chat-session-view-cache', () => {
         messages: full,
         hasMoreMessages: false,
       });
-      const rows = await unit.loadTailMessages();
+      const rows = (await unit.loadTailMessages()).value;
 
       expect(rows).toHaveLength(full.length);
       const snap = unit.snapshot();
