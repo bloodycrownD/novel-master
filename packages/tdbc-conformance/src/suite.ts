@@ -199,14 +199,7 @@ export namespace ConformanceSuite {
         });
 
         it("batch inserts three rows", async () => {
-          const result = await conn.batch(
-            "INSERT INTO conformance_batch (id, n) VALUES (?, ?)",
-            [
-              [1, 10],
-              [2, 20],
-              [3, 30],
-            ],
-          );
+          const result = await conn.batch("INSERT INTO conformance_batch (id, n) VALUES (?, ?)", [[1, 10], [2, 20], [3, 30],],);
           assert.equal(result.count, 3);
           assert.equal(result.totalChanges, 3);
           const rows = await conn.query("SELECT COUNT(*) AS c FROM conformance_batch");
@@ -291,10 +284,7 @@ export namespace ConformanceSuite {
         });
 
         it("executes parser INSERT output", async () => {
-          const { sql, parameters } = parser.parse(
-            "INSERT INTO conformance_parser (id, label) VALUES (#{id}, #{label})",
-            { id: 5, label: "from-parser" },
-          );
+          const { sql, parameters } = parser.parse("INSERT INTO conformance_parser (id, label) VALUES (#{id}, #{label})", { id: 5, label: "from-parser" },);
           assert.match(sql, /\?/);
           await conn.execute(sql, parameters);
           const rows = await conn.query<ParserRow>(SELECT_PARSER_SQL, [5]);
