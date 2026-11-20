@@ -66,7 +66,7 @@ test("T-TA1 四形态识别与属性列（fn 路径 / ret 八值桶 / catch / ke
   assert.equal(t1.text, "throw x.error;", "text 是 throw 语句本身（空白归一），不含同函数其余语句");
 });
 
-test("T-TA2 白名单三类：tdbc 驱动层 / 事务回调文件 / 控制信号类名（外层 if 条件里）", () => {
+test("T-TA2 白名单三类：tdbc 驱动层 / 事务回调（文件名与 .transaction 回调实参 AST 判定）/ 控制信号类名（外层 if 条件里）", () => {
   const tdbc = throwSitesOfText("packages/core/src/infra/tdbc/conn.ts", "function open(): void { throw new Error('open'); }")[0];
   assert.equal(tdbc.verdict, "ALLOWED");
   assert.equal(tdbc.allow, "tdbc-driver");
@@ -78,6 +78,13 @@ test("T-TA2 白名单三类：tdbc 驱动层 / 事务回调文件 / 控制信号
   const signal = throwSitesOfText("apps/desktop/src/main/x.ts", "function sync(r: unknown): void { if (r.error instanceof DatabaseReplacedError) throw r.error; }")[0];
   assert.equal(signal.verdict, "ALLOWED");
   assert.equal(signal.allow, "control-signal");
+  // 事务回调 AST 判定：文件名不带 in-transaction，throw 在 conn.transaction 回调内 → ALLOWED（总纲 §五例外 2）。
+  const txnCallback = throwSitesOfText("packages/core/src/service/chat/impl/message.service.ts", "class S { async fork(conn: {transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>}): Promise<void> { const t = conn.transaction(async (tx) => { const v = await read(tx); if (v.kind === 'failed') throw v.error; return 1; }); await t; } }")[0];
+  assert.equal(txnCallback.verdict, "ALLOWED", "conn.transaction 回调实参内的 throw 应按事务回滚放行");
+  assert.equal(txnCallback.allow, "transaction");
+  // 反例：同名变量调用别的（非 transaction）不吃事务豁免。
+  const notTxn = throwSitesOfText("packages/core/src/service/chat/impl/message.service.ts", "class S { async fork(conn: {exec<T>(fn: (tx: unknown) => Promise<T>): Promise<T>}): Promise<void> { conn.exec(async (tx) => { const v = await read(tx); if (v.kind === 'failed') throw v.error; return 1; }); } }")[0];
+  assert.equal(notTxn.verdict, "VIOLATION-B", "exec 回调不享事务豁免（只有 transaction 认抛错回滚）");
 });
 
 test("T-TA3 gate：未登记 VIOLATION/BOUNDARY 拦（exit 1），UNTRIAGED 不拦但显数，已消除=改善", () => {

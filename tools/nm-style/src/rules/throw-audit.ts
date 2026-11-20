@@ -101,13 +101,13 @@ function formOf(expr: ts.Expression): ThrowForm | null {
   return null;
 }
 
-/** 限定函数：从 throw 向上找最近函数节点，同时收路径段（方法拼类名、箭头找绑定名，外层在前 . 连接）。 */
+/** 限定函数：从 throw 向上找最近函数节点（返回形态/catch 都按最近一层算——回调槽的标注不该被外层函数顶替），同时收全部祖先函数段（方法拼类名、箭头找绑定名，外层在前 . 连接）。 */
 function enclosingFnOf(node: ts.Node): { fn: ts.FunctionLikeDeclaration; path: string } | null {
   const segments: string[] = [];
   let fn: ts.FunctionLikeDeclaration | null = null;
   for (let current: ts.Node | undefined = node.parent; current != null; current = current.parent) {
     if (!isFnLike(current)) continue;
-    fn = current;
+    if (fn == null) fn = current; // 最近一层：ret/catch 的判定对象
     segments.unshift(fnSegmentOf(current));
   }
   return fn == null ? null : { fn, path: segments.join(".") };
@@ -190,12 +190,28 @@ function keepReasonOf(stmt: ts.ThrowStatement, sf: ts.SourceFile): string | null
   return null;
 }
 
-/** 白名单三类命中：文件规则（事务回调 / tdbc 驱动层 / cloud-sync 登记文件）或控制信号类名出现在语句/外层 if 文本里。 */
+/** 白名单三类命中：文件规则（事务回调文件名 / tdbc 驱动层 / cloud-sync 登记文件）→ 事务回调 AST 判定（函数是 `xxx.transaction(fn)` 的实参——总纲 §五例外 2：只认抛错回滚）→ 控制信号类名出现在语句/外层 if 文本里。 */
 function allowCategoryOf(stmt: ts.ThrowStatement, rel: string): string | null {
   for (const rule of ALLOWED_FILE_RULES) if (rule.test(rel)) return rule.category;
+  if (isTransactionCallbackArgument(stmt)) return "transaction";
   const scope = ts.isIfStatement(stmt.parent) ? stmt.parent.getText(sfOf(stmt)) : stmt.getText(sfOf(stmt));
   if (CONTROL_SIGNAL_CLASSES.some((name) => scope.includes(name))) return "control-signal";
   return null;
+}
+
+/** throw 的任一层祖先函数是 `.transaction(...)` / `transaction(...)` 的实参（回调本体即可，不必是直接实参）。 */
+function isTransactionCallbackArgument(stmt: ts.ThrowStatement): boolean {
+  for (let current: ts.Node | undefined = stmt; current != null; current = current.parent) {
+    if (!isFnLike(current)) continue;
+    const parent: ts.Node | undefined = current.parent;
+    if (parent == null || !ts.isCallExpression(parent)) continue;
+    const args: readonly ts.Node[] = parent.arguments;
+    if (!args.includes(current)) continue;
+    const callee = parent.expression;
+    const name = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.name) ? callee.name.text : ts.isIdentifier(callee) ? callee.text : null;
+    if (name === "transaction") return true;
+  }
+  return false;
 }
 
 function sfOf(node: ts.Node): ts.SourceFile {
