@@ -6,19 +6,19 @@ import {
 } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
+  BetterSqlite3Register,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { setDpapiTestPassthrough } from "../src/dpapi.js";
-import { createWindowsSecretStore } from "../src/sqlite-secret-store.js";
+import { Dpapi } from "../src/dpapi.js";
+import { WindowsSecretStore } from "../src/sqlite-secret-store.js";
 
 describe("SqliteSecretStore", () => {
   before(() => {
-    setDpapiTestPassthrough(true);
-    registerBetterSqlite3Driver();
+    Dpapi.setTestPassthrough(true);
+    BetterSqlite3Register.register();
   });
 
   after(() => {
-    setDpapiTestPassthrough(false);
+    Dpapi.setTestPassthrough(false);
   });
 
   it("round-trips set/get and stores non-plaintext ciphertext", async () => {
@@ -27,7 +27,7 @@ describe("SqliteSecretStore", () => {
       filename: ":memory:",
     });
     await NovelMasterBootstrap.bootstrap(conn);
-    const store = createWindowsSecretStore(conn);
+    const store = WindowsSecretStore.create(conn);
     const ref = "provider/test/apiKey";
     await store.set(ref, "sk-secret-123");
     assert.equal(await store.get(ref), "sk-secret-123");

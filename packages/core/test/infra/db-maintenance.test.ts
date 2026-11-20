@@ -4,7 +4,7 @@ import {  tmpdir  } from "node:os";
 import {  join  } from "node:path";
 import {  after, before, describe, it  } from "node:test";
 import {  NovelMasterBootstrap, TdbcOpen, DbMaintenance, type TdbcConnection  } from "@novel-master/core";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -23,7 +23,7 @@ let conn: TdbcConnection;
 let maintenance: DbMaintenanceService;
 
 before(async () => {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   // 文件库 open 形态照 test/helpers/novel-master.ts：URL 与 options 双写
   // filename，Windows 绝对路径塞进 URL 的解析歧义由 options 覆盖兜底。
   conn = await TdbcOpen.open(`tdbc:sqlite:file:${dbPath}`, {

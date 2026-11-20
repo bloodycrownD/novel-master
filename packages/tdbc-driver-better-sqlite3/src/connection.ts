@@ -12,7 +12,7 @@ import type {
   TdbcConnection,
 } from "@novel-master/core";
 import { AsyncMutex, TdbcBindings, TdbcError } from "@novel-master/core/tdbc";
-import { mapRow } from "./row-mapper.js";
+import { RowMapper } from "./row-mapper.js";
 
 /** 单条语句的绑定参数集（与 core `TdbcConnection` 契约同构的类型别名，只为签名一行写完）。 */
 type SqlParams = readonly unknown[];
@@ -101,7 +101,7 @@ export class BetterSqlite3Connection implements TdbcConnection {
       const stmt = this.db.prepare(sql);
       const args = TdbcBindings.normalize(params) ?? [];
       const rawRows = stmt.all(...args) as Record<string, unknown>[];
-      return rawRows.map((r) => mapRow(r) as T);
+      return rawRows.map((r) => RowMapper.map(r) as T);
     } catch (cause) {
       throw this.wrapSqlite(cause);
     }

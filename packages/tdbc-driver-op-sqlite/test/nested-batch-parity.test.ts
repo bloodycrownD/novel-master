@@ -9,13 +9,13 @@
  */
 
 import { describe } from "node:test";
-import { runNestedBatchParityTests } from "@novel-master/tdbc-conformance";
+import { NestedBatch } from "@novel-master/tdbc-conformance";
 import { OpSqliteDriver, OPSQLITE_DRIVER_NAME } from "../src/driver.js";
 import { MockOpSqliteAdapter } from "./mock-adapter.js";
 
 const driver = new OpSqliteDriver(new MockOpSqliteAdapter());
 
-runNestedBatchParityTests({
+NestedBatch.runParityTests({
   createConnection: async () =>
     driver.open({ filename: ":memory:", driver: OPSQLITE_DRIVER_NAME }),
 });

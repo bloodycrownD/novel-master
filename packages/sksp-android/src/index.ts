@@ -1,6 +1,6 @@
-export { getSkspNativeModule } from "./native.js";
+export { SkspNative } from "./native.js";
 export {
   AndroidSecretStore,
-  createAndroidSecretStore,
+  AndroidSecretStoreFactory,
 } from "./android-secret-store.js";
-export { registerSkspAndroidDriver } from "./register.js";
+export { SkspAndroidRegister } from "./register.js";

@@ -18,16 +18,13 @@ import {
   TokenCountTools,
   type TokenizerFamily,
 } from "@novel-master/core/tokenizer";
+import { EncodingCache } from "../src/impl/encoding-cache.js";
+import { SentencePieceFamilyCount } from "../src/impl/sentencepiece-token-counter.js";
 import {
-  __setNodeEncodingFactoryForTests,
-  countTextWithDefaultEncoding,
-} from "../src/impl/encoding-cache.js";
-import { countSentencePieceFamilyPrompt } from "../src/impl/sentencepiece-token-counter.js";
-import {
-  countWebFamilyPrompt,
+  WebFamilyCount,
   WebTokenizerCounter,
 } from "../src/impl/web-tokenizer-counter.js";
-import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.js";
+import { TokenizerNodeRegisterForTests } from "../src/register-for-tests.js";
 
 /** 一段中文正文：字符折算在它上面低估得最明显。 */
 const CHINESE =
@@ -38,13 +35,13 @@ const UNKNOWN_FAMILY = "no-such-family" as unknown as TokenizerFamily;
 
 describe("兜底计数口径", () => {
   before(() => {
-    registerTokenizerNodeDriverForTests();
+    TokenizerNodeRegisterForTests.registerForTests();
   });
 
   it("F1: web 家族加载失败 → 默认 cl100k 真计数（非字符折算）", async () => {
-    const result = await countWebFamilyPrompt(UNKNOWN_FAMILY, CHINESE);
+    const result = await WebFamilyCount.countPrompt(UNKNOWN_FAMILY, CHINESE);
     assert.equal(result.estimated, true);
-    assert.equal(result.count, countTextWithDefaultEncoding(CHINESE));
+    assert.equal(result.count, EncodingCache.countText(CHINESE));
     assert.ok(
       result.count > Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO) * 3,
       `web 兜底 ${result.count} 应远大于字符折算`,
@@ -52,9 +49,9 @@ describe("兜底计数口径", () => {
   });
 
   it("F2: sentencepiece 家族加载失败 → 默认 cl100k 真计数（非字符折算）", async () => {
-    const result = await countSentencePieceFamilyPrompt(UNKNOWN_FAMILY, CHINESE);
+    const result = await SentencePieceFamilyCount.countPrompt(UNKNOWN_FAMILY, CHINESE);
     assert.equal(result.estimated, true);
-    assert.equal(result.count, countTextWithDefaultEncoding(CHINESE));
+    assert.equal(result.count, EncodingCache.countText(CHINESE));
     assert.ok(
       result.count > Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO) * 3,
       `sentencepiece 兜底 ${result.count} 应远大于字符折算`,
@@ -70,11 +67,11 @@ describe("兜底计数口径", () => {
 
   it("F4: 连 cl100k 表都建不起来 → 才退到最后一级的字符折算", async () => {
     // 注入「构造必失败」的编码表工厂，复现 ranks 资源缺失这类环境级故障。
-    __setNodeEncodingFactoryForTests(() => {
+    EncodingCache.__setFactoryForTests(() => {
       throw new Error("boom: encoding table unavailable");
     });
     try {
-      assert.equal(countTextWithDefaultEncoding(CHINESE), null);
+      assert.equal(EncodingCache.countText(CHINESE), null);
 
       const layout = { system: CHINESE, persist: [], dynamic: [] };
       const ctx = { workplaceDisplay: "", messages: [] };
@@ -96,7 +93,7 @@ describe("兜底计数口径", () => {
       );
     } finally {
       // 还原真实构造器（会顺带作废缓存），别把故障留给后续用例。
-      __setNodeEncodingFactoryForTests(null);
+      EncodingCache.__setFactoryForTests(null);
     }
   });
 });

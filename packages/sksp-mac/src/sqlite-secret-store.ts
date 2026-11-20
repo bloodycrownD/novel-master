@@ -22,7 +22,10 @@ export class MacSqliteSecretStore extends BaseSqliteSecretStore {
   }
 }
 
+// nm-style 注记：namespace 按内容主体起名（撞同文件 export class MacSqliteSecretStore，取平台主体 MacSecretStore）。
 /** Creates a macOS SQLite secret store. */
-export function createMacSecretStore(conn: TdbcConnection): SecretStore {
-  return new MacSqliteSecretStore(conn);
+export namespace MacSecretStore {
+  export function create(conn: TdbcConnection): SecretStore {
+    return new MacSqliteSecretStore(conn);
+  }
 }

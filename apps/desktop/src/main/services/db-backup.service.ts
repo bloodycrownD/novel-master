@@ -15,7 +15,7 @@ import { DatabaseBackupExport, DatabaseReplacedError, ProviderTableSnapshotIo, S
 import { AppError } from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
-import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
+import { BetterSqlite3Register } from "@novel-master/tdbc-driver-better-sqlite3";
 import { DesktopDb } from "../runtime/connection.js";
 import { DesktopRuntimeSingleton } from "../runtime/desktop-runtime-singleton.js";
 import { DesktopDbPath } from "../runtime/resolve-db-path.js";
@@ -135,7 +135,7 @@ export namespace DbBackupService {
       databaseReplaced = true;
 
       // 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
-      registerBetterSqlite3Driver();
+      BetterSqlite3Register.register();
       const restoreDbPath = resolve(DesktopDbPath.resolve());
       const restoreConn = await TdbcOpen.open(`tdbc:sqlite:file:${restoreDbPath}`, { driver: "better-sqlite3" });
       try {

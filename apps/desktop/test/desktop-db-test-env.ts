@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setMacKeychainTestPassthrough } from "@novel-master/sksp-mac";
-import { setDpapiTestPassthrough } from "@novel-master/sksp-windows";
+import { Dpapi } from "@novel-master/sksp-windows";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 
 export async function setupDesktopDbTestEnv(
@@ -11,7 +11,7 @@ export async function setupDesktopDbTestEnv(
   if (process.platform === "darwin") {
     setMacKeychainTestPassthrough(true);
   } else {
-    setDpapiTestPassthrough(true);
+    Dpapi.setTestPassthrough(true);
   }
   await DesktopRuntimeSingleton.resetForTest();
   const tempDir = await mkdtemp(join(tmpdir(), prefix));
@@ -25,7 +25,7 @@ export async function teardownDesktopDbTestEnv(tempDir: string): Promise<void> {
   if (process.platform === "darwin") {
     setMacKeychainTestPassthrough(false);
   } else {
-    setDpapiTestPassthrough(false);
+    Dpapi.setTestPassthrough(false);
   }
   await rm(tempDir, { recursive: true, force: true });
 }

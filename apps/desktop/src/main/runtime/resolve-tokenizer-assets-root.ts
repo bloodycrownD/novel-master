@@ -4,7 +4,7 @@
  */
 import { createRequire } from "node:module";
 import path from "node:path";
-import { defaultTokenizerAssetsRoot } from "@novel-master/tokenizer-driver-node";
+import { NodeTokenizerLoader } from "@novel-master/tokenizer-driver-node";
 
 const require = createRequire(import.meta.url);
 
@@ -22,6 +22,6 @@ export namespace TokenizerAssetsRoot {
     } catch {
       // Node test host — fall through to monorepo default.
     }
-    return defaultTokenizerAssetsRoot();
+    return NodeTokenizerLoader.defaultAssetsRoot();
   }
 }

@@ -26,7 +26,7 @@ import { DesktopDb } from "./connection.js";
 import { DesktopSksp } from "./register-platform-drivers.js";
 import { DesktopDbPath } from "./resolve-db-path.js";
 import { LlmFetchSetup } from "./setup-llm-fetch.js";
-import { getDefaultNodeEncoding } from "@novel-master/tokenizer-driver-node";
+import { EncodingCache } from "@novel-master/tokenizer-driver-node";
 import type { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "./types.js";
@@ -112,7 +112,7 @@ export namespace DesktopRuntimeFactory {
     // ② 不得阻塞启动——只挂 `setTimeout`、**不 `await`**；③ 不许改成同步 `await getDefaultNodeEncoding()`。
     setTimeout(() => {
       try {
-        getDefaultNodeEncoding();
+        EncodingCache.getDefault();
       } catch {
         // 静默吞掉：预热只是「提前把表建好」，失败时兜底路径会自己再试一次。
       }

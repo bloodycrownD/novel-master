@@ -12,11 +12,11 @@ import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
 import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  execLegacyV7ChatMessageDdl  } from "./helpers/legacy-db-fixtures.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

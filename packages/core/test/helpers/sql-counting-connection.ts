@@ -26,7 +26,7 @@ import {  MessageCheckpointFactory, type MessageCheckpointService  } from "@nove
 import {  SessionFsServiceFactory, type SessionFsService  } from "@novel-master/core/session-fs";
 import {  SessionKkvServiceFactory, type SessionKkvService  } from "@novel-master/core/session-kkv";
 import {  VfsServiceFactory, type VfsService  } from "@novel-master/core/vfs";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 import type { NovelMasterTestContext } from "./novel-master.js";
 
@@ -164,7 +164,7 @@ export class CountingTdbcConnection implements TdbcConnection {
 export async function openSqlCountingNovelMasterTestConnection(): Promise<
   NovelMasterTestContext & { readonly counter: SqlCounter }
 > {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   const rawConn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

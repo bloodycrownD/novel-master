@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  TdbcOpen, type TdbcConnection  } from "@novel-master/core";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  BASELINE_MIGRATION_IDS, NovelMasterBootstrap  } from "../../src/bootstrap/novel-master-bootstrap.js";
 import {  ErrorMessage  } from "../../src/i18n/error-message.js";
 import {  tCore  } from "../helpers/core-i18n.js";
@@ -10,7 +10,7 @@ import {  execLegacyChatProjectWithAgentConfig, execLegacySavedModelTable, execL
 
 /** 打开一个内存库连接。 */
 async function openMemoryConn(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

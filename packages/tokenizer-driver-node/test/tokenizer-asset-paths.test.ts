@@ -12,8 +12,8 @@ import { describe, it } from "node:test";
 
 import type { TokenizerFamily } from "@novel-master/core/tokenizer";
 
-import { tokenizerAssetPaths } from "../src/logic/tokenizer-asset-paths.js";
-import { defaultTokenizerAssetsRoot } from "../src/node-tokenizer-loader.js";
+import { TokenizerAssetPaths } from "../src/logic/tokenizer-asset-paths.js";
+import { NodeTokenizerLoader } from "../src/node-tokenizer-loader.js";
 
 /** node 资产表覆盖的家族，与 `tokenizerAssetPaths` 的 switch 分支一一对应。 */
 const ASSET_FAMILIES = [
@@ -32,7 +32,7 @@ const ASSET_FAMILIES = [
   "glm",
 ] as const satisfies readonly TokenizerFamily[];
 
-const assetsRoot = defaultTokenizerAssetsRoot();
+const assetsRoot = NodeTokenizerLoader.defaultAssetsRoot();
 
 /** `exists()` 会被同名目录骗过，这里必须落到 `isFile()`。 */
 function assertAsset(label: string, relative: string, kind: "json" | "model"): void {
@@ -57,7 +57,7 @@ describe("node 分词资产表级守卫", () => {
 
   for (const family of ASSET_FAMILIES) {
     it(`${family}: primary/fallback 都是真文件且扩展名与 kind 一致`, () => {
-      const spec = tokenizerAssetPaths(family);
+      const spec = TokenizerAssetPaths.forFamily(family);
       assert.ok(spec != null, `家族 ${family} 在资产表中必须有条目`);
       assertAsset(`家族 ${family}`, spec.primary, spec.kind);
       if (spec.fallback != null) {
@@ -68,7 +68,7 @@ describe("node 分词资产表级守卫", () => {
 
   it("表外家族没有 node 资产条目", () => {
     for (const family of ["heuristic", "tiktoken", "gpt2"] as const) {
-      assert.equal(tokenizerAssetPaths(family), null, `${family} 不该有 node 资产条目`);
+      assert.equal(TokenizerAssetPaths.forFamily(family), null, `${family} 不该有 node 资产条目`);
     }
   });
 });

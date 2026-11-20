@@ -9,7 +9,7 @@ import { MessageBodyText } from "@novel-master/core/prompt";
 
 import { type TokenCounter } from "@novel-master/core/tokenizer";
 import { TokenizerFamilyResolver } from "@novel-master/core/tokenizer";
-import { getNodeEncodingForModel } from "./encoding-cache.js";
+import { EncodingCache } from "./encoding-cache.js";
 
 /**
  * 取模型对应的编码表（进程级单例，见 `encoding-cache`）。
@@ -18,7 +18,7 @@ import { getNodeEncodingForModel } from "./encoding-cache.js";
  * 拿不到表时抛给调用方，由驱动层决定降级口径（那里会退回默认 cl100k 近似）。
  */
 function getEncoding(tiktokenModel: string) {
-  const enc = getNodeEncodingForModel(tiktokenModel);
+  const enc = EncodingCache.forModel(tiktokenModel);
   if (enc == null) {
     // nm-throw: keep — tiktoken 第三方编码表加载边界：拿不到表按契约抛给驱动层降级。
     throw new Error(`tiktoken encoding unavailable: ${tiktokenModel}`);

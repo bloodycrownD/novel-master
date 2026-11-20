@@ -6,20 +6,20 @@ import {
 } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
+  BetterSqlite3Register,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   SkspError,
   SkspRegistry,
 } from "@novel-master/core/sksp";
 import { setMacKeychainTestPassthrough } from "../src/keychain.js";
-import { createMacSecretStore } from "../src/sqlite-secret-store.js";
-import { registerSkspMacDriver } from "../src/register.js";
+import { MacSecretStore } from "../src/sqlite-secret-store.js";
+import { SkspMacRegister } from "../src/register.js";
 
 describe("MacSqliteSecretStore", () => {
   before(() => {
     setMacKeychainTestPassthrough(true);
-    registerBetterSqlite3Driver();
+    BetterSqlite3Register.register();
   });
 
   after(() => {
@@ -32,7 +32,7 @@ describe("MacSqliteSecretStore", () => {
       filename: ":memory:",
     });
     await NovelMasterBootstrap.bootstrap(conn);
-    const store = createMacSecretStore(conn);
+    const store = MacSecretStore.create(conn);
     const ref = "provider/test/apiKey";
     const plain = "sk-secret-123";
     await store.set(ref, plain);
@@ -62,7 +62,7 @@ describe("MacSqliteSecretStore", () => {
       filename: ":memory:",
     });
     await NovelMasterBootstrap.bootstrap(conn);
-    const store = createMacSecretStore(conn);
+    const store = MacSecretStore.create(conn);
     const ref = "provider/wrong/algo";
     await conn.execute(
       `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
@@ -81,7 +81,7 @@ describe("MacSqliteSecretStore", () => {
   });
 
   it("registers and resolves macos driver", () => {
-    registerSkspMacDriver();
+    SkspMacRegister.register();
     const driver = SkspRegistry.resolve("macos");
     assert.equal(driver.name, "macos");
     assert.equal(typeof driver.createStore, "function");

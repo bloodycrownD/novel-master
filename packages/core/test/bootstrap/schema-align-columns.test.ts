@@ -7,12 +7,12 @@ import {  BASELINE_MIGRATION_IDS, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VE
 import {  TextBlocks  } from "@novel-master/core/chat";
 import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {  SqliteSessionRepository  } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  execLegacyChatMessageWithoutHidden, execLegacyV107ChatDdl, execLegacyV7ChatMessageDdl  } from "./helpers/legacy-db-fixtures.js";
 import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

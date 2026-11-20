@@ -20,20 +20,9 @@ import {
   TokenizerTextCount,
   tokenChunkCache,
 } from "@novel-master/core/tokenizer";
-import {
-  __setNodeEncodingFactoryForTests,
-  clearNodeEncodingCacheForTests,
-  countTextWithDefaultEncoding,
-  getDefaultNodeEncoding,
-  getNodeEncodingByName,
-  getNodeEncodingForModel,
-} from "../src/impl/encoding-cache.js";
-import {
-  createNodeTokenizerLoader,
-  defaultTokenizerAssetsRoot,
-  setNodeTokenizerLoader,
-} from "../src/node-tokenizer-loader.js";
-import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.js";
+import { EncodingCache } from "../src/impl/encoding-cache.js";
+import { NodeTokenizerLoader } from "../src/node-tokenizer-loader.js";
+import { TokenizerNodeRegisterForTests } from "../src/register-for-tests.js";
 
 /**
  * 与驱动 `countOpenAiStyleChunked` 同构的分块口径组装（测试侧独立书写）：
@@ -110,9 +99,9 @@ function fixtureParams(overrides?: {
   };
 }
 
-describe("countPromptLlmInput", () => {
+describe("PromptLlmInputCounter.count", () => {
   before(() => {
-    registerTokenizerNodeDriverForTests();
+    TokenizerNodeRegisterForTests.registerForTests();
   });
 
   beforeEach(() => {
@@ -169,17 +158,17 @@ describe("countPromptLlmInput", () => {
   });
 
   it("T-FA3: model: 键废除后 gpt-4o/gpt-4 解析进 enc: 单键空间，与按名取用共享同一张表", () => {
-    const for4o = getNodeEncodingForModel("gpt-4o");
-    const for4 = getNodeEncodingForModel("gpt-4");
-    const for35 = getNodeEncodingForModel("gpt-3.5-turbo");
+    const for4o = EncodingCache.forModel("gpt-4o");
+    const for4 = EncodingCache.forModel("gpt-4");
+    const for35 = EncodingCache.forModel("gpt-3.5-turbo");
     assert.notEqual(for4o, null);
     assert.notEqual(for4, null);
     assert.notEqual(for35, null);
     // 若 model: 双命名空间残留（或模型→编码名解析装错表），这里取到的是
     // 各自独立构造的另一张表实例，严格相等必红。
-    assert.ok(for4o === getNodeEncodingByName("o200k_base"));
-    assert.ok(for4 === getNodeEncodingByName("cl100k_base"));
-    assert.ok(for35 === getNodeEncodingByName("cl100k_base"));
+    assert.ok(for4o === EncodingCache.byName("o200k_base"));
+    assert.ok(for4 === EncodingCache.byName("cl100k_base"));
+    assert.ok(for35 === EncodingCache.byName("cl100k_base"));
     assert.notEqual(for4o, for4);
   });
 
@@ -193,8 +182,8 @@ describe("countPromptLlmInput", () => {
     const serialized =
       ((await serializePromptLlmInput(layout, ctx)).value) +
       TokenCountTools.serialize(undefined);
-    const o200k = getNodeEncodingByName("o200k_base");
-    const cl100k = getNodeEncodingByName("cl100k_base");
+    const o200k = EncodingCache.byName("o200k_base");
+    const cl100k = EncodingCache.byName("cl100k_base");
     assert.notEqual(o200k, null);
     assert.notEqual(cl100k, null);
     // 夹具自检：两表对同一串的读数必须不同，否则下面的对拍没有鉴别力。
@@ -241,9 +230,9 @@ describe("countPromptLlmInput", () => {
     const serialized =
       ((await serializePromptLlmInput(layout, ctx)).value) +
       TokenCountTools.serialize(undefined);
-    const real = countTextWithDefaultEncoding(serialized);
+    const real = EncodingCache.countText(serialized);
     assert.notEqual(real, null);
-    const defaultEncoding = getDefaultNodeEncoding();
+    const defaultEncoding = EncodingCache.getDefault();
     assert.notEqual(defaultEncoding, null);
     assert.equal(result.tokenCount, chunkedTextSum(defaultEncoding!, serialized));
     assert.notEqual(
@@ -275,7 +264,7 @@ describe("countPromptLlmInput", () => {
     assert.equal(result.estimated, true);
     // 同 T-TC5 迁移注记：兜底档走分块口径的**纯文本块和**（无消息包装
     // overhead；cl100k 对纯中文按字符独立切词，标点边界切分基本无损）。
-    const cnEncoding = getDefaultNodeEncoding();
+    const cnEncoding = EncodingCache.getDefault();
     assert.notEqual(cnEncoding, null);
     assert.equal(
       result.tokenCount,
@@ -313,7 +302,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
   const registry = DefaultTokenCounterRegistry.create({} as Record<string, never>);
 
   before(() => {
-    registerTokenizerNodeDriverForTests();
+    TokenizerNodeRegisterForTests.registerForTests();
   });
 
   beforeEach(() => {
@@ -324,7 +313,7 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
   });
 
   it("W1: web 家族（claude）资产加载失败 → counterKind=heuristic + estimated=true", async () => {
-    registerTokenizerNodeDriverForTests(badAssetsRoot);
+    TokenizerNodeRegisterForTests.registerForTests(badAssetsRoot);
     try {
       const { layout, ctx } = fixtureParams();
       const result = (await PromptLlmInputCount.count({
@@ -341,14 +330,14 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
         ((await serializePromptLlmInput(layout, ctx)).value) +
         TokenCountTools.serialize(undefined);
       // 两级降级的第一级：真 cl100k 读数（非字符折算）。
-      assert.equal(result.tokenCount, countTextWithDefaultEncoding(serialized));
+      assert.equal(result.tokenCount, EncodingCache.countText(serialized));
     } finally {
-      registerTokenizerNodeDriverForTests();
+      TokenizerNodeRegisterForTests.registerForTests();
     }
   });
 
   it("S1: SP 家族（mistral）资产加载失败 → counterKind=heuristic + estimated=true", async () => {
-    registerTokenizerNodeDriverForTests(badAssetsRoot);
+    TokenizerNodeRegisterForTests.registerForTests(badAssetsRoot);
     try {
       const { layout, ctx } = fixtureParams();
       const result = (await PromptLlmInputCount.count({
@@ -363,9 +352,9 @@ describe("WEB/SP 资产加载失败的 counterKind 降级（T-FA4）", () => {
       const serialized =
         ((await serializePromptLlmInput(layout, ctx)).value) +
         TokenCountTools.serialize(undefined);
-      assert.equal(result.tokenCount, countTextWithDefaultEncoding(serialized));
+      assert.equal(result.tokenCount, EncodingCache.countText(serialized));
     } finally {
-      registerTokenizerNodeDriverForTests();
+      TokenizerNodeRegisterForTests.registerForTests();
     }
   });
 });
@@ -382,7 +371,7 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
   const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
   before(() => {
-    registerTokenizerNodeDriverForTests();
+    TokenizerNodeRegisterForTests.registerForTests();
   });
 
   beforeEach(() => {
@@ -392,14 +381,14 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
 
   afterEach(() => {
     // recording 表注入还原：工厂回真实现 + 作废已缓存的假表。
-    __setNodeEncodingFactoryForTests(null);
-    clearNodeEncodingCacheForTests();
+    EncodingCache.__setFactoryForTests(null);
+    EncodingCache.clearForTests();
   });
 
   /** recording 注入：假表按字符数计，并统计 baseEncode 调用次数。 */
   function installRecordingEncoding(): { calls(): number } {
     let encodeCalls = 0;
-    __setNodeEncodingFactoryForTests(
+    EncodingCache.__setFactoryForTests(
       () =>
         ({
           encode: (text: string) => {
@@ -408,7 +397,7 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
           },
         }) as never,
     );
-    clearNodeEncodingCacheForTests();
+    EncodingCache.clearForTests();
     return { calls: () => encodeCalls };
   }
 
@@ -499,8 +488,8 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
     // WEB 档每次计数都 new WebTokenizerCounter（实例不跨调用复用），无 L1
     // 时第二次必然重新读资产 JSON——这正是本用例的鉴别力来源。
     let readJsonCalls = 0;
-    const realLoader = createNodeTokenizerLoader(defaultTokenizerAssetsRoot());
-    setNodeTokenizerLoader({
+    const realLoader = NodeTokenizerLoader.create(NodeTokenizerLoader.defaultAssetsRoot());
+    NodeTokenizerLoader.set({
       readJson(relativePath: string): ArrayBuffer {
         readJsonCalls += 1;
         return realLoader.readJson(relativePath);
@@ -532,7 +521,7 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
         "L1 命中：同输入第二次不得再读资产文件",
       );
     } finally {
-      registerTokenizerNodeDriverForTests();
+      TokenizerNodeRegisterForTests.registerForTests();
     }
   });
 });
@@ -551,7 +540,7 @@ describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
   const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
   before(() => {
-    registerTokenizerNodeDriverForTests();
+    TokenizerNodeRegisterForTests.registerForTests();
   });
 
   beforeEach(() => {

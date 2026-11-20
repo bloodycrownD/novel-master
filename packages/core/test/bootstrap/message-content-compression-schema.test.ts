@@ -14,7 +14,7 @@ import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstra
 import {  TextBlocks  } from "@novel-master/core/chat";
 import type { Row } from "../../src/infra/tdbc/types.js";
 import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 /**
  * 压缩两列进入合同的 BOOT 版本（v17 bump 引入，见
@@ -26,7 +26,7 @@ import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@nove
 const COMPRESSION_COLUMNS_BOOT_VERSION = 17;
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

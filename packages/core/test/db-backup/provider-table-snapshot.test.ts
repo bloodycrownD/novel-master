@@ -6,7 +6,7 @@ import {  describe, it  } from "node:test";
 import {  NovelMasterBootstrap, TdbcOpen, ProviderTableSnapshotIo, type ProviderTableSnapshot, type TdbcConnection  } from "@novel-master/core";
 import {  NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
 import {  AppErrorOps  } from "@novel-master/core/errors";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  ErrorMessage  } from "../../src/i18n/error-message.js";
 import {  execLegacySavedModelTable, seedLegacySavedModelRows  } from "../bootstrap/helpers/legacy-db-fixtures.js";
 
@@ -14,7 +14,7 @@ const NOW_MS = 1_700_000_000_000;
 
 /** 注册 better-sqlite3 驱动并打开内存库（不 bootstrap）。 */
 async function openRawMemoryDb(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

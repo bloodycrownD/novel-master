@@ -4,9 +4,9 @@
  * @module tdbc-conformance
  */
 
-export { runConformanceTests } from "./suite.js";
+export { ConformanceSuite } from "./suite.js";
 export type { ConformanceFactory, ConformanceOptions } from "./suite.js";
-export { runNestedBatchParityTests } from "./nested-batch.js";
+export { NestedBatch } from "./nested-batch.js";
 export type {
   NestedBatchFactory,
   NestedBatchOptions,

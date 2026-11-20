@@ -9,13 +9,13 @@ import {
 import type { TdbcConnection } from "@novel-master/core/tdbc";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
+  BetterSqlite3Register,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 
 // 注册 react-native 桩模块钩子，必须在动态导入 store 之前完成。
 register(new URL("./rn-mock-hook.mjs", import.meta.url));
 
-const { createAndroidSecretStore } = await import("../src/android-secret-store.ts");
+const { AndroidSecretStoreFactory } = await import("../src/android-secret-store.ts");
 
 const ALGO = "android-keystore-aes-gcm-v1";
 
@@ -50,7 +50,7 @@ function installSkspStub(): { calls: number } {
 
 describe("AndroidSecretStore", () => {
   before(() => {
-    registerBetterSqlite3Driver();
+    BetterSqlite3Register.register();
   });
 
   it("set/get 来回一致，且 SELECT 现在能带出 version 列（与 mac/windows 对齐）", async () => {
@@ -61,7 +61,7 @@ describe("AndroidSecretStore", () => {
     });
     await NovelMasterBootstrap.bootstrap(conn);
     try {
-      const store = createAndroidSecretStore(conn);
+      const store = AndroidSecretStoreFactory.create(conn);
       const ref = "provider/test/apiKey";
       const plain = "sk-secret-123";
       await store.set(ref, plain);
@@ -109,7 +109,7 @@ describe("AndroidSecretStore", () => {
         [ref, Buffer.from(ciphertext, "base64"), Buffer.from(iv, "base64"), ALGO, Date.now()],
       );
 
-      const store = createAndroidSecretStore(conn);
+      const store = AndroidSecretStoreFactory.create(conn);
       assert.equal(await store.get(ref), plain);
 
       // 顺便确认读出来的行里 version 列就是 2，证明 SELECT 确实把它取出来了。
@@ -137,7 +137,7 @@ describe("AndroidSecretStore", () => {
          VALUES (?, ?, ?, ?, 1, ?)`,
         [ref, Buffer.from("x"), Buffer.alloc(12), "macos-keychain-aes-gcm-v1", Date.now()],
       );
-      const store = createAndroidSecretStore(conn);
+      const store = AndroidSecretStoreFactory.create(conn);
       await assert.rejects(() => store.get(ref));
     } finally {
       await closeQuietly(conn);

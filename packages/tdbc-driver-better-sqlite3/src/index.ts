@@ -13,9 +13,12 @@ export {
   BETTER_SQLITE3_DRIVER_NAME,
 } from "./driver.js";
 
+// nm-style 注记：barrel 主入口的注册口，按成员主体起名（BetterSqlite3Register）。
 /**
  * Registers the better-sqlite3 driver as `better-sqlite3`.
  */
-export function registerBetterSqlite3Driver(): void {
-  TdbcRegistry.register(new BetterSqlite3Driver());
+export namespace BetterSqlite3Register {
+  export function register(): void {
+    TdbcRegistry.register(new BetterSqlite3Driver());
+  }
 }

@@ -13,10 +13,10 @@ import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  NovelMasterBootstrap, TdbcOpen  } from "@novel-master/core";
 import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 async function openMemory() {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

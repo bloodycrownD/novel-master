@@ -6,12 +6,15 @@
 
 import type { TdbcConnection } from "@novel-master/core/tdbc";
 import { SkspRegistry } from "@novel-master/core/sksp";
-import { createWindowsSecretStore } from "./sqlite-secret-store.js";
+import { WindowsSecretStore } from "./sqlite-secret-store.js";
 
+// nm-style 注记：文件名 register 太泛，按成员主体起名（SkspWindowsRegister）。
 /** Registers `windows` SKSP driver (DPAPI + SQLite). */
-export function registerSkspWindowsDriver(): void {
-  SkspRegistry.register({
-    name: "windows",
-    createStore: (conn) => createWindowsSecretStore(conn as TdbcConnection),
-  });
+export namespace SkspWindowsRegister {
+  export function register(): void {
+    SkspRegistry.register({
+      name: "windows",
+      createStore: (conn) => WindowsSecretStore.create(conn as TdbcConnection),
+    });
+  }
 }

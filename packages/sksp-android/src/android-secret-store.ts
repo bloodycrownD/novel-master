@@ -17,25 +17,15 @@ import {
   type SecretStore,
   type SkspCryptoStrategy,
 } from "@novel-master/core/sksp";
-import { getSkspNativeModule } from "./native.js";
+import { SkspNative } from "./native.js";
 
 const ALGO = "android-keystore-aes-gcm-v1";
-
-function decodeBlob(value: unknown): Uint8Array {
-  if (value instanceof Uint8Array) {
-    return value;
-  }
-  if (typeof value === "string") {
-    return Encoding.base64ToBytes(value);
-  }
-  throw new SkspError("DB_ERROR", "Invalid blob column");
-}
 
 /** Android Keystore 加密策略：密文/iv 都以 base64 文本存进 DB。 */
 const androidStrategy: SkspCryptoStrategy = {
   algo: ALGO,
   async encrypt(ref, plain) {
-    const native = getSkspNativeModule();
+    const native = SkspNative.get();
     try {
       const enc = await native.encrypt(ref, plain);
       // 存 base64 文本，不走 Uint8Array BLOB 绑定（quick-sqlite heap 损伤）。
@@ -53,12 +43,12 @@ const androidStrategy: SkspCryptoStrategy = {
     if (iv == null) {
       throw new SkspError("DECRYPT_FAILED", `Missing IV for ${ref}`, { ref });
     }
-    const native = getSkspNativeModule();
+    const native = SkspNative.get();
     try {
       return await native.decrypt(
         ref,
-        Encoding.bytesToBase64(decodeBlob(row.ciphertext)),
-        Encoding.bytesToBase64(decodeBlob(iv)),
+        Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(row.ciphertext)),
+        Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(iv)),
       );
     } catch (cause) {
       throw new SkspError(
@@ -77,7 +67,21 @@ export class AndroidSecretStore extends BaseSqliteSecretStore {
   }
 }
 
+// nm-style 注记：namespace 按内容主体起名（撞同文件 export class AndroidSecretStore，取工厂主体 AndroidSecretStoreFactory）。
 /** Creates an Android secret store for an open connection. */
-export function createAndroidSecretStore(conn: TdbcConnection): SecretStore {
-  return new AndroidSecretStore(conn);
+export namespace AndroidSecretStoreFactory {
+  // nm-style 注记：本应保持 namespace 私有，但顶层 androidStrategy（const，不收口）依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
+  export function decodeBlob(value: unknown): Uint8Array {
+    if (value instanceof Uint8Array) {
+      return value;
+    }
+    if (typeof value === "string") {
+      return Encoding.base64ToBytes(value);
+    }
+    throw new SkspError("DB_ERROR", "Invalid blob column");
+  }
+
+  export function create(conn: TdbcConnection): SecretStore {
+    return new AndroidSecretStore(conn);
+  }
 }

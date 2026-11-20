@@ -7,7 +7,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
-import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
+import { TokenizerNodeRegister } from "@novel-master/tokenizer-driver-node";
 import {
   bootstrapNovelMaster,
   createPersistentPreferences,
@@ -54,11 +54,11 @@ import { createWorkplaceService, type WorkplaceService } from "@novel-master/cor
 import { createSessionKkvService, type SessionKkvService } from "@novel-master/core/session-kkv";
 import { createSkillsService, type SkillService } from "@novel-master/core/skills";
 import type { AgentAbortRegistry, AgentRegistryService, AgentStreamRegistry } from "@novel-master/core/agent";
-import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
+import { BetterSqlite3Register } from "@novel-master/tdbc-driver-better-sqlite3";
 import { createCompositeSecretStore, createEnvSecretStore, resolveSkspDriver, resolveSkspNameFromPlatform, type PlatformSkspName } from "@novel-master/core/sksp";
-import { registerSkspMacDriver } from "@novel-master/sksp-mac";
-import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
-import { registerSkspLinuxDriver } from "@novel-master/sksp-linux";
+import { SkspMacRegister } from "@novel-master/sksp-mac";
+import { SkspWindowsRegister } from "@novel-master/sksp-windows";
+import { SkspLinuxRegister } from "@novel-master/sksp-linux";
 import { createAgentMockModelRequests } from "./agent/mock-llm.js";
 import { installE2eLlmFetchCapture } from "./test/e2e-llm-fetch.js";
 import { CliScopeResolver } from "./config/resolve-scope.js";
@@ -79,11 +79,11 @@ export function registerPlatformSkspDriver(platform: string = process.platform):
   const name = resolveSkspNameFromPlatform(platform);
   if (!name.ok) return name;
   if (name.value === "macos") {
-    registerSkspMacDriver();
+    SkspMacRegister.register();
   } else if (name.value === "linux") {
-    registerSkspLinuxDriver();
+    SkspLinuxRegister.register();
   } else {
-    registerSkspWindowsDriver();
+    SkspWindowsRegister.register();
   }
   return name;
 }
@@ -166,10 +166,10 @@ export interface NovelMasterRuntime {
  * preferences 读的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 export async function createNovelMasterRuntime(argv: readonly string[]): Promise<Result<NovelMasterRuntime, AppError>> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   const skspName = registerPlatformSkspDriver();
   if (!skspName.ok) return Result.err(skspName.error);
-  registerTokenizerNodeDriver();
+  TokenizerNodeRegister.register();
   // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
   // 由 CLI 运行时注册。未注册（RN）时 core 全走 fflate，行为不变。
   // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给

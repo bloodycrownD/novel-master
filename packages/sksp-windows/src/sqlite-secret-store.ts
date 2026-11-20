@@ -11,7 +11,7 @@
 import type { TdbcConnection, Row } from "@novel-master/core/tdbc";
 import { BaseSqliteSecretStore, type SecretStore, type SkspCryptoStrategy } from "@novel-master/core/sksp";
 import { SkspRowBinary } from "@novel-master/core/sksp-node";
-import { protectUtf8, unprotectUtf8 } from "./dpapi.js";
+import { Dpapi } from "./dpapi.js";
 
 const ALGO = "dpapi-v1";
 
@@ -19,11 +19,11 @@ const ALGO = "dpapi-v1";
 const windowsStrategy: SkspCryptoStrategy = {
   algo: ALGO,
   async encrypt(ref, plain) {
-    const ciphertext = await protectUtf8(plain, ref);
+    const ciphertext = await Dpapi.protect(plain, ref);
     return { ciphertext, iv: null };
   },
   async decrypt(ref, row: Row) {
-    return unprotectUtf8(SkspRowBinary.ciphertext(row), ref);
+    return Dpapi.unprotect(SkspRowBinary.ciphertext(row), ref);
   },
 };
 
@@ -34,7 +34,10 @@ export class SqliteSecretStore extends BaseSqliteSecretStore {
   }
 }
 
+// nm-style 注记：namespace 按内容主体起名（撞同文件 export class SqliteSecretStore，取平台主体 WindowsSecretStore）。
 /** Creates a Windows SQLite secret store. */
-export function createWindowsSecretStore(conn: TdbcConnection): SecretStore {
-  return new SqliteSecretStore(conn);
+export namespace WindowsSecretStore {
+  export function create(conn: TdbcConnection): SecretStore {
+    return new SqliteSecretStore(conn);
+  }
 }

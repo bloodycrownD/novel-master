@@ -40,7 +40,7 @@ import {
   serializePromptLlmInput,
   type TokenCounterRegistry,
 } from "@novel-master/core/tokenizer";
-import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
+import { EncodingCache } from "@novel-master/tokenizer-driver-node";
 import { LogFactory } from "@novel-master/core/log";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import { PromptChatTokenUpdatedForwarder } from "../ipc/forward-prompt-chat-token-updated.js";
@@ -161,7 +161,7 @@ export namespace ChatPromptTokensService {
    * 一并复用，不再是双命名空间时代的「各建各的」。
    */
   function countFallbackTokens(runtime: DesktopNovelMasterRuntime, serialized: string): number {
-    const real = countTextWithDefaultEncoding(serialized);
+    const real = EncodingCache.countText(serialized);
     if (real != null) {
       return real;
     }

@@ -15,7 +15,7 @@ import {  NovelMasterBootstrap, PersistentStateFactory, decode, open  } from "@n
 import {  agentDefinitionSchema, AgentServiceFactory  } from "@novel-master/core/agent";
 import {  ChatServiceFactory, TextBlocks  } from "@novel-master/core/chat";
 import {  VfsServiceFactory  } from "@novel-master/core/vfs";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import {  SqliteProjectRepository  } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import {  DefaultProjectService  } from "@/service/chat/impl/project.service.js";
@@ -39,7 +39,7 @@ const fmt = (ms: number): string => `${ms.toFixed(1)}ms`;
 
 async function main(): Promise<void> {
   rmSync(DB_PATH, { force: true });
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   const conn = await open(`tdbc:sqlite:file:${DB_PATH}`, {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: DB_PATH,

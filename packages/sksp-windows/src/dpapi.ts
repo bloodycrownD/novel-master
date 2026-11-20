@@ -9,77 +9,79 @@ import { SkspError } from "@novel-master/core/sksp";
 /** Test hook: bypass DPAPI (UTF-8 passthrough as "ciphertext"). @internal */
 let testPassthrough = false;
 
-/** Enables passthrough mode for non-Windows unit tests. @internal */
-export function setDpapiTestPassthrough(enabled: boolean): void {
-  testPassthrough = enabled;
-}
-
-function isWin32(): boolean {
-  return process.platform === "win32";
-}
-
-/**
- * Protects UTF-8 plaintext with DPAPI (current user).
- * @throws SkspError ENCRYPT_FAILED on failure
- */
-export async function protectUtf8(plain: string, ref: string): Promise<Uint8Array> {
-  const data = Buffer.from(plain, "utf8");
-  if (testPassthrough) {
-    return new Uint8Array(data);
+export namespace Dpapi {
+  /** Enables passthrough mode for non-Windows unit tests. @internal */
+  export function setTestPassthrough(enabled: boolean): void {
+    testPassthrough = enabled;
   }
-  if (!isWin32()) {
-    throw new SkspError(
-      "ENCRYPT_FAILED",
-      "DPAPI is only available on Windows",
-      { ref },
-    );
+
+  function isWin32(): boolean {
+    return process.platform === "win32";
   }
-  try {
-    const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
-    if (!isPlatformSupported) {
-      // nm-throw: keep — OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。
-      throw new Error("DPAPI platform not supported");
+
+  /**
+   * Protects UTF-8 plaintext with DPAPI (current user).
+   * @throws SkspError ENCRYPT_FAILED on failure
+   */
+  export async function protect(plain: string, ref: string): Promise<Uint8Array> {
+    const data = Buffer.from(plain, "utf8");
+    if (testPassthrough) {
+      return new Uint8Array(data);
     }
-    return Dpapi.protectData(data, null, "CurrentUser");
-  } catch (cause) {
-    throw new SkspError("ENCRYPT_FAILED", `DPAPI encrypt failed for ${ref}`, {
-      ref,
-      cause,
-    });
-  }
-}
-
-/**
- * Unprotects DPAPI ciphertext to UTF-8 string.
- * @throws SkspError DECRYPT_FAILED on failure
- */
-export async function unprotectUtf8(
-  ciphertext: Uint8Array,
-  ref: string,
-): Promise<string> {
-  if (testPassthrough) {
-    return Buffer.from(ciphertext).toString("utf8");
-  }
-  if (!isWin32()) {
-    throw new SkspError(
-      "DECRYPT_FAILED",
-      `DPAPI decrypt failed for ${ref} (not on Windows). Re-run: nm provider edit --apiKey`,
-      { ref },
-    );
-  }
-  try {
-    const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
-    if (!isPlatformSupported) {
-      // nm-throw: keep — OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。
-      throw new Error("DPAPI platform not supported");
+    if (!isWin32()) {
+      throw new SkspError(
+        "ENCRYPT_FAILED",
+        "DPAPI is only available on Windows",
+        { ref },
+      );
     }
-    const out = Dpapi.unprotectData(Buffer.from(ciphertext), null, "CurrentUser");
-    return Buffer.from(out).toString("utf8");
-  } catch (cause) {
-    throw new SkspError(
-      "DECRYPT_FAILED",
-      `DPAPI decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`,
-      { ref, cause },
-    );
+    try {
+      const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
+      if (!isPlatformSupported) {
+        // nm-throw: keep — OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。
+        throw new Error("DPAPI platform not supported");
+      }
+      return Dpapi.protectData(data, null, "CurrentUser");
+    } catch (cause) {
+      throw new SkspError("ENCRYPT_FAILED", `DPAPI encrypt failed for ${ref}`, {
+        ref,
+        cause,
+      });
+    }
+  }
+
+  /**
+   * Unprotects DPAPI ciphertext to UTF-8 string.
+   * @throws SkspError DECRYPT_FAILED on failure
+   */
+  export async function unprotect(
+    ciphertext: Uint8Array,
+    ref: string,
+  ): Promise<string> {
+    if (testPassthrough) {
+      return Buffer.from(ciphertext).toString("utf8");
+    }
+    if (!isWin32()) {
+      throw new SkspError(
+        "DECRYPT_FAILED",
+        `DPAPI decrypt failed for ${ref} (not on Windows). Re-run: nm provider edit --apiKey`,
+        { ref },
+      );
+    }
+    try {
+      const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
+      if (!isPlatformSupported) {
+        // nm-throw: keep — OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。
+        throw new Error("DPAPI platform not supported");
+      }
+      const out = Dpapi.unprotectData(Buffer.from(ciphertext), null, "CurrentUser");
+      return Buffer.from(out).toString("utf8");
+    } catch (cause) {
+      throw new SkspError(
+        "DECRYPT_FAILED",
+        `DPAPI decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`,
+        { ref, cause },
+      );
+    }
   }
 }

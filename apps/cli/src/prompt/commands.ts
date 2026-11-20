@@ -12,7 +12,7 @@ import { formatPromptLlmInputForCliFromLayout, type PromptSkillIndexEntry } from
 import { countPromptLlmInput, isSavedModelUuidFormat, serializePromptLlmInput } from "@novel-master/core/provider";
 
 import { assembleWorkplaceDisplay, type Outcome } from "@novel-master/core/workplace";
-import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
+import { EncodingCache } from "@novel-master/tokenizer-driver-node";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { OUTCOME_COMPLETED } from "../cli-errors.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
@@ -145,7 +145,7 @@ export async function runPrompt(rt: PromptRuntime, subcommand: string, args: rea
       // `counter: "heuristic"` / `estimated: true` 不变——变的只是读数本身：
       // cl100k 对任意模型都只是近似，报成精确档反而是误导。编码表建不起来
       // （ranks 资源缺失）时才有最后一级折算兜底。
-      const tokenCount = resolveCliPromptTokens(serialized.value, countTextWithDefaultEncoding, (text) => rt.tokenCounters.heuristic.countText(text));
+      const tokenCount = resolveCliPromptTokens(serialized.value, EncodingCache.countText, (text) => rt.tokenCounters.heuristic.countText(text));
       console.error(JSON.stringify(buildCliNoModelTokenDiagnostic(tokenCount)));
       return OUTCOME_COMPLETED;
     }

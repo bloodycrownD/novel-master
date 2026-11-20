@@ -13,8 +13,8 @@ import type {
 import { TdbcError } from "@novel-master/core";
 import { AsyncMutex } from "@novel-master/core/tdbc";
 import type { OpSqliteAdapter } from "./adapter.js";
-import { normalizeOpSqliteBindings } from "./bindings.js";
-import { rowsFromResult } from "./row-mapper.js";
+import { OpSqliteBindings } from "./bindings.js";
+import { RowMapper } from "./row-mapper.js";
 
 export class OpSqliteConnection implements TdbcConnection {
   private closed = false;
@@ -125,9 +125,9 @@ export class OpSqliteConnection implements TdbcConnection {
     try {
       const result = await this.runAdapter(
         sql,
-        normalizeOpSqliteBindings(parameters),
+        OpSqliteBindings.normalize(parameters),
       );
-      return rowsFromResult(result) as T[];
+      return RowMapper.fromResult(result) as T[];
     } catch (cause) {
       throw this.wrapSqlite(cause);
     }
@@ -142,7 +142,7 @@ export class OpSqliteConnection implements TdbcConnection {
     try {
       const result = await this.runAdapter(
         sql,
-        normalizeOpSqliteBindings(parameters),
+        OpSqliteBindings.normalize(parameters),
       );
       return {
         changes: result.rowsAffected ?? 0,
@@ -168,7 +168,7 @@ export class OpSqliteConnection implements TdbcConnection {
       for (const params of parametersList) {
         const result = await this.runAdapter(
           sql,
-          normalizeOpSqliteBindings(params),
+          OpSqliteBindings.normalize(params),
         );
         totalChanges += result.rowsAffected ?? 0;
       }

@@ -2,9 +2,9 @@
  * Platform SKSP driver registration for the desktop main process.
  * Invariant: call once per process before opening the DB connection.
  */
-import { registerSkspMacDriver } from "@novel-master/sksp-mac";
-import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
-import { registerSkspLinuxDriver } from "@novel-master/sksp-linux";
+import { SkspMacRegister } from "@novel-master/sksp-mac";
+import { SkspWindowsRegister } from "@novel-master/sksp-windows";
+import { SkspLinuxRegister } from "@novel-master/sksp-linux";
 import { SkspPlatform, type PlatformSkspName } from "@novel-master/core/sksp";
 import { type AppError, Result } from "@novel-master/core/errors";
 
@@ -28,11 +28,11 @@ export namespace DesktopSksp {
     const name = getName();
     if (!name.ok) return name;
     if (name.value === "macos") {
-      registerSkspMacDriver();
+      SkspMacRegister.register();
     } else if (name.value === "linux") {
-      registerSkspLinuxDriver();
+      SkspLinuxRegister.register();
     } else {
-      registerSkspWindowsDriver();
+      SkspWindowsRegister.register();
     }
     return name;
   }

@@ -6,20 +6,20 @@ import {
 } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
+  BetterSqlite3Register,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   SkspError,
   SkspRegistry,
 } from "@novel-master/core/sksp";
 import { setLinuxKeychainTestPassthrough } from "../src/keychain.js";
-import { createLinuxSecretStore } from "../src/sqlite-secret-store.js";
-import { registerSkspLinuxDriver } from "../src/register.js";
+import { LinuxSecretStore } from "../src/sqlite-secret-store.js";
+import { SkspLinuxRegister } from "../src/register.js";
 
 describe("LinuxSqliteSecretStore", () => {
   before(() => {
     setLinuxKeychainTestPassthrough(true);
-    registerBetterSqlite3Driver();
+    BetterSqlite3Register.register();
   });
 
   after(() => {
@@ -32,7 +32,7 @@ describe("LinuxSqliteSecretStore", () => {
       filename: ":memory:",
     });
     await NovelMasterBootstrap.bootstrap(conn);
-    const store = createLinuxSecretStore(conn);
+    const store = LinuxSecretStore.create(conn);
     const ref = "provider/test/apiKey";
     const plain = "sk-secret-123";
     await store.set(ref, plain);
@@ -62,7 +62,7 @@ describe("LinuxSqliteSecretStore", () => {
       filename: ":memory:",
     });
     await NovelMasterBootstrap.bootstrap(conn);
-    const store = createLinuxSecretStore(conn);
+    const store = LinuxSecretStore.create(conn);
     const ref = "provider/wrong/algo";
     await conn.execute(
       `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
@@ -81,7 +81,7 @@ describe("LinuxSqliteSecretStore", () => {
   });
 
   it("registers and resolves linux driver", () => {
-    registerSkspLinuxDriver();
+    SkspLinuxRegister.register();
     const driver = SkspRegistry.resolve("linux");
     assert.equal(driver.name, "linux");
     assert.equal(typeof driver.createStore, "function");

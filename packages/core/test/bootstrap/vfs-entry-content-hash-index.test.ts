@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
 import {  BASELINE_MIGRATION_IDS, SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  ErrorMessage  } from "../../src/i18n/error-message.js";
 import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import {  execLegacyVfsEntryTable  } from "./helpers/legacy-db-fixtures.js";
@@ -33,7 +33,7 @@ function resolvesBaselineTooOld(error: unknown): boolean {
 }
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { bootstrapNovelMaster, createPersistentState, open, type TdbcConnection } from "@novel-master/core";
 
 import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
-import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
+import { BetterSqlite3Register } from "@novel-master/tdbc-driver-better-sqlite3";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
@@ -273,7 +273,7 @@ export function seedMockProviderModels(
 }
 
 async function openConn(dbPath: string): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   const conn = await open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
   await bootstrapNovelMaster(conn);
   return conn;

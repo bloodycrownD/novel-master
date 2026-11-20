@@ -22,7 +22,10 @@ export class LinuxSqliteSecretStore extends BaseSqliteSecretStore {
   }
 }
 
+// nm-style 注记：namespace 按内容主体起名（撞同文件 export class LinuxSqliteSecretStore，取平台主体 LinuxSecretStore）。
 /** Creates a Linux SQLite secret store. */
-export function createLinuxSecretStore(conn: TdbcConnection): SecretStore {
-  return new LinuxSqliteSecretStore(conn);
+export namespace LinuxSecretStore {
+  export function create(conn: TdbcConnection): SecretStore {
+    return new LinuxSqliteSecretStore(conn);
+  }
 }

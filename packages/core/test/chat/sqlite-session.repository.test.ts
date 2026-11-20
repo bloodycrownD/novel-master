@@ -7,7 +7,7 @@ import {  SqliteSessionRepository  } from "../../src/domain/chat/repositories/im
 import {  ComposerDraftSchema  } from "../../src/domain/chat/model/composer-draft.schema.js";
 import {  chatAnnotateDraftStore  } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
 import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {  BETTER_SQLITE3_DRIVER_NAME, registerBetterSqlite3Driver  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import {  execLegacyV107ChatDdl  } from "../bootstrap/helpers/legacy-db-fixtures.js";
 import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import {  BASELINE_MIGRATION_IDS  } from "../../src/bootstrap/novel-master-bootstrap.js";
@@ -149,7 +149,7 @@ describe("SqliteSessionRepository", () => {
 
 describe("SqliteSessionRepository legacy 库 bootstrap", () => {
   it("v1.0.7 风格缺列库 bootstrap 后无 user_vfs_pending_json 且可读会话", async () => {
-    registerBetterSqlite3Driver();
+    BetterSqlite3Register.register();
     const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",

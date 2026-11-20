@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, DatabaseReplacedError, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, AppErrorOps, ErrorGuards, Result, type Interrupt } from "@novel-master/core/errors";
-import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
+import { S3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import { HeadBucketCommand, ListObjectsV2Command, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -160,7 +160,7 @@ class DesktopCloudSyncService {
               secretAccessKey: storageSecret,
               forcePathStyle: publicConfig.value.forcePathStyle,
             };
-            const storage = createS3ObjectStorage(storageConfig);
+            const storage = S3ObjectStorage.create(storageConfig);
             const key = CloudSyncPaths.statusKey(publicConfig.value.pathPrefix);
             const head = await storage.head(key);
             if (!head.exists) {
@@ -400,7 +400,7 @@ class DesktopCloudSyncService {
       secretAccessKey: secret,
       forcePathStyle: publicConfig.value.forcePathStyle,
     };
-    const storage = storageOverride ?? createS3ObjectStorage(storageConfig, { fileSystem: nodeFileSystem });
+    const storage = storageOverride ?? S3ObjectStorage.create(storageConfig, { fileSystem: nodeFileSystem });
 
     const runtime = this.runtime;
     const stamp = Date.now();

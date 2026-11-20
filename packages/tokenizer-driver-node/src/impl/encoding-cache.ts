@@ -14,13 +14,13 @@
  * 维持 Node 侧的默认表与计数口径。历史上本模块自建的 `model:` / `enc:` 双命名
  * 空间已随收敛废除——同一张表曾因「按模型名取一次、按编码名取一次」构造两份，
  * 现在 registry 只认 `enc:<encodingName>` 单键空间，model→encoding 的解析上移到
- * {@link getNodeEncodingForModel} 内部（走 tiktoken 官方映射
+ * {@link EncodingCache.forModel} 内部（走 tiktoken 官方映射
  * `get_encoding_name_for_model`），精确档与兜底档从此共享同一张表。
  *
  * `free()` 生命周期不变量：registry 吐出的是**共享句柄**——精确档、兜底档、预热
  * 方持有同一张表，任何一方 `free()` 都会让其它持有者拿到已释放的 WASM 句柄、后续
  * `encode` 直接炸。所以句柄由 registry 持有、进程内一直活着、绝不 `free()`；
- * {@link clearNodeEncodingCacheForTests} 也只丢弃引用不释放，WASM 内存随进程退出
+ * {@link EncodingCache.clearForTests} 也只丢弃引用不释放，WASM 内存随进程退出
  * 整体回收（表以编码名为界，是有上界的小集合，不存在无界增长）。
  *
  * 失败语义（与旧实现的差别）：构造失败仍缓存 `null`，但由 registry 的
@@ -54,76 +54,78 @@ const DEFAULT_NODE_ENCODING_NAME: TiktokenEncoding = "cl100k_base";
  */
 export type NodeEncodingFactory = (encodingName: string) => Tiktoken;
 
-/**
- * 按**模型名**取（单例）编码表；模型名不被 tiktoken 认识时返回 `null`。
- *
- * 精确档（`counterKind: "tiktoken"`）走这里。`model:` 键废除后的取法：先用
- * tiktoken 官方映射 `get_encoding_name_for_model` 把模型名解析成编码名
- * （gpt-4o → o200k_base、gpt-4 / gpt-3.5-turbo → cl100k_base……），再进
- * registry 的 `enc:` 单键空间——因此与 {@link getNodeEncodingByName} 取同一张表。
- * 模型名解析失败（不被认识）在进 registry 前就返回 `null`：解析只是查一张
- * 静态映射表、零建表开销，不值得为它占 TTL 失败缓存。
- *
- * 取到的是**共享单例**，调用方不得 `free()`。WASM 构造注入直接交给
- * `get_encoding`（Tiktoken 结构上满足 registry 的 `EncodingHandle` 契约：
- * `encode` 返回带 `length` 的序列，无需适配层）。
- */
-export function getNodeEncodingForModel(tiktokenModel: TiktokenModel | string): Tiktoken | null {
-  let encodingName: TiktokenEncoding;
-  try {
-    encodingName = get_encoding_name_for_model(tiktokenModel as TiktokenModel);
-  } catch (err) {
-    console.warn(`[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`, err);
-    return null;
+export namespace EncodingCache {
+  /**
+   * 按**模型名**取（单例）编码表；模型名不被 tiktoken 认识时返回 `null`。
+   *
+   * 精确档（`counterKind: "tiktoken"`）走这里。`model:` 键废除后的取法：先用
+   * tiktoken 官方映射 `get_encoding_name_for_model` 把模型名解析成编码名
+   * （gpt-4o → o200k_base、gpt-4 / gpt-3.5-turbo → cl100k_base……），再进
+   * registry 的 `enc:` 单键空间——因此与 {@link EncodingCache.byName} 取同一张表。
+   * 模型名解析失败（不被认识）在进 registry 前就返回 `null`：解析只是查一张
+   * 静态映射表、零建表开销，不值得为它占 TTL 失败缓存。
+   *
+   * 取到的是**共享单例**，调用方不得 `free()`。WASM 构造注入直接交给
+   * `get_encoding`（Tiktoken 结构上满足 registry 的 `EncodingHandle` 契约：
+   * `encode` 返回带 `length` 的序列，无需适配层）。
+   */
+  export function forModel(tiktokenModel: TiktokenModel | string): Tiktoken | null {
+    let encodingName: TiktokenEncoding;
+    try {
+      encodingName = get_encoding_name_for_model(tiktokenModel as TiktokenModel);
+    } catch (err) {
+      console.warn(`[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`, err);
+      return null;
+    }
+    return EncodingRegistry.get(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
   }
-  return EncodingRegistry.get(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
-}
 
-/**
- * 按**编码名**取（单例）编码表；失败返回 `null`（TTL 内不重试，见模块头注释）。
- *
- * nm-style: keep-public — 「按编码名取表」语义入口，与 {@link getNodeEncodingForModel}（按模型名取）
- * 构成 `enc:` 单键空间的成对取表口（包 barrel 公开）；6 处测试以它为探针验证「精确档与兜底档
- * 共享同一张表」的不变量，该验证无等价替代入口——唯一生产调用方 {@link getDefaultNodeEncoding}
- * 只是 cl100k 特化，own 不了「按任意编码名取」的语义。
- */
-export function getNodeEncodingByName(name: TiktokenEncoding | string): Tiktoken | null {
-  return EncodingRegistry.get(name, () => get_encoding(name as TiktokenEncoding));
-}
-
-/** 默认（cl100k）编码表取用口。 */
-export function getDefaultNodeEncoding(): Tiktoken | null {
-  return getNodeEncodingByName(DEFAULT_NODE_ENCODING_NAME);
-}
-
-/**
- * 用默认编码表（cl100k）计一段文本的 token 数。
- *
- * @param text 待计数文本。
- * @returns token 数（估算值，误差实测 ≤0.6%）；**编码表不可用时返回 `null`**，
- *   调用方须自行决定降级口径（不要把 `null` 当 0）。
- */
-export function countTextWithDefaultEncoding(text: string): number | null {
-  const encoding = getDefaultNodeEncoding();
-  if (encoding == null) {
-    return null;
+  /**
+   * 按**编码名**取（单例）编码表；失败返回 `null`（TTL 内不重试，见模块头注释）。
+   *
+   * nm-style: keep-public — 「按编码名取表」语义入口，与 {@link EncodingCache.forModel}（按模型名取）
+   * 构成 `enc:` 单键空间的成对取表口（包 barrel 公开）；6 处测试以它为探针验证「精确档与兜底档
+   * 共享同一张表」的不变量，该验证无等价替代入口——唯一生产调用方 {@link EncodingCache.getDefault}
+   * 只是 cl100k 特化，own 不了「按任意编码名取」的语义。
+   */
+  export function byName(name: TiktokenEncoding | string): Tiktoken | null {
+    return EncodingRegistry.get(name, () => get_encoding(name as TiktokenEncoding));
   }
-  return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
-}
 
-/**
- * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
- *
- * 注意这里**不 `free()`**（见模块头「free 生命周期」）。
- */
-export function clearNodeEncodingCacheForTests(): void {
-  EncodingRegistry.clearForTests();
-}
+  /** 默认（cl100k）编码表取用口。 */
+  export function getDefault(): Tiktoken | null {
+    return byName(DEFAULT_NODE_ENCODING_NAME);
+  }
 
-/**
- * 测试钩子：覆盖编码表构造器（传 `null` 还原真实实现）。
- * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
- */
-export function __setNodeEncodingFactoryForTests(factory: NodeEncodingFactory | null): void {
-  EncodingRegistry.setFactoryForTests(factory);
+  /**
+   * 用默认编码表（cl100k）计一段文本的 token 数。
+   *
+   * @param text 待计数文本。
+   * @returns token 数（估算值，误差实测 ≤0.6%）；**编码表不可用时返回 `null`**，
+   *   调用方须自行决定降级口径（不要把 `null` 当 0）。
+   */
+  export function countText(text: string): number | null {
+    const encoding = getDefault();
+    if (encoding == null) {
+      return null;
+    }
+    return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
+  }
+
+  /**
+   * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
+   *
+   * 注意这里**不 `free()`**（见模块头「free 生命周期」）。
+   */
+  export function clearForTests(): void {
+    EncodingRegistry.clearForTests();
+  }
+
+  /**
+   * 测试钩子：覆盖编码表构造器（传 `null` 还原真实实现）。
+   * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
+   */
+  export function __setFactoryForTests(factory: NodeEncodingFactory | null): void {
+    EncodingRegistry.setFactoryForTests(factory);
+  }
 }

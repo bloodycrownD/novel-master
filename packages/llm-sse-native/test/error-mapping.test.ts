@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   NativeSseTransportError,
-  createNativeSseTransportFromBridge,
+  NativeSseTransport,
 } from "../src/transport.js";
 import {
   LLM_SSE_EVENT_CHUNK,
@@ -24,7 +24,7 @@ import { createMockBridge } from "./mock-bridge.js";
 describe("LlmSseError → transport 错误映射（T-N2）", () => {
   it('kind:"timeout"（callTimeout；原读超时口径已退役）原样携带，供 core 映射 LlmStreamTimeoutError', async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -46,7 +46,7 @@ describe("LlmSseError → transport 错误映射（T-N2）", () => {
 
   it('kind:"timeout" 在 0 数据阶段（首字黑洞）同样携带 kind（分级判定归 core）', async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -65,7 +65,7 @@ describe("LlmSseError → transport 错误映射（T-N2）", () => {
 
   it('kind:"network"（连接失败 / 连接被重置）', async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -83,7 +83,7 @@ describe("LlmSseError → transport 错误映射（T-N2）", () => {
   it("未知 kind（native 侧扩展）按非法载荷忽略——不误 reject 既有流", async () => {
     const mock = createMockBridge();
     const chunks: string[] = [];
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       (c) => chunks.push(c),
@@ -101,7 +101,7 @@ describe("LlmSseError → transport 错误映射（T-N2）", () => {
 
   it("headers 前收到 Done 属 network 语义（headers 丢失，流异常终止）", async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},

@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  registerNodeTokenizerDriverForTests  } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import {  unwrap  } from "../../helpers/result-unwrap.js";
-import {  countTextWithDefaultEncoding  } from "../../../../tokenizer-driver-node/src/impl/encoding-cache.js";
+import {  EncodingCache  } from "../../../../tokenizer-driver-node/src/impl/encoding-cache.js";
 import type { LlmToolDefinition } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
 import {  PromptLlmInputCount, DefaultTokenCounterRegistry, serializePromptLlmInput, TokenCountTools, ChunkSplitter  } from "../../../src/infra/tokenizer/index.js";
 import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
@@ -126,7 +126,7 @@ describe("本地计数含 tools 段", () => {
     const text = serialized + TokenCountTools.serialize(TOOLS);
     let expected = 0;
     for (const chunk of ChunkSplitter.splitText(text)) {
-      const perChunk = countTextWithDefaultEncoding(chunk);
+      const perChunk = EncodingCache.countText(chunk);
       assert.ok(
         perChunk != null,
         "真分词器计数不可用（编码表建不起来），本用例无法表达「tools 按同一序列化拼接」的契约"

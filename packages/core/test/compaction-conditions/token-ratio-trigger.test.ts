@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import {  beforeEach, describe, it  } from "node:test";
 import {  registerNodeTokenizerDriverForTests  } from "../helpers/register-node-tokenizer-driver-for-tests.js";
 import {  TokenizerRegistry  } from "../../src/infra/nmtp/index.js";
-import {  countPromptLlmInput as nodeCountPromptLlmInput  } from "../../../tokenizer-driver-node/src/count-prompt-llm-input.js";
-import {  createNodeTokenizerLoader, defaultTokenizerAssetsRoot, setNodeTokenizerLoader  } from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
+import {  PromptLlmInputCounter as NodePromptLlmInputCounter  } from "../../../tokenizer-driver-node/src/count-prompt-llm-input.js";
+import {  NodeTokenizerLoader  } from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
 import {  NODE_DRIVER_NAME  } from "../../../tokenizer-driver-node/src/register.js";
 import {  TokenRatioConditionTrigger  } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 import {  sessionApiPromptTokenCache  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
@@ -146,14 +146,14 @@ describe("TokenRatioConditionTrigger", () => {
   it("无统计可用时评估走 heuristic 估算、不调驱动（preferEstimate，T5 改版）", async () => {
     const captured: { driverCalled: number } = { driverCalled: 0 };
     TokenizerRegistry.clear();
-    setNodeTokenizerLoader(
-      createNodeTokenizerLoader(defaultTokenizerAssetsRoot()),
+    NodeTokenizerLoader.set(
+      NodeTokenizerLoader.create(NodeTokenizerLoader.defaultAssetsRoot()),
     );
     TokenizerRegistry.register({
       name: NODE_DRIVER_NAME,
       countPromptLlmInput: async (params) => {
         captured.driverCalled += 1;
-        return nodeCountPromptLlmInput(params);
+        return NodePromptLlmInputCounter.count(params);
       },
     });
 
