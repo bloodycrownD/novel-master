@@ -3,7 +3,7 @@
  *
  * 断言：五区顺序（存储空间 → 云端配置 → 数据清理 → 导出 → 导入）、存储
  * 空间卡体积展示、云端配置入口（进 CloudSyncStorage）、数据清理的
- * dbBusy 守卫、Alert 二次确认、失败 toast（toastMessage('清理失败')）、
+ * dbBusy 守卫、Alert 二次确认、失败 toast（ToastMessage.toast('清理失败')）、
  * finally 复位 dbBusy、云同步区已迁出本页（不再直接出现同步状态卡与
  * 拉取/推送菜单项）。与 provider-detail-tabs.test.ts 同款源码断言手法：
  * 整屏依赖 runtime/navigation/Toast 上下文，TestRenderer 行为化需逐层
@@ -13,6 +13,8 @@
  * 整卡移除（v1.5.41 同批）。
  */
 import {describe, expect, it} from '@jest/globals';
+import {CloudSyncConfigStore} from '@/services/cloud-sync-config.store';
+import {ToastMessage} from '@/errors/toast-message';
 import {readFileSync} from 'fs';
 import {join} from 'path';
 
@@ -39,7 +41,7 @@ describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
   });
 
   it('ProfileStatusCard 展示库体积与可回收量（进入页面拉取统计）', () => {
-    expect(source).toMatch(/getDatabaseMaintenanceStats/);
+    expect(source).toMatch(/DbMaintenanceService\.getStats/);
     expect(source).toMatch(/label: '库体积'/);
     expect(source).toMatch(/label: '可回收'/);
   });
@@ -47,8 +49,8 @@ describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
   it('云端配置入口存在：value 显示配置状态，点击进入 CloudSyncStorage', () => {
     expect(source).toMatch(/label="云端配置"/);
     expect(source).toMatch(/cloudConfigured \? '已配置' : '未配置'/);
-    // 配置状态经 getCloudSyncLocalStatus 本地读取（kkv），不发 S3 网络请求
-    expect(source).toMatch(/getCloudSyncLocalStatus/);
+    // 配置状态经 CloudSyncConfigStore.getLocalStatus 本地读取（kkv），不发 S3 网络请求
+    expect(source).toMatch(/CloudSyncConfigStore\.getLocalStatus/);
     expect(source).toMatch(/navigation\.navigate\('CloudSyncStorage'\)/);
   });
 
@@ -71,16 +73,16 @@ describe('StorageConfigScreen 数据清理行为 — T-UIM1', () => {
     expect(source).toMatch(/Alert\.alert\(\s*'数据清理'/);
   });
 
-  it("失败 toast 走 toastMessage('清理失败', err)", () => {
-    expect(source).toMatch(/toastMessage\('清理失败', err\)/);
+  it("失败 toast 走 ToastMessage.toast('清理失败', err)", () => {
+    expect(source).toMatch(/ToastMessage\.toast\('清理失败', err\)/);
   });
 
   it('finally 中复位 dbBusy（失败也复位）', () => {
     expect(source).toMatch(/\.finally\(\(\) => setDbBusy\(false\)\)/);
   });
 
-  it('确认后调用 runDatabaseMaintenance(runtime)，成功 toast 含前后体积对比', () => {
-    expect(source).toMatch(/runDatabaseMaintenance\(runtime\)/);
+  it('确认后调用 DbMaintenanceService.run(runtime)，成功 toast 含前后体积对比', () => {
+    expect(source).toMatch(/DbMaintenanceService\.run\(runtime\)/);
     expect(source).toMatch(/清理完成/);
   });
 });

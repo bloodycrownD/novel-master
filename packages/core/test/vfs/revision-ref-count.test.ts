@@ -11,23 +11,17 @@
  *
  * entry_id 化后 revision 按 entryId 寻址；ref_count 直接读裸列校验。
  */
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import {
-  decrementLiveRefsUnderScope,
-  decrementRefsForCheckpointFiles,
-  incrementRefsForCheckpointFiles,
-} from "@/domain/vfs/logic/revision-ref-count.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -53,7 +47,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -64,8 +58,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const pointers: Array<{ entryId: number; version: number }> = [];
     for (const p of paths) {
       await svfs.write(p, `body-${p}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
 
@@ -98,7 +92,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
           ],
           +1,
         ),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => AppErrorOps.is(err, "VFS_NOT_FOUND"),
     );
 
     // 部分存在、部分缺失：只要有一条缺失就抛错
@@ -106,14 +100,14 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
     await svfs.write("/exists.md", "x", { versionCheck: false });
-    const entry = await entries.findByPath(sk, "/exists.md");
-    const version = (await svfs.read("/exists.md")).version;
+    const entry = unwrap(await entries.findByPath(sk, "/exists.md"));
+    const version = (unwrap(await svfs.read("/exists.md"))).version;
 
     await assert.rejects(
       () =>
@@ -124,7 +118,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
           ],
           +1,
         ),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => AppErrorOps.is(err, "VFS_NOT_FOUND"),
     );
     // 抛错前不应 UPDATE 已存在的行（前置校验失败，整批不落库）
     // 初始 live head ref_count=1，没被改动
@@ -149,14 +143,14 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
     await svfs.write("/mix.md", "x", { versionCheck: false });
-    const entry = await entries.findByPath(sk, "/mix.md");
-    const version = (await svfs.read("/mix.md")).version;
+    const entry = unwrap(await entries.findByPath(sk, "/mix.md"));
+    const version = (unwrap(await svfs.read("/mix.md"))).version;
 
     await revisions.batchAdjustRefCount(
       [
@@ -185,7 +179,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -196,8 +190,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     for (let i = 0; i < 550; i++) {
       const p = `/chunk-${i}.md`;
       await svfs.write(p, `body-${i}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
     assert.equal(pointers.length, 550);
@@ -223,7 +217,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -233,13 +227,13 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const pointers: Array<{ entryId: number; version: number }> = [];
     for (const p of paths) {
       await svfs.write(p, `body-${p}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
 
     // increment helper：每条 +1
-    await incrementRefsForCheckpointFiles(
+    await RevisionRefCount.incrementForCheckpointFiles(
       revisions,
       pointers.map((p) => ({ entryId: p.entryId, revisionVersion: p.version })),
     );
@@ -248,7 +242,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     }
 
     // decrement helper：每条 -1
-    await decrementRefsForCheckpointFiles(
+    await RevisionRefCount.decrementForCheckpointFiles(
       revisions,
       pointers.map((p) => ({ entryId: p.entryId, revisionVersion: p.version })),
     );
@@ -257,14 +251,14 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     }
   });
 
-  it("T-BATCH-REF-LIVE：decrementLiveRefsUnderScope 批量扣减 scope 下 live head", async () => {
+  it("T-BATCH-REF-LIVE：RevisionRefCount.decrementLiveUnderScope 批量扣减 scope 下 live head", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -274,13 +268,13 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const pointers: Array<{ entryId: number; version: number }> = [];
     for (const p of paths) {
       await svfs.write(p, `body-${p}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
 
     // 批量扣减 scope 下所有 live head（每条 -1）
-    await decrementLiveRefsUnderScope(revisions, entries, sk, "/");
+    await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
     for (const p of pointers) {
       // 初始 1（live head）- 1 = 0
       assert.equal(await readRefCount(ctx.conn, p.entryId, p.version), 0);
@@ -294,14 +288,14 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     // increment helper 内部调 batchAdjustRefCount(+1)，缺失应抛错
     await assert.rejects(
       () =>
-        incrementRefsForCheckpointFiles(revisions, [
+        RevisionRefCount.incrementForCheckpointFiles(revisions, [
           { entryId: 555001, revisionVersion: 1 },
         ]),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => AppErrorOps.is(err, "VFS_NOT_FOUND"),
     );
 
     // decrement helper 对缺失行 no-op，不抛错
-    await decrementRefsForCheckpointFiles(revisions, [
+    await RevisionRefCount.decrementForCheckpointFiles(revisions, [
       { entryId: 555002, revisionVersion: 1 },
     ]);
   });

@@ -1,6 +1,6 @@
 /**
  * C-orch-1 (T-CF2)：handleAgentRun 在 RUN_STARTED 之前 reject / 早退时，
- * finally 兜底分支必须递减 refcount，否则 isDesktopAgentActive() 永久 true，
+ * finally 兜底分支必须递减 refcount，否则 agentActivity.isActive() 永久 true，
  * 后续 run 全部被 AGENT_BUSY 门禁挡掉。
  *
  * 用 node:module 的 register() 挂一个 loader hook，把 agent.ts 引用的
@@ -10,10 +10,7 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { afterEach, describe, it } from "node:test";
-import {
-  decrementDesktopAgentActive,
-  isDesktopAgentActive,
-} from "../src/main/runtime/agent-activity.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
 
 // 必须在动态 import agent.ts 之前注册 hook，否则真实模块已加载、mock 不生效。
 register(
@@ -21,9 +18,7 @@ register(
   import.meta.url,
 );
 
-const { handleAgentRun, __testRunTrackingState } = await import(
-  "../src/main/ipc/handlers/agent.js"
-);
+const { Agent } = await import("../src/main/ipc/handlers/agent.js");
 
 /** 等待 fire-and-forget 的 runAgentTurn 走完 catch+finally 的微任务队列。 */
 async function waitForBackgroundFinally(): Promise<void> {
@@ -34,15 +29,15 @@ async function waitForBackgroundFinally(): Promise<void> {
 
 describe("C-orch-1 handleAgentRun 早退兜底", () => {
   afterEach(() => {
-    while (isDesktopAgentActive()) {
-      decrementDesktopAgentActive();
+    while (agentActivity.isActive()) {
+      agentActivity.decrement();
     }
   });
 
   it("RUN_STARTED 之前 reject 时 refcount 回落到 0，再次 run 不被 AGENT_BUSY 挡，map 无泄漏", async () => {
-    const before = __testRunTrackingState();
+    const before = Agent.__testRunTrackingState();
 
-    const first = await handleAgentRun({
+    const first = await Agent.run({
       projectId: "p1",
       sessionId: "s-early-exit",
       userContent: "hi",
@@ -52,13 +47,13 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
 
     // ① refcount 必须 0；修复前这里永久为 true（C-orch-1 P0 bug）。
     assert.equal(
-      isDesktopAgentActive(),
+      agentActivity.isActive(),
       false,
       "早退兜底必须递减 refcount（C-orch-1）",
     );
 
     // ② 再次调用不应被 AGENT_BUSY 门禁挡掉。
-    const second = await handleAgentRun({
+    const second = await Agent.run({
       projectId: "p1",
       sessionId: "s-early-exit",
       userContent: "again",
@@ -70,7 +65,7 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
     await waitForBackgroundFinally();
 
     // ③ 早退分支必须清掉 activeRuns，map 大小回到测试前水位。
-    const after = __testRunTrackingState();
+    const after = Agent.__testRunTrackingState();
     assert.equal(
       after.activeRunsCount,
       before.activeRunsCount,
@@ -81,6 +76,6 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
       before.sessionRunIdsCount,
       "sessionRunIds 不应残留",
     );
-    assert.equal(isDesktopAgentActive(), false, "两次早退后 refcount 仍归零");
+    assert.equal(agentActivity.isActive(), false, "两次早退后 refcount 仍归零");
   });
 });

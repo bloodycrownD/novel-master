@@ -15,7 +15,7 @@ import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {type ChatMessageData} from '@novel-master/core/chat';
 import {Alert} from 'react-native';
-import {createSnapshotCompleteSignal} from '../src/services/snapshot-complete-signal';
+import {SnapshotCompleteSignal} from '../src/services/snapshot-complete-signal'
 import {useChatTabMessageActions} from '../src/screens/tabs/chat-tab/useChatTabMessageActions';
 
 const mockRollbackToMessage = jest.fn();
@@ -29,9 +29,12 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('../src/services/message-rollback.service', () => ({
+jest.mock('../src/services/message-rollback.service', () => {
+  const legacy = {
   rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
-}));
+};
+  return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
+});
 
 jest.mock('react-native', () => ({
   Alert: {
@@ -108,7 +111,7 @@ describe('token 刷新错峰（T-R5 hook 半）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
-    mockRollbackToMessage.mockResolvedValue(undefined);
+    mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
     mockReloadMessages.mockResolvedValue([]);
     mockSetDraftRestoreToken.mockImplementation(
       (updater: number | ((t: number) => number)) => {
@@ -124,7 +127,7 @@ describe('token 刷新错峰（T-R5 hook 半）', () => {
   });
 
   it('T-R5a: 快照完成信号先于 token 重算——notify 前 refresh 不发起、notify 后发起', async () => {
-    const signal = createSnapshotCompleteSignal();
+    const signal = SnapshotCompleteSignal.create();
     const anchor = plainUserMessage('hello');
     const api = mountActions([anchor], {snapshotCompleteSignal: signal});
 
@@ -149,7 +152,7 @@ describe('token 刷新错峰（T-R5 hook 半）', () => {
 
   it('T-R5b: 超时兜底——信号迟到时超时后刷新最终仍执行（不悬挂）', async () => {
     jest.useFakeTimers();
-    const signal = createSnapshotCompleteSignal();
+    const signal = SnapshotCompleteSignal.create();
     const anchor = plainUserMessage('hello');
     const api = mountActions([anchor], {snapshotCompleteSignal: signal});
 
@@ -179,7 +182,7 @@ describe('token 刷新错峰（T-R5 hook 半）', () => {
   });
 
   it('T-R5d: 信号早于 consumeNext 到达（notify 先行）——立即放行刷新', async () => {
-    const signal = createSnapshotCompleteSignal();
+    const signal = SnapshotCompleteSignal.create();
     const anchor = plainUserMessage('hello');
     const api = mountActions([anchor], {snapshotCompleteSignal: signal});
 

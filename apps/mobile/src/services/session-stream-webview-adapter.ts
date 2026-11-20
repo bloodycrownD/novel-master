@@ -12,7 +12,7 @@
  * 定义），本适配器用显式类型判定收窄——不用 `as` 双重断言。
  */
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
-import {isRecord} from '@novel-master/core/common';
+import {Guards} from '@novel-master/core/common';
 import type {StreamWireChunk} from './stream-wire-queue';
 import type {
   SessionStreamUnitStreamPayload,
@@ -22,76 +22,78 @@ import type {
 /** 载荷里的工具卡元素类型（经 SessionStreamUnitStreamPayload 派生，避免再导出内部类型）。 */
 type ToolView = NonNullable<SessionStreamUnitStreamPayload['tools']>[number];
 
-// prettier-ignore
-export function createTranscriptStreamHandle(handleId: string, web: ChatTranscriptWebViewHandle): SessionStreamWebviewHandle {
-  return {
-    handleId,
-    onStreamPayload: payload => {
-      if (!isRecord(payload) || payload.type !== 'stream-batch') {
-        return;
-      }
-      const {streamId, segments, tools} = payload;
-      if (typeof streamId !== 'string' || !Array.isArray(segments)) {
-        return;
-      }
-      const chunks: StreamWireChunk[] = [];
-      for (const entry of segments) {
-        if (!isRecord(entry)) {
+export namespace SessionStreamWebviewAdapter {
+  // prettier-ignore
+  export function create(handleId: string, web: ChatTranscriptWebViewHandle): SessionStreamWebviewHandle {
+    return {
+      handleId,
+      onStreamPayload: payload => {
+        if (!Guards.isRecord(payload) || payload.type !== 'stream-batch') {
           return;
         }
-        const kind = entry.kind;
-        const delta = entry.delta;
-        if (kind !== 'text' && kind !== 'thinking') {
+        const {streamId, segments, tools} = payload;
+        if (typeof streamId !== 'string' || !Array.isArray(segments)) {
           return;
         }
-        if (typeof delta !== 'string') {
-          return;
-        }
-        chunks.push({kind, delta});
-      }
-      let toolViews: ToolView[] | undefined;
-      if (tools != null) {
-        if (!Array.isArray(tools)) {
-          return;
-        }
-        toolViews = [];
-        for (const entry of tools) {
-          if (!isRecord(entry)) {
+        const chunks: StreamWireChunk[] = [];
+        for (const entry of segments) {
+          if (!Guards.isRecord(entry)) {
             return;
           }
-          const {toolUseId, name, status, input} = entry;
-          if (typeof toolUseId !== 'string' || typeof name !== 'string') {
+          const kind = entry.kind;
+          const delta = entry.delta;
+          if (kind !== 'text' && kind !== 'thinking') {
             return;
           }
-          if (typeof status !== 'string' || !isRecord(input)) {
+          if (typeof delta !== 'string') {
             return;
           }
-          toolViews.push({toolUseId, name, status, input});
+          chunks.push({kind, delta});
         }
-      }
-      web.pushStream({streamId, segments: chunks, tools: toolViews});
-    },
-    onControlMessage: message => {
-      if (!isRecord(message)) {
-        return;
-      }
-      if (message.type === 'reset-stream') {
-        if (!Array.isArray(message.streamIds)) {
+        let toolViews: ToolView[] | undefined;
+        if (tools != null) {
+          if (!Array.isArray(tools)) {
+            return;
+          }
+          toolViews = [];
+          for (const entry of tools) {
+            if (!Guards.isRecord(entry)) {
+              return;
+            }
+            const {toolUseId, name, status, input} = entry;
+            if (typeof toolUseId !== 'string' || typeof name !== 'string') {
+              return;
+            }
+            if (typeof status !== 'string' || !Guards.isRecord(input)) {
+              return;
+            }
+            toolViews.push({toolUseId, name, status, input});
+          }
+        }
+        web.pushStream({streamId, segments: chunks, tools: toolViews});
+      },
+      onControlMessage: message => {
+        if (!Guards.isRecord(message)) {
           return;
         }
-        const streamIds: string[] = [];
-        for (const entry of message.streamIds) {
-          if (typeof entry !== 'string') {
+        if (message.type === 'reset-stream') {
+          if (!Array.isArray(message.streamIds)) {
             return;
           }
-          streamIds.push(entry);
+          const streamIds: string[] = [];
+          for (const entry of message.streamIds) {
+            if (typeof entry !== 'string') {
+              return;
+            }
+            streamIds.push(entry);
+          }
+          web.resetStream(streamIds);
+          return;
         }
-        web.resetStream(streamIds);
-        return;
-      }
-      if (message.type === 'force-snapshot') {
-        web.forceSnapshot();
-      }
-    },
-  };
+        if (message.type === 'force-snapshot') {
+          web.forceSnapshot();
+        }
+      },
+    };
+  }
 }

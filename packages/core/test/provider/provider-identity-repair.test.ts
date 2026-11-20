@@ -7,22 +7,24 @@
  * - provider secret rename 操作的 detect + repair 幂等搬运。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createProviderIdentityRepairOperation, createProviderSecretRenameOperation } from "@/domain/provider/logic/provider-identity-repair.js";
-import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
+import {  describe, it  } from "node:test";
+import {  ProviderIdentityRepair  } from "@/domain/provider/logic/provider-identity-repair.js";
+import {  SqliteProviderRepository  } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  Result  } from "@/errors/either.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** 内存版 ProviderRepository，方便构造异常形态（绕开真实 repo 的读取校验）。 */
 function inMemoryProviderRepo(rows: LlmProvider[]): ProviderRepository {
   return {
     async list() {
-      return [...rows];
+      return Result.ok([...rows]);
     },
     async findById(id) {
-      return rows.find((r) => r.id === id) ?? null;
+      return Result.ok(rows.find((r) => r.id === id) ?? null);
     },
     async insert() {},
     async update() {},
@@ -78,9 +80,9 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     const ctx = getNovelMasterTestContext();
     // bootstrap 已种了内置 provider（openai / anthropic / ...），形态正常
     const providerRepo = new SqliteProviderRepository(ctx.conn);
-    const op = createProviderIdentityRepairOperation({ providerRepo });
+    const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
   });
 
@@ -90,13 +92,13 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     const providerRepo = new SqliteProviderRepository(ctx.conn);
 
     // 直接破坏一条内置行的 builtin_key（模拟 migration 裂了）
-    const builtins = await providerRepo.list();
+    const builtins = unwrap(await providerRepo.list());
     const target = builtins.find((p) => p.isBuiltin);
     assert.ok(target != null, "bootstrap 应已种内置 provider");
     await ctx.conn.execute(`UPDATE llm_provider SET builtin_key = NULL WHERE id = ?`, [target.id]);
 
-    const op = createProviderIdentityRepairOperation({ providerRepo });
-    const detection = await op.detect();
+    const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo });
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, true);
     assert.match(detection.details ?? "", /builtin_key/);
 
@@ -118,9 +120,9 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
         displayName: "",
       },
     ]);
-    const op = createProviderIdentityRepairOperation({ providerRepo: mockRepo });
+    const op = ProviderIdentityRepair.createIdentityRepairOperation({ providerRepo: mockRepo });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, true);
     assert.match(detection.details ?? "", /display_name/);
 
@@ -140,13 +142,13 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
     const newRef = `provider/${newId}/apiKey`;
     await store.set(oldRef, "sk-secret");
 
-    const op = createProviderSecretRenameOperation({
+    const op = ProviderIdentityRepair.createSecretRenameOperation({
       secretStore: store,
       oldId,
       newId,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, true);
 
     await op.repair();
@@ -155,20 +157,20 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
     assert.equal(store._dump().get(newRef), "sk-secret", "新 ref 应有值");
 
     // 再 detect 应为 false（幂等）
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false);
   });
 
   it("oldId === newId 时 detect=false（无需搬运）", async () => {
     const store = inMemorySecretStore();
     const id = `same-${testIsolationSuffix()}`;
-    const op = createProviderSecretRenameOperation({
+    const op = ProviderIdentityRepair.createSecretRenameOperation({
       secretStore: store,
       oldId: id,
       newId: id,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
   });
 
@@ -179,13 +181,13 @@ describe("provider-identity-repair: createProviderSecretRenameOperation", () => 
     await store.set(`provider/${oldId}/apiKey`, "old-val");
     await store.set(`provider/${newId}/apiKey`, "existing-val");
 
-    const op = createProviderSecretRenameOperation({
+    const op = ProviderIdentityRepair.createSecretRenameOperation({
       secretStore: store,
       oldId,
       newId,
     });
 
-    const detection = await op.detect();
+    const detection = unwrap(await op.detect());
     assert.equal(detection.needsRepair, false);
     assert.match(detection.details ?? "", /跳过 rename/);
   });

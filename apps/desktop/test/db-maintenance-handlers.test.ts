@@ -1,24 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import {
-  resetDesktopCloudSyncServiceForTest,
-  setDesktopCloudSyncBusyForTest,
-} from "../src/main/services/cloud-sync.service.js";
-import { runDbMaintenance } from "../src/main/services/db-maintenance.service.js";
-import {
-  isDesktopDbMaintenanceBusy,
-  resetDesktopDbMaintenanceBusyForTest,
-  setDesktopDbMaintenanceBusy,
-} from "../src/main/services/db-maintenance-busy.js";
-import {
-  handleDbMaintenance,
-  handleDbStats,
-} from "../src/main/ipc/handlers/db-maintenance.js";
-import {
-  decrementDesktopAgentActive,
-  incrementDesktopAgentActive,
-} from "../src/main/runtime/agent-activity.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import {CloudSyncService, syncBusy} from "../src/main/services/cloud-sync.service.js";
+import { DbMaintenanceService } from "../src/main/services/db-maintenance.service.js";
+import { maintenanceBusy } from "../src/main/services/db-maintenance-busy.js";
+import { DbMaintenance } from "../src/main/ipc/handlers/db-maintenance.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -29,57 +16,57 @@ describe("db-maintenance ipc handlers", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-db-maintenance-"));
-    resetDesktopCloudSyncServiceForTest();
-    resetDesktopDbMaintenanceBusyForTest();
+    CloudSyncService.resetForTest();
+    maintenanceBusy.resetForTest();
   });
 
   after(async () => {
-    resetDesktopCloudSyncServiceForTest();
-    resetDesktopDbMaintenanceBusyForTest();
+    CloudSyncService.resetForTest();
+    maintenanceBusy.resetForTest();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("T-DMD1：Agent 运行中或云同步进行中时返回中文错误", async () => {
-    incrementDesktopAgentActive();
+    agentActivity.increment();
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, false);
       if (!res.ok) {
         assert.equal(res.error.message, "Agent 运行中，请稍后再操作");
       }
     } finally {
-      decrementDesktopAgentActive();
+      agentActivity.decrement();
     }
 
-    setDesktopCloudSyncBusyForTest(true);
+    syncBusy.set(true);
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, false);
       if (!res.ok) {
         assert.equal(res.error.message, "云同步进行中，请稍后再操作");
       }
     } finally {
-      setDesktopCloudSyncBusyForTest(false);
+      syncBusy.set(false);
     }
 
     // 第三分支：自身数据清理 busy 时拒绝并发（spec 风险表承诺的口径）
-    setDesktopDbMaintenanceBusy(true);
+    maintenanceBusy.set(true);
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, false);
       if (!res.ok) {
         assert.equal(res.error.message, "数据清理进行中，请稍后再操作");
       }
     } finally {
-      setDesktopDbMaintenanceBusy(false);
+      maintenanceBusy.set(false);
     }
 
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(maintenanceBusy.isBusy(), false);
   });
 
   it("T-DMD2：正常路径返回前后体积且执行窗口内 maintenanceBusy 为真", async () => {
     // stats 顺带验证：fileBytes 来自 stat，reclaimableBytes 来自 PRAGMA 口径
-    const stats = await handleDbStats();
+    const stats = await DbMaintenance.handleDbStats();
     assert.equal(stats.ok, true);
     if (stats.ok) {
       assert.ok(stats.data.fileBytes > 0);
@@ -89,7 +76,9 @@ describe("db-maintenance ipc handlers", () => {
     // busy 窗口断言不能靠事件循环插入（setImmediate/轮询）：better-sqlite3
     // 的同步 VACUUM 会冻住 main 事件循环，任何回调都要等 busy 复位后才能
     // 跑——所以在 conn.execute 上装探针，在 VACUUM 语句执行的一刻采样。
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const conn = runtime.conn as unknown as {
       execute: (sql: string) => Promise<unknown>;
     };
@@ -97,12 +86,12 @@ describe("db-maintenance ipc handlers", () => {
     let busyAtVacuum: boolean | undefined;
     conn.execute = async (sql: string) => {
       if (sql.includes("VACUUM")) {
-        busyAtVacuum = isDesktopDbMaintenanceBusy();
+        busyAtVacuum = maintenanceBusy.isBusy();
       }
       return originalExecute(sql);
     };
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, true);
       if (res.ok) {
         assert.ok(res.data.beforeBytes > 0);
@@ -114,23 +103,25 @@ describe("db-maintenance ipc handlers", () => {
       conn.execute = originalExecute;
     }
     assert.equal(busyAtVacuum, true);
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(maintenanceBusy.isBusy(), false);
   });
 
   it("T-DMD3：维护链路抛错时消息透传且 maintenanceBusy 复位", async () => {
     // 事务内 VACUUM 被 SQLite 拒绝（core 链路真实抛错点），
     // 用来构造 runDatabaseMaintenance 失败路径。
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     await runtime.conn.execute("BEGIN");
 
-    const pending = handleDbMaintenance();
+    const pending = DbMaintenance.handle();
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(isDesktopDbMaintenanceBusy(), true);
+    assert.equal(maintenanceBusy.isBusy(), true);
     const res = await pending;
     await runtime.conn.execute("ROLLBACK");
 
     assert.equal(res.ok, false);
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(maintenanceBusy.isBusy(), false);
     if (!res.ok) {
       assert.ok(res.error.message.length > 0);
     }
@@ -140,7 +131,7 @@ describe("db-maintenance ipc handlers", () => {
     await runtime.conn.execute("BEGIN");
     let rawMessage = "";
     try {
-      await runDbMaintenance();
+      await DbMaintenanceService.run();
     } catch (err) {
       rawMessage = err instanceof Error ? err.message : String(err);
     }

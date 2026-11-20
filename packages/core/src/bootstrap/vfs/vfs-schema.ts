@@ -10,7 +10,7 @@
  */
 
 /** 若不存在则创建 vfs_entry 表（entry_id 主键形态，entry_kind CHECK）. */
-export const VFS_ENTRY_TABLE_DDL = `
+const VFS_ENTRY_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_entry (
   entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
   scope_key TEXT NOT NULL,
@@ -22,11 +22,6 @@ CREATE TABLE IF NOT EXISTS vfs_entry (
   content TEXT NULL,
   UNIQUE(scope_key, path)
 )`.trim();
-
-/** scope_key + path 复合索引，用于 scope 内前缀扫描。 */
-export const VFS_ENTRY_SCOPE_PATH_INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS idx_vfs_entry_scope_path
-  ON vfs_entry(scope_key, path)`.trim();
 
 /**
  * content_hash 索引：打包候选谓词的 `NOT EXISTS (vfs_entry.content_hash)` 反查

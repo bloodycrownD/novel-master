@@ -12,8 +12,7 @@ import { describe, it } from "node:test";
 import {
   NativeSseAbortError,
   NativeSseTransportError,
-  createNativeSseTransportFromBridge,
-  flattenRequestHeaders,
+  NativeSseTransport,
 } from "../src/transport.js";
 import {
   LLM_SSE_EVENT_CHUNK,
@@ -26,7 +25,7 @@ import { createMockBridge } from "./mock-bridge.js";
 /** 一次完整的成功流：headers → chunks → done。返回 promise 与注入工具。 */
 function startStream(mock: ReturnType<typeof createMockBridge>) {
   const chunks: string[] = [];
-  const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+  const promise = NativeSseTransport.create(mock.bridge).post(
     "https://example.test/v1/chat",
     { method: "POST", body: '{"prompt":"hi"}' },
     (chunk) => {
@@ -38,7 +37,7 @@ function startStream(mock: ReturnType<typeof createMockBridge>) {
   return { promise, chunks, requestId: requestId as string };
 }
 
-describe("createNativeSseTransportFromBridge（T-N1）", () => {
+describe("NativeSseTransport.create（T-N1）", () => {
   it("全链路：headers 记录 status/contentType，chunk 1:1 透传，done 后 resolve", async () => {
     const mock = createMockBridge();
     const { promise, chunks, requestId } = startStream(mock);
@@ -98,7 +97,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
 
   it("并发两个请求：各自路由正确、requestId 前缀区分", async () => {
     const mock = createMockBridge();
-    const transport = createNativeSseTransportFromBridge(mock.bridge);
+    const transport = NativeSseTransport.create(mock.bridge);
     const chunksA: string[] = [];
     const chunksB: string[] = [];
 
@@ -133,18 +132,18 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     const reloaded = (await import(
       `../src/transport.js?reload=${Date.now()}`
     )) as {
-      createNativeSseTransportFromBridge: typeof createNativeSseTransportFromBridge;
+      NativeSseTransport: typeof NativeSseTransport;
     };
 
     const chunksBefore: string[] = [];
     const chunksAfter: string[] = [];
     // 同一 mock bridge = 同一 native 模块：重载前后的旧 id 仍存活于 native 侧
-    const promiseBefore = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promiseBefore = NativeSseTransport.create(mock.bridge).post(
       "https://before.test",
       { method: "POST", body: "" },
       (c) => chunksBefore.push(c),
     );
-    const promiseAfter = reloaded.createNativeSseTransportFromBridge(mock.bridge).post(
+    const promiseAfter = reloaded.NativeSseTransport.create(mock.bridge).post(
       "https://after.test",
       { method: "POST", body: "" },
       (c) => chunksAfter.push(c),
@@ -207,7 +206,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     const mock = createMockBridge();
     const { promise, requestId } = (() => {
       const chunks: string[] = [];
-      const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+      const promise = NativeSseTransport.create(mock.bridge).post(
         "https://example.test/stream",
         {
           method: "POST",
@@ -236,7 +235,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
   it("nativeTimeouts 覆盖传参（per-request 超时覆盖）", async () => {
     const mock = createMockBridge();
     const chunks: string[] = [];
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       (c) => chunks.push(c),
@@ -254,7 +253,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
 
   it("core 下发 wholeCallTimeoutMs：作为第 6 参透传给 sseConnect（单点整调用预算）", async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -272,7 +271,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
 
   it("wholeCallTimeoutMs 优先于 nativeTimeouts.callMs（core 单点口径覆盖本包扩展位）", async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -292,7 +291,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     const mock = createMockBridge();
     const controller = new AbortController();
     const chunks: string[] = [];
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       (c) => chunks.push(c),
@@ -319,7 +318,7 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     const mock = createMockBridge();
     const controller = new AbortController();
     controller.abort();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -347,7 +346,7 @@ describe("非 2xx 错误路径（对齐 XHR 分支 onload 语义）", () => {
   it("非 2xx：错误 body 不喂 onChunk，Done 时以 http 错误 reject（带摘要）", async () => {
     const mock = createMockBridge();
     const chunks: string[] = [];
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       (c) => chunks.push(c),
@@ -371,7 +370,7 @@ describe("非 2xx 错误路径（对齐 XHR 分支 onload 语义）", () => {
 
   it("超长错误 body 只保留前 500 字符摘要", async () => {
     const mock = createMockBridge();
-    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+    const promise = NativeSseTransport.create(mock.bridge).post(
       "https://example.test/stream",
       { method: "POST", body: "" },
       () => {},
@@ -390,14 +389,14 @@ describe("非 2xx 错误路径（对齐 XHR 分支 onload 语义）", () => {
   });
 });
 
-describe("flattenRequestHeaders", () => {
+describe("NativeSseTransport.flattenRequestHeaders", () => {
   it("Record 形态", () => {
-    assert.deepEqual(flattenRequestHeaders({ A: "1", B: "2" }), ["A", "1", "B", "2"]);
+    assert.deepEqual(NativeSseTransport.flattenRequestHeaders({ A: "1", B: "2" }), ["A", "1", "B", "2"]);
   });
 
   it("数组形态（HeadersInit 的 [string, string][]）", () => {
     assert.deepEqual(
-      flattenRequestHeaders([
+      NativeSseTransport.flattenRequestHeaders([
         ["A", "1"],
         ["B", "2"],
       ]),
@@ -408,10 +407,10 @@ describe("flattenRequestHeaders", () => {
   it("Headers 实例形态（forEach 遍历；undici 会小写化头名，OkHttp 侧大小写不敏感）", () => {
     const headers = new Headers();
     headers.set("Authorization", "Bearer tk");
-    assert.deepEqual(flattenRequestHeaders(headers), ["authorization", "Bearer tk"]);
+    assert.deepEqual(NativeSseTransport.flattenRequestHeaders(headers), ["authorization", "Bearer tk"]);
   });
 
   it("undefined 形态", () => {
-    assert.deepEqual(flattenRequestHeaders(undefined), []);
+    assert.deepEqual(NativeSseTransport.flattenRequestHeaders(undefined), []);
   });
 });

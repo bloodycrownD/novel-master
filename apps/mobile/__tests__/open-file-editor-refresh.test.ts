@@ -12,9 +12,10 @@ import {beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '@/screens/tabs/chat-tab/useChatTabScope';
-import {takeFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -24,15 +25,15 @@ jest.mock('@/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('@/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // 防御性补键（tokenizer-native-cancel）：hook 的换 key 分支 / 卸载 cleanup
-  // 也会调 cancelPreciseUpgrade，缺键即 undefined 抛。
-  cancelPreciseUpgrade: jest.fn(),
-  // Part D 新导出（cr2-E-2 同族，换 key 分支首轮必调）。
-  cancelPreciseUpgradeDelay: jest.fn(),
+  // 也会调 PreciseUpgrade.cancel，缺键即 undefined 抛。
+  PreciseUpgrade: {cancel: jest.fn(), cancelDelay: jest.fn()},
 }));
 
 const mockRuntime: any = {
@@ -55,14 +56,14 @@ const mockRuntime: any = {
 describe('openFileEditor 保存回调接线（N-P1-03）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    takeFileEditorOnSessionVfsSaved();
+    fileEditorOnSessionVfsSavedSlot.take();
   });
 
   it('T-FEPar-4 session scope：navigate 被调用前回调已写入', async () => {
     let cbAtNavigateTime: unknown = 'navigate-not-called';
     const navigation = {
       navigate: jest.fn(() => {
-        cbAtNavigateTime = takeFileEditorOnSessionVfsSaved();
+        cbAtNavigateTime = fileEditorOnSessionVfsSavedSlot.take();
       }),
     } as never;
 
@@ -127,6 +128,6 @@ describe('openFileEditor 保存回调接线（N-P1-03）', () => {
       projectId: 'p1',
     });
     // project 域不写回调：避免上一次 session 打开的回调被误消费
-    expect(takeFileEditorOnSessionVfsSaved()).toBeNull();
+    expect(fileEditorOnSessionVfsSavedSlot.take()).toBeNull();
   });
 });

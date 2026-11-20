@@ -1,25 +1,25 @@
 import { describe } from "node:test";
-import { open } from "@novel-master/core";
-import { clearDrivers } from "@novel-master/core/tdbc";
-import { runConformanceTests } from "@novel-master/tdbc-conformance";
+import { TdbcOpen } from "@novel-master/core";
+import { TdbcRegistry } from "@novel-master/core/tdbc";
+import { ConformanceSuite } from "@novel-master/tdbc-conformance";
 import {
-  registerBetterSqlite3Driver,
+  BetterSqlite3Register,
   BETTER_SQLITE3_DRIVER_NAME,
 } from "../src/index.js";
 
-registerBetterSqlite3Driver();
+BetterSqlite3Register.register();
 
-runConformanceTests({
+ConformanceSuite.run({
   createConnection: async () =>
-    open("tdbc:sqlite:file::memory:", {
+    TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     }),
   beforeUnknownDriverTest: () => {
-    clearDrivers();
+    TdbcRegistry.clear();
   },
   afterUnknownDriverTest: () => {
-    registerBetterSqlite3Driver();
+    BetterSqlite3Register.register();
   },
 });
 

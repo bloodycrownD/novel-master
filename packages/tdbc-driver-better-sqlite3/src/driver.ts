@@ -14,9 +14,7 @@ export const BETTER_SQLITE3_DRIVER_NAME = "better-sqlite3";
 export class BetterSqlite3Driver implements TdbcDriver {
   readonly name = BETTER_SQLITE3_DRIVER_NAME;
 
-  async open(
-    options: OpenOptions & { url?: string },
-  ): Promise<TdbcConnection> {
+  async open(options: OpenOptions & { url?: string },): Promise<TdbcConnection> {
     const filename = options.filename ?? ":memory:";
     try {
       const db = new Database(filename, {

@@ -3,12 +3,7 @@ import {
   userVfsTurnStorage,
   type ChatMessageData,
 } from '@novel-master/core/chat';
-import {
-  buildChatListItems,
-  buildTranscriptRows,
-  selectTailTranscriptRows,
-  type BuildChatListItemsOptions,
-} from '@/components/chat/message-blocks';
+import {type BuildChatListItemsOptions, MessageBlocks} from '@/components/chat/message-blocks'
 
 function msg(
   id: string,
@@ -37,8 +32,8 @@ describe('buildTranscriptRows', () => {
       msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
       msg('a1', 'assistant', [{type: 'text', text: 'hello'}], 2),
     ];
-    const listKinds = buildChatListItems(messages).map(i => i.kind);
-    const rowKinds = buildTranscriptRows(messages).map(r => r.kind);
+    const listKinds = MessageBlocks.buildChatListItems(messages).map(i => i.kind);
+    const rowKinds = MessageBlocks.buildTranscriptRows(messages).map(r => r.kind);
     expect(rowKinds).toEqual(listKinds);
   });
 
@@ -62,7 +57,7 @@ describe('buildTranscriptRows', () => {
         },
       ],
     };
-    const row = buildTranscriptRows([withAttach])[0];
+    const row = MessageBlocks.buildTranscriptRows([withAttach])[0];
     expect(row).toMatchObject({
       kind: 'message',
       role: 'user',
@@ -81,7 +76,7 @@ describe('buildTranscriptRows', () => {
         },
       ],
     });
-    const plain = buildTranscriptRows([
+    const plain = MessageBlocks.buildTranscriptRows([
       msg('u2', 'user', [{type: 'text', text: '无附件'}], 1),
     ])[0];
     expect(plain).toMatchObject({kind: 'message', role: 'user'});
@@ -103,7 +98,7 @@ describe('buildTranscriptRows', () => {
       ],
     };
     // user ops 已拆除：遗留操作日志不再兼容展示，空正文且无其它附件 → 不生成行。
-    expect(buildTranscriptRows([opsOnly])).toHaveLength(0);
+    expect(MessageBlocks.buildTranscriptRows([opsOnly])).toHaveLength(0);
   });
 
   it('T-SR3b: 空正文 + 仅 annotate 附件仍进 transcript（批注保留）', () => {
@@ -121,7 +116,7 @@ describe('buildTranscriptRows', () => {
         },
       ],
     };
-    const rows = buildTranscriptRows([annotateOnly]);
+    const rows = MessageBlocks.buildTranscriptRows([annotateOnly]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       kind: 'message',
@@ -158,7 +153,7 @@ describe('buildTranscriptRows', () => {
         },
       ],
     };
-    const row = buildTranscriptRows([withAction])[0];
+    const row = MessageBlocks.buildTranscriptRows([withAction])[0];
     // user_ops write 是遗留操作日志，丢弃；workplace 照常透传。
     expect(row).toMatchObject({
       kind: 'message',
@@ -198,8 +193,8 @@ describe('buildTranscriptRows', () => {
         {metadata: {kind: 'user_vfs_ack', synthetic: true}},
       ),
     ];
-    const items = buildChatListItems(messages);
-    const rows = buildTranscriptRows(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
+    const rows = MessageBlocks.buildTranscriptRows(messages);
     expect(items.every(i => i.kind === 'message')).toBe(true);
     expect(rows.every(r => r.kind === 'message')).toBe(true);
     expect(items).toHaveLength(2);
@@ -226,7 +221,7 @@ describe('buildTranscriptRows', () => {
         },
       ],
     };
-    const rows = buildTranscriptRows([emptyWithMixed]);
+    const rows = MessageBlocks.buildTranscriptRows([emptyWithMixed]);
     expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows[0]).toMatchObject({
       kind: 'message',
@@ -241,7 +236,7 @@ describe('buildTranscriptRows', () => {
 
   it('流式正文不再是本函数的第二数据面（spec C10：流式行由宿主投影生成）', () => {
     const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
-    const rows = buildTranscriptRows(messages);
+    const rows = MessageBlocks.buildTranscriptRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows.every(row => row.kind === 'message')).toBe(true);
   });
@@ -255,7 +250,7 @@ describe('buildTranscriptRows', () => {
         1,
       ),
     ];
-    const row = buildTranscriptRows(messages, {
+    const row = MessageBlocks.buildTranscriptRows(messages, {
       agentRunning: true,
     })[0];
     expect(row).toMatchObject({
@@ -277,7 +272,7 @@ describe('buildTranscriptRows', () => {
         1,
       ),
     ];
-    const row = buildTranscriptRows(messages)[0];
+    const row = MessageBlocks.buildTranscriptRows(messages)[0];
     expect(row).toMatchObject({
       kind: 'message',
       id: 'a1',
@@ -306,7 +301,7 @@ describe('buildTranscriptRows', () => {
         3,
       ),
     ];
-    const rows = buildTranscriptRows(messages);
+    const rows = MessageBlocks.buildTranscriptRows(messages);
     expect(rows.every(r => r.kind !== 'tool')).toBe(true);
     const assistant = rows.find(r => r.kind === 'message' && r.id === 'a1');
     expect(assistant).toMatchObject({
@@ -340,7 +335,7 @@ describe('buildTranscriptRows', () => {
         2,
       ),
     ];
-    const rows = buildTranscriptRows(messages);
+    const rows = MessageBlocks.buildTranscriptRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       kind: 'message',
@@ -353,7 +348,7 @@ describe('buildTranscriptRows', () => {
     const messages = [
       msg('u1', 'user', [{type: 'text', text: 'hidden'}], 1, true),
     ];
-    const row = buildTranscriptRows(messages)[0];
+    const row = MessageBlocks.buildTranscriptRows(messages)[0];
     expect(row).toMatchObject({kind: 'message', hidden: true});
   });
 
@@ -373,10 +368,10 @@ describe('buildTranscriptRows', () => {
         true,
       ),
     ];
-    const tailOnly = buildTranscriptRows([messages[0]!], {
+    const tailOnly = MessageBlocks.buildTranscriptRows([messages[0]!], {
       agentRunning: true,
     })[0];
-    const fromFull = selectTailTranscriptRows(messages, [messages[0]!], {
+    const fromFull = MessageBlocks.selectTailTranscriptRows(messages, [messages[0]!], {
       agentRunning: true,
     })[0];
     expect(tailOnly).toMatchObject({
@@ -389,7 +384,7 @@ describe('buildTranscriptRows', () => {
 
   it('T-R1: 空 tail 返回空数组', () => {
     const messages = [msg('u1', 'user', [{type: 'text', text: 'hi'}], 1)];
-    expect(selectTailTranscriptRows(messages, [])).toEqual([]);
+    expect(MessageBlocks.selectTailTranscriptRows(messages, [])).toEqual([]);
   });
 });
 
@@ -487,11 +482,11 @@ describe('T-R1 selectTailTranscriptRows 预扫构建等价（init-busy-yield Ste
       for (const tailSize of [3, 30, 539]) {
         const tailMessages = allMessages.slice(-tailSize);
         const tailIds = new Set(tailMessages.map(message => message.id));
-        const expected = buildTranscriptRows(allMessages, options).filter(
+        const expected = MessageBlocks.buildTranscriptRows(allMessages, options).filter(
           row => row.kind === 'message' && tailIds.has(row.id),
         );
         expect(
-          selectTailTranscriptRows(allMessages, tailMessages, options),
+          MessageBlocks.selectTailTranscriptRows(allMessages, tailMessages, options),
         ).toEqual(expected);
       }
     },

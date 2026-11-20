@@ -9,17 +9,16 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import {
-  openSqlCountingNovelMasterTestConnection,
-} from "../helpers/sql-counting-connection.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** 带 SQL 计数的测试上下文：conn 是装饰过的，counter 和它一对一。 */
 type CountedCtx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
@@ -63,7 +62,7 @@ describe("T-SC1 scanContents 批量读 blob", () => {
 
     // 写入阶段会发大量 SQL，清掉后再 grep，只统计读取路径。
     c.counter.clear();
-    const matches = await vfs.grep("needle", { pathPrefix: "/docs" });
+    const matches = unwrap(await vfs.grep("needle", { pathPrefix: "/docs" }));
 
     // grep 命中全部 500 文件，证明 scanContents 正常解出明文。
     assert.equal(matches.length, N);
@@ -95,11 +94,11 @@ describe("T-DEL2 deleteVfsPrefix 批量删", () => {
       await vfs.write(`/tree/f${i}.md`, `body-${i}`);
     }
 
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
     const repo = new SqliteVfsEntryRepository(c.conn);
 
     c.counter.clear();
-    await deleteVfsPrefix(repo, sk, "/tree");
+    await VfsTreeCopy.deletePrefix(repo, sk, "/tree");
 
     const entryDeletes = c.counter.countBySubstring("DELETE FROM vfs_entry");
     assert.equal(
@@ -117,12 +116,12 @@ describe("T-DEL2 deleteVfsPrefix 批量删", () => {
   it("空 prefix（目录已空）不抛异常，静默返回", async () => {
     const c = getCtx();
     const project = await c.projects.create("p-del2-empty");
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
     const repo = new SqliteVfsEntryRepository(c.conn);
 
     // 该 project 还没写过任何文件，prefix 下为空，不应抛 vfsNotFound。
     c.counter.clear();
-    await assert.doesNotReject(() => deleteVfsPrefix(repo, sk, "/none"));
+    await assert.doesNotReject(() => VfsTreeCopy.deletePrefix(repo, sk, "/none"));
     // 空探测不应发 DELETE。
     assert.equal(c.counter.countBySubstring("DELETE FROM vfs_entry"), 0);
   });
@@ -144,7 +143,7 @@ describe("T-GC2 blob GC 单条 DELETE", () => {
     }
 
     c.counter.clear();
-    const deleted = await runDeferredBlobGc(c.conn);
+    const deleted = await DeferredBlobGc.run(c.conn);
 
     assert.equal(
       deleted,
@@ -162,7 +161,7 @@ describe("T-GC2 blob GC 单条 DELETE", () => {
       `DELETE FROM vfs_content_blob 次数应为 1，实际 ${blobDeletes}`,
     );
 
-    // cr-p1-2 删掉 collectAllReferencedHashes 后，runDeferredBlobGc 不再独立发出
+    // cr-p1-2 删掉 collectAllReferencedHashes 后，DeferredBlobGc.run 不再独立发出
     // 「扫 entry / revision 引用集」的 SELECT——gc 的 NOT IN 子查询嵌在同一条 DELETE
     // 语句里，不会单独成为 query 记录。这里双保险：断言 entry 和 revision 两条引用集
     // SELECT 都没有作为独立语句发出。

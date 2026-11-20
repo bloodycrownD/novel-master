@@ -92,6 +92,13 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/agent.js',
     ),
+    // 取消域 barrel（ABORT_KEY / AbortRegistry / createAbortScope 等）：
+    // exports 只声明 import 条件，Jest 的 require 解析不到，同其它 core
+    // 子路径直连 dist 真实文件。
+    '^@novel-master/core/abort$': path.join(
+      repoRoot,
+      'packages/core/dist/public/abort.js',
+    ),
     '^@novel-master/core/format$': path.join(
       repoRoot,
       'packages/core/dist/public/format.js',
@@ -150,6 +157,16 @@ module.exports = {
     '^@novel-master/core/tdbc$': path.join(
       repoRoot,
       'packages/core/dist/infra/tdbc/index.js',
+    ),
+    // token 计数 / LLM 协议层直映子出口（p22 public-surface-ownership）：
+    // 同 nmtp/tdbc 口径直连 dist 真实文件。
+    '^@novel-master/core/tokenizer$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/tokenizer/index.js',
+    ),
+    '^@novel-master/core/llm-protocol$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/llm-protocol/index.js',
     ),
     // 日志端口：同其它 core 子路径直连 dist 真实文件（RN preset 的
     // customExportConditions 不含 import，未映射的子路径在 jest-resolve 就抛）。
@@ -232,6 +249,13 @@ module.exports = {
     '^@novel-master/core/presentation/chat/(.*)$': path.join(
       repoRoot,
       'packages/core/dist/presentation/chat/$1',
+    ),
+    // 错误通道三期新增的 public/errors 子入口（AppError / Result / Outcome）：
+    // 同其它 core 子路径直连 dist 真实文件，exports 只声明 import 条件，
+    // Jest 的 require 解析不到，漏写会让 format-error 等套件解析失败。
+    '^@novel-master/core/errors$': path.join(
+      repoRoot,
+      'packages/core/dist/public/errors.js',
     ),
   },
 };

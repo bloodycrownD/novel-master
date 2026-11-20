@@ -25,12 +25,12 @@ import {
   resolveMoveDestination,
 } from "./vfs-tree-dnd";
 
-export type ActiveNativeDrag = {
+type ActiveNativeDrag = {
   readonly logicalPaths: readonly string[];
   readonly stagingRoot: string;
 };
 
-export type StagedExport = {
+type StagedExport = {
   readonly logicalPaths: readonly string[];
   readonly stagingRoot: string;
   readonly filePaths: readonly string[];
@@ -92,11 +92,6 @@ export function finalizeRowDrag(logicalPath: string): void {
   }
 }
 
-/** @internal 测试辅助 */
-export function isPrefetchInFlightForTest(logicalPath: string): boolean {
-  return prefetchInFlight.has(logicalPath);
-}
-
 /** 订阅 main startDrag 失败事件（幂等）。 */
 export function ensureStartDragFailureToast(): () => void {
   if (startDragFailedUnsub == null) {
@@ -113,10 +108,6 @@ export function ensureStartDragFailureToast(): () => void {
     startDragFailedUnsub?.();
     startDragFailedUnsub = null;
   };
-}
-
-export function getActiveNativeDrag(): ActiveNativeDrag | null {
-  return activeNativeDrag;
 }
 
 export function clearActiveNativeDrag(): void {

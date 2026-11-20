@@ -4,60 +4,26 @@
  * @module runtime/novel-master-context
  */
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import {
-  ActivityIndicator,
-  Button,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
-import {closeMobileConnection} from '../db/connection';
-import {
-  createAppUiPreferences,
-  type AppUiPreferences,
-} from '../storage/app-ui-prefs';
-import {syncAppVersionForRichRender} from '../storage/app-version-guard';
-import {createMobileNovelMasterRuntime} from './create-mobile-runtime';
+import React, {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
+import {ActivityIndicator, Button, StyleSheet, Text, useColorScheme, View} from 'react-native';
+import {MobileDb} from '../db/connection';
+import {AppUiPrefs, type AppUiPreferences} from '../storage/app-ui-prefs';
+import {AppVersionGuard} from '../storage/app-version-guard';
+import {MobileRuntimeFactory} from './create-mobile-runtime';
 import mobilePackage from '../../package.json';
-import {
-  loadMobileScope,
-  setMobileProject,
-  setMobileSession,
-  type MobileScopeSnapshot,
-} from './mobile-scope';
+import {MobileScope, type MobileScopeSnapshot} from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
-import {
-  armRebootWaiter,
-  rebindRebootWaiterGeneration,
-  settleRebootWaiter,
-  type RebootWaiter,
-} from './reboot-waiter';
-import {
-  SessionStreamUnitManager,
-  type SessionStreamPrefBridge,
-} from '@/services/session-stream-unit-manager.service';
+import {RebootWaiter} from './reboot-waiter';
+import {SessionStreamUnitManager, type SessionStreamPrefBridge} from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
-import {
-  createSessionStreamTokenEstimator,
-  primeStreamTokenModelHint,
-} from '@/services/stream-token-estimator';
-import {showAppToast} from '@/services/app-toast';
-import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
-import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
-import {tokensForMode} from '../theme/tokens';
+import {StreamTokenEstimator} from '@/services/stream-token-estimator';
+import {AppToast} from '@/services/app-toast';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
+import {Tokens} from '../theme/tokens';
 
-export type RuntimeStatus = 'loading' | 'ready' | 'error';
+type RuntimeStatus = 'loading' | 'ready' | 'error';
 
 /**
  * {@link NovelMasterContextValue.retryAndWait} 的悬空兜底超时。
@@ -66,7 +32,7 @@ export type RuntimeStatus = 'loading' | 'ready' | 'error';
  */
 const REBOOT_WAIT_TIMEOUT_MS = 60_000;
 
-export interface NovelMasterContextValue {
+interface NovelMasterContextValue {
   status: RuntimeStatus;
   runtime: MobileNovelMasterRuntime | undefined;
   appUi: AppUiPreferences | undefined;
@@ -89,9 +55,7 @@ export interface NovelMasterContextValue {
   refreshScope: () => Promise<void>;
 }
 
-const NovelMasterContext = createContext<NovelMasterContextValue | undefined>(
-  undefined,
-);
+const NovelMasterContext = createContext<NovelMasterContextValue | undefined>(undefined);
 
 function formatBootstrapError(err: unknown): string {
   if (err instanceof Error) {
@@ -100,60 +64,56 @@ function formatBootstrapError(err: unknown): string {
   return String(err);
 }
 
-/**
- * 常驻保活启动挂点：按消息通知开关拉起常驻前台服务通知。
- *
- * 直读 storage 层 readMessageNotificationEnabled（不走 prefBridge，避免
- * appUi 未就绪降级口径干扰），开则 setKeepAliveResidentEnabled(true)。
- * 签名显式接受 undefined：appUiRef.current 的声明类型就是
- * `AppUiPreferences | undefined`，而 readMessageNotificationEnabled 参数
- * 非空——守卫收在函数体内（typecheck 强制；时序上 effect 触发时 appUi
- * 必已就绪，守卫非时序需要）。拉起失败只 console.error，不向上抛
- * （fire-and-forget，与桥装配风格一致）。
- */
-export async function ensureKeepAliveResidentBoot(
-  appUi: AppUiPreferences | undefined,
-): Promise<void> {
-  if (appUi == null) {
-    return;
-  }
-  if (!(await readMessageNotificationEnabled(appUi))) {
-    return;
-  }
-  try {
-    await setKeepAliveResidentEnabled(true);
-  } catch (err) {
-    console.error('keepalive: resident boot failed', err);
-  }
-}
+export const NovelMasterContextHelpers = {
+  /**
+   * 常驻保活启动挂点：按消息通知开关拉起常驻前台服务通知。
+   *
+   * 直读 storage 层 app-ui 偏好（不走 prefBridge，避免
+   * appUi 未就绪降级口径干扰），开则 AgentFinishedNotification.setResidentEnabled(true)。
+   * 签名显式接受 undefined：appUiRef.current 的声明类型就是
+   * `AppUiPreferences | undefined`，而 AppUiPrefIo.readBoolPref 参数
+   * 非空——守卫收在函数体内（typecheck 强制；时序上 effect 触发时 appUi
+   * 必已就绪，守卫非时序需要）。拉起失败只 console.error，不向上抛
+   * （fire-and-forget，与桥装配风格一致）。
+   */
+  ensureKeepAliveResidentBoot: async (appUi: AppUiPreferences | undefined): Promise<void> => {
+    if (appUi == null) {
+      return;
+    }
+    if (!(await AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false))) {
+      return;
+    }
+    try {
+      await AgentFinishedNotification.setResidentEnabled(true);
+    } catch (err) {
+      console.error('keepalive: resident boot failed', err);
+    }
+  },
 
-/**
- * 消息通知偏好桥工厂：返回 manager 侧 isNotificationEnabled 的装配。
- *
- * appUi 未就绪（getAppUi() 返回 null）的降级口径取「关」——与开关默认关
- * 对齐，防装配早期误判开；appUi 就绪后按存储真值。
- */
-export function createNotificationPrefBridge(
-  getAppUi: () => AppUiPreferences | undefined,
-): SessionStreamPrefBridge {
-  return {
-    isNotificationEnabled: () => {
-      const appUiNow = getAppUi();
-      if (appUiNow == null) {
-        return Promise.resolve(false);
-      }
-      return readMessageNotificationEnabled(appUiNow);
-    },
-  };
-}
+  /**
+   * 消息通知偏好桥工厂：返回 manager 侧 isNotificationEnabled 的装配。
+   *
+   * appUi 未就绪（getAppUi() 返回 null）的降级口径取「关」——与开关默认关
+   * 对齐，防装配早期误判开；appUi 就绪后按存储真值。
+   */
+  createNotificationPrefBridge: (getAppUi: () => AppUiPreferences | undefined): SessionStreamPrefBridge => {
+    return {
+      isNotificationEnabled: () => {
+        const appUiNow = getAppUi();
+        if (appUiNow == null) {
+          return Promise.resolve(false);
+        }
+        return AppUiPrefIo.readBoolPref(appUiNow, APP_UI_KEY_MESSAGE_NOTIFICATION, false);
+      },
+    };
+  },
+} as const;
 
 export function NovelMasterProvider({children}: {children: ReactNode}) {
   // 本组件在 ThemeProvider 之外渲染，直接按系统色取 token（错误屏要适配 dark）。
   const colorScheme = useColorScheme();
   const [status, setStatus] = useState<RuntimeStatus>('loading');
-  const [runtime, setRuntime] = useState<
-    MobileNovelMasterRuntime | undefined
-  >();
+  const [runtime, setRuntime] = useState<MobileNovelMasterRuntime | undefined>();
   const [appUi, setAppUi] = useState<AppUiPreferences | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [scope, setScope] = useState<MobileScopeSnapshot>({
@@ -179,7 +139,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     // 无参 retry 只推进代号、不新增等待方。若此时槽里正挂着等待方，必须把
     // 它的归属改绑到新代号——否则新一代 effect 兑现时会因代号不符而 no-op，
     // 等待方只能悬到 60s 超时（这是本修复会新引入的丢事件，务必堵死）。
-    rebindRebootWaiterGeneration(rebootWaiterRef, nextGeneration);
+    RebootWaiter.rebindGeneration(rebootWaiterRef, nextGeneration);
     bootTokenRef.current = nextGeneration;
     setBootToken(nextGeneration);
   }, []);
@@ -196,18 +156,12 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   // 注意这里直接用 useRef<Waiter | null>(null)：`RefObject` 自身就满足
   // RebootWaiterSlot 的 `{current}` 契约，不必再包一层对象（包一层会多出
   // 一层嵌套，settle 侧读到的就不是 waiter 了）。
-  const rebootWaiterRef = useRef<RebootWaiter<MobileNovelMasterRuntime> | null>(
-    null,
-  );
+  const rebootWaiterRef = useRef<RebootWaiter<MobileNovelMasterRuntime> | null>(null);
 
   const retryAndWait = useCallback((): Promise<MobileNovelMasterRuntime> => {
     return new Promise<MobileNovelMasterRuntime>((resolve, reject) => {
       const nextGeneration = bootTokenRef.current + 1;
-      const outcome = armRebootWaiter<MobileNovelMasterRuntime>(
-        rebootWaiterRef,
-        nextGeneration,
-        {resolve, reject},
-      );
+      const outcome = RebootWaiter.arm<MobileNovelMasterRuntime>(rebootWaiterRef, nextGeneration, {resolve, reject});
       if (outcome === 'joined') {
         // 槽已被占用：**复用**（挂到既有 waiter 上），绝不覆盖。
         // 覆盖会让先到那个调用方的 promise 彻底失主、只能等超时兜底；
@@ -231,7 +185,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     }
     const {generation} = pending;
     const rebootTimer = setTimeout(() => {
-      settleRebootWaiter(rebootWaiterRef, generation, {
+      RebootWaiter.settle(rebootWaiterRef, generation, {
         kind: 'reject',
         error: new Error('重建 runtime 超时，请重试'),
       });
@@ -247,28 +201,44 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     setError(undefined);
 
     const resolveRebootWaiter = (rt: MobileNovelMasterRuntime): void => {
-      settleRebootWaiter(rebootWaiterRef, bootToken, {
+      RebootWaiter.settle(rebootWaiterRef, bootToken, {
         kind: 'resolve',
         runtime: rt,
       });
     };
     const rejectRebootWaiter = (err: unknown): void => {
-      settleRebootWaiter(rebootWaiterRef, bootToken, {
+      RebootWaiter.settle(rebootWaiterRef, bootToken, {
         kind: 'reject',
         error: err,
       });
     };
+    // bootstrap 失败统一终端（错误通道迁移四期）：装配/读偏好/scope 装载的
+    // Result.err 与平台 reject 共用——错误屏 + reject 等待者。
+    const failBootstrap = (err: unknown): void => {
+      if (!cancelled) {
+        setRuntime(undefined);
+        setAppUi(undefined);
+        setError(formatBootstrapError(err));
+        setStatus('error');
+      }
+      rejectRebootWaiter(err);
+    };
 
-    (async () => {
+    const bootstrapPromise = (async () => {
       if (bootToken > 0) {
         // 对齐 desktop main 的先 detach 模式：重建前先销毁旧 Manager
         // （退订事件总线 + 按记录清零模块级 refcount + 停前台服务 + 在途
         // 写通尽力落盘），再销毁旧连接。模块级 agent-activity 不随 runtime
         // 重建归零，必须 dispose 显式清零。
         runtimeRef.current?.sessionStreamUnitManager.dispose();
-        await closeMobileConnection();
+        await MobileDb.closeMobileConnection();
       }
-      const rt = await createMobileNovelMasterRuntime();
+      const rtResult = await MobileRuntimeFactory.create();
+      if (!rtResult.ok) {
+        failBootstrap(rtResult.error);
+        return;
+      }
+      const rt = rtResult.value;
       // 装配契约：runtime 创建完成后实例化 Manager 并挂到 runtime 上
       // （Manager 生命周期跟随 runtime；桥在下方 ready 后的 effect 注入）。
       // 构造注入 core 的 session_run_state 服务——持久化开跑（写通/水合/
@@ -280,23 +250,27 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
           // 实时 token 估算（stream-metrics-native ②）：这里只**装配工厂**；编码表
           // 在会话切换时空闲预热，估算器本体在单元 `begin()`（run 起手）同步兜底建
           // （正文/思考各一条，编码名按会话模型解析，未就绪按 cl100k 兜底）。
-          tokenEstimatorFactory: sessionId =>
-            createSessionStreamTokenEstimator(rt, sessionId),
+          tokenEstimatorFactory: sessionId => StreamTokenEstimator.createForSession(rt, sessionId),
         }),
       });
-      const loaded = await loadMobileScope(runtime);
-      const ui = createAppUiPreferences(runtime.kkv);
-      const epoch = await syncAppVersionForRichRender(
-        ui,
-        mobilePackage.version,
-      );
+      const loaded = await MobileScope.load(runtime);
+      if (!loaded.ok) {
+        failBootstrap(loaded.error);
+        return;
+      }
+      const ui = AppUiPrefs.create(runtime.kkv);
+      const epoch = await AppVersionGuard.syncAppVersionForRichRender(ui, mobilePackage.version);
+      if (!epoch.ok) {
+        failBootstrap(epoch.error);
+        return;
+      }
       if (cancelled) {
         // svc/B-2：此刻 Manager 已构造（事件订阅、AppState 订阅、通知点按
         // 注册均已生效），直接 return 会泄漏——对齐 bootToken>0 分支的
         // 先 detach 模式：先 dispose（退订 + 清 refcount + 停前台服务 +
         // 写通尽力落盘），再销毁数据库连接。
         runtime.sessionStreamUnitManager.dispose();
-        await closeMobileConnection();
+        await MobileDb.closeMobileConnection();
         // 同样必须 reject：调用方（云同步 pull）不能永挂在 await 上，
         // 否则它持有的 busy 令牌永不 release。
         rejectRebootWaiter(new Error('重建 runtime 已取消，请重试'));
@@ -304,19 +278,12 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       }
       setRuntime(runtime);
       setAppUi(ui);
-      setRichRenderEpoch(epoch);
-      setScope(loaded);
+      setRichRenderEpoch(epoch.value);
+      setScope(loaded.value);
       setStatus('ready');
       resolveRebootWaiter(runtime);
-    })().catch(err => {
-      if (!cancelled) {
-        setRuntime(undefined);
-        setAppUi(undefined);
-        setError(formatBootstrapError(err));
-        setStatus('error');
-      }
-      rejectRebootWaiter(err);
-    });
+    })();
+    bootstrapPromise.catch(failBootstrap);
 
     return () => {
       cancelled = true;
@@ -331,10 +298,10 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       return;
     }
     const manager = runtime.sessionStreamUnitManager;
-    manager.setUiBridge({onError: message => showAppToast(message)});
+    manager.setUiBridge({onError: message => AppToast.show(message)});
     // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
     // 口径取「关」（与开关默认关对齐），appUi 就绪后按存储真值。
-    manager.setPrefBridge(createNotificationPrefBridge(() => appUiRef.current));
+    manager.setPrefBridge(NovelMasterContextHelpers.createNotificationPrefBridge(() => appUiRef.current));
     manager.setScopeBridge({
       getCurrentSessionId: () => scopeRef.current.sessionId ?? null,
       setCurrentSession: async sessionId => {
@@ -344,23 +311,28 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
           return;
         }
         // 通知点按路径的 scope 同步：持久化 + 直接 setScope 更新 React state
-        // （不在 React 外裸调模块级 setMobileSession——它只写持久层不更新 React scope）。
-        const next = await setMobileSession(rt, projectId, sessionId);
+        // （不在 React 外裸调模块级 MobileScope.setMobileSession——它只写持久层不更新 React scope）。
+        const next = await MobileScope.setMobileSession(rt, projectId, sessionId);
         setScope(next);
       },
     });
     // 常驻保活启动挂点：桥装配完成后按开关拉起常驻前台服务通知
     // （fire-and-forget；retry 重建 runtime 后本 effect 重跑，dispose 全停
     // → 重新拉起的秒级闪断 PRD 已接受）。
-    void ensureKeepAliveResidentBoot(appUiRef.current);
+    void NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUiRef.current);
   }, [runtime]);
 
   const refreshScope = useCallback(async () => {
     if (!runtime) {
       return;
     }
-    const loaded = await loadMobileScope(runtime);
-    setScope(loaded);
+    const loaded = await MobileScope.load(runtime);
+    // 失败保持现有 scope（错误通道迁移四期：旧通道为无 catch 的 rejection，
+    // 同为静默不更新）。
+    if (!loaded.ok) {
+      return;
+    }
+    setScope(loaded.value);
   }, [runtime]);
 
   // 实时 token 估算的编码提示预热（stream-metrics-native ②）：会话切换时
@@ -370,7 +342,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     if (runtime == null || scope.sessionId == null) {
       return;
     }
-    primeStreamTokenModelHint(runtime, scope.sessionId);
+    StreamTokenEstimator.primeModelHint(runtime, scope.sessionId);
   }, [runtime, scope.sessionId]);
 
   const setCurrentProject = useCallback(
@@ -378,8 +350,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       if (!runtime) {
         return;
       }
-      const next = await setMobileProject(runtime, projectId);
-      setScope(next);
+      const next = await MobileScope.setMobileProject(runtime, projectId);
+      // 失败保持现有 scope（错误通道迁移四期：旧通道为无 catch 的 rejection，
+      // 同为静默不更新）。
+      if (!next.ok) {
+        return;
+      }
+      setScope(next.value);
     },
     [runtime],
   );
@@ -389,7 +366,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       if (!runtime || scope.projectId == null) {
         return;
       }
-      const next = await setMobileSession(runtime, scope.projectId, sessionId);
+      const next = await MobileScope.setMobileSession(runtime, scope.projectId, sessionId);
       setScope(next);
     },
     [runtime, scope.projectId],
@@ -409,19 +386,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       setCurrentSession,
       refreshScope,
     }),
-    [
-      status,
-      runtime,
-      appUi,
-      richRenderEpoch,
-      error,
-      retry,
-      retryAndWait,
-      scope,
-      setCurrentProject,
-      setCurrentSession,
-      refreshScope,
-    ],
+    [status, runtime, appUi, richRenderEpoch, error, retry, retryAndWait, scope, setCurrentProject, setCurrentSession, refreshScope],
   );
 
   if (status === 'loading') {
@@ -434,25 +399,17 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   }
 
   if (status === 'error') {
-    const errorMessageColor = tokensForMode(
-      colorScheme === 'dark' ? 'dark' : 'light',
-    ).textSecondary;
+    const errorMessageColor = Tokens.forMode(colorScheme === 'dark' ? 'dark' : 'light').textSecondary;
     return (
       <View style={styles.centered}>
         <Text style={styles.errorTitle}>启动失败</Text>
-        <Text style={[styles.errorMessage, {color: errorMessageColor}]}>
-          {error}
-        </Text>
+        <Text style={[styles.errorMessage, {color: errorMessageColor}]}>{error}</Text>
         <Button title="重试" onPress={retry} />
       </View>
     );
   }
 
-  return (
-    <NovelMasterContext.Provider value={value}>
-      {children}
-    </NovelMasterContext.Provider>
-  );
+  return <NovelMasterContext.Provider value={value}>{children}</NovelMasterContext.Provider>;
 }
 
 export function useNovelMaster(): NovelMasterContextValue {

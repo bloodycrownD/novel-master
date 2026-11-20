@@ -1,23 +1,12 @@
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  KEY_CUSTOM_ENGINES,
-  KEY_ENABLED_ENGINES,
-  KEY_ENGINE_BASE_URLS,
-  KEY_ENGINE_ORDER_V2,
-  KEY_PRESET_OVERRIDES,
-  SEARCH_KKV_MODULE,
-  createSearchConfigStore,
-  normalizeEngineBaseUrl,
-  readSearchConfig,
-  resolveEngineChain,
-  searchApiKeyRef,
-  type SearchConfigDeps,
-} from "../../src/domain/tool/builtin/search/search-config.js";
-import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { validateSearchEngineTemplate, type SearchEngineTemplate } from "../../src/domain/tool/builtin/search/types.js";
-import { AppError } from "../../src/errors/app-error.js";
+import {  KEY_CUSTOM_ENGINES, KEY_ENABLED_ENGINES, KEY_ENGINE_BASE_URLS, KEY_ENGINE_ORDER_V2, KEY_PRESET_OVERRIDES, SEARCH_KKV_MODULE, SearchConfig, type SearchConfigDeps  } from "../../src/domain/tool/builtin/search/search-config.js";
+import {  DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES  } from "../../src/domain/tool/builtin/search/preset-templates.js";
+import {  SearchEngine, type SearchEngineTemplate  } from "../../src/domain/tool/builtin/search/types.js";
+import {  AppError  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 
@@ -54,7 +43,7 @@ function fakeSecretStore(): SecretStore & {
   };
 }
 
-/** 内存 fake KkvService：缺 key 抛 NOT_FOUND（与 DefaultKkvService 同语义）。 */
+/** 内存 fake KkvService：缺 key 返回 KKV_NOT_FOUND（与 DefaultKkvService 同语义）。 */
 function fakeKkv(): KkvService & { readonly map: Map<string, string> } {
   const map = new Map<string, string>();
   return {
@@ -65,9 +54,9 @@ function fakeKkv(): KkvService & { readonly map: Map<string, string> } {
     async get(module, key) {
       const value = map.get(`${module}/${key}`);
       if (value == null) {
-        throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
+        return Result.err(new AppError("KKV_NOT_FOUND", { detail: `KKV key not found: ${module}/${key}` }));
       }
-      return value;
+      return Result.ok(value);
     },
     async set(module, key, value) {
       map.set(`${module}/${key}`, value);
@@ -75,11 +64,17 @@ function fakeKkv(): KkvService & { readonly map: Map<string, string> } {
     async delete(module, key) {
       const composite = `${module}/${key}`;
       if (!map.has(composite)) {
-        throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
+        return Result.err(new AppError("KKV_NOT_FOUND", { detail: `KKV key not found: ${module}/${key}` }));
       }
       map.delete(composite);
+      return Result.ok(undefined);
     },
   };
+}
+
+/** 成功分支解包：本文件用例只关心成功链；错误分支由 rejectsErr 用例直判。 */
+async function chainOf(deps: SearchConfigDeps, inputEngine?: string) {
+  return unwrap(await SearchConfig.resolveEngineChain(deps, inputEngine));
 }
 
 function makeDeps(): SearchConfigDeps & {
@@ -123,7 +118,7 @@ function customTemplate(): SearchEngineTemplate {
 
 /** 断言模板校验失败并返回错误（Result 失败分支收窄）。 */
 function invalidTemplateError(raw: unknown): AppError<"TOOL_SEARCH_TEMPLATE_INVALID"> {
-  const result = validateSearchEngineTemplate(raw);
+  const result = SearchEngine.validateTemplate(raw);
   assert.equal(result.ok, false, "预期模板校验失败");
   if (result.ok) throw new Error("expected invalid search engine template");
   return result.error;
@@ -142,8 +137,8 @@ function readKkvJson(
 
 describe("search-config：ref / kkv-key 常量", () => {
   it("SKSP ref 命名为 search/{engineId}/apiKey，KKV 模块为 nm-search，五键全部新键名", () => {
-    assert.equal(searchApiKeyRef("bocha"), "search/bocha/apiKey");
-    assert.equal(searchApiKeyRef("custom:abc12345"), "search/custom:abc12345/apiKey");
+    assert.equal(SearchConfig.apiKeyRef("bocha"), "search/bocha/apiKey");
+    assert.equal(SearchConfig.apiKeyRef("custom:abc12345"), "search/custom:abc12345/apiKey");
     assert.equal(SEARCH_KKV_MODULE, "nm-search");
     assert.equal(KEY_ENABLED_ENGINES, "enabledEngines");
     assert.equal(KEY_ENGINE_ORDER_V2, "engineOrderV2");
@@ -155,19 +150,19 @@ describe("search-config：ref / kkv-key 常量", () => {
 
 describe("search-config：引擎实例地址规范化（normalizeEngineBaseUrl）", () => {
   it("仅 http/https、禁 userinfo、剥尾斜杠与 search/hash", () => {
-    assert.equal(normalizeEngineBaseUrl("https://search.example.com/"), "https://search.example.com");
-    assert.equal(normalizeEngineBaseUrl("http://192.168.1.5:8080/searx///"), "http://192.168.1.5:8080/searx");
-    assert.equal(normalizeEngineBaseUrl("https://s.example.com/x?q=1#frag"), "https://s.example.com/x");
-    assert.equal(normalizeEngineBaseUrl("ftp://x"), null);
-    assert.equal(normalizeEngineBaseUrl("https://u:p@x.com"), null);
-    assert.equal(normalizeEngineBaseUrl("not a url"), null);
-    assert.equal(normalizeEngineBaseUrl("  "), null);
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("https://search.example.com/"), "https://search.example.com");
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("http://192.168.1.5:8080/searx///"), "http://192.168.1.5:8080/searx");
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("https://s.example.com/x?q=1#frag"), "https://s.example.com/x");
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("ftp://x"), null);
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("https://u:p@x.com"), null);
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("not a url"), null);
+    assert.equal(SearchConfig.normalizeEngineBaseUrl("  "), null);
   });
 });
 
 describe("search-config：T-C1 新键缺省态与存量丢弃", () => {
   it("全空状态：出厂序（DDG 队尾）、仅 DDG 启用、canRun=[duckduckgo]、预置 needsKey/needsBaseUrl 判定", async () => {
-    const config = await readSearchConfig(makeDeps());
+    const config = unwrap(await SearchConfig.read(makeDeps()));
     assert.deepEqual(
       config.engines.map((engine) => engine.id),
       DEFAULT_ORDER
@@ -201,71 +196,71 @@ describe("search-config：T-C1 新键缺省态与存量丢弃", () => {
     await deps.kkv.set(SEARCH_KKV_MODULE, "engineOrder", JSON.stringify(["tavily", "bocha", "brave", "searxng"]));
     await deps.kkv.set(SEARCH_KKV_MODULE, "searxngBaseUrl", "http://legacy.local:8080");
 
-    const config = await readSearchConfig(deps);
+    const config = unwrap(await SearchConfig.read(deps));
     assert.deepEqual(
       config.engines.map((engine) => engine.id),
       DEFAULT_ORDER
     );
     assert.equal(config.engines.find((engine) => engine.id === "searxng")!.baseUrl, undefined);
     // 链解析同样只认新键：旧 searxngBaseUrl 不产生可用引擎。
-    assert.deepEqual(await resolveEngineChain(deps), [{ engine: "duckduckgo" }]);
+    assert.deepEqual(await chainOf(deps), [{ engine: "duckduckgo" }]);
   });
 });
 
 describe("search-config：key 通道（保存 / 清除 / 空串拒绝）", () => {
   it("保存 key 后 hasKey=true，清除后回落；明文不出现在任何返回值", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
 
-    await store.saveEngineKey("bocha", "sk-plain-bocha");
-    let config = await readSearchConfig(deps);
+    unwrap(await store.saveEngineKey("bocha", "sk-plain-bocha"));
+    let config = unwrap(await SearchConfig.read(deps));
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, true);
     assert.equal(config.engines.find((engine) => engine.id === "tavily")!.hasKey, false);
     assert.equal(JSON.stringify(config).includes("sk-plain-bocha"), false, "对外配置不得携带 key 明文");
 
-    await store.clearEngineKey("bocha");
-    config = await readSearchConfig(deps);
+    unwrap(await store.clearEngineKey("bocha"));
+    config = unwrap(await SearchConfig.read(deps));
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, false);
   });
 
   it("saveEngineKey 空串拒绝；自定义实例建后同走统一 key 通道", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await assert.rejects(store.saveEngineKey("bocha", "  "), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_api_key_required"));
-    await store.createCustomEngine({
+    const store = SearchConfig.createStore(deps);
+    await rejectsErr(store.saveEngineKey("bocha", "  "), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_api_key_required"));
+    unwrap(await store.createCustomEngine({
       def: {
         id: "custom:abc12345",
         name: "我的引擎",
         template: validTemplate(),
         createdAt: "2026-01-01T00:00:00.000Z",
       },
-    });
-    await store.saveEngineKey("custom:abc12345", "sk-custom");
+    }));
+    unwrap(await store.saveEngineKey("custom:abc12345", "sk-custom"));
     assert.equal(deps.secretStore.map.get("search/custom:abc12345/apiKey"), "sk-custom");
   });
 
   it("saveEngineKey / clearEngineKey 未知 engineId 拒绝（dangling SKSP ref 防护，点名 FIX-12）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await assert.rejects(store.saveEngineKey("google", "sk-plain-google"), (e: unknown) =>
+    const store = SearchConfig.createStore(deps);
+    await rejectsErr(store.saveEngineKey("google", "sk-plain-google"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "google",
       })
     );
-    await assert.rejects(store.clearEngineKey("google"), (e: unknown) =>
+    await rejectsErr(store.clearEngineKey("google"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "google",
       })
     );
-    await assert.rejects(store.clearEngineKey("custom:nope"), (e: unknown) =>
+    await rejectsErr(store.clearEngineKey("custom:nope"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "custom:nope",
       })
     );
     assert.equal(deps.secretStore.map.size, 0, "未知 id 不得落 SKSP ref");
     // 已知 id 行为不变。
-    await store.saveEngineKey("bocha", "sk-bocha");
-    await store.clearEngineKey("bocha");
+    unwrap(await store.saveEngineKey("bocha", "sk-bocha"));
+    unwrap(await store.clearEngineKey("bocha"));
     assert.equal(deps.secretStore.map.has("search/bocha/apiKey"), false);
   });
 });
@@ -275,26 +270,26 @@ describe("search-config：T-C2 容错归一与放宽后的 setEngineOrder", () =
     const deps = makeDeps();
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, "not-json");
     assert.deepEqual(
-      (await readSearchConfig(deps)).engines.map((engine) => engine.id),
+      (unwrap(await SearchConfig.read(deps))).engines.map((engine) => engine.id),
       DEFAULT_ORDER
     );
 
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, '"tavily"');
     assert.deepEqual(
-      (await readSearchConfig(deps)).engines.map((engine) => engine.id),
+      (unwrap(await SearchConfig.read(deps))).engines.map((engine) => engine.id),
       DEFAULT_ORDER
     );
 
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, '["tavily","tavily","google","searxng"]');
     assert.deepEqual(
-      (await readSearchConfig(deps)).engines.map((engine) => engine.id),
+      (unwrap(await SearchConfig.read(deps))).engines.map((engine) => engine.id),
       ["tavily", "searxng", "bocha", "brave", "deepseek", "zhipu", "duckduckgo"]
     );
 
     // 存量四引擎序缺 DDG：按出厂序补尾，用户既有排序保留（点名用例 263 的 engineOrderV2 语义）。
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, '["tavily","bocha","brave","searxng"]');
     assert.deepEqual(
-      (await readSearchConfig(deps)).engines.map((engine) => engine.id),
+      (unwrap(await SearchConfig.read(deps))).engines.map((engine) => engine.id),
       ["tavily", "bocha", "brave", "searxng", "deepseek", "zhipu", "duckduckgo"]
     );
   });
@@ -302,42 +297,42 @@ describe("search-config：T-C2 容错归一与放宽后的 setEngineOrder", () =
   it("enabledEngines dangling id 丢弃；损坏 / 缺省回落仅 DDG 启用", async () => {
     const deps = makeDeps();
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENABLED_ENGINES, '["bocha","ghost"]');
-    let config = await readSearchConfig(deps);
+    let config = unwrap(await SearchConfig.read(deps));
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.enabled, true);
     assert.equal(config.engines.find((engine) => engine.id === "duckduckgo")!.enabled, false);
     assert.deepEqual(config.canRun, [], "bocha 未配置 key，enabled 也不入链");
 
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENABLED_ENGINES, '"bocha"');
-    config = await readSearchConfig(deps);
+    config = unwrap(await SearchConfig.read(deps));
     assert.equal(config.engines.find((engine) => engine.id === "duckduckgo")!.enabled, true);
     assert.deepEqual(config.canRun, ["duckduckgo"]);
   });
 
   it("setEngineOrder 放宽：缺项容忍、未知 id / 重复项拒绝、合法序列存取（点名用例 172 的 order 部分）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
 
     // 缺项容忍：读侧按出厂序补尾。
-    await store.setEngineOrder(["tavily", "bocha"]);
+    unwrap(await store.setEngineOrder(["tavily", "bocha"]));
     assert.deepEqual(
-      (await readSearchConfig(deps)).engines.map((engine) => engine.id),
+      (unwrap(await SearchConfig.read(deps))).engines.map((engine) => engine.id),
       ["tavily", "bocha", "brave", "searxng", "deepseek", "zhipu", "duckduckgo"]
     );
 
-    await assert.rejects(store.setEngineOrder(["bocha", "bocha"]), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_order_invalid"));
-    await assert.rejects(store.setEngineOrder(["bocha", "google"]), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_order_invalid"));
+    await rejectsErr(store.setEngineOrder(["bocha", "bocha"]), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_order_invalid"));
+    await rejectsErr(store.setEngineOrder(["bocha", "google"]), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_order_invalid"));
 
     // 合法全量序列存取回读（DDG 无队尾特权）。
-    await store.setEngineOrder(["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]);
+    unwrap(await store.setEngineOrder(["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]));
     assert.deepEqual(
-      (await readSearchConfig(deps)).engines.map((engine) => engine.id),
+      (unwrap(await SearchConfig.read(deps))).engines.map((engine) => engine.id),
       ["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]
     );
   });
 
   it("engineBaseUrls 读路径逐值 normalize：非法值丢弃，canRun 与串行链同源（点名 FIX-13）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
     // 绕过保存校验直写脏数据（模拟旧版本 / 外部落库）；bocha 槽位验证合法值归一，与模板是否引用无关。
     await deps.kkv.set(
       SEARCH_KKV_MODULE,
@@ -347,14 +342,14 @@ describe("search-config：T-C2 容错归一与放宽后的 setEngineOrder", () =
         bocha: "https://dirty.example.com///",
       })
     );
-    await store.setEnabled("searxng", true);
+    unwrap(await store.setEnabled("searxng", true));
 
-    const config = await readSearchConfig(deps);
+    const config = unwrap(await SearchConfig.read(deps));
     assert.equal(config.engines.find((engine) => engine.id === "searxng")!.baseUrl, undefined, "非法 baseUrl 读路径丢弃");
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.baseUrl, "https://dirty.example.com", "合法值归一保留");
     assert.equal(config.canRun.includes("searxng"), false, "baseUrl 非法的引擎不得判可跑");
 
-    const chainIds = (await resolveEngineChain(deps)).map((entry) => entry.engine);
+    const chainIds = (await chainOf(deps)).map((entry) => entry.engine);
     assert.equal(chainIds.includes("searxng"), false, "串行链同样不入（与 canRun 同源）");
     assert.deepEqual(chainIds, config.canRun, "canRun 与串行链逐项一致");
   });
@@ -363,17 +358,17 @@ describe("search-config：T-C2 容错归一与放宽后的 setEngineOrder", () =
 describe("search-config：T-C3 resolveEngineChain 双过滤 + 显式三分支", () => {
   it("链 = enabled ∩ 配置完整（占位符判据），按 order 序且条目携带 template（DDG 无模板）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.saveEngineKey("bocha", "sk-bocha");
-    await store.setEnabled("bocha", true);
-    await store.setEnabled("brave", true); // 启用但无 key → 过滤
-    await store.setEnabled("searxng", true); // 启用但 URL 仍是出厂示例 → 过滤
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.saveEngineKey("bocha", "sk-bocha"));
+    unwrap(await store.setEnabled("bocha", true));
+    unwrap(await store.setEnabled("brave", true)); // 启用但无 key → 过滤
+    unwrap(await store.setEnabled("searxng", true)); // 启用但 URL 仍是出厂示例 → 过滤
     // searxng 无密钥、URL 即完整端点：改掉出厂示例地址后才算配置完整。
-    await store.updatePresetOverride("searxng", {
+    unwrap(await store.updatePresetOverride("searxng", {
       url: "http://192.168.1.5:8080/search?format=json",
-    });
+    }));
 
-    const chain = await resolveEngineChain(deps);
+    const chain = await chainOf(deps);
     assert.deepEqual(
       chain.map((entry) => entry.engine),
       ["bocha", "searxng", "duckduckgo"]
@@ -388,53 +383,53 @@ describe("search-config：T-C3 resolveEngineChain 双过滤 + 显式三分支", 
 
   it("DDG 不再恒队尾 / 恒在链：重排后随序、关闭后链空（点名用例 282/337）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.setEngineOrder(["duckduckgo", "bocha", "tavily"]);
-    await store.saveEngineKey("bocha", "sk-bocha");
-    await store.setEnabled("bocha", true);
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.setEngineOrder(["duckduckgo", "bocha", "tavily"]));
+    unwrap(await store.saveEngineKey("bocha", "sk-bocha"));
+    unwrap(await store.setEnabled("bocha", true));
     assert.deepEqual(
-      (await resolveEngineChain(deps)).map((entry) => entry.engine),
+      (await chainOf(deps)).map((entry) => entry.engine),
       ["duckduckgo", "bocha"]
     );
 
-    await store.setEnabled("duckduckgo", false);
-    await store.setEnabled("bocha", false);
-    assert.deepEqual(await resolveEngineChain(deps), []);
-    assert.deepEqual((await readSearchConfig(deps)).canRun, []);
+    unwrap(await store.setEnabled("duckduckgo", false));
+    unwrap(await store.setEnabled("bocha", false));
+    assert.deepEqual(await chainOf(deps), []);
+    assert.deepEqual((unwrap(await SearchConfig.read(deps))).canRun, []);
   });
 
   it("显式三分支：①钉链首 ②顺位回落（截尾不全局回落）③未知 id 抛 AppError 含引擎 id", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.saveEngineKey("bocha", "sk-bocha");
-    await store.saveEngineKey("tavily", "sk-tavily");
-    await store.setEnabled("bocha", true);
-    await store.setEnabled("tavily", true);
-    await store.setEnabled("searxng", true);
-    await store.updatePresetOverride("searxng", {
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.saveEngineKey("bocha", "sk-bocha"));
+    unwrap(await store.saveEngineKey("tavily", "sk-tavily"));
+    unwrap(await store.setEnabled("bocha", true));
+    unwrap(await store.setEnabled("tavily", true));
+    unwrap(await store.setEnabled("searxng", true));
+    unwrap(await store.updatePresetOverride("searxng", {
       url: "http://192.168.1.5:8080/search?format=json",
-    });
+    }));
 
     // ① 已知且通过过滤 → 钉为该引擎单发。
     assert.deepEqual(
-      (await resolveEngineChain(deps, "tavily")).map((entry) => entry.engine),
+      (await chainOf(deps, "tavily")).map((entry) => entry.engine),
       ["tavily"]
     );
 
     // ② 已知但未通过过滤 → 沿 order 从该 id 起截尾取第一个可用项：
     // brave 未启用，往后 searxng（已改实例地址）命中；不回落排位更前的 bocha/tavily。
     assert.deepEqual(
-      (await resolveEngineChain(deps, "brave")).map((entry) => entry.engine),
+      (await chainOf(deps, "brave")).map((entry) => entry.engine),
       ["searxng"]
     );
 
     // ② 截尾后链空 → 空数组（调用方走链空提示）。
-    await store.setEnabled("searxng", false);
-    await store.setEnabled("duckduckgo", false);
-    assert.deepEqual(await resolveEngineChain(deps, "searxng"), []);
+    unwrap(await store.setEnabled("searxng", false));
+    unwrap(await store.setEnabled("duckduckgo", false));
+    assert.deepEqual(await chainOf(deps, "searxng"), []);
 
     // ③ 不在动态全集 → AppError + i18n key（params 带引擎 id）。
-    await assert.rejects(resolveEngineChain(deps, "google"), (e: unknown) =>
+    await rejectsErr(SearchConfig.resolveEngineChain(deps, "google"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "google",
       })
@@ -443,17 +438,17 @@ describe("search-config：T-C3 resolveEngineChain 双过滤 + 显式三分支", 
 
   it("显式 engine 分支：pinned 引擎只 resolveOne 一次（enabled 且未就绪不在回落循环里重复读 SKSP，点名 FIX-14）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.setEnabled("duckduckgo", false);
-    await store.setEnabled("bocha", true); // enabled 但无 key → pinned 试探失败，进入截尾回落
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.setEnabled("duckduckgo", false));
+    unwrap(await store.setEnabled("bocha", true)); // enabled 但无 key → pinned 试探失败，进入截尾回落
 
-    assert.deepEqual(await resolveEngineChain(deps, "bocha"), [], "截尾后无其他可用引擎 → 空链");
+    assert.deepEqual(await chainOf(deps, "bocha"), [], "截尾后无其他可用引擎 → 空链");
     assert.deepEqual(deps.secretStore.getCalls, ["search/bocha/apiKey"], "pinned 已试探过的引擎恰一次 SKSP 读，回落循环跳过");
 
     // pinned 就绪路径同样只读一次。
-    await store.saveEngineKey("bocha", "sk-bocha");
+    unwrap(await store.saveEngineKey("bocha", "sk-bocha"));
     assert.deepEqual(
-      (await resolveEngineChain(deps, "bocha")).map((entry) => entry.engine),
+      (await chainOf(deps, "bocha")).map((entry) => entry.engine),
       ["bocha"]
     );
     assert.deepEqual(deps.secretStore.getCalls, ["search/bocha/apiKey", "search/bocha/apiKey"], "两次显式解析各恰一次 SKSP 读");
@@ -463,8 +458,8 @@ describe("search-config：T-C3 resolveEngineChain 双过滤 + 显式三分支", 
 describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
   it("createCustomEngine：模板校验 + append orderV2 + apiKey/baseUrl 拆分落库（不入 enabled）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.createCustomEngine({
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.createCustomEngine({
       def: {
         id: "custom:abc12345",
         name: "我的引擎",
@@ -473,9 +468,9 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
       },
       apiKey: "sk-custom",
       baseUrl: "https://custom.example.com/",
-    });
+    }));
 
-    const config = await readSearchConfig(deps);
+    const config = unwrap(await SearchConfig.read(deps));
     const entry = config.engines.find((engine) => engine.id === "custom:abc12345")!;
     assert.equal(entry.name, "我的引擎");
     assert.equal(entry.isCustom, true);
@@ -494,18 +489,18 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
     assert.equal(JSON.stringify(config.customEngines).includes("sk-custom"), false);
 
     // 收录契约：启用后即可入链（模板 + key/baseUrl 就绪）。
-    await store.setEnabled("custom:abc12345", true);
-    assert.deepEqual((await readSearchConfig(deps)).canRun, ["duckduckgo", "custom:abc12345"]);
+    unwrap(await store.setEnabled("custom:abc12345", true));
+    assert.deepEqual((unwrap(await SearchConfig.read(deps))).canRun, ["duckduckgo", "custom:abc12345"]);
     assert.deepEqual(
-      (await resolveEngineChain(deps)).map((engine) => engine.engine),
+      (await chainOf(deps)).map((engine) => engine.engine),
       ["duckduckgo", "custom:abc12345"]
     );
   });
 
   it("updateCustomEngine：名称 / 模板更新；apiKey/baseUrl 缺省保留、空串清除", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.createCustomEngine({
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.createCustomEngine({
       def: {
         id: "custom:abc12345",
         name: "我的引擎",
@@ -514,36 +509,36 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
       },
       apiKey: "sk-custom",
       baseUrl: "https://custom.example.com",
-    });
+    }));
 
-    await store.updateCustomEngine("custom:abc12345", {
+    unwrap(await store.updateCustomEngine("custom:abc12345", {
       template: {
         ...customTemplate(),
         name: "改名后的引擎",
         paramHint: "新说明",
       },
-    });
-    let entry = (await readSearchConfig(deps)).engines.find((engine) => engine.id === "custom:abc12345")!;
+    }));
+    let entry = (unwrap(await SearchConfig.read(deps))).engines.find((engine) => engine.id === "custom:abc12345")!;
     assert.equal(entry.name, "改名后的引擎", "缺省 name 随模板 name");
     assert.equal(entry.paramHint, "新说明");
     assert.equal(entry.hasKey, true, "apiKey 缺省保留");
     assert.equal(entry.baseUrl, "https://custom.example.com", "baseUrl 缺省保留");
 
-    await store.updateCustomEngine("custom:abc12345", {
+    unwrap(await store.updateCustomEngine("custom:abc12345", {
       apiKey: "",
       baseUrl: "",
-    });
-    entry = (await readSearchConfig(deps)).engines.find((engine) => engine.id === "custom:abc12345")!;
+    }));
+    entry = (unwrap(await SearchConfig.read(deps))).engines.find((engine) => engine.id === "custom:abc12345")!;
     assert.equal(entry.hasKey, false);
     assert.equal(entry.baseUrl, undefined);
     assert.deepEqual(readKkvJson(deps, KEY_ENGINE_BASE_URLS), undefined);
-    assert.deepEqual((await readSearchConfig(deps)).canRun, ["duckduckgo"]);
+    assert.deepEqual((unwrap(await SearchConfig.read(deps))).canRun, ["duckduckgo"]);
   });
 
   it("deleteCustomEngine：prune orderV2 / enabledEngines / engineBaseUrls + 清 SKSP ref", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.createCustomEngine({
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.createCustomEngine({
       def: {
         id: "custom:abc12345",
         name: "我的引擎",
@@ -552,11 +547,11 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
       },
       apiKey: "sk-custom",
       baseUrl: "https://custom.example.com",
-    });
-    await store.setEnabled("custom:abc12345", true);
+    }));
+    unwrap(await store.setEnabled("custom:abc12345", true));
 
-    await store.deleteCustomEngine("custom:abc12345");
-    const config = await readSearchConfig(deps);
+    unwrap(await store.deleteCustomEngine("custom:abc12345"));
+    const config = unwrap(await SearchConfig.read(deps));
     assert.deepEqual(config.customEngines, []);
     assert.equal(
       config.engines.some((engine) => engine.id === "custom:abc12345"),
@@ -571,11 +566,11 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
 
   it("presetOverrides：浅合并 + 嵌套对象整体替换、恢复默认；setEnabled 只动开关不动 key", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.saveEngineKey("bocha", "sk-bocha");
-    await store.setEnabled("bocha", true);
+    const store = SearchConfig.createStore(deps);
+    unwrap(await store.saveEngineKey("bocha", "sk-bocha"));
+    unwrap(await store.setEnabled("bocha", true));
 
-    await store.updatePresetOverride("bocha", {
+    unwrap(await store.updatePresetOverride("bocha", {
       headers: {
         Authorization: "Bearer {{apiKey}}",
         "Content-Type": "application/json",
@@ -583,11 +578,11 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
         "X-Extra": "1",
       },
       paramHint: "覆盖说明",
-    });
-    let config = await readSearchConfig(deps);
+    }));
+    let config = unwrap(await SearchConfig.read(deps));
     assert.deepEqual(config.presetOverrides, { bocha: true });
     assert.ok(deps.kkv.map.has(`${SEARCH_KKV_MODULE}/${KEY_PRESET_OVERRIDES}`), "覆盖副本应落 presetOverrides 键");
-    let chain = await resolveEngineChain(deps);
+    let chain = await chainOf(deps);
     let template = chain.find((entry) => entry.engine === "bocha")!.template!;
     assert.equal(template.headers["X-Extra"], "1", "嵌套对象整体替换（headers 全量覆盖）");
     assert.equal(template.headers.Authorization, "Bearer {{apiKey}}");
@@ -597,54 +592,54 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
 
     // setEnabled 独立性：开关只动 enabledEngines，不动 key。
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, true);
-    await store.setEnabled("bocha", false);
-    config = await readSearchConfig(deps);
+    unwrap(await store.setEnabled("bocha", false));
+    config = unwrap(await SearchConfig.read(deps));
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.enabled, false);
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, true);
-    await assert.rejects(store.setEnabled("google", true), (e: unknown) =>
+    await rejectsErr(store.setEnabled("google", true), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "google",
       })
     );
 
     // updatePresetOverride 仅预置 id；恢复默认 = 删除覆盖条目。
-    await assert.rejects(store.updatePresetOverride("custom:abc12345", { paramHint: "x" }), (e: unknown) =>
+    await rejectsErr(store.updatePresetOverride("custom:abc12345", { paramHint: "x" }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "custom:abc12345",
       })
     );
-    await store.setEnabled("bocha", true);
-    await store.resetPresetOverride("bocha");
-    config = await readSearchConfig(deps);
+    unwrap(await store.setEnabled("bocha", true));
+    unwrap(await store.resetPresetOverride("bocha"));
+    config = unwrap(await SearchConfig.read(deps));
     assert.deepEqual(config.presetOverrides, {});
-    chain = await resolveEngineChain(deps);
+    chain = await chainOf(deps);
     template = chain.find((entry) => entry.engine === "bocha")!.template!;
     assert.equal(template, PRESET_ENGINE_TEMPLATES.bocha);
   });
 
   it("setEngineBaseUrl：空串清除、非空规范化、未知引擎拒绝（点名用例 172）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
 
-    await assert.rejects(store.setEngineBaseUrl("searxng", "ftp://bad"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_searxng_base_url_invalid"));
-    await assert.rejects(store.setEngineBaseUrl("searxng", "https://u:p@h.com"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_searxng_base_url_invalid"));
-    await assert.rejects(store.setEngineBaseUrl("google", "http://x"), (e: unknown) =>
+    await rejectsErr(store.setEngineBaseUrl("searxng", "ftp://bad"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_searxng_base_url_invalid"));
+    await rejectsErr(store.setEngineBaseUrl("searxng", "https://u:p@h.com"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_searxng_base_url_invalid"));
+    await rejectsErr(store.setEngineBaseUrl("google", "http://x"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "google",
       })
     );
 
-    await store.setEngineBaseUrl("searxng", "http://localhost:8888/");
+    unwrap(await store.setEngineBaseUrl("searxng", "http://localhost:8888/"));
     assert.deepEqual(readKkvJson(deps, KEY_ENGINE_BASE_URLS), {
       searxng: "http://localhost:8888",
     });
-    await store.setEngineBaseUrl("searxng", "");
+    unwrap(await store.setEngineBaseUrl("searxng", ""));
     assert.equal(readKkvJson(deps, KEY_ENGINE_BASE_URLS), undefined);
   });
 
   it("createCustomEngine 错误分支：id 形态 / 重复 id / name 空串全拒绝且零写入（点名 FIX-16）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
     const defWith = (
       id: string
     ): {
@@ -660,22 +655,22 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
     });
 
     // id 不符 ^custom:[A-Za-z0-9_-]{1,64}$：缺前缀 / 空后缀 / 含斜杠 / 超长。
-    await assert.rejects(store.createCustomEngine({ def: defWith("myengine") }), (e: unknown) =>
+    await rejectsErr(store.createCustomEngine({ def: defWith("myengine") }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_template_invalid", {
         reason: "invalid custom engine id: myengine",
       })
     );
-    await assert.rejects(store.createCustomEngine({ def: defWith("custom:") }), (e: unknown) =>
+    await rejectsErr(store.createCustomEngine({ def: defWith("custom:") }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_template_invalid", {
         reason: "invalid custom engine id: custom:",
       })
     );
-    await assert.rejects(store.createCustomEngine({ def: defWith("custom:a/b") }), (e: unknown) =>
+    await rejectsErr(store.createCustomEngine({ def: defWith("custom:a/b") }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_template_invalid", {
         reason: "invalid custom engine id: custom:a/b",
       })
     );
-    await assert.rejects(store.createCustomEngine({ def: defWith(`custom:${"a".repeat(65)}`) }), (e: unknown) =>
+    await rejectsErr(store.createCustomEngine({ def: defWith(`custom:${"a".repeat(65)}`) }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_template_invalid", {
         reason: `invalid custom engine id: custom:${"a".repeat(65)}`,
       })
@@ -683,15 +678,15 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
     assert.equal(deps.kkv.map.size, 0, "id 拒绝路径零写入");
 
     // 重复 id。
-    await store.createCustomEngine({ def: defWith("custom:abc12345") });
-    await assert.rejects(store.createCustomEngine({ def: defWith("custom:abc12345") }), (e: unknown) =>
+    unwrap(await store.createCustomEngine({ def: defWith("custom:abc12345") }));
+    await rejectsErr(store.createCustomEngine({ def: defWith("custom:abc12345") }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_template_invalid", {
         reason: "duplicate custom engine id: custom:abc12345",
       })
     );
 
     // name 空串（trim 后为空即拒）。
-    await assert.rejects(
+    await rejectsErr(
       store.createCustomEngine({
         def: {
           id: "custom:def67890",
@@ -709,24 +704,24 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
 
   it("updateCustomEngine / deleteCustomEngine 未知 id 拒绝（点名 FIX-16）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await assert.rejects(store.updateCustomEngine("custom:nope", { name: "改名" }), (e: unknown) =>
+    const store = SearchConfig.createStore(deps);
+    await rejectsErr(store.updateCustomEngine("custom:nope", { name: "改名" }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "custom:nope",
       })
     );
-    await assert.rejects(store.deleteCustomEngine("custom:nope"), (e: unknown) =>
+    await rejectsErr(store.deleteCustomEngine("custom:nope"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "custom:nope",
       })
     );
     // 预置 id 不是自定义实例，同样拒绝。
-    await assert.rejects(store.updateCustomEngine("bocha", { name: "改名" }), (e: unknown) =>
+    await rejectsErr(store.updateCustomEngine("bocha", { name: "改名" }), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "bocha",
       })
     );
-    await assert.rejects(store.deleteCustomEngine("bocha"), (e: unknown) =>
+    await rejectsErr(store.deleteCustomEngine("bocha"), (e: unknown) =>
       assertErrorDescriptor(e, "error.tool.search_engine_not_found", {
         engine: "bocha",
       })
@@ -735,17 +730,17 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
   });
 });
 
-describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存路径密钥拒绝", () => {
+describe("search-config：T-C7 SearchEngine.validateTemplate 全规则 + 保存路径密钥拒绝", () => {
   it("六份出厂模板全部通过校验；v3 出厂 searxng 为完整端点（URL 内无 {{baseUrl}} 占位符）", () => {
     for (const [engineId, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
-      const result = validateSearchEngineTemplate(template);
+      const result = SearchEngine.validateTemplate(template);
       assert.equal(result.ok, true, `${engineId} 出厂模板应通过校验`);
     }
   });
 
   it("结构规则：method / URL / defaultBody 可选 / 占位符 / paramHint", () => {
     // 合法基线 + trim 归一。
-    const okTemplate = validateSearchEngineTemplate({
+    const okTemplate = SearchEngine.validateTemplate({
       ...validTemplate(),
       name: "  测试引擎  ",
     });
@@ -753,7 +748,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     if (okTemplate.ok) assert.equal(okTemplate.value.name, "测试引擎");
 
     // v2：POST 不再强制 defaultBody（留空则依赖 agent 调用时传 params）。
-    const postNoBody = validateSearchEngineTemplate({
+    const postNoBody = SearchEngine.validateTemplate({
       ...validTemplate(),
       method: "POST",
       url: "https://api.example.com/search",
@@ -812,7 +807,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
       /whole-string/
     );
     // paramHint 不限长：超长说明原样通过校验（装配期也不再截断）。
-    const longHint = validateSearchEngineTemplate({
+    const longHint = SearchEngine.validateTemplate({
       ...validTemplate(),
       paramHint: "x".repeat(800),
     });
@@ -844,7 +839,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.equal(bodySecret.messageParams?.field, "defaultBody");
 
     // 占位符自身 / 短 token 不是命中项。
-    const placeholderOk = validateSearchEngineTemplate({
+    const placeholderOk = SearchEngine.validateTemplate({
       ...validTemplate(),
       headers: {
         Authorization: "Bearer {{apiKey}}",
@@ -852,7 +847,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
       },
     });
     assert.equal(placeholderOk.ok, true);
-    const shortTokenOk = validateSearchEngineTemplate({
+    const shortTokenOk = SearchEngine.validateTemplate({
       ...validTemplate(),
       headers: { Authorization: "Bearer short-token" },
     });
@@ -861,9 +856,9 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
 
   it("保存路径密钥拒绝：createCustomEngine / updatePresetOverride 双入口命中即拒绝且零写入", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
 
-    await assert.rejects(
+    await rejectsErr(
       store.createCustomEngine({
         def: {
           id: "custom:abc12345",
@@ -884,7 +879,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.equal(deps.kkv.map.size, 0, "拒绝保存时不得写 KKV");
     assert.equal(deps.secretStore.map.size, 0, "拒绝保存时不得写 SKSP");
 
-    await assert.rejects(
+    await rejectsErr(
       store.updatePresetOverride("bocha", {
         defaultBody: '{"query":"{{query}}","count":"{{count}}","api_key":"sk-secret123"}',
       }),
@@ -898,9 +893,9 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
 
   it("paramHint 明文密钥扩扫：create / update / updatePresetOverride 保存入口命中即拒绝且零写入（点名 FIX-15）", async () => {
     const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
+    const store = SearchConfig.createStore(deps);
 
-    await assert.rejects(
+    await rejectsErr(
       store.createCustomEngine({
         def: {
           id: "custom:abc12345",
@@ -917,7 +912,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
           field: "paramHint",
         })
     );
-    await assert.rejects(
+    await rejectsErr(
       store.updatePresetOverride("bocha", {
         paramHint: "api_key=sk-plain-override-secret-0001",
       }),
@@ -926,15 +921,15 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
           field: "paramHint",
         })
     );
-    await store.createCustomEngine({
+    unwrap(await store.createCustomEngine({
       def: {
         id: "custom:abc12345",
         name: "我的引擎",
         template: validTemplate(),
         createdAt: "2026-01-01T00:00:00.000Z",
       },
-    });
-    await assert.rejects(
+    }));
+    await rejectsErr(
       store.updateCustomEngine("custom:abc12345", {
         template: {
           ...validTemplate(),
@@ -949,9 +944,9 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.equal(deps.kkv.map.size, 2, "仅首次合法 create 落库（customEngines + engineOrderV2），拒绝路径零写入");
 
     // 合法 paramHint 不受影响，覆盖照常落库。
-    await store.updatePresetOverride("bocha", {
+    unwrap(await store.updatePresetOverride("bocha", {
       paramHint: "query 拼在 url 上，count 控制条数",
-    });
+    }));
     const overrides = readKkvJson(deps, KEY_PRESET_OVERRIDES) as Record<string, { paramHint: string }>;
     assert.equal(overrides.bocha.paramHint, "query 拼在 url 上，count 控制条数");
   });
@@ -990,7 +985,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { 'a"b': "x" } }).messageParams?.reason), /must be a valid HTTP token/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "a,b": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "a\\b": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
-    const tokenOk = validateSearchEngineTemplate({
+    const tokenOk = SearchEngine.validateTemplate({
       ...validTemplate(),
       headers: {
         "X-API-Key": "{{apiKey}}",

@@ -27,6 +27,5 @@ export {
 export {
   NativeSseAbortError,
   NativeSseTransportError,
-  createNativeSseTransportFromBridge,
-  flattenRequestHeaders,
+  NativeSseTransport,
 } from "./transport.js";

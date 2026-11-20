@@ -1,12 +1,13 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { z } from "zod";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  describe, it  } from "node:test";
+import {  z  } from "zod";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -25,15 +26,15 @@ function makeToolContext(
 describe("ToolRunner.runParallel", () => {
   it("R6: parallel writes to three paths yield one checkpoint tree with three entries", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const assistant = await ctx.messages.append(session.id, "assistant", {
+    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write three" }],
-    });
+    }));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
@@ -48,7 +49,7 @@ describe("ToolRunner.runParallel", () => {
     assert.equal(outcomes.length, 3);
     assert.ok(outcomes.every((o) => o.ok));
 
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
     const tree = await repo.loadFileTree(session.id, assistant.id);
@@ -61,15 +62,15 @@ describe("ToolRunner.runParallel", () => {
 
   it("R7: parallel same-path writes last-write-wins in checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const assistant = await ctx.messages.append(session.id, "assistant", {
+    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "race" }],
-    });
+    }));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
@@ -92,10 +93,10 @@ describe("ToolRunner.runParallel", () => {
       ctxForTools,
     );
 
-    const live = await vfs.read("/race.md");
+    const live = unwrap(await vfs.read("/race.md"));
     assert.equal(live.content, "second");
 
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
     const tree = await repo.loadFileTree(session.id, assistant.id);
     assert.ok(tree);
@@ -104,14 +105,14 @@ describe("ToolRunner.runParallel", () => {
 
   it("runs read-only tools in parallel without error", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/x.md", "x");
     await vfs.write("/y.md", "y");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const runner = new ToolRunner(registry);
     const ctxForTools = makeToolContext(vfs, project.id, session.id);
 

@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  chatMessagesToGeminiContents,
-  geminiPartsToBlocks,
-  toolsToGeminiFunctionDeclarations,
-} from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
+import {  describe, it  } from "node:test";
+import {  GeminiMapper  } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
-import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
+import {  OrphanToolResults  } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
+
+// 六期签名适配：chatMessagesToGeminiContents 返回 Result，本文件的既有断言
+// 全部跑在成功值上——本地同名 wrapper 拆包（失败原样抛出 AppError），调用点
+// 与断言语义零改动。
+const chatMessagesToGeminiContents = (
+  messages: Parameters<typeof chatMessagesToGeminiContentsImpl>[0],
+  options?: Parameters<typeof chatMessagesToGeminiContentsImpl>[1],
+) => {
+  const result = GeminiMapper.chatMessagesToContents(messages, options);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
 
 describe("gemini-content-mapper", () => {
   it("T5: multi-turn history with tool_result", () => {
@@ -93,7 +101,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("inbound functionResponse.name resolves to NM toolUseId", () => {
-    const blocks = geminiPartsToBlocks(
+    const blocks = GeminiMapper.partsToBlocks(
       [
         {
           functionResponse: {
@@ -112,7 +120,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("round-trips functionCall to tool_use", () => {
-    const blocks = geminiPartsToBlocks([
+    const blocks = GeminiMapper.partsToBlocks([
       {
         functionCall: { name: "read", args: { path: "/b" } },
       },
@@ -224,7 +232,7 @@ describe("gemini-content-mapper", () => {
         },
       },
     ];
-    const normalized = normalizeOrphanToolResultsForLlm(visible);
+    const normalized = OrphanToolResults.normalizeForLlm(visible);
     const contents = chatMessagesToGeminiContents(normalized);
     assert.equal(contents[0]?.role, "user");
     assert.equal(contents[0]?.parts[0]?.functionResponse, undefined);
@@ -273,7 +281,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("非 thought 正文含内嵌标签时原样进 text，不挖入 thinking", () => {
-    const blocks = geminiPartsToBlocks([
+    const blocks = GeminiMapper.partsToBlocks([
       { text: "plan", thought: true },
       { text: "<thought>leak</thought>你好。" },
     ]);
@@ -422,7 +430,7 @@ describe("gemini-content-mapper", () => {
     assert.ok(fullSource.length > visible.length);
 
     // 生产链路口径：出站历史先过 orphan 归一化（agent-runner 每步都做）
-    const outbound = normalizeOrphanToolResultsForLlm(visible);
+    const outbound = OrphanToolResults.normalizeForLlm(visible);
     const withVisible = chatMessagesToGeminiContents(outbound, {
       toolLookupMessages: visible,
     });
@@ -456,7 +464,7 @@ describe("gemini-content-mapper", () => {
       "未归一化历史下两种源必然分叉"
     );
     // 归一化后（生产口径）两者重新等价：孤儿 tool_result 已被拍平
-    const normalizedOrphan = normalizeOrphanToolResultsForLlm(orphanOnly);
+    const normalizedOrphan = OrphanToolResults.normalizeForLlm(orphanOnly);
     assert.deepEqual(
       chatMessagesToGeminiContents(normalizedOrphan, {
         toolLookupMessages: visible,
@@ -468,7 +476,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("toolsToGeminiFunctionDeclarations wraps schemas", () => {
-    const tools = toolsToGeminiFunctionDeclarations([
+    const tools = GeminiMapper.toolsToFunctionDeclarations([
       { name: "read", description: "read", inputSchema: { type: "object" } },
     ]);
     assert.equal(tools.length, 1);

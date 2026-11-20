@@ -35,22 +35,24 @@ const QUOTE_MAP: ReadonlyMap<string, string> = new Map<string, string>([
   ["\u3000", " "], // IDEOGRAPHIC SPACE
 ]);
 
-/**
- * 对字符串做「引号族 + 全角空格」归一化，供替换匹配定位用。
- *
- * @remarks
- * 用 `Array.from` 按码点遍历，避免代理对在 UTF-16 码元层面被截断。
- * 归一化后仍是普通 JS `string`，后续 `indexOf`/`slice` 继续用原生
- * UTF-16 版本——因为 v1 全部映射字符都是 BMP 内单码点，代理对原样
- * 透传，UTF-16 码元层面也严格 1:1，index 可以直接通用。
- *
- * 落盘内容绝不能用归一化后的串——归一化只用于定位命中位置，
- * 切片和拼接必须走原文，否则未替换段的引号会被悄悄改写。
- */
-export function normalizeForMatch(input: string): string {
-  let result = "";
-  for (const ch of Array.from(input)) {
-    result += QUOTE_MAP.get(ch) ?? ch;
-  }
-  return result;
-}
+export const MatchNormalizer = {
+  /**
+   * 对字符串做「引号族 + 全角空格」归一化，供替换匹配定位用。
+   *
+   * @remarks
+   * 用 `Array.from` 按码点遍历，避免代理对在 UTF-16 码元层面被截断。
+   * 归一化后仍是普通 JS `string`，后续 `indexOf`/`slice` 继续用原生
+   * UTF-16 版本——因为 v1 全部映射字符都是 BMP 内单码点，代理对原样
+   * 透传，UTF-16 码元层面也严格 1:1，index 可以直接通用。
+   *
+   * 落盘内容绝不能用归一化后的串——归一化只用于定位命中位置，
+   * 切片和拼接必须走原文，否则未替换段的引号会被悄悄改写。
+   */
+  normalize(input: string): string {
+    let result = "";
+    for (const ch of Array.from(input)) {
+      result += QUOTE_MAP.get(ch) ?? ch;
+    }
+    return result;
+  },
+} as const;

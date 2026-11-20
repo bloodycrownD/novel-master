@@ -7,12 +7,7 @@
 import {describe, expect, it} from '@jest/globals';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
 import type {TranscriptRow} from '@/components/chat/ChatTranscriptBridge';
-import {
-  EMPTY_STREAM_ROW_IDS,
-  buildStreamingRows,
-  buildStreamingTranscriptRow,
-  applyStreamRowIds,
-} from '@/components/chat/transcript-stream-projection';
+import {EMPTY_STREAM_ROW_IDS, TranscriptStreamProjection} from '@/components/chat/transcript-stream-projection'
 
 function view(
   streamRows: SessionStreamUnitView['streamRows'],
@@ -52,12 +47,12 @@ function messageRow(
 
 describe('buildStreamingRows（T-SP1）', () => {
   it('null / 空投影 → 稳定空数组', () => {
-    expect(buildStreamingRows(null)).toEqual([]);
-    expect(buildStreamingRows(view([]))).toEqual([]);
+    expect(TranscriptStreamProjection.buildStreamingRows(null)).toEqual([]);
+    expect(TranscriptStreamProjection.buildStreamingRows(view([]))).toEqual([]);
   });
 
   it('starting/running 只有当前 streaming 行 → 一条 streaming 投影', () => {
-    const rows = buildStreamingRows(
+    const rows = TranscriptStreamProjection.buildStreamingRows(
       view([projection({text: '流式中', thinking: '想'})]),
     );
     expect(rows).toHaveLength(1);
@@ -71,7 +66,7 @@ describe('buildStreamingRows（T-SP1）', () => {
   });
 
   it('step 提交后：finished-未接管行与当前 streaming 行同现（旧→新）', () => {
-    const rows = buildStreamingRows(
+    const rows = TranscriptStreamProjection.buildStreamingRows(
       view([
         projection({
           streamId: 'st:s:1:0',
@@ -107,7 +102,7 @@ describe('buildStreamingRows（T-SP1）', () => {
   });
 
   it('interrupted partial → finished 行、无 messageId', () => {
-    const rows = buildStreamingRows(
+    const rows = TranscriptStreamProjection.buildStreamingRows(
       view([
         projection({
           streamId: 'st:s:interrupted:123',
@@ -122,19 +117,19 @@ describe('buildStreamingRows（T-SP1）', () => {
 
   it('引用稳定：同输入两次返回同一数组，内容变化才换新', () => {
     const input = [projection({text: 'abc'})];
-    const first = buildStreamingRows(view(input));
-    const second = buildStreamingRows(view(input));
+    const first = TranscriptStreamProjection.buildStreamingRows(view(input));
+    const second = TranscriptStreamProjection.buildStreamingRows(view(input));
     expect(second).toBe(first);
-    expect(buildStreamingRows(view(input))[0]!.text).toBe('abc');
+    expect(TranscriptStreamProjection.buildStreamingRows(view(input))[0]!.text).toBe('abc');
 
     // 内容变化（unit 的 streamRows copy-on-write → 新数组）→ 新输出
     const changedInput = projection({text: 'abcd'});
-    const changed = buildStreamingRows(view([changedInput]));
+    const changed = TranscriptStreamProjection.buildStreamingRows(view([changedInput]));
     expect(changed).not.toBe(first);
     expect(changed[0]!.text).toBe('abcd');
 
     // 新数组但字段全等（含 tools 引用不变）→ 复用上一次输出
-    const sameContent = buildStreamingRows(view([{...changedInput}]));
+    const sameContent = TranscriptStreamProjection.buildStreamingRows(view([{...changedInput}]));
     expect(sameContent).toBe(changed);
   });
 });
@@ -150,7 +145,7 @@ describe('applyStreamRowIds（T-SP1 / T-SP33）', () => {
       ['db-a1', 'st:s:1:0'],
       ['db-u1', 'st:user-should-not-apply'],
     ]);
-    const next = applyStreamRowIds(rows, map);
+    const next = TranscriptStreamProjection.applyStreamRowIds(rows, map);
     expect(next[0]).toMatchObject({
       id: 'st:s:1:0',
       messageId: 'db-a1',
@@ -163,13 +158,13 @@ describe('applyStreamRowIds（T-SP1 / T-SP33）', () => {
 
   it('空映射原样返回（回滚开关等价面，T-SP33）', () => {
     const rows = [messageRow('db-a1', 'assistant')];
-    expect(applyStreamRowIds(rows, EMPTY_STREAM_ROW_IDS)).toBe(rows);
+    expect(TranscriptStreamProjection.applyStreamRowIds(rows, EMPTY_STREAM_ROW_IDS)).toBe(rows);
   });
 });
 
 describe('buildStreamingTranscriptRow（T-SP3 投影面）', () => {
   it('行身份 id=streamId、status/messageId 原样搬运，plain 不带 html', () => {
-    const row = buildStreamingTranscriptRow(
+    const row = TranscriptStreamProjection.buildStreamingTranscriptRow(
       projection({
         streamId: 'st:s:1:0',
         status: 'finished',
@@ -193,7 +188,7 @@ describe('buildStreamingTranscriptRow（T-SP3 投影面）', () => {
   });
 
   it('richText：textHtml/thinkingHtml 为覆盖后**全量**文本的 HTML', () => {
-    const row = buildStreamingTranscriptRow(
+    const row = TranscriptStreamProjection.buildStreamingTranscriptRow(
       projection({text: '原文', thinking: '原想'}),
       true,
       {text: '第一段\n\n第二段', thinking: '完整思考'},
@@ -210,9 +205,9 @@ describe('buildStreamingTranscriptRow（T-SP3 投影面）', () => {
   });
 
   it('空 tools 不带 tools 字段；非空 tools 结构化搬运', () => {
-    const empty = buildStreamingTranscriptRow(projection(), false);
+    const empty = TranscriptStreamProjection.buildStreamingTranscriptRow(projection(), false);
     expect(empty).not.toHaveProperty('tools');
-    const withTools = buildStreamingTranscriptRow(
+    const withTools = TranscriptStreamProjection.buildStreamingTranscriptRow(
       projection({
         tools: [
           {toolUseId: 't1', name: 'grep', input: {q: 'x'}, status: 'pending'},
@@ -230,8 +225,8 @@ describe('buildStreamingTranscriptRow（T-SP3 投影面）', () => {
   });
 });
 
-describe('buildStreamingRows(null)（T-SP33）', () => {
+describe('TranscriptStreamProjection.buildStreamingRows(null)（T-SP33）', () => {
   it('回滚/无单元时返回空数组，不抛错', () => {
-    expect(buildStreamingRows(null)).toEqual([]);
+    expect(TranscriptStreamProjection.buildStreamingRows(null)).toEqual([]);
   });
 });

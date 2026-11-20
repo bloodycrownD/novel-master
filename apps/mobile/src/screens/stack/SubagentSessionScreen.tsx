@@ -16,8 +16,8 @@
  *   重进 partial——与本页旧的内联注入版语义一致，实现只剩单元一份）；
  * - 消息面：有单元走投影，无单元（run 已结束且单元出表）本地回源。
  *
- * 只读：无 composer；agent 运行中时显示停止按钮（经 manager.stopRun 走
- * abortRegistry 的 abort 语义）。
+ * 只读：无 composer；agent 运行中时显示停止按钮（经 manager.stop 传
+ * `ABORT_KEY.agent(sessionId)` 走 abortRegistry 的 abort 语义）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
@@ -27,31 +27,27 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessageData} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import type {SkillToolRef} from '@novel-master/core/chat';
-import {
-  ChatStreamMetricsBarLive,
-  hasVisibleSettledMetrics,
-} from '../../components/chat/ChatStreamMetricsBarLive';
+import {ChatStreamMetricsBarLive, SettledMetrics} from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatConversationWebView} from '../../components/chat/ChatConversationWebView';
-import {showAppToast} from '@/services/app-toast';
+import {AppToast} from '@/services/app-toast';
 import {chatLinkResolver} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
-import {setPromptTurnDetail} from '../../components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
-import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
-import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
+import {ChatLinkNav} from '@/screens/tabs/chat-tab/chat-link-nav';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
-import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
-import {
-  EMPTY_STREAM_ROW_IDS,
-  buildStreamingRows,
-} from '../../components/chat/transcript-stream-projection';
+import {SessionStreamWebviewAdapter} from '@/services/session-stream-webview-adapter';
+import {EMPTY_STREAM_ROW_IDS, TranscriptStreamProjection} from '../../components/chat/transcript-stream-projection';
 import {coreT} from '@/i18n/core';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
@@ -98,19 +94,25 @@ export function SubagentSessionScreen() {
         try {
           // force：宽限期内的 settled 单元可能还挂着首轮缓存，复用场景（第二轮 run）
           // 必须回源，否则进屏先看到旧内容
-          return (
-            (await manager.loadSessionTailMessages(sessionId, {force: true})) ??
-            []
-          );
+          const read = await manager.loadSessionTailMessages(sessionId, {force: true});
+          if (!read.ok) {
+            showToast(ToastMessage.toast('加载子会话失败', read.error));
+            return [];
+          }
+          return read.value ?? [];
         } catch (error) {
-          showToast(toastMessage('加载子会话失败', error));
+          showToast(ToastMessage.toast('加载子会话失败', error));
           return [];
         }
       }
       try {
-        return await runtime.messages.listBySession(sessionId);
+        const read = await runtime.messages.listBySession(sessionId);
+        if (read.kind === 'failed') throw read.error;
+        // 未注入 hooks：中断分支不可达；真出现时按「本次不采纳」保留空面。
+        if (read.kind !== 'completed') return [];
+        return read.value;
       } catch (error) {
-        showToast(toastMessage('加载子会话失败', error));
+        showToast(ToastMessage.toast('加载子会话失败', error));
         return [];
       }
     })()
@@ -135,7 +137,7 @@ export function SubagentSessionScreen() {
     if (appUi == null) {
       return;
     }
-    const prefRead = readChatRichTextEnabled(appUi);
+    const prefRead = AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false);
     prefRead.then(setRichTextEnabled).catch(() => undefined);
   }, [appUi]);
 
@@ -156,7 +158,7 @@ export function SubagentSessionScreen() {
     const sid = sessionId;
     // 单元载荷/控制消息 → webview handle 适配（与主屏同一份哑引擎契约，
     // 映射细节见 services/session-stream-webview-adapter）。
-    const handle = createTranscriptStreamHandle(SUBAGENT_HANDLE_ID, web);
+    const handle = SessionStreamWebviewAdapter.create(SUBAGENT_HANDLE_ID, web);
     manager.attachWebview(sid, handle);
     return () => {
       manager.detachWebview(sid, handle.handleId);
@@ -184,7 +186,7 @@ export function SubagentSessionScreen() {
       // 子会话屏没有工作区列表（state 只有 messages / unitView 等），
       // 显式写 no-op：保存后的刷新对象是主会话的工作区，由主会话侧重进时补齐。
       // 刻意不为该屏新建列表 state（那是产品级口径，不在本条范围）。
-      setFileEditorOnSessionVfsSaved(() => {});
+      fileEditorOnSessionVfsSavedSlot.set(() => {});
       navigation.navigate('FileEditor', {
         path,
         scopeKind: 'session',
@@ -202,7 +204,7 @@ export function SubagentSessionScreen() {
     (href: string) => {
       const sessionVfs = runtime.sessionVfs(projectId, parentSessionId);
       const projectVfs = runtime.projectVfs(projectId);
-      void resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
+      void ChatLinkNav.resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
         intent => {
           if (intent.kind === 'external') {
             void Linking.openURL(intent.url).catch(() => undefined);
@@ -210,13 +212,13 @@ export function SubagentSessionScreen() {
           }
           if (intent.kind === 'not-found') {
             // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-            showAppToast(coreT(chatLinkResolver.notFoundMessage(intent.path)));
+            AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
             return;
           }
           if (intent.kind === 'file') {
             if (intent.scope === 'session') {
               // 同 onOpenToolFile：子会话屏无工作区列表，回调写 no-op。
-              setFileEditorOnSessionVfsSaved(() => {});
+              fileEditorOnSessionVfsSavedSlot.set(() => {});
               navigation.navigate('FileEditor', {
                 path: intent.path,
                 scopeKind: 'session',
@@ -267,7 +269,7 @@ export function SubagentSessionScreen() {
       const {title, content, inputJson} = payload;
       const bodyWithInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
       const body = inputJson ? bodyWithInput : content;
-      setPromptTurnDetail({title, body});
+      promptTurnDetailSlot.set({title, body});
       navigation.navigate('PromptTurnDetail', {
         title,
         turnId: `tool-result-${title}`,
@@ -287,9 +289,10 @@ export function SubagentSessionScreen() {
     if (sessionId == null) {
       return;
     }
-    // 与主会话停止入口一致：经 manager.stopRun → abortRegistry.abort 触发
-    // core 层中断；后续 FINISHED 照常走事件路径收尾（投影回落、按钮消失）。
-    manager.stopRun(sessionId);
+    // 与主会话停止入口一致：经 manager.stop(ABORT_KEY.agent(...)) →
+    // abortRegistry.abort 触发 core 层中断；后续 FINISHED 照常走事件路径收尾
+    //（投影回落、按钮消失）。
+    manager.stop(ABORT_KEY.agent(sessionId));
   }, [manager, sessionId]);
 
   if (initialLoading) {
@@ -324,7 +327,7 @@ export function SubagentSessionScreen() {
   // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
   // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
   const interrupted = status === 'interrupted';
-  const hasMetrics = unitView != null && hasVisibleSettledMetrics(unitView);
+  const hasMetrics = unitView != null && SettledMetrics.hasVisible(unitView);
   const showInterrupted = interrupted && sessionId != null && !hasMetrics;
 
   return (
@@ -357,7 +360,7 @@ export function SubagentSessionScreen() {
           transcriptOnly
           sessionKey={sessionKey}
           messages={displayMessages}
-          streamingRows={buildStreamingRows(unitView)}
+          streamingRows={TranscriptStreamProjection.buildStreamingRows(unitView)}
           streamRowIds={streamRowIds}
           // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
           pendingSubagentSessions={unitView?.pendingChildrenByTitle}

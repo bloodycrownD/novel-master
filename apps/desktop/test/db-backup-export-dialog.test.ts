@@ -9,8 +9,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { dialog } from "electron";
-import { exportDatabaseBackup } from "../src/main/services/db-backup.service.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { DbBackupService } from "../src/main/services/db-backup.service.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -23,7 +23,7 @@ describe("exportDatabaseBackup 保存框命名与 filters", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-backup-name-"));
-    await getDesktopRuntime();
+    await DesktopRuntimeSingleton.get();
     dialog.showSaveDialog = (async (...args: unknown[]) => {
       savedDialogs.push(args);
       return { canceled: true, filePath: undefined };
@@ -36,9 +36,13 @@ describe("exportDatabaseBackup 保存框命名与 filters", () => {
   });
 
   it("默认名 nmbackup.db，filters 含 db 与 nmbackup（无窗口分支）", async () => {
-    const runtime = await getDesktopRuntime();
-    const result = await exportDatabaseBackup(runtime);
-    assert.equal(result, "cancelled");
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
+    // 四期签名：exportDatabaseBackup 沿 Result 回传，解包取结果。
+    const exported = await DbBackupService.exportWithDialog(runtime);
+    if (!exported.ok) throw exported.error;
+    assert.equal(exported.value, "cancelled");
     assert.equal(savedDialogs.length, 1);
     const options = savedDialogs[0]![0] as {
       defaultPath: string;

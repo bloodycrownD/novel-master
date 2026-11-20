@@ -39,9 +39,7 @@ export type OpSqliteBindings = {
 };
 
 /** 把 op-sqlite 的 metadata 字段 `{name, type, index}` 转换为契约的 `{columnName}`。 */
-function convertMetadata(
-  metadata: OpSqliteRawResult["metadata"],
-): { columnName: string }[] | undefined {
+function convertMetadata(metadata: OpSqliteRawResult["metadata"],): { columnName: string }[] | undefined {
   if (!metadata || metadata.length === 0) {
     return undefined;
   }
@@ -117,8 +115,7 @@ export class BaseOpSqliteAdapter implements OpSqliteAdapter {
     // quick-sqlite 的 location: 'default' 布局：Android 落在
     // <files>/default/<name>，iOS 落在 <DocumentDir>/default/<name>。
     // 平台常量一边为 null（另一平台），均不可用时返回 undefined。
-    const base =
-      this.bindings.ANDROID_FILES_PATH ?? this.bindings.IOS_DOCUMENT_PATH;
+    const base = this.bindings.ANDROID_FILES_PATH ?? this.bindings.IOS_DOCUMENT_PATH;
     if (typeof base !== "string" || base.length === 0) {
       return undefined;
     }
@@ -131,6 +128,7 @@ export class BaseOpSqliteAdapter implements OpSqliteAdapter {
 
   private requireDb(): OpSqliteDb {
     if (!this.db) {
+      // nm-throw: keep — 驱动层 API 误用不变量：未 open 即调用属编程错误。
       throw new Error("op-sqlite adapter is not open");
     }
     return this.db;

@@ -5,9 +5,9 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '../../theme/tokens';
-import {isRichContentOverLimit} from './rich-content-limits';
+import {RichContentLimits} from './rich-content-limits';
 
-export interface RichContentBodyProps {
+interface RichContentBodyProps {
   content: string;
   tokens: ThemeTokens;
   /** Plain-text color (default tokens.text). */
@@ -19,7 +19,7 @@ function RichContentBodyInner({
   tokens,
   fallbackTextColor,
 }: RichContentBodyProps) {
-  const overLimit = isRichContentOverLimit(content);
+  const overLimit = RichContentLimits.isOverLimit(content);
   const plainColor = fallbackTextColor ?? tokens.text;
 
   return (

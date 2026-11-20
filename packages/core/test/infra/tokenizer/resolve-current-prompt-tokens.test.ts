@@ -4,40 +4,36 @@
  * T-T9 覆盖 API 占用的两种载体：进程内热层（Map）与 session KKV（跨重启）。
  * 后者是本轮治本点——「清掉进程 Map = 模拟重启」后仍能读到同一份 API 值。
  */
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
-import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  afterEach, beforeEach, describe, it  } from "node:test";
+import {  registerNodeTokenizerDriverForTests  } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
-import {
-  clearTokenizerDrivers,
-  registerTokenizerDriver,
-} from "../../../src/infra/nmtp/index.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  PROMPT_WHOLE_CACHE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-  TOKEN_CHUNKS_CACHE_KEY,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  createDefaultTokenCounterRegistry,
-  pickLastPromptUsage,
-  PromptTokenResolveBailedError,
-  promptWholeCache,
-  resolveCurrentPromptTokens,
-  sessionApiPromptTokenCache,
-  tokenChunkCache,
-} from "../../../src/infra/tokenizer/index.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  TokenizerRegistry  } from "../../../src/infra/nmtp/index.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  DefaultTokenCounterRegistry, LastPromptUsage, promptWholeCache, CurrentPromptTokens, sessionApiPromptTokenCache, tokenChunkCache  } from "../../../src/infra/tokenizer/index.js";
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
-import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { estimateTokensCjkAware } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
-import { formatChatMessageForCliPreview } from "../../../src/domain/chat/content/message-body-text.js";
-import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
-import { emptyRegistryDeps } from "./registry-test-helpers.js";
+import {  SessionApiPromptTokenEntry  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  CjkAwareEstimate  } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
+import {  MessageBodyText  } from "../../../src/domain/chat/content/message-body-text.js";
+import {  createMemorySessionKkv  } from "../../helpers/prompt-layout-test-helpers.js";
+import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
 
 const SESSION_ID = "sess-token-resolve";
 const RUN_MODEL_ID = "openai/gpt-4o";
+
+/**
+ * 错误通道迁移二期：resolveCurrentPromptTokens 返回 `Outcome<ResolvedPromptTokens>`。
+ * 本文件的用例几乎全部只关心 completed 分支（弃权语义单独在 shouldBail 两个用例
+ * 里直判 Outcome.cancelled），统一从这里取 value。
+ */
+async function resolveCompleted(sessionId: string, params: Parameters<typeof CurrentPromptTokens.resolve>[1], options?: Parameters<typeof CurrentPromptTokens.resolve>[2]) {
+  const outcome = await CurrentPromptTokens.resolve(sessionId, params, options);
+  assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
+  return outcome.value;
+}
 
 function round(
   partial: Partial<ModelRoundSummary> & Pick<ModelRoundSummary, "step">,
@@ -54,7 +50,7 @@ function countParams() {
     layout: { persist: [], dynamic: [] },
     ctx: { workplaceDisplay: "", messages: [] },
     savedModelId: RUN_MODEL_ID,
-    registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
   };
 }
 
@@ -74,14 +70,14 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       round({ step: 1, usage: { promptTokens: 250 } }),
       round({ step: 2, usage: { completionTokens: 10 } }),
     ];
-    assert.equal(pickLastPromptUsage(rounds), 250);
+    assert.equal(LastPromptUsage.pick(rounds), 250);
   });
 
   it("T-T2: promptTokens: 0 视为可用", () => {
     const rounds: ModelRoundSummary[] = [
       round({ step: 0, usage: { promptTokens: 0 } }),
     ];
-    assert.equal(pickLastPromptUsage(rounds), 0);
+    assert.equal(LastPromptUsage.pick(rounds), 0);
   });
 
   it("T-T3: usage 全缺 → resolve 走 local", async () => {
@@ -89,9 +85,9 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       round({ step: 0 }),
       round({ step: 1, usage: { completionTokens: 3 } }),
     ];
-    assert.equal(pickLastPromptUsage(rounds), undefined);
+    assert.equal(LastPromptUsage.pick(rounds), undefined);
 
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, countParams());
+    const resolved = await resolveCompleted(SESSION_ID, countParams());
     assert.equal(resolved.source, "local");
     assert.notEqual(resolved.counterKind, "api");
     assert.ok(resolved.tokenCount >= 0);
@@ -103,7 +99,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       promptTokens: 1234,
       updatedAt: Date.now(),
     });
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, countParams());
+    const resolved = await resolveCompleted(SESSION_ID, countParams());
     assert.equal(resolved.source, "api");
     assert.equal(resolved.tokenCount, 1234);
     assert.equal(resolved.estimated, false);
@@ -116,14 +112,14 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({
+      SessionApiPromptTokenEntry.serialize({
         promptTokens: 12_729,
         atMs: 1_700_000_000_000,
         savedModelId: RUN_MODEL_ID,
       }),
     );
 
-    const resolved = await resolveCurrentPromptTokens(
+    const resolved = await resolveCompleted(
       SESSION_ID,
       countParams(),
       { sessionKkv }
@@ -141,7 +137,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
 
     // 命中同一模型前提下的「重启前」读数
     writeEntryFor(sessionKkv, RUN_MODEL_ID, 3_926);
-    const before = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const before = await resolveCompleted(SESSION_ID, params, {
       sessionKkv,
     });
     assert.equal(before.source, "api");
@@ -149,7 +145,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
 
     // 模拟进程重启：进程内热层清空，DB（KKV）留存
     sessionApiPromptTokenCache.clearAll();
-    const after = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const after = await resolveCompleted(SESSION_ID, params, {
       sessionKkv,
     });
     assert.equal(after.source, "api");
@@ -164,13 +160,13 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({
+      SessionApiPromptTokenEntry.serialize({
         promptTokens: 99_999,
         atMs: 1,
         savedModelId: "anthropic/claude-old",
       })
     );
-    const resolved = await resolveCurrentPromptTokens(
+    const resolved = await resolveCompleted(
       SESSION_ID,
       countParams(),
       { sessionKkv }
@@ -185,7 +181,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       updatedAt: Date.now(),
     });
     sessionApiPromptTokenCache.invalidate(SESSION_ID);
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, countParams());
+    const resolved = await resolveCompleted(SESSION_ID, countParams());
     assert.equal(resolved.source, "local");
   });
 
@@ -200,7 +196,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
     );
     sessionApiPromptTokenCache.clearAll();
 
-    const resolved = await resolveCurrentPromptTokens(
+    const resolved = await resolveCompleted(
       SESSION_ID,
       countParams(),
       { sessionKkv }
@@ -218,17 +214,17 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({ promptTokens: 999, atMs: 1 })
+      SessionApiPromptTokenEntry.serialize({ promptTokens: 999, atMs: 1 })
     );
     sessionApiPromptTokenCache.clearAll();
 
-    await sessionKkv.delete(
+    unwrap(await sessionKkv.delete(
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY
-    );
+    ));
 
-    const resolved = await resolveCurrentPromptTokens(
+    const resolved = await resolveCompleted(
       SESSION_ID,
       countParams(),
       { sessionKkv }
@@ -247,7 +243,7 @@ async function writeEntryFor(
     SESSION_ID,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens,
       atMs: Date.now(),
       savedModelId,
@@ -296,7 +292,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages },
       savedModelId,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
   }
 
@@ -309,7 +305,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       anchorSeq: 9,
     });
 
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.source, "api");
     assert.equal(resolved.counterKind, "api");
     assert.equal(resolved.estimated, false);
@@ -343,15 +339,15 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     // 期望值：按读口的序列化口径复算 tail（seq > 9 且非 hidden）的 CJK 下限。
     const expectedTail = [msg(10, "十号消息正文")]
       .map((m) =>
-        formatChatMessageForCliPreview(m)
+        MessageBodyText.formatForCliPreview(m)
           .map((segment) => `${segment.role}: ${segment.body}`)
           .join("\n\n")
       )
       .join("\n\n");
-    const expectedDelta = estimateTokensCjkAware(expectedTail);
+    const expectedDelta = CjkAwareEstimate.estimate(expectedTail);
     assert.ok(expectedDelta > 1, "中文 tail 的 CJK 下限应远大于 heuristic 的 1");
 
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.tokenCount, baseline + expectedDelta);
   });
 
@@ -363,7 +359,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       savedModelId: RUN_MODEL_ID,
       anchorSeq: 10,
     });
-    const noDelta = await resolveCurrentPromptTokens(
+    const noDelta = await resolveCompleted(
       SESSION_ID,
       paramsWithMessages([msg(9, "九"), msg(10, "十")])
     );
@@ -375,7 +371,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       updatedAt: Date.now(),
       savedModelId: RUN_MODEL_ID,
     });
-    const noAnchor = await resolveCurrentPromptTokens(
+    const noAnchor = await resolveCompleted(
       SESSION_ID,
       paramsWithMessages([msg(9, "九")])
     );
@@ -392,7 +388,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       savedModelId: RUN_MODEL_ID,
       anchorSeq: 99,
     });
-    const resolved = await resolveCurrentPromptTokens(
+    const resolved = await resolveCompleted(
       SESSION_ID,
       paramsWithMessages([msg(9, "九"), msg(10, "十")])
     );
@@ -407,24 +403,24 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
 
   it("本地 miss → 透传模型家族计数器（glm 不再强制估算档，真机复验拍板）", async () => {
     const captured: { override?: unknown; sessionId?: unknown } = {};
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-stats-first",
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
         captured.sessionId = params.sessionId;
-        return {
+        return Result.ok({
           tokenCount: 1_234,
           counterKind: "glm",
           estimated: false,
           savedModelId: params.savedModelId,
           vendorModelId: "zai/glm-4.6",
           tokenizerFamily: "glm",
-        };
+        });
       },
     });
 
-    const resolved = await resolveCurrentPromptTokens(
+    const resolved = await resolveCompleted(
       SESSION_ID,
       paramsWithMessages([], "zai/glm-4.6")
     );
@@ -448,25 +444,25 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
 
   it("本地 miss + 调用方显式 override → 原样透传（heuristic 不被改写）", async () => {
     const captured: { override?: unknown; sessionId?: unknown } = {};
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-stats-first-2",
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
         captured.sessionId = params.sessionId;
-        return {
+        return Result.ok({
           tokenCount: 10,
           counterKind: "tiktoken",
           estimated: false,
           savedModelId: params.savedModelId,
           vendorModelId: "openai/gpt-4o",
           tokenizerFamily: "tiktoken",
-        };
+        });
       },
     });
 
     // 未传 override：undefined 原样透传
-    await resolveCurrentPromptTokens(
+    await resolveCompleted(
       SESSION_ID,
       paramsWithMessages([], RUN_MODEL_ID)
     );
@@ -476,7 +472,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     assert.equal(captured.sessionId, SESSION_ID);
 
     // 调用方显式 heuristic：透传不改写
-    await resolveCurrentPromptTokens(SESSION_ID, {
+    await resolveCompleted(SESSION_ID, {
       ...paramsWithMessages([], RUN_MODEL_ID),
       tokenizerOverride: "heuristic",
     });
@@ -485,8 +481,8 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
 
   it("preferEstimate：不调驱动、CJK 下限生效、api 命中不受影响", async () => {
     const captured: { driverCalled: number } = { driverCalled: 0 };
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-prefer-estimate",
       countPromptLlmInput: async () => {
         captured.driverCalled += 1;
@@ -506,9 +502,9 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
-    const estimated = await resolveCurrentPromptTokens(
+    const estimated = await resolveCompleted(
       SESSION_ID,
       cjkParams,
       { preferEstimate: true }
@@ -526,7 +522,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       updatedAt: Date.now(),
       savedModelId: RUN_MODEL_ID,
     });
-    const apiHit = await resolveCurrentPromptTokens(
+    const apiHit = await resolveCompleted(
       SESSION_ID,
       { ...cjkParams, layout: { persist: [], dynamic: [] } },
       { preferEstimate: true }
@@ -542,24 +538,24 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       layout: { persist: [], dynamic: [], system: "暖机后首帧直读的精确占位" },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
 
     // 冷 L1 首帧：估算档（gpt ≈ 语义）。
-    const cold = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const cold = await resolveCompleted(SESSION_ID, params, {
       preferEstimate: true,
     });
     assert.equal(cold.estimated, true);
     assert.equal(cold.counterKind, "heuristic");
 
     // 暖机：完整口径计数一次（真 node 驱动 → tiktoken 精确档 + L1 写入）。
-    const warm = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const warm = await resolveCompleted(SESSION_ID, params);
     assert.equal(warm.estimated, false);
     assert.equal(warm.counterKind, "tiktoken");
 
     // 暖后首帧：L1 命中 → 精确档直读、数值与暖机一致。旧实现（早退不查
     // L1）这里仍是 heuristic/estimated:true——本断言即回归锁。
-    const warmFirst = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const warmFirst = await resolveCompleted(SESSION_ID, params, {
       preferEstimate: true,
     });
     assert.equal(warmFirst.source, "local");
@@ -592,7 +588,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
       layout: { persist: [], dynamic: [], system: text },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
   }
 
@@ -636,23 +632,23 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
       "夜色如水，林间小径上落满了枯叶。她停下脚步，抬头望向灯火。",
     );
 
-    const first = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const first = await resolveCompleted(SESSION_ID, params, {
       sessionKkv,
     });
     assert.equal(first.source, "local");
 
     // advanceGeneration(realRefresh)：本地计数收尾把当前代整表写进了 KKV。
-    const raw = await sessionKkv.get(
+    const raw = unwrap(await sessionKkv.get(
       SESSION_ID,
       SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
       TOKEN_CHUNKS_CACHE_KEY
-    );
+    ));
     assert.notEqual(raw, null, "本地计数后应写入 token_chunks/chunkCache 行");
 
     // 模拟进程重启：L1/L2 热层全清，KKV 留存——同内容再计数应靠种子全命中。
     promptWholeCache.clearForTests();
     tokenChunkCache.clearForTests();
-    const second = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const second = await resolveCompleted(SESSION_ID, params, {
       sessionKkv,
     });
     assert.equal(second.source, "local");
@@ -666,7 +662,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
 
   it("无 sessionKkv（CLI / 测试）：本地计数只推内存代、不持久化", async () => {
     const params = countParamsWithText("他把伞收了，窗外的雨顺着玻璃往下淌。");
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.source, "local");
     // 驱动把块写进当前代，读口 advanceGeneration 推代后条目落第二代
     // （当前代清空待下轮计数复用）。
@@ -693,7 +689,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
       "夜色如水，林间小径上落满了枯叶。她停下脚步，抬头望向灯火。",
     );
 
-    const first = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const first = await resolveCompleted(SESSION_ID, params, {
       sessionKkv: probe.kkv,
     });
     assert.equal(first.source, "local");
@@ -701,7 +697,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
     assert.equal(probe.sets(), 1, "首轮：有新块计数 → 整表落盘一次");
 
     // 第二轮同会话同内容：读口不该再把整表 KKV 行读回来 parse 一遍。
-    const second = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const second = await resolveCompleted(SESSION_ID, params, {
       sessionKkv: probe.kkv,
     });
     assert.equal(second.tokenCount, first.tokenCount, "同内容读数必须一致");
@@ -714,7 +710,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
       "夜色如水，林间小径上落满了枯叶。她停下脚步，抬头望向灯火。",
     );
 
-    const first = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const first = await resolveCompleted(SESSION_ID, params, {
       sessionKkv: probe.kkv,
     });
     assert.equal(first.source, "local");
@@ -722,15 +718,15 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
 
     // 只留 L2 整表种子：删掉 L1 整串行（L1 命中会在驱动入口短路、压根不进
     // L2——那不是本用例要验的路径），再清热层模拟进程重启。
-    await probe.kkv.delete(
+    unwrap(await probe.kkv.delete(
       SESSION_ID,
       SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
       PROMPT_WHOLE_CACHE_KEY
-    );
+    ));
     promptWholeCache.clearForTests();
     tokenChunkCache.clearForTests();
 
-    const second = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const second = await resolveCompleted(SESSION_ID, params, {
       sessionKkv: probe.kkv,
     });
     assert.equal(second.tokenCount, first.tokenCount);
@@ -748,7 +744,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
 
   it("重启后内容变了（有新块）→ 照常整表落库（脏标记复位）", async () => {
     const probe = instrumentChunkRowKkv();
-    await resolveCurrentPromptTokens(
+    await resolveCompleted(
       SESSION_ID,
       countParamsWithText("第一段正文内容。"),
       { sessionKkv: probe.kkv }
@@ -758,7 +754,7 @@ describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
     promptWholeCache.clearForTests();
     tokenChunkCache.clearForTests();
 
-    const second = await resolveCurrentPromptTokens(
+    const second = await resolveCompleted(
       SESSION_ID,
       countParamsWithText("第二段完全不同的正文内容。"),
       { sessionKkv: probe.kkv }
@@ -789,7 +785,7 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
 
   afterEach(() => {
     sessionApiPromptTokenCache.clearAll();
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
   });
 
   it("插入点①：preferEstimate 段在序列化之前 bail（整串重活根本没起跑）", async () => {
@@ -807,22 +803,17 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
       layout: { persist: [], dynamic: [], system: "弃权点必须在整串序列化之前" },
       ctx,
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
 
-    await assert.rejects(
-      resolveCurrentPromptTokens(SESSION_ID, params, {
-        preferEstimate: true,
-        shouldBail: () => true,
-      }),
-      (error: unknown) => {
-        assert.ok(
-          error instanceof PromptTokenResolveBailedError,
-          "命中 must throw PromptTokenResolveBailedError（读口按它收成空串哨兵）"
-        );
-        return true;
-      }
-    );
+    const bailed = await CurrentPromptTokens.resolve(SESSION_ID, params, {
+      preferEstimate: true,
+      shouldBail: () => ({ kind: "cancelled", reason: "user-stop" }),
+    });
+    assert.equal(bailed.kind, "cancelled", "命中弃权点必须收成 Outcome.cancelled（不再 throw 哨兵）");
+    if (bailed.kind === "cancelled") {
+      assert.equal(bailed.reason, "user-stop", "shouldBail 给的 Interrupt 原样成为 cancelled 的 reason");
+    }
     assert.equal(
       messageTouches,
       0,
@@ -834,8 +825,8 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
     // 用计数驱动替代真 node 驱动，把「驱动被调了几次」钉成可断言量——
     // 整串原生计数是 resolve 链最重的一步，弃权必须在它起跑前生效。
     let driverCalled = 0;
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-resolve-bail",
       countPromptLlmInput: async () => {
         driverCalled += 1;
@@ -868,19 +859,14 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
       layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
       ctx: { workplaceDisplay: "", messages: [] } as unknown as PromptRenderContext,
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
 
-    await assert.rejects(
-      resolveCurrentPromptTokens(SESSION_ID, params, {
-        sessionKkv,
-        shouldBail: () => true,
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptTokenResolveBailedError);
-        return true;
-      }
-    );
+    const bailed = await CurrentPromptTokens.resolve(SESSION_ID, params, {
+      sessionKkv,
+      shouldBail: () => ({ kind: "cancelled", reason: "user-stop" }),
+    });
+    assert.equal(bailed.kind, "cancelled", "命中弃权点必须收成 Outcome.cancelled（不再 throw 哨兵）");
     assert.equal(driverCalled, 0, "弃权后原生整串计数零调用（进得去停不下已治本）");
     assert.equal(chunkRowGets, 1, "检查点②在 L1/L2 seed 之后：seed 的读已发生");
   });
@@ -892,9 +878,9 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
       layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
       ctx: { workplaceDisplay: "", messages: [] } as unknown as PromptRenderContext,
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.source, "local");
     assert.equal(resolved.estimated, false, "完整口径仍是家族精确档");
     assert.ok(resolved.tokenCount > 0);
@@ -924,7 +910,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
       layout: { persist: [], dynamic: [], system: text },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
-      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+      registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
     };
   }
 
@@ -966,7 +952,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
     const probe = instrumentTokenChunksRows();
     const params = countParamsWithText(TEXT);
 
-    const first = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const first = await resolveCompleted(SESSION_ID, params, {
       sessionKkv: probe.kkv,
     });
     assert.equal(first.source, "local");
@@ -975,7 +961,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
 
     // 第二轮同会话：L1 seed 已被节流挡掉（该行本进程内只会被覆盖写成更新的
     // 内容，重复读只是把热层数据再 parse 一遍）。
-    const second = await resolveCurrentPromptTokens(SESSION_ID, params, {
+    const second = await resolveCompleted(SESSION_ID, params, {
       sessionKkv: probe.kkv,
     });
     assert.equal(second.tokenCount, first.tokenCount, "同内容读数必须一致");
@@ -986,7 +972,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
   it("preferEstimate 的 L1 预查路径同样命中节流（内容变了也不重读）", async () => {
     const probe = instrumentTokenChunksRows();
     const params = countParamsWithText(TEXT);
-    await resolveCurrentPromptTokens(SESSION_ID, params, { sessionKkv: probe.kkv });
+    await resolveCompleted(SESSION_ID, params, { sessionKkv: probe.kkv });
     assert.equal(probe.wholeGets(), 1, "夹具前提：首轮已读过一次");
 
     // 换一份内容 → L1 键（内容指纹）变了，预查必然 miss → 走
@@ -994,7 +980,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
     // 登记，第二条也必须被节流挡掉（注意不能用 clearForTests 来造 miss：
     // 它连节流登记一起复位，那是「进程重启」语义、不是「热层被清」）。
     const otherParams = countParamsWithText(`${TEXT}这是另一段完全不同的正文。`);
-    const estimated = await resolveCurrentPromptTokens(SESSION_ID, otherParams, {
+    const estimated = await resolveCompleted(SESSION_ID, otherParams, {
       sessionKkv: probe.kkv,
       preferEstimate: true,
     });
@@ -1013,7 +999,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
     console.warn = (): void => undefined;
 
     try {
-      const first = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      const first = await resolveCompleted(SESSION_ID, params, {
         sessionKkv: probe.kkv,
       });
       assert.equal(first.source, "local", "读失败不打断计数路径（静默按无种子处理）");
@@ -1022,7 +1008,7 @@ describe("L1 整串行 seed-once（r3-cache-2 读口级）", () => {
 
       // 首轮 L1 记的精确档条目已经由 persistPendingWrites 落库；登记被撤销，
       // 第二轮 seed 会真读一次并把它载入（不撤销登记就永远读不到它）。
-      const second = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      const second = await resolveCompleted(SESSION_ID, params, {
         sessionKkv: probe.kkv,
       });
       assert.equal(second.tokenCount, first.tokenCount, "口径不跳");

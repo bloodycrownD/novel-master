@@ -41,7 +41,8 @@ jest.mock('@/components/ui/AppModal', () => {
 
 const EMPTY_MESSAGE = '暂无可用智能体，请先在智能体配置中添加。';
 
-jest.mock('@/services/agent-picker', () => ({
+jest.mock('@/services/agent-picker', () => {
+  const legacy = {
   AGENT_PICKER_EMPTY_MESSAGE: EMPTY_MESSAGE,
   isAgentPickerRowSelected: (
     agentId: string,
@@ -52,7 +53,9 @@ jest.mock('@/services/agent-picker', () => ({
   loadSessionAgentPickerRows: jest.fn(),
   selectWorkspaceAgent: jest.fn(),
   selectSessionAgent: jest.fn(),
-}));
+};
+  return {...legacy, AgentPicker: {loadRows: legacy.loadAgentPickerRows, loadSessionRows: legacy.loadSessionAgentPickerRows, isRowSelected: legacy.isAgentPickerRowSelected, selectWorkspace: legacy.selectWorkspaceAgent, selectSession: legacy.selectSessionAgent}};
+});
 
 const mockShowToast = jest.fn();
 
@@ -68,13 +71,10 @@ jest.mock('@/hooks/useRuntime', () => ({
 }));
 
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
-import {
-  loadAgentPickerRows,
-  selectWorkspaceAgent,
-} from '@/services/agent-picker';
+import {AgentPicker} from '@/services/agent-picker'
 
-const mockLoad = loadAgentPickerRows as jest.Mock;
-const mockSelect = selectWorkspaceAgent as jest.Mock;
+const mockLoad = AgentPicker.loadRows as jest.Mock;
+const mockSelect = AgentPicker.selectWorkspace as jest.Mock;
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
 function treeText(
@@ -165,7 +165,7 @@ async function renderPicker(
 
 describe('AgentPickerModal 错误处理', () => {
   beforeEach(() => {
-    mockLoad.mockReset().mockResolvedValue({currentId: undefined, rows: []});
+    mockLoad.mockReset().mockResolvedValue({ok: true, value: {currentId: undefined, rows: []}});
     mockSelect.mockReset().mockResolvedValue(undefined);
     mockShowToast.mockReset();
   });
@@ -183,8 +183,11 @@ describe('AgentPickerModal 错误处理', () => {
     mockLoad
       .mockRejectedValueOnce(new Error('读档失败'))
       .mockResolvedValueOnce({
-        currentId: 'a1',
-        rows: [{agentId: 'a1', label: 'Writer'}],
+        ok: true,
+        value: {
+          currentId: 'a1',
+          rows: [{agentId: 'a1', label: 'Writer'}],
+        },
       });
     const {renderer} = await renderPicker();
     expect(json(renderer)).toContain('读档失败');
@@ -198,8 +201,11 @@ describe('AgentPickerModal 错误处理', () => {
 
   it('B-2: 选中写入失败 toast「设置失败」且不回调不关闭', async () => {
     mockLoad.mockResolvedValue({
-      currentId: 'a1',
-      rows: [{agentId: 'a1', label: 'Writer'}],
+      ok: true,
+      value: {
+        currentId: 'a1',
+        rows: [{agentId: 'a1', label: 'Writer'}],
+      },
     });
     mockSelect.mockRejectedValueOnce(new Error('写入炸了'));
     const {renderer, onClose, onSelected} = await renderPicker();
@@ -215,8 +221,11 @@ describe('AgentPickerModal 错误处理', () => {
 
   it('B-2: 写入成功才 onSelected + onClose', async () => {
     mockLoad.mockResolvedValue({
-      currentId: 'a1',
-      rows: [{agentId: 'a1', label: 'Writer'}],
+      ok: true,
+      value: {
+        currentId: 'a1',
+        rows: [{agentId: 'a1', label: 'Writer'}],
+      },
     });
     const {renderer, onClose, onSelected} = await renderPicker();
 

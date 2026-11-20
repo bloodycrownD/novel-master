@@ -46,25 +46,21 @@ import type {ChatConversationWebViewHandle} from '@/components/chat/ChatConversa
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import type {TranscriptStreamingMessage} from '@/components/chat/ChatTranscriptBridge';
-import {EMPTY_STREAM_ROW_IDS} from '@/components/chat/transcript-stream-projection';
-import {buildStreamingRows} from '@/components/chat/transcript-stream-projection';
+import {EMPTY_STREAM_ROW_IDS, TranscriptStreamProjection} from '@/components/chat/transcript-stream-projection';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
-import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
-import {findLastVisibleMessage} from '@/components/chat/composer-send-state';
-import {deriveComposerSendState} from '@/components/chat/composer-send-state';
+import {SessionStreamWebviewAdapter} from '@/services/session-stream-webview-adapter';
+import {ComposerSendState} from '@/components/chat/composer-send-state';
 import {useToast} from '@/components/chrome/ToastHost';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
-import {
-  isMobileAgentActive,
-  subscribeMobileAgentActivity,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import type {RootStackParamList} from '@/navigation/types';
-import {readChatTranscriptEngine} from '@/storage/chat-transcript-engine';
-import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
+import {ChatTranscriptEngine} from '@/storage/chat-transcript-engine';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
 import {useChatTabMessages} from './useChatTabMessages';
 import {
   useChatTabScope,
@@ -272,7 +268,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   // 遮住 idle 里上一轮交接的映射——所以按**非空优先**取（P1-3），避免已接管
   // 行回退 DB id 触发 remount。
   // 引用稳定性由 `buildStreamingRows` 自己的输入缓存保证（spec P1-5），不再套 useMemo。
-  const streamingRows = buildStreamingRows(unitView);
+  const streamingRows = TranscriptStreamProjection.buildStreamingRows(unitView);
   const unitRowIds = unitView?.streamRowIds;
   const viewRowIds = messagesView?.streamRowIds;
   const hasUnitRowIds = unitRowIds != null && unitRowIds.size > 0;
@@ -316,7 +312,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     const sid = sessionId;
     // 单元流式载荷/控制消息 → webview handle 的适配层（哑引擎契约不动，
     // 映射细节见 services/session-stream-webview-adapter）。
-    const handle = createTranscriptStreamHandle(CHAT_TAB_HANDLE_ID, web);
+    const handle = SessionStreamWebviewAdapter.create(CHAT_TAB_HANDLE_ID, web);
     manager.attachWebview(sid, handle);
     return () => {
       manager.detachWebview(sid, handle.handleId);
@@ -337,8 +333,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   // 发送态推导基于显示源：用户消息 append 后 force 回源刷新（有单元走
   // 投影、无单元走 idle），推导随消息面即时更新。
   const composerSendState = useMemo(() => {
-    const lastVisibleMessage = findLastVisibleMessage(chatMessages);
-    const derived = deriveComposerSendState(lastVisibleMessage);
+    const lastVisibleMessage = ComposerSendState.findLastVisibleMessage(chatMessages);
+    const derived = ComposerSendState.derive(lastVisibleMessage);
     // 中断现场解锁输入：被杀 run 的尾部 user 消息是「没回完」的历史现场，
     // 不是「等待回复中」。partial 非空的中断由流式行投影呈现（单元
     // `streamRows` → 宿主快照）；partial 为空的（首字前被杀）没有任何可呈现
@@ -378,8 +374,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     [manager, sessionId, projectId, refreshChatTokenLabel],
   );
 
-  const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
-  useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
+  const [agentActive, setAgentActive] = useState(() => agentActivity.isActive());
+  useEffect(() => agentActivity.subscribe(setAgentActive), []);
 
   const {
     setProjectDrawerOpen,
@@ -423,7 +419,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     if (appUi == null) {
       return;
     }
-    setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
+    setChatRichTextEnabled(await AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false));
   }, [appUi]);
 
   /**
@@ -432,7 +428,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
    * 消费点（口径见 `storage/chat-transcript-engine.ts` 文件头）。
    */
   const refreshChatTranscriptEngine = useCallback(async () => {
-    await readChatTranscriptEngine(appUi);
+    await ChatTranscriptEngine.read(appUi);
   }, [appUi]);
 
   const refreshOnFocus = useCallback(() => {

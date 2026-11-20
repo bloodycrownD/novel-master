@@ -7,15 +7,7 @@
  * token 明文为 `$技能名$` / `@路径@`（触发符开头、同字符收尾），区间含收尾
  * 触发符；无尾终止符的旧格式不再命中（不高亮 / 无原子删除区间）。
  */
-import {
-  atomicDeleteRanges,
-  renderHighlightHtml,
-  resolveAtomicCaret,
-  resolveAtomicDelete,
-  resolveReportedHeight,
-  resolveUnbounded,
-  shouldReportChange,
-} from '@web/composer-input/webview/runtime/editor';
+import {ComposerEditor} from '@web/composer-input/webview/runtime/editor';
 import type {ComposerMetrics} from '@web/composer-input/webview/runtime/model';
 
 const TOKEN_SPAN = (inner: string) =>
@@ -32,83 +24,83 @@ const METRICS: ComposerMetrics = {
 
 describe('renderHighlightHtml（composer-token 模式）', () => {
   it('T-CW1：非 token 段按 HTML 转义（& < > "）', () => {
-    expect(renderHighlightHtml('<b>&"', 'composer-token')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('<b>&"', 'composer-token')).toBe(
       '&lt;b&gt;&amp;&quot;',
     );
   });
 
   it('T-CW2：token 段包 span 且类名固定', () => {
-    expect(renderHighlightHtml('看 @src/a.ts@ 谢谢', 'composer-token')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('看 @src/a.ts@ 谢谢', 'composer-token')).toBe(
       `看 ${TOKEN_SPAN('@src/a.ts@')} 谢谢`,
     );
   });
 
   it('T-CW3：@a@$b$ 互斥成两个独立 token（不互吞）', () => {
-    expect(renderHighlightHtml('@a@$b$', 'composer-token')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('@a@$b$', 'composer-token')).toBe(
       `${TOKEN_SPAN('@a@')}${TOKEN_SPAN('$b$')}`,
     );
   });
 
   it('T-CW4：末尾换行补 <br/>（pre-wrap 下占位，防与 textarea 高度错位）', () => {
-    expect(renderHighlightHtml('第一行\n', 'composer-token')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('第一行\n', 'composer-token')).toBe(
       '第一行\n<br/>',
     );
     // 宏模式同款口径：尾换行占位与分段来源无关
-    expect(renderHighlightHtml('第一行\n', 'prompt-macro')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('第一行\n', 'prompt-macro')).toBe(
       '第一行\n<br/>',
     );
     // 中间换行由 pre-wrap 自己占位，不补 br；末尾那个才补
-    expect(renderHighlightHtml('a\nb\n', 'composer-token')).toBe('a\nb\n<br/>');
+    expect(ComposerEditor.renderHighlightHtml('a\nb\n', 'composer-token')).toBe('a\nb\n<br/>');
   });
 
   it('T-CW5：空串给零宽空格（行盒不塌）', () => {
-    expect(renderHighlightHtml('', 'composer-token')).toBe('&#8203;');
-    expect(renderHighlightHtml('', 'prompt-macro')).toBe('&#8203;');
+    expect(ComposerEditor.renderHighlightHtml('', 'composer-token')).toBe('&#8203;');
+    expect(ComposerEditor.renderHighlightHtml('', 'prompt-macro')).toBe('&#8203;');
   });
 
   it('孤立 $ 不成 token（后随空白/结尾）', () => {
-    expect(renderHighlightHtml('价格 $ 100', 'composer-token')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('价格 $ 100', 'composer-token')).toBe(
       '价格 $ 100',
     );
   });
 
   it('旧格式（无尾终止符）不再命中：@路径 与 $技能 都按普通文本渲染', () => {
     const plain = '看 @src/a.ts 与 $技能 都不高亮';
-    expect(renderHighlightHtml(plain, 'composer-token')).toBe(plain);
+    expect(ComposerEditor.renderHighlightHtml(plain, 'composer-token')).toBe(plain);
   });
 });
 
 describe('renderHighlightHtml（prompt-macro 模式）', () => {
   it('T-CW6：白名单宏包 span（手输形态含内文空格）', () => {
     expect(
-      renderHighlightHtml('前缀 {{$time}} 与 {{ $week_cn }}', 'prompt-macro'),
+      ComposerEditor.renderHighlightHtml('前缀 {{$time}} 与 {{ $week_cn }}', 'prompt-macro'),
     ).toBe(
       `前缀 ${TOKEN_SPAN('{{$time}}')} 与 ${TOKEN_SPAN('{{ $week_cn }}')}`,
     );
   });
 
   it('T-CW6：未闭合 {{ 不高亮', () => {
-    expect(renderHighlightHtml('typing {{$time', 'prompt-macro')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('typing {{$time', 'prompt-macro')).toBe(
       'typing {{$time',
     );
   });
 
   it('T-CW6：非白名单/子键宏保持普通文本', () => {
     expect(
-      renderHighlightHtml('{{$unknown}} {{$time.nested}}', 'prompt-macro'),
+      ComposerEditor.renderHighlightHtml('{{$unknown}} {{$time.nested}}', 'prompt-macro'),
     ).toBe('{{$unknown}} {{$time.nested}}');
   });
 
   it('T-CW6：模式隔离——宏模式不认 @/$ token；token 模式无宏语义', () => {
-    expect(renderHighlightHtml('@a@ $b$', 'prompt-macro')).toBe('@a@ $b$');
+    expect(ComposerEditor.renderHighlightHtml('@a@ $b$', 'prompt-macro')).toBe('@a@ $b$');
     // token 规则要求首尾同字符收尾：{{$time}} 里只有一个 $，token 模式不高亮
-    expect(renderHighlightHtml('{{$time}}', 'composer-token')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('{{$time}}', 'composer-token')).toBe(
       '{{$time}}',
     );
   });
 
   it('宏内文与其余文本同样走转义', () => {
-    expect(renderHighlightHtml('a<b {{$time}}', 'prompt-macro')).toBe(
+    expect(ComposerEditor.renderHighlightHtml('a<b {{$time}}', 'prompt-macro')).toBe(
       `a&lt;b ${TOKEN_SPAN('{{$time}}')}`,
     );
   });
@@ -118,33 +110,33 @@ describe('atomicDeleteRanges / resolveAtomicDelete（T-CW7 原子删纯逻辑）
   it('token 源：退格删进 token 内侧 → 整段摘除', () => {
     const prev = '看 @a.rb@ 好';
     const raw = '看 @a.r@ 好';
-    expect(atomicDeleteRanges(prev, 'composer-token')).toEqual([
+    expect(ComposerEditor.atomicDeleteRanges(prev, 'composer-token')).toEqual([
       {start: 2, end: 8},
     ]);
-    expect(resolveAtomicDelete(prev, raw, 'composer-token')).toBe('看  好');
-    expect(resolveAtomicCaret(prev, raw, '看  好')).toBe(2);
+    expect(ComposerEditor.resolveAtomicDelete(prev, raw, 'composer-token')).toBe('看  好');
+    expect(ComposerEditor.resolveAtomicCaret(prev, raw, '看  好')).toBe(2);
     // 旧格式（无尾终止符）无候选区间，退格不拦截
-    expect(atomicDeleteRanges('看 @a.rb 好', 'composer-token')).toEqual([]);
+    expect(ComposerEditor.atomicDeleteRanges('看 @a.rb 好', 'composer-token')).toEqual([]);
     expect(
-      resolveAtomicDelete('看 @a.rb 好', '看 @a.r 好', 'composer-token'),
+      ComposerEditor.resolveAtomicDelete('看 @a.rb 好', '看 @a.r 好', 'composer-token'),
     ).toBeNull();
   });
 
   it('宏源：退格命中宏尾 → 整段摘除', () => {
     const prev = '前缀{{$time}}后缀';
     const raw = '前缀{{$time}后缀';
-    expect(atomicDeleteRanges(prev, 'prompt-macro')).toEqual([
+    expect(ComposerEditor.atomicDeleteRanges(prev, 'prompt-macro')).toEqual([
       {start: 2, end: 11, value: '{{$time}}'},
     ]);
-    expect(resolveAtomicDelete(prev, raw, 'prompt-macro')).toBe('前缀后缀');
-    expect(resolveAtomicCaret(prev, raw, '前缀后缀')).toBe(2);
+    expect(ComposerEditor.resolveAtomicDelete(prev, raw, 'prompt-macro')).toBe('前缀后缀');
+    expect(ComposerEditor.resolveAtomicCaret(prev, raw, '前缀后缀')).toBe(2);
   });
 
   it('选中删除跨进 token 内侧：删除窗起点早于区间起点 → caret 取删除窗起点', () => {
     // 选中 ' @t'（删除窗 [1,4)）删进 token 区间 [2,7)：整段摘除后光标落在
     // 删除窗起点（1），不被推到被删内容右侧——min() 另一支的回归锁。
-    expect(resolveAtomicDelete('a @tok@', 'aok@', 'composer-token')).toBe('a ');
-    expect(resolveAtomicCaret('a @tok@', 'aok@', 'a ')).toBe(1);
+    expect(ComposerEditor.resolveAtomicDelete('a @tok@', 'aok@', 'composer-token')).toBe('a ');
+    expect(ComposerEditor.resolveAtomicCaret('a @tok@', 'aok@', 'a ')).toBe(1);
   });
 
   it('双源互不串台（token 模式不认宏区间，反之亦然）', () => {
@@ -152,45 +144,45 @@ describe('atomicDeleteRanges / resolveAtomicDelete（T-CW7 原子删纯逻辑）
     const macroPrev = '前缀{{ $time }}后缀';
     const macroRaw = '前缀{{ $time }后缀';
     expect(
-      resolveAtomicDelete(macroPrev, macroRaw, 'composer-token'),
+      ComposerEditor.resolveAtomicDelete(macroPrev, macroRaw, 'composer-token'),
     ).toBeNull();
-    expect(resolveAtomicDelete(macroPrev, macroRaw, 'prompt-macro')).toBe(
+    expect(ComposerEditor.resolveAtomicDelete(macroPrev, macroRaw, 'prompt-macro')).toBe(
       '前缀后缀',
     );
     expect(
-      resolveAtomicDelete('看 @a.rb@ 好', '看 @a.r@ 好', 'prompt-macro'),
+      ComposerEditor.resolveAtomicDelete('看 @a.rb@ 好', '看 @a.r@ 好', 'prompt-macro'),
     ).toBeNull();
   });
 
   it('非删除/整段覆盖/多处不连续删都不拦截（交内核默认差分）', () => {
     expect(
-      resolveAtomicDelete('看 @a.rb@', '看 @a.rb@!', 'composer-token'),
+      ComposerEditor.resolveAtomicDelete('看 @a.rb@', '看 @a.rb@!', 'composer-token'),
     ).toBeNull();
     // 删除窗已覆盖整段区间
-    expect(resolveAtomicDelete('$技能$', '', 'composer-token')).toBeNull();
+    expect(ComposerEditor.resolveAtomicDelete('$技能$', '', 'composer-token')).toBeNull();
     expect(
-      resolveAtomicDelete('x@a@ b@c@', 'x@a@ @c@', 'composer-token'),
+      ComposerEditor.resolveAtomicDelete('x@a@ b@c@', 'x@a@ @c@', 'composer-token'),
     ).toBeNull();
   });
 
   it('T-CW8：suppressChange 期间或内容相同 → 不上报 change', () => {
-    expect(shouldReportChange('新', '旧', false)).toBe(true);
-    expect(shouldReportChange('same', 'same', false)).toBe(false);
-    expect(shouldReportChange('新', '旧', true)).toBe(false);
-    expect(shouldReportChange('same', 'same', true)).toBe(false);
+    expect(ComposerEditor.shouldReportChange('新', '旧', false)).toBe(true);
+    expect(ComposerEditor.shouldReportChange('same', 'same', false)).toBe(false);
+    expect(ComposerEditor.shouldReportChange('新', '旧', true)).toBe(false);
+    expect(ComposerEditor.shouldReportChange('same', 'same', true)).toBe(false);
   });
 });
 
 describe('resolveReportedHeight（T-CW9 高度 clamp / 全屏跳过）', () => {
   it('min/max 双向 clamp', () => {
-    expect(resolveReportedHeight(0, METRICS)).toBe(56);
-    expect(resolveReportedHeight(100, METRICS)).toBe(100);
-    expect(resolveReportedHeight(400, METRICS)).toBe(160);
+    expect(ComposerEditor.resolveReportedHeight(0, METRICS)).toBe(56);
+    expect(ComposerEditor.resolveReportedHeight(100, METRICS)).toBe(100);
+    expect(ComposerEditor.resolveReportedHeight(400, METRICS)).toBe(160);
   });
 
   it('maxHeight=null（chat 全屏）不上报', () => {
     expect(
-      resolveReportedHeight(100, {...METRICS, maxHeight: null}),
+      ComposerEditor.resolveReportedHeight(100, {...METRICS, maxHeight: null}),
     ).toBeNull();
   });
 });
@@ -199,8 +191,8 @@ describe('resolveUnbounded（T-CW10 全屏铺满判定）', () => {
   // 回归背景：全屏（maxHeight=null）时容器若仍按内容高度流式布局，触摸区只到内容底部
   // （验收实测中部点击不达），需据此判定切换 `.composer-input--unbounded`（height:100%）。
   it('maxHeight=null → 不限高（需铺满视口）；数值或未给 → 限高', () => {
-    expect(resolveUnbounded({...METRICS, maxHeight: null})).toBe(true);
-    expect(resolveUnbounded(METRICS)).toBe(false);
-    expect(resolveUnbounded({...METRICS, maxHeight: 176})).toBe(false);
+    expect(ComposerEditor.resolveUnbounded({...METRICS, maxHeight: null})).toBe(true);
+    expect(ComposerEditor.resolveUnbounded(METRICS)).toBe(false);
+    expect(ComposerEditor.resolveUnbounded({...METRICS, maxHeight: 176})).toBe(false);
   });
 });

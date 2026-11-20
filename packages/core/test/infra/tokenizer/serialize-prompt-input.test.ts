@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { serializePromptLlmInput } from "../../../src/infra/tokenizer/logic/serialize-prompt-input.js";
+import {  describe, it  } from "node:test";
+import {  serializePromptLlmInput  } from "../../../src/infra/tokenizer/logic/serialize-prompt-input.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("serializePromptLlmInput", () => {
@@ -36,8 +36,9 @@ describe("serializePromptLlmInput", () => {
         messages,
       },
     );
-    assert.match(out, /system: You are helpful\./);
-    assert.match(out, /user: hi/);
-    assert.match(out, /assistant: hello/);
+    assert.ok(out.ok, JSON.stringify(out));
+    assert.match(out.value, /system: You are helpful\./);
+    assert.match(out.value, /user: hi/);
+    assert.match(out.value, /assistant: hello/);
   });
 });

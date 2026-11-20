@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { handleSmartSortRuleMatch } from "../../src/main/ipc/handlers/smart-sort-rule.js";
+import { SmartSortRule } from "../../src/main/ipc/handlers/smart-sort-rule.js";
 
 /**
  * nm:sort-rule/match handler 级测试（dtcli/G-1 桌面行为测试）：
@@ -11,7 +11,7 @@ import { handleSmartSortRuleMatch } from "../../src/main/ipc/handlers/smart-sort
 describe("nm:sort-rule/match handler", () => {
   it("透传 match 的 index/text/groups/tuple（smart 档数字元组）", async () => {
     const text = "序言 第1章 中段 第2章 结尾";
-    const res = await handleSmartSortRuleMatch({
+    const res = await SmartSortRule.match({
       pattern: "第(\\d+)章",
       flags: "i",
       text,
@@ -40,7 +40,7 @@ describe("nm:sort-rule/match handler", () => {
 
   it("重复匹配文本的 index 各自独立（indexOf 回查会漂，偏移透传不漂）", async () => {
     const text = "第1章 开头 第1章 结尾";
-    const res = await handleSmartSortRuleMatch({
+    const res = await SmartSortRule.match({
       pattern: "第(\\d+)章",
       flags: "",
       text,
@@ -61,7 +61,7 @@ describe("nm:sort-rule/match handler", () => {
   });
 
   it("fixed 档 tuple 为哨兵文案（忽略捕获组）", async () => {
-    const res = await handleSmartSortRuleMatch({
+    const res = await SmartSortRule.match({
       pattern: "第(\\d+)章",
       flags: "",
       text: "第3章",
@@ -82,7 +82,7 @@ describe("nm:sort-rule/match handler", () => {
   });
 
   it("非法正则返回 ok:false 的测试结果（非 IPC 错误）", async () => {
-    const res = await handleSmartSortRuleMatch({
+    const res = await SmartSortRule.match({
       pattern: "([未闭合",
       flags: "",
       text: "任意文本",

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks, type ChatMessageData  } from "@novel-master/core/chat";
 
-import { formatPromptLlmInputForCliFromLayout, type AgentPromptLayout } from "@novel-master/core/prompt";
+import {  PromptBuilder, type AgentPromptLayout  } from "@novel-master/core/prompt";
 
-import { serializePromptLlmInput } from "@novel-master/core/provider";
+import {  serializePromptLlmInput  } from "@novel-master/core/tokenizer";
 
 const layout: AgentPromptLayout = {
   system: "ctx",
@@ -19,7 +20,7 @@ function message(role: string, content: string, seq: number): ChatMessageData {
     sessionId: "s1",
     seq,
     role,
-    content: textBlocks(content),
+    content: TextBlocks.of(content),
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -33,8 +34,8 @@ describe("prompt assembly parity", () => {
       workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
     };
-    const serialized = await serializePromptLlmInput(layout, ctx);
-    const formatted = await formatPromptLlmInputForCliFromLayout(layout, ctx);
+    const serialized = unwrap(await serializePromptLlmInput(layout, ctx));
+    const formatted = unwrap(await PromptBuilder.cliText(layout, ctx));
     assert.equal(serialized, formatted);
   });
 
@@ -50,8 +51,8 @@ describe("prompt assembly parity", () => {
       workplaceDisplay: "",
       messages: [message("user", "visible", 1)],
     };
-    const full = await serializePromptLlmInput(layout, fullCtx);
-    const hidden = await serializePromptLlmInput(layout, hiddenCtx);
+    const full = unwrap(await serializePromptLlmInput(layout, fullCtx));
+    const hidden = unwrap(await serializePromptLlmInput(layout, hiddenCtx));
     assert.equal(full, hidden);
   });
 });

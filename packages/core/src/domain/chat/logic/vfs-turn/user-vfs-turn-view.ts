@@ -4,13 +4,13 @@
  * @module domain/chat/logic/vfs-turn/user-vfs-turn-view
  */
 
-import {messageBodyTextFromBlocks} from "../../content/message-body-text.js";
-import {stringOrEmpty} from "@/common/coerce.js";
+import {MessageBodyText} from "../../content/message-body-text.js";
+import {Coerce} from "@/common/coerce.js";
 import type {ToolResultBlock, ToolUseBlock} from "../../model/content-block.js";
 import type {ChatMessageData} from "../../model/message.js";
-import {readMessageMetadata} from "../../model/message-metadata.js";
-import {actionXmlToToolUses, type DerivedToolUseInput} from "../../../vfs/logic/action-xml-to-tool-uses.js";
-import {buildUserVfsActionXml, parseUserVfsActionsFromText} from "../../../vfs/logic/user-vfs-action-xml.js";
+import {MessageMetadata} from "../../model/message-metadata.js";
+import {ActionXmlToolUses, type DerivedToolUseInput} from "../../../vfs/logic/action-xml-to-tool-uses.js";
+import { UserVfsActionXml } from "../../../vfs/logic/user-vfs-action-xml.js";
 import {attachmentPath} from "../message/attachment-path.js";
 import {USER_VFS_TURN_ACK_TEXT} from "./user-vfs-turn-constants.js";
 
@@ -51,17 +51,17 @@ export const USER_VFS_TURN_SPAN = 2 as const;
 class UserVfsTurns {
     /** 解析文本中全部 `<action name="…">`。 */
     parseActions(text: string): readonly ParsedUserVfsAction[] {
-        return parseUserVfsActionsFromText(text).map(({name, params}) => {
+        return UserVfsActionXml.parseFromText(text).map(({name, params}) => {
             let resolvedName = name;
             if (name === "rename" || name === "move") {
-                const from = stringOrEmpty(params.from);
-                const to = stringOrEmpty(params.to);
+                const from = Coerce.string(params.from);
+                const to = Coerce.string(params.to);
                 if (from !== "" && to !== "") {
                     resolvedName = attachmentPath.actionBetween(from, to);
                 }
             }
-            const path = resolvedName === "rename" || resolvedName === "move" ? `${stringOrEmpty(params.from)}→${stringOrEmpty(params.to)}` : stringOrEmpty(params.path);
-            const hunks: ParsedUserVfsEditHunk[] = resolvedName === "edit" ? [{index: "1", old: stringOrEmpty(params.oldString), new: stringOrEmpty(params.newString)}] : [];
+            const path = resolvedName === "rename" || resolvedName === "move" ? `${Coerce.string(params.from)}→${Coerce.string(params.to)}` : Coerce.string(params.path);
+            const hunks: ParsedUserVfsEditHunk[] = resolvedName === "edit" ? [{index: "1", old: Coerce.string(params.oldString), new: Coerce.string(params.newString)}] : [];
             return {
                 name: resolvedName,
                 path,
@@ -82,14 +82,14 @@ class UserVfsTurns {
         const xmlParts: string[] = [];
         for (const action of actions) {
             if (action.name === "edit" && action.hunks.length > 0) {
-                xmlParts.push(action.hunks.map((hunk) => buildUserVfsActionXml("edit", {path: action.path, oldString: hunk.old, newString: hunk.new})).join("\n"));
+                xmlParts.push(action.hunks.map((hunk) => UserVfsActionXml.build("edit", {path: action.path, oldString: hunk.old, newString: hunk.new})).join("\n"));
                 continue;
             }
             const [renameFrom = "", renameTo = ""] = action.path.split("→");
             const params = Object.keys(action.params).length > 0 ? action.params : action.name === "rename" || action.name === "move" ? {from: renameFrom, to: renameTo} : {path: action.path};
-            xmlParts.push(buildUserVfsActionXml(action.name || action.kind, params));
+            xmlParts.push(UserVfsActionXml.build(action.name || action.kind, params));
         }
-        return actionXmlToToolUses(xmlParts.join("\n"));
+        return ActionXmlToolUses.toToolUses(xmlParts.join("\n"));
     }
 
     /** 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。 */
@@ -99,14 +99,14 @@ class UserVfsTurns {
         const m1 = messages[startIndex + 1];
         if (m0 == null || m1 == null) return null;
         if (m0.hidden || m1.hidden) return null;
-        if (readMessageMetadata(m0.raw)?.kind !== "user_vfs_action") return null;
-        if (!messageBodyTextFromBlocks(m0.content.blocks).includes("<action")) return null;
+        if (MessageMetadata.read(m0.raw)?.kind !== "user_vfs_action") return null;
+        if (!MessageBodyText.fromBlocks(m0.content.blocks).includes("<action")) return null;
         if (m1.role !== "assistant") return null;
-        if (readMessageMetadata(m1.raw)?.kind !== "user_vfs_ack") return null;
+        if (MessageMetadata.read(m1.raw)?.kind !== "user_vfs_ack") return null;
         const ackBlocks = m1.content.blocks ?? [];
         if (ackBlocks.length === 0) return null;
         if (ackBlocks.some((block) => block.type !== "text")) return null;
-        if (messageBodyTextFromBlocks(ackBlocks) !== USER_VFS_TURN_ACK_TEXT) return null;
+        if (MessageBodyText.fromBlocks(ackBlocks) !== USER_VFS_TURN_ACK_TEXT) return null;
         return [m0, m1];
     }
 
@@ -114,7 +114,7 @@ class UserVfsTurns {
     /** nm-style: keep-public — core-shim / UI 测试的 VFS 视图构建入口。 */
     buildView(turn: readonly [ChatMessageData, ChatMessageData]): UserVfsTurnView {
         const [actionMsg, ackMsg] = turn;
-        const actionText = messageBodyTextFromBlocks(actionMsg.content.blocks);
+        const actionText = MessageBodyText.fromBlocks(actionMsg.content.blocks);
         const actions = this.parseActions(actionText);
         const toolUses = this.deriveToolUses(actions).map((toolUse, index) => ({
             type: "tool_use" as const,
@@ -133,7 +133,7 @@ class UserVfsTurns {
                 content: "ok",
                 ok: true
             })),
-            bridgeText: messageBodyTextFromBlocks(ackMsg.content.blocks),
+            bridgeText: MessageBodyText.fromBlocks(ackMsg.content.blocks),
         };
     }
 }

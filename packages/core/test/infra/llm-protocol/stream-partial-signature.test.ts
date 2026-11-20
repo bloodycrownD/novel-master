@@ -6,19 +6,9 @@
  * 块会被 400。核心断言是**两条路径的 `(type, thinkingSignature)` 序列一致**。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  createGeminiSseParserState,
-  feedGeminiSseChunk,
-  finishGeminiSse,
-  finishGeminiSsePartial,
-} from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
-import {
-  createAnthropicSseParserState,
-  feedAnthropicSseChunk,
-  finishAnthropicSse,
-  finishAnthropicSsePartial,
-} from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
+import {  describe, it  } from "node:test";
+import {  GeminiSseParser  } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
+import {  AnthropicSseParser  } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
 
 type Block = { type: string; thinkingSignature?: string } & Record<
   string,
@@ -38,9 +28,8 @@ function geminiChunk(parts: unknown[]): string {
 describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => {
   it("T-SPS1 gemini：有文本档 + signature-only 档两条路径签名序列一致", () => {
     // 档①：thinking 有文本。
-    const feedWithText = (state: ReturnType<typeof createGeminiSseParserState>) => {
-      feedGeminiSseChunk(
-        state,
+    const feedWithText = (parser: ReturnType<typeof createGeminiSseParser>) => {
+      parser.feed(
         geminiChunk([
           { text: "thinking", thought: true, thought_signature: "SIG" },
           {
@@ -49,22 +38,21 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
         ]),
       );
     };
-    const normal1 = createGeminiSseParserState();
+    const normal1 = GeminiSseParser.create();
     feedWithText(normal1);
-    const abort1 = createGeminiSseParserState();
+    const abort1 = GeminiSseParser.create();
     feedWithText(abort1);
     assert.deepEqual(
-      signatureShape(finishGeminiSsePartial(abort1).blocks),
-      signatureShape(finishGeminiSse(normal1).blocks),
+      signatureShape(abort1.finishPartial().blocks),
+      signatureShape(normal1.finish().blocks),
       "有文本档：中断与正常收尾的 (type, thinkingSignature) 序列必须相同",
     );
 
     // 档②：signature-only（thinking 文本为空、只有签名——Claude 4+ 的常态形态）。
     const feedSignatureOnly = (
-      state: ReturnType<typeof createGeminiSseParserState>
+      parser: ReturnType<typeof createGeminiSseParser>
     ) => {
-      feedGeminiSseChunk(
-        state,
+      parser.feed(
         geminiChunk([
           { thought: true, thought_signature: "SIG_ONLY" },
           {
@@ -73,14 +61,14 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
         ]),
       );
     };
-    const normal2 = createGeminiSseParserState();
+    const normal2 = GeminiSseParser.create();
     feedSignatureOnly(normal2);
-    const abort2 = createGeminiSseParserState();
+    const abort2 = GeminiSseParser.create();
     feedSignatureOnly(abort2);
     // 这条在「只补字段、不放宽 thinking 守卫」的实现下必红——它就是放宽守卫的牙齿。
     assert.deepEqual(
-      signatureShape(finishGeminiSsePartial(abort2).blocks),
-      signatureShape(finishGeminiSse(normal2).blocks),
+      signatureShape(abort2.finishPartial().blocks),
+      signatureShape(normal2.finish().blocks),
       "signature-only 档：中断与正常收尾必须仍然对称",
     );
   });
@@ -109,22 +97,22 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
         .join("\n");
 
     for (const withText of [true, false]) {
-      const normal = createAnthropicSseParserState();
-      feedAnthropicSseChunk(normal, lines(withText));
-      const abort = createAnthropicSseParserState();
-      feedAnthropicSseChunk(abort, lines(withText));
+      const normal = AnthropicSseParser.create();
+      normal.feed(lines(withText));
+      const abort = AnthropicSseParser.create();
+      abort.feed(lines(withText));
       assert.deepEqual(
-        signatureShape(finishAnthropicSsePartial(abort).blocks),
-        signatureShape(finishAnthropicSse(normal).blocks),
+        signatureShape(abort.finishPartial().blocks),
+        signatureShape(normal.finish().blocks),
         `anthropic withText=${withText}：两条路径签名序列必须相同`,
       );
     }
   });
 
   it("T-SPS3 无签名输入不产生 thinkingSignature 键（严格 deepEqual）", () => {
-    const state = createGeminiSseParserState();
-    feedGeminiSseChunk(state, geminiChunk([{ text: "plain" }]));
-    const blocks = finishGeminiSsePartial(state).blocks as Block[];
+    const parser = GeminiSseParser.create();
+    parser.feed(geminiChunk([{ text: "plain" }]));
+    const blocks = parser.finishPartial().blocks as Block[];
     for (const b of blocks) {
       assert.equal(
         Object.prototype.hasOwnProperty.call(b, "thinkingSignature"),
@@ -136,17 +124,16 @@ describe("中断 partial 与正常收尾的 thinkingSignature 对称性", () => 
 
   it("T-SPS4 流事件 tool-use 不带签名字段", () => {
     const events: Array<Record<string, unknown>> = [];
-    const state = createGeminiSseParserState();
-    feedGeminiSseChunk(
-      state,
+    const onStream = (ev: unknown) => events.push(ev as Record<string, unknown>);
+    const parser = GeminiSseParser.create({ onStream });
+    parser.feed(
       geminiChunk([
         {
           functionCall: { name: "read", args: { path: "/a" }, thought_signature: "SIG2" },
         },
       ]),
-      (ev) => events.push(ev as Record<string, unknown>),
     );
-    finishGeminiSsePartial(state, (ev) => events.push(ev as Record<string, unknown>));
+    parser.finishPartial();
     const toolUseEvents = events.filter((e) => e["type"] === "tool-use");
     assert.ok(toolUseEvents.length >= 1);
     for (const e of toolUseEvents) {

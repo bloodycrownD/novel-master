@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
-import { textBlocks } from "@novel-master/core/chat";
+import {  describe, it  } from "node:test";
+import {  ChatMessage  } from "../../src/domain/chat/logic/message/chat-message.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
 import type { ChatMessageData, MessageAttachment } from "@novel-master/core/chat";
 
 function stubMessage(
@@ -56,7 +56,7 @@ describe("isPlainUserUndoSendEligible", () => {
   it("T-C1: user_vfs_action 排除", () => {
     const message = stubMessage({
       role: "user",
-      content: textBlocks("<user_vfs_action>write</user_vfs_action>"),
+      content: TextBlocks.of("<user_vfs_action>write</user_vfs_action>"),
       raw: {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       },
@@ -77,7 +77,7 @@ describe("isPlainUserUndoSendEligible", () => {
   it("plain user 文本 eligible", () => {
     const message = stubMessage({
       role: "user",
-      content: textBlocks("prompt"),
+      content: TextBlocks.of("prompt"),
     });
     assert.equal(ChatMessage.from(message).isUndoSendEligible(), true);
   });
@@ -85,7 +85,7 @@ describe("isPlainUserUndoSendEligible", () => {
   it("assistant 不可 Undo Send", () => {
     const message = stubMessage({
       role: "assistant",
-      content: textBlocks("reply"),
+      content: TextBlocks.of("reply"),
     });
     assert.equal(ChatMessage.from(message).isUndoSendEligible(), false);
   });
@@ -134,7 +134,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
   it("T-B3-04: 既有正文又有批注 → isPlainUserUndoSendEligible 返回 true（不回归）", () => {
     const message = stubMessage({
       role: "user",
-      content: textBlocks("正文"),
+      content: TextBlocks.of("正文"),
       attachments: [annotateAttachment()],
     });
     assert.equal(ChatMessage.from(message).isUndoSendEligible(), true);
@@ -143,7 +143,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
   it("T-B3-05: assistant 消息含批注 → isPlainUserText 返回 false（role 守卫不回归）", () => {
     const message = stubMessage({
       role: "assistant",
-      content: textBlocks("reply"),
+      content: TextBlocks.of("reply"),
       attachments: [annotateAttachment()],
     });
     assert.equal(ChatMessage.from(message).isPlainUserText(), false);
@@ -165,7 +165,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
   it("T-B3-07: user_vfs_action 消息含批注 → isPlainUserUndoSendEligible 返回 false（synthetic 守卫不回归）", () => {
     const message = stubMessage({
       role: "user",
-      content: textBlocks("<user_vfs_action>write</user_vfs_action>"),
+      content: TextBlocks.of("<user_vfs_action>write</user_vfs_action>"),
       raw: {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       },
@@ -177,13 +177,13 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
   it("T-B3-08: attachments 为空数组或 undefined → hasAnnotateAttachment 返回 false", () => {
     const emptyArray = stubMessage({
       role: "user",
-      content: textBlocks("x"),
+      content: TextBlocks.of("x"),
       attachments: [],
     });
     assert.equal(ChatMessage.from(emptyArray).hasAnnotateAttachment(), false);
     const undefined1 = stubMessage({
       role: "user",
-      content: textBlocks("x"),
+      content: TextBlocks.of("x"),
     });
     assert.equal(ChatMessage.from(undefined1).hasAnnotateAttachment(), false);
   });

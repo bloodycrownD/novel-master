@@ -11,13 +11,15 @@
  * @module test/chat/fork-copy-batch-insert
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import { textBlocks } from "@novel-master/core/chat";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 type CountingCtx = NovelMasterTestContext & {
   readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
@@ -74,24 +76,24 @@ function assertMessagesClone(
 describe("T-FK2 fork/copy 消息批量化", () => {
   it(`fork ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
     const c = getCtx();
-    const project = await c.projects.create(`P-fk2-${testIsolationSuffix()}`);
-    const session = await c.sessions.create(project.id);
+    const project = unwrap(await c.projects.create(`P-fk2-${testIsolationSuffix()}`));
+    const session = unwrap(await c.sessions.create(project.id));
 
     // 准备阶段：append 40 条消息。这段 SQL 不计入统计。
     let lastId = "";
     for (let i = 0; i < MSG_COUNT; i++) {
-      const m = await c.messages.append(
+      const m = unwrap(await c.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`m${i}`),
-      );
+        TextBlocks.of(`m${i}`),
+      ));
       lastId = m.id;
     }
 
     // 清掉准备阶段的 SQL，只统计 fork 这一段。
     c.counter.clear();
 
-    const forked = await c.messages.fork(session.id, lastId);
+    const forked = unwrap(await c.messages.fork(session.id, lastId));
 
     // fork 内部除了消息 INSERT，还有 session insert / VFS copy / checkpoint seed 等，
     // 但只有 batchInsert 这一条会碰 chat_message 表——找出所有 chat_message 的 INSERT。
@@ -116,28 +118,28 @@ describe("T-FK2 fork/copy 消息批量化", () => {
     );
 
     // 正确性：fork 出的会话消息数 = 源会话，且逐条 seq/role/content/hidden 一致。
-    const sourceMsgs = await c.messages.listBySession(session.id);
-    const forkedMsgs = await c.messages.listBySession(forked.id);
+    const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
+    const forkedMsgs = outcomeValue(await c.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, MSG_COUNT);
     assertMessagesClone(sourceMsgs, forkedMsgs, "fork");
   });
 
   it(`copy ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
     const c = getCtx();
-    const project = await c.projects.create(`P-fk2cp-${testIsolationSuffix()}`);
-    const session = await c.sessions.create(project.id);
+    const project = unwrap(await c.projects.create(`P-fk2cp-${testIsolationSuffix()}`));
+    const session = unwrap(await c.sessions.create(project.id));
 
     for (let i = 0; i < MSG_COUNT; i++) {
-      await c.messages.append(
+      unwrap(await c.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`c${i}`),
-      );
+        TextBlocks.of(`c${i}`),
+      ));
     }
 
     c.counter.clear();
 
-    const copied = await c.sessions.copy(session.id);
+    const copied = unwrap(await c.sessions.copy(session.id));
 
     const chatInserts = c.counter
       .all()
@@ -159,10 +161,10 @@ describe("T-FK2 fork/copy 消息批量化", () => {
       "chat_message INSERT 应走 batch 路径（batchInsert）",
     );
 
-    const copiedMsgs = await c.messages.listBySession(copied.id);
+    const copiedMsgs = outcomeValue(await c.messages.listBySession(copied.id));
     assert.equal(copiedMsgs.length, MSG_COUNT);
     // 逐条校验 copy 也保留 seq/role/content/hidden。
-    const sourceMsgs = await c.messages.listBySession(session.id);
+    const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
     assertMessagesClone(sourceMsgs, copiedMsgs, "copy");
   });
 });

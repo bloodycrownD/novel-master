@@ -11,29 +11,26 @@
  *   （2026-09-19 修复的回归，此处为守卫断言）。
  * 并从 webview-dist 产物断言 DocumentApp 的分支接线经由 buildDocumentBody。
  */
-import {
-  buildDocumentBody,
-  concatDocBodyHtml,
-} from '@/web/rich-document/webview/runtime/document-model';
+import {DocumentModel} from '@/web/rich-document/webview/runtime/document-model';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 describe('concatDocBodyHtml (T-FA4 html 分支 fm+body 拼接)', () => {
   it('有 FM 时把 FM 置于正文之前、拼成同一条 HTML', () => {
     const fm = '<div class="fm-card"><h1>title</h1></div>';
     const body = '<p>正文段落</p>';
-    expect(concatDocBodyHtml(fm, body)).toBe(`${fm}${body}`);
+    expect(DocumentModel.concatBodyHtml(fm, body)).toBe(`${fm}${body}`);
   });
 
   it('无 FM 时原样返回正文', () => {
     const body = '<p>仅正文</p>';
-    expect(concatDocBodyHtml('', body)).toBe(body);
+    expect(DocumentModel.concatBodyHtml('', body)).toBe(body);
   });
 });
 
 describe('buildDocumentBody (T-FA4 分支选择)', () => {
   it('html 模式：FM 拼进正文 HTML、layout 透传', () => {
     const fm = '<div class="fm-card"></div>';
-    const desc = buildDocumentBody({
+    const desc = DocumentModel.buildBody({
       mode: 'html',
       html: '<p>正文</p>',
       frontMatterHtml: fm,
@@ -44,7 +41,7 @@ describe('buildDocumentBody (T-FA4 分支选择)', () => {
 
   it('plain 回退（over-limit）：fmHtml 与 text 分离，text 不得含 FM HTML', () => {
     const fm = '<div class="fm-card"><div class="fm-title">Front Matter</div></div>';
-    const desc = buildDocumentBody({
+    const desc = DocumentModel.buildBody({
       mode: 'plain',
       plain: '第1章\n正文',
       overLimit: true,
@@ -56,13 +53,13 @@ describe('buildDocumentBody (T-FA4 分支选择)', () => {
   });
 
   it('plain 回退无 FM：fmHtml 为空串、正文原样', () => {
-    const desc = buildDocumentBody({mode: 'plain', plain: '仅正文'});
+    const desc = DocumentModel.buildBody({mode: 'plain', plain: '仅正文'});
     expect(desc).toEqual({kind: 'plain', fmHtml: '', text: '仅正文'});
   });
 
   it('无 html 且无 plain 时返回 null', () => {
-    expect(buildDocumentBody({mode: 'html', frontMatterHtml: '<div/>'})).toBeNull();
-    expect(buildDocumentBody({})).toBeNull();
+    expect(DocumentModel.buildBody({mode: 'html', frontMatterHtml: '<div/>'})).toBeNull();
+    expect(DocumentModel.buildBody({})).toBeNull();
   });
 
   it('DocumentApp 分支接线在 WebView 产物中经由 buildDocumentBody', () => {

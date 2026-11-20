@@ -6,8 +6,8 @@
 
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import { normalizeAgentPromptLayoutDomain } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
-import { decode } from "@/infra/serialization/decode.js";
+import { AgentPromptLayoutNormalize } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import type { StoredConfigHealth } from "./types.js";
 
 const REMOVED_FEATURE_KEYWORDS = [
@@ -18,31 +18,41 @@ const REMOVED_FEATURE_KEYWORDS = [
   "legacy nested model",
 ] as const;
 
-/**
- * 将智能体配置 wire 判定为 valid / invalid。
- */
-export function assessAgentDefinitionWire(raw: unknown): StoredConfigHealth<AgentDefinition> {
-  try {
-    const value = decode(raw, agentDefinitionSchema);
-    return { status: "valid", value };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };
-  }
-}
-
-/**
- * 从存储读取智能体定义：支持 wire 文档与已解析的领域对象。
- *
- * 项目 `agent_config_json.definition` 与 registry `get()` 返回领域形态
- *（`prompts.persist` 为数组），不可直接走 wire 判定。
- */
-export function resolveAgentDefinitionFromStorage(stored: unknown): StoredConfigHealth<AgentDefinition> {
-  if (stored != null && typeof stored === "object" && !Array.isArray(stored) && !("schemaVersion" in stored)) {
-    const record = stored as AgentDefinition;
-    if (typeof record.name === "string" && record.name.trim().length > 0 && record.prompts != null && typeof record.prompts === "object" && !Array.isArray(record.prompts) && Array.isArray(record.prompts.persist) && Array.isArray(record.prompts.dynamic)) {
-      return { status: "valid", value: { ...record, prompts: normalizeAgentPromptLayoutDomain(record.prompts) } };
+export const AgentDefinitionWire = {
+  /**
+   * 将智能体配置 wire 判定为 valid / invalid。
+   */
+  assess(raw: unknown): StoredConfigHealth<AgentDefinition> {
+    // decode 已 Result 化（错误通道迁移四期）。两条失败通道都归 invalid，分类关键词
+    // 与 message 透传规则不变：① decode 的 `Result.err`（zod issue）；② schema
+    // preprocess 的同步 throw（zod v4 的 safeParse 不把 transform/preprocess 抛错
+    // 折进 issue，会原样穿透 decode，必须在这里兜住）。
+    try {
+      const decoded = SerializationDecode.decode(raw, agentDefinitionSchema);
+      if (!decoded.ok) {
+        const message = decoded.error.message;
+        return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };
+      }
+      return { status: "valid", value: decoded.value };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };
     }
-  }
-  return assessAgentDefinitionWire(stored);
-}
+  },
+
+  /**
+   * 从存储读取智能体定义：支持 wire 文档与已解析的领域对象。
+   *
+   * 项目 `agent_config_json.definition` 与 registry `get()` 返回领域形态
+   *（`prompts.persist` 为数组），不可直接走 wire 判定。
+   */
+  resolveFromStorage(stored: unknown): StoredConfigHealth<AgentDefinition> {
+    if (stored != null && typeof stored === "object" && !Array.isArray(stored) && !("schemaVersion" in stored)) {
+      const record = stored as AgentDefinition;
+      if (typeof record.name === "string" && record.name.trim().length > 0 && record.prompts != null && typeof record.prompts === "object" && !Array.isArray(record.prompts) && Array.isArray(record.prompts.persist) && Array.isArray(record.prompts.dynamic)) {
+        return { status: "valid", value: { ...record, prompts: AgentPromptLayoutNormalize.normalizeDomain(record.prompts) } };
+      }
+    }
+    return AgentDefinitionWire.assess(stored);
+  },
+} as const;

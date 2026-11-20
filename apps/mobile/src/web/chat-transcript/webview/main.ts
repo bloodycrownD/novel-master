@@ -3,7 +3,7 @@
  *
  * 转录侧从 chat-conversation 合成包拆回独立文档：本包没有 composer runtime /
  * dock / dispatcher——宿主 message 通道由本入口**自行**
- * `bindHostMessageChannel(rawDowntranslate)` 承接 v2→v1 下译（拆包重打包逻辑
+ * `HostMessageChannel.bind(rawDowntranslate)` 承接 v2→v1 下译（拆包重打包逻辑
  * 在 host-downtranslate.ts，原 dispatcher 的 transcript 半边，真机白屏根因层），
  * runtime 以 `bindChannel: false` 装配、不再自绑（单次注册纪律保持）。
  * `emitReady: false` 必须显式关：runtime 自发的 ready 是 v:1 envelope
@@ -23,39 +23,36 @@
  * 装配失败诊断」同一纪律。
  *
  * 上行 v 号：转录 runtime 内部的 `post` 单例仍是模块级 v:1（6+ 兄弟模块直接
- * import，不可替换）；本入口的 `createBoundPost(2)`（常量
+ * import，不可替换）；本入口的 `Post.bound(2)`（常量
  * `TRANSCRIPT_ENTRY_BRIDGE_V`，host-downtranslate.ts 同源导出）**只**供 ready
  * 使用。宿主只认 `v === 2` 的 ready，其余上行宽容解析（不校验 v）。
  *
  * es2018 纪律：web 代码禁 ES2021+ 运行时 API 与 lookbehind 正则（esbuild target es2018）。
  */
-import {createBoundPost} from '@web/shared/post';
-import {bindHostMessageChannel} from '@web/shared/host-message-channel';
-import {createTranscriptRuntime} from '@web/chat-transcript/webview/runtime/factory';
-import {
-  TRANSCRIPT_ENTRY_BRIDGE_V,
-  rawDowntranslate,
-} from './host-downtranslate';
+import {Post} from '@web/shared/post';
+import {HostMessageChannel} from '@web/shared/host-message-channel';
+import {Factory} from '@web/chat-transcript/webview/runtime/factory';
+import {HostDowntranslate, TRANSCRIPT_ENTRY_BRIDGE_V} from './host-downtranslate';
 import {
   TRANSCRIPT_CAPABILITIES,
   TRANSCRIPT_READY_VERSION,
 } from '@web/chat-transcript/transcript-capabilities';
 
 // 新入口自有上行出口（v:2）：仅 ready 一条（dockAction 随 dock 退役，无此上行）。
-const post = createBoundPost(TRANSCRIPT_ENTRY_BRIDGE_V);
+const post = Post.bound(TRANSCRIPT_ENTRY_BRIDGE_V);
 
 /**
  * 下行 v2→v1 翻译接线（真机实锤补上，3d206251e）：宿主下行全是 v2 信封，而
- * runtime 的 `handleHostMessage` 用 `matchHostMessage(raw, BRIDGE_V)` 只认
+ * runtime 的 `handleHostMessage` 用 `HostMessageChannel.match(raw, BRIDGE_V)` 只认
  * v1——合成包时代这层拆包重打包由 dispatcher 承担，dispatcher 随包退役后若
  * runtime 直绑通道，init/快照会在 `if (!msg) return` 处被静默丢弃（白屏无
  * 错误页）。故本入口**先**单次注册宿主通道承接翻译，runtime 不再自绑。
  * 未知 type 透传给 runtime 的 switch 自行忽略（宽松口径与 dispatcher 一致）。
  */
-bindHostMessageChannel(rawDowntranslate);
+HostMessageChannel.bind(HostDowntranslate.raw);
 
 /* ---- 转录 runtime：不自绑通道（本入口已先绑并承接 v2→v1 翻译）、ready 发言权交本入口。 ---- */
-createTranscriptRuntime({bindChannel: false, emitReady: false});
+Factory.create({bindChannel: false, emitReady: false});
 
 /* ---- 单条 v:2 ready：壳装配成功后发；失败不发，交宿主 8s 超时兜底。 ---- */
 function emitTranscriptReady(): void {

@@ -17,10 +17,11 @@ import { register } from "node:module";
 import { describe, it } from "node:test";
 
 import type { UsageStatsFilterDto } from "../shared/ipc-types.js";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
+import { Result } from "@novel-master/core/errors";
 
 register(new URL("./usage-stats-runtime-hook.mjs", import.meta.url));
-const { handleUsageStatsQuery } = await import(
+const { UsageStats } = await import(
   "../src/main/ipc/handlers/usage-stats.js"
 );
 
@@ -145,25 +146,28 @@ function makeStubUsageStats(
 ): {
   usageStats: unknown;
 } {
+  // 错误通道迁移四期后 handler 走 Result 组合子（.map 链），stub 必须返回
+  // 真 Result 实例（裸 {ok, value} 字面量没有原型方法，会伪装成未知异常）；
+  // listModels 仍返回裸数组（签名未迁移）。
   const usageStats = {
     getSummary: async (filter: unknown) => {
       calls.push({ method: "getSummary", args: [filter] });
       if (summaryError) {
         throw summaryError;
       }
-      return SUMMARY;
+      return Result.ok(SUMMARY);
     },
     getDailyBuckets: async (filter: unknown) => {
       calls.push({ method: "getDailyBuckets", args: [filter] });
-      return BUCKETS;
+      return Result.ok(BUCKETS);
     },
     getHourlyBuckets: async (dayLocalDate: string, filter: unknown) => {
       calls.push({ method: "getHourlyBuckets", args: [dayLocalDate, filter] });
-      return BUCKETS;
+      return Result.ok(BUCKETS);
     },
     getModelBreakdown: async (filter: unknown) => {
       calls.push({ method: "getModelBreakdown", args: [filter] });
-      return modelRows ?? MODEL_ROWS;
+      return Result.ok(modelRows ?? MODEL_ROWS);
     },
     listModels: async () => {
       calls.push({ method: "listModels", args: [] });
@@ -171,11 +175,11 @@ function makeStubUsageStats(
     },
     listRequestUsage: async (filter: unknown, page: unknown) => {
       calls.push({ method: "listRequestUsage", args: [filter, page] });
-      return REQUEST_PAGE;
+      return Result.ok(REQUEST_PAGE);
     },
     getSessionUsageDetail: async (sessionId: string) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return SESSION_DETAIL;
+      return Result.ok(SESSION_DETAIL);
     },
   };
   return { usageStats };
@@ -205,7 +209,7 @@ const RANGE_FILTER: UsageStatsFilterDto = {
 describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
   it("kind=summary 转发 getSummary，区间 DTO 逐字段映射（summary 无 today 子对象）", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "summary",
       filter: RANGE_FILTER,
     });
@@ -227,16 +231,14 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     assert.deepEqual(calls, [
       {
         method: "getSummary",
-        args: [
-          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
-        ],
+        args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
       },
     ]);
   });
 
   it("filter 无 range 时透传为无 range 的 core filter（model 三态保留）", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "requests",
       filter: { model: null },
     });
@@ -255,9 +257,12 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=daily 转发 getDailyBuckets，bucket 数组逐字段映射（model:null 三态保留）", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "daily",
-      filter: { range: { fromDay: "2026-08-01", toDay: "2026-08-30" }, model: null },
+      filter: {
+        range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
+        model: null,
+      },
     });
     assert.equal(res.ok, true);
     if (!res.ok) {
@@ -268,7 +273,10 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       {
         method: "getDailyBuckets",
         args: [
-          { range: { fromDay: "2026-08-01", toDay: "2026-08-30" }, model: null },
+          {
+            range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
+            model: null,
+          },
         ],
       },
     ]);
@@ -276,7 +284,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=hourly 转发 getHourlyBuckets，dayLocalDate 作为首参透传", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "hourly",
       filter: RANGE_FILTER,
       dayLocalDate: "2026-08-23",
@@ -295,7 +303,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=hourly 缺 dayLocalDate 时传空串（由服务层日期校验拒绝）", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "hourly",
       filter: RANGE_FILTER,
     });
@@ -310,7 +318,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=modelBreakdown 转发 getModelBreakdown，providerId/modelName null 透传", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "modelBreakdown",
       filter: {
         range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
@@ -361,7 +369,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       },
     ];
     const calls = installStubRuntime(undefined, rows);
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "modelBreakdown",
       filter: RANGE_FILTER,
     });
@@ -373,16 +381,14 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     assert.deepEqual(calls, [
       {
         method: "getModelBreakdown",
-        args: [
-          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
-        ],
+        args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
       },
     ]);
   });
 
   it("kind=models 转发 listModels，字符串数组原样返回", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "models",
       filter: RANGE_FILTER,
     });
@@ -393,9 +399,12 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=requests 转发 listRequestUsage，offset/limit 透传且分页/NULL 字段保真", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "requests",
-      filter: { range: { fromDay: "2026-08-24", toDay: "2026-08-30" }, model: "gpt-4o" },
+      filter: {
+        range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+        model: "gpt-4o",
+      },
       offset: 50,
       limit: 100,
     });
@@ -420,7 +429,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=requests 缺省 offset/limit 时回落 0/50", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "requests",
       filter: RANGE_FILTER,
     });
@@ -438,7 +447,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("新指标字段显式透传且 null 保真：summary 有值 / bucket 存量 null（T-IP1）", async () => {
     const calls = installStubRuntime();
-    const summaryRes = await handleUsageStatsQuery({
+    const summaryRes = await UsageStats.handleQuery({
       kind: "summary",
       filter: RANGE_FILTER,
     });
@@ -448,7 +457,9 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     }
     const summary = summaryRes.data;
     assert.equal(
-      typeof summary === "object" && summary != null && "avgFirstTokenMs" in summary,
+      typeof summary === "object" &&
+        summary != null &&
+        "avgFirstTokenMs" in summary,
       true
     );
     if (
@@ -460,7 +471,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       assert.equal(summary.avgTokensPerSecond, 42.25);
     }
 
-    const dailyRes = await handleUsageStatsQuery({
+    const dailyRes = await UsageStats.handleQuery({
       kind: "daily",
       filter: RANGE_FILTER,
     });
@@ -481,7 +492,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("区间校验：fromDay > toDay 在 IPC 边界拒绝，不触达 service", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "summary",
       filter: { range: { fromDay: "2026-08-31", toDay: "2026-08-24" } },
     });
@@ -489,20 +500,32 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     if (res.ok) {
       return;
     }
-    assert.equal(res.error.code, "ERROR");
+    assert.equal(res.error.code, "INFRA_UNEXPECTED_ERROR");
     assert.ok(res.error.message.includes("fromDay 不能晚于 toDay"));
     assert.equal(calls.length, 0, "校验失败不应转发 service");
   });
 
   it("区间校验：非法格式与溢出日历日（02-30）在 IPC 边界拒绝", async () => {
     const calls = installStubRuntime();
-    const badCases: Array<{ range: { fromDay: string; toDay: string }; hint: string }> = [
+    const badCases: Array<{
+      range: { fromDay: string; toDay: string };
+      hint: string;
+    }> = [
       { range: { fromDay: "2026/08/24", toDay: "2026-08-30" }, hint: "格式" },
-      { range: { fromDay: "2026-02-30", toDay: "2026-03-01" }, hint: "合法日期" },
-      { range: { fromDay: "2026-08-24", toDay: "2026-13-01" }, hint: "合法日期" },
+      {
+        range: { fromDay: "2026-02-30", toDay: "2026-03-01" },
+        hint: "合法日期",
+      },
+      {
+        range: { fromDay: "2026-08-24", toDay: "2026-13-01" },
+        hint: "合法日期",
+      },
     ];
     for (const { range, hint } of badCases) {
-      const res = await handleUsageStatsQuery({ kind: "summary", filter: { range } });
+      const res = await UsageStats.handleQuery({
+        kind: "summary",
+        filter: { range },
+      });
       assert.equal(res.ok, false, `区间 ${JSON.stringify(range)} 应被拒绝`);
       if (!res.ok) {
         assert.ok(res.error.message.includes(hint));
@@ -513,7 +536,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
 
   it("kind=sessionDetail 转发 getSessionUsageDetail：filter:{} 占位不触达、DTO 逐字段映射（T-MD3）", async () => {
     const calls = installStubRuntime();
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "sessionDetail",
       // filter 为必填字段：sessionDetail 携带空对象占位（handler 该 case 不读）。
       filter: {},
@@ -540,13 +563,9 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       sessionId: string
     ) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return {
-        last: null,
-        visibleMessageCount: 0,
-        toolUseCount: 0,
-      };
+      return Result.ok({ last: null, visibleMessageCount: 0, toolUseCount: 0 });
     };
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "sessionDetail",
       filter: {},
       sessionId: "empty",
@@ -574,9 +593,11 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       sessionId: string
     ) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      throw new AppError("CHAT_INVALID_ARGUMENT", "sessionId 须提供");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {
+        detail: "sessionId 须提供",
+      });
     };
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "sessionDetail",
       filter: {},
     });
@@ -585,16 +606,17 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       return;
     }
     assert.equal(res.error.code, "CHAT_INVALID_ARGUMENT");
-    assert.deepEqual(calls, [
-      { method: "getSessionUsageDetail", args: [""] },
-    ]);
+    assert.deepEqual(calls, [{ method: "getSessionUsageDetail", args: [""] }]);
   });
 
   it("service 抛 CHAT_INVALID_ARGUMENT 时返回 IpcResult error 形态（key/message 透传）", async () => {
-    // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）。
-    const chatError = new AppError("CHAT_INVALID_ARGUMENT", "自然日区间不合法");
+    // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）；
+    // 旧（key, message）签名已退役，文案走 params.detail。
+    const chatError = new AppError("CHAT_INVALID_ARGUMENT", {
+      detail: "自然日区间不合法",
+    });
     const calls = installStubRuntime(chatError);
-    const res = await handleUsageStatsQuery({
+    const res = await UsageStats.handleQuery({
       kind: "summary",
       filter: RANGE_FILTER,
     });

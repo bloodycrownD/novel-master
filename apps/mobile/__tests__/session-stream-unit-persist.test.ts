@@ -32,17 +32,10 @@ import type {
   SessionRunStateSettleInput,
   SessionRunStatus,
 } from '@novel-master/core/session-run-state';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
-import {
-  createRunStateWritethrough,
-  RUN_STATE_WRITETHROUGH_INTERVAL_MS,
-  RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS,
-} from '@/services/run-state-writethrough';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {RUN_STATE_WRITETHROUGH_INTERVAL_MS, RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS, RunStateWritethrough} from '@/services/run-state-writethrough'
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 
 /** 时钟起点（fake timers 的 Date.now 从此起算，断言可精确）。 */
 const CLOCK_START_MS = 1_000_000;
@@ -306,7 +299,7 @@ describe('run-state-writethrough（coalescer 三态）', () => {
 
   it('节流合并：窗口内多次 append 只一次写，落盘为最新快照；窗口滚动后再写', () => {
     const write = jest.fn(async () => undefined);
-    const wt = createRunStateWritethrough(write);
+    const wt = RunStateWritethrough.create(write);
 
     wt.append(makeRow('s', 'p', {textChars: 1, partialText: 'a'}));
     wt.append(makeRow('s', 'p', {textChars: 2, partialText: 'ab'}));
@@ -337,7 +330,7 @@ describe('run-state-writethrough（coalescer 三态）', () => {
 
   it('flush：同步发起写并清 pending（定时器不再触发第二次）；空 pending no-op', () => {
     const write = jest.fn(async () => undefined);
-    const wt = createRunStateWritethrough(write);
+    const wt = RunStateWritethrough.create(write);
 
     wt.append(makeRow('s', 'p', {partialText: 'x'}));
     wt.flush();
@@ -359,7 +352,7 @@ describe('run-state-writethrough（coalescer 三态）', () => {
 
   it('dispose：丢弃未写数据，此后 append/flush 均为僵尸 no-op（防旧写覆盖新行）', () => {
     const write = jest.fn(async () => undefined);
-    const wt = createRunStateWritethrough(write);
+    const wt = RunStateWritethrough.create(write);
 
     wt.append(makeRow('s', 'p', {partialText: '将丢弃'}));
     wt.dispose();
@@ -375,7 +368,7 @@ describe('run-state-writethrough（coalescer 三态）', () => {
 
   it('大载荷降频：单次载荷超阈值改用 1s 慢档（防写放大），载荷回落后恢复快档', () => {
     const write = jest.fn(async () => undefined);
-    const wt = createRunStateWritethrough(write, {largePayloadChars: 1_000});
+    const wt = RunStateWritethrough.create(write, {largePayloadChars: 1_000});
 
     // 小载荷 → 快档
     wt.append(makeRow('s', 'p', {partialText: '小'}));
@@ -403,7 +396,7 @@ describe('run-state-writethrough（coalescer 三态）', () => {
       throw new Error('db closed');
     });
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    const wt = createRunStateWritethrough(write);
+    const wt = RunStateWritethrough.create(write);
 
     wt.append(makeRow('s', 'p', {partialText: 'x'}));
     wt.flush();
@@ -418,17 +411,17 @@ describe('run-state-writethrough（coalescer 三态）', () => {
 
 describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-U7: 写通节流合并——250ms 内多次 delta 只一次 upsert，落盘为最后一次 append 的快照', async () => {
@@ -779,7 +772,7 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     expect(() => h.manager.dispose()).not.toThrow();
     // 冲微任务确认 catch 收敛（无 unhandled rejection 即通过）
     await Promise.resolve();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('forgetSession: 销毁单元 + 清 settled 投影（供会话删除链路调用）', async () => {
@@ -804,13 +797,13 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     const h = createHarness({runStateStore: fake.store});
     await h.manager.hydrate();
     startRunningRun(h, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     h.manager.forgetSession('a');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     // 后续 FINISHED（run 实际由 core 侧终止）无单元不 decrement，防负
     publishFinished(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('settled 投影被同会话新 run 收尾覆盖（不累积旧值）', async () => {

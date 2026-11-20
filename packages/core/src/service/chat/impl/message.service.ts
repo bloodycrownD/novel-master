@@ -4,66 +4,47 @@
  * @module service/chat/impl/message.service
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { parseMessageContentValue } from "@/domain/chat/content/parse-message-content.js";
+import { MessageContentParse } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
-import type {
-  ChatMessageData,
-  ChatMessageHeader,
-  MessageAttachment,
-} from "@/domain/chat/model/message.js";
+import type { ChatMessageData, ChatMessageHeader } from "@/domain/chat/model/message.js";
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
-import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment.schema.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
-import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
+import type { Outcome } from "@/errors/outcome.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
-import {
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-  SESSION_KKV_DOMAIN_USAGE_STATS,
-  USAGE_STATS_TOOL_USE_COUNT_KEY,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SESSION_KKV_DOMAIN_BACKFILL_CURSOR, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
+import { TruncateTail } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteUsageRecordRepository } from "@/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
-import { createLogger } from "@/infra/log/logger.js";
-import { buildUsageRecordFromMessage } from "@/domain/usage/logic/build-usage-record.js";
+import { LogFactory } from "@/infra/log/logger.js";
+import { UsageRecord } from "@/domain/usage/logic/build-usage-record.js";
 import type { MessageService } from "../message.port.js";
 
-const log = createLogger("chat.message");
-
-function reposFor(conn: TdbcConnection) {
-  return {
-    sessions: new SqliteSessionRepository(conn),
-    messages: new SqliteMessageRepository(conn),
-    vfs: new SqliteVfsEntryRepository(conn),
-  };
-}
-
-function normalizeAppendAttachments(
-  attachments: readonly MessageAttachment[] | undefined
-): MessageAttachment[] | undefined {
-  if (attachments == null || attachments.length === 0) {
-    return undefined;
-  }
-  return messageAttachmentsSchema.parse(attachments);
-}
+const log = LogFactory.create("chat.message");
 
 /** Dependencies for {@link DefaultMessageService}. */
 interface MessageServiceDeps {
@@ -89,10 +70,7 @@ export class DefaultMessageService implements MessageService {
    * 都在 `conn.transaction` 块外，KKV 删除已 await（失败只吞 warn，不冒泡）。
    */
   private async invalidatePromptTokens(sessionId: string): Promise<void> {
-    await invalidateSessionApiPromptTokenEntry(
-      createSessionKkvService(this.deps.conn),
-      sessionId
-    );
+    await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), sessionId);
   }
 
   /**
@@ -110,101 +88,59 @@ export class DefaultMessageService implements MessageService {
    */
   private async invalidateToolUseCount(sessionId: string): Promise<void> {
     try {
-      await createSessionKkvService(this.deps.conn).set(
-        sessionId,
-        SESSION_KKV_DOMAIN_USAGE_STATS,
-        USAGE_STATS_TOOL_USE_COUNT_KEY,
-        ""
-      );
+      await SessionKkvServiceFactory.create(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
     } catch (error) {
       log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  listBySession(
-    sessionId: string,
-    options?: { includeHidden?: boolean }
-  ): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySession(sessionId, options);
+  listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySession(sessionId, options, hooks);
   }
 
-  listMessageHeadersBySession(
-    sessionId: string
-  ): Promise<ChatMessageHeader[]> {
+  listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]> {
     return this.deps.messages.listMessageHeadersBySession(sessionId);
   }
 
-  listBySessionFromSeq(
-    sessionId: string,
-    fromSeq: number
-  ): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq);
+  listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq, hooks);
   }
 
-  listBySessionTail(
-    sessionId: string,
-    options: { limit: number }
-  ): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionTail(sessionId, options.limit);
+  listBySessionTail(sessionId: string, options: { limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionTail(sessionId, options.limit, hooks);
   }
 
-  listBySessionTailOfRole(
-    sessionId: string,
-    options: { role: string; limit: number }
-  ): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionTailOfRole(
-      sessionId,
-      options.role,
-      options.limit
-    );
+  listBySessionTailOfRole(sessionId: string, options: { role: string; limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionTailOfRole(sessionId, options.role, options.limit, hooks);
   }
 
-  listBySessionPage(
-    sessionId: string,
-    options: { limit: number; beforeSeq?: number }
-  ): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionPage(
-      sessionId,
-      options.limit,
-      options.beforeSeq
-    );
+  listBySessionPage(sessionId: string, options: { limit: number; beforeSeq?: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionPage(sessionId, options.limit, options.beforeSeq, hooks);
   }
 
-  async get(id: string): Promise<ChatMessageData> {
+  async get(id: string): Promise<Result<ChatMessageData, AppError>> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
-      throw chatNotFound("message", id);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id }));
     }
-    return message;
+    return Result.ok(message);
   }
 
-  async append(
-    sessionId: string,
-    role: string,
-    content: MessageContent,
-    options?: {
-      provider?: string | null;
-      modelName?: string | null;
-      providerId?: string | null;
-      raw?: Record<string, unknown> | null;
-      attachments?: readonly MessageAttachment[];
-      usage?: MessageUsage;
-    }
-  ): Promise<ChatMessageData> {
+  async append(sessionId: string, role: string, content: MessageContent, options?: Parameters<MessageService["append"]>[3]): Promise<Result<ChatMessageData, AppError>> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
-    const parsedContent = parseMessageContentValue(content);
+    const parsedContent = MessageContentParse.parseValue(content);
     if (!parsedContent.ok) {
-      throw parsedContent.error;
+      return Result.err(parsedContent.error);
     }
     const normalizedContent = parsedContent.value;
-    const attachments = normalizeAppendAttachments(options?.attachments);
+    const attachments = options?.attachments == null || options.attachments.length === 0 ? undefined : messageAttachmentsSchema.parse(options.attachments);
     const seq = await this.deps.messages.nextSeq(sessionId);
     // New messages are visible by default
     const message: ChatMessageData = {
-      id: randomUUID(),
+      id: Random.uuid(),
       sessionId,
       seq,
       role,
@@ -224,7 +160,7 @@ export class DefaultMessageService implements MessageService {
     // （永续，删除链不碰），统计读口改打账本后数字不再随删除归零。
     // 无 token 真值（prompt/completion 皆空）与无 usage 的消息不写账本——
     // 与旧统计口径 USAGE_NOT_NULL_SQL 同源，普通消息走原直通插入零额外开销。
-    const usageRecord = buildUsageRecordFromMessage(message);
+    const usageRecord = UsageRecord.buildFromMessage(message);
     if (usageRecord == null) {
       await this.deps.messages.insert(message);
     } else {
@@ -247,59 +183,46 @@ export class DefaultMessageService implements MessageService {
     if (role === "assistant" && hasToolUse) {
       await this.invalidateToolUseCount(sessionId);
     }
-    return ChatMessage.from(message);
+    return Result.ok(ChatMessage.from(message));
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string): Promise<Result<void, AppError>> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
-      throw chatNotFound("message", id);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id }));
     }
 
     const session = await this.deps.sessions.findById(message.sessionId);
     if (session == null) {
-      throw chatNotFound("session", message.sessionId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${message.sessionId}`, kind: "session", id: message.sessionId }));
     }
 
     await this.deps.conn.transaction(async (tx) => {
       const messages = new SqliteMessageRepository(tx);
       const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      const entries = new SqliteVfsEntryRepository(tx);
       const revisions = new SqliteVfsRevisionRepository(tx);
 
       const deleted = await messages.delete(id);
       if (!deleted) {
-        throw chatNotFound("message", id);
+        throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id });
       }
 
       // 发生删除即清 backfill 游标：消息删除改变计数口径（count < 游标或圈段
       // 位移），残留会让下次 backfill 判定错位——清掉走保守全量自愈。
-      await new SqliteSessionKkvRepository(tx).clearDomain(
-        message.sessionId,
-        SESSION_KKV_DOMAIN_BACKFILL_CURSOR
-      );
+      await new SqliteSessionKkvRepository(tx).clearDomain(message.sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
       await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
-      await sweepSessionRevisions(
-        revisions,
-        entries,
-        checkpoints,
-        session.projectId,
-        message.sessionId,
-        tx
-      );
+      await RevisionGc.sweepSession(revisions, session.projectId, message.sessionId);
     });
-    await runDeferredBlobGc(this.deps.conn);
+    await DeferredBlobGc.run(this.deps.conn);
     await this.invalidatePromptTokens(message.sessionId);
     await this.invalidateToolUseCount(message.sessionId);
+    return Result.ok(undefined);
   }
 
-  async updateContent(
-    messageId: string,
-    content: MessageContent
-  ): Promise<ChatMessageData> {
-    const parsedContent = parseMessageContentValue(content);
+  async updateContent(messageId: string, content: MessageContent): Promise<Result<ChatMessageData, AppError>> {
+    const parsedContent = MessageContentParse.parseValue(content);
     if (!parsedContent.ok) {
-      throw parsedContent.error;
+      return Result.err(parsedContent.error);
     }
     // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
     // 下沉到 repository（port 签名为 MessageContent 对象）。
@@ -308,43 +231,43 @@ export class DefaultMessageService implements MessageService {
       const messages = new SqliteMessageRepository(tx);
       const existing = await messages.findById(messageId);
       if (existing == null) {
-        throw chatNotFound("message", messageId);
+        throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId });
       }
       const updated = await messages.updateContent(messageId, parsedContent.value);
       if (!updated) {
-        throw chatNotFound("message", messageId);
+        throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId });
       }
     });
     const message = await this.get(messageId);
-    await this.invalidatePromptTokens(message.sessionId);
-    await this.invalidateToolUseCount(message.sessionId);
-    return message;
+    if (!message.ok) return message;
+    await this.invalidatePromptTokens(message.value.sessionId);
+    await this.invalidateToolUseCount(message.value.sessionId);
+    return Result.ok(message.value);
   }
 
-  async fork(sessionId: string, upToMessageId: string): Promise<ChatSession> {
+  async fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>> {
     const source = await this.deps.sessions.findById(sessionId);
     if (source == null) {
-      throw chatNotFound("session", sessionId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
     const upTo = await this.deps.messages.findById(upToMessageId);
     if (upTo == null || upTo.sessionId !== sessionId) {
-      throw chatNotFound("message", upToMessageId, { sessionId });
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId }));
     }
     // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
     // seedForkCopyParity 吃同一份 toCopy），锚点之后的
     // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
-    const all = await this.deps.messages.listBySessionUpToSeq(
-      sessionId,
-      upTo.seq
-    );
+    const allRead = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq, hooks);
+    if (allRead.kind === "failed") return Result.err(allRead.error);
+    // 中断不是错误：本方法出口是边界，转抛 AbortError 交给上层（IPC / CLI）收口。
+    if (allRead.kind !== "completed") throw AbortError.create();
+    const all = allRead.value;
     if (all.length === 0) {
       // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
-      // 没有时直接抛，不为一个必然回滚的动作开事务。
-      throw chatInvalidArgument("No messages to fork up to the given id");
+      // 没有时直接拒绝，不为一个必然回滚的动作开事务。
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "No messages to fork up to the given id" }));
     }
-    const projectSessions = await this.deps.sessions.listByProject(
-      source.projectId
-    );
+    const projectSessions = await this.deps.sessions.listByProject(source.projectId);
     const forkBaseTitle = source.title?.trim() || "会话";
     const forkTitlePattern = new RegExp(`^${forkBaseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_ckpt_(\\d+)$`);
     let maxForkIndex = 0;
@@ -358,14 +281,14 @@ export class DefaultMessageService implements MessageService {
       }
     }
     const forkTitle = `${forkBaseTitle}_ckpt_${maxForkIndex + 1}`;
-    return this.deps.conn.transaction(async (tx) => {
-      const r = reposFor(tx);
+    const forkTransaction = this.deps.conn.transaction(async (tx) => {
+      const r = { sessions: new SqliteSessionRepository(tx), messages: new SqliteMessageRepository(tx), vfs: new SqliteVfsEntryRepository(tx) };
       // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，
       // 零新增过滤语义（含 hidden 行——fork 要 Preserve hidden state）。
       const toCopy = all;
       const now = Date.now();
       const forked: ChatSession = {
-        id: randomUUID(),
+        id: Random.uuid(),
         projectId: source.projectId,
         title: forkTitle,
         // P2-13：fork 出的是独立主会话，不继承源会话的 parent 关系。
@@ -378,120 +301,100 @@ export class DefaultMessageService implements MessageService {
       // 刻意不复制 composer_draft_json（维持现状）
       // agent_config_json：继承源会话配置（与 copy 一致）。必须走 repo 层——
       // NULL 静默跳过；service 层 getSessionAgentConfig 对 NULL 会抛且不在本事务上。
-      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(
-        source.id
-      );
+      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(source.id);
       if (sourceAgentConfigJson != null) {
-        await r.sessions.setSessionAgentConfig(
-          forked.id,
-          sourceAgentConfigJson,
-          now
-        );
+        await r.sessions.setSessionAgentConfig(forked.id, sourceAgentConfigJson, now);
       }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
-      await copyVfsTree(
-        r.vfs,
-        { scopeKey: `session:${source.projectId}:${source.id}` },
-        "/",
-        { scopeKey: `session:${source.projectId}:${forked.id}` },
-        "/",
-        { contentStore: new SqliteVfsContentStore(tx) }
-      );
+      // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
+      // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 fork。
+      const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
+      const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
+      if (vfsCopied.kind === "failed") throw vfsCopied.error;
+      if (vfsCopied.kind !== "completed") throw AbortError.create();
 
       const newMessages: { id: string }[] = [];
       let seq = 1;
       // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
       const forkedMessages: ChatMessageData[] = [];
       for (const msg of toCopy) {
-        const id = randomUUID();
+        const id = Random.uuid();
         // Preserve hidden state when forking
         forkedMessages.push({ ...msg, id, sessionId: forked.id, seq });
         newMessages.push({ id });
         seq++;
       }
-      await r.messages.batchInsert(forkedMessages);
-      const seeded = await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages });
-      if (!seeded.ok) throw seeded.error;
+      const inserted = await r.messages.batchInsert(forkedMessages, hooks);
+      // 事务边界（平台协议例外）：中断/失败都必须抛错才能让驱动整体回滚，
+      // 不能把 Outcome 直接 return——那样外层事务会 commit 半批 fork。
+      if (inserted.kind === "failed") throw inserted.error;
+      if (inserted.kind !== "completed") throw AbortError.create();
+      // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
+      // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
+      await TdbcTransaction.unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
       return forked;
     });
+    return Result.ok(await forkTransaction);
   }
 
-  async hide(messageId: string): Promise<void> {
+  async hide(messageId: string): Promise<Result<void, AppError>> {
     const existing = await this.deps.messages.findById(messageId);
     if (existing == null) {
-      throw chatNotFound("message", messageId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
     }
     const updated = await this.deps.messages.updateHidden(messageId, true);
     if (!updated) {
-      throw chatNotFound("message", messageId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
     }
     await this.invalidatePromptTokens(existing.sessionId);
+    return Result.ok(undefined);
   }
 
-  async show(messageId: string): Promise<void> {
+  async show(messageId: string): Promise<Result<void, AppError>> {
     const existing = await this.deps.messages.findById(messageId);
     if (existing == null) {
-      throw chatNotFound("message", messageId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
     }
     const updated = await this.deps.messages.updateHidden(messageId, false);
     if (!updated) {
-      throw chatNotFound("message", messageId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
     }
     await this.invalidatePromptTokens(existing.sessionId);
+    return Result.ok(undefined);
   }
 
-  async hideRange(
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number
-  ): Promise<number> {
+  async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
-    const count = await this.deps.messages.updateHiddenRange(
-      sessionId,
-      fromSeq,
-      toSeq,
-      true
-    );
+    const count = await this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, true);
     if (count > 0) {
       await this.invalidatePromptTokens(sessionId);
     }
-    return count;
+    return Result.ok(count);
   }
 
-  async showRange(
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number
-  ): Promise<number> {
+  async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
-    const count = await this.deps.messages.updateHiddenRange(
-      sessionId,
-      fromSeq,
-      toSeq,
-      false
-    );
+    const count = await this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, false);
     if (count > 0) {
       await this.invalidatePromptTokens(sessionId);
     }
-    return count;
+    return Result.ok(count);
   }
 
-  async truncateAfter(
-    sessionId: string,
-    afterMessageId: string | null
-  ): Promise<void> {
+  /** nm-style: keep-public — MessageService 端口方法，chat-agent-session 经端口单点调用；实现无法脱离接口内联。 */
+  async truncateAfter(sessionId: string, afterMessageId: string | null): Promise<Result<void, AppError>> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
 
     if (afterMessageId == null) {
@@ -506,50 +409,28 @@ export class DefaultMessageService implements MessageService {
         const ids = await messages.listIdsBySession(sessionId);
         if (ids.length > 0) {
           // 发生删除即清 backfill 游标（清空重聊场景 seq 全量复用，防线同 delete）。
-          await new SqliteSessionKkvRepository(tx).clearDomain(
-            sessionId,
-            SESSION_KKV_DOMAIN_BACKFILL_CURSOR
-          );
+          await new SqliteSessionKkvRepository(tx).clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
           await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
         }
         await messages.deleteBySession(sessionId);
       });
       await this.invalidatePromptTokens(sessionId);
       await this.invalidateToolUseCount(sessionId);
-      return;
+      return Result.ok(undefined);
     }
 
     const anchor = await this.deps.messages.findById(afterMessageId);
     if (anchor == null || anchor.sessionId !== sessionId) {
-      throw chatNotFound("message", afterMessageId, { sessionId });
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId }));
     }
 
-    // 拉 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表删除链素材。
-    const tailMessages = await this.deps.messages.listBySessionFromSeq(
-      sessionId,
-      anchor.seq + 1
-    );
-    if (tailMessages.length === 0) {
-      // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
-      await this.invalidatePromptTokens(sessionId);
-      return;
-    }
-
+    // tail 截断核心与回滚 / 批量删共用 `TruncateTail.truncate`：删除链、backfill
+    // 游标、Composer 状态条域的清理只有一份实现（读也一并留在事务内，产出写集合）。
     await this.deps.conn.transaction(async (tx) => {
-      const messages = new SqliteMessageRepository(tx);
-      const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      // 发生删除即清 backfill 游标（tail 截断后 seq 复用，防线同 delete）。
-      await new SqliteSessionKkvRepository(tx).clearDomain(
-        sessionId,
-        SESSION_KKV_DOMAIN_BACKFILL_CURSOR
-      );
-      await checkpoints.deleteCheckpointsForMessages(
-        sessionId,
-        tailMessages.map((m) => m.id)
-      );
-      await messages.deleteAfterSeq(sessionId, anchor.seq);
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
     });
     await this.invalidatePromptTokens(sessionId);
     await this.invalidateToolUseCount(sessionId);
+    return Result.ok(undefined);
   }
 }

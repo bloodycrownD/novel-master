@@ -4,7 +4,7 @@
  * 以 agent-run-manager.service.ts 为模板原样吸收其契约（Step 2；旧文件的
  * 拆除与调用方接线分别在 Step 7 / Step 6 完成）：
  * - per-session 门禁：该会话存在 starting|running 状态的单元，或
- *   abortRegistry.has(sessionId) 任一为真即拒绝（registry 是 run 在途的第二
+ *   abortRegistry.has(ABORT_KEY.agent(sessionId)) 任一为真即拒绝（registry 是 run 在途的第二
  *   道判据，core 的 register 在 runAgentTurn 函数入口执行，受理即在途；
  *   starting 单元判据仍独立保留）；settled 单元（interrupted/finished/failed，
  *   含宽限中）不阻塞新 run——interrupted 单元在 startRun 时被替换/吸收（删旧
@@ -98,71 +98,29 @@ import type {
   AgentStreamUsagePayload,
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
-import type {
-  ChatMessageData,
-  ComposerDraftTokenRange,
-  MessageAttachment,
-  SendAnnotateDraft,
-} from '@novel-master/core/chat';
+import type {ChatMessageData, ComposerDraftTokenRange, MessageAttachment, SendAnnotateDraft} from '@novel-master/core/chat';
+import {Result, type AppError} from '@novel-master/core/errors';
 import type {EventSubscription} from '@novel-master/core/events';
-import {
-  parseStreamFinalRateSnapshot,
-  serializeStreamFinalRateSnapshot,
-} from '@novel-master/core/format';
-import {
-  SESSION_KKV_DOMAIN_STREAM_METRICS as METRICS_DOMAIN,
-  STREAM_METRICS_FINAL_RATE_KEY as FINAL_RATE_KEY,
-} from '@novel-master/core/session-kkv';
+import {StreamFinalRate} from '@novel-master/core/format';
+import {SESSION_KKV_DOMAIN_STREAM_METRICS as METRICS_DOMAIN, STREAM_METRICS_FINAL_RATE_KEY as FINAL_RATE_KEY} from '@novel-master/core/session-kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
-import type {
-  SessionRunState,
-  SessionRunStateSettleInput,
-  SessionRunStatus,
-} from '@novel-master/core/session-run-state';
-import {
-  decrementAgentActive,
-  incrementAgentActive,
-} from '@/runtime/agent-activity';
-import {runAgentTurn as defaultRunAgentTurn} from '@/services/agent-run.service';
+import type {SessionRunState, SessionRunStateSettleInput, SessionRunStatus} from '@novel-master/core/session-run-state';
+import {ABORT_KEY} from '@novel-master/core/abort';
+import {agentActivity} from '@/runtime/agent-activity';
+import {AgentRunService} from '@/services/agent-run.service';
 import {bootTimingLog, timingLog} from '@/debug/run-timing';
-import {
-  notifyAgentRunFinished,
-  navigateToChatTabFromNotification,
-  registerAgentNotificationTapHandling,
-  startAgentKeepAliveService,
-  stopAgentKeepAliveService,
-} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {
-  SessionStreamUnit,
-  isSessionStreamUnitSettled,
-  SESSION_STREAM_MESSAGES_PAGE_SIZE,
-  STREAM_ROW_IDS_LIMIT,
-} from '@/services/session-stream-unit';
-import type {
-  SessionStreamRunSettledStatus,
-  SessionStreamUnitMetrics,
-  SessionStreamUnitView,
-  SessionStreamWebviewHandle,
-} from '@/services/session-stream-unit';
-import {createRunStateWritethrough} from '@/services/run-state-writethrough';
-import type {RunStateWritethrough} from '@/services/run-state-writethrough';
-import type {IncrementalTokenCounter} from '@novel-master/core/format';
-import {
-  createRunFinishCalibrationProbe,
-  type RunFinishCalibrationProbe,
-} from '@/services/run-finish-calibration-probe';
-import {
-  getSessionViewCache,
-  hydrateWindowFromCache,
-  sessionViewCacheKey,
-  setSessionViewCache,
-  type SessionViewCache,
-} from '@/services/chat-session-view-cache';
-import {createLruMap, type LruMap} from '@/services/scope-key-cache';
-import {prependOlderMessages} from '@/services/message-paging';
-import {createQuantumYield} from '@/services/yield-quantum';
-import {createLogger} from '@novel-master/core/log';
+import {SessionStreamUnit, SESSION_STREAM_MESSAGES_PAGE_SIZE, STREAM_ROW_IDS_LIMIT} from '@/services/session-stream-unit';
+import type {SessionStreamRunSettledStatus, SessionStreamUnitMetrics, SessionStreamUnitView, SessionStreamWebviewHandle} from '@/services/session-stream-unit';
+import {RunStateWritethrough} from '@/services/run-state-writethrough';
+import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import {RunFinishCalibrationProbe} from '@/services/run-finish-calibration-probe';
+import {SessionViewCache} from '@/services/chat-session-view-cache';
+import {ScopeKeyCache, type LruMap} from '@/services/scope-key-cache';
+import {MessagePaging} from '@/services/message-paging';
+import {YieldQuantum} from '@/services/yield-quantum';
+import {LogFactory} from '@novel-master/core/log';
 import {AppState} from 'react-native';
 
 /**
@@ -181,7 +139,7 @@ type RunOutcome = {
 };
 
 /** 编排器日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
-const log = createLogger('chat.stream-manager');
+const log = LogFactory.create('chat.stream-manager');
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
@@ -236,10 +194,7 @@ interface IdleOlderLoadInFlight {
 }
 
 /** Manager 实际依赖的 runtime 子集（测试可传 mock）。messages 为 Step 4 消息管线所需。 */
-type SessionStreamManagerRuntime = Pick<
-  MobileNovelMasterRuntime,
-  'eventBus' | 'abortRegistry' | 'sessions' | 'projects' | 'messages'
-> & {
+type SessionStreamManagerRuntime = Pick<MobileNovelMasterRuntime, 'eventBus' | 'abortRegistry' | 'sessions' | 'projects' | 'messages'> & {
   /**
    * session KKV 面（冻结末值速率的落库/读回）。缺省即速率不落库——
    * 冻结值仍走内存 settled 投影，只是不跨重启（测试/极简 runtime 用）。
@@ -253,7 +208,7 @@ type RunAgentTurnFn = (
   scope: {projectId: string; sessionId: string},
   content: string,
   options?: SessionStreamStartOptions,
-) => Promise<unknown>;
+) => Promise<unknown> | Promise<{ok: false; error: unknown}> | Promise<{ok: true; value: {stopReason?: unknown}}>;
 
 /** startRun 的 options 契约（供 ChatComposer.executeRun 等 UI 侧消费）。 */
 interface SessionStreamStartOptions {
@@ -282,9 +237,7 @@ interface SessionStreamStartOptions {
 }
 
 /** startRun 同步返回的受理/拒绝结果（拒绝时带明确错误信息）。 */
-type SessionStreamStartResult =
-  | {readonly ok: true}
-  | {readonly ok: false; readonly error: string};
+type SessionStreamStartResult = {readonly ok: true} | {readonly ok: false; readonly error: string};
 
 /** 失败 toast 上浮桥（Manager 在 React 外，经 Provider 注入）。 */
 interface SessionStreamUiBridge {
@@ -312,9 +265,7 @@ interface SessionStreamScopeBridge {
 interface SessionStreamRunStateStore {
   upsert(state: SessionRunState): Promise<void>;
   settle(input: SessionRunStateSettleInput): Promise<void>;
-  listByStatuses(
-    statuses: readonly SessionRunStatus[],
-  ): Promise<SessionRunState[]>;
+  listByStatuses(statuses: readonly SessionRunStatus[]): Promise<SessionRunState[]>;
 }
 
 /**
@@ -364,7 +315,7 @@ interface SessionStreamUnitManagerParams {
   };
   /**
    * 量子化让步函数（init-busy-yield Step 2）：水合逐行循环的让步点用。
-   * 缺省 createQuantumYield()（16ms 时间量子 + setTimeout(0)）；测试经此
+   * 缺省 YieldQuantum.create()（16ms 时间量子 + setTimeout(0)）；测试经此
    * 注入同步 resolve 的 mock（fake timers 下无需真实定时器）。
    */
   readonly yieldQuantum?: () => Promise<void>;
@@ -374,9 +325,7 @@ interface SessionStreamUnitManagerParams {
    * （`ceil(chars/3.35)`），**未收到 usage 前**与旧口径严格一致；usage 到达后
    * 按 ①「基线 + 增量」口径。
    */
-  readonly tokenEstimatorFactory?: (
-    sessionId: string,
-  ) => IncrementalTokenCounter | null;
+  readonly tokenEstimatorFactory?: (sessionId: string) => IncrementalTokenCounter | null;
 }
 
 /**
@@ -427,11 +376,9 @@ export class SessionStreamUnitManager {
   /** 水合逐行循环的量子化让步（Step 2 分片；缺省 16ms 量子）。 */
   private readonly yieldQuantum: () => Promise<void>;
   /** settled 投影常驻 map（独立于单元生命周期，见接口注释）。挂 500 LRU 防无界增长。 */
-  private readonly settledProjections: LruMap<SessionStreamSettledProjection> =
-    createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
+  private readonly settledProjections: LruMap<SessionStreamSettledProjection> = ScopeKeyCache.createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
   /** 无单元会话的消息面（Step 7 收口：idle 会话 tail/分页的落点）。同样挂 500 LRU。 */
-  private readonly idleMessageViews: LruMap<IdleMessageViewEntry> =
-    createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
+  private readonly idleMessageViews: LruMap<IdleMessageViewEntry> = ScopeKeyCache.createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
   /**
    * idle 上翻的 in-flight 表（**不参与 LRU 淘汰**）：sessionId → 在途态。
    *
@@ -447,9 +394,7 @@ export class SessionStreamUnitManager {
   /** 水合流程的单飞 promise（构造 kick 一次；hydrate 幂等复用）。 */
   private hydratePromise: Promise<void> | null = null;
   /** 实时 token 估算器工厂（②；未注入 = 单元走启发式兜底）。 */
-  private readonly tokenEstimatorFactory?:
-    | ((sessionId: string) => IncrementalTokenCounter | null)
-    | undefined;
+  private readonly tokenEstimatorFactory?: ((sessionId: string) => IncrementalTokenCounter | null) | undefined;
 
   private uiBridge: SessionStreamUiBridge | undefined;
   private prefBridge: SessionStreamPrefBridge | undefined;
@@ -490,14 +435,14 @@ export class SessionStreamUnitManager {
   constructor(params: SessionStreamUnitManagerParams) {
     this.runtime = params.runtime;
     // 默认实现的完整 options 类型比 SessionStreamStartOptions 宽，调用点只传子集，安全断言。
-    const defaultTurn = defaultRunAgentTurn as RunAgentTurnFn;
+    const defaultTurn = AgentRunService.run as RunAgentTurnFn;
     this.runAgentTurnFn = params.runAgentTurn ?? defaultTurn;
     this.settledGraceMs = params.settledGraceMs;
     const settledCap = SESSION_STREAM_MAX_SETTLED_UNITS;
     this.maxSettledUnits = params.maxSettledUnits ?? settledCap;
     this.runStateStore = params.runStateService;
     this.writethroughOptions = params.writethrough;
-    this.yieldQuantum = params.yieldQuantum ?? createQuantumYield();
+    this.yieldQuantum = params.yieldQuantum ?? YieldQuantum.create();
     this.tokenEstimatorFactory = params.tokenEstimatorFactory;
 
     // 全量订阅 run 生命周期事件（不经 UI 面板过滤）与流式事件（Step 3）：
@@ -509,112 +454,82 @@ export class SessionStreamUnitManager {
     const bus = this.runtime.eventBus;
     this.subscriptions = [
       // RUN_STARTED 只做单元状态迁移与 runId 回填，不碰 refcount。
-      bus.subscribe(
-        EVENT_AGENT_RUN_STARTED,
-        (payload: AgentRunStartedPayload) => {
-          const {sessionId, projectId} = payload;
-          timingLog(`RUN_STARTED arrived (s=${sessionId.slice(0, 4)})`);
-          let unit = this.units.get(sessionId);
-          if (unit == null) {
-            // Step 6 消费型单元：非本 manager 发起的 run（subagent 子会话 run）。
-            // 子会话屏订阅 manager 取投影/注入，需要子会话 run 有单元落点；
-            // 该类单元不占 refcount（refcount 归属发起方 run 的 startRun）、
-            // 不写持久层（session_run_state 行只记录经 startRun 发起的 run）。
-            unit = this.adoptConsumptiveUnit(sessionId, projectId);
+      bus.subscribe(EVENT_AGENT_RUN_STARTED, (payload: AgentRunStartedPayload) => {
+        const {sessionId, projectId} = payload;
+        timingLog(`RUN_STARTED arrived (s=${sessionId.slice(0, 4)})`);
+        let unit = this.units.get(sessionId);
+        if (unit == null) {
+          // Step 6 消费型单元：非本 manager 发起的 run（subagent 子会话 run）。
+          // 子会话屏订阅 manager 取投影/注入，需要子会话 run 有单元落点；
+          // 该类单元不占 refcount（refcount 归属发起方 run 的 startRun）、
+          // 不写持久层（session_run_state 行只记录经 startRun 发起的 run）。
+          unit = this.adoptConsumptiveUnit(sessionId, projectId);
+        }
+        if (!unit.markRunning(payload.runId)) {
+          // 消费型子会话的 run 复用（同一 childSessionId 连跑两轮）会撞上仍在宽限期内的
+          // settled 旧单元；不替换吸收的话后续 delta / STEP / FINISHED 全被 runId 守卫丢掉，
+          // 子会话屏只能看到首轮的旧内容。发起型 run 的 settled 单元不在此列——那由
+          // startRun 负责替换，这里复活会绕过持久层口径。
+          //
+          // 同一个 runId 的重复 RUN_STARTED（真机轮曾有「回填双发」）不替换：该 runId 的
+          // FINISHED 已被消费，重建出的 running 单元等不到第二次终态 → 屏上停止按钮不消失、
+          // activeSessionIds 误报、单元永不进宽限销毁。
+          if (!this.consumptiveSessions.has(sessionId) || !SessionStreamUnit.isSettled(unit.getStatus()) || unit.getRunId() === payload.runId) {
+            return;
+          }
+          // 句柄迁移 + 消费型标记重建都靠 adoptConsumptiveUnit（removeUnit 会 delete 标记）
+          const inheritedHandles = unit.takeWebviewHandles();
+          const inheritedStreamRowIds = unit.getStreamRowIds();
+          this.removeUnit(sessionId, unit);
+          unit = this.adoptConsumptiveUnit(sessionId, projectId);
+          unit.inheritStreamRowIds(inheritedStreamRowIds);
+          for (const handle of inheritedHandles) {
+            unit.attachWebview(handle);
           }
           if (!unit.markRunning(payload.runId)) {
-            // 消费型子会话的 run 复用（同一 childSessionId 连跑两轮）会撞上仍在宽限期内的
-            // settled 旧单元；不替换吸收的话后续 delta / STEP / FINISHED 全被 runId 守卫丢掉，
-            // 子会话屏只能看到首轮的旧内容。发起型 run 的 settled 单元不在此列——那由
-            // startRun 负责替换，这里复活会绕过持久层口径。
-            //
-            // 同一个 runId 的重复 RUN_STARTED（真机轮曾有「回填双发」）不替换：该 runId 的
-            // FINISHED 已被消费，重建出的 running 单元等不到第二次终态 → 屏上停止按钮不消失、
-            // activeSessionIds 误报、单元永不进宽限销毁。
-            if (
-              !this.consumptiveSessions.has(sessionId) ||
-              !isSessionStreamUnitSettled(unit.getStatus()) ||
-              unit.getRunId() === payload.runId
-            ) {
-              return;
-            }
-            // 句柄迁移 + 消费型标记重建都靠 adoptConsumptiveUnit（removeUnit 会 delete 标记）
-            const inheritedHandles = unit.takeWebviewHandles();
-            const inheritedStreamRowIds = unit.getStreamRowIds();
-            this.removeUnit(sessionId, unit);
-            unit = this.adoptConsumptiveUnit(sessionId, projectId);
-            unit.inheritStreamRowIds(inheritedStreamRowIds);
-            for (const handle of inheritedHandles) {
-              unit.attachWebview(handle);
-            }
-            if (!unit.markRunning(payload.runId)) {
-              return;
-            }
-            // 新单元 messages 为空，屏侧会先落到空数组；立即回源填历史，避免二轮 run 开场空白
-            void this.loadSessionTailMessages(sessionId, {force: true}).catch(
-              error => {
-                log.error('reuse tail reload failed', {sessionId, error});
-              },
-            );
+            return;
           }
-          if (!this.consumptiveSessions.has(sessionId)) {
-            // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行
-            //（runId/startedAtMs 回填；一次性事件不走节流）。消费型单元跳过。
-            const store = this.runStateStore;
-            if (store != null && !this.writethroughs.has(sessionId)) {
-              const writethrough = createRunStateWritethrough(
-                state => store.upsert(state),
-                this.writethroughOptions,
-              );
-              this.writethroughs.set(sessionId, writethrough);
-            }
-            this.upsertRunStateQuietly(this.runStateRowFromSnapshot(unit));
-          }
-          this.notifyChanged();
-        },
-      ),
-      bus.subscribe(
-        EVENT_AGENT_RUN_FINISHED,
-        (payload: AgentRunFinishedPayload) => {
-          this.finishRun(payload.sessionId, payload.runId, {
-            status: 'finished',
+          // 新单元 messages 为空，屏侧会先落到空数组；立即回源填历史，避免二轮 run 开场空白
+          void this.loadSessionTailMessages(sessionId, {force: true}).catch(error => {
+            log.error('reuse tail reload failed', {sessionId, error});
           });
-        },
-      ),
-      bus.subscribe(
-        EVENT_AGENT_RUN_FAILED,
-        (payload: AgentRunFailedPayload) => {
-          const failure: RunOutcome = {
-            status: 'failed',
-            errorMessage: payload.error,
-          };
-          this.finishRun(payload.sessionId, payload.runId, failure);
-        },
-      ),
-      bus.subscribe(
-        EVENT_AGENT_STREAM_TEXT_DELTA,
-        (payload: AgentStreamTextDeltaPayload) => {
-          const unit = this.units.get(payload.sessionId);
-          if (
-            unit != null &&
-            unit.ingestTextDelta(payload.runId, payload.text)
-          ) {
-            this.appendWritethroughSnapshot(unit);
+        }
+        if (!this.consumptiveSessions.has(sessionId)) {
+          // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行
+          //（runId/startedAtMs 回填；一次性事件不走节流）。消费型单元跳过。
+          const store = this.runStateStore;
+          if (store != null && !this.writethroughs.has(sessionId)) {
+            const writethrough = RunStateWritethrough.create(state => store.upsert(state), this.writethroughOptions);
+            this.writethroughs.set(sessionId, writethrough);
           }
-        },
-      ),
-      bus.subscribe(
-        EVENT_AGENT_STREAM_THINKING_DELTA,
-        (payload: AgentStreamThinkingDeltaPayload) => {
-          const unit = this.units.get(payload.sessionId);
-          if (
-            unit != null &&
-            unit.ingestThinkingDelta(payload.runId, payload.text)
-          ) {
-            this.appendWritethroughSnapshot(unit);
-          }
-        },
-      ),
+          this.upsertRunStateQuietly(this.runStateRowFromSnapshot(unit));
+        }
+        this.notifyChanged();
+      }),
+      bus.subscribe(EVENT_AGENT_RUN_FINISHED, (payload: AgentRunFinishedPayload) => {
+        this.finishRun(payload.sessionId, payload.runId, {
+          status: 'finished',
+        });
+      }),
+      bus.subscribe(EVENT_AGENT_RUN_FAILED, (payload: AgentRunFailedPayload) => {
+        const failure: RunOutcome = {
+          status: 'failed',
+          errorMessage: payload.error,
+        };
+        this.finishRun(payload.sessionId, payload.runId, failure);
+      }),
+      bus.subscribe(EVENT_AGENT_STREAM_TEXT_DELTA, (payload: AgentStreamTextDeltaPayload) => {
+        const unit = this.units.get(payload.sessionId);
+        if (unit != null && unit.ingestTextDelta(payload.runId, payload.text)) {
+          this.appendWritethroughSnapshot(unit);
+        }
+      }),
+      bus.subscribe(EVENT_AGENT_STREAM_THINKING_DELTA, (payload: AgentStreamThinkingDeltaPayload) => {
+        const unit = this.units.get(payload.sessionId);
+        if (unit != null && unit.ingestThinkingDelta(payload.runId, payload.text)) {
+          this.appendWritethroughSnapshot(unit);
+        }
+      }),
       // tool-use（chat-streaming-projection Step 2）：进当前 step 记录的
       // tools 并立即推 tools-only 的 stream-batch。tool 状态不是持久字段，
       // 不写通（只由单元内的 onProjectionChanged 通知）。
@@ -623,84 +538,65 @@ export class SessionStreamUnitManager {
       // 单元内含 runId 所有权守卫，生效才触发投影通知。Step 5：生效后把
       // partial 已清零的新快照 append 进 coalescer 并立即 flush（step 边界
       // 立即刷——落盘行反映 step 边界状态，而非 append 时刻的旧 partial）。
-      bus.subscribe(
-        EVENT_AGENT_STEP_COMMITTED,
-        (payload: AgentStepCommittedPayload) => {
-          const unit = this.units.get(payload.sessionId);
-          const {runId, phase, messageId} = payload;
-          if (
-            unit == null ||
-            !unit.handleStepCommitted(runId, phase, messageId)
-          ) {
-            return;
-          }
-          this.appendWritethroughSnapshot(unit);
-          this.writethroughs.get(payload.sessionId)?.flush();
-          this.notifyChanged();
-        },
-      ),
+      bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (payload: AgentStepCommittedPayload) => {
+        const unit = this.units.get(payload.sessionId);
+        const {runId, phase, messageId} = payload;
+        if (unit == null || !unit.handleStepCommitted(runId, phase, messageId)) {
+          return;
+        }
+        this.appendWritethroughSnapshot(unit);
+        this.writethroughs.get(payload.sessionId)?.flush();
+        this.notifyChanged();
+      }),
       // usage 事件（stream-metrics-tokens）：run 级累计 completionTokens 直达
       // unit.ingestUsage 覆盖 heuristic（事件即归账，不经缓冲节拍——与
       // textChars 同口径；风暴面由事件总线 microtask 合批兜住）。生效才把
       // 写通快照 append 进 coalescer（陈旧事件不产生持久层写）。
-      bus.subscribe(
-        EVENT_AGENT_STREAM_USAGE,
-        (payload: AgentStreamUsagePayload) => {
-          const unit = this.units.get(payload.sessionId);
-          if (
-            unit != null &&
-            unit.ingestUsage(payload.runId, payload.completionTokens)
-          ) {
-            this.appendWritethroughSnapshot(unit);
-          }
-        },
-      ),
+      bus.subscribe(EVENT_AGENT_STREAM_USAGE, (payload: AgentStreamUsagePayload) => {
+        const unit = this.units.get(payload.sessionId);
+        if (unit != null && unit.ingestUsage(payload.runId, payload.completionTokens)) {
+          this.appendWritethroughSnapshot(unit);
+        }
+      }),
       // child-created：按 parentSessionId 路由进父单元登记（去重在单元内），
       // 同时记反查表供子会话终态摘除。无父单元（父 run 已结束/不在本进程）
       // 自然落空。
-      bus.subscribe(
-        EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-        (payload: SubagentChildSessionCreatedPayload) => {
-          const unit = this.units.get(payload.parentSessionId);
-          if (unit == null) {
-            return;
-          }
-          const childId = payload.childSessionId;
-          const parentId = payload.parentSessionId;
-          this.pendingChildParentByChild.set(childId, parentId);
-          if (
-            unit.registerPendingChild(payload.childSessionId, payload.title)
-          ) {
-            // 链接变化进写通节流窗（不立即刷——低频事件，等下个窗口即可；
-            // 重启恢复晚一个窗口可接受）。
-            this.appendWritethroughSnapshot(unit);
-            this.notifyChanged();
-          }
-        },
-      ),
+      bus.subscribe(EVENT_SUBAGENT_CHILD_SESSION_CREATED, (payload: SubagentChildSessionCreatedPayload) => {
+        const unit = this.units.get(payload.parentSessionId);
+        if (unit == null) {
+          return;
+        }
+        const childId = payload.childSessionId;
+        const parentId = payload.parentSessionId;
+        this.pendingChildParentByChild.set(childId, parentId);
+        if (unit.registerPendingChild(payload.childSessionId, payload.title)) {
+          // 链接变化进写通节流窗（不立即刷——低频事件，等下个窗口即可；
+          // 重启恢复晚一个窗口可接受）。
+          this.appendWritethroughSnapshot(unit);
+          this.notifyChanged();
+        }
+      }),
     ];
 
     // 通知点按：切 scope 到目标会话（已在目标会话则跳过切换）+ 导航 Chat tab。
     // onBackgroundEvent 为模块级一次注册（handler 引用替换），不随实例退订；
     // 这里只握 onForegroundEvent 的退订函数，dispose 时退订。
-    this.offNotificationTap = registerAgentNotificationTapHandling(
-      sessionId => {
-        const bridge = this.scopeBridge;
-        if (bridge?.getCurrentSessionId() !== sessionId) {
-          void bridge?.setCurrentSession(sessionId).catch(() => undefined);
-        }
-        navigateToChatTabFromNotification();
-      },
-    );
+    this.offNotificationTap = AgentFinishedNotification.registerTapHandling(sessionId => {
+      const bridge = this.scopeBridge;
+      if (bridge?.getCurrentSessionId() !== sessionId) {
+        void bridge?.setCurrentSession(sessionId).catch(() => undefined);
+      }
+      AgentFinishedNotification.navigateToChatTab();
+    });
 
     // 收尾校准探针（Step 7 自旧 run 探针的收尾方向迁入）：低频轮询 +
     // 前台回焦校准「running 单元 + registry 无注册」的悬挂现场，防 core
     // 终态事件丢失导致「生成中」永久残留。starting 单元不参与（runId 未
     // 回填；core 的 register 在 runAgentTurn 函数入口执行，受理即在途，
     // 与注册时机无关；该场景由 finally 兜底）。
-    this.calibrationProbe = createRunFinishCalibrationProbe({
+    this.calibrationProbe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => this.listCalibratableSessionIds(),
-      isRunRegistered: sessionId => this.runtime.abortRegistry.has(sessionId),
+      isRunRegistered: sessionId => this.runtime.abortRegistry.has(ABORT_KEY.agent(sessionId)),
       // 校准收尾（终态事件丢失的兜底）：走与 FAILED 事件等效的收尾路径——
       // runId 所有权匹配则 settle('failed')，refcount/持久层/通知/保活照常
       // 收口。经 startRun 发起的 run 的 runAgentTurn promise 挂死场景同样
@@ -845,9 +741,7 @@ export class SessionStreamUnitManager {
           try {
             const parsed: unknown = JSON.parse(row.pendingChildrenJson);
             if (Array.isArray(parsed)) {
-              pendingChildren = parsed.filter(
-                (id): id is string => typeof id === 'string',
-              );
+              pendingChildren = parsed.filter((id): id is string => typeof id === 'string');
             }
           } catch {
             // 损坏的 JSON 按空链接处理，不阻断水合
@@ -889,7 +783,7 @@ export class SessionStreamUnitManager {
         // 快照没带 runId（旧格式/身份未知）→ 兼容采用；带 runId 但与 settled
         // 行不一致（settled 行被新 run 覆盖、KKV 还留着上一轮残留的竞态窗口）
         // → 视为缺值，不把上一轮的速度拼到本轮「上次生成」上。
-        const rateSnapshot = parseStreamFinalRateSnapshot(rawRate);
+        const rateSnapshot = StreamFinalRate.parseSnapshot(rawRate);
         const snapshotRunId = rateSnapshot?.runId;
         const mismatch = snapshotRunId != null && snapshotRunId !== row.runId;
         let finalRate: number | null = null;
@@ -952,9 +846,7 @@ export class SessionStreamUnitManager {
   rateTokensPerSecond(sessionId: string, nowMs: number): number | null {
     const unit = this.units.get(sessionId);
     if (unit != null) {
-      return isSessionStreamUnitSettled(unit.getStatus())
-        ? unit.getFinalRateTokensPerSecond()
-        : unit.getRateTokensPerSecond(nowMs);
+      return SessionStreamUnit.isSettled(unit.getStatus()) ? unit.getFinalRateTokensPerSecond() : unit.getRateTokensPerSecond(nowMs);
     }
     if (!this.hydratedValue) {
       return null;
@@ -981,11 +873,8 @@ export class SessionStreamUnitManager {
     }
     const unit = this.units.get(sessionId);
     if (unit != null) {
-      if (
-        !isSessionStreamUnitSettled(unit.getStatus()) &&
-        !this.consumptiveSessions.has(sessionId)
-      ) {
-        decrementAgentActive();
+      if (!SessionStreamUnit.isSettled(unit.getStatus()) && !this.consumptiveSessions.has(sessionId)) {
+        agentActivity.decrement();
       }
       this.removeUnit(sessionId, unit);
     } else {
@@ -1134,7 +1023,7 @@ export class SessionStreamUnitManager {
    * 键用（缺省只回源、不读写缓存）。
    */
   // prettier-ignore
-  async loadSessionTailMessages(sessionId: string, options?: {readonly force?: boolean; readonly projectId?: string}): Promise<readonly ChatMessageData[] | null> {
+  async loadSessionTailMessages(sessionId: string, options?: {readonly force?: boolean; readonly projectId?: string}): Promise<Result<readonly ChatMessageData[] | null, AppError>> {
     const force = options?.force;
     const unit = this.units.get(sessionId);
     if (unit != null) {
@@ -1148,30 +1037,39 @@ export class SessionStreamUnitManager {
     const projectId = options?.projectId;
     let cacheKey: string | null = null;
     if (projectId != null) {
-      cacheKey = sessionViewCacheKey(projectId, sessionId);
+      cacheKey = SessionViewCache.key(projectId, sessionId);
     }
     if (cacheKey != null && !forceReload) {
-      const cached = getSessionViewCache(cacheKey);
+      const cached = SessionViewCache.get(cacheKey);
       if (cached != null) {
         // 与单元路径同款守卫：只有冷启动水合才裁窗口。idle 视图已有消息面
         // 时（重进 / idle 分页翻出来的浏览史），整面采纳——截回去等于当着
         // 用户的面把转录塌掉。当前唯一调用方 loadSessionTailMessages 在
         // 重进场景确实会带着非空面进来，守卫不是空转。
         const idleCount = this.idleMessageViews.get(sessionId)?.messages.length ?? 0;
-        const adopted = idleCount === 0 ? hydrateWindowFromCache(cached) : cached;
+        const adopted = idleCount === 0 ? SessionViewCache.hydrateWindowFromCache(cached) : cached;
         this.applyIdleMessages(sessionId, adopted);
-        return [...adopted.messages];
+        return Result.ok([...adopted.messages]);
       }
     }
     const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
-    const fetched = await this.runtime.messages.listBySessionTail(sessionId, {limit});
+    const fetchedRead = await this.runtime.messages.listBySessionTail(sessionId, {limit});
+    if (fetchedRead.kind === 'failed') {
+      // 读口已换 Outcome：已知失败沿 Result 接力给 UI 回调（p26 门⑦），不再抛。
+      return Result.err(fetchedRead.error);
+    }
+    if (fetchedRead.kind !== 'completed') {
+      // 未注入 hooks 时中断分支不可达；真出现时按「本次不采纳」保留现有 idle 面。
+      return Result.ok([...(this.idleMessageViews.get(sessionId)?.messages ?? [])]);
+    }
+    const fetched = fetchedRead.value;
     const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
     const list = hasMore ? fetched.slice(1) : fetched;
     if (cacheKey != null) {
-      setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
+      SessionViewCache.set(cacheKey, {messages: list, hasMoreMessages: hasMore});
     }
     this.applyIdleMessages(sessionId, {messages: list, hasMoreMessages: hasMore});
-    return [...list];
+    return Result.ok([...list]);
   }
 
   /**
@@ -1186,32 +1084,41 @@ export class SessionStreamUnitManager {
    * manager 私有 idleMessageViews/idleLoadingMore 与视图缓存。
    */
   // prettier-ignore
-  async loadOlderSessionMessages(sessionId: string, projectId?: string): Promise<void> {
+  async loadOlderSessionMessages(sessionId: string, projectId?: string): Promise<Result<void, AppError>> {
     const unit = this.units.get(sessionId);
     if (unit != null) {
       return unit.loadOlderMessages();
     }
     const idle = this.idleMessageViews.get(sessionId);
     if (idle == null || this.idleLoadingMore.has(sessionId)) {
-      return;
+      return Result.ok(undefined);
     }
     if (idle.messages.length === 0) {
-      return;
+      return Result.ok(undefined);
     }
     const beforeSeq = idle.messages[0]?.seq;
     if (beforeSeq == null) {
-      return;
+      return Result.ok(undefined);
     }
     this.idleLoadingMore.set(sessionId, {base: idle});
     this.notifyChanged();
     try {
       const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
-      const older = await this.runtime.messages.listBySessionPage(sessionId, page);
+      const olderRead = await this.runtime.messages.listBySessionPage(sessionId, page);
+      if (olderRead.kind === 'failed') {
+        // 同 loadSessionTailMessages：已知失败沿 Result 接力（p26 门⑦），不再抛。
+        return Result.err(olderRead.error);
+      }
+      if (olderRead.kind !== 'completed') {
+        // 未注入 hooks 时中断分支不可达；中断按「本次翻页不落地」处理。
+        return Result.ok(undefined);
+      }
+      const older = olderRead.value;
       const inFlight = this.idleLoadingMore.get(sessionId);
       if (inFlight == null) {
         // 窗口期内会话被遗忘（forgetSession）或 manager 已 dispose：本次结果
         // 不再落地（与 in-flight 标记仍在 LRU 表内的旧行为同语义）。
-        return;
+        return Result.ok(undefined);
       }
       // 窗口期内本会话条目若被 LRU 淘汰（别的路径灌进 CAP+1 个 sessionId），
       // 用发起时的基线兜底合并——本次上翻的数据仍会 set 回 LRU，页面照常翻。
@@ -1220,13 +1127,13 @@ export class SessionStreamUnitManager {
         this.idleLoadingMore.delete(sessionId);
         this.idleMessageViews.set(sessionId, {...current, hasMoreMessages: false});
         this.notifyChanged();
-        return;
+        return Result.ok(undefined);
       }
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
-      const next = prependOlderMessages(current.messages, older);
+      const next = MessagePaging.prependOlder(current.messages, older);
       if (projectId != null) {
-        const cacheKey = sessionViewCacheKey(projectId, sessionId);
-        setSessionViewCache(cacheKey, {messages: next, hasMoreMessages: hasMore});
+        const cacheKey = SessionViewCache.key(projectId, sessionId);
+        SessionViewCache.set(cacheKey, {messages: next, hasMoreMessages: hasMore});
       }
       this.idleLoadingMore.delete(sessionId);
       this.idleMessageViews.set(sessionId, {
@@ -1235,6 +1142,7 @@ export class SessionStreamUnitManager {
         streamRowIds: current.streamRowIds,
       });
       this.notifyChanged();
+      return Result.ok(undefined);
     } finally {
       // 异常/早退路径的标记复位（成功路径已提前 delete，这里是幂等兜底）。
       if (this.idleLoadingMore.delete(sessionId)) {
@@ -1280,9 +1188,7 @@ export class SessionStreamUnitManager {
       };
     }
     const idle = this.idleMessageViews.get(sessionId);
-    return idle != null
-      ? {...idle, loadingMoreMessages: this.idleLoadingMore.has(sessionId)}
-      : null;
+    return idle != null ? {...idle, loadingMoreMessages: this.idleLoadingMore.has(sessionId)} : null;
   }
 
   /**
@@ -1293,14 +1199,14 @@ export class SessionStreamUnitManager {
    * nm-style: keep-public — 会话切换防闪的唯一水合入口，读写 manager 私有
    * idleMessageViews 与 view cache，调用侧无法 own 这段状态。
    */
-  hydrateSessionMessages(projectId: string, sessionId: string): void {
+  hydrateSessionMessages(sessionId: string, projectId: string): void {
     if (this.units.has(sessionId)) {
       return;
     }
-    const cacheKey = sessionViewCacheKey(projectId, sessionId);
-    const cached = getSessionViewCache(cacheKey);
+    const cacheKey = SessionViewCache.key(projectId, sessionId);
+    const cached = SessionViewCache.get(cacheKey);
     if (cached != null) {
-      const windowed = hydrateWindowFromCache(cached);
+      const windowed = SessionViewCache.hydrateWindowFromCache(cached);
       this.idleMessageViews.set(sessionId, {
         messages: [...windowed.messages],
         hasMoreMessages: windowed.hasMoreMessages,
@@ -1332,16 +1238,14 @@ export class SessionStreamUnitManager {
    * 已接管的 assistant 行就会回退 DB id（remount/闪动，P1-3）。
    */
   private idleStreamRowIds(sessionId: string): ReadonlyMap<string, string> {
-    return (
-      this.idleMessageViews.get(sessionId)?.streamRowIds ?? EMPTY_STREAM_ROW_IDS
-    );
+    return this.idleMessageViews.get(sessionId)?.streamRowIds ?? EMPTY_STREAM_ROW_IDS;
   }
 
   /**
    * 发起 run：per-session 门禁 + fire-and-forget。
    *
-   * 门禁钉死「该会话存在 starting|running 单元或 abortRegistry.has 为真即
-   * 拒绝，返回明确错误而非静默」——core 的 register 在 runAgentTurn 函数
+   * 门禁钉死「该会话存在 starting|running 单元或
+   * abortRegistry.has(ABORT_KEY.agent(sessionId)) 为真即拒绝，返回明确错误而非静默」——core 的 register 在 runAgentTurn 函数
    * 入口执行（受理即在途），单看 registry 仍会在受理空窗内漏放第二个同会话
    * run。settled 单元不阻塞：interrupted/finished/failed（含宽限中）
    * 的旧单元被替换吸收——删旧建新（run_id 更新、状态机回 starting、
@@ -1362,7 +1266,7 @@ export class SessionStreamUnitManager {
     const existing = this.units.get(sessionId);
     if (
       (existing != null && this.isActiveUnit(existing)) ||
-      this.runtime.abortRegistry.has(sessionId)
+      this.runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))
     ) {
       return {ok: false, error: '该会话已有进行中的生成，请先等待完成或停止'};
     }
@@ -1417,10 +1321,10 @@ export class SessionStreamUnitManager {
     });
     this.notifyChanged();
     timingLog('notifyChanged done (metrics bar scheduled)');
-    incrementAgentActive();
+    agentActivity.increment();
     // 受理后按需刷新保活通知：消息通知总开关开启才操作（开关关时受理不
     // 产生任何通知刷新）。两段式时序（Step 8 忙期优先）——第一段无标签调
-    // startAgentKeepAliveService(sessionId) 登记受理意图（常驻模式下该调用
+    // AgentFinishedNotification.startKeepAliveService(sessionId) 登记受理意图（常驻模式下该调用
     // 是 no-op；通知启停决策权已收归模块内的常驻开关态）；第二段会话名/
     // 项目名两查询并发，查回后带标签再调同一函数，经既有 labelsVersion →
     // reconcileKeepAlive「同 id 原位刷新」把内容切到「正在生成 · 会话名」；
@@ -1432,13 +1336,14 @@ export class SessionStreamUnitManager {
         timingLog('keepalive: disabled by pref, skip');
         return;
       }
-      await startAgentKeepAliveService(sessionId);
+      await AgentFinishedNotification.startKeepAliveService(sessionId);
       timingLog('keepalive: initial start (default content) returned');
       const titles = Promise.all([
         (async () => {
           try {
             const session = await this.runtime.sessions.get(sessionId);
-            const title = session?.title ?? undefined;
+            // 名字取不到不阻塞保活（错误通道迁移四期：Result 失败同款兜底）
+            const title = session.ok ? session.value?.title ?? undefined : undefined;
             timingLog('keepalive: session title fetched');
             return title;
           } catch {
@@ -1449,7 +1354,8 @@ export class SessionStreamUnitManager {
         (async () => {
           try {
             const project = await this.runtime.projects.get(projectId);
-            const name = project?.name ?? undefined;
+            // 同上
+            const name = project.ok ? project.value?.name ?? undefined : undefined;
             timingLog('keepalive: project name fetched');
             return name;
           } catch {
@@ -1459,7 +1365,7 @@ export class SessionStreamUnitManager {
         })(),
       ]);
       const [sessionTitle, projectName] = await titles;
-      await startAgentKeepAliveService(sessionId, {projectName, sessionTitle});
+      await AgentFinishedNotification.startKeepAliveService(sessionId, {projectName, sessionTitle});
       timingLog('keepalive: label refresh returned');
     })().catch(err => {
       log.error('startKeepAlive failed', {sessionId, err});
@@ -1477,6 +1383,20 @@ export class SessionStreamUnitManager {
       onUserMessageAppended: options?.onUserMessageAppended,
     })
       .then(result => {
+        // 已知失败沿 Result.err 到达（四期门⑦）：终态事件已由 core 补发，此处走
+        // 与 catch 同款的兜底收尾（事件已 settled 时 finishRun 幂等拦截）。
+        const failure = (result as {ok?: unknown} | null | undefined)?.ok === false ? (result as {error: unknown}).error : undefined;
+        if (failure != null) {
+          const current = this.units.get(sessionId);
+          if (
+            current === unit &&
+            current.getRunId() == null &&
+            !SessionStreamUnit.isSettled(current.getStatus())
+          ) {
+            this.uiBridge?.onError(failure instanceof Error ? failure.message : String(failure));
+          }
+          return;
+        }
         // 前奏期停止（2026-09-30）：core 在检查点命中 abort 时以合成 cancelled
         // 结果收尾（stepsExecuted=0、无模型请求）。
         //
@@ -1488,10 +1408,12 @@ export class SessionStreamUnitManager {
         // starting 单元仍需按 FINISHED 同款语义收尾（cancelled 归 finished
         // 家族，流式中途停止同样走 finishRun('finished')）。
         // RunAgentTurnFn 契约是 Promise<unknown>，按 stopReason 字段窄化取用。
-        if (
-          (result as {stopReason?: unknown} | null | undefined)?.stopReason ===
-          'cancelled'
-        ) {
+        // 四期起生产实现沿 Result 回传——cancelled 的 stopReason 在 ok 分支的
+        // value 上（顶层读到的是 undefined，取消兜底会静默失效，spec-2-core
+        // §2.2 的「停止被当成功」形态）；兼容注入 mock 的裸 AgentRunResult。
+        const resultRecord = result as {ok?: unknown; value?: {stopReason?: unknown}; stopReason?: unknown} | null | undefined;
+        const runStopReason = resultRecord?.ok === true ? resultRecord.value?.stopReason : resultRecord?.stopReason;
+        if (runStopReason === 'cancelled') {
           const current = this.units.get(sessionId);
           if (current === unit && current.getRunId() == null) {
             this.finishRun(sessionId, '', {status: 'finished'});
@@ -1511,13 +1433,13 @@ export class SessionStreamUnitManager {
         // EVENT_AGENT_RUN_FAILED——runner 期带真实 runId，r3-run-1 之后前奏
         // 抛错也发 FAILED(runId:'')，事件收口 finishRun 里已经 onError 过
         // 一次）会在这里被 settled 判据拦下。缺了
-        // `!isSessionStreamUnitSettled(...)` 这半个条件，前奏抛错会双弹。
+        // `!SessionStreamUnit.isSettled(...)` 这半个条件，前奏抛错会双弹。
         // 单元非本次（事件已收尾或已被替换）同理不弹。
         const current = this.units.get(sessionId);
         if (
           current === unit &&
           current.getRunId() == null &&
-          !isSessionStreamUnitSettled(current.getStatus())
+          !SessionStreamUnit.isSettled(current.getStatus())
         ) {
           const message = err instanceof Error ? err.message : String(err);
           this.uiBridge?.onError(message);
@@ -1527,7 +1449,7 @@ export class SessionStreamUnitManager {
         const current = this.units.get(sessionId);
         if (
           current !== unit ||
-          isSessionStreamUnitSettled(current.getStatus())
+          SessionStreamUnit.isSettled(current.getStatus())
         ) {
           // 已被新一轮 startRun 替换（current !== unit），或事件路径已收尾
           // （单元已 settled 进宽限期）——不双减、不动宽限中的终态投影。
@@ -1553,7 +1475,7 @@ export class SessionStreamUnitManager {
         // destroy 的单元安全，这里无条件调。
         unit.invokeOnSettled('failed');
         this.notifyChanged();
-        decrementAgentActive();
+        agentActivity.decrement();
         this.stopKeepAliveQuietly(sessionId);
       });
 
@@ -1561,19 +1483,19 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 停止指定会话的活跃 run（会话列表「停止生成」入口，Step 6 接线）。
+   * 停止指定 registry key 的活跃任务（会话列表「停止生成」入口，Step 6 接线）。
    *
-   * 走 abortRegistry 的 abort 语义（retain/freeze 时序由 core 负责）；
-   * 未注册（无在途 controller）返回 false。后续 FINISHED 事件照常经
-   * 事件路径收尾。
+   * 收完整的 `ABORT_KEY.x(id)` 产物（agent 调用点传 `ABORT_KEY.agent(sessionId)`）；
+   * 走泛化 abortRegistry 的 abort 语义（retain/freeze 时序由 core 负责）。
+   * 未注册（无在途任务）返回 false。后续 FINISHED 事件照常经事件路径收尾。
    */
-  stopRun(sessionId: string): boolean {
-    if (!this.runtime.abortRegistry.has(sessionId)) {
-      timingLog('stopRun: no controller (dropped)');
+  stop(key: string): boolean {
+    if (!this.runtime.abortRegistry.has(key)) {
+      timingLog('stop: no controller (dropped)');
       return false;
     }
-    this.runtime.abortRegistry.abort(sessionId);
-    timingLog('stopRun: abort dispatched');
+    this.runtime.abortRegistry.abort(key);
+    timingLog('stop: abort dispatched');
     return true;
   }
 
@@ -1722,7 +1644,7 @@ export class SessionStreamUnitManager {
           ? {runId: snap.runId}
           : {}),
       };
-      const serialized = serializeStreamFinalRateSnapshot(payload);
+      const serialized = StreamFinalRate.serializeSnapshot(payload);
       // prettier-ignore
       const write = kkv.set(sessionId, METRICS_DOMAIN, FINAL_RATE_KEY, serialized);
       void write.catch(err =>
@@ -1739,7 +1661,7 @@ export class SessionStreamUnitManager {
     }
     this.evictSettledOverflow();
     this.notifyChanged();
-    decrementAgentActive();
+    agentActivity.decrement();
     this.stopKeepAliveQuietly(sessionId);
 
     if (status === 'failed') {
@@ -1768,17 +1690,19 @@ export class SessionStreamUnitManager {
       }
       let sessionTitle: string | null | undefined;
       try {
-        sessionTitle = (await this.runtime.sessions.get(sessionId))?.title;
+        const session = await this.runtime.sessions.get(sessionId);
+        // 会话名取不到不阻塞通知（错误通道迁移四期：Result 失败同款兜底）
+        sessionTitle = session.ok ? session.value?.title : undefined;
       } catch {
         // 会话名取不到不阻塞通知
       }
-      await notifyAgentRunFinished({sessionId, sessionTitle, status});
+      await AgentFinishedNotification.notifyRunFinished({sessionId, sessionTitle, status});
     })().catch(() => undefined);
   }
 
   /** 单会话收尾：摘标签（剩余会话由通知模块维持）；吞错但留日志，防 unhandled rejection。 */
   private stopKeepAliveQuietly(sessionId: string): void {
-    void stopAgentKeepAliveService(sessionId).catch(err => {
+    void AgentFinishedNotification.stopKeepAliveService(sessionId).catch(err => {
       log.error('stopKeepAlive failed', {sessionId, err});
     });
   }
@@ -1797,15 +1721,11 @@ export class SessionStreamUnitManager {
    * settledAt 从旧到新淘汰，直到回到上限内。活跃单元不占槽、不参与淘汰。
    */
   private evictSettledOverflow(): void {
-    const settled = [...this.units.values()].filter(unit =>
-      isSessionStreamUnitSettled(unit.getStatus()),
-    );
+    const settled = [...this.units.values()].filter(unit => SessionStreamUnit.isSettled(unit.getStatus()));
     if (settled.length <= this.maxSettledUnits) {
       return;
     }
-    settled.sort(
-      (a, b) => (a.getSettledAtMs() ?? 0) - (b.getSettledAtMs() ?? 0),
-    );
+    settled.sort((a, b) => (a.getSettledAtMs() ?? 0) - (b.getSettledAtMs() ?? 0));
     const excess = settled.length - this.maxSettledUnits;
     for (const unit of settled.slice(0, excess)) {
       this.removeUnit(unit.sessionId, unit);
@@ -1888,12 +1808,8 @@ export class SessionStreamUnitManager {
       completionTokens: snap.metrics.completionTokens,
       tokenSource: snap.metrics.tokenSource,
       partialText: snap.partialText.length > 0 ? snap.partialText : null,
-      partialThinking:
-        snap.partialThinking.length > 0 ? snap.partialThinking : null,
-      pendingChildrenJson:
-        snap.pendingChildren.length > 0
-          ? JSON.stringify([...snap.pendingChildren])
-          : null,
+      partialThinking: snap.partialThinking.length > 0 ? snap.partialThinking : null,
+      pendingChildrenJson: snap.pendingChildren.length > 0 ? JSON.stringify([...snap.pendingChildren]) : null,
       updatedAtMs: Date.now(),
     };
   }
@@ -2021,11 +1937,8 @@ export class SessionStreamUnitManager {
       // 模块级计数不随 runtime 重建归零，必须由 dispose 显式清零——
       // 但只清活跃 run 的计数（settled 单元在 finishRun 时已 decrement；
       // 消费型单元从未 increment）。
-      if (
-        !isSessionStreamUnitSettled(unit.getStatus()) &&
-        !this.consumptiveSessions.has(unit.sessionId)
-      ) {
-        decrementAgentActive();
+      if (!SessionStreamUnit.isSettled(unit.getStatus()) && !this.consumptiveSessions.has(unit.sessionId)) {
+        agentActivity.decrement();
       }
       this.removeUnit(unit.sessionId, unit);
     }
@@ -2041,7 +1954,7 @@ export class SessionStreamUnitManager {
     this.idleLoadingMore.clear();
     this.notifyChanged();
     this.listeners.clear();
-    void stopAgentKeepAliveService().catch(() => undefined);
+    void AgentFinishedNotification.stopKeepAliveService().catch(() => undefined);
   }
 
   /**

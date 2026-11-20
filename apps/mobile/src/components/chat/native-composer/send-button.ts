@@ -15,7 +15,7 @@
 import type {ConversationDockAction} from '../ChatConversationBridge';
 
 /** 发送/终止钮形态：canSend=false 走 disabled，running 走 danger，否则 primary。 */
-export type SendButtonState = {
+type SendButtonState = {
   readonly disabled: boolean;
   readonly running: boolean;
   readonly variant: 'disabled' | 'danger' | 'primary';
@@ -23,14 +23,16 @@ export type SendButtonState = {
   readonly action: ConversationDockAction;
 };
 
-export function resolveSendButtonState(input: {
-  readonly canSend: boolean;
-  readonly running: boolean;
-}): SendButtonState {
-  return {
-    disabled: !input.canSend,
-    running: input.running,
-    variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
-    action: input.running ? 'terminate' : 'send',
-  };
+export namespace SendButton {
+  export function resolve(input: {
+    readonly canSend: boolean;
+    readonly running: boolean;
+  }): SendButtonState {
+    return {
+      disabled: !input.canSend,
+      running: input.running,
+      variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
+      action: input.running ? 'terminate' : 'send',
+    };
+  }
 }

@@ -4,44 +4,34 @@
  * @module provider/model/commands
  */
 
-import {
-  assertSavedModelUuid,
-  isValidTokenCounterModePref,
-  savedModelDisplayName,
-  type TokenizerOverride,
-} from "@novel-master/core/provider";
+import { assertSavedModelUuid, isValidTokenCounterModePref, savedModelDisplayName, type TokenizerOverride } from "@novel-master/core/provider";
 import { type SavedModelSettingsPatch } from "@novel-master/core/provider";
+import { type AppError, Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../../runtime.js";
+import { RESULT_OK } from "../../cli-errors.js";
 import { resolveProviderId } from "../../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
 import { runProviderModelSampling } from "./sampling-commands.js";
 
-function flagString(
-  flags: ReadonlyMap<string, string | true>,
-  key: string,
-): string | undefined {
+function flagString(flags: ReadonlyMap<string, string | true>, key: string): string | undefined {
   const v = flags.get(key);
   return typeof v === "string" ? v : undefined;
 }
 
-async function requireSavedModelId(
-  rt: NovelMasterRuntime,
-  flags: ReadonlyMap<string, string | true>,
-): Promise<string> {
+/**
+ * 解析的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
+ */
+async function requireSavedModelId(rt: NovelMasterRuntime, flags: ReadonlyMap<string, string | true>): Promise<Result<string, AppError>> {
   const modelId = flagString(flags, "modelId");
   if (modelId == null) {
     throw new Error("Missing --modelId <uuid>");
   }
   const saved = await assertSavedModelUuid(modelId, rt.savedModels);
-  if (!saved.ok) throw saved.error;
-  return saved.value.id;
+  if (!saved.ok) return Result.err(saved.error);
+  return Result.ok(saved.value.id);
 }
 
-export async function runProviderModel(
-  rt: NovelMasterRuntime,
-  subcommand: string,
-  args: readonly string[],
-): Promise<void> {
+export async function runProviderModel(rt: NovelMasterRuntime, subcommand: string, args: readonly string[]): Promise<Result<void, AppError>> {
   const { flags } = parseCliArgs(args);
 
   if (subcommand === "suggest") {
@@ -49,88 +39,78 @@ export async function runProviderModel(
     if (suggestSub !== "list") {
       throw new Error("Usage: nm provider model suggest list ...");
     }
-    const providerId = await resolveProviderId(parseCliArgs(args.slice(1)).flags, rt.state);
+    const resolvedProvider = await resolveProviderId(parseCliArgs(args.slice(1)).flags, rt.state);
+    if (!resolvedProvider.ok) return Result.err(resolvedProvider.error);
+    const providerId = resolvedProvider.value;
     const list = await rt.providerModels.suggestList(providerId);
-    for (const s of list) {
-      console.log(
-        `${s.vendorModelId}\t${s.displayName ?? ""}\t${s.stale ? 1 : 0}`,
-      );
+    if (!list.ok) return Result.err(list.error);
+    for (const s of list.value) {
+      console.log(`${s.vendorModelId}\t${s.displayName ?? ""}\t${s.stale ? 1 : 0}`);
     }
-    return;
+    return RESULT_OK;
   }
 
   if (subcommand === "sampling") {
     const samplingSub = args[0];
     if (samplingSub == null) {
-      throw new Error(
-        "Usage: nm provider model sampling <show|set|clear> --modelId <uuid>",
-      );
+      throw new Error("Usage: nm provider model sampling <show|set|clear> --modelId <uuid>");
     }
-    await runProviderModelSampling(rt, samplingSub, args.slice(1));
-    return;
+    return runProviderModelSampling(rt, samplingSub, args.slice(1));
   }
 
-  const providerId = await resolveProviderId(flags, rt.state);
+  const resolvedProvider = await resolveProviderId(flags, rt.state);
+  if (!resolvedProvider.ok) return Result.err(resolvedProvider.error);
+  const providerId = resolvedProvider.value;
 
   switch (subcommand) {
     case "fetch": {
-      await rt.providerModels.fetch(providerId);
-      return;
+      const fetched = await rt.providerModels.fetch(providerId);
+      if (!fetched.ok) return Result.err(fetched.error);
+      return RESULT_OK;
     }
     case "save": {
       const vendorModelId = flagString(flags, "vendorModelId");
       if (!vendorModelId) {
-        throw new Error(
-          "Usage: nm provider model save --vendorModelId <id> [--modelName <name>]",
-        );
+        throw new Error("Usage: nm provider model save --vendorModelId <id> [--modelName <name>]");
       }
-      await rt.providerModels.save(
-        providerId,
-        vendorModelId,
-        flagString(flags, "modelName"),
-      );
-      return;
+      const savedModel = await rt.providerModels.save(providerId, vendorModelId, flagString(flags, "modelName"));
+      if (!savedModel.ok) return Result.err(savedModel.error);
+      return RESULT_OK;
     }
     case "create": {
       const vendorModelId = flagString(flags, "vendorModelId");
       if (!vendorModelId) {
-        throw new Error(
-          "Usage: nm provider model create --vendorModelId <id>",
-        );
+        throw new Error("Usage: nm provider model create --vendorModelId <id>");
       }
-      await rt.providerModels.create(providerId, vendorModelId);
-      return;
+      const created = await rt.providerModels.create(providerId, vendorModelId);
+      if (!created.ok) return Result.err(created.error);
+      return RESULT_OK;
     }
     case "list": {
       const list = await rt.providerModels.savedList(providerId);
+      if (!list.ok) return Result.err(list.error);
       const provider = await rt.providers.get(providerId);
-      for (const m of list) {
-        console.log(
-          `${m.id}\t${savedModelDisplayName(m, provider.displayName)}\t${m.vendorModelId}`,
-        );
+      if (!provider.ok) return Result.err(provider.error);
+      for (const m of list.value) {
+        console.log(`${m.id}\t${savedModelDisplayName(m, provider.value.displayName)}\t${m.vendorModelId}`);
       }
-      return;
+      return RESULT_OK;
     }
     case "edit": {
-      const savedModelId = await requireSavedModelId(rt, flags);
-      if (
-        !flags.has("modelName") &&
-        !flags.has("resetContextWindow") &&
-        flagString(flags, "contextWindowTokens") == null &&
-        flagString(flags, "tokenCounterMode") == null
-      ) {
-        throw new Error(
-          "Usage: nm provider model edit --modelId <uuid> [--modelName <name>] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]",
-        );
+      const resolvedSavedModel = await requireSavedModelId(rt, flags);
+      if (!resolvedSavedModel.ok) return Result.err(resolvedSavedModel.error);
+      const savedModelId = resolvedSavedModel.value;
+      if (!flags.has("modelName") && !flags.has("resetContextWindow") && flagString(flags, "contextWindowTokens") == null && flagString(flags, "tokenCounterMode") == null) {
+        throw new Error("Usage: nm provider model edit --modelId <uuid> [--modelName <name>] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]");
       }
-      const modelName = flags.has("modelName")
-        ? (flagString(flags, "modelName") ?? null)
-        : undefined;
+      const modelName = flags.has("modelName") ? flagString(flags, "modelName") ?? null : undefined;
       if (modelName !== undefined) {
-        await rt.providerModels.editSaved(savedModelId, modelName ?? undefined);
+        const edited = await rt.providerModels.editSaved(savedModelId, modelName ?? undefined);
+        if (!edited.ok) return Result.err(edited.error);
       }
       if (flags.has("resetContextWindow")) {
-        await rt.providerModels.resetContextWindowToDefault(savedModelId);
+        const reset = await rt.providerModels.resetContextWindowToDefault(savedModelId);
+        if (!reset.ok) return Result.err(reset.error);
       } else {
         const contextWindowRaw = flagString(flags, "contextWindowTokens");
         const tokenCounterModeRaw = flagString(flags, "tokenCounterMode");
@@ -144,9 +124,7 @@ export async function runProviderModel(
         let tokenCounterMode: TokenizerOverride | undefined;
         if (tokenCounterModeRaw != null) {
           if (!isValidTokenCounterModePref(tokenCounterModeRaw)) {
-            throw new Error(
-              `--tokenCounterMode must be one of: auto, heuristic, tiktoken, claude, ...`,
-            );
+            throw new Error(`--tokenCounterMode must be one of: auto, heuristic, tiktoken, claude, ...`);
           }
           tokenCounterMode = tokenCounterModeRaw as TokenizerOverride;
         }
@@ -155,19 +133,20 @@ export async function runProviderModel(
             ...(contextWindowTokens != null ? { contextWindowTokens } : {}),
             ...(tokenCounterMode != null ? { tokenCounterMode } : {}),
           };
-          await rt.providerModels.updateSettings(savedModelId, patch);
+          const updated = await rt.providerModels.updateSettings(savedModelId, patch);
+          if (!updated.ok) return Result.err(updated.error);
         }
       }
-      return;
+      return RESULT_OK;
     }
     case "delete": {
-      const savedModelId = await requireSavedModelId(rt, flags);
-      await rt.providerModels.deleteSaved(savedModelId);
-      return;
+      const resolvedSavedModel = await requireSavedModelId(rt, flags);
+      if (!resolvedSavedModel.ok) return Result.err(resolvedSavedModel.error);
+      const deleted = await rt.providerModels.deleteSaved(resolvedSavedModel.value);
+      if (!deleted.ok) return Result.err(deleted.error);
+      return RESULT_OK;
     }
     default:
-      throw new Error(
-        "Usage: nm provider model <suggest list|fetch|save|create|list|edit|delete|sampling> ...",
-      );
+      throw new Error("Usage: nm provider model <suggest list|fetch|save|create|list|edit|delete|sampling> ...");
   }
 }

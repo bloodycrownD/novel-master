@@ -8,15 +8,9 @@
  * 3. 测试钩子「清缓存 / 换构造器」各管一件事、互不干扰。
  */
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
+import {  after, describe, it  } from "node:test";
 
-import {
-  getEncoding,
-  clearForTests,
-  setFactoryForTests,
-  setClockForTests,
-  type EncodingHandle,
-} from "../../../src/infra/tokenizer/encoding-registry.js";
+import {  EncodingRegistry, type EncodingHandle  } from "../../../src/infra/tokenizer/encoding-registry.js";
 
 /** 规格常量（registry 不再导出，测试按规格值本地锁定）。 */
 const ENCODING_RETRY_TTL_MS = 5 * 60 * 1000;
@@ -35,14 +29,14 @@ const fakeClock = (): number => fakeNow;
 describe("encoding-registry T-FA1", () => {
   after(() => {
     // 还原全局状态，别把假时钟 / 故障构造器留给同进程的其它测试文件。
-    setClockForTests(null);
-    setFactoryForTests(null);
-    clearForTests();
+    EncodingRegistry.setClockForTests(null);
+    EncodingRegistry.setFactoryForTests(null);
+    EncodingRegistry.clearForTests();
   });
 
   describe("单例语义", () => {
     it("同键同构造器只构造一次，两次取用返回同一句柄", () => {
-      clearForTests();
+      EncodingRegistry.clearForTests();
       let builds = 0;
       const handle = makeHandle("only");
       const build = (): EncodingHandle => {
@@ -50,8 +44,8 @@ describe("encoding-registry T-FA1", () => {
         return handle;
       };
 
-      const first = getEncoding("cl100k_base", build);
-      const second = getEncoding("cl100k_base", build);
+      const first = EncodingRegistry.get("cl100k_base", build);
+      const second = EncodingRegistry.get("cl100k_base", build);
 
       assert.equal(first, handle);
       assert.equal(second, handle);
@@ -59,15 +53,15 @@ describe("encoding-registry T-FA1", () => {
     });
 
     it("不同编码名各自构造（enc: 单命名空间下不同键互不串）", () => {
-      clearForTests();
+      EncodingRegistry.clearForTests();
       const built: string[] = [];
       const buildFor = (tag: string) => (): EncodingHandle => {
         built.push(tag);
         return makeHandle(tag);
       };
 
-      const cl = getEncoding("cl100k_base", buildFor("cl100k_base"));
-      const o2 = getEncoding("o200k_base", buildFor("o200k_base"));
+      const cl = EncodingRegistry.get("cl100k_base", buildFor("cl100k_base"));
+      const o2 = EncodingRegistry.get("o200k_base", buildFor("o200k_base"));
 
       assert.notEqual(cl, o2);
       assert.deepEqual(built, ["cl100k_base", "o200k_base"]);
@@ -76,8 +70,8 @@ describe("encoding-registry T-FA1", () => {
 
   describe("失败缓存与 TTL 重试", () => {
     it("失败缓存 null 后 TTL 内不重试（构造器调用数不增）", () => {
-      clearForTests();
-      setClockForTests(fakeClock);
+      EncodingRegistry.clearForTests();
+      EncodingRegistry.setClockForTests(fakeClock);
       fakeNow = 1_000;
       let attempts = 0;
       const fail = (): EncodingHandle => {
@@ -85,20 +79,20 @@ describe("encoding-registry T-FA1", () => {
         throw new Error("boom: ranks unavailable");
       };
 
-      assert.equal(getEncoding("cl100k_base", fail), null);
+      assert.equal(EncodingRegistry.get("cl100k_base", fail), null);
       assert.equal(attempts, 1);
 
       // TTL 内推进（含 0 与边界差 1ms）：一律命中失败缓存，不重试。
       fakeNow = 1_000;
-      assert.equal(getEncoding("cl100k_base", fail), null);
+      assert.equal(EncodingRegistry.get("cl100k_base", fail), null);
       fakeNow = 1_000 + ENCODING_RETRY_TTL_MS - 1;
-      assert.equal(getEncoding("cl100k_base", fail), null);
+      assert.equal(EncodingRegistry.get("cl100k_base", fail), null);
       assert.equal(attempts, 1);
     });
 
     it("假时钟推进超过 TTL 后重试成功", () => {
-      clearForTests();
-      setClockForTests(fakeClock);
+      EncodingRegistry.clearForTests();
+      EncodingRegistry.setClockForTests(fakeClock);
       fakeNow = 2_000;
       let attempts = 0;
       // 第一次抛错、之后成功的构造器：验证「失败 → TTL 过 → 重试成功」全链路。
@@ -110,21 +104,21 @@ describe("encoding-registry T-FA1", () => {
         return makeHandle("recovered");
       };
 
-      assert.equal(getEncoding("o200k_base", flaky), null);
+      assert.equal(EncodingRegistry.get("o200k_base", flaky), null);
       fakeNow = 2_000 + ENCODING_RETRY_TTL_MS;
-      const recovered = getEncoding("o200k_base", flaky);
+      const recovered = EncodingRegistry.get("o200k_base", flaky);
 
       assert.notEqual(recovered, null);
       assert.equal(attempts, 2);
       // 成功后失败记录清除：再次取用直接命中成功缓存。
-      const again = getEncoding("o200k_base", flaky);
+      const again = EncodingRegistry.get("o200k_base", flaky);
       assert.equal(again, recovered);
       assert.equal(attempts, 2);
     });
 
     it("重试再失败则从重试时刻重起新 TTL 窗口", () => {
-      clearForTests();
-      setClockForTests(fakeClock);
+      EncodingRegistry.clearForTests();
+      EncodingRegistry.setClockForTests(fakeClock);
       fakeNow = 10_000;
       let attempts = 0;
       const alwaysFail = (): EncodingHandle => {
@@ -132,52 +126,52 @@ describe("encoding-registry T-FA1", () => {
         throw new Error("still broken");
       };
 
-      assert.equal(getEncoding("cl100k_base", alwaysFail), null);
+      assert.equal(EncodingRegistry.get("cl100k_base", alwaysFail), null);
       fakeNow = 10_000 + ENCODING_RETRY_TTL_MS;
-      assert.equal(getEncoding("cl100k_base", alwaysFail), null); // 重试再失败
+      assert.equal(EncodingRegistry.get("cl100k_base", alwaysFail), null); // 重试再失败
       assert.equal(attempts, 2);
 
       // 从重试时刻（而非首次失败时刻）重新计窗：差 1ms 仍不重试。
       fakeNow = 10_000 + ENCODING_RETRY_TTL_MS + ENCODING_RETRY_TTL_MS - 1;
-      assert.equal(getEncoding("cl100k_base", alwaysFail), null);
+      assert.equal(EncodingRegistry.get("cl100k_base", alwaysFail), null);
       assert.equal(attempts, 2);
 
       // 过了第二个窗口才再次重试。
       fakeNow = 10_000 + 2 * ENCODING_RETRY_TTL_MS;
-      assert.equal(getEncoding("cl100k_base", alwaysFail), null);
+      assert.equal(EncodingRegistry.get("cl100k_base", alwaysFail), null);
       assert.equal(attempts, 3);
     });
   });
 
   describe("测试钩子互不干扰", () => {
     it("clearForTests 只清缓存，不还原构造器", () => {
-      clearForTests();
+      EncodingRegistry.clearForTests();
       let factoryBuilds = 0;
       const factory = (): EncodingHandle => {
         factoryBuilds += 1;
         return makeHandle("factory");
       };
-      setFactoryForTests(factory);
+      EncodingRegistry.setFactoryForTests(factory);
       // 最自然的测试写法：清缓存后取用，应仍走注入的构造器。
-      clearForTests();
+      EncodingRegistry.clearForTests();
 
-      const a = getEncoding("cl100k_base", () => makeHandle("ignored"));
+      const a = EncodingRegistry.get("cl100k_base", () => makeHandle("ignored"));
       assert.notEqual(a, null);
       assert.equal(factoryBuilds, 1);
     });
 
     it("clearForTests 清缓存后 getEncoding 会重新执行 build", () => {
-      clearForTests();
-      setFactoryForTests(null);
+      EncodingRegistry.clearForTests();
+      EncodingRegistry.setFactoryForTests(null);
       let builds = 0;
       const build = (): EncodingHandle => {
         builds += 1;
         return makeHandle("rebuild");
       };
 
-      const first = getEncoding("cl100k_base", build);
-      clearForTests();
-      const second = getEncoding("cl100k_base", build);
+      const first = EncodingRegistry.get("cl100k_base", build);
+      EncodingRegistry.clearForTests();
+      const second = EncodingRegistry.get("cl100k_base", build);
 
       assert.notEqual(second, null);
       assert.notEqual(second, first); // 引用已丢弃重建（不 free，见模块头）
@@ -185,28 +179,28 @@ describe("encoding-registry T-FA1", () => {
     });
 
     it("setFactoryForTests 换构造器时顺带作废既有缓存", () => {
-      clearForTests();
-      setFactoryForTests(null);
+      EncodingRegistry.clearForTests();
+      EncodingRegistry.setFactoryForTests(null);
       const original = makeHandle("original");
-      const first = getEncoding("cl100k_base", () => original);
+      const first = EncodingRegistry.get("cl100k_base", () => original);
       assert.equal(first, original);
 
       const factoryHandle = makeHandle("factory");
-      setFactoryForTests(() => factoryHandle);
+      EncodingRegistry.setFactoryForTests(() => factoryHandle);
 
-      const second = getEncoding("cl100k_base", () => original);
+      const second = EncodingRegistry.get("cl100k_base", () => original);
       assert.equal(second, factoryHandle); // 不吃旧缓存，改走新构造器
     });
 
-    it("setFactoryForTests(null) 还原为调用方注入的 build", () => {
-      clearForTests();
+    it("EncodingRegistry.setFactoryForTests(null) 还原为调用方注入的 build", () => {
+      EncodingRegistry.clearForTests();
       const factoryHandle = makeHandle("temp");
-      setFactoryForTests(() => factoryHandle);
-      assert.equal(getEncoding("cl100k_base", () => makeHandle("real")), factoryHandle);
+      EncodingRegistry.setFactoryForTests(() => factoryHandle);
+      assert.equal(EncodingRegistry.get("cl100k_base", () => makeHandle("real")), factoryHandle);
 
-      setFactoryForTests(null);
+      EncodingRegistry.setFactoryForTests(null);
       const real = makeHandle("real");
-      assert.equal(getEncoding("cl100k_base", () => real), real);
+      assert.equal(EncodingRegistry.get("cl100k_base", () => real), real);
     });
   });
 });

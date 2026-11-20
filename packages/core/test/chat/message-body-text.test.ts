@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
+import {  describe, it  } from "node:test";
+import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
 
-describe("messageBodyTextFromBlocks", () => {
+describe("MessageBodyText.fromBlocks", () => {
   it("text only → hello", () => {
-    assert.equal(messageBodyTextFromBlocks([{ type: "text", text: "hello" }]), "hello");
+    assert.equal(MessageBodyText.fromBlocks([{ type: "text", text: "hello" }]), "hello");
   });
 
   it("text + tool_use + tool_result without JSON blob", () => {
-    const body = messageBodyTextFromBlocks([
+    const body = MessageBodyText.fromBlocks([
       { type: "text", text: "run tool" },
       { type: "tool_use", id: "tu_1", name: "grep", input: {} },
       { type: "tool_result", toolUseId: "tu_1", content: "hits" },
@@ -22,14 +22,14 @@ describe("messageBodyTextFromBlocks", () => {
 
   it("thinking only → empty", () => {
     assert.equal(
-      messageBodyTextFromBlocks([{ type: "thinking", text: "secret" }]),
+      MessageBodyText.fromBlocks([{ type: "thinking", text: "secret" }]),
       "",
     );
   });
 
   it("image → [image]", () => {
     assert.equal(
-      messageBodyTextFromBlocks([
+      MessageBodyText.fromBlocks([
         {
           type: "image",
           source: { kind: "url", url: "https://x.test/p.png" },

@@ -58,6 +58,7 @@ import {
 
 import { resolveChatLinkAction } from "../features/chat/chat-link-route";
 import { chatLinkResolver } from "@shared/logic/chat";
+import { coreT } from "@shared/logic/core-i18n";
 import { showToast } from "@/components/ui/show-toast";
 
 import {
@@ -80,7 +81,7 @@ import {
 
 
 
-export interface ShellNavContextValue {
+interface ShellNavContextValue {
 
   viewId: NavViewId;
 
@@ -207,11 +208,7 @@ function workspaceMutatedMatchesNav(
   return payload.projectId === projectId && payload.sessionId === sessionId;
 }
 
-const ShellNavContext = createContext<ShellNavContextValue | undefined>(
-
-  undefined,
-
-);
+const ShellNavContext = createContext<ShellNavContextValue | undefined>(undefined);
 
 
 
@@ -247,9 +244,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const [viewId, setViewId] = useState<NavViewId>("projects");
 
-  const [workspaceScope, setWorkspaceScope] =
-
-    useState<WorkspaceScope>("physical");
+  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>("physical");
 
   const [projectId, setProjectId] = useState<string | undefined>();
 
@@ -414,7 +409,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
         }
         if (action.kind === "not-found") {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showToast(chatLinkResolver.notFoundMessage(action.path));
+          showToast(coreT(chatLinkResolver.notFoundMessage(action.path)));
         }
       });
     },

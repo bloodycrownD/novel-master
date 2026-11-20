@@ -6,7 +6,7 @@ import {StyleSheet, Text, View} from 'react-native';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
 import type {ThemeTokens} from '@/theme/tokens';
 
-export type ProfileStatusMetric = {
+type ProfileStatusMetric = {
   label: string;
   value: string;
   tone?: 'default' | 'warning' | 'success';
@@ -22,70 +22,30 @@ type Props = {
   tokens: ThemeTokens;
 };
 
-function metricColor(
-  tone: ProfileStatusMetric['tone'] | undefined,
-  tokens: ThemeTokens,
-): string {
-  if (tone === 'warning') {
-    return tokens.warning;
-  }
-  if (tone === 'success') {
-    return tokens.success;
-  }
-  return tokens.text;
-}
-
-export function ProfileStatusCard({
-  title,
-  hint,
-  message,
-  metrics,
-  notice,
-  noticeTone = 'muted',
-  tokens,
-}: Props) {
+export function ProfileStatusCard({title, hint, message, metrics, notice, noticeTone = 'muted', tokens}: Props) {
   return (
     <FormSectionCard title={title} hint={hint} tokens={tokens}>
       {metrics != null && metrics.length > 0 ? (
         <View style={styles.metricRow}>
           {metrics.map(metric => (
-            <View
-              key={metric.label}
-              style={[styles.metric, {backgroundColor: tokens.bgSecondary}]}
-            >
-              <Text style={[styles.metricLabel, {color: tokens.textSecondary}]}>
-                {metric.label}
-              </Text>
-              <Text
-                style={[
-                  styles.metricValue,
-                  {color: metricColor(metric.tone, tokens)},
-                ]}
-                numberOfLines={1}
-              >
+            <View key={metric.label} style={[styles.metric, {backgroundColor: tokens.bgSecondary}]}>
+              <Text style={[styles.metricLabel, {color: tokens.textSecondary}]}>{metric.label}</Text>
+              <Text style={[styles.metricValue, {color: metric.tone === 'warning' ? tokens.warning : metric.tone === 'success' ? tokens.success : tokens.text}]} numberOfLines={1}>
                 {metric.value}
               </Text>
             </View>
           ))}
         </View>
       ) : message ? (
-        <Text style={[styles.message, {color: tokens.textSecondary}]}>
-          {message}
-        </Text>
+        <Text style={[styles.message, {color: tokens.textSecondary}]}>{message}</Text>
       ) : null}
       {notice ? (
         <Text
           style={[
             styles.notice,
             {
-              color:
-                noticeTone === 'warning'
-                  ? tokens.warning
-                  : tokens.textSecondary,
-              backgroundColor:
-                noticeTone === 'warning'
-                  ? tokens.warningMuted
-                  : tokens.bgSecondary,
+              color: noticeTone === 'warning' ? tokens.warning : tokens.textSecondary,
+              backgroundColor: noticeTone === 'warning' ? tokens.warningMuted : tokens.bgSecondary,
             },
           ]}
         >

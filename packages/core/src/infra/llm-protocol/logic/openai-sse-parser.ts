@@ -1,28 +1,18 @@
 /**
  * Incremental OpenAI Chat Completions SSE parser.
  *
- * Shared by fetch reader loops and {@link postSse} chunk delivery.
+ * Shared by fetch reader loops and {@link LlmSseTransport.post} chunk delivery.
+ * State 收在 {@link OpenAiSseParser.create} 闭包里，同名动词归位到对象方法。
  *
  * @module infra/llm-protocol/logic/openai-sse-parser
  */
 
-import { isRecord } from "@/common/guards.js";
-import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type {
-  DegradedToolCall,
-  LlmStreamEvent,
-} from "../ports/adapter.port.js";
-import {
-  openAiStreamAccumulatorsToBlocks,
-  openAiStreamDeltaToEvents,
-} from "./openai-content-mapper.js";
-import { feedSseLines } from "./sse-line-buffer.js";
-import { parseSseDataLine } from "./sse-data-line.js";
-import {
-  assertSseParseSucceededOrThrow,
-  recordMalformedSseLine,
-  type SseParseDiagnostics,
-} from "./sse-parse-errors.js";
+import { Guards } from "@/common/guards.js";
+import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import { OpenAiMapper } from "./openai-content-mapper.js";
+import { SseJsonEvents } from "./sse-json-events.js";
+import { SseLineBuffer } from "./sse-line-buffer.js";
+import { SseParseErrors, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 
 type ToolCallAccumulator = {
   id: string;
@@ -30,8 +20,8 @@ type ToolCallAccumulator = {
   argumentsJson: string;
 };
 
-/** Mutable accumulator state for one OpenAI SSE response. */
-export type OpenAiSseParserState = SseParseDiagnostics & {
+/** 单条流的累加器（工厂闭包持有；诊断字段与白盒测试可见）。 */
+type OpenAiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -42,103 +32,74 @@ export type OpenAiSseParserState = SseParseDiagnostics & {
   lastUsageEvent: Record<string, unknown> | undefined;
 };
 
-/** Create empty parser state for a new SSE response. */
-export function createOpenAiSseParserState(): OpenAiSseParserState {
-  return {
-    buffer: "",
-    textParts: [],
-    thinkingParts: [],
-    toolCalls: new Map(),
-    emittedToolIndices: new Set(),
-    lastEvent: undefined,
-    lastUsageEvent: undefined,
-    malformedLineCount: 0,
-  };
-}
+export type OpenAiSseParserOptions = {
+  readonly onStream?: (event: LlmStreamEvent) => void;
+};
 
-/**
- * Feed one UTF-8 text chunk (may split mid-line); emits stream events via `onStream`.
- */
-export function feedOpenAiSseChunk(
-  state: OpenAiSseParserState,
-  chunk: string,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  feedSseLines(state, chunk, (line) => {
-    const payload = parseSseDataLine(line);
-    if (payload == null) {
-      return;
-    }
-    if (payload === "[DONE]") {
-      return;
-    }
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(payload) as Record<string, unknown>;
-    } catch {
-      recordMalformedSseLine(state, payload);
-      return;
-    }
-    state.lastEvent = event;
-    if (isRecord(event.usage)) {
-      state.lastUsageEvent = event;
-    }
-    const choices = event.choices;
-    if (!Array.isArray(choices) || choices.length === 0) {
-      return;
-    }
-    const first = choices[0];
-    if (!isRecord(first)) {
-      return;
-    }
-    openAiStreamDeltaToEvents(first.delta, state, onStream);
-  });
-}
+type OpenAiSseParserHandle = {
+  readonly state: OpenAiSseParserState;
+  readonly feed: (chunk: string) => void;
+  readonly finish: () => SseFinishResult;
+  readonly finishPartial: () => SseFinishResult;
+};
 
-/** Finalize parser state into content blocks and the last raw SSE event. */
-export function finishOpenAiSse(
-  state: OpenAiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void
-): {
-  blocks: ContentBlock[];
-  streamRaw: unknown;
-  degradedToolCalls: DegradedToolCall[];
-} {
-  if (state.buffer !== "") {
-    feedOpenAiSseChunk(state, "\n", onStream);
-  }
-  const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(
-    state,
-    onStream
-  );
-  assertSseParseSucceededOrThrow(state, blocks, "openai");
-  return {
-    blocks,
-    streamRaw: state.lastUsageEvent ?? state.lastEvent,
-    degradedToolCalls,
-  };
-}
+export const OpenAiSseParser = {
+  /** 创建一个单流 OpenAI SSE parser；`state` 持有本次流的全部累加器。 */
+  create(options: OpenAiSseParserOptions = {}): OpenAiSseParserHandle {
+    const onStream = options.onStream;
+    const state: OpenAiSseParserState = {
+      buffer: "",
+      textParts: [],
+      thinkingParts: [],
+      toolCalls: new Map(),
+      emittedToolIndices: new Set(),
+      lastEvent: undefined,
+      lastUsageEvent: undefined,
+      malformedLineCount: 0,
+    };
 
-/** Read a fetch `ReadableStream` body and parse OpenAI SSE incrementally. */
-export async function parseOpenAiSseStream(
-  body: ReadableStream<Uint8Array>,
-  onStream?: (event: LlmStreamEvent) => void
-): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const state = createOpenAiSseParserState();
+    const feed = (chunk: string): void => {
+      SseJsonEvents.feed(state, chunk, (event) => {
+        state.lastEvent = event;
+        if (Guards.isRecord(event.usage)) {
+          state.lastUsageEvent = event;
+        }
+        const choices = event.choices;
+        if (!Array.isArray(choices) || choices.length === 0) {
+          return;
+        }
+        const first = choices[0];
+        if (!Guards.isRecord(first)) {
+          return;
+        }
+        OpenAiMapper.streamDeltaToEvents(first.delta, state, onStream);
+      });
+    };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    feedOpenAiSseChunk(
-      state,
-      decoder.decode(value, { stream: true }),
-      onStream
-    );
-  }
+    const finish = (): SseFinishResult => {
+      SseLineBuffer.drain(state, feed);
+      const { blocks, degradedToolCalls } = OpenAiMapper.streamAccumulatorsToBlocks(state, onStream);
+      // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+      const asserted = SseParseErrors.assertSucceededOrThrow(state, blocks, "openai");
+      if (!asserted.ok) throw asserted.error;
+      return {
+        blocks,
+        streamRaw: state.lastUsageEvent ?? state.lastEvent,
+        degradedToolCalls,
+      };
+    };
 
-  return finishOpenAiSse(state, onStream);
-}
+    /** Abort 快照：宽松解析已累积参数、不 assert；先冲刷尾部残行，与 anthropic/gemini 的中断收尾一致。 */
+    const finishPartial = (): SseFinishResult => {
+      SseLineBuffer.drain(state, feed);
+      const blocks = OpenAiMapper.streamAccumulatorsToPartialBlocks(state, onStream);
+      return {
+        blocks,
+        streamRaw: state.lastUsageEvent ?? state.lastEvent ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+        degradedToolCalls: [],
+      };
+    };
+
+    return { state, feed, finish, finishPartial };
+  },
+} as const;

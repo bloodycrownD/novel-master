@@ -1,17 +1,18 @@
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { z } from "zod";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
+import {  describe, it  } from "node:test";
+import {  z  } from "zod";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
 
 describe("ToolRunner", () => {
   it("throws NOT_FOUND for missing tool", async () => {
     const registry = new ToolRegistry();
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("no.such.tool", {}, {}),
-      (e) => e instanceof ToolError && e.code === "NOT_FOUND",
+      (e) => AppErrorOps.is(e, "TOOL_NOT_FOUND"),
     );
   });
 
@@ -27,12 +28,12 @@ describe("ToolRunner", () => {
       },
     });
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("test.sum", { a: 1 }, {}),
       (e) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
-        e.toolName === "test.sum" &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
+        e.details?.toolName === "test.sum" &&
         typeof e.details === "object",
     );
   });
@@ -48,12 +49,13 @@ describe("ToolRunner", () => {
       },
     });
     const runner = new ToolRunner(registry);
+    // 工具闭包 throw（未知异常）走 runner 的归一化抛出通道；返回 Err 才走 Result。
     await assert.rejects(
       () => runner.call("test.fail", {}, {}),
       (e) =>
-        e instanceof ToolError &&
-        e.code === "FAILED" &&
-        e.toolName === "test.fail" &&
+        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_FAILED" &&
+        e.details?.toolName === "test.fail" &&
         (e.cause as Error | undefined)?.message === "boom",
     );
   });
@@ -70,9 +72,9 @@ describe("ToolRunner", () => {
       },
     });
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("test.badOutput", {}, {}),
-      (e) => e instanceof ToolError && e.code === "FAILED",
+      (e) => AppErrorOps.is(e, "TOOL_FAILED"),
     );
   });
 });

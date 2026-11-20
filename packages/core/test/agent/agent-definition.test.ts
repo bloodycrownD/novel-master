@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode, encode, ConfigDecodeError } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
+import type { ZodType } from "zod";
+import {  AppErrorOps  } from "@novel-master/core/errors";
 
-import { agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(SerializationDecode.decode(raw, schema));
+}
 
 const emptyPrompts = { persist: {}, dynamic: {} };
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
@@ -42,7 +50,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
     );
   });
 
@@ -58,7 +66,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
     );
   });
 
@@ -72,8 +80,9 @@ describe("agentDefinitionSchema", () => {
       },
       agentDefinitionSchema
     );
-    const doc = encode(def, agentDefinitionSchema);
-    assert.equal((doc as { model?: string }).model, TEST_SAVED_MODEL);
+    // encode 已 Result 化（错误通道迁移）：Err 抛出断言失败，Ok 解包取 wire
+    const doc = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as { model?: string };
+    assert.equal(doc.model, TEST_SAVED_MODEL);
     const again = decode(doc, agentDefinitionSchema);
     assert.equal(again.model, TEST_SAVED_MODEL);
   });
@@ -116,7 +125,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
+      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
     );
   });
 
@@ -136,7 +145,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
     );
   });
 
@@ -161,7 +170,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError
+      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
     );
   });
 
@@ -289,12 +298,13 @@ describe("agentDefinitionSchema", () => {
     };
   }
 
-  it("toWire 对重名 persist 块抛 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
+  it("toWire 对重名 persist 块返 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
     const def = defWithDuplicatePersist();
-    assert.throws(
-      () => agentDefinitionSchema.toWire(def),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
-    );
+    const wired = agentDefinitionSchema.toWire(def);
+    assert.ok(!wired.ok, "重名 persist 块应走 Err 通道");
+    if (!wired.ok) {
+      assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+    }
   });
 
   it("toWire 对重名 dynamic 块抛 PROMPT_INVALID_LAYOUT", () => {
@@ -319,38 +329,41 @@ describe("agentDefinitionSchema", () => {
         dynamic: [...base.prompts.dynamic, { ...base.prompts.dynamic[0]! }],
       },
     };
-    assert.throws(
-      () => agentDefinitionSchema.toWire(dup),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
-    );
+    const wired = agentDefinitionSchema.toWire(dup);
+    assert.ok(!wired.ok, "重名 dynamic 块应走 Err 通道");
+    if (!wired.ok) {
+      assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+    }
   });
 
-  it("toWire 抛错后不改写入方对象（无副作用污染）", () => {
+  it("toWire 失败后不改写入方对象（无副作用污染）", () => {
     const def = defWithDuplicatePersist();
     const before = JSON.stringify(def);
-    assert.throws(() => agentDefinitionSchema.toWire(def));
-    assert.equal(JSON.stringify(def), before, "toWire 抛错不得就地改写入方传入的对象");
+    const wired = agentDefinitionSchema.toWire(def);
+    assert.ok(!wired.ok, "重名块应走 Err 通道");
+    assert.equal(JSON.stringify(def), before, "toWire 失败不得就地改写入方传入的对象");
   });
 
   it("合法 definition（多块不重名）toWire 往返等值（既有行为不受影响）", () => {
-    const again = decode(
-      agentDefinitionSchema.toWire(
-        decode(
-          {
-            schemaVersion: 1,
-            name: "ok-writer",
-            prompts: {
-              persist: {
-                persona: { type: "text", role: "user", content: "人设" },
-                notes: { type: "text", role: "assistant", content: "笔记" },
-              },
-              dynamic: {},
+    const wireDoc = agentDefinitionSchema.toWire(
+      decode(
+        {
+          schemaVersion: 1,
+          name: "ok-writer",
+          prompts: {
+            persist: {
+              persona: { type: "text", role: "user", content: "人设" },
+              notes: { type: "text", role: "assistant", content: "笔记" },
             },
-            model: TEST_SAVED_MODEL,
+            dynamic: {},
           },
-          agentDefinitionSchema
-        )
-      ),
+          model: TEST_SAVED_MODEL,
+        },
+        agentDefinitionSchema
+      )
+    );
+    const again = decode(
+      unwrap(wireDoc),
       agentDefinitionSchema
     );
     assert.deepEqual(

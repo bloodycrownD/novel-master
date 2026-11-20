@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  clearTokenizerDrivers,
-  getTokenizerDriver,
-  registerTokenizerDriver,
-  resolveTokenizerDriver,
-} from "../../../src/infra/nmtp/logic/registry.js";
-import { TokenizerError } from "../../../src/infra/nmtp/nmtp-error.js";
+import {  describe, it  } from "node:test";
+import {  AssertionError  } from "../../../src/common/assert.js";
+import {  TokenizerRegistry  } from "../../../src/infra/nmtp/logic/registry.js";
 import type { TokenizerDriver } from "../../../src/infra/nmtp/ports/tokenizer-driver.port.js";
 
 function stubDriver(name: string): TokenizerDriver {
@@ -26,62 +21,62 @@ function stubDriver(name: string): TokenizerDriver {
 }
 
 describe("NMTP registry", () => {
-  it("throws NOT_REGISTERED when empty", () => {
-    clearTokenizerDrivers();
+  it("throws AssertionError when empty", () => {
+    TokenizerRegistry.clear();
     assert.throws(
-      () => resolveTokenizerDriver(),
+      () => TokenizerRegistry.resolve(),
       (e) =>
-        e instanceof TokenizerError &&
-        e.code === "NOT_REGISTERED" &&
+        e instanceof AssertionError &&
+        e.message.includes("Tokenizer: no driver registered") &&
         e.message.includes("registerTokenizerNodeDriver"),
     );
   });
 
   it("resolves single registered driver", () => {
-    clearTokenizerDrivers();
-    registerTokenizerDriver(stubDriver("node"));
-    assert.equal(resolveTokenizerDriver().name, "node");
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register(stubDriver("node"));
+    assert.equal(TokenizerRegistry.resolve().name, "node");
+    TokenizerRegistry.clear();
   });
 
-  it("throws MULTIPLE_DRIVERS when more than one registered", () => {
-    clearTokenizerDrivers();
-    registerTokenizerDriver(stubDriver("node"));
-    registerTokenizerDriver(stubDriver("rn"));
+  it("throws AssertionError when more than one registered", () => {
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register(stubDriver("node"));
+    TokenizerRegistry.register(stubDriver("rn"));
     assert.throws(
-      () => resolveTokenizerDriver(),
-      (e) => e instanceof TokenizerError && e.code === "MULTIPLE_DRIVERS",
+      () => TokenizerRegistry.resolve(),
+      (e) => e instanceof AssertionError && e.message.includes("Tokenizer: 2 drivers registered (node, rn); specify driver name."),
     );
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
   });
 
   it("resolves explicit driver by name", () => {
-    clearTokenizerDrivers();
-    registerTokenizerDriver(stubDriver("node"));
-    registerTokenizerDriver(stubDriver("rn"));
-    assert.equal(resolveTokenizerDriver("rn").name, "rn");
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register(stubDriver("node"));
+    TokenizerRegistry.register(stubDriver("rn"));
+    assert.equal(TokenizerRegistry.resolve("rn").name, "rn");
+    TokenizerRegistry.clear();
   });
 
-  it("throws NOT_REGISTERED for missing explicit name", () => {
-    clearTokenizerDrivers();
-    registerTokenizerDriver(stubDriver("node"));
+  it("throws AssertionError for missing explicit name", () => {
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register(stubDriver("node"));
     assert.throws(
-      () => resolveTokenizerDriver("missing"),
-      (e) => e instanceof TokenizerError && e.code === "NOT_REGISTERED",
+      () => TokenizerRegistry.resolve("missing"),
+      (e) => e instanceof AssertionError && e.message.includes("Tokenizer driver not registered: missing"),
     );
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
   });
 
-  it("getTokenizerDriver returns undefined for unknown name", () => {
-    clearTokenizerDrivers();
-    assert.equal(getTokenizerDriver("node"), undefined);
+  it("TokenizerRegistry.get returns undefined for unknown name", () => {
+    TokenizerRegistry.clear();
+    assert.equal(TokenizerRegistry.get("node"), undefined);
   });
 
-  it("clearTokenizerDrivers empties registry", () => {
-    clearTokenizerDrivers();
-    registerTokenizerDriver(stubDriver("node"));
-    clearTokenizerDrivers();
-    assert.throws(() => resolveTokenizerDriver());
+  it("TokenizerRegistry.clear empties registry", () => {
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register(stubDriver("node"));
+    TokenizerRegistry.clear();
+    assert.throws(() => TokenizerRegistry.resolve());
   });
 });

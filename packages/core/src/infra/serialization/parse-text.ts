@@ -5,26 +5,25 @@
  */
 
 import { parse as parseYaml } from "yaml";
-import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 export type TextFormat = "yaml" | "json";
 
 /**
- * Parses a string as YAML or JSON into an untyped value.
+ * YAML / JSON 文本解析。
  */
-export function parseText(source: string, format: TextFormat): unknown {
-  if (format === "json") {
+export const SerializationParseText = {
+  /**
+   * Parses a string as YAML or JSON into an untyped value;
+   * 解析失败是用户内容错误，沿 `Result.err` 回传，不抛。
+   */
+  parse(source: string, format: TextFormat): Result<unknown, AppError> {
     try {
-      return JSON.parse(source) as unknown;
+      return Result.ok(format === "json" ? JSON.parse(source) as unknown : parseYaml(source));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "invalid JSON";
-      throw new ConfigDecodeError("INVALID_SCHEMA", message);
+      const message = error instanceof Error ? error.message : `invalid ${format.toUpperCase()}`;
+      return Result.err(new AppError("CONFIG_DECODE_INVALID_SCHEMA", { detail: message }));
     }
-  }
-  try {
-    return parseYaml(source);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "invalid YAML";
-    throw new ConfigDecodeError("INVALID_SCHEMA", message);
-  }
-}
+  },
+} as const;

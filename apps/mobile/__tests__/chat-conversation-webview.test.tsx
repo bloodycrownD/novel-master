@@ -12,6 +12,7 @@
  * - 切会话 key 重挂、transcriptOnly 变体、流式命令式 API 与块提交判路。
  */
 import React from 'react';
+import {ChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {AppState, Linking, Platform, Text} from 'react-native';
@@ -27,7 +28,7 @@ import {
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
 import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from '@/components/chat/chat-transcript-selection-menu';
-import {buildTranscriptLabels} from '@/components/chat/transcript-labels';
+import {TranscriptLabelsFactory} from '@/components/chat/transcript-labels'
 import {CORE_CATALOGS} from '@novel-master/core/i18n';
 import {coreT} from '@/i18n/core';
 import {
@@ -71,9 +72,12 @@ jest.mock('sanitize-html', () => {
   return fn;
 });
 
-jest.mock('@/services/chat-transcript-telemetry', () => ({
+jest.mock('@/services/chat-transcript-telemetry', () => {
+  const legacy = {
   emitChatTranscriptTelemetry: jest.fn(),
-}));
+};
+  return {...legacy, ChatTranscriptTelemetry: {emit: legacy.emitChatTranscriptTelemetry}};
+});
 
 /**
  * 快照分片循环的片间让步 mock：**由用例手动开闸**。
@@ -98,12 +102,15 @@ function releaseChunkGate(): void {
   mockChunkGate = null;
 }
 
-jest.mock('@/services/yield-quantum', () => ({
+jest.mock('@/services/yield-quantum', () => {
+  const legacy = {
   createQuantumYield: () => () => {
     const gate = mockChunkGate;
     return gate != null ? gate.promise : Promise.resolve();
   },
-}));
+};
+  return {...legacy, YieldQuantum: {create: legacy.createQuantumYield}};
+});
 
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
@@ -256,7 +263,7 @@ const ClipboardMock = require('@react-native-clipboard/clipboard').default as {
 
 /** 遥测 mock：本文件已整体 mock 掉 chat-transcript-telemetry（见顶部 jest.mock）。 */
 const telemetryMock = require('@/services/chat-transcript-telemetry')
-  .emitChatTranscriptTelemetry as jest.Mock;
+  .ChatTranscriptTelemetry.emit as jest.Mock;
 
 /**
  * 挂载登记册：每个用例结束后卸载。
@@ -374,7 +381,7 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     expect(Object.keys(init!.payload.theme as object)).toHaveLength(9);
     expect(init?.payload.flags).toMatchObject({menuDisabled: false});
     // T-SP22：init.labels 与 core catalog 的 4 个 transcript key 逐字段 parity。
-    expect(init?.payload.labels).toEqual(buildTranscriptLabels(coreT));
+    expect(init?.payload.labels).toEqual(TranscriptLabelsFactory.build(coreT));
     // 再直比 zh-CN catalog 字面值：避免宿主与断言共用同一个装配函数造成自证。
     const zh = CORE_CATALOGS['zh-CN']!;
     expect(init?.payload.labels).toEqual({

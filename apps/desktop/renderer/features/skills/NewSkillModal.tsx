@@ -9,11 +9,12 @@
  */
 import { useEffect, useState } from "react";
 import {
-  previewSkillZip,
+  SKILL_NAME_PATTERN,
+  SkillZip,
   type SkillZipPreview,
 } from "@shared/logic/skills";
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
-import { withSkillFrontMatterValues } from "@shared/logic/skills";
+import { SkillFrontMatterValues } from "@shared/logic/skills";
 import {
   ipcSkillsAssertCreateName,
   ipcSkillsList,
@@ -22,11 +23,7 @@ import {
   ipcVfsZipPick,
 } from "@/ipc/client";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import {
-  buildNewSkillDoc,
-  isValidSkillNameInput,
-  toSkillRef,
-} from "./skill-ui";
+import { NewSkillDoc, toSkillRef } from "./skill-ui";
 
 /** 导入态：zip 字节（创建时落盘）+ 预检结果（预填与 front matter 重写判定）。 */
 type ImportedSkill = {
@@ -79,8 +76,7 @@ export function NewSkillModal({
 
   const trimmedName = name.trim();
   const trimmedDesc = description.trim();
-  const canSubmit =
-    !saving && trimmedName.length > 0 && trimmedDesc.length > 0;
+  const canSubmit = !saving && trimmedName.length > 0 && trimmedDesc.length > 0;
 
   /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
   const handleImport = async () => {
@@ -98,7 +94,7 @@ export function NewSkillModal({
       if (pickRes.data == null) {
         return;
       }
-      const previewResult = previewSkillZip(pickRes.data);
+      const previewResult = SkillZip.preview(pickRes.data);
       if (!previewResult.ok) {
         setError(previewResult.error.message);
         return;
@@ -122,7 +118,8 @@ export function NewSkillModal({
     if (!canSubmit) {
       return;
     }
-    if (!isValidSkillNameInput(trimmedName)) {
+    // 技能名输入校验（原 isValidSkillNameInput 内联：与 core SKILL_NAME_PATTERN 同口径）
+    if (!(trimmedName.length > 0 && SKILL_NAME_PATTERN.test(trimmedName))) {
       setError("技能名不能包含空格或斜杠，且不能以「.」开头。");
       return;
     }
@@ -141,11 +138,7 @@ export function NewSkillModal({
       );
       if (listRes.ok) {
         if (listRes.data.some((s) => s.name === trimmedName)) {
-          setError(
-            domain === "global"
-              ? "全局域已存在同名技能。"
-              : "该项目已存在同名技能。",
-          );
+          setError(domain === "global" ? "全局域已存在同名技能。" : "该项目已存在同名技能。");
           return;
         }
       }
@@ -186,7 +179,7 @@ export function NewSkillModal({
             domain,
             ...(domain === "project" ? { projectId } : {}),
             name: trimmedName,
-            content: withSkillFrontMatterValues(imported.preview.skillMd!, {
+            content: SkillFrontMatterValues.rewrite(imported.preview.skillMd!, {
               name: trimmedName,
               description: trimmedDesc,
             }),
@@ -201,7 +194,7 @@ export function NewSkillModal({
           domain,
           ...(domain === "project" ? { projectId } : {}),
           name: trimmedName,
-          content: buildNewSkillDoc(trimmedName, trimmedDesc),
+          content: NewSkillDoc.build(trimmedName, trimmedDesc),
         });
         if (!res.ok) {
           setError(res.error.message);

@@ -4,6 +4,9 @@
  * @module service/chat/usage-stats.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
+
 /**
  * 统计时间范围：本地自然日闭区间。
  *
@@ -32,7 +35,7 @@ export interface UsageStatsFilter {
   /**
    * 时间范围：缺省语义按查询分级——`getSummary` / `getModelBreakdown` /
    * `listRequestUsage` 不限时间（全历史）；`getDailyBuckets` 必填，
-   * 否则抛 `chatInvalidArgument`（日桶序列需要界）。
+   * 否则以 `err` 返回 `CHAT_INVALID_ARGUMENT`（日桶序列需要界）。
    */
   readonly range?: UsageStatsRange;
   readonly model?: string | null;
@@ -196,13 +199,13 @@ export interface SessionUsageDetail {
  */
 export interface UsageStatsService {
   /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
-  getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary>;
+  getSummary(filter: UsageStatsFilter): Promise<Result<UsageStatsSummary, AppError>>;
 
   /**
    * 按本地时区天边界切桶，`fromDay` 到 `toDay` 逐日稠密产出（无数据日
-   * 为零值桶）；`filter.range` 必填，否则抛 `chatInvalidArgument`。
+   * 为零值桶）；`filter.range` 必填，否则以 `err` 返回 `CHAT_INVALID_ARGUMENT`。
    */
-  getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]>;
+  getDailyBuckets(filter: UsageStatsFilter): Promise<Result<UsageStatsBucket[], AppError>>;
 
   /**
    * 指定本地日期（`YYYY-MM-DD`）的 24 个小时桶（只应用 `filter.model` 与 `filter.providerId`，
@@ -211,13 +214,13 @@ export interface UsageStatsService {
   getHourlyBuckets(
     dayLocalDate: string,
     filter: UsageStatsFilter
-  ): Promise<UsageStatsBucket[]>;
+  ): Promise<Result<UsageStatsBucket[], AppError>>;
 
   /**
    * 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶；
    * `filter.range` 缺省时为全历史）。
    */
-  getModelBreakdown(filter: UsageStatsFilter): Promise<UsageStatsModelRow[]>;
+  getModelBreakdown(filter: UsageStatsFilter): Promise<Result<UsageStatsModelRow[], AppError>>;
 
   /**
    * 请求流水分页：按时间倒序逐条列出范围（与模型筛选同口径）内的
@@ -226,7 +229,7 @@ export interface UsageStatsService {
   listRequestUsage(
     filter: UsageStatsFilter,
     page: UsageStatsRequestPageQuery
-  ): Promise<UsageStatsRequestPage>;
+  ): Promise<Result<UsageStatsRequestPage, AppError>>;
 
   /**
    * 可选模型列表：来自当前服务商配置的已保存模型（vendor_model_id 去重，
@@ -242,5 +245,5 @@ export interface UsageStatsService {
    * 不进 `UsageStatsFilter`——filter 服务统计页时间轴语义，会话详情是
    * 独立读型（spec 拍板）。
    */
-  getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail>;
+  getSessionUsageDetail(sessionId: string): Promise<Result<SessionUsageDetail, AppError>>;
 }

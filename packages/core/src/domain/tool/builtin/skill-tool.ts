@@ -5,7 +5,7 @@
  * 工具内部经 `ctx.skills` 闭包调 {@link SkillService}，**不直接持有 vfs**；
  * 参数校验（各 action 条件必填 + path 禁 `..`）全部由 `inputSchema` 承担，
  * 失败经 {@link ToolRunner} 统一产出 `INVALID_ARGUMENT` + zod issue；
- * `run()` 里的 `requiredField` 只做类型收窄，不是给模型看的报错路径。
+ * `run()` 里的 `missingField` 只防御 schema 与本函数脱节，不是给模型看的报错路径。
  * 服务层 `resolveSkillRelPath` 对 path 另行兜底。
  *
  * description 是 lambda（照 `subagent-tool` 先例）：从装配期预算好的
@@ -23,13 +23,14 @@
 
 import { z } from "zod";
 
-import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
-import type { SkillService } from "@/service/skills/skills.port.js";
-import { ToolError } from "@/errors/tool-errors.js";
+import type { SkillListItem, SkillService } from "@/service/skills/skills.port.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import { Outcome } from "@/errors/outcome.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_LINES } from "../logic/tool-output-limits.js";
-import { deriveSkillLoadTruncation, deriveSkillReadTruncation } from "../logic/skill-read-truncation.js";
+import { SkillTruncation } from "../logic/skill-read-truncation.js";
 
 /** 工具注册名（catalog / policy / 卡片解析四处同名字符串）。 */
 export const SKILL_TOOL_NAME = "skill";
@@ -57,7 +58,7 @@ export interface SkillToolInput {
 }
 
 /** load 输出：生效副本 SKILL.md 全文 + 附属文件清单（`domain` 是解析后的实际命中域）。 */
-export interface SkillToolLoadOutput {
+interface SkillToolLoadOutput {
   readonly action: "load";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -73,7 +74,7 @@ export interface SkillToolLoadOutput {
 }
 
 /** read 输出（`domain` 是生效副本解析后的实际命中域）。 */
-export interface SkillToolReadOutput {
+interface SkillToolReadOutput {
   readonly action: "read";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -89,7 +90,7 @@ export interface SkillToolReadOutput {
 }
 
 /** write / edit / list 输出（write/edit 带定位三元组供摘要与 meta 透传）。 */
-export interface SkillToolWriteOutput {
+interface SkillToolWriteOutput {
   readonly action: "write";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -97,7 +98,7 @@ export interface SkillToolWriteOutput {
   readonly version: number;
 }
 
-export interface SkillToolEditOutput {
+interface SkillToolEditOutput {
   readonly action: "edit";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -106,7 +107,7 @@ export interface SkillToolEditOutput {
   readonly replacements: number;
 }
 
-export interface SkillToolListOutput {
+interface SkillToolListOutput {
   readonly action: "list";
   readonly entries: readonly {
     readonly name: string;
@@ -119,7 +120,7 @@ export interface SkillToolListOutput {
   readonly total: number;
 }
 
-export type SkillToolOutput = SkillToolLoadOutput | SkillToolReadOutput | SkillToolWriteOutput | SkillToolEditOutput | SkillToolListOutput;
+type SkillToolOutput = SkillToolLoadOutput | SkillToolReadOutput | SkillToolWriteOutput | SkillToolEditOutput | SkillToolListOutput;
 
 /**
  * 各 action 的必填字段表（单一事实源）。
@@ -150,38 +151,14 @@ const SKILL_FIELD_LABELS: Partial<Record<keyof SkillToolInput, string>> = {
   domain: '技能域 domain（"global" 或 "project"）——edit 必须显式指定改哪一份副本',
 };
 
-/** 必填字段缺失时按 action 补 issue（superRefine 回调，zod 4 签名）。 */
-function refineRequiredFields(input: { action: SkillToolInput["action"] } & Record<string, unknown>, ctx: z.RefinementCtx): void {
-  for (const field of SKILL_ACTION_REQUIRED_FIELDS[input.action] ?? []) {
-    const value = input[field];
-    if (value === undefined || value === "") {
-      ctx.addIssue({
-        code: "custom",
-        path: [field],
-        message: `skill 的 ${input.action} 动作必须提供${SKILL_FIELD_LABELS[field] ?? String(field)}`,
-      });
-    }
-  }
-}
-
 /**
- * 必填字段类型收窄。
+ * 必填字段缺失的防御性失败。
  *
- * @remarks 缺参已由 schema 的 `superRefine` 拦下并报给模型；这里再抛一次只是
- * 防御「schema 与本函数脱节」，不是给模型看的路径。
+ * @remarks 缺参已由 schema 的 `superRefine` 拦下并报给模型；这条分支只防御
+ * 「schema 与本函数脱节」，不是给模型看的常规路径。
  */
-function requiredField<T>(value: T | undefined, field: string): T {
-  if (value === undefined) {
-    throw new ToolError("INVALID_ARGUMENT", `skill 内部校验不一致：schema 放行了缺 ${field} 的调用`, { toolName: SKILL_TOOL_NAME });
-  }
-  return value;
-}
-
-/** 从装配期预算好的生效清单拼给 LLM 看的「可用技能」文案（照 formatCallableList）。 */
-function formatEffectiveSkills(effective: readonly EffectiveSkill[]): string {
-  const usable = effective.filter((s) => s.effective);
-  if (usable.length === 0) return "（暂无可用技能）";
-  return usable.map((s) => (s.description != null && s.description.trim().length > 0 ? `- ${s.name}：${s.description.trim()}` : `- ${s.name}`)).join("\n");
+function missingField(field: string): Result<never, AppError> {
+  return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `skill 内部校验不一致：schema 放行了缺 ${field} 的调用` }));
 }
 
 /** load 已在提示词中时的短提示（与 $ 引用的 alreadyReferenced 同语义）。 */
@@ -207,16 +184,23 @@ const skillInputObjectSchema = z.object({
   limit: z.number().int().min(1).optional().describe("read 分页行数上限"),
 });
 
-const skillInputSchema = skillInputObjectSchema.superRefine(refineRequiredFields);
+/** 必填字段缺失时按 action 补 issue（superRefine 回调，zod 4 签名）。 */
+const skillInputSchema = skillInputObjectSchema.superRefine((input, ctx) => {
+  for (const field of SKILL_ACTION_REQUIRED_FIELDS[input.action] ?? []) {
+    const value = input[field];
+    if (value === undefined || value === "") ctx.addIssue({ code: "custom", path: [field], message: `skill 的 ${input.action} 动作必须提供${SKILL_FIELD_LABELS[field] ?? String(field)}` });
+  }
+});
 
 export const skillTool: Tool<SkillToolInput, SkillToolOutput, BuiltinToolContext> = {
   name: SKILL_TOOL_NAME,
   description: (ctx) => {
-    const effective = ctx.skills?.effective ?? [];
+    const usable = (ctx.skills?.effective ?? []).filter((s) => s.effective);
+    const availableSkills = usable.length === 0 ? "（暂无可用技能）" : usable.map((s) => (s.description != null && s.description.trim().length > 0 ? `- ${s.name}：${s.description.trim()}` : `- ${s.name}`)).join("\n");
     return `读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。
 
 当前可用技能（装配期快照，回合内变更不即时反映）：
-${formatEffectiveSkills(effective)}
+${availableSkills}
 
 action 说明：
 - load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示
@@ -287,54 +271,68 @@ action 说明：
       total: z.number().int(),
     }),
   ]),
-  async run(input, ctx): Promise<SkillToolOutput> {
+  /**
+   * 已知失败走返回值通道（四期门⑦）：service `Result` 失败 `return r` 接力，tool-runner 框架级统一收口。
+   */
+  async run(input, ctx): Promise<Result<SkillToolOutput, AppError>> {
     const skills = ctx.skills;
     if (skills == null) {
-      throw new ToolError("FAILED", "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）", { toolName: SKILL_TOOL_NAME });
+      return Result.err(new AppError("TOOL_FAILED", { toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）" }));
     }
     const service: SkillService = skills.service;
 
     switch (input.action) {
       case "load": {
-        const name = requiredField(input.name, "name");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
         const result = await service.readSkillFile(undefined, name, undefined, skills.projectId);
+        if (!result.ok) return Result.err(result.error);
         // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
         if (skills.referencedNames?.has(name)) {
-          return {
+          return Result.ok({
             action: "load",
-            domain: result.domain,
+            domain: result.value.domain,
             name,
-            path: result.path,
+            path: result.value.path,
             content: SKILL_LOAD_SEEN_TIP,
-            version: result.version,
+            version: result.value.version,
             files: [],
             truncated: false,
             alreadyReferenced: true,
-          };
+          });
         }
         // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
         // —— 推导单源在 `domain/tool/logic/skill-read-truncation.ts`
         // （skill-tool 执行侧与读侧共享同一份推导函数）。
-        const { content, truncated } = deriveSkillLoadTruncation(result.content);
-        // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
-        const list = await service.listSkills(result.domain === "global" ? "global" : { projectId: skills.projectId });
-        const files = list.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
+        const { content, truncated } = SkillTruncation.deriveLoad(result.value.content);
+        // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件。
+        // listSkills 走 Outcome 通道：取消按工具取消码回收（TOOL_CANCELLED 只作展示标签）。
+        const list = Outcome.match<SkillListItem[], Result<SkillListItem[], AppError>>(await service.listSkills(result.value.domain === "global" ? "global" : { projectId: skills.projectId }), {
+          completed: (entries) => Result.ok(entries),
+          cancelled: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          replaced: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          failed: (error) => Result.err(error),
+        });
+        if (!list.ok) return Result.err(list.error);
+        const files = list.value.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
         // v1.5.30 unref 回迁：load 不再同步 +1、不再产 contentRef 引用块
         // （alreadyReferenced 分支恒返回常量 tip，本分支恒返回全文）。
-        return {
+        return Result.ok({
           action: "load",
-          domain: result.domain,
+          domain: result.value.domain,
           name,
-          path: result.path,
+          path: result.value.path,
           content,
-          version: result.version,
+          version: result.value.version,
           files,
           truncated,
-        };
+        });
       }
       case "read": {
-        const name = requiredField(input.name, "name");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
         const result = await service.readSkillFile(input.domain, name, input.path, skills.projectId);
+        if (!result.ok) return Result.err(result.error);
         const offset = input.offset ?? 1;
         const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
         // 分页截断推导单源（见
@@ -342,61 +340,71 @@ action 说明：
         // 推导函数内部短路（跳过整套截断推导、只回 totalLines 供报错文案），
         // 故这里直接在推导后判越界——判定收在单源函数内，调用方不重复推导，
         // 报错文案与「推导前先判定」逐字一致。
-        const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.content, offset, limit);
+        const { content, returnedLines, totalLines, truncated, nextOffset } = SkillTruncation.deriveRead(result.value.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
-          throw new ToolError("INVALID_ARGUMENT", `offset ${offset} exceeds file length (${totalLines} lines)`, { toolName: SKILL_TOOL_NAME });
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)` }));
         }
         // v1.5.30 unref 回迁：read 不再同步 +1、不再产 contentRef 引用块。
-        return {
+        return Result.ok({
           action: "read",
-          domain: result.domain,
+          domain: result.value.domain,
           name,
-          path: result.path,
+          path: result.value.path,
           content,
-          version: result.version,
+          version: result.value.version,
           offset,
           limit,
           totalLines,
           returnedLines,
           truncated,
           ...(nextOffset != null ? { nextOffset } : {}),
-        };
+        });
       }
       case "write": {
-        const name = requiredField(input.name, "name");
-        const content = requiredField(input.content, "content");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
+        const content = input.content;
+        if (content === undefined) return missingField("content");
         // write 保留缺省 project：写向项目域=建项目覆盖副本，是明确且安全的语义
         // （不像 edit 那样有「打哪一份」的歧义），不必强求模型每次显式声明。
         const domain = input.domain ?? "project";
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
-        const { version } = await service.writeSkillFile(domain, name, input.path, content, skills.projectId);
-        return { action: "write", domain, name, path, version };
+        const written = await service.writeSkillFile(domain, name, input.path, content, skills.projectId);
+        if (!written.ok) return Result.err(written.error);
+        const { version } = written.value;
+        return Result.ok({ action: "write", domain, name, path, version });
       }
       case "edit": {
-        const name = requiredField(input.name, "name");
-        const oldString = requiredField(input.oldString, "oldString");
-        const newString = requiredField(input.newString, "newString");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
+        const oldString = input.oldString;
+        if (oldString === undefined) return missingField("oldString");
+        const newString = input.newString;
+        if (newString === undefined) return missingField("newString");
         // domain 必填（schema 保证）：同名技能可能同时有项目副本与全局本体，
         // 缺省猜 project 会把「改我刚 load 的那个」打到空域上。
-        const domain = requiredField(input.domain, "domain");
+        const domain = input.domain;
+        if (domain === undefined) return missingField("domain");
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const result = await service.editSkillFile(domain, name, input.path, { oldString, newString, replaceAll: input.replaceAll }, skills.projectId);
-        return {
+        if (!result.ok) return Result.err(result.error);
+        return Result.ok({
           action: "edit",
           domain,
           name,
           path,
-          version: result.version,
-          replacements: result.replacements,
-        };
+          version: result.value.version,
+          replacements: result.value.replacements,
+        });
       }
       case "list": {
         if (input.domain == null) {
           // 缺省列合并视图（当前项目视角的生效清单，含禁用/覆盖标记）
           const effective = await service.effectiveSkills(skills.projectId);
-          return {
+          if (!effective.ok) return Result.err(effective.error);
+          return Result.ok({
             action: "list",
-            entries: effective.map((s) => ({
+            entries: effective.value.map((s) => ({
               name: s.name,
               ...(s.description != null ? { description: s.description } : {}),
               domain: s.domain,
@@ -404,20 +412,26 @@ action 说明：
               ...(s.disabled ? { disabled: true } : {}),
               ...(s.overridden ? { overridden: true } : {}),
             })),
-            total: effective.length,
-          };
+            total: effective.value.length,
+          });
         }
-        const items = await service.listSkills(input.domain === "global" ? "global" : { projectId: skills.projectId });
-        return {
+        const items = Outcome.match<SkillListItem[], Result<SkillListItem[], AppError>>(await service.listSkills(input.domain === "global" ? "global" : { projectId: skills.projectId }), {
+          completed: (entries) => Result.ok(entries),
+          cancelled: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          replaced: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          failed: (error) => Result.err(error),
+        });
+        if (!items.ok) return Result.err(items.error);
+        return Result.ok({
           action: "list",
-          entries: items.map((s) => ({
+          entries: items.value.map((s) => ({
             name: s.name,
             ...(s.description != null ? { description: s.description } : {}),
             domain: s.domain,
             valid: s.valid,
           })),
-          total: items.length,
-        };
+          total: items.value.length,
+        });
       }
     }
   },

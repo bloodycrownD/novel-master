@@ -9,7 +9,7 @@
  *
  * 列名与 `chat_message` 的统计列同名同义（见 usage-record-schema），统计读口
  * 的聚合与筛选 SQL 因此可原样复用。全部字段可空：缺 token 真值的请求不入
- * 账本（由 {@link buildUsageRecordFromMessage} 把关），耗时类列独立可空。
+ * 账本（由 {@link UsageRecord.buildFromMessage} 把关），耗时类列独立可空。
  */
 export interface UsageRecordInsert {
   /** 溯源：产生本请求的会话；会话删除后本行保留。 */

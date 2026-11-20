@@ -50,13 +50,14 @@ jest.mock('@/components/chrome/ToastHost', () => ({
 
 jest.mock('@/components/provider/ProviderForm', () => {
   const mockReact = require('react');
+  const toCreateInput = jest.fn((values: typeof sampleValues) => ({
+    protocol: values.protocol,
+    baseUrl: values.baseUrl,
+    displayName: values.displayName,
+    apiKey: values.apiKey,
+  }));
   return {
-    providerFormToCreateInput: jest.fn((values: typeof sampleValues) => ({
-      protocol: values.protocol,
-      baseUrl: values.baseUrl,
-      displayName: values.displayName,
-      apiKey: values.apiKey,
-    })),
+    ProviderFormMapper: {toCreateInput},
     ProviderForm: ({
       onSubmit,
       saving,
@@ -108,7 +109,7 @@ describe('ProviderCreateScreen (T-PI9)', () => {
     mockReplace.mockClear();
     mockShowToast.mockClear();
     mockCreate.mockReset();
-    mockCreate.mockResolvedValue(createdProvider);
+    mockCreate.mockResolvedValue({ok: true, value: createdProvider});
   });
 
   it('创建成功后用返回的 provider.id 导航，toast 用 displayName', async () => {

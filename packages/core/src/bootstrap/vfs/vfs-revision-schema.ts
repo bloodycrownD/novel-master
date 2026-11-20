@@ -14,7 +14,7 @@
  *
  * 决策 4：切 WITHOUT ROWID 后生产代码里的 deleteUnreferencedUnderScope 已改用
  * `(entry_id, version) IN (...)` 复合 PK 寻址，不再依赖 rowid。 */
-export const VFS_REVISION_TABLE_DDL = `
+const VFS_REVISION_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_revision (
   entry_id INTEGER NOT NULL,
   version INTEGER NOT NULL CHECK (version >= 1),
@@ -26,13 +26,8 @@ CREATE TABLE IF NOT EXISTS vfs_revision (
   CHECK (NOT (status = 'active' AND content_hash IS NULL))
 ) WITHOUT ROWID`.trim();
 
-/** entry_id 查询索引，用于 revision GC / restore / scope 扫描。 */
-export const VFS_REVISION_ENTRY_INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS idx_vfs_revision_entry
-  ON vfs_revision(entry_id)`.trim();
-
 /** revision INSERT 时，对非 NULL content_hash 的 blob ref_count + 1。 */
-export const VFS_REVISION_INSERT_TRIGGER_DDL = `
+const VFS_REVISION_INSERT_TRIGGER_DDL = `
 CREATE TRIGGER IF NOT EXISTS trg_revision_insert_inc_blob_ref
 AFTER INSERT ON vfs_revision
 WHEN NEW.content_hash IS NOT NULL
@@ -54,7 +49,7 @@ END`.trim();
  *
  * 方向是**保守**的（宁可留垃圾不可丢数据）：entry 还引用着就不删。
  */
-export const VFS_REVISION_DELETE_TRIGGER_DDL = `
+const VFS_REVISION_DELETE_TRIGGER_DDL = `
 CREATE TRIGGER trg_revision_delete_dec_blob_ref_v2
 AFTER DELETE ON vfs_revision
 WHEN OLD.content_hash IS NOT NULL
@@ -75,7 +70,7 @@ END`.trim();
  * 同款兜底」的推理不成立。`WHEN OLD.content_hash IS NOT NEW.content_hash`
  * 这一句本身就是逐字节同款缺陷（`IS NOT` 与 `!=` 等价），一并修掉。
  */
-export const VFS_REVISION_UPDATE_TRIGGER_DDL = `
+const VFS_REVISION_UPDATE_TRIGGER_DDL = `
 CREATE TRIGGER trg_revision_update_transfer_blob_ref_v2
 AFTER UPDATE OF content_hash ON vfs_revision
 WHEN OLD.content_hash IS NOT NEW.content_hash
@@ -90,8 +85,7 @@ BEGIN
 END`.trim();
 
 /** 归零删除的守卫子串（bootstrap 对齐段与测试用它判定「新触发器已生效」）。 */
-export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT =
-  "NOT EXISTS (SELECT 1 FROM vfs_entry";
+export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT = "NOT EXISTS (SELECT 1 FROM vfs_entry";
 
 /**
  * `vfs_entry(content_hash)` **部分索引**——守卫子查询的落地索引（CR-F06 同批）。
@@ -111,7 +105,7 @@ export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT =
  * v19 注记）：canonical DDL 只在**慢路径**重放，而 `bootVersion >= 18` 的库在
  * 快路径直接 return —— 不 bump 的话存量库永远补不上这个索引。
  */
-export const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
+const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
   ON vfs_entry(content_hash) WHERE content_hash IS NOT NULL`.trim();
 
@@ -119,10 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
 export const VFS_ENTRY_CONTENT_HASH_INDEX_NAME = "idx_vfs_entry_content_hash";
 
 /** 两个 blob 归零触发器的**新名**（含版本后缀）。 */
-export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = [
-  "trg_revision_delete_dec_blob_ref_v2",
-  "trg_revision_update_transfer_blob_ref_v2",
-] as const;
+export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = ["trg_revision_delete_dec_blob_ref_v2", "trg_revision_update_transfer_blob_ref_v2"] as const;
 
 /**
  * 两个 blob 归零触发器的**旧名**。
@@ -132,10 +123,7 @@ export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = [
  * 的东西 ⇒ 光 `CREATE <新名>` 不够：那样新旧两条会**同时注册**、同一次
  * DELETE 归零两次，旧那条照样把 blob 删掉。必须先显式 DROP 旧名。
  */
-export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = [
-  "trg_revision_delete_dec_blob_ref",
-  "trg_revision_update_transfer_blob_ref",
-] as const;
+export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = ["trg_revision_delete_dec_blob_ref", "trg_revision_update_transfer_blob_ref"] as const;
 
 /**
  * blob 归零触发器的 DROP 前缀语句（CS-07 存量库生效机制·子动作一）。
@@ -147,7 +135,7 @@ export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = [
  * 也不做「改了触发器却判成没改」的比对。
  *
  * 另一条不可省的配套动作是 **bump `SCHEMA_BOOT_VERSION`**：本组语句与
- * `alignSchemaColumns` 同在慢路径，而 `bootVersion >= SCHEMA_BOOT_VERSION`
+ * `SchemaColumnAlign.align` 同在慢路径，而 `bootVersion >= SCHEMA_BOOT_VERSION`
  * 的存量库会在快路径直接 return ⇒ 不 bump 的话这组语句永远补不上。
  *
  * ⚠️ 这四条**不带尾分号**（CR c2 P2-2 收口）：`NOVEL_MASTER_SCHEMA_STATEMENTS`
@@ -156,13 +144,9 @@ export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = [
  * 但 mobile 的 op-sqlite `execute` 对尾分号的容忍度**零用例覆盖** ⇒ 按全仓
  * 惯例去掉，零行为变化。
  */
-export const VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS: readonly string[] = [
-  ...VFS_BLOB_GC_TRIGGER_LEGACY_NAMES.map(
-    (name) => `DROP TRIGGER IF EXISTS ${name}`
-  ),
-  ...VFS_BLOB_GC_TRIGGER_NAMES_V2.map(
-    (name) => `DROP TRIGGER IF EXISTS ${name}`
-  ),
+const VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS: readonly string[] = [
+  ...VFS_BLOB_GC_TRIGGER_LEGACY_NAMES.map((name) => `DROP TRIGGER IF EXISTS ${name}`),
+  ...VFS_BLOB_GC_TRIGGER_NAMES_V2.map((name) => `DROP TRIGGER IF EXISTS ${name}`),
 ];
 
 /** All vfs_revision bootstrap statements in execution order.

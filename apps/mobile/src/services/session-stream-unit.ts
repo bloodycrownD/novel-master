@@ -45,34 +45,22 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessageData} from '@novel-master/core/chat';
+import {Result, type AppError, type Outcome} from '@novel-master/core/errors';
 import type {AgentStepCommittedPhase} from '@novel-master/core/events';
-import {
-  composeStreamTokens,
-  createTokenRateSampler,
-  reanchorStreamTokenBase,
-} from '@novel-master/core/format';
-import type {
-  IncrementalTokenCounter,
-  StreamTokenSource,
-  TokenRateSampler,
-} from '@novel-master/core/format';
-import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/provider';
-import {createLogger} from '@novel-master/core/log';
+import {SlidingTokenRate, StreamTokenAnchor} from '@novel-master/core/format';
+import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import type {StreamTokenSource} from '@novel-master/core/session-run-state';
+import type {TokenRateSampler} from '@novel-master/core/format';
+import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/tokenizer';
+import {LogFactory} from '@novel-master/core/log';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
-import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
-import {createStreamApplyBuffer} from './stream-apply-buffer';
-import type {StreamApplyBuffer} from './stream-apply-buffer';
-import {
-  getSessionViewCache,
-  hydrateWindowFromCache,
-  sessionViewCacheKey,
-  setSessionViewCache,
-  type SessionViewCache,
-} from './chat-session-view-cache';
-import {prependOlderMessages} from './message-paging';
+import {StreamWireQueue} from './stream-wire-queue';
+import {StreamApplyBuffer} from './stream-apply-buffer';
+import {SessionViewCache} from './chat-session-view-cache';
+import {MessagePaging} from './message-paging';
 
 /** 单元侧日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
-const log = createLogger('chat.stream-unit');
+const log = LogFactory.create('chat.stream-unit');
 
 /** settled(finished|failed) 后的默认宽限销毁时长（毫秒）；构造参数可覆盖。 */
 const SESSION_STREAM_SETTLED_GRACE_PERIOD_MS = 30_000;
@@ -102,14 +90,6 @@ type SessionStreamUnitSettledStatus = 'interrupted' | 'finished' | 'failed';
 export type SessionStreamUnitStatus =
   | SessionStreamUnitActiveStatus
   | SessionStreamUnitSettledStatus;
-
-/** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
-// prettier-ignore
-export function isSessionStreamUnitSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
-  return (
-    status === 'interrupted' || status === 'finished' || status === 'failed'
-  );
-}
 
 /** 事件收尾驱动的 run 终态（interrupted 不经事件路径，故不在其列）。 */
 export type SessionStreamRunSettledStatus = 'finished' | 'failed';
@@ -237,17 +217,19 @@ type SessionStreamUnitTokenSource = StreamTokenSource;
  * 消息仓库窄口（单元消息管线回源 DB 用）。
  *
  * 单元本体不持有 runtime——由 manager 构造时从 runtime.messages 透传
- * （结构上就是 core MessageService 的子集）。
+ * （结构上就是 core MessageService 的子集）。大结果集读口返回 `Outcome`
+ * （分片边界可被 hooks 中断）；单元不注入 hooks，中断分支实际不可达，
+ * 但通道形状必须与 core 对齐。
  */
 interface SessionStreamMessageStore {
   listBySessionTail(
     sessionId: string,
     options: {limit: number},
-  ): Promise<readonly ChatMessageData[]>;
+  ): Promise<Outcome<readonly ChatMessageData[]>>;
   listBySessionPage(
     sessionId: string,
     options: {limit: number; beforeSeq?: number},
-  ): Promise<readonly ChatMessageData[]>;
+  ): Promise<Outcome<readonly ChatMessageData[]>>;
 }
 
 /** 单元只读投影：snapshot(sessionId) 的返回形状，屏幕订阅的唯一消费面。 */
@@ -356,6 +338,7 @@ export class SessionStreamUnit {
   readonly sessionId: string;
   readonly projectId: string;
 
+
   private status: SessionStreamUnitStatus = 'idle';
   private runIdValue: string | null = null;
   private settledAtMsValue: number | null = null;
@@ -403,7 +386,7 @@ export class SessionStreamUnit {
    * 末值速率（窗口以最后样本时刻收尾，不受收尾前停顿影响）。单元自持而
    * 非组件持有——冻结值要与实时值同源，且须跨单元存活/水合后的读取。
    */
-  private readonly rateSampler: TokenRateSampler = createTokenRateSampler();
+  private readonly rateSampler: TokenRateSampler = SlidingTokenRate.createSampler();
   private startedAtMsValue = 0;
   private elapsedMsValue: number | null = null;
   /**
@@ -463,7 +446,7 @@ export class SessionStreamUnit {
   private hasMoreMessagesValue = false;
   private loadingMoreMessagesValue = false;
   /** force tail reload 在途去重（蓝本 reloadInFlightRef：force 合流不重发）。 */
-  private tailReloadInFlight: Promise<readonly ChatMessageData[]> | null = null;
+  private tailReloadInFlight: Promise<Result<readonly ChatMessageData[], AppError>> | null = null;
 
   private readonly webviewHandles: SessionStreamWebviewHandle[] = [];
   private readonly messageStore?: SessionStreamMessageStore | undefined;
@@ -493,7 +476,7 @@ export class SessionStreamUnit {
     this.tokenEstimatorFactory = options.tokenEstimatorFactory;
     // 进程级单调序号（同一毫秒建两个 unit 也不撞 streamId；见模块顶部注释）。
     this.streamEpoch = ++streamUnitEpoch;
-    this.applyBuffer = createStreamApplyBuffer(
+    this.applyBuffer = StreamApplyBuffer.create(
       segments => this.applyStreamSegments(segments),
       {flushIntervalMs: SESSION_STREAM_APPLY_INTERVAL_MS},
     );
@@ -784,8 +767,8 @@ export class SessionStreamUnit {
    */
   private reanchorBase(value: number): void {
     const increment = this.estimateIncrementTokens();
-    this.baseTokens = reanchorStreamTokenBase(value, increment);
-    this.metricsAcc.completionTokens = composeStreamTokens(value, 0);
+    this.baseTokens = StreamTokenAnchor.reanchorBase(value, increment);
+    this.metricsAcc.completionTokens = StreamTokenAnchor.composeTokens(value, 0);
   }
 
   /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle/streamRows/streamRowIds 字段返回内部引用——见字段注释的引用稳定契约）。 */
@@ -1214,41 +1197,51 @@ export class SessionStreamUnit {
    */
   async loadTailMessages(options?: {
     readonly force?: boolean;
-  }): Promise<readonly ChatMessageData[]> {
+  }): Promise<Result<readonly ChatMessageData[], AppError>> {
     const force = options?.force ?? false;
     if (force && this.tailReloadInFlight != null) {
       return this.tailReloadInFlight;
     }
-    const task = (async (): Promise<readonly ChatMessageData[]> => {
-      const cacheKey = sessionViewCacheKey(this.projectId, this.sessionId);
+    const task = (async (): Promise<Result<readonly ChatMessageData[], AppError>> => {
+      const cacheKey = SessionViewCache.key(this.projectId, this.sessionId);
       if (!force) {
-        const cached = getSessionViewCache(cacheKey);
+        const cached = SessionViewCache.get(cacheKey);
         if (cached != null) {
           // 只有冷启动水合才裁窗口：已有消息面是用户自己翻出来的（loadOlder
           // 会把整面写回缓存），截回去等于当着用户的面把转录塌掉。
           const cold = this.messagesValue.length === 0;
-          const adopted = cold ? hydrateWindowFromCache(cached) : cached;
+          const adopted = cold ? SessionViewCache.hydrateWindowFromCache(cached) : cached;
           // 非 force 结果不消费待接管队列（缓存/普通 reload 可能是插入前的
           // 旧面，配对会把历史 assistant 错认成本 step 的落库行）。
           this.applyMessages(adopted, false);
-          return [...adopted.messages];
+          return Result.ok([...adopted.messages]);
         }
       }
       const store = this.messageStore;
       if (store == null) {
         // 未装配消息仓库（防御降级，正常装配不会走到）：保持现状返回。
-        return [...this.messagesValue];
+        return Result.ok([...this.messagesValue]);
       }
       const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
-      const fetched = await store.listBySessionTail(this.sessionId, {limit});
+      const fetchedOutcome = await store.listBySessionTail(this.sessionId, {limit});
+      if (fetchedOutcome.kind === 'failed') {
+        // 读口已换 Outcome：已知失败沿 Result 接力（p26 门⑦），消费方
+        // （kickTailReloadQuietly / manager / UI 回调）按 !ok 收口，不再抛。
+        return Result.err(fetchedOutcome.error);
+      }
+      if (fetchedOutcome.kind !== 'completed') {
+        // 未注入 hooks 时中断分支不可达；真出现时按「本次不采纳」保留现状。
+        return Result.ok([...this.messagesValue]);
+      }
+      const fetched = fetchedOutcome.value;
       const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
       const list = hasMore ? fetched.slice(1) : fetched;
       // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
       // 守卫点）；键是本会话自己的，天然不串会话。
-      setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
+      SessionViewCache.set(cacheKey, {messages: list, hasMoreMessages: hasMore});
       // 只有 force（step/settle 边界的权威回源）才消费待接管队列。
       this.applyMessages({messages: list, hasMoreMessages: hasMore}, force);
-      return [...list];
+      return Result.ok([...list]);
     })();
     if (!force) {
       return task;
@@ -1269,45 +1262,55 @@ export class SessionStreamUnit {
    * nm-style: keep-public — manager 的 loadOlderSessionMessages 唯一路由入口，
    * 读写单元私有 messagesValue/loadingMoreMessagesValue 与视图缓存。
    */
-  async loadOlderMessages(): Promise<void> {
+  async loadOlderMessages(): Promise<Result<void, AppError>> {
     if (
       this.destroyed ||
       this.loadingMoreMessagesValue ||
       this.messagesValue.length === 0
     ) {
-      return;
+      return Result.ok(undefined);
     }
     const beforeSeq = this.messagesValue[0]?.seq;
     if (beforeSeq == null) {
-      return;
+      return Result.ok(undefined);
     }
     const store = this.messageStore;
     if (store == null) {
-      return;
+      return Result.ok(undefined);
     }
     this.loadingMoreMessagesValue = true;
     this.onProjectionChanged?.();
     try {
       const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
-      const older = await store.listBySessionPage(this.sessionId, page);
+      const olderOutcome = await store.listBySessionPage(this.sessionId, page);
+      if (olderOutcome.kind === 'failed') {
+        // 同 loadTailMessages：已知失败沿 Result 接力（p26 门⑦），不再抛。
+        return Result.err(olderOutcome.error);
+      }
+      if (olderOutcome.kind !== 'completed') {
+        // 未注入 hooks 时中断分支不可达；中断按「本次翻页不落地」处理。
+        return Result.ok(undefined);
+      }
+      const older = olderOutcome.value;
       if (this.destroyed) {
-        return;
+        return Result.ok(undefined);
       }
       if (older.length === 0) {
         // 没有更早的了：只收 hasMore，不动消息与缓存（蓝本同路径）。
         this.hasMoreMessagesValue = false;
         this.onProjectionChanged?.();
-        return;
+        return Result.ok(undefined);
       }
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
-      const next = prependOlderMessages(this.messagesValue, older);
-      setSessionViewCache(sessionViewCacheKey(this.projectId, this.sessionId), {
+      const next = MessagePaging.prependOlder(this.messagesValue, older);
+      SessionViewCache.set(SessionViewCache.key(this.projectId, this.sessionId), {
         messages: next,
         hasMoreMessages: hasMore,
       });
       this.messagesValue = next;
       this.hasMoreMessagesValue = hasMore;
       this.onProjectionChanged?.();
+      return Result.ok(undefined);
     } finally {
       this.loadingMoreMessagesValue = false;
       this.onProjectionChanged?.();
@@ -1316,9 +1319,12 @@ export class SessionStreamUnit {
 
   /** step/settle 边界的 fire-and-forget force reload（错误吞掉不阻塞状态机）。 */
   private kickTailReloadQuietly(): void {
-    void this.loadTailMessages({force: true}).catch(err => {
-      log.error('tail reload failed', {err});
-    });
+    void (async () => {
+      const read = await this.loadTailMessages({force: true});
+      if (!read.ok) {
+        log.error('tail reload failed', {err: read.error});
+      }
+    })();
   }
 
   /**
@@ -1450,10 +1456,10 @@ export class SessionStreamUnit {
     // 行为严格一致）。usage 真值成为基线后增量继续叠加——数字持续增长，
     // 不再停在上一条 usage 的累计值上（多步 run 冻结缺陷的修复点）。
     const increment = this.estimateIncrementTokens();
-    const tokens = composeStreamTokens(this.baseTokens, increment);
+    const tokens = StreamTokenAnchor.composeTokens(this.baseTokens, increment);
     this.metricsAcc.completionTokens = tokens;
     this.sampleRate();
-    appendWireChunk(this.ingressQueue, {kind, delta: text});
+    StreamWireQueue.append(this.ingressQueue, {kind, delta: text});
     if (this.ingressTimer == null) {
       this.ingressTimer = setTimeout(() => {
         this.ingressTimer = null;
@@ -1468,7 +1474,7 @@ export class SessionStreamUnit {
     if (this.ingressQueue.length === 0) {
       return;
     }
-    const coalesced = coalesceWireQueue(this.ingressQueue);
+    const coalesced = StreamWireQueue.coalesce(this.ingressQueue);
     this.ingressQueue = [];
     this.applyBuffer.pushAll(coalesced);
   }
@@ -1656,6 +1662,16 @@ export class SessionStreamUnit {
       rows.push(projectStreamRecord({...current, text, thinking}));
     }
     return rows;
+  }
+}
+
+export namespace SessionStreamUnit {
+  /** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
+  // prettier-ignore
+  export function isSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
+    return (
+      status === 'interrupted' || status === 'finished' || status === 'failed'
+    );
   }
 }
 

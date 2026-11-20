@@ -5,7 +5,7 @@
  * 计数（chip 刷新、压缩评估反复触发）直接命中返回，不再进入 L2 分块求和。
  *
  * - **键**：`l1:${sessionId}:${计数器身份(scope)}:${内容指纹}`——内容指纹
- *   由调用方对「整串+tools 串」拼接后取 hashContent 传入（spec 计数流程
+ *   由调用方对「整串+tools 串」拼接后取 ContentHash.hash 传入（spec 计数流程
  *   L1 口径）；内容或身份任一变化都换键，天然失效、无脏读。
  * - **LRU 会话级 32 条**：同一会话最近 32 个「内容×身份」组合。上限取的
  *   是回滚/编辑场景下同会话在少数几个内容版本间来回切换的窗口——超出即
@@ -33,11 +33,11 @@
  */
 
 import { PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_TOKEN_CHUNKS } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenCounterKind } from "../ports/token-counter.port.js";
 
-const log = createLogger("tokenizer.prompt-whole-cache");
+const log = LogFactory.create("tokenizer.prompt-whole-cache");
 
 /** L1 缓存条目：一次整 prompt 本地计数的完整结果（口径三件套）。 */
 export interface PromptWholeCacheEntry {
@@ -60,13 +60,7 @@ const PERSIST_MAX_ITEMS = 16;
 const PERSIST_PAYLOAD_VERSION = 2;
 
 /** 持久化条目五元组：`[hash16, scope, count, kind, est]`。 */
-type PersistItem = readonly [
-  hash16: string,
-  scope: string,
-  count: number,
-  kind: string,
-  est: boolean
-];
+type PersistItem = readonly [hash16: string, scope: string, count: number, kind: string, est: boolean];
 
 /** 会话桶：Map 迭代序即插入序——首键最旧、末键最新，LRU 据此淘汰。 */
 const buckets = new Map<string, Map<string, PromptWholeCacheEntry>>();
@@ -277,18 +271,10 @@ export const promptWholeCache = {
     const items = persistedItems.get(sessionId) ?? [];
     const merged: PersistItem[] = [];
     for (const write of batch) {
-      merged.unshift([
-        write.contentHash,
-        write.scope,
-        write.entry.tokenCount,
-        write.entry.counterKind,
-        false,
-      ]);
+      merged.unshift([write.contentHash, write.scope, write.entry.tokenCount, write.entry.counterKind, false]);
     }
     for (const item of items) {
-      if (
-        merged.some(([hash16, scope]) => hash16 === item[0] && scope === item[1])
-      ) {
+      if (merged.some(([hash16, scope]) => hash16 === item[0] && scope === item[1])) {
         continue;
       }
       merged.push(item);

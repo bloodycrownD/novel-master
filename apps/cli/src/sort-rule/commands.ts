@@ -1,4 +1,4 @@
-import {coreT} from '../i18n.js';
+import { coreT } from "../i18n.js";
 /**
  * `nm sort-rule` subcommands (spec Step 9；agent 自测定位，从简).
  *
@@ -16,13 +16,12 @@ import {
   type SmartSortRuleMoveTarget,
   type UpdateSmartSortRuleInput,
 } from "@novel-master/core/smart-sort-rule";
+import { type AppError, Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { RESULT_OK } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-function flagString(
-  flags: ReadonlyMap<string, string | true>,
-  key: string,
-): string | undefined {
+function flagString(flags: ReadonlyMap<string, string | true>, key: string): string | undefined {
   const v = flags.get(key);
   return typeof v === "string" ? v : undefined;
 }
@@ -32,9 +31,7 @@ function parseCaptureKind(value: string): SmartSortCaptureKind {
   if ((SMART_SORT_CAPTURE_KINDS as readonly string[]).includes(value)) {
     return value as SmartSortCaptureKind;
   }
-  throw new Error(
-    `invalid --capture-kind: ${value} (expected ${SMART_SORT_CAPTURE_KINDS.join("|")})`,
-  );
+  throw new Error(`invalid --capture-kind: ${value} (expected ${SMART_SORT_CAPTURE_KINDS.join("|")})`);
 }
 
 function formatFromPath(path: string): "yaml" | "json" {
@@ -42,26 +39,10 @@ function formatFromPath(path: string): "yaml" | "json" {
   return ext === ".json" ? "json" : "yaml";
 }
 
-/** --to 取值：top/bottom/up/down 或绝对位次数字 N（1 基，与 list 的 order 列同口径）。 */
-function parseMoveTarget(value: string): SmartSortRuleMoveTarget {
-  if (value === "top" || value === "bottom" || value === "up" || value === "down") {
-    return value;
-  }
-  // N 为 1 基位次（与 list 输出的 order 列一致）：仅接受 >= 1，0 及前导零形态
-  // 直接报 invalid，不静默交给 core clamp（0 会被 clamp 到首位、口径对不上）。
-  if (/^[1-9]\d*$/.test(value)) {
-    return { index: Number.parseInt(value, 10) - 1 };
-  }
-  throw new Error(
-    `invalid --to: ${value} (expected top|bottom|up|down|<N>，N 为 1 基位次)`,
-  );
-}
-
-export async function runSortRule(
-  rt: NovelMasterRuntime,
-  subcommand: string,
-  args: readonly string[],
-): Promise<void> {
+/**
+ * 规则读 / 删 / 编译的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
+ */
+export async function runSortRule(rt: NovelMasterRuntime, subcommand: string, args: readonly string[]): Promise<Result<void, AppError>> {
   const { positional, flags } = parseCliArgs(args);
   const svc = rt.smartSortRule;
 
@@ -73,44 +54,32 @@ export async function runSortRule(
         // 列序钉死：order⇥id⇥enabled⇥capture⇥flags⇥name⇥pattern（D13 后
         // capture 列插在 enabled 后）。序号元组显示：固定档哨兵文案友好化，
         // smart 档保持数字（-Infinity/Infinity 不适合 TSV 直出）。
-        console.log(
-          `${r.sortOrder}\t${r.ruleId}\t${en}\t${r.captureKind}\t${r.flags}\t${r.name}\t${r.pattern}`,
-        );
+        console.log(`${r.sortOrder}\t${r.ruleId}\t${en}\t${r.captureKind}\t${r.flags}\t${r.name}\t${r.pattern}`);
       }
-      return;
+      return RESULT_OK;
     }
     case "create": {
       const name = flagString(flags, "name");
       const pattern = flagString(flags, "pattern");
       if (!name || !pattern) {
-        throw new Error(
-          "Usage: nm sort-rule create --name <n> --pattern <p> [--description <d>] [--flags <f>] [--capture-kind <smart|fixed_min|fixed_max>]",
-        );
+        throw new Error("Usage: nm sort-rule create --name <n> --pattern <p> [--description <d>] [--flags <f>] [--capture-kind <smart|fixed_min|fixed_max>]");
       }
-      const rule = await svc.createRule({
+      const createInput = {
         name,
         pattern,
-        ...(flags.has("description")
-          ? { description: flagString(flags, "description") ?? null }
-          : {}),
+        ...(flags.has("description") ? { description: flagString(flags, "description") ?? null } : {}),
         ...(flags.has("flags") ? { flags: flagString(flags, "flags") } : {}),
-        ...(flags.has("capture-kind")
-          ? {
-              captureKind: parseCaptureKind(
-                flagString(flags, "capture-kind") ?? "smart",
-              ),
-            }
-          : {}),
-      });
-      console.log(rule.ruleId);
-      return;
+        ...(flags.has("capture-kind") ? { captureKind: parseCaptureKind(flagString(flags, "capture-kind") ?? "smart") } : {}),
+      };
+      const rule = await svc.createRule(createInput);
+      if (!rule.ok) return Result.err(rule.error);
+      console.log(rule.value.ruleId);
+      return RESULT_OK;
     }
     case "update": {
       const ruleId = flagString(flags, "id");
       if (!ruleId) {
-        throw new Error(
-          "Usage: nm sort-rule update --id <ruleId> [--name <n>] [--pattern <p>] [--description <d>] [--flags <f>] [--capture-kind <smart|fixed_min|fixed_max>]",
-        );
+        throw new Error("Usage: nm sort-rule update --id <ruleId> [--name <n>] [--pattern <p>] [--description <d>] [--flags <f>] [--capture-kind <smart|fixed_min|fixed_max>]");
       }
       const patch: UpdateSmartSortRuleInput = {};
       if (flags.has("name")) patch.name = flagString(flags, "name");
@@ -120,13 +89,12 @@ export async function runSortRule(
       }
       if (flags.has("flags")) patch.flags = flagString(flags, "flags");
       if (flags.has("capture-kind")) {
-        patch.captureKind = parseCaptureKind(
-          flagString(flags, "capture-kind") ?? "smart",
-        );
+        patch.captureKind = parseCaptureKind(flagString(flags, "capture-kind") ?? "smart");
       }
       const rule = await svc.updateRule(ruleId, patch);
-      console.log(rule.ruleId);
-      return;
+      if (!rule.ok) return Result.err(rule.error);
+      console.log(rule.value.ruleId);
+      return RESULT_OK;
     }
     case "remove": {
       const ruleId = flagString(flags, "id");
@@ -134,12 +102,11 @@ export async function runSortRule(
         throw new Error("Usage: nm sort-rule remove --id <ruleId>");
       }
       if (isBuiltinSmartSortRuleId(ruleId)) {
-        throw new Error(
-          `builtin- rule cannot be removed (disable it instead): ${ruleId}`,
-        );
+        throw new Error(`builtin- rule cannot be removed (disable it instead): ${ruleId}`);
       }
-      await svc.deleteRule(ruleId);
-      return;
+      const deleted = await svc.deleteRule(ruleId);
+      if (!deleted.ok) return Result.err(deleted.error);
+      return RESULT_OK;
     }
     case "enable":
     case "disable": {
@@ -147,22 +114,33 @@ export async function runSortRule(
       if (!ruleId) {
         throw new Error(`Usage: nm sort-rule ${subcommand} --id <ruleId>`);
       }
-      await svc.setEnabled(ruleId, subcommand === "enable");
-      return;
+      const set = await svc.setEnabled(ruleId, subcommand === "enable");
+      if (!set.ok) return Result.err(set.error);
+      return RESULT_OK;
     }
     case "move": {
       const ruleId = flagString(flags, "id");
       const to = flagString(flags, "to");
       if (!ruleId || !to) {
-        throw new Error(
-          "Usage: nm sort-rule move --id <ruleId> --to top|bottom|up|down|<N>（N 为 1 基位次）",
-        );
+        throw new Error("Usage: nm sort-rule move --id <ruleId> --to top|bottom|up|down|<N>（N 为 1 基位次）");
       }
-      const rules = await svc.moveRule(ruleId, parseMoveTarget(to));
-      for (const r of rules) {
+      // --to 取值：top/bottom/up/down 或绝对位次数字 N（1 基，与 list 的 order 列同口径）。
+      // N 仅接受 >= 1，0 及前导零形态直接报 invalid，不静默交给 core clamp
+      // （0 会被 clamp 到首位、口径对不上）。
+      let moveTarget: SmartSortRuleMoveTarget;
+      if (to === "top" || to === "bottom" || to === "up" || to === "down") {
+        moveTarget = to;
+      } else if (/^[1-9]\d*$/.test(to)) {
+        moveTarget = { index: Number.parseInt(to, 10) - 1 };
+      } else {
+        throw new Error(`invalid --to: ${to} (expected top|bottom|up|down|<N>，N 为 1 基位次)`);
+      }
+      const rules = await svc.moveRule(ruleId, moveTarget);
+      if (!rules.ok) return Result.err(rules.error);
+      for (const r of rules.value) {
         console.log(`${r.sortOrder}\t${r.ruleId}`);
       }
-      return;
+      return RESULT_OK;
     }
     case "export": {
       const file = flagString(flags, "file");
@@ -173,7 +151,7 @@ export async function runSortRule(
       const text = stringifyText(doc, formatFromPath(file));
       await writeFile(file, text, "utf8");
       console.log(doc.rules.length);
-      return;
+      return RESULT_OK;
     }
     case "import": {
       const file = flagString(flags, "file");
@@ -181,34 +159,34 @@ export async function runSortRule(
         throw new Error("Usage: nm sort-rule import --file <path>");
       }
       const source = await readFile(file, "utf8");
-      const raw = parseText(source, formatFromPath(file));
-      const rules = await svc.importRules(raw);
-      console.log(rules.length);
-      return;
+      const parsed = parseText(source, formatFromPath(file));
+      if (!parsed.ok) return Result.err(parsed.error);
+      const rules = await svc.importRules(parsed.value);
+      if (!rules.ok) return Result.err(rules.error);
+      console.log(rules.value.length);
+      return RESULT_OK;
     }
     case "test": {
       if (positional.length === 0) {
         throw new Error("Usage: nm sort-rule test <name>...");
       }
       const result = await svc.previewSort(positional);
-      for (const line of result.lines) {
+      if (!result.ok) return Result.err(result.error);
+      for (const line of result.value.lines) {
         // 序号元组显示：null → '-'；其余经 core 单源 formatSortTupleForDisplay
         // 格式化（C-3）：固定档哨兵 "(固定最小,)"/"(固定最大,)"，smart "(1,)"
         // 风格（Python 元组 repr 尾逗号）。
-        const nums =
-          line.nums == null ? "-" : coreT(formatSortTupleForDisplay(line.nums));
+        const nums = line.nums == null ? "-" : coreT(formatSortTupleForDisplay(line.nums));
         console.log(`${line.name}\t${line.matchedRuleId ?? "-"}\t${nums}`);
       }
       console.log("");
-      for (const name of result.sortedNames) {
+      for (const name of result.value.sortedNames) {
         console.log(name);
       }
       console.log("# asc");
-      return;
+      return RESULT_OK;
     }
     default:
-      throw new Error(
-        "Usage: nm sort-rule <list|create|update|remove|enable|disable|move|export|import|test> ...",
-      );
+      throw new Error("Usage: nm sort-rule <list|create|update|remove|enable|disable|move|export|import|test> ...");
   }
 }

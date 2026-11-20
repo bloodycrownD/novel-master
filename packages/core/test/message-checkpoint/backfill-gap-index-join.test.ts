@@ -11,24 +11,18 @@
  * @module test/message-checkpoint/backfill-gap-index-join
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
-import {
-  backfillBaselineCheckpoints,
-  scanBackfillGap,
-  writeBackfillGap,
-} from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  MessageCheckpointFactory  } from "@novel-master/core/message-checkpoint";
+import {  BackfillBaselineCheckpoints  } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteMessageRepository  } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { ChatMessageHeader } from "@/domain/chat/model/message.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
 
 interface Counters {
   hasCheckpoint: number;
@@ -97,15 +91,15 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     messageCount: number,
     capturedIndexes: readonly number[]
   ): Promise<{ projectId: string; sessionId: string; ids: string[] }> {
-    const project = await ctx.projects.create(`P-${label}-${Date.now()}-${Math.random()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${label}-${Date.now()}-${Math.random()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const ids: string[] = [];
     for (let i = 0; i < messageCount; i++) {
       ids.push(
         (
-          await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
+          unwrap(await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
             blocks: [{ type: "text", text: `m${i}` }],
-          })
+          }))
         ).id
       );
     }
@@ -113,9 +107,9 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     await ctx.sessionVfs(project.id, session.id).write("/a.md", `a-${label}`, {
       versionCheck: false,
     });
-    const checkpoints = createMessageCheckpointService(conn);
+    const checkpoints = MessageCheckpointFactory.create(conn);
     for (const i of capturedIndexes) {
-      await checkpoints.capture(session.id, project.id, ids[i]!);
+      unwrap(await checkpoints.capture(session.id, project.id, ids[i]!));
     }
     return { projectId: project.id, sessionId: session.id, ids };
   }
@@ -132,7 +126,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         new SqliteMessageCheckpointRepository(conn),
         counters
       );
-      const scan = await scanBackfillGap({
+      const scan = await BackfillBaselineCheckpoints.scanGap({
         entryRepo: entries,
         messageRepo: messages,
         checkpointRepo: repo,
@@ -140,7 +134,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         sessionId: withGap.sessionId,
       });
       assert.equal(scan.gapMessageIds.length, 3, "gap 应为最后 3 条");
-      await writeBackfillGap({
+      await BackfillBaselineCheckpoints.writeGap({
         checkpointRepo: repo,
         sessionId: withGap.sessionId,
         scan,
@@ -160,7 +154,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         new SqliteMessageCheckpointRepository(conn),
         counters
       );
-      const scan = await scanBackfillGap({
+      const scan = await BackfillBaselineCheckpoints.scanGap({
         entryRepo: entries,
         messageRepo: messages,
         checkpointRepo: repo,
@@ -169,7 +163,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
       });
       assert.deepEqual(scan.gapMessageIds, []);
       assert.equal(scan.confirmedNoGap, true);
-      await writeBackfillGap({
+      await BackfillBaselineCheckpoints.writeGap({
         checkpointRepo: repo,
         sessionId: noGap.sessionId,
         scan,
@@ -185,7 +179,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         new SqliteMessageCheckpointRepository(conn),
         counters
       );
-      const scan = await scanBackfillGap({
+      const scan = await BackfillBaselineCheckpoints.scanGap({
         entryRepo: entries,
         messageRepo: messages,
         checkpointRepo: repo,
@@ -193,7 +187,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         sessionId: allGap.sessionId,
       });
       assert.equal(scan.gapMessageIds.length, allGap.ids.length);
-      await writeBackfillGap({
+      await BackfillBaselineCheckpoints.writeGap({
         checkpointRepo: repo,
         sessionId: allGap.sessionId,
         scan,
@@ -217,7 +211,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         new SqliteMessageCheckpointRepository(conn),
         counters
       );
-      const scan = await scanBackfillGap({
+      const scan = await BackfillBaselineCheckpoints.scanGap({
         entryRepo: entries,
         messageRepo: messages,
         checkpointRepo: repo,
@@ -225,7 +219,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
         sessionId: seeded.sessionId,
       });
       assert.equal(scan.gapMessageIds.length, 3, "两条会话的 gap 必须都是 3");
-      await writeBackfillGap({
+      await BackfillBaselineCheckpoints.writeGap({
         checkpointRepo: repo,
         sessionId: seeded.sessionId,
         scan,
@@ -261,13 +255,13 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
       .sort();
 
     const before = await checkpointIds(conn, seeded.sessionId);
-    await backfillBaselineCheckpoints(
-      entries,
-      messages,
-      plain,
-      seeded.projectId,
-      seeded.sessionId
-    );
+    await BackfillBaselineCheckpoints.backfill({
+      entryRepo: entries,
+      messageRepo: messages,
+      checkpointRepo: plain,
+      projectId: seeded.projectId,
+      sessionId: seeded.sessionId,
+    });
     const after = await checkpointIds(conn, seeded.sessionId);
 
     const added = after.filter((id) => !before.includes(id)).sort();
@@ -281,7 +275,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     // ① 一条 checkpoint 都没有 ⇒ firstGapIndex = 0（整表都是空窗）。
     const none = await seed("f3-none", 4, []);
     {
-      const scan = await scanBackfillGap({
+      const scan = await BackfillBaselineCheckpoints.scanGap({
         entryRepo: entries,
         messageRepo: messages,
         checkpointRepo: new SqliteMessageCheckpointRepository(conn),
@@ -296,7 +290,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     const tail = await seed("f3-tail", 4, [3]);
     {
       const before = await checkpointIds(conn, tail.sessionId);
-      const scan = await scanBackfillGap({
+      const scan = await BackfillBaselineCheckpoints.scanGap({
         entryRepo: entries,
         messageRepo: messages,
         checkpointRepo: new SqliteMessageCheckpointRepository(conn),
@@ -305,7 +299,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
       });
       assert.deepEqual(scan.gapMessageIds, [], "无空窗 ⇒ 不补任何消息");
       assert.equal(scan.confirmedNoGap, true);
-      await writeBackfillGap({
+      await BackfillBaselineCheckpoints.writeGap({
         checkpointRepo: new SqliteMessageCheckpointRepository(conn),
         sessionId: tail.sessionId,
         scan,
@@ -314,12 +308,12 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     }
 
     // ③ 空消息会话（有 live 文件）⇒ 恒无空窗，不新增行。
-    const emptyProject = await ctx.projects.create(`P-f3-empty-${Date.now()}`);
-    const emptySession = await ctx.sessions.create(emptyProject.id);
+    const emptyProject = unwrap(await ctx.projects.create(`P-f3-empty-${Date.now()}`));
+    const emptySession = unwrap(await ctx.sessions.create(emptyProject.id));
     await ctx.sessionVfs(emptyProject.id, emptySession.id).write("/only.md", "x", {
       versionCheck: false,
     });
-    const scan = await scanBackfillGap({
+    const scan = await BackfillBaselineCheckpoints.scanGap({
       entryRepo: entries,
       messageRepo: messages,
       checkpointRepo: new SqliteMessageCheckpointRepository(conn),

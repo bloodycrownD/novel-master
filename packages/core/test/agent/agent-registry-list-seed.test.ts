@@ -1,26 +1,19 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 
-import {
-  isAppError,
-  agentDefinitionSchema,
-  createAgentRegistryService,
-} from "@novel-master/core/agent";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  AgentServiceFactory, agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
 describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
   it("空 DB 时 list 包含虚拟 general", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
-    const defs = await registry.list();
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
+    const defs = unwrap(await registry.list());
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
     assert.ok(
@@ -31,27 +24,25 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("get(<不存在的 uuid>) 报 AGENT_NOT_FOUND（get 不合并虚拟）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
-    await assert.rejects(
-      () => registry.get("non-existent-uuid-xxx"),
-      (e: unknown) =>
-        isAppError(e, "AGENT_NOT_FOUND"),
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
+    await rejectsErr(
+      registry.get("non-existent-uuid-xxx"),
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "AGENT_NOT_FOUND")),
     );
   });
 
   it("delete('general') 走 DB 路径报 AGENT_NOT_FOUND（虚拟不可删）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
-    await assert.rejects(
-      () => registry.delete("general"),
-      (e: unknown) =>
-        isAppError(e, "AGENT_NOT_FOUND"),
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
+    await rejectsErr(
+      registry.delete("general"),
+      (e: unknown) => assert.ok(AppErrorOps.is(e, "AGENT_NOT_FOUND")),
     );
   });
 
   it("export 排除虚拟（listAgentIds 不含 general）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const ids = await registry.listAgentIds();
     // general 是虚拟的，没有 id，所以 listAgentIds 不应包含。
     assert.ok(!ids.includes("general"));
@@ -59,29 +50,32 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("upsert 同名 general 被拒绝（Step 6 禁止内置名重名，抛 INVALID_SCHEMA）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const dbGeneralId = `db-general-${testIsolationSuffix()}`;
-    await assert.rejects(
+    await rejectsErr(
       registry.upsert(
         dbGeneralId,
-        decode(
-          {
-            schemaVersion: 1,
-            name: "general",
-            prompts: { persist: {}, dynamic: {} },
-          },
-          agentDefinitionSchema,
+        unwrap(
+          SerializationDecode.decode(
+            {
+              schemaVersion: 1,
+              name: "general",
+              prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema,
+          ),
         ),
       ),
-      (e: unknown) =>
-        isAppError(e, "AGENT_INVALID_SCHEMA"),
+      (e) => {
+        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA"));
+      },
     );
   });
 
   it("T-G1: 空 DB 时 list 返回的虚拟 general 满足 mode === subagent（FR-5）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
-    const defs = await registry.list();
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
+    const defs = unwrap(await registry.list());
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
     assert.equal(
@@ -93,35 +87,23 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("list 同时返回 DB 已有 agent + 虚拟 general", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const writerId = `writer-${testIsolationSuffix()}`;
     await registry.upsert(
       writerId,
-      decode(
-        {
-          schemaVersion: 1,
-          name: `writer-${testIsolationSuffix()}`,
-          prompts: { persist: {}, dynamic: {} },
-        },
-        agentDefinitionSchema,
+      unwrap(
+        SerializationDecode.decode(
+          {
+            schemaVersion: 1,
+            name: `writer-${testIsolationSuffix()}`,
+            prompts: { persist: {}, dynamic: {} },
+          },
+          agentDefinitionSchema,
+        ),
       ),
     );
-    const defs = await registry.list();
+    const defs = unwrap(await registry.list());
     assert.ok(defs.some((d) => d.name === "general"));
     assert.ok(defs.some((d) => d.name.startsWith("writer-")));
   });
 });
-
-/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
-function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
-}
-
-/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
-function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
-}

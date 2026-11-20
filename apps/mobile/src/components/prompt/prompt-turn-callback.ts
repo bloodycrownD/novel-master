@@ -10,6 +10,8 @@
  * 不走路由，标题这类可序列化的短文本仍走 params）。
  */
 
+import {CallbackSlot} from '../../runtime/callback-slot';
+
 export type PromptTurnDetail = {
   /** 轮标题（首行摘要），供详情页 header 覆盖用。 */
   readonly title: string;
@@ -23,16 +25,8 @@ export type PromptTurnDetail = {
   readonly leafId?: string;
 };
 
-let detail: PromptTurnDetail | null = null;
-
-/** navigate 前写入当次载荷（每次打开详情都覆盖新载荷）。 */
-export function setPromptTurnDetail(next: PromptTurnDetail) {
-  detail = next;
-}
-
-/** 挂载时读取并清空：take 语义避免残留旧正文（未消费即离开则丢弃）。 */
-export function takePromptTurnDetail(): PromptTurnDetail | null {
-  const taken = detail;
-  detail = null;
-  return taken;
-}
+/**
+ * 模块级单槽：navigate 前 `set`（每次打开详情都覆盖新载荷）、挂载时 `take`
+ * （读后即清，未消费即离开则丢弃，避免残留旧正文）。
+ */
+export const promptTurnDetailSlot = CallbackSlot.create<PromptTurnDetail>();

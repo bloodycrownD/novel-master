@@ -11,7 +11,7 @@ import {
 } from '@/features/workspace/vfs-tree-utils';
 import { composerAtPath } from './composer-at-path';
 
-export type FileReferencePickerProps = {
+type FileReferencePickerProps = {
   open: boolean;
   projectId: string;
   sessionId: string;
@@ -26,6 +26,7 @@ function basename(path: string): string {
 }
 
 /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
+// nm-style: keep-local — file-reference-picker.test 直引断言直子行过滤语义（4 个调用点）；内联会破坏测试锁名。
 export function listPickerChildRows(
   rows: readonly WorkplaceListRowDto[],
   currentPath: string,
@@ -226,9 +227,11 @@ export function FileReferencePicker({
             className="file-ref-picker__confirm"
             disabled={!canConfirm}
             onClick={() => {
-              onConfirm(
-                composerAtPath.tokensFromPickerSelection(selectedDirs, selectedFiles),
-              );
+              const tokens = composerAtPath.tokensFromPickerSelection(selectedDirs, selectedFiles);
+              if (!tokens.ok) {
+                return;
+              }
+              onConfirm(tokens.value);
               onClose();
             }}
           >

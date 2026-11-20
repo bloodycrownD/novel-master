@@ -15,13 +15,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { dialog } from "electron";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import {
-  handleVfsFileExport,
-  handleVfsFilePick,
-  handleVfsMkdir,
-  handleVfsWrite,
-} from "../src/main/ipc/handlers/vfs.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -77,7 +72,7 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-vfs-file-io-"));
-    const project = await handleProjectsCreate({ name: "单文件导出项目" });
+    const project = await Projects.create({ name: "单文件导出项目" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -101,7 +96,7 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
 
   it("T-DI1 pick：用户取消 → null", async () => {
     stubOpenDialog(() => undefined);
-    const res = await handleVfsFilePick();
+    const res = await Vfs.filePick();
     assert.equal(res.ok, true);
     assert.equal(res.data, null);
     assert.equal(openDialogs.length, 1);
@@ -113,7 +108,7 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
       result.canceled = false;
       result.filePaths = [picked];
     });
-    const res = await handleVfsFilePick();
+    const res = await Vfs.filePick();
     assert.equal(res.ok, true);
     assert.equal(res.data, picked);
 
@@ -129,16 +124,16 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
       result.canceled = false;
       result.filePaths = [];
     });
-    const res = await handleVfsFilePick();
+    const res = await Vfs.filePick();
     assert.equal(res.ok, true);
     assert.equal(res.data, null);
   });
 
   it("T-DI2 export：默认名 = 文件名；取消保存框 → cancelled 且不写盘", async () => {
-    await handleVfsWrite({ ...scope, path: "/笔记/导出.md", content: "hello" });
+    await Vfs.write({ ...scope, path: "/笔记/导出.md", content: "hello" });
     const before = saveDialogs.length;
     stubSaveDialog(() => undefined);
-    const res = await handleVfsFileExport({ ...scope, logicalPath: "/笔记/导出.md" });
+    const res = await Vfs.fileExport({ ...scope, logicalPath: "/笔记/导出.md" });
     assert.equal(res.ok, true);
     assert.equal(res.data, "cancelled");
     assert.equal(saveDialogs.length, before + 1);
@@ -147,14 +142,14 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
 
   it("T-DI2 export：保存 → utf8 写盘且内容与 VFS 一致", async () => {
     const content = "第一行\n中文内容\n";
-    await handleVfsWrite({ ...scope, path: "/笔记/落盘.md", content });
+    await Vfs.write({ ...scope, path: "/笔记/落盘.md", content });
     const target = join(tempDir, "落盘-out.md");
     stubSaveDialog((result) => {
       result.canceled = false;
       result.filePath = target;
     });
 
-    const res = await handleVfsFileExport({ ...scope, logicalPath: "/笔记/落盘.md" });
+    const res = await Vfs.fileExport({ ...scope, logicalPath: "/笔记/落盘.md" });
     assert.equal(res.ok, true);
     assert.equal(res.data, "saved");
     assert.equal(lastSaveDialogOptions().defaultPath, "落盘.md");
@@ -162,17 +157,17 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
   });
 
   it("T-DI2 export：顶层文件同样取文件名作默认名", async () => {
-    await handleVfsWrite({ ...scope, path: "/顶层.md", content: "x" });
+    await Vfs.write({ ...scope, path: "/顶层.md", content: "x" });
     stubSaveDialog(() => undefined);
-    const res = await handleVfsFileExport({ ...scope, logicalPath: "/顶层.md" });
+    const res = await Vfs.fileExport({ ...scope, logicalPath: "/顶层.md" });
     assert.equal(res.ok, true);
     assert.equal(lastSaveDialogOptions().defaultPath, "顶层.md");
   });
 
   it("T-DI2 export：误传目录（plan 出多条）→ 报错，且不弹保存框、不写盘", async () => {
-    await handleVfsMkdir({ ...scope, path: "/多文件目录" });
-    await handleVfsWrite({ ...scope, path: "/多文件目录/a.md", content: "a" });
-    await handleVfsWrite({ ...scope, path: "/多文件目录/b.md", content: "b" });
+    await Vfs.mkdir({ ...scope, path: "/多文件目录" });
+    await Vfs.write({ ...scope, path: "/多文件目录/a.md", content: "a" });
+    await Vfs.write({ ...scope, path: "/多文件目录/b.md", content: "b" });
 
     // 这条是安全闸：`planBatchExport` 收到目录会递归整棵子树且**不报错**，
     // 只取 files[0] 会静默把「导出一个目录」降级成「导出其中某个文件」。
@@ -183,7 +178,7 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
       result.filePath = target;
     });
 
-    const res = await handleVfsFileExport({ ...scope, logicalPath: "/多文件目录" });
+    const res = await Vfs.fileExport({ ...scope, logicalPath: "/多文件目录" });
     assert.equal(res.ok, false);
     assert.match(res.ok ? "" : res.error.message, /只能导出单个文件/);
     assert.equal(saveDialogs.length, 0, "校验必须发生在 showSaveDialog 之前");
@@ -195,7 +190,7 @@ describe("VFS 单文件 pick / export（T-DI1 / T-DI2）", () => {
       result.canceled = false;
       result.filePath = join(tempDir, "不存在.md");
     });
-    const res = await handleVfsFileExport({ ...scope, logicalPath: "/根本没有这个.md" });
+    const res = await Vfs.fileExport({ ...scope, logicalPath: "/根本没有这个.md" });
     assert.equal(res.ok, false);
     assert.equal(saveDialogs.length, 0);
   });

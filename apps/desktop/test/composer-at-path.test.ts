@@ -9,7 +9,9 @@ import { composerSendPolicy } from "@/features/chat/composer-send-intent";
 import { renderComposerAtPathHighlightHtml } from "@/features/chat/ComposerAtPathInput";
 
 test("T-ATD2: Picker 确认 token 为 @path；目录带尾 /；扫描落库带前导 /", () => {
-  const tokens = composerAtPath.tokensFromPickerSelection(["/notes"], ["/a.md"]);
+  const tokensResult = composerAtPath.tokensFromPickerSelection(["/notes"], ["/a.md"]);
+  if (!tokensResult.ok) throw tokensResult.error;
+  const tokens = tokensResult.value;
   assert.deepEqual(tokens, ["@/notes/", "@/a.md"]);
   const scanned = attachmentScanner.scanAtPaths(tokens.join(" "));
   assert.equal(scanned.length, 2);
@@ -23,8 +25,9 @@ test("T-ATD3: 点选替换为完整 @path", () => {
   const active = composerAtPath.detectQuery("见 @ab", 5);
   assert.ok(active);
   assert.equal(active!.query, "ab");
-  const token = composerAtPath.formatToken("/ab.md", false);
-  const next = composerAtPath.replaceToken("见 @ab", 5, active!.start, token);
+  const tokenResult = composerAtPath.formatToken("/ab.md", false);
+  if (!tokenResult.ok) throw tokenResult.error;
+  const next = composerAtPath.replaceToken("见 @ab", 5, active!.start, tokenResult.value);
   assert.equal(next.text, "见 @/ab.md ");
   assert.ok(next.text.includes("@/ab.md"));
 });

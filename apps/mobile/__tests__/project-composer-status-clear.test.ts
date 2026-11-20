@@ -7,14 +7,13 @@ import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 const mockReplace = jest.fn();
 
 jest.mock('@/storage/chat-composer-draft', () => ({
-  applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
-    mockReplace(...args),
+  ChatComposerDraft: {
+    applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
+      mockReplace(...args),
+  },
 }));
 
-import {
-  refreshComposerStatusAfterFloorOrCompaction,
-  refreshComposerStatusAfterSessionKkvCleared,
-} from '@/services/project-composer-status.service';
+import {ProjectComposerStatusService} from '@/services/project-composer-status.service'
 
 describe('composer status after kkv clear (T-CR5)', () => {
   beforeEach(() => {
@@ -23,7 +22,7 @@ describe('composer status after kkv clear (T-CR5)', () => {
   });
 
   it('Undo/手动：refreshComposerStatusAfterSessionKkvCleared 以空 attachments 替换', async () => {
-    await refreshComposerStatusAfterSessionKkvCleared({} as any, {
+    await ProjectComposerStatusService.refreshAfterSessionKkvCleared({
       projectId: 'p',
       sessionId: 's1',
     });
@@ -40,7 +39,7 @@ describe('composer status after kkv clear (T-CR5)', () => {
       originalText: 'k',
       userAnnotation: '批注',
     });
-    await refreshComposerStatusAfterFloorOrCompaction({} as any, {
+    await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
       projectId: 'p',
       sessionId: 's1',
     });

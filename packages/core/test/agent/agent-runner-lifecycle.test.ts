@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type BuiltinToolContext,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { type LlmChatResult, type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
-import { SimpleEventBus } from "@novel-master/core/events";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  type ModelRequestOptions, type  ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p1";
@@ -56,7 +54,7 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
   };
 }
 
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 
 function runnerDeps(
   deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels"> &
@@ -80,7 +78,7 @@ function runnerDeps(
 describe("AgentRunner dynamic 区 once 语义", () => {
   it("R1: dynamic block only on step 0 history", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "kick-agent",
@@ -99,7 +97,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
         captured.push(options);
         const step = captured.length - 1;
         if (step === 0) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -110,19 +108,19 @@ describe("AgentRunner dynamic 区 once 语义", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          } satisfies LlmChatResult);
         }
-        return {
+        return Result.ok({
           assistantText: "done",
           blocks: [{ type: "text", text: "done" }],
           raw: {},
-        } satisfies LlmChatResult;
+        } satisfies LlmChatResult);
       },
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -131,14 +129,14 @@ describe("AgentRunner dynamic 区 once 语义", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
       maxSteps: 3,
-    });
+    }));
 
     assert.equal(captured.length, 2);
     const step0Kick = captured[0]!.history.find((m) => m.id === "prompt:kick");
@@ -164,7 +162,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
       async request(_id, _prompt, options) {
         captured.push(options);
         if (captured.length % 2 === 1) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -175,20 +173,20 @@ describe("AgentRunner dynamic 区 once 语义", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          } satisfies LlmChatResult);
         }
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        } satisfies LlmChatResult);
       },
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const makeRunner = (session: InMemoryAgentSession) =>
-      createAgentRunner(
+      AgentServiceFactory.createRunner(
         runnerDeps({
           session,
           modelRequests: model,
@@ -199,7 +197,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
 
     // 第一轮 run：step0 注入、step1 跳过
     const session1 = new InMemoryAgentSession();
-    await session1.append("user", textBlocks("go"));
+    await session1.append("user", TextBlocks.of("go"));
     await makeRunner(session1).run({
       definition,
       sessionId: SESSION_ID,
@@ -215,7 +213,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     );
 
     // 第二轮新 run（同一 session 续接）：step0 重新注入
-    await session1.append("user", textBlocks("go again"));
+    await session1.append("user", TextBlocks.of("go again"));
     await makeRunner(session1).run({
       definition,
       sessionId: SESSION_ID,
@@ -236,7 +234,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
 
   it("R3: system 来自 layout.system 字段", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "sys-agent",
@@ -251,17 +249,17 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     const model: ModelRequestService = {
       async request(_id, _prompt, options) {
         systemArg = options.system;
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        } satisfies LlmChatResult);
       },
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -270,13 +268,13 @@ describe("AgentRunner dynamic 区 once 语义", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(systemArg, "你是助手");
   });

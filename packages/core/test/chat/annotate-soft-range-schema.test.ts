@@ -3,9 +3,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import { annotateDraftSchema, type AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
+import {  describe, it  } from "node:test";
+import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  annotateDraftSchema, type AnnotateDraft  } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
 describe("T-AR1 annotateDraftSchema 行列 decode/encode", () => {

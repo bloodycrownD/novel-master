@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  createTokenRateSampler,
-  slidingTokenRate,
-} from "../../../src/domain/format/sliding-token-rate.js";
+import {  describe, it  } from "node:test";
+import {  SlidingTokenRate  } from "../../../src/domain/format/sliding-token-rate.js";
 
-describe("slidingTokenRate（T-M9 滑窗速率）", () => {
+describe("SlidingTokenRate.rate（T-M9 滑窗速率）", () => {
   it("200 t/s 场景数值稳定：窗口推进下每个时刻的速率都在 200 附近", () => {
     // 每 250ms 产出 50 t（=200 t/s），采样 4s。逐时刻只用「截至该时刻」
     // 的样本切片（真实组件的样本序列不含未来样本）。
@@ -17,7 +14,7 @@ describe("slidingTokenRate（T-M9 滑窗速率）", () => {
     // 窗口填满后（≥2.5s）逐时刻核对：首尾差分 ÷ 窗口时长 ≈ 200。
     for (let i = 10; i <= 16; i += 1) {
       const nowMs = startMs + i * 250;
-      const rate = slidingTokenRate(samples.slice(0, i), nowMs);
+      const rate = SlidingTokenRate.rate(samples.slice(0, i), nowMs);
       assert.notEqual(rate, null);
       assert.ok(
         Math.abs(rate! - 200) <= 8,
@@ -35,7 +32,7 @@ describe("slidingTokenRate（T-M9 滑窗速率）", () => {
     }
     for (let i = 14; i <= 20; i += 1) {
       const nowMs = startMs + i * 200;
-      const rate = slidingTokenRate(samples.slice(0, i), nowMs);
+      const rate = SlidingTokenRate.rate(samples.slice(0, i), nowMs);
       assert.notEqual(rate, null);
       assert.ok(
         Math.abs(rate! - 5) <= 0.4,
@@ -45,7 +42,7 @@ describe("slidingTokenRate（T-M9 滑窗速率）", () => {
   });
 
   it("输出暂停 3s 后速率衰减趋零；恢复后回升", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     // 先以 200 t/s 跑 1.5s（每 250ms +50）。
     for (let i = 1; i <= 6; i += 1) {
@@ -76,11 +73,11 @@ describe("slidingTokenRate（T-M9 滑窗速率）", () => {
   });
 
   it("样本不足两个或时长非正返回 null（省略速率段的判定依据）", () => {
-    assert.equal(slidingTokenRate([], 1_000), null);
-    assert.equal(slidingTokenRate([{tMs: 900, tokens: 5}], 1_000), null);
+    assert.equal(SlidingTokenRate.rate([], 1_000), null);
+    assert.equal(SlidingTokenRate.rate([{tMs: 900, tokens: 5}], 1_000), null);
     // 全部样本晚于当前时刻（时钟回拨形态）：时长非正 → null。
     assert.equal(
-      slidingTokenRate(
+      SlidingTokenRate.rate(
         [
           {tMs: 2_000, tokens: 5},
           {tMs: 2_500, tokens: 9},
@@ -99,23 +96,23 @@ describe("slidingTokenRate（T-M9 滑窗速率）", () => {
       {tMs: 100_750, tokens: 150},
     ];
     // 时钟回拨到 t=100_250：后两条是未来样本，须排除——只按 0→50 算 200 t/s。
-    assert.equal(slidingTokenRate(samples, 100_250), 200);
+    assert.equal(SlidingTokenRate.rate(samples, 100_250), 200);
     // 回拨到两样本之间：分母随 nowMs 走（50 t / 300ms），不被未来样本污染。
-    const between = slidingTokenRate(samples, 100_300);
+    const between = SlidingTokenRate.rate(samples, 100_300);
     assert.ok(
       between != null && Math.abs(between - 50_000 / 300) < 1e-9,
       `回拨到样本之间应只算已发生的增量：${between}`
     );
     // 回拨到首样本之前：无可用样本 → null（「全未来样本 → null」的推广）。
-    assert.equal(slidingTokenRate(samples, 99_000), null);
+    assert.equal(SlidingTokenRate.rate(samples, 99_000), null);
     // 恢复：窗口按此刻重算，正常产出速率。
-    assert.equal(slidingTokenRate(samples, 100_750), 200);
+    assert.equal(SlidingTokenRate.rate(samples, 100_750), 200);
   });
 });
 
-describe("createTokenRateSampler（T-M10 校正重置）", () => {
+describe("SlidingTokenRate.createSampler（T-M10 校正重置）", () => {
   it("heuristic→usage 覆盖瞬间滑窗重 seed、速率无尖刺", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     // heuristic 阶段：每 250ms 折算 +3 t（约 12 t/s）。
     for (let i = 1; i <= 8; i += 1) {
@@ -141,7 +138,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("usage 下调（900→600）与上调同构：翻转瞬间 null、从真值起算、freeze 回落（core-metrics/G-1）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     // heuristic 阶段：每 250ms 折算 +3 t（约 12 t/s），累计 24。
     for (let i = 1; i <= 8; i += 1) {
@@ -175,7 +172,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("窗口折叠后的首个新样本重 seed：freeze 回落到折叠前末值（多步 run 终态速率）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     // 第一步：200 t/s 跑 1.5s（每 250ms +50）。
     for (let i = 1; i <= 6; i += 1) {
@@ -210,7 +207,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("跨静默（> 窗口时长）时旧样本不进新窗口；未超窗口的暂停仍走衰减语义", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     sampler.sample(0, "usage", startMs);
     sampler.sample(100, "usage", startMs + 250);
@@ -240,7 +237,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("时钟回拨不触发窗口折叠重 seed（分支不变）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     sampler.sample(0, "usage", startMs);
     for (let i = 1; i <= 6; i += 1) {
@@ -254,7 +251,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("reset 后跨 run 差分不残留", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     sampler.sample(5_000, "usage", 100_000);
     sampler.reset();
     // 新 run 从零起：首个样本即 seed，速率 null。
@@ -263,7 +260,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("tokens 未变的重复采样不产生新样本（暂停衰减依赖 nowMs 分母）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     sampler.sample(100, "usage", 100_000);
     sampler.sample(200, "usage", 100_250);
     // 同 tokens、只推进时刻：分子不变分母增大，速率下降。
@@ -273,7 +270,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("同毫秒多条 delta 只留最终累计值（core-metrics/B-1）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     // 同一渲染节拍内的 3 条 delta（累计 100 → 200 → 300）：同刻去重后只剩
     // 一条样本，窗口样本不足 → null，而不是「300 t ÷ 0~几毫秒」的爆表值。
@@ -289,7 +286,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("时钟回拨期采样入口丢弃、序列不倒序，恢复后照常记样本（core-metrics/B-4）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     const startMs = 100_000;
     sampler.sample(0, "usage", startMs);
     sampler.sample(50, "usage", startMs + 250);
@@ -308,7 +305,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("rateAt 只读不记样本：同 nowMs 幂等、暂停期随 nowMs 衰减、样本不足 null", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     // 0/1 个样本：null（首秒不显示抖动速率）。
     assert.equal(sampler.rateAt(100_000), null);
     sampler.sample(100, "usage", 100_000);
@@ -326,7 +323,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("freeze 末值快照：窗口以最后样本时刻收尾（收尾前停顿不拉低）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     sampler.sample(0, "usage", 100_000);
     for (let i = 1; i <= 8; i += 1) {
       sampler.sample(i * 50, "usage", 100_000 + i * 250);
@@ -344,7 +341,7 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
   });
 
   it("freeze 在样本不足以成窗口时回落到校正翻转前的末值（openai 收尾真值场景）", () => {
-    const sampler = createTokenRateSampler();
+    const sampler = SlidingTokenRate.createSampler();
     sampler.sample(0, "heuristic", 100_000);
     for (let i = 1; i <= 6; i += 1) {
       sampler.sample(i * 30, "heuristic", 100_000 + i * 250);

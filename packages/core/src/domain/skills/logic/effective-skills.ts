@@ -40,35 +40,37 @@ export interface EffectiveSkill {
   readonly effective: boolean;
 }
 
-/**
- * 计算当前项目可见的技能合并视图。
- *
- * 规则：global ∪ project；同名时 project 副本覆盖 global 版（标
- * `overridden`，global 原件不出现在结果里）；命中负清单的标 `disabled`；
- * 无效技能保留但 `effective=false`。结果按名称排序，输出稳定。
- *
- * nm-style: keep-public — 技能索引 / `$` 候选 / 面板共用的唯一合并入口（public/skills.ts 导出）。
- */
-export function computeEffectiveSkills(input: EffectiveSkillsInput): EffectiveSkill[] {
-  const disabled = new Set(input.disabledNames ?? []);
+export const EffectiveSkills = {
+  /**
+   * 计算当前项目可见的技能合并视图。
+   *
+   * 规则：global ∪ project；同名时 project 副本覆盖 global 版（标
+   * `overridden`，global 原件不出现在结果里）；命中负清单的标 `disabled`；
+   * 无效技能保留但 `effective=false`。结果按名称排序，输出稳定。
+   *
+   * nm-style: keep-public — 技能索引 / `$` 候选 / 面板共用的唯一合并入口（public/skills.ts 导出）。
+   */
+  compute(input: EffectiveSkillsInput): EffectiveSkill[] {
+    const disabled = new Set(input.disabledNames ?? []);
 
-  const projectNames = new Set(input.project.map((s) => s.name));
-  const merged: SkillSummary[] = [...input.global.filter((s) => !projectNames.has(s.name)), ...input.project];
+    const projectNames = new Set(input.project.map((s) => s.name));
+    const merged: SkillSummary[] = [...input.global.filter((s) => !projectNames.has(s.name)), ...input.project];
 
-  return merged
-    .map((s): EffectiveSkill => {
-      const isDisabled = disabled.has(s.name);
-      const overridden = s.domain === "project" && input.global.some((g) => g.name === s.name);
-      return {
-        name: s.name,
-        description: s.description,
-        domain: s.domain,
-        overridden,
-        disabled: isDisabled,
-        valid: s.valid,
-        ...(s.invalidReason != null ? { invalidReason: s.invalidReason } : {}),
-        effective: s.valid && !isDisabled,
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
+    return merged
+      .map((s): EffectiveSkill => {
+        const isDisabled = disabled.has(s.name);
+        const overridden = s.domain === "project" && input.global.some((g) => g.name === s.name);
+        return {
+          name: s.name,
+          description: s.description,
+          domain: s.domain,
+          overridden,
+          disabled: isDisabled,
+          valid: s.valid,
+          ...(s.invalidReason != null ? { invalidReason: s.invalidReason } : {}),
+          effective: s.valid && !isDisabled,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+} as const;

@@ -6,32 +6,21 @@
 
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { RevisionGc } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import {
-  collectMutatingPathsFromCalls,
-  extractMutatingPaths,
-} from "@/domain/vfs/logic/extract-mutating-paths.js";
-import {
-  captureMutatingPathHeadSnapshots,
-  MutatingPathRestoreCompositeError,
-  restoreMutatingPathHeads,
-} from "@/domain/vfs/logic/restore-mutating-path-heads.js";
-import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { MutatingPaths } from "@/domain/vfs/logic/extract-mutating-paths.js";
+import { MutatingPathHeads, MutatingPathRestoreCompositeError } from "@/domain/vfs/logic/restore-mutating-path-heads.js";
+import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
-import type {
-  UserVfsTurnExecuteResult,
-  UserVfsTurnOp,
-  UserVfsTurnService,
-} from "../user-vfs-turn.port.js";
+import type { UserVfsTurnExecuteResult, UserVfsTurnOp, UserVfsTurnService } from "../user-vfs-turn.port.js";
 
 /** {@link DefaultUserVfsTurnService} 依赖。 */
 export interface UserVfsTurnServiceDeps {
@@ -52,10 +41,7 @@ export interface UserVfsTurnServiceDeps {
   readonly entries: VfsEntryRepository;
   readonly revisions: VfsRevisionRepository;
   readonly toolRunner: ToolRunner<BuiltinToolContext>;
-  readonly resolveToolCtx: (
-    sessionId: string,
-    projectId: string
-  ) => BuiltinToolContext;
+  readonly resolveToolCtx: (sessionId: string, projectId: string) => BuiltinToolContext;
   /**
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
    */
@@ -68,20 +54,17 @@ export interface UserVfsTurnServiceDeps {
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
   constructor(private readonly deps: UserVfsTurnServiceDeps) {}
 
-  async executeOp(
-    sessionId: string,
-    op: UserVfsTurnOp
-  ): Promise<UserVfsTurnExecuteResult> {
+  async executeOp(sessionId: string, op: UserVfsTurnOp): Promise<UserVfsTurnExecuteResult> {
     if (op.tools.length === 0) {
-      throw chatInvalidArgument("userVfsTurn.op.tools must not be empty");
+      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.tools must not be empty" }) };
     }
     if (op.actionXml.trim() === "") {
-      throw chatInvalidArgument("userVfsTurn.op.actionXml must not be empty");
+      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.actionXml must not be empty" }) };
     }
 
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      return { ok: false, error: new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }) };
     }
 
     const toolCtx = this.deps.resolveToolCtx(sessionId, session.projectId);
@@ -89,11 +72,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       name: tool.name,
       input: tool.input,
     }));
-    const mutatingPaths = collectMutatingPathsFromCalls(calls);
-    const headSnapshots = await captureMutatingPathHeadSnapshots(
-      toolCtx.vfs,
-      mutatingPaths
-    );
+    const mutatingPaths = MutatingPaths.collectFromCalls(calls);
+    const captured = await MutatingPathHeads.captureSnapshots(toolCtx.vfs, mutatingPaths);
+    if (!captured.ok) {
+      return { ok: false, error: captured.error };
+    }
+    const headSnapshots = captured.value;
 
     const outcomes = await this.deps.toolRunner.runParallel(calls, toolCtx);
 
@@ -106,33 +90,25 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
           continue;
         }
         const tool = op.tools[index]!;
-        const paths = extractMutatingPaths({
+        const paths = MutatingPaths.extract({
           name: tool.name,
           input: tool.input,
         });
         if (paths == null || paths.length === 0) {
           continue;
         }
-        try {
-          await restoreMutatingPathHeads(toolCtx.vfs, headSnapshots, paths);
-        } catch (error: unknown) {
-          if (error instanceof MutatingPathRestoreCompositeError) {
-            restoreErrors.push(...error.causes);
+        const restored = await MutatingPathHeads.restore(toolCtx.vfs, headSnapshots, paths);
+        if (!restored.ok) {
+          if (restored.error instanceof MutatingPathRestoreCompositeError) {
+            restoreErrors.push(...restored.error.causes);
           } else {
-            restoreErrors.push(error);
+            restoreErrors.push(restored.error);
           }
         }
       }
       // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
-      await sweepSessionRevisions(
-        this.deps.revisions,
-        this.deps.entries,
-        this.deps.checkpoints,
-        session.projectId,
-        sessionId,
-        this.deps.conn
-      );
-      await runDeferredBlobGc(this.deps.conn);
+      await RevisionGc.sweepSession(this.deps.revisions, session.projectId, sessionId);
+      await DeferredBlobGc.run(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {
           ok: false,

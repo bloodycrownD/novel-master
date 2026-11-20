@@ -11,10 +11,7 @@
  */
 import {describe, expect, it} from '@jest/globals';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {
-  planMessagesUpdate,
-  planOpenSnapshot,
-} from '@/components/chat/chat-conversation-update-plan';
+import {ChatConversationUpdatePlan} from '@/components/chat/chat-conversation-update-plan'
 
 function message(
   id: string,
@@ -53,7 +50,7 @@ function openInput(overrides: Partial<OpenInput> = {}): OpenInput {
 }
 
 function openPlan(overrides: Partial<OpenInput> = {}) {
-  const plan = planOpenSnapshot(openInput(overrides));
+  const plan = ChatConversationUpdatePlan.planOpenSnapshot(openInput(overrides));
   if (plan.kind !== 'open') {
     throw new Error(`expected open plan, got ${plan.kind}`);
   }
@@ -77,7 +74,7 @@ function updateInput(overrides: Partial<UpdateInput> = {}): UpdateInput {
 
 describe('planOpenSnapshot（纯函数 · 开屏滚动意图与遥测）', () => {
   it('O1: 空列表 → wait-empty（不产出任何事件）', () => {
-    expect(planOpenSnapshot(openInput({messageCount: 0}))).toEqual({
+    expect(ChatConversationUpdatePlan.planOpenSnapshot(openInput({messageCount: 0}))).toEqual({
       kind: 'wait-empty',
     });
   });
@@ -163,7 +160,7 @@ describe('planOpenSnapshot（纯函数 · 开屏滚动意图与遥测）', () =>
 describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M1: 同一引用 → same-reference', () => {
     const same = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: same,
         previousMessages: same,
@@ -177,7 +174,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M2: 等长、首条 id 不变、hidden 翻转 → hidden-changed', () => {
     const prev = [message('m1', 1), message('m2', 2)];
     const next = [prev[0]!, {...prev[1]!, hidden: true}];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: next,
         previousMessages: prev,
@@ -190,7 +187,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M3: 等长、hidden 不变 → snapshot preserve', () => {
     const prev = [message('m1', 1), message('m2', 2)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m1', 1), message('m2', 2)],
         previousMessages: prev,
@@ -204,7 +201,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M4: grew + 首条 id 变化（纯前插）→ prepend（遥测读 lastScroll 值）', () => {
     const prev = [message('m1', 1)];
     const next = [message('m0', 0), message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: next,
         previousMessages: prev,
@@ -227,7 +224,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M4b: prepend 时 wasNearBottom 取真实值（true 不被写死）', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m0', 0), message('m1', 1)],
         previousMessages: prev,
@@ -249,7 +246,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   });
 
   it('M5: grew 但 prevFirstId 未知 → 不是 prepend（落 snapshot preserve）', () => {
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m1', 1)],
         previousMessages: [],
@@ -263,7 +260,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M6: grew + uiRunning + 普通文本 → append，added 为尾部切片', () => {
     const prev = [message('m1', 1)];
     const added = message('m2', 2);
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, added],
         previousMessages: prev,
@@ -278,7 +275,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M6b: grew + uiRunning + 多行普通文本 → append 全量尾部切片', () => {
     const prev = [message('m1', 1)];
     const added = [message('m2', 2), message('m3', 3)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, ...added],
         previousMessages: prev,
@@ -293,7 +290,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M6c: grew + uiRunning + assistant 纯文本新增 → append（不是 force-snapshot）', () => {
     const prev = [message('m1', 1)];
     const added = assistant('a1', 2);
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, added],
         previousMessages: prev,
@@ -312,7 +309,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
         blocks: [{type: 'tool_result', toolUseId: 'c1', content: 'ok'}],
       },
     });
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, toolResult],
         previousMessages: prev,
@@ -332,7 +329,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
         blocks: [{type: 'tool_result', toolUseId: 'c1', content: 'ok'}],
       },
     });
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, plain, toolResult],
         previousMessages: prev,
@@ -352,7 +349,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
         blocks: [{type: 'tool_use', id: 'c1', name: 'read', input: {}}],
       },
     });
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, toolUse],
         previousMessages: prev,
@@ -373,7 +370,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
       },
     });
     const plain = message('u2', 3);
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, toolUse, plain],
         previousMessages: prev,
@@ -387,7 +384,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M9: grew + 非运行态 + 普通新增 → snapshot preserve', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m1', 1), message('m2', 2)],
         previousMessages: prev,
@@ -400,7 +397,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M10: 变短 → snapshot stick', () => {
     const prev = [message('m1', 1), message('m2', 2), message('m3', 3)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m1', 1)],
         previousMessages: prev,
@@ -413,7 +410,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M10b: 缩到 0 条 → snapshot stick', () => {
     const prev = [message('m1', 1), message('m2', 2), message('m3', 3)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [],
         previousMessages: prev,
@@ -426,7 +423,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M11: 等长 + 首条 id 变化 → snapshot stick', () => {
     const prev = [message('m1', 1), message('m2', 2)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m0', 0), message('m2', 2)],
         previousMessages: prev,
@@ -439,7 +436,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M11b: 等长 + 首条 id 变化 + hidden 也变 → snapshot stick（不是 hidden-changed）', () => {
     const prev = [message('m1', 1), message('m2', 2)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [{...message('m0', 0), hidden: true}, prev[1]!],
         previousMessages: prev,
@@ -452,7 +449,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M12: 等长 + 首条 id 不变 + 正文变 → snapshot preserve', () => {
     const prev = [message('m1', 1), message('m2', 2)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [
           message('m1', 1, {
@@ -470,7 +467,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M13: 纯 loadOlder（两行前插、无尾部新增）→ prepend，prependedCount 取旧首行下标', () => {
     const prev = [message('m2', 2), message('m3', 3)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [
           message('m0', 0),
@@ -491,7 +488,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M14: 前插 + 尾部 adopted 同拍 → force-snapshot（prepend 页发不了尾部）', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m0', 0), message('m1', 1), assistant('a1', 3)],
         previousMessages: prev,
@@ -505,7 +502,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M15: 前插 + 尾部普通新增同拍 → force-snapshot', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m0', 0), message('m1', 1), message('m2', 2)],
         previousMessages: prev,
@@ -518,7 +515,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M16: 旧首行不在新列表 → force-snapshot（头尾都可能变，无法安全前插）', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m0', 0), assistant('a1', 2)],
         previousMessages: prev,
@@ -531,7 +528,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M17: 新增 assistant 全部命中 streamRowIds → stream-adopted（逐条带 DB id）', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, assistant('a1', 2), assistant('a2', 3)],
         previousMessages: prev,
@@ -554,7 +551,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M18: 新增里混合 adopted 与普通行 → force-snapshot（append 会重复 id）', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, assistant('a1', 2), message('u2', 3)],
         previousMessages: prev,
@@ -569,7 +566,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M19: 空 streamRowIds + uiRunning 普通新增 → append（T-SP33 回滚等价面）', () => {
     const prev = [message('m1', 1)];
     const added = message('m2', 2);
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, added],
         previousMessages: prev,
@@ -584,7 +581,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M20: 空 streamRowIds + 空闲态新增 assistant → snapshot（不会 stream-adopted）', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, assistant('a1', 2)],
         previousMessages: prev,
@@ -598,7 +595,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M21: adopted 判定优先于 uiRunning 的 append 分支', () => {
     const prev = [message('m1', 1)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, assistant('a1', 2)],
         previousMessages: prev,
@@ -613,7 +610,7 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
 
   it('M22: 等长 hidden 翻转 + 非空 streamRowIds → hidden-changed', () => {
     const prev = [message('m1', 1), message('m2', 2)];
-    const plan = planMessagesUpdate(
+    const plan = ChatConversationUpdatePlan.planMessagesUpdate(
       updateInput({
         messages: [message('m1', 1), {...message('m2', 2), hidden: true}],
         previousMessages: prev,

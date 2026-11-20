@@ -36,19 +36,32 @@ const mockProvidersList = jest.fn();
 const mockListByProvider = jest.fn();
 const mockListRequestUsage = jest.fn();
 
+// 错误通道迁移二期后 usageStats 各端口走 Result（screen 侧 `!ok` 即 throw）；
+// 桩仍按裸值配置，出口统一包成 ok——reject 语义原样透传。
+const wireOk = async (fn: any, ...args: unknown[]) => ({
+  ok: true as const,
+  value: await fn(...args),
+});
+
 const mockRuntime = {
   usageStats: {
-    getSummary: mockGetSummary,
-    getDailyBuckets: mockGetDailyBuckets,
-    getHourlyBuckets: mockGetHourlyBuckets,
-    getModelBreakdown: mockGetModelBreakdown,
-    listRequestUsage: mockListRequestUsage,
+    getSummary: (...args: unknown[]) => wireOk(mockGetSummary, ...args),
+    getDailyBuckets: (...args: unknown[]) =>
+      wireOk(mockGetDailyBuckets, ...args),
+    getHourlyBuckets: (...args: unknown[]) =>
+      wireOk(mockGetHourlyBuckets, ...args),
+    getModelBreakdown: (...args: unknown[]) =>
+      wireOk(mockGetModelBreakdown, ...args),
+    listRequestUsage: (...args: unknown[]) =>
+      wireOk(mockListRequestUsage, ...args),
   },
   providers: {
-    list: mockProvidersList,
+    // 错误通道迁移后 providers.list 也走 Result（screen 侧 !ok 回退空选项）。
+    list: (...args: unknown[]) => wireOk(mockProvidersList, ...args),
   },
   savedModelRepo: {
-    listByProvider: mockListByProvider,
+    // 错误通道迁移四期：listByProvider 走 Result（screen 侧 !ok 回退空选项）。
+    listByProvider: (...args: unknown[]) => wireOk(mockListByProvider, ...args),
   },
   state: {
     getCurrentModelId: jest.fn(async () => null),
@@ -89,9 +102,12 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
@@ -168,16 +184,16 @@ jest.mock('@/components/provider/ModelPickerModal', () => {
   };
 });
 
-jest.mock('@/services/agent-display-label', () => ({
+jest.mock('@/services/agent-display-label', () => {
+  const legacy = {
   resolveCurrentAgentDisplayLabel: jest.fn(async () => 'Agent'),
-}));
+};
+  return {...legacy, AgentDisplayLabel: {resolveCurrent: legacy.resolveCurrentAgentDisplayLabel}};
+});
 
 import {TokenUsageStatsScreen} from '@/screens/stack/TokenUsageStatsScreen';
-import {
-  isCustomRangeValid,
-  localDayKeyOffset,
-  toLocalDayKey,
-} from '@/screens/stack/token-usage/format';
+import {UsageStats} from '@/screens/stack/token-usage/format'
+import {DateTime} from '@novel-master/core/common';
 import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
 import {PieChart} from '@/components/charts/PieChart';
 import {ProfileTabScreen} from '@/screens/tabs/ProfileTabScreen';
@@ -289,10 +305,10 @@ const SAMPLE_REQUEST_ROWS = [
 
 /** 当天（运行时）与 N 天前偏移的本地日 key：与实现同用日历加法。 */
 function todayKey(): string {
-  return toLocalDayKey(Date.now());
+  return DateTime.localDayKey(Date.now());
 }
 function dayKeyOffset(offsetDays: number): string {
-  return localDayKeyOffset(new Date(), offsetDays);
+  return UsageStats.localDayKeyOffset(new Date(), offsetDays);
 }
 
 function flushPromises(): Promise<void> {
@@ -809,7 +825,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       nodeText(findByTestId(renderer.root, 'pie-slice-label-p1::gpt-4o')!),
     ).toContain('38%');
     expect(
-      nodeText(findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__')!),
+      nodeText(
+        findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__')!,
+      ),
     ).toContain('24%');
     expect(
       findByTestId(renderer.root, 'pie-slice-label-p1::__unlogged__'),
@@ -1074,8 +1092,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     // 自定义区间由 sheet 结果产日期字符串（本地日 key），不再有毫秒换算。
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
       range: {
-        fromDay: toLocalDayKey(dayMs(year, month, 3)),
-        toDay: toLocalDayKey(dayMs(year, month, 10)),
+        fromDay: DateTime.localDayKey(dayMs(year, month, 3)),
+        toDay: DateTime.localDayKey(dayMs(year, month, 10)),
       },
       model: undefined,
     });
@@ -1083,7 +1101,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
 
   it('自定义区间结束日跨 DST 边界：日期字符串按挂钟日产出（cross/B-2 / T-M6）', async () => {
     // 照 desktop test 的做法：运行时切纽约时区再断言；TZ 不可控则跳过
-    // （toLocalDayKey 直接读本地年月日，跨 DST 天然正确；用例锢定
+    // （DateTime.localDayKey 直接读本地年月日，跨 DST 天然正确；用例锢定
     // 日期字符串口径不回退到毫秒换算）。jest 没有 node:test 的
     // t.skip，这里以探测失败即返回兼底，避免假失败。
     const prevTz = process.env.TZ;
@@ -1393,10 +1411,10 @@ describe('T-M7 PieChart 组件级', () => {
 describe('T-M6 自定义区间校验（无上限）', () => {
   it('366 天、十年均合法，仅倒序非法', () => {
     const from = new Date(2026, 0, 1);
-    expect(isCustomRangeValid(from, new Date(2027, 0, 1))).toBe(true); // 366 天
-    expect(isCustomRangeValid(from, new Date(2036, 0, 1))).toBe(true); // 十年
+    expect(UsageStats.isCustomRangeValid(from, new Date(2027, 0, 1))).toBe(true); // 366 天
+    expect(UsageStats.isCustomRangeValid(from, new Date(2036, 0, 1))).toBe(true); // 十年
     expect(
-      isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
+      UsageStats.isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
     ).toBe(false); // from > to
   });
 });

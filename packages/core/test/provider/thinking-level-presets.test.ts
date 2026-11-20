@@ -1,28 +1,28 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { thinkingLevelToModelThinkingParams } from "../../src/domain/provider/logic/thinking-level-presets.js";
+import {  ThinkingLevelPresets  } from "../../src/domain/provider/logic/thinking-level-presets.js";
 
 const samplingOff = { enabled: false as const };
 
 describe("thinkingLevelToModelThinkingParams", () => {
   it("off 返回 undefined", () => {
     assert.equal(
-      thinkingLevelToModelThinkingParams("off", "openai", "gpt-4o", samplingOff),
+      ThinkingLevelPresets.toModelThinkingParams("off", "openai", "gpt-4o", samplingOff),
       undefined,
     );
   });
 
   it("OpenAI 四档映射 reasoning_effort", () => {
     assert.deepEqual(
-      thinkingLevelToModelThinkingParams("low", "openai", "gpt-4o", samplingOff),
+      ThinkingLevelPresets.toModelThinkingParams("low", "openai", "gpt-4o", samplingOff),
       { protocol: "openai", openai: { reasoning_effort: "low" } },
     );
     assert.deepEqual(
-      thinkingLevelToModelThinkingParams("medium", "openai", "gpt-4o", samplingOff),
+      ThinkingLevelPresets.toModelThinkingParams("medium", "openai", "gpt-4o", samplingOff),
       { protocol: "openai", openai: { reasoning_effort: "medium" } },
     );
     assert.deepEqual(
-      thinkingLevelToModelThinkingParams("high", "openai", "gpt-4o", samplingOff),
+      ThinkingLevelPresets.toModelThinkingParams("high", "openai", "gpt-4o", samplingOff),
       { protocol: "openai", openai: { reasoning_effort: "high" } },
     );
   });
@@ -30,19 +30,19 @@ describe("thinkingLevelToModelThinkingParams", () => {
   it("GLM 型号与 gpt-* 输出完全一致，无型号差异", () => {
     for (const model of ["glm-4.7", "glm-5.2"]) {
       assert.equal(
-        thinkingLevelToModelThinkingParams("off", "openai", model, samplingOff),
+        ThinkingLevelPresets.toModelThinkingParams("off", "openai", model, samplingOff),
         undefined,
       );
       assert.deepEqual(
-        thinkingLevelToModelThinkingParams("low", "openai", model, samplingOff),
+        ThinkingLevelPresets.toModelThinkingParams("low", "openai", model, samplingOff),
         { protocol: "openai", openai: { reasoning_effort: "low" } },
       );
       assert.deepEqual(
-        thinkingLevelToModelThinkingParams("medium", "openai", model, samplingOff),
+        ThinkingLevelPresets.toModelThinkingParams("medium", "openai", model, samplingOff),
         { protocol: "openai", openai: { reasoning_effort: "medium" } },
       );
       assert.deepEqual(
-        thinkingLevelToModelThinkingParams("high", "openai", model, samplingOff),
+        ThinkingLevelPresets.toModelThinkingParams("high", "openai", model, samplingOff),
         { protocol: "openai", openai: { reasoning_effort: "high" } },
       );
     }
@@ -53,7 +53,7 @@ describe("thinkingLevelToModelThinkingParams", () => {
     // 4095（可见正文只剩 1 token，三档无差别）。修复后 max=16000、比例 0.8 ⇒
     // 上限 12800，三档 4096 / 8192 / 12800 各自可区分，且都留 3200 给可见正文。
     const budgetOf = (level: "low" | "medium" | "high"): number => {
-      const params = thinkingLevelToModelThinkingParams(
+      const params = ThinkingLevelPresets.toModelThinkingParams(
         level,
         "anthropic",
         "claude-3-5-sonnet",
@@ -71,7 +71,7 @@ describe("thinkingLevelToModelThinkingParams", () => {
   });
 
   it("Gemini 2.5 使用 thinkingBudget preset", () => {
-    const low = thinkingLevelToModelThinkingParams(
+    const low = ThinkingLevelPresets.toModelThinkingParams(
       "low",
       "gemini",
       "gemini-2.5-flash",
@@ -81,7 +81,7 @@ describe("thinkingLevelToModelThinkingParams", () => {
     if (low?.protocol === "gemini") {
       assert.equal(low.gemini.thinkingConfig.thinkingBudget, 4096);
     }
-    const medium = thinkingLevelToModelThinkingParams(
+    const medium = ThinkingLevelPresets.toModelThinkingParams(
       "medium",
       "gemini",
       "gemini-2.5-flash",
@@ -90,7 +90,7 @@ describe("thinkingLevelToModelThinkingParams", () => {
     if (medium?.protocol === "gemini") {
       assert.equal(medium.gemini.thinkingConfig.thinkingBudget, -1);
     }
-    const high = thinkingLevelToModelThinkingParams(
+    const high = ThinkingLevelPresets.toModelThinkingParams(
       "high",
       "gemini",
       "gemini-2.5-flash",
@@ -102,7 +102,7 @@ describe("thinkingLevelToModelThinkingParams", () => {
   });
 
   it("Gemini 3.x 使用 thinkingLevel preset", () => {
-    const params = thinkingLevelToModelThinkingParams(
+    const params = ThinkingLevelPresets.toModelThinkingParams(
       "medium",
       "gemini",
       "gemini-3-pro",

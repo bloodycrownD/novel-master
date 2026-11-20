@@ -3,4 +3,4 @@
  * 禁止 `export *`；禁止 service / runtime 工厂。
  */
 
-export { resolveToolResultOk } from "@novel-master/core";
+export { ToolResultBlock } from "@novel-master/core";

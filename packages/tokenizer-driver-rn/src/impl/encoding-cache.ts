@@ -25,12 +25,7 @@
  *
  * @module tokenizer-driver-rn/impl/encoding-cache
  */
-import {
-  clearForTests,
-  countTextWithIncrementalTokenizer,
-  getEncoding,
-  setFactoryForTests,
-} from "@novel-master/core/provider";
+import { EncodingRegistry, TokenizerTextCount } from "@novel-master/core/tokenizer";
 import { Tiktoken } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
 import * as o200kRanksModule from "js-tiktoken/ranks/o200k_base";
@@ -52,82 +47,69 @@ export interface RnTokenEncoding {
  * tokenizer，js-tiktoken 给不出真值，但**任何真分词器都比字符折算强**
  * （折算对中文低估 82%~84%），近似估算在这里是净收益。
  */
-export const DEFAULT_RN_ENCODING_NAME: RnEncodingName = "cl100k_base";
+const DEFAULT_RN_ENCODING_NAME: RnEncodingName = "cl100k_base";
 
-/**
- * ranks 命名空间取默认导出兼容形态。
- *
- * ranks 模块 ESM 侧是 default 导出、CJS 侧是命名导出；Metro / jest(ESM) /
- * jest(CJS) / Vite 四种环境下形态不同，统一经 `(mod.default ?? mod)` 取值。
- */
-function unwrapRanksModule(mod: unknown): unknown {
-  const candidate = mod as { default?: unknown } | null | undefined;
-  return candidate?.default ?? mod;
-}
-
-/** js-tiktoken 构造注入：按编码名取对应 ranks 建表。 */
-function buildJsTiktokenEncoding(name: RnEncodingName): RnTokenEncoding {
-  const ranks =
-    name === "o200k_base"
-      ? unwrapRanksModule(o200kRanksModule)
-      : unwrapRanksModule(cl100kRanksModule);
-  return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
-}
-
-/** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
-export function getRnEncoding(name: RnEncodingName): RnTokenEncoding | null {
-  return getEncoding(name, () => buildJsTiktokenEncoding(name));
-}
-
-/** 默认（cl100k）编码表取用口。 */
-export function getDefaultRnEncoding(): RnTokenEncoding | null {
-  return getRnEncoding(DEFAULT_RN_ENCODING_NAME);
-}
-
-/**
- * 用默认编码表（cl100k）计一段文本的 token 数。
- *
- * 走 core 的 `countTextWithIncrementalTokenizer` 而不是直接 `encode`：后者对
- * 「无空白长中文串」是 O(len²)（实测 12K 字符 93s），前者把单次 encode 夹在
- * ≤64 字符、同一段文本耗时与全量 encode 持平或略快（30K 中文 240–250ms vs 266ms），
- * 病态档还快 175~195 倍。
- *
- * @param text 待计数文本。
- * @returns token 数；**编码表不可用时返回 null**，调用方须自行决定降级口径
- *   （不要把 null 当 0）。
- */
-export function countTextWithDefaultEncoding(text: string): number | null {
-  const encoding = getDefaultRnEncoding();
-  if (encoding == null) {
-    return null;
+export namespace EncodingCache {
+  /**
+   * ranks 命名空间取默认导出兼容形态。
+   *
+   * ranks 模块 ESM 侧是 default 导出、CJS 侧是命名导出；Metro / jest(ESM) /
+   * jest(CJS) / Vite 四种环境下形态不同，统一经 `(mod.default ?? mod)` 取值。
+   */
+  function unwrapRanksModule(mod: unknown): unknown {
+    const candidate = mod as { default?: unknown } | null | undefined;
+    return candidate?.default ?? mod;
   }
-  return countTextWithIncrementalTokenizer(
-    (chunk) => encoding.encode(chunk).length,
-    text,
-  );
-}
 
-/**
- * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
- *
- * 注意这里**不 `free()`**（js-tiktoken 实例本就没有该方法，句柄由 registry 持有）。
- */
-export function __resetRnEncodingCacheForTests(): void {
-  clearForTests();
-}
+  /** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
+  export function get(name: RnEncodingName): RnTokenEncoding | null {
+    return EncodingRegistry.get(name, () => {
+      const ranks = name === "o200k_base" ? unwrapRanksModule(o200kRanksModule) : unwrapRanksModule(cl100kRanksModule);
+      return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
+    });
+  }
 
-/**
- * 测试钩子：覆盖编码表构造器（传 `null` 还原默认实现）。
- * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
- */
-export function __setRnEncodingFactoryForTests(
-  factory: ((name: RnEncodingName) => RnTokenEncoding) | null,
-): void {
-  // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
-  // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
-  setFactoryForTests(
-    factory == null
-      ? null
-      : (encodingName: string) => factory(encodingName as RnEncodingName),
-  );
+  /** 默认（cl100k）编码表取用口。 */
+  export function getDefault(): RnTokenEncoding | null {
+    return get(DEFAULT_RN_ENCODING_NAME);
+  }
+
+  /**
+   * 用默认编码表（cl100k）计一段文本的 token 数。
+   *
+   * 走 core 的 `countTextWithIncrementalTokenizer` 而不是直接 `encode`：后者对
+   * 「无空白长中文串」是 O(len²)（实测 12K 字符 93s），前者把单次 encode 夹在
+   * ≤64 字符、同一段文本耗时与全量 encode 持平或略快（30K 中文 240–250ms vs 266ms），
+   * 病态档还快 175~195 倍。
+   *
+   * @param text 待计数文本。
+   * @returns token 数；**编码表不可用时返回 null**，调用方须自行决定降级口径
+   *   （不要把 null 当 0）。
+   */
+  export function countText(text: string): number | null {
+    const encoding = getDefault();
+    if (encoding == null) {
+      return null;
+    }
+    return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
+  }
+
+  /**
+   * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
+   *
+   * 注意这里**不 `free()`**（js-tiktoken 实例本就没有该方法，句柄由 registry 持有）。
+   */
+  export function __resetForTests(): void {
+    EncodingRegistry.clearForTests();
+  }
+
+  /**
+   * 测试钩子：覆盖编码表构造器（传 `null` 还原默认实现）。
+   * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
+   */
+  export function __setFactoryForTests(factory: ((name: RnEncodingName) => RnTokenEncoding) | null): void {
+    // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
+    // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
+    EncodingRegistry.setFactoryForTests(factory == null ? null : (encodingName: string) => factory(encodingName as RnEncodingName));
+  }
 }

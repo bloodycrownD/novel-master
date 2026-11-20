@@ -6,31 +6,16 @@
  */
 
 import { type LlmStreamEvent, type ModelRequestService } from "@novel-master/core/provider";
+import { Result } from "@novel-master/core/errors";
 
-type LlmChatResult = Awaited<ReturnType<ModelRequestService["request"]>>;
-type RequestOptions = NonNullable<
-  Parameters<ModelRequestService["request"]>[2]
->;
+type RequestResult = Awaited<ReturnType<ModelRequestService["request"]>>;
+type RequestOptions = NonNullable<Parameters<ModelRequestService["request"]>[2]>;
 
-const SCENARIOS = [
-  "continue",
-  "run",
-  "vfs",
-  "stream",
-  "doom",
-  "compaction",
-] as const;
+const SCENARIOS = ["continue", "run", "vfs", "stream", "doom", "compaction"] as const;
 
 type MockScenario = (typeof SCENARIOS)[number];
 
-function isCompactionRequest(options?: RequestOptions): boolean {
-  return options?.tools == null || options.tools.length === 0;
-}
-
-async function emitStream(
-  text: string,
-  options?: RequestOptions,
-): Promise<void> {
+async function emitStream(text: string, options?: RequestOptions): Promise<void> {
   if (!options?.stream || options.onStream == null) {
     return;
   }
@@ -40,25 +25,24 @@ async function emitStream(
   }
 }
 
-function textResult(text: string): LlmChatResult {
-  return {
+function textResult(text: string): RequestResult {
+  return Result.ok({
     assistantText: text,
     blocks: [{ type: "text", text }],
     raw: { mock: true },
-  };
+  });
 }
 
 /**
  * Returns a deterministic mock LLM for the active `NM_AGENT_MOCK_SCENARIO`.
  */
 export function createAgentMockModelRequests(): ModelRequestService {
-  const scenario = (process.env.NM_AGENT_MOCK_SCENARIO ??
-    "continue") as MockScenario;
+  const scenario = (process.env.NM_AGENT_MOCK_SCENARIO ?? "continue") as MockScenario;
   let callIndex = 0;
 
   return {
     async request(_applicationModelId, _userContent, options) {
-      if (isCompactionRequest(options)) {
+      if (options?.tools == null || options.tools.length === 0) {
         return textResult("summary text");
       }
 
@@ -67,15 +51,13 @@ export function createAgentMockModelRequests(): ModelRequestService {
       switch (scenario) {
         case "continue": {
           const reportModel = process.env.NM_AGENT_MOCK_REPORT_MODEL === "1";
-          const text = reportModel
-            ? `Assistant reply (model: ${_applicationModelId}).`
-            : "Assistant reply (single step).";
+          const text = reportModel ? `Assistant reply (model: ${_applicationModelId}).` : "Assistant reply (single step).";
           await emitStream(text, options);
           return textResult(text);
         }
         case "run": {
           if (callIndex === 1) {
-            return {
+            return Result.ok({
               assistantText: "",
               blocks: [
                 {
@@ -86,10 +68,10 @@ export function createAgentMockModelRequests(): ModelRequestService {
                 },
               ],
               raw: { mock: true },
-            };
+            });
           }
           if (callIndex === 2) {
-            return {
+            return Result.ok({
               assistantText: "",
               blocks: [
                 {
@@ -100,14 +82,14 @@ export function createAgentMockModelRequests(): ModelRequestService {
                 },
               ],
               raw: { mock: true },
-            };
+            });
           }
           const text = "Multi-step run finished.";
           await emitStream(text, options);
           return textResult(text);
         }
         case "vfs": {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -118,7 +100,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
               },
             ],
             raw: { mock: true },
-          };
+          });
         }
         case "stream": {
           const text = "streamed hello";
@@ -127,7 +109,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
         }
         case "doom": {
           const input = { path: "/x" };
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               { type: "tool_use", id: "a", name: "read", input },
@@ -135,7 +117,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
               { type: "tool_use", id: "c", name: "read", input },
             ],
             raw: { mock: true },
-          };
+          });
         }
         case "compaction": {
           const text = "After compaction.";

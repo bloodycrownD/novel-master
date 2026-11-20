@@ -72,7 +72,7 @@ export class DoomLoopDetector {
       const tail = toolUses.slice(-this.threshold);
       const first = tail[0]!;
       if (tail.every((toolUse) => sameToolUse(toolUse, first))) {
-        return Result.err(new AppError("AGENT_DOOM_LOOP", `Doom loop: tool "${first.name}" invoked ${this.threshold} times with identical input`));
+        return Result.err(new AppError("AGENT_DOOM_LOOP", { detail: `Doom loop: tool "${first.name}" invoked ${this.threshold} times with identical input` }));
       }
     }
 
@@ -99,7 +99,7 @@ export class DoomLoopDetector {
     if (!window.every((toolUse, idx) => sameToolUse(idx % 2 === 0 ? a : b, toolUse))) {
       return Result.ok(undefined);
     }
-    return Result.err(new AppError("AGENT_DOOM_LOOP", `Doom loop: tools "${a.name}" and "${b.name}" alternate over the last ${this.crossRoundWindow} calls`));
+    return Result.err(new AppError("AGENT_DOOM_LOOP", { detail: `Doom loop: tools "${a.name}" and "${b.name}" alternate over the last ${this.crossRoundWindow} calls` }));
   }
 
   /** 清空轨迹（复用实例换 run 时调用）。 */

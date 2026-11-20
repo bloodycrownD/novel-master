@@ -3,4 +3,4 @@
  * 禁止 `export *`。
  */
 
-export { truncateText } from "@novel-master/core/common";
+export { Text } from "@novel-master/core/common";

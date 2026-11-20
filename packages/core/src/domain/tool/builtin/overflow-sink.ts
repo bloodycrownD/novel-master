@@ -21,17 +21,17 @@
  */
 
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
-import { ensureDirRulesForNewPath, upsertFileCacheAfterWrite } from "./vfs-tools.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { FileTools } from "./vfs-tools.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.overflow-sink");
+const log = LogFactory.create("tool.overflow-sink");
 
 /** 落盘子目录（会话工作区 VFS 内，子代理时为父会话工作区）。 */
-export const OVERFLOW_SINK_DIR = "/tmp";
+const OVERFLOW_SINK_DIR = "/tmp";
 
-/** `sinkOversizedOutput` 入参。 */
+/** `OverflowSink.sink` 入参。 */
 export interface SinkOversizedInput {
   /** 调用方工具名（文件名前缀，如 "curl" / "search"）。 */
   readonly tool: string;
@@ -41,7 +41,7 @@ export interface SinkOversizedInput {
   readonly contentType: string;
 }
 
-/** `sinkOversizedOutput` 返回值。 */
+/** `OverflowSink.sink` 返回值。 */
 export interface OversizedSinkResult {
   /** 落盘路径（会话工作区 VFS 内，如 `/tmp/curl-20260906-1f2e.html`）。 */
   readonly savedPath: string;
@@ -49,42 +49,44 @@ export interface OversizedSinkResult {
   readonly message: string;
 }
 
-/**
- * content-type → 扩展名映射：含 json → `json`，含 html → `html`，
- * 其余（text/plain、xml、缺省等）→ `txt`。
- */
-export function extensionForContentType(contentType: string): "html" | "json" | "txt" {
-  const lower = contentType.toLowerCase();
-  if (lower.includes("json")) return "json";
-  if (lower.includes("html")) return "html";
-  return "txt";
-}
+export const OverflowSink = {
+  /**
+   * content-type → 扩展名映射：含 json → `json`，含 html → `html`，
+   * 其余（text/plain、xml、缺省等）→ `txt`。
+   */
+  extensionForContentType: (contentType: string): "html" | "json" | "txt" => {
+    const lower = contentType.toLowerCase();
+    if (lower.includes("json")) return "json";
+    if (lower.includes("html")) return "html";
+    return "txt";
+  },
 
-/**
- * 把超预算输出全文落盘到会话工作区 `/tmp/`，返回 `{savedPath, message}`。
- *
- * @throws `vfs.write` 失败时原样抛出（调用方降级）；落盘成功后的
- * `file_cache` upsert 与目录规则补齐失败只吞错不阻断。
- */
-export async function sinkOversizedOutput(ctx: BuiltinToolContext, input: SinkOversizedInput): Promise<OversizedSinkResult> {
-  const randHex = Math.floor(Math.random() * 0x10000).toString(16);
-  const rand4 = randHex.padStart(4, "0");
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const savedPath = `${OVERFLOW_SINK_DIR}/${input.tool}-${now.getFullYear()}${month}${day}-${rand4}.${extensionForContentType(input.contentType)}`;
-  await ctx.vfs.write(savedPath, input.content);
-  // 配套动作失败不阻断（照 write 工具口径）：file_cache 是加速缓存，
-  // 目录规则是辅助展示配置——文件已落盘，返回路径仍有效。
-  try {
-    await upsertFileCacheAfterWrite(ctx, savedPath, input.content);
-  } catch (error) {
-    log.debug(`file_cache upsert 失败（${savedPath}）`, { error });
-  }
-  await ensureDirRulesForNewPath(ctx, OVERFLOW_SINK_DIR);
-  const contentBytes = utf8ByteLength(input.content);
-  return {
-    savedPath,
-    message: `输出超过 ${TOOL_OUTPUT_MAX_BYTES / 1024}KB 预算（original ${contentBytes} bytes），全文已自动保存到会话工作区，可用 read 分页读取。`,
-  };
-}
+  /**
+   * 把超预算输出全文落盘到会话工作区 `/tmp/`，返回 `{savedPath, message}`。
+   *
+   * @throws `vfs.write` 失败时原样抛出（调用方降级）；落盘成功后的
+   * `file_cache` upsert 与目录规则补齐失败只吞错不阻断。
+   */
+  sink: async (ctx: BuiltinToolContext, input: SinkOversizedInput): Promise<OversizedSinkResult> => {
+    const randHex = Math.floor(Math.random() * 0x10000).toString(16);
+    const rand4 = randHex.padStart(4, "0");
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const savedPath = `${OVERFLOW_SINK_DIR}/${input.tool}-${now.getFullYear()}${month}${day}-${rand4}.${OverflowSink.extensionForContentType(input.contentType)}`;
+    await ctx.vfs.write(savedPath, input.content);
+    // 配套动作失败不阻断（照 write 工具口径）：file_cache 是加速缓存，
+    // 目录规则是辅助展示配置——文件已落盘，返回路径仍有效。
+    try {
+      await FileTools.upsertFileCacheAfterWrite(ctx, savedPath, input.content);
+    } catch (error) {
+      log.debug(`file_cache upsert 失败（${savedPath}）`, { error });
+    }
+    await FileTools.ensureDirRulesForNewPath(ctx, OVERFLOW_SINK_DIR);
+    const contentBytes = Encoding.utf8ByteLength(input.content);
+    return {
+      savedPath,
+      message: `输出超过 ${TOOL_OUTPUT_MAX_BYTES / 1024}KB 预算（original ${contentBytes} bytes），全文已自动保存到会话工作区，可用 read 分页读取。`,
+    };
+  },
+} as const;

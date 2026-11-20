@@ -7,10 +7,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {
-  buildChatStreamMetricsLine,
-  type AgentStreamMetricsView,
-} from '@/hooks/useAgentStreamMetrics';
+import {type AgentStreamMetricsView, AgentStreamMetrics} from '@/hooks/useAgentStreamMetrics';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -30,7 +27,7 @@ export function ChatStreamMetricsBar({
   onPress,
 }: Props) {
   const {tokens} = useTheme();
-  const line = buildChatStreamMetricsLine(metrics);
+  const line = AgentStreamMetrics.buildChatLine(metrics);
 
   return (
     <Pressable

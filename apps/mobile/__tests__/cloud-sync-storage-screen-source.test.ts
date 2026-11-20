@@ -25,7 +25,7 @@ describe('CloudSyncStorageScreen 云端存储设置页', () => {
   });
 
   it('进入页面经 refreshCloudSyncStatus 拉取同步状态（getCloudSyncStatusView）', () => {
-    expect(source).toMatch(/getCloudSyncStatusView/);
+    expect(source).toMatch(/CloudSyncService\.getStatusView/);
     expect(source).toMatch(/refreshCloudSyncStatus/);
     expect(source).toMatch(/useFocusEffect/);
   });
@@ -54,7 +54,7 @@ describe('CloudSyncStorageScreen 云端存储设置页', () => {
   });
 
   it('Agent 运行中守卫：同步操作在 agentActive 时禁用', () => {
-    expect(source).toMatch(/isMobileAgentActive/);
+    expect(source).toMatch(/agentActivity\.isActive/);
     expect(source).toMatch(/syncControlsDisabled = agentActive/);
     expect(source).toMatch(/Agent 运行中，同步操作已禁用。/);
   });

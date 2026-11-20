@@ -10,6 +10,8 @@
  * @module infra/log/log-file-policy
  */
 
+import {Number} from "@/common/number.js";
+
 /** 目录里的一份同名家族日志文件（`name` 不含目录）。 */
 // nm-style: keep-public — 三端文件 sink 构造 `existing` 的入参类型，core 内部无消费者。
 export interface LogFileEntry {
@@ -32,54 +34,55 @@ const DEFAULT_KEEP = 5;
 /** 分段号上限：超了退到 `<baseName>.<hhmmss>.log`，避免无限试探文件系统。 */
 const MAX_SEGMENT = 99;
 
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
 /**
- * 规划一次日志写入。
- *
- * 规则（与 spec 4.4 逐条对应）：
- * 1. `baseName` 默认 `nm-<本地 YYYYMMDD>`；
- * 2. 段 0 写满（`bytes + appendBytes > maxBytes`）依次试 `.1`…`.99`，取第一个
- *    不存在或未超限的段；超 99 退 `<hhmmss>`；
- * 3. 保留按 **mtime 降序**取最新 `keep` 份（不能按文件名字典序：`.` < `l`，
- *    会把基础文件排到分段文件之后），其余按 mtime 从旧到新进 `deleteNames`。
+ * 日志文件轮转策略（纯函数，三端 sink 共用）。
  */
-// nm-style: keep-public — 三端文件 sink（mobile / desktop / CLI）共用同一份轮转策略，core 内部无消费者。
-export function planLogFileWrite(input: {
-  readonly now: Date;
-  readonly existing: readonly LogFileEntry[];
-  readonly appendBytes: number;
-  /** 第一段文件名（不含 `.log`）；默认 `nm-<本地 YYYYMMDD>`。 */
-  readonly baseName?: string;
-  readonly maxBytes?: number;
-  readonly keep?: number;
-}): LogFilePlan {
-  // 默认 baseName 取本地时间日期键：用户自己翻日志时要能对上手机时间（不用 UTC）。
-  const baseName = input.baseName ?? `nm-${input.now.getFullYear()}${pad2(input.now.getMonth() + 1)}${pad2(input.now.getDate())}`;
-  const maxBytes = input.maxBytes ?? DEFAULT_MAX_BYTES;
-  const keep = Math.max(1, input.keep ?? DEFAULT_KEEP);
-  const byName = new Map(input.existing.map((entry) => [entry.name, entry]));
+export const LogFilePolicy = {
+  /**
+   * 规划一次日志写入。
+   *
+   * 规则（与 spec 4.4 逐条对应）：
+   * 1. `baseName` 默认 `nm-<本地 YYYYMMDD>`；
+   * 2. 段 0 写满（`bytes + appendBytes > maxBytes`）依次试 `.1`…`.99`，取第一个
+   *    不存在或未超限的段；超 99 退 `<hhmmss>`；
+   * 3. 保留按 **mtime 降序**取最新 `keep` 份（不能按文件名字典序：`.` < `l`，
+   *    会把基础文件排到分段文件之后），其余按 mtime 从旧到新进 `deleteNames`。
+   */
+  // nm-style: keep-public — 三端文件 sink（mobile / desktop / CLI）共用同一份轮转策略，core 内部无消费者。
+  planWrite(input: {
+    readonly now: Date;
+    readonly existing: readonly LogFileEntry[];
+    readonly appendBytes: number;
+    /** 第一段文件名（不含 `.log`）；默认 `nm-<本地 YYYYMMDD>`。 */
+    readonly baseName?: string;
+    readonly maxBytes?: number;
+    readonly keep?: number;
+  }): LogFilePlan {
+    // 默认 baseName 取本地时间日期键：用户自己翻日志时要能对上手机时间（不用 UTC）。
+    const baseName = input.baseName ?? `nm-${input.now.getFullYear()}${Number.pad2(input.now.getMonth() + 1)}${Number.pad2(input.now.getDate())}`;
+    const maxBytes = input.maxBytes ?? DEFAULT_MAX_BYTES;
+    const keep = Math.max(1, input.keep ?? DEFAULT_KEEP);
+    const byName = new Map(input.existing.map((entry) => [entry.name, entry]));
 
-  let targetName: string | null = null;
-  for (let segment = 0; segment <= MAX_SEGMENT; segment += 1) {
-    const name = segment === 0 ? `${baseName}.log` : `${baseName}.${segment}.log`;
-    const entry = byName.get(name);
-    if (entry === undefined || entry.bytes + input.appendBytes <= maxBytes) {
-      targetName = name;
-      break;
+    let targetName: string | null = null;
+    for (let segment = 0; segment <= MAX_SEGMENT; segment += 1) {
+      const name = segment === 0 ? `${baseName}.log` : `${baseName}.${segment}.log`;
+      const entry = byName.get(name);
+      if (entry === undefined || entry.bytes + input.appendBytes <= maxBytes) {
+        targetName = name;
+        break;
+      }
     }
-  }
-  if (targetName == null) {
-    targetName = `${baseName}.${pad2(input.now.getHours())}${pad2(input.now.getMinutes())}${pad2(input.now.getSeconds())}.log`;
-  }
+    if (targetName == null) {
+      targetName = `${baseName}.${Number.pad2(input.now.getHours())}${Number.pad2(input.now.getMinutes())}${Number.pad2(input.now.getSeconds())}.log`;
+    }
 
-  const kept = [...input.existing].sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name)).slice(0, keep);
-  const keptNames = new Set(kept.map((entry) => entry.name));
-  const deleteNames = input.existing
-    .filter((entry) => !keptNames.has(entry.name))
-    .sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name))
-    .map((entry) => entry.name);
-  return { targetName, deleteNames };
-}
+    const kept = [...input.existing].sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name)).slice(0, keep);
+    const keptNames = new Set(kept.map((entry) => entry.name));
+    const deleteNames = input.existing
+      .filter((entry) => !keptNames.has(entry.name))
+      .sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name))
+      .map((entry) => entry.name);
+    return { targetName, deleteNames };
+  },
+} as const;

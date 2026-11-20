@@ -9,34 +9,27 @@
  * @module test/vfs/vfs-import-shard
  */
 
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  isVfsError  } from "../../src/errors/guards.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import {
-  createScopedVfsService,
-  createVfsZipIoService,
-  VfsZipError,
-} from "@novel-master/core/vfs";
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
+import {  after, before, describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import {  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK  } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
-import {
-  probeTransactions,
-  type TransactionProbe,
-} from "../helpers/transaction-probe.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
+import {  probeTransactions, type TransactionProbe  } from "../helpers/transaction-probe.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
-import { tCore } from "../helpers/core-i18n.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 /** 分片大小上界（与实现共用常量，防止测试悄悄跟实现漂移）。 */
 const CHUNK = ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK;
 
-/** 单个文件在一条分片事务内的语句条数上界（findByPath ×3 + 落 entry/blob/revision + adjustRef）。 */
+/** 单个文件在一条分片事务内的语句条数上界（findByPath ×3 + 落 entry/blob/revision + RevisionRefCount.adjust）。 */
 const STATEMENTS_PER_FILE_UPPER_BOUND = 15;
 
 function pad(n: number): string {
@@ -78,9 +71,9 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const scope = { kind: "project" as const, projectId: project.id };
 
     probe.reset();
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       scope,
-      buildVfsZip(filesMap(450)),
+      VfsZipBuild.build(filesMap(450)),
       { confirmed: true }
     );
 
@@ -98,18 +91,18 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     assert.equal(countSql(probe, last, "INSERT INTO vfs_entry"), 0);
   });
 
-  it("A2: 任一文件片内 insertFileSeedingRevision 调用次数 ≤ 200", async () => {
+  it("A2: 任一文件片内 LiveHeadRevisionSeeder.insertFileSeeding 调用次数 ≤ 200", async () => {
     const project = await ctx.projects.create(`P-a2-${Date.now()}`);
     const scope = { kind: "project" as const, projectId: project.id };
 
     probe.reset();
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       scope,
-      buildVfsZip(filesMap(450)),
+      VfsZipBuild.build(filesMap(450)),
       { confirmed: true }
     );
 
-    // 每个文件恰好一条 vfs_revision（insertFileSeedingRevision 的 append）⇒
+    // 每个文件恰好一条 vfs_revision（LiveHeadRevisionSeeder.insertFileSeeding 的 append）⇒
     // 「revision 行数 == 片内文件数」即「该片调用次数」，不必去 spy 模块函数。
     const perShard = [1, 2, 3].map((i) => countSql(probe, i, "INSERT INTO vfs_revision"));
     assert.deepEqual(perShard, [200, 200, 50]);
@@ -125,13 +118,13 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const scopeKey = `project:${project.id}`;
     const expected = filesMap(450);
 
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       { kind: "project", projectId: project.id },
-      buildVfsZip(expected),
+      VfsZipBuild.build(expected),
       { confirmed: true }
     );
 
-    const rows = await new SqliteVfsEntryRepository(conn).scanContents(scopeKey, "/");
+    const rows = unwrap(await new SqliteVfsEntryRepository(conn).scanContents(scopeKey, "/"));
     const actual = new Map(rows.map((r) => [r.path, r.content]));
     assert.equal(actual.size, 450);
     for (const [path, content] of expected) {
@@ -142,7 +135,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
   it("A4/钩子: 第 3 片注入既有钩子 → 抛原始 Error、半棵新树被补偿、旧内容不恢复", async () => {
     const project = await ctx.projects.create(`P-a4hook-${Date.now()}`);
     const scope = { kind: "project" as const, projectId: project.id };
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     await vfs.write("/before.md", "旧内容");
 
     const files = filesMap(450);
@@ -150,33 +143,21 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const failPath = "/f0200.md";
     await assert.rejects(
       () =>
-        createVfsZipIoService(conn, {
+        VfsServiceFactory.createZipIo(conn, {
           testHook: { throwOnInsertLogical: failPath },
-        }).import(scope, buildVfsZip(files), { confirmed: true }),
+        }).import(scope, VfsZipBuild.build(files), { confirmed: true }),
       (e: unknown) =>
         // 测试钩子直抛分支绕过了 IMPORT_FAILED 包装 ⇒ 断言必须是原始 Error。
         e instanceof Error && e.message === "test import failure"
     );
 
     // 前 2 片的文件已被补偿删除（补偿挂在片失败的内层，不挂外层 catch）。
-    await assert.rejects(
-      () => vfs.read("/f0000.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
-    await assert.rejects(
-      () => vfs.read("/f0199.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
+    await rejectsErr(() => vfs.read("/f0000.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
+    await rejectsErr(() => vfs.read("/f0199.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
     // 失败片本身未落库。
-    await assert.rejects(
-      () => vfs.read(failPath),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
+    await rejectsErr(() => vfs.read(failPath), (e: unknown) => isVfsError(e, "NOT_FOUND"));
     // 旧内容**不恢复**（段 B0 已删，补偿只清半棵新树）——这是分片的既定行为损失。
-    await assert.rejects(
-      () => vfs.read("/before.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
+    await rejectsErr(() => vfs.read("/before.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
 
     // 补偿用 releaseAndDeleteVfsPrefix（减 live ref + 删 entry + GC 无引用 revision）
     // ⇒ 该前缀下零 revision 残留。裸 deleteVfsPrefix 会留下一批 ref_count=1 的
@@ -196,10 +177,10 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
   it("A4/真实失败: 非钩子失败 → IMPORT_FAILED 且消息带分片进度", async () => {
     const project = await ctx.projects.create(`P-a4real-${Date.now()}`);
     const scope = { kind: "project" as const, projectId: project.id };
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
 
     // 文件序：先 200 个正常文件（第 1 片），再「a.md」+「a.md/b.md」。
-    // 第二片的第二条让 ensureParentDirectories 撞上「父路径是文件行」⇒ 真实
+    // 第二片的第二条让 ParentDirs.ensure 撞上「父路径是文件行」⇒ 真实
     // 语句级失败（不是测试钩子）。
     const files = filesMap(200, "ok");
     files.set("a.md", "A");
@@ -207,25 +188,21 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
 
     await assert.rejects(
       () =>
-        createVfsZipIoService(conn).import(
+        VfsServiceFactory.createZipIo(conn).import(
           scope,
-          buildVfsZip(files),
+          VfsZipBuild.build(files),
           { confirmed: true }
         ),
       (e: unknown) =>
-        e instanceof VfsZipError &&
-        e.code === "IMPORT_FAILED" &&
-        (e as {messageKey?: string}).messageKey === "error.vfs.zip_import_failed.with_progress" &&
+        AppErrorOps.is(e, "VFS_IMPORT_FAILED") &&
+        (e as {messageKey?: string}).messageKey === "error.vfs.import_failed.with_progress" &&
         (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.committed === 1 &&
         (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.failed_shard === 2
     );
 
     // 补偿照跑：目标前缀回到「空的可重试态」。
-    await assert.rejects(
-      () => vfs.read("/a.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
-    const remaining = await vfs.list("/", { recursive: true });
+    await rejectsErr(() => vfs.read("/a.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
+    const remaining = unwrap(await vfs.list("/", { recursive: true }));
     assert.deepEqual(remaining, [], "补偿后目标前缀应为空");
   });
 
@@ -244,18 +221,18 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     );
 
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       await assert.rejects(
         () =>
-          createVfsZipIoService(conn, {
+          VfsServiceFactory.createZipIo(conn, {
             testHook: { throwOnInsertLogical: "/f0200.md" },
-          }).import(scope, buildVfsZip(filesMap(450)), { confirmed: true }),
+          }).import(scope, VfsZipBuild.build(filesMap(450)), { confirmed: true }),
         (e: unknown) =>
           e instanceof Error && e.message === "test import failure"
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
       await ctx.conn.execute(`DROP TRIGGER IF EXISTS t_block_compensate_delete`);
     }
 
@@ -271,9 +248,9 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     const files = filesMap(5000);
 
     probe.reset();
-    await createVfsZipIoService(conn).import(
+    await VfsServiceFactory.createZipIo(conn).import(
       scope,
-      buildVfsZip(files),
+      VfsZipBuild.build(files),
       { confirmed: true }
     );
 

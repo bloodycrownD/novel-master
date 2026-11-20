@@ -15,12 +15,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Tiktoken } from "tiktoken";
 
-import {
-  __setNodeEncodingFactoryForTests,
-  getDefaultNodeEncoding,
-  getNodeEncodingByName,
-  getNodeEncodingForModel,
-} from "../src/impl/encoding-cache.js";
+import { EncodingCache } from "../src/impl/encoding-cache.js";
 
 /** 计数版假表：encode 返回带 length 的序列即满足 `EncodingHandle` 契约。 */
 function fakeEncoding(): Tiktoken {
@@ -32,53 +27,53 @@ function fakeEncoding(): Tiktoken {
 describe("encoding-cache 构造计数（T-FA7 main 侧）", () => {
   it("model: 键废除后精确档与 cl100k 预热共享同键：gpt-4 与默认表只构造一次", () => {
     let constructions = 0;
-    __setNodeEncodingFactoryForTests(() => {
+    EncodingCache.__setFactoryForTests(() => {
       constructions += 1;
       return fakeEncoding();
     });
     try {
       // 精确档：按模型名取——内部走 tiktoken 官方映射把 gpt-4 解析成
       // cl100k_base，再进 registry 的 `enc:cl100k_base` 单键空间。
-      const precise = getNodeEncodingForModel("gpt-4");
+      const precise = EncodingCache.forModel("gpt-4");
       assert.notEqual(precise, null);
       assert.equal(constructions, 1, "精确档首次取表应构造一次");
 
       // cl100k 预热 / 兜底档：按编码名取同一张表。`model:` 与 `enc:` 双命名
       // 空间互不命中的时代已结束——两路同键命中，不再有第二次建表。
-      const warmup = getDefaultNodeEncoding();
+      const warmup = EncodingCache.getDefault();
       assert.notEqual(warmup, null);
       assert.equal(constructions, 1, "预热与精确档共享同键，不应再构造");
       assert.equal(warmup, precise, "预热拿到的应是同一个共享句柄");
 
       // 按编码名显式取也命中同一张表。
-      assert.equal(getNodeEncodingByName("cl100k_base"), precise);
+      assert.equal(EncodingCache.byName("cl100k_base"), precise);
       assert.equal(constructions, 1, "显式按编码名取也不应再构造");
     } finally {
       // 还原真实构造器（会顺带作废缓存），别把假表留给后续用例。
-      __setNodeEncodingFactoryForTests(null);
+      EncodingCache.__setFactoryForTests(null);
     }
   });
 
   it("分键维度是编码名而非模型名：gpt-4o（o200k）与 gpt-4（cl100k）各建各的", () => {
     let constructions = 0;
-    __setNodeEncodingFactoryForTests(() => {
+    EncodingCache.__setFactoryForTests(() => {
       constructions += 1;
       return fakeEncoding();
     });
     try {
-      const o200k = getNodeEncodingForModel("gpt-4o");
-      const cl100k = getNodeEncodingForModel("gpt-4");
+      const o200k = EncodingCache.forModel("gpt-4o");
+      const cl100k = EncodingCache.forModel("gpt-4");
       assert.notEqual(o200k, null);
       assert.notEqual(cl100k, null);
       assert.notEqual(o200k, cl100k, "不同编码名应是两张不同的表");
       assert.equal(constructions, 2, "两个编码名各构造一次");
 
       // 同一编码名的另一个模型名（gpt-3.5-turbo 同属 cl100k_base）复用已有表。
-      const gpt35 = getNodeEncodingForModel("gpt-3.5-turbo");
+      const gpt35 = EncodingCache.forModel("gpt-3.5-turbo");
       assert.equal(gpt35, cl100k, "同编码名的不同模型应复用同一张表");
       assert.equal(constructions, 2);
     } finally {
-      __setNodeEncodingFactoryForTests(null);
+      EncodingCache.__setFactoryForTests(null);
     }
   });
 });

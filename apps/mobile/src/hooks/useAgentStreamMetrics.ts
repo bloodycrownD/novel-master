@@ -4,13 +4,11 @@
  * ChatStreamMetricsBar / ChatStreamMetricsBarLive 复用的纯函数与类型）。
  *
  * 历时分段格式（60s 内一位小数、否则整数）与千分位口径的单源在 core：
- * 本模块不再持有本地实现，文案统一经 core 的 `buildStreamMetricsLine`
- * （内部调用 core 的 `formatStreamElapsed`）生成。
+ * 本模块不再持有本地实现，文案统一经 core 的 `StreamMetricsLine.build`
+ * （内部调用 core 的 `StreamMetricsLine.formatElapsed`）生成。
  */
-import {
-  buildStreamMetricsLine,
-  type StreamTokenSource,
-} from '@novel-master/core/format';
+import {type StreamTokenSource} from '@novel-master/core/session-run-state';
+import {StreamMetricsLine} from '@novel-master/core/format';
 import {coreT} from '@/i18n/core';
 
 /**
@@ -20,10 +18,10 @@ import {coreT} from '@/i18n/core';
  * 复用 core 的中立类型（别名，不再本地重声明联合字面量）——新增来源时
  * 单点改 core，消费端不会漏改。
  */
-export type AgentStreamTokenSource = StreamTokenSource;
+type AgentStreamTokenSource = StreamTokenSource;
 
 /** 指标快照：历时与 token 计数（文案消费的最小集）。 */
-export type AgentStreamMetricsSnapshot = {
+type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
   readonly completionTokens: number;
   readonly tokenSource: AgentStreamTokenSource;
@@ -35,19 +33,16 @@ export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
   readonly tokensPerSecond: number | null;
 };
 
-/** 快照 → 展示 View（冻结态不喂速率，tokensPerSecond 缺省 null）。 */
-export function toAgentStreamMetricsView(
-  running: boolean,
-  snap: AgentStreamMetricsSnapshot,
-  tokensPerSecond: number | null = null,
-): AgentStreamMetricsView {
-  return {...snap, running, tokensPerSecond};
-}
+export namespace AgentStreamMetrics {
+  /** 快照 → 展示 View（冻结态不喂速率，tokensPerSecond 缺省 null）。 */
+  export function toView(running: boolean, snap: AgentStreamMetricsSnapshot, tokensPerSecond: number | null = null): AgentStreamMetricsView {
+    return {...snap, running, tokensPerSecond};
+  }
 
-/** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
-export function buildChatStreamMetricsLine(
-  metrics: AgentStreamMetricsView,
-): string {
-  const parts = buildStreamMetricsLine(metrics);
-  return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
+  /** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
+  // nm-style: keep-public — use-agent-stream-metrics.test.ts / session-stream-unit-final-rate.test.ts 直接 import 断言 T-M8 文案快照，测试锁名
+  export function buildChatLine(metrics: AgentStreamMetricsView): string {
+    const parts = StreamMetricsLine.build(metrics);
+    return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
+  }
 }

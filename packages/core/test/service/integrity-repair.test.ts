@@ -1,22 +1,21 @@
 /**
- * IntegrityRepairRegistry / runIntegrityRepair 单元测试（S-8 / Step 20）。
+ * IntegrityRepairRegistry / runIntegrityRepair 单元测试（S-8 / Step 20；p26 R4 接口 Result 化）。
  *
  * 覆盖：
  * - register 校验（detect/repair 必填、重名拒绝）；
  * - detect 只读、needsRepair=false 时跳过 repair；
  * - needsRepair=true 时跑 repair；
- * - detect 抛错时保守尝试 repair；
- * - repair 抛错挂到报告 error，不中断后续操作；
+ * - detect Result.err 时保守尝试 repair（p26 R4 业务失败通道）；
+ * - detect 抛错时保守尝试 repair（平台异常兜网）；
+ * - repair Result.err / 抛错挂到报告 error，不中断后续操作；
  * - runOnly 按种类过滤；
  * - runIntegrityRepair 便捷函数等价于 registry 单步。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  IntegrityRepairRegistry,
-  runIntegrityRepair,
-  type IntegrityRepairOperation,
-} from "@/service/integrity-repair.js";
+import {  describe, it  } from "node:test";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import {  IntegrityRepairRegistry, IntegrityRepair, type IntegrityRepairOperation  } from "@/service/integrity-repair.js";
 
 /** 拼一个可控行为的假操作，方便断言 detect/repair 是否被调用。 */
 function fakeOp(
@@ -25,7 +24,9 @@ function fakeOp(
     readonly kind?: "repair" | "rename" | "backfill";
     readonly needsRepair?: boolean;
     readonly details?: string;
+    readonly detectErr?: AppError;
     readonly detectThrows?: Error;
+    readonly repairErr?: AppError;
     readonly repairThrows?: Error;
   } = {},
 ): IntegrityRepairOperation & {
@@ -39,15 +40,18 @@ function fakeOp(
     kind: opts.kind ?? "repair",
     async detect() {
       detectCalls++;
+      if (opts.detectErr) return Result.err(opts.detectErr);
       if (opts.detectThrows) throw opts.detectThrows;
-      return {
+      return Result.ok({
         needsRepair: opts.needsRepair ?? false,
         details: opts.details,
-      };
+      });
     },
     async repair() {
       repairCalls++;
+      if (opts.repairErr) return Result.err(opts.repairErr);
       if (opts.repairThrows) throw opts.repairThrows;
+      return Result.ok(undefined);
     },
     get detectCalls() {
       return detectCalls;
@@ -80,7 +84,7 @@ describe("IntegrityRepairRegistry", () => {
         registry.register({
           name: "x",
           kind: "repair",
-          detect: async () => ({ needsRepair: false }),
+          detect: async () => Result.ok({ needsRepair: false }),
           // @ts-expect-error 故意漏 repair
           repair: undefined,
         }),
@@ -155,6 +159,41 @@ describe("IntegrityRepairRegistry", () => {
     );
   });
 
+  it("detect Result.err 时保守尝试 repair 并在 details 记下失败（p26 R4 业务失败通道）", async () => {
+    const op = fakeOp("detect-err", {
+      detectErr: new AppError("PROVIDER_INVALID_ARGUMENT", { detail: "detect 通道 mock 失败" }),
+    });
+    const registry = new IntegrityRepairRegistry().register(op);
+
+    const reports = await registry.runAll();
+
+    assert.equal(op.detectCalls, 1);
+    assert.equal(op.repairCalls, 1);
+    assert.equal(reports[0]!.repaired, true);
+    assert.match(
+      reports[0]!.detection.details ?? "",
+      /detect 阶段失败/,
+    );
+  });
+
+  it("repair Result.err 挂到报告 error（AppError），不中断后续操作", async () => {
+    const boom = fakeOp("boom-err", {
+      needsRepair: true,
+      repairErr: new AppError("VFS_CONTENT_CORRUPT", { detail: "boom-repair-err" }),
+    });
+    const ok = fakeOp("ok-after", { needsRepair: true });
+    const registry = new IntegrityRepairRegistry().register(boom).register(ok);
+
+    const reports = await registry.runAll();
+
+    const boomReport = reports.find((r) => r.name === "boom-err")!;
+    assert.equal(boomReport.repaired, false);
+    assert.ok(boomReport.error instanceof AppError);
+    const okReport = reports.find((r) => r.name === "ok-after")!;
+    assert.equal(okReport.repaired, true);
+    assert.equal(okReport.error, undefined);
+  });
+
   it("runOnly 按种类过滤", async () => {
     const repair = fakeOp("r", { kind: "repair", needsRepair: true });
     const rename = fakeOp("n", { kind: "rename", needsRepair: true });
@@ -186,7 +225,7 @@ describe("IntegrityRepairRegistry", () => {
 
   it("runIntegrityRepair 便捷函数等价于 registry 单步", async () => {
     const op = fakeOp("solo", { needsRepair: true });
-    const report = await runIntegrityRepair(op);
+    const report = await IntegrityRepair.run(op);
 
     assert.equal(op.detectCalls, 1);
     assert.equal(op.repairCalls, 1);

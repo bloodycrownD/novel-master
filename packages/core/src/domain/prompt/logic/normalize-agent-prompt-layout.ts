@@ -4,23 +4,85 @@
  * @module domain/prompt/logic/normalize-agent-prompt-layout
  */
 
-import { AppError } from "@/errors/app-error.js";
-import type { AgentPromptLayout, PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
-import { layoutHasCustomAttach, layoutHasWorkplace } from "../model/agent-prompt-layout.js";
+import { assert } from "@/common/assert.js";
+import type { PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
+import { AgentPromptLayout } from "../model/agent-prompt-layout.js";
 
-/**
- * 从 wire persist map 丢弃 `type:worktree` 条目（**不**据此设 workplace）。
- */
-export function stripLegacyWorktreeBlocksFromPersistMap(persist: Record<string, unknown>): Record<string, unknown> {
-  const filtered: Record<string, unknown> = {};
-  for (const [name, item] of Object.entries(persist)) {
-    if (item != null && typeof item === "object" && !Array.isArray(item) && (item as { type?: unknown }).type === "worktree") {
-      continue;
+export const AgentPromptLayoutNormalize = {
+  /**
+   * 从 wire persist map 丢弃 `type:worktree` 条目（**不**据此设 workplace）。
+   */
+  stripLegacyWorktreeBlocksFromPersistMap(persist: Record<string, unknown>): Record<string, unknown> {
+    const filtered: Record<string, unknown> = {};
+    for (const [name, item] of Object.entries(persist)) {
+      if (item != null && typeof item === "object" && !Array.isArray(item) && (item as { type?: unknown }).type === "worktree") {
+        continue;
+      }
+      filtered[name] = item;
     }
-    filtered[name] = item;
-  }
-  return filtered;
-}
+    return filtered;
+  },
+
+  /**
+   * 运行期穷举断言：normalize 是否逐字段保值（wave-e H2 Step 2）。
+   *
+   * **为什么不按「与实际 spread 集合对账」的字面写法实现**：运行期导不出「实际 spread 集合」，
+   * 把同一份键表再抄一遍进断言体会让断言恒真——删任一 spread 也不红，正撞牙齿判据①的事故原型。
+   * 故改用**哨兵值驱动**：逐键塞入 {@link NORMALIZE_FIELD_SENTINELS}，跑 normalize，断言哨兵被原样回吐。
+   * ⇒ 删任一 spread ⇒ 该字段的哨兵回不来 ⇒ 抛错；
+   * ⇒ 新增第 8 个字段只要进了 {@link NORMALIZED_OPTIONAL_FIELDS} 与哨兵表，就自动进入断言面，**不必改测试**。
+   *
+   * 供测试与生产双用；失败即抛 `Error`（不 exit），由调用方决定怎么报。
+   */
+  assertNormalizeCoversAllFields(): void {
+    const normalized = AgentPromptLayoutNormalize.normalizeDomain({
+      ...NORMALIZE_FIELD_SENTINELS,
+      persist: [],
+      dynamic: [],
+    });
+    const missed: NormalizedOptionalField[] = [];
+    for (const field of Object.keys(NORMALIZED_OPTIONAL_FIELDS) as NormalizedOptionalField[]) {
+      // ⚠️ 用 !== 而非 in：某字段被「写了但值不对」（如 skillsEnabled 写成 === true）同样要红。
+      if (normalized[field] !== NORMALIZE_FIELD_SENTINELS[field]) {
+        missed.push(field);
+      }
+    }
+    assert(missed.length === 0, `[invariant] AgentPromptLayoutNormalize.normalizeDomain 白名单漏字段：${missed.join("、")}。` + `NORMALIZED_OPTIONAL_FIELDS 声明了这些字段，但 normalize 没有原样回吐哨兵值 —— ` + `多半是对应的条件 spread 被删了，或分支条件写反（如 skillsEnabled 写成 === true）。`);
+  },
+
+  /**
+   * 域 layout 归一化：persist 仅 text；保留非空 `workplace` string（勿压成 boolean）；丢弃旧 worktree 块。
+   *
+   * ⚠️ 本函数的返回对象由**显式白名单逐字段重建**，因此白名单必须覆盖
+   * {@link AgentPromptLayout} 的全部可选标量字段（`persist` / `dynamic` 两个必填数组除外）。
+   * 新增字段时必须同步：① 本白名单；② `test/prompt/normalize-agent-prompt-layout.test.ts`
+   * 的「全字段白名单往返」用例夹具；③ 本文件上方 {@link NORMALIZED_OPTIONAL_FIELDS} 的
+   * 编译期穷举守卫与 {@link AgentPromptLayoutNormalize.assertNormalizeCoversAllFields} 的运行期断言
+   * （wave-e H2 Step 1/Step 2）。前两者漏了就静默丢字段，三者缺一不可。
+   * ⚠️ 各字段的省略语义**不统一**，勿照抄邻居：
+   * `persistEnabled` / `dynamicEnabled` 用 `=== true`（缺省 = 关），
+   * 而 `skillsEnabled` 用 `=== false`（缺省 = 开，仅显式 false 表示关闭，
+   * 见 `agent-definition.schema.ts`）——写成 `=== true` 会把用户已关闭的技能能力过滤掉。
+   */
+  normalizeDomain(layout: AgentPromptLayout): AgentPromptLayout {
+    const persist = layout.persist.filter((block): block is PersistTextPromptBlock => (block as { type?: string }).type === "text");
+    return {
+      ...(layout.system != null && layout.system.trim() !== "" ? { system: layout.system } : {}),
+      ...(layout.persistEnabled === true ? { persistEnabled: true } : {}),
+      ...(layout.dynamicEnabled === true ? { dynamicEnabled: true } : {}),
+      ...(AgentPromptLayout.hasWorkplace(layout) ? { workplace: layout.workplace } : {}),
+      ...(AgentPromptLayout.hasCustomAttach(layout) ? { customAttach: layout.customAttach } : {}),
+      ...(layout.skillsEnabled === false ? { skillsEnabled: false } : {}),
+      // 与 AgentPromptLayoutValidate.validateFromMaps 逐字对齐：`skillsEnabled` 是「缺省 = 开」。
+      ...(() => {
+        const prefixRaw = layout.skillsPrefix;
+        return typeof prefixRaw === "string" && prefixRaw.trim().length > 0 ? { skillsPrefix: prefixRaw } : {};
+      })(),
+      persist,
+      dynamic: [...layout.dynamic],
+    };
+  },
+} as const;
 
 /**
  * normalize 覆盖的**可选字段全集**（`persist` / `dynamic` 两个必填数组除外）。
@@ -29,7 +91,7 @@ export function stripLegacyWorktreeBlocksFromPersistMap(persist: Record<string, 
  * - 给 {@link AgentPromptLayout} 新增可选字段而忘了加进这里 ⇒ `Record` 缺键 ⇒ **编译红**；
  * - 往这里加一个模型上已不存在的字段 ⇒ excess property ⇒ **编译红**。
  *
- * 之所以要这道锁：`normalizeAgentPromptLayoutDomain` 靠一串条件 spread 逐字段重建返回对象，
+ * 之所以要这道锁：`AgentPromptLayoutNormalize.normalizeDomain` 靠一串条件 spread 逐字段重建返回对象，
  * 漏一条 spread **既不编译报错也不测试红**，只是静默丢字段。该病已连续发作两次
  * （`customAttach`、后是 `skillsEnabled` / `skillsPrefix`），且 `skillsEnabled` 漏掉的后果
  * 不是少个字段而是**语义反转**——`false` 掉成 `undefined`，下游按「缺省 = 开」处理，
@@ -67,65 +129,3 @@ export const NORMALIZE_FIELD_SENTINELS = {
   skillsEnabled: false,
   skillsPrefix: "__sentinel__skillsPrefix",
 } satisfies Record<NormalizedOptionalField, Exclude<AgentPromptLayout[NormalizedOptionalField], undefined>>;
-
-/**
- * 运行期穷举断言：normalize 是否逐字段保值（wave-e H2 Step 2）。
- *
- * **为什么不按「与实际 spread 集合对账」的字面写法实现**：运行期导不出「实际 spread 集合」，
- * 把同一份键表再抄一遍进断言体会让断言恒真——删任一 spread 也不红，正撞牙齿判据①的事故原型。
- * 故改用**哨兵值驱动**：逐键塞入 {@link NORMALIZE_FIELD_SENTINELS}，跑 normalize，断言哨兵被原样回吐。
- * ⇒ 删任一 spread ⇒ 该字段的哨兵回不来 ⇒ 抛错；
- * ⇒ 新增第 8 个字段只要进了 {@link NORMALIZED_OPTIONAL_FIELDS} 与哨兵表，就自动进入断言面，**不必改测试**。
- *
- * 供测试与生产双用；失败即抛 `Error`（不 exit），由调用方决定怎么报。
- */
-export function assertNormalizeCoversAllFields(): void {
-  const normalized = normalizeAgentPromptLayoutDomain({
-    ...NORMALIZE_FIELD_SENTINELS,
-    persist: [],
-    dynamic: [],
-  });
-  const missed: NormalizedOptionalField[] = [];
-  for (const field of Object.keys(NORMALIZED_OPTIONAL_FIELDS) as NormalizedOptionalField[]) {
-    // ⚠️ 用 !== 而非 in：某字段被「写了但值不对」（如 skillsEnabled 写成 === true）同样要红。
-    if (normalized[field] !== NORMALIZE_FIELD_SENTINELS[field]) {
-      missed.push(field);
-    }
-  }
-  if (missed.length > 0) {
-    throw new AppError("PROMPT_INVARIANT_VIOLATION", `[invariant] normalizeAgentPromptLayoutDomain 白名单漏字段：${missed.join("、")}。` + `NORMALIZED_OPTIONAL_FIELDS 声明了这些字段，但 normalize 没有原样回吐哨兵值 —— ` + `多半是对应的条件 spread 被删了，或分支条件写反（如 skillsEnabled 写成 === true）。`);
-  }
-}
-
-/**
- * 域 layout 归一化：persist 仅 text；保留非空 `workplace` string（勿压成 boolean）；丢弃旧 worktree 块。
- *
- * ⚠️ 本函数的返回对象由**显式白名单逐字段重建**，因此白名单必须覆盖
- * {@link AgentPromptLayout} 的全部可选标量字段（`persist` / `dynamic` 两个必填数组除外）。
- * 新增字段时必须同步：① 本白名单；② `test/prompt/normalize-agent-prompt-layout.test.ts`
- * 的「全字段白名单往返」用例夹具；③ 本文件下方 {@link NORMALIZED_OPTIONAL_FIELDS} 的
- * 编译期穷举守卫与 {@link assertNormalizeCoversAllFields} 的运行期断言
- * （wave-e H2 Step 1/Step 2）。前两者漏了就静默丢字段，三者缺一不可。
- * ⚠️ 各字段的省略语义**不统一**，勿照抄邻居：
- * `persistEnabled` / `dynamicEnabled` 用 `=== true`（缺省 = 关），
- * 而 `skillsEnabled` 用 `=== false`（缺省 = 开，仅显式 false 表示关闭，
- * 见 `agent-definition.schema.ts`）——写成 `=== true` 会把用户已关闭的技能能力过滤掉。
- */
-export function normalizeAgentPromptLayoutDomain(layout: AgentPromptLayout): AgentPromptLayout {
-  const persist = layout.persist.filter((block): block is PersistTextPromptBlock => (block as { type?: string }).type === "text");
-  return {
-    ...(layout.system != null && layout.system.trim() !== "" ? { system: layout.system } : {}),
-    ...(layout.persistEnabled === true ? { persistEnabled: true } : {}),
-    ...(layout.dynamicEnabled === true ? { dynamicEnabled: true } : {}),
-    ...(layoutHasWorkplace(layout) ? { workplace: layout.workplace } : {}),
-    ...(layoutHasCustomAttach(layout) ? { customAttach: layout.customAttach } : {}),
-    ...(layout.skillsEnabled === false ? { skillsEnabled: false } : {}),
-    // 与 validateAgentPromptLayoutFromMaps 逐字对齐：`skillsEnabled` 是「缺省 = 开」。
-    ...(() => {
-      const prefixRaw = layout.skillsPrefix;
-      return typeof prefixRaw === "string" && prefixRaw.trim().length > 0 ? { skillsPrefix: prefixRaw } : {};
-    })(),
-    persist,
-    dynamic: [...layout.dynamic],
-  };
-}

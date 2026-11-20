@@ -23,12 +23,14 @@ export interface LlmProvider {
   readonly updatedAtMs: number;
 }
 
-/** 标准 provider API Key 的 SKSP ref。 */
-export function providerApiKeyRef(providerId: string): string {
-  return `provider/${providerId}/apiKey`;
-}
+export const ProviderModel = {
+  /** 标准 provider API Key 的 SKSP ref。 */
+  apiKeyRef(providerId: string): string {
+    return `provider/${providerId}/apiKey`;
+  },
 
-/** 解析 provider API 密钥 SKSP ref（list 状态、请求、delete、edit 共用）。 */
-export function resolveProviderApiKeySecretRef(provider: Pick<LlmProvider, "id" | "secretRef">): string {
-  return provider.secretRef ?? providerApiKeyRef(provider.id);
-}
+  /** 解析 provider API 密钥 SKSP ref（list 状态、请求、delete、edit 共用）。 */
+  resolveApiKeySecretRef(provider: Pick<LlmProvider, "id" | "secretRef">): string {
+    return provider.secretRef ?? ProviderModel.apiKeyRef(provider.id);
+  },
+} as const;

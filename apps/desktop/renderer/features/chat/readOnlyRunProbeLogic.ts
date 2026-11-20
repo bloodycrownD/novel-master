@@ -11,7 +11,7 @@ export const READONLY_RUN_PROBE_RECONFIRM_DELAY_MS = 800;
 /** IPC 查询结果的最小契约（与 ipcAgentRunIsActive 的 { ok, data } 形态对齐）。 */
 export type RunActiveQueryResult = { ok: boolean; data: boolean };
 
-export type ProbeReadOnlyRunEndedParams = {
+type ProbeReadOnlyRunEndedParams = {
   sessionId: string;
   /** 同步读 uiRunning（第一次与复询前各读一次，避免 run 已被别处结束还重复收尾）。 */
   isActive(): boolean;

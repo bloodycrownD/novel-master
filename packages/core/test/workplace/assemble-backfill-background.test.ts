@@ -8,25 +8,28 @@
  * - T-BF1 冷 miss：组装结果立即含正文，不等缓存写完（写侧被闸门挂住也返回）
  * - T-BF2 后台写最终落定，缓存可查（回填没被丢掉）
  * - T-BF3 已有缓存行且 hash 一致时不再压缩（昨天的「先 hash 比对」优化
- *   没被改丢）——用 spy 数 compressFileCacheBodyForBlob 调用次数
+ *   没被改丢）——用 spy 数 FileCacheBlobCodec.compressBodyForBlob 调用次数
  * - T-BF4 后台写失败静默：无 unhandled rejection，组装照常返回
  * - T-BF5 hydrate 语义不变：loadOrFillFileCache 默认仍同步落库
  *
  * T-BF1/T-BF4 需要「写侧被挂住仍能返回」，用内存 kkv 的 set 闸门表达。
  */
+import {  Result  } from "../../src/errors/either.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { loadOrFillFileCache, settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
-import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  WorkplaceDisplayAssembler  } from "../../src/service/workplace/assemble-workplace-display.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -36,19 +39,19 @@ const LAYOUT: Pick<AgentPromptLayout, "workplace"> = { workplace: "【done】" }
 function fakeVfs(content: string): VfsService {
   return {
     async read() {
-      return {
+      return Result.ok({
         path: "/note.md",
         content,
         version: 1,
         mtimeMs: 1_700_000_000_000,
-      };
+      });
     },
     async findContentSize() {
-      return {
+      return Result.ok({
         kind: "inlineChars" as const,
         size: content.length,
         mtimeMs: 1_700_000_000_000,
-      };
+      } as const);
     },
   } as unknown as VfsService;
 }
@@ -97,16 +100,22 @@ async function flushMacrotasks(times = 4): Promise<void> {
   }
 }
 
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
+}
+
 describe("workplace 冷 miss 回填后台化", () => {
   it("T-BF1 冷 miss：组装结果立即含正文，缓存写侧被闸门挂住也照样返回", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const inner = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const inner = SessionKkvServiceFactory.create(ctx.conn);
     const gated = gatedKkv(inner);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/cold.md", "冷态正文ABC");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -117,61 +126,61 @@ describe("workplace 冷 miss 回填后台化", () => {
       // 写侧被闸门挂死：file_cache 域的 kkv.set 永不 resolve。改后 assemble
       // 既不 await 它、也不等它被调度，所以这一行必须返回；若实现仍同步
       // await set，本用例会挂在闸门上（event loop 空转 → cancelled）而红。
-      const out = await assembleWorkplaceDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: gated, workplace: wt, vfs, layout: LAYOUT });
+      const out = await assembleDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: gated, workplace: wt, vfs, layout: LAYOUT });
 
       assert.match(out.workplaceDisplay, /冷态正文ABC/);
       assert.deepEqual(out.prefixPaths, ["/cold.md"]);
-      assert.equal(await inner.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/cold.md")), null, "assemble 返回时缓存写还没落库——正文不靠缓存交到读者手里");
+      assert.equal(unwrap(await inner.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/cold.md"))), null, "assemble 返回时缓存写还没落库——正文不靠缓存交到读者手里");
 
       // 让一个宏任务过去：后台回填此时才被调度起来（写侧推迟到宏任务是
       // 为了不跟同轮 vfs.read 抢 JS 线程），随后被闸门挂住不落库。
       await flushMacrotasks();
       assert.equal(gated.setCalls(), 1, "后台回填确实被发起了（只是没等它）");
-      assert.equal(await inner.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/cold.md")), null, "写侧挂起期间缓存仍查不到");
+      assert.equal(unwrap(await inner.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/cold.md"))), null, "写侧挂起期间缓存仍查不到");
     } finally {
       // 收尾必须无条件执行：闸门不放行的话 pending 集合里的 promise 永不
       // 落定，后续用例的 settlePendingFileCacheBackfills 会一起挂死。
       gated.releaseSets();
-      await settlePendingFileCacheBackfills();
+      await FileCache.settlePendingBackfills();
     }
   });
 
   it("T-BF2 缓存最终被回填：后台写落定后 kkv 可查到同一份正文", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/fill.md", "后台回填正文XYZ");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
     await wt.setFileRule({ logicalPath: "/fill.md", inclusionMode: "show" });
 
-    const out = await assembleWorkplaceDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: LAYOUT });
+    const out = await assembleDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: LAYOUT });
     assert.match(out.workplaceDisplay, /后台回填正文XYZ/);
 
     // 后台写的可观测闸门：settle 后缓存必须已经落库。
     // 若实现把回填直接丢掉（只返回不写），这里必然 null → 红。
-    await settlePendingFileCacheBackfills();
-    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/fill.md"));
+    await FileCache.settlePendingBackfills();
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/fill.md")));
     assert.notEqual(raw, null, "后台回填必须最终落库");
-    const payload = parseFileCachePayload(raw!);
+    const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
     assert.ok(payload.ok);
     assert.equal(payload.value.body, "后台回填正文XYZ");
   });
 
   it("T-BF3 已有缓存行且 blob 同 hash：不再压缩（昨天的免重压缩优化未被改丢）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const body = `同内容不回填-${testIsolationSuffix()}`;
     await vfs.write("/same.md", body);
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -182,22 +191,22 @@ describe("workplace 冷 miss 回填后台化", () => {
     // body 带 testIsolationSuffix 唯一 → 按 hash 计数与「本用例只落 1 行」等价
     // （夹具内存库由本文件所有用例共享，全表 COUNT(*) 不可用）
     const blobCountFor = async (): Promise<number> => {
-      const rows = await ctx.conn.query<{ n: number }>("SELECT COUNT(*) AS n FROM session_file_cache_blob WHERE content_hash = ?", [hashContent(body)]);
+      const rows = await ctx.conn.query<{ n: number }>("SELECT COUNT(*) AS n FROM session_file_cache_blob WHERE content_hash = ?", [ContentHash.hash(body)]);
       return Number(rows[0]!.n);
     };
 
     // 第一次：blob 尚不存在，必然真压缩一次，压缩后 blob 落库。
-    await assembleWorkplaceDisplay(scope, deps);
-    await settlePendingFileCacheBackfills();
+    await assembleDisplay(scope, deps);
+    await FileCache.settlePendingBackfills();
     assert.equal(await blobCountFor(), 1, "首次回填落 1 行 blob");
 
     // 清 file_cache 引用行（blob 保留）模拟「置位/压缩后清域、内容未变」：
     // 下一次 assemble 仍会 miss → 读 VFS → 回填，但 blob 已存在。
     // 契约：set 侧的「先 hash 比对、命中即免压缩」必须仍然生效。
     await sk.clearDomain(session.id, SESSION_KKV_DOMAIN_FILE_CACHE);
-    const out = await assembleWorkplaceDisplay(scope, deps);
+    const out = await assembleDisplay(scope, deps);
     assert.ok(out.workplaceDisplay.includes(body), "二次组装仍出正文（自愈重读）");
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
 
     assert.equal(await blobCountFor(), 1, "同内容二次回填未产生新 blob 行（免重压缩在 DB 层的可观测形态）");
     // 注：DB 层区分不了「压缩被跳过」与「压缩后被 INSERT OR IGNORE 丢弃」，
@@ -239,10 +248,10 @@ describe("workplace 冷 miss 回填后台化", () => {
     process.on("unhandledRejection", onUnhandled);
     try {
       // deferBackfillWrite: set 必抛——返回仍须是正文，不能冒泡
-      const { fillFileCacheFromVfs } = await import("../../src/domain/workplace/logic/load-or-fill-file-cache.js");
-      const payload = await fillFileCacheFromVfs(deps, { deferBackfillWrite: true });
+      const { FileCache: FileCacheMod } = await import("../../src/domain/workplace/logic/load-or-fill-file-cache.js");
+      const payload = await FileCacheMod.fillFromVfs(deps, { deferBackfillWrite: true });
       assert.equal(payload.body, "失败静默正文");
-      await settlePendingFileCacheBackfills();
+      await FileCache.settlePendingBackfills();
       // 让 unhandledRejection 的检测窗口过去（Node 默认在微任务轮后派发）
       await new Promise((r) => setTimeout(r, 20));
     } finally {
@@ -269,8 +278,8 @@ describe("workplace 冷 miss 回填后台化", () => {
         await inner.set(s, d, k, v);
       },
     };
-    const { fillFileCacheFromVfs } = await import("../../src/domain/workplace/logic/load-or-fill-file-cache.js");
-    const payload = await fillFileCacheFromVfs(
+    const { FileCache: FileCacheMod } = await import("../../src/domain/workplace/logic/load-or-fill-file-cache.js");
+    const payload = await FileCacheMod.fillFromVfs(
       {
         sessionId: "bf6",
         sessionKkv: kkv,
@@ -284,16 +293,16 @@ describe("workplace 冷 miss 回填后台化", () => {
     assert.equal(payload.body, "宏任务推迟正文", "读侧结果不受调度时机影响");
     assert.equal(setCalls, 0, "assemble/fill 返回的同一轮里后台写尚未被调度（必须推迟到宏任务）");
 
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
     assert.equal(setCalls, 1, "宏任务过后后台写被调度一次");
-    const deferred = parseFileCachePayload((await inner.get("bf6", SESSION_KKV_DOMAIN_FILE_CACHE, "full:/note.md"))!);
+    const deferred = RuleSnapshotCodec.parseFileCachePayload((unwrap(await inner.get("bf6", SESSION_KKV_DOMAIN_FILE_CACHE, "full:/note.md")))!);
     assert.ok(deferred.ok);
     assert.equal(deferred.value.body, "宏任务推迟正文");
   });
 
   it("T-BF5 hydrate 语义不变：loadOrFillFileCache 默认同步落库（返回即可查）", async () => {
     const inner = createMemoryLikeKkv();
-    const payload = await loadOrFillFileCache({
+    const payload = await FileCache.loadOrFill({
       sessionId: "bf5",
       sessionKkv: inner,
       vfs: fakeVfs("同步落库正文"),
@@ -302,9 +311,9 @@ describe("workplace 冷 miss 回填后台化", () => {
     });
     assert.equal(payload.body, "同步落库正文");
     // 未加 defer 选项：await 返回时缓存必须已经在（不改 hydrate 语义）
-    const raw = await inner.get("bf5", SESSION_KKV_DOMAIN_FILE_CACHE, "full:/note.md");
+    const raw = unwrap(await inner.get("bf5", SESSION_KKV_DOMAIN_FILE_CACHE, "full:/note.md"));
     assert.notEqual(raw, null, "默认路径仍同步写回 file_cache");
-    const stored = parseFileCachePayload(raw!);
+    const stored = RuleSnapshotCodec.parseFileCachePayload(raw!);
     assert.ok(stored.ok);
     assert.equal(stored.value.body, "同步落库正文");
   });

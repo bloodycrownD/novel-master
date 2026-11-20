@@ -14,16 +14,14 @@
  * @module test/vfs/vfs-batch-ingest-revision-alignment
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
 
 function enc(s: string): Uint8Array {
   return new TextEncoder().encode(s);
@@ -72,21 +70,21 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   }
 
   it("D1: 批量 ingest（含覆盖写）后每个 head_version 都有对应 vfs_revision 行", async () => {
-    const project = await ctx.projects.create(`P-d1-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d1-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const vfs = createScopedVfsService(conn, scope);
-    await vfs.write("/chap/a.md", "old-a");
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
+    unwrap(await vfs.write("/chap/a.md", "old-a"));
 
-    const batch = createVfsBatchIoService(conn);
-    const plan = await batch.planBatchIngest(scope, "/chap", [
+    const batch = VfsServiceFactory.createBatchIo(conn);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("new-a") },
       { kind: "file", relativePath: "b.md", bytes: enc("B") },
       { kind: "file", relativePath: "sub/c.md", bytes: enc("C") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/chap", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
       overwriteConfirmed: true,
-    });
+    }));
     assert.equal(report.failed.length, 0, JSON.stringify(report.failed));
     assert.deepEqual(report.written.sort(), [
       "/chap/a.md",
@@ -108,18 +106,18 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("D2: 新建 ref=1；覆盖写后旧版本 ref=0、新版本 ref=1", async () => {
-    const project = await ctx.projects.create(`P-d2-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d2-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const vfs = createScopedVfsService(conn, scope);
-    await vfs.write("/a.md", "old");
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
+    unwrap(await vfs.write("/a.md", "old"));
 
-    const batch = createVfsBatchIoService(conn);
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const batch = VfsServiceFactory.createBatchIo(conn);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "a.md", bytes: enc("new") },
       { kind: "file", relativePath: "b.md", bytes: enc("b") },
-    ]);
-    await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: true });
+    ]));
+    unwrap(await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: true }));
 
     const refs = await conn.query<{ entry_id: number; version: number; ref_count: number }>(
       `SELECT r.entry_id, r.version, r.ref_count
@@ -130,8 +128,8 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       [scopeKey]
     );
     const entryRepo = new SqliteVfsEntryRepository(conn);
-    const entryA = (await entryRepo.findByPath(scopeKey, "/a.md"))!;
-    const entryB = (await entryRepo.findByPath(scopeKey, "/b.md"))!;
+    const entryA = (unwrap(await entryRepo.findByPath(scopeKey, "/a.md")))!;
+    const entryB = (unwrap(await entryRepo.findByPath(scopeKey, "/b.md")))!;
     const byEntry = new Map<number, Array<{ version: number; ref: number }>>();
     for (const r of refs) {
       const list = byEntry.get(Number(r.entry_id)) ?? [];
@@ -146,26 +144,26 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("D3: checkpoint 钉住批量导入的 head 不抛 NOT_FOUND（真 head 的 ref 可回收）", async () => {
-    const project = await ctx.projects.create(`P-d3-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d3-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const messageId = (
-      await ctx.messages.append(session.id, "user", {
+      unwrap(await ctx.messages.append(session.id, "user", {
         blocks: [{ type: "text", text: "hi" }],
-      })
+      }))
     ).id;
 
-    const batch = createVfsBatchIoService(conn);
-    const plan = await batch.planBatchIngest(scope, "/chap", [
+    const batch = VfsServiceFactory.createBatchIo(conn);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "pinned.md", bytes: enc("pinned-body") },
-    ]);
-    await batch.applyBatchIngest(scope, "/chap", plan, { overwriteConfirmed: false });
+    ]));
+    unwrap(await batch.applyBatchIngest(scope, "/chap", plan, { overwriteConfirmed: false }));
 
-    const entry = (await new SqliteVfsEntryRepository(conn).findByPath(
+    const entry = (unwrap(await new SqliteVfsEntryRepository(conn).findByPath(
       scopeKey,
       "/chap/pinned.md"
-    ))!;
+    )))!;
 
     // 旧实现下这里抛 `VfsError NOT_FOUND: Revision not found`。
     await assert.doesNotReject(() =>
@@ -191,18 +189,18 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("D5: 覆盖写版本单调 —— 既有 v1/v2 后批量 ingest 得 v3，版本连续无洞", async () => {
-    const project = await ctx.projects.create(`P-d5-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d5-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const vfs = createScopedVfsService(conn, scope);
-    await vfs.write("/x.md", "v1");
-    await vfs.write("/x.md", "v2");
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
+    unwrap(await vfs.write("/x.md", "v1"));
+    unwrap(await vfs.write("/x.md", "v2"));
 
-    const batch = createVfsBatchIoService(conn);
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const batch = VfsServiceFactory.createBatchIo(conn);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "x.md", bytes: enc("v3") },
-    ]);
-    await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: true });
+    ]));
+    unwrap(await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: true }));
 
     const rows = await conn.query<{ version: number; ref_count: number }>(
       `SELECT r.version, r.ref_count FROM vfs_revision r
@@ -221,35 +219,35 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       1,
       "live head 持有一份引用"
     );
-    const head = (await new SqliteVfsEntryRepository(conn).findByPath(scopeKey, "/x.md"))!;
+    const head = (unwrap(await new SqliteVfsEntryRepository(conn).findByPath(scopeKey, "/x.md")))!;
     assert.equal(head.version, 3);
   });
 
-  it("幂等：同内容再导入一次不新增 revision（共享 writeWithRevision 的同文短路）", async () => {
-    const project = await ctx.projects.create(`P-idem-${Date.now()}`);
+  it("幂等：同内容再导入一次不新增 revision（共享 WriteWithRevision.write 的同文短路）", async () => {
+    const project = unwrap(await ctx.projects.create(`P-idem-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
 
-    const batch = createVfsBatchIoService(conn);
+    const batch = VfsServiceFactory.createBatchIo(conn);
     const entries = [{ kind: "file" as const, relativePath: "same.md", bytes: enc("same") }];
-    await batch.applyBatchIngest(
+    unwrap(await batch.applyBatchIngest(
       scope,
       "/",
-      await batch.planBatchIngest(scope, "/", entries),
+      unwrap(await batch.planBatchIngest(scope, "/", entries)),
       { overwriteConfirmed: false }
-    );
+    ));
     const before = await conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_revision r
        JOIN vfs_entry e ON e.entry_id = r.entry_id
        WHERE e.scope_key = ?`,
       [scopeKey]
     );
-    await batch.applyBatchIngest(
+    unwrap(await batch.applyBatchIngest(
       scope,
       "/",
-      await batch.planBatchIngest(scope, "/", entries),
+      unwrap(await batch.planBatchIngest(scope, "/", entries)),
       { overwriteConfirmed: true }
-    );
+    ));
     const after = await conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_revision r
        JOIN vfs_entry e ON e.entry_id = r.entry_id
@@ -260,23 +258,23 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     assert.equal((await headTable(scopeKey))[0]!.head, 1);
   });
 
-  it("writeWithRevision 复用：批量通道保留导入链路的外部文件名语义（跳过名校验）", async () => {
+  it("WriteWithRevision.write 复用：批量通道保留导入链路的外部文件名语义（跳过名校验）", async () => {
     // 牙齿：把 `skipNameValidation` 去掉，本条立刻红（以前能导入的外部文件名
     // 变成「导入失败」，改变了 validate-entry-name.ts 已拍板的导入语义）。
-    const project = await ctx.projects.create(`P-name-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-name-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
 
-    const batch = createVfsBatchIoService(conn);
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const batch = VfsServiceFactory.createBatchIo(conn);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "尾随空格.md ", bytes: enc("x") },
       { kind: "file", relativePath: "控制符\u0001.md", bytes: enc("z") },
       { kind: "file", relativePath: "正常.md", bytes: enc("y") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.equal(report.failed.length, 0, JSON.stringify(report.failed));
-    // 尾随空格被 normalizePath 规范化掉；控制符原样保留（这正是「以前能导入」的形态）。
+    // 尾随空格被 PathNormalizer.normalize 规范化掉；控制符原样保留（这正是「以前能导入」的形态）。
     assert.deepEqual(report.written.sort(), [
       "/尾随空格.md",
       "/控制符\u0001.md",

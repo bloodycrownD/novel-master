@@ -4,6 +4,9 @@
  * @module service/message-checkpoint/message-rollback.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
+
 /** 回滚可选参数。 */
 export type RollbackOptions = {
   /** 跳过 VFS reconcile，仅截断 tail 消息与 checkpoint。 */
@@ -36,5 +39,5 @@ export interface MessageRollbackService {
     projectId: string,
     anchorMessageId: string,
     options?: RollbackOptions
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 }

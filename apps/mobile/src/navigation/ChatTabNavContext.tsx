@@ -39,15 +39,12 @@ export type ChatTabNavigationContextValue = {
   readonly actions: ChatTabNavigationActions;
 };
 
-export const ChatTabNavigationCtx =
-  createContext<ChatTabNavigationContextValue | null>(null);
+export const ChatTabNavigationCtx = createContext<ChatTabNavigationContextValue | null>(null);
 
 export function useChatTabNavigation(): ChatTabNavigationContextValue {
   const ctx = useContext(ChatTabNavigationCtx);
   if (ctx == null) {
-    throw new Error(
-      'useChatTabNavigation 须在 ChatTabNavigationProvider 内使用',
-    );
+    throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');
   }
   return ctx;
 }

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { grepContents } from "../../src/domain/vfs/logic/vfs-grep.js";
+import {  describe, it  } from "node:test";
+import {  VfsGrep  } from "../../src/domain/vfs/logic/vfs-grep.js";
 
-function grep(...args: Parameters<typeof grepContents>) {
-  const result = grepContents(...args);
+function grep(...args: Parameters<typeof VfsGrep.grepContents>) {
+  const result = VfsGrep.grepContents(...args);
   assert.ok(result.ok);
   return result.value;
 }
@@ -82,7 +82,7 @@ describe("grepContents", () => {
   });
 
   it("regex mode returns VFS_INVALID_PATTERN for invalid regex", () => {
-    const result = grepContents(rows, "(unclosed", { matchMode: "regex" });
+    const result = VfsGrep.grepContents(rows, "(unclosed", { matchMode: "regex" });
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.error.key, "VFS_INVALID_PATTERN");

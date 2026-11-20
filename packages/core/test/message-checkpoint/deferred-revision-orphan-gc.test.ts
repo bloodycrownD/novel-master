@@ -11,18 +11,16 @@
  *
  * @module test/message-checkpoint/deferred-revision-orphan-gc
  */
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
-import { scheduleDeferredRevisionOrphanGc } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  DeferredRevisionOrphanGc  } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -43,14 +41,14 @@ async function drainMicrotasks(): Promise<void> {
 describe("deferred 全局孤儿清扫（T-R4）", () => {
   it("T-R4a: 回滚事务内无全局孤儿 DELETE；resolve 先于清扫 SQL；孤儿最终被清", async () => {
     const ctx = await openSqlCountingNovelMasterTestConnection();
-    const project = await ctx.projects.create(`P-tr4a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr4a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("a"));
-    const anchor = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
+    const anchor = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
     //（content_hash 置 NULL 且 status=deleted，避开 INSERT 触发器与
@@ -61,7 +59,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     );
 
     ctx.counter.clear();
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     const rollbackDone = rollback.rollbackToMessage(
       session.id,
       project.id,
@@ -91,7 +89,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     assert.equal(Number(orphans[0]!.n), 0, "孤儿 revision 行最终应被清");
 
     // 回滚语义不受影响（rewind 保留锚点，tail 截断）。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[1]!.id, anchor.id);
     await ctx.conn.close();
@@ -99,14 +97,14 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
 
   it("T-R4b: 清扫进行中重复调度不重入（in-flight 去重）；孤儿残留窗口不影响回滚正确性", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr4b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr4b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("a"));
-    const anchor = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
+    const anchor = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
     // 受控连接：孤儿 DELETE 挂起在 gate 上，直到测试放行。
     const releases: Array<() => void> = [];
@@ -135,23 +133,23 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     );
 
     // 第一次调度：清扫挂在 gate 上（进行中）。
-    scheduleDeferredRevisionOrphanGc(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
     await drainMicrotasks();
     assert.equal(orphanDeleteCalls, 1, "第一次调度应发出孤儿 DELETE");
     assert.equal(releases.length, 1);
 
     // 孤儿残留窗口内：回滚正常完成且语义正确。
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, anchor.id, {
       skipVfsReconcile: true,
     });
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[1]!.id, anchor.id);
 
     // 清扫进行中重复调度：直接丢弃（不重入、不发第二条 DELETE）。
-    scheduleDeferredRevisionOrphanGc(gatedConn);
-    scheduleDeferredRevisionOrphanGc(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
     await drainMicrotasks();
     assert.equal(
       orphanDeleteCalls,
@@ -162,7 +160,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     // 放行第一次清扫后，守卫复位——新一轮调度可再次发出。
     releases[0]!();
     await drainMicrotasks();
-    scheduleDeferredRevisionOrphanGc(gatedConn);
+    DeferredRevisionOrphanGc.schedule(gatedConn);
     await drainMicrotasks();
     assert.equal(orphanDeleteCalls, 2, "守卫复位后新调度应可再次发出");
     // 放行挂起的第二次 DELETE（gate 连接只挂起不真执行），随后以真连接
@@ -171,7 +169,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
       release();
     }
     await drainMicrotasks();
-    scheduleDeferredRevisionOrphanGc(ctx.conn);
+    DeferredRevisionOrphanGc.schedule(ctx.conn);
     await drainMicrotasks();
 
     const orphans = await ctx.conn.query(

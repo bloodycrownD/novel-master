@@ -1,16 +1,17 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
 
-import { compactionConditionsSchema, createCompactionConditionsStore } from "@novel-master/core/compaction";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
+import {  compactionConditionsSchema, CompactionFactory  } from "@novel-master/core/compaction";
+import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
 
 describe("compaction conditions v3 migration", () => {
   it("v2 KKV read-once migrates to v4 and writes back", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
 
     await kkv.set(
       "nm-compaction-conditions",
@@ -23,14 +24,14 @@ describe("compaction conditions v3 migration", () => {
       }),
     );
 
-    const first = await store.getConditions();
+    const first = unwrap(await store.getConditions());
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);
     assert.equal(first?.hideStartDepth, 6);
     assert.equal("tokenThreshold" in (first ?? {}), false);
 
-    const raw = await kkv.get("nm-compaction-conditions", "policy");
+    const raw = unwrap(await kkv.get("nm-compaction-conditions", "policy"));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, 4);
     assert.equal(parsed.hideStartDepth, 6);
@@ -42,7 +43,7 @@ describe("compaction conditions v3 migration", () => {
   it("v3 KKV read-once migrates to v4 and writes back", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
 
     await kkv.set(
       "nm-compaction-conditions",
@@ -55,13 +56,13 @@ describe("compaction conditions v3 migration", () => {
       }),
     );
 
-    const first = await store.getConditions();
+    const first = unwrap(await store.getConditions());
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);
     assert.equal(first?.hideStartDepth, 6);
 
-    const raw = await kkv.get("nm-compaction-conditions", "policy");
+    const raw = unwrap(await kkv.get("nm-compaction-conditions", "policy"));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, 4);
     assert.equal(parsed.hideStartDepth, 6);
@@ -70,11 +71,11 @@ describe("compaction conditions v3 migration", () => {
   });
 
   it("v2 set is rejected", () => {
-    assert.throws(() => {
-      decode(
-        { schemaVersion: 2, enabled: true, tokenThreshold: 12000 },
-        compactionConditionsSchema,
-      );
-    });
+    // 四期签名：decode 失败沿 Result.err 回传（不再 throw）。
+    const r = SerializationDecode.decode(
+      { schemaVersion: 2, enabled: true, tokenThreshold: 12000 },
+      compactionConditionsSchema,
+    );
+    assert.equal(r.ok, false);
   });
 });

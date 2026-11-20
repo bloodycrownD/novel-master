@@ -15,30 +15,21 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, describe, it } from "node:test";
 import type { WebContents } from "electron";
-import { sessionApiPromptTokenCache } from "@novel-master/core/provider";
+import { sessionApiPromptTokenCache } from "@novel-master/core/tokenizer";
 import {
   IPC_CHANNELS,
   type PromptChatTokenUpdatedPayload,
 } from "../shared/ipc-types.js";
-import {
-  handleAgentSetCurrent,
-  onCoreRunFailed,
-  onCoreRunFinished,
-  registerTrackedRunForTests,
-} from "../src/main/ipc/handlers/agent.js";
-import { handlePromptChatTokenLabel } from "../src/main/ipc/handlers/prompt.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleProvidersCreate } from "../src/main/ipc/handlers/providers.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import {
-  chatPromptTokenDebounceExecCountForTests,
-  loadChatPromptTokenStatsResilient,
-  resetChatPromptTokenDebounceForTests,
-} from "../src/main/services/chat-prompt-tokens.service.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Prompt } from "../src/main/ipc/handlers/prompt.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { ChatPromptTokensService } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -48,20 +39,22 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * 把某 session 伪造成「run 在途」：直接向 core 的 abortRegistry 注册一个
+ * 把某 session 伪造成「run 在途」：直接向 core 的 agent 门面注册一个
  * controller（与 runAgentTurn 入口同款），返回释放函数。
  *
- * 为什么不用 activeRuns 伪造：判活源写死 `rt.abortRegistry.has(sessionId)`，
- * 而 abortRegistry 是 core 受理 run 时自己登记的，desktop 侧没有可写的影子。
+ * 为什么不用 activeRuns 伪造：判活源写死 `rt.agentAbortRegistry.has(sessionId)`，
+ * 而门面记录是 core 受理 run 时自己登记的，desktop 侧没有可写的影子。
  */
 async function registerRunInFlight(
   sessionId: string,
 ): Promise<() => Promise<void>> {
-  const rt = await getDesktopRuntime();
+  const rtR = await DesktopRuntimeSingleton.get();
+  if (!rtR.ok) throw rtR.error;
+  const rt = rtR.value;
   const controller = new AbortController();
-  rt.abortRegistry.register(sessionId, controller);
+  rt.agentAbortRegistry.register(sessionId, controller);
   return async () => {
-    rt.abortRegistry.unregister(sessionId, controller);
+    rt.agentAbortRegistry.unregister(sessionId, controller);
   };
 }
 
@@ -79,17 +72,17 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   ): Promise<number> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const count = chatPromptTokenDebounceExecCountForTests(id);
+      const count = ChatPromptTokensService.debounceExecCountForTests(id);
       if (count >= target) {
         return count;
       }
       await sleep(25);
     }
-    return chatPromptTokenDebounceExecCountForTests(id);
+    return ChatPromptTokensService.debounceExecCountForTests(id);
   }
 
   before(async () => {
-    setPromptChatTokenUpdatedForwardTarget(
+    PromptChatTokenUpdatedForwarder.setTarget(
       () =>
         ({
           send: (channel: string, payload: unknown) => {
@@ -102,18 +95,18 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
 
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-dt-align-"));
 
-    const project = await handleProjectsCreate({ name: "dt-align" });
+    const project = await Projects.create({ name: "dt-align" });
     assert.equal(project.ok, true);
     if (!project.ok) return;
     projectId = project.data.id;
 
-    const agent = await handleAgentRegistryCreateBlank();
+    const agent = await AgentRegistry.createBlank();
     assert.equal(agent.ok, true);
     if (!agent.ok) return;
-    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
     assert.equal(setAgent.ok, true);
 
-    const provider = await handleProvidersCreate({
+    const provider = await Providers.create({
       protocol: "openai",
       baseUrl: "https://api.openai.com/v1",
       displayName: "openai-dt-align",
@@ -121,16 +114,20 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     });
     assert.equal(provider.ok, true, provider.ok ? "" : provider.error.message);
     if (!provider.ok) return;
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const saved = await rt.providerModels.save(provider.data.providerId, "gpt-4o");
-    await rt.state.setCurrentModelId(saved.id);
+    // 四期签名：save 沿 Result 回传，解包取实体。
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
 
-    const session = await handleSessionsCreate({ projectId, title: "dt-align" });
+    const session = await Sessions.create({ projectId, title: "dt-align" });
     assert.equal(session.ok, true);
     if (!session.ok) return;
     sessionId = session.data.id;
     // 造点中文正文：空上下文会让「读到了读数」与「没读到」难以区分。
-    await handleMessagesAppend({
+    await Messages.append({
       sessionId,
       role: "user",
       text: "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(6),
@@ -139,18 +136,20 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
 
   after(async () => {
     sessionApiPromptTokenCache.clearAll();
-    resetChatPromptTokenDebounceForTests();
+    ChatPromptTokensService.resetDebounceForTests();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
   beforeEach(() => {
     sessionApiPromptTokenCache.clearAll();
-    resetChatPromptTokenDebounceForTests();
+    ChatPromptTokensService.resetDebounceForTests();
     pushed.length = 0;
   });
 
   it("T-DA1: run 在途 ⇒ 读口跳过本轮（build 0 次）+ IPC 回 data:null", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const scope = { projectId, sessionId };
 
     // 探针：数 buildSessionPromptInput 的两处 runtime 足迹——第①段
@@ -187,8 +186,8 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     const release = await registerRunInFlight(sessionId);
     try {
       // 腿一：service 层——跳过本轮并回 null 哨兵。
-      const stats = await loadChatPromptTokenStatsResilient(probeRt, scope);
-      assert.equal(stats, null, "run 在途时读口必须回 null（保留旧标签）");
+      const stats = await ChatPromptTokensService.loadResilient(probeRt, scope);
+      assert.ok(stats.ok && stats.value === null, "run 在途时读口必须回 null（保留旧标签）");
       assert.equal(
         listCalls,
         0,
@@ -201,7 +200,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
       );
 
       // 腿二：IPC 层——{ok:true, data:null}，不是失败、也不是 0 值。
-      const res = await handlePromptChatTokenLabel(scope);
+      const res = await Prompt.chatTokenLabel(scope);
       assert.equal(res.ok, true);
       assert.equal(res.ok ? res.data : "not-ok", null);
       assert.equal(
@@ -216,9 +215,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
 
   it("T-DA2a: run 终态后补推读口恰好一次（不经 renderer 触发）", async () => {
     // 补推只认 desktop 登记过的主 run（子 run 终态过滤），先把 run 登记进来。
-    registerTrackedRunForTests(sessionId, "run-finished-1");
+    Agent.registerTrackedRunForTests(sessionId, "run-finished-1");
     // 没有 renderer、没有抽屉 IPC——若这次读口不是终态钩子补的，执行次数会停在 0。
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       sessionId,
       projectId,
       runId: "run-finished-1",
@@ -234,7 +233,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     // 恰好一次：再等一个完整的防抖窗口，不该冒出第二轮。
     await sleep(500);
     assert.equal(
-      chatPromptTokenDebounceExecCountForTests(sessionId),
+      ChatPromptTokensService.debounceExecCountForTests(sessionId),
       1,
       "补推不应重复排轮（终态只补一拍）",
     );
@@ -243,20 +242,20 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   it("T-DA2b: 补推与抽屉自发的读口 IPC 合并成一次底层计算", async () => {
     // 抽屉在 FINISHED 上会自发一次 reload（不在抑制范围：run 已结束），
     // 两条触发必须被 300ms 防抖合并——否则就是双跑一次整串重活。
-    registerTrackedRunForTests(sessionId, "run-failed-1");
-    onCoreRunFailed({
+    Agent.registerTrackedRunForTests(sessionId, "run-failed-1");
+    Agent.onCoreRunFailed({
       sessionId,
       projectId,
       runId: "run-failed-1",
       error: "boom",
     });
     // 抽屉那次走的是同一条 IPC 通道（这里用真实 handler，不走内部函数）。
-    const drawerRead = handlePromptChatTokenLabel({ projectId, sessionId });
+    const drawerRead = Prompt.chatTokenLabel({ projectId, sessionId });
 
     await waitForExecCount(sessionId, 1);
     await sleep(500);
     assert.equal(
-      chatPromptTokenDebounceExecCountForTests(sessionId),
+      ChatPromptTokensService.debounceExecCountForTests(sessionId),
       1,
       "补推 + 抽屉 IPC 应合并成一次底层计算（不合并就是 2 次整串重活）",
     );
@@ -274,13 +273,13 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     // 不过滤的话每个子代理 run 结束都会给子会话排一拍完整读口（build 整串
     // 重活 ×N），正是本迭代要消灭的「共享资源上的多余重活」。
     const childSessionId = `${sessionId}::child`;
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       sessionId: childSessionId,
       projectId,
       runId: "child-run-1",
       stopReason: "completed",
     });
-    onCoreRunFailed({
+    Agent.onCoreRunFailed({
       sessionId: childSessionId,
       projectId,
       runId: "child-run-2",
@@ -289,14 +288,16 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     // 等满两个防抖窗口：一次都不该排（execCount 停在 0）。
     await sleep(650);
     assert.equal(
-      chatPromptTokenDebounceExecCountForTests(childSessionId),
+      ChatPromptTokensService.debounceExecCountForTests(childSessionId),
       0,
       "子 run 终态不应触发子会话的读口补推（0 次才算过滤）",
     );
   });
 
   it("T-DA3: build 途中 run 起步 ⇒ 弃权回 null，且绝不进 fallback", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const scope = { projectId, sessionId };
 
     // 前提：把 build 卡在取消息那一步，等 build 跑起来之后才让 run 起步——
@@ -331,7 +332,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
       },
     }) as typeof rt;
 
-    const pending = loadChatPromptTokenStatsResilient(gatedRt, scope);
+    const pending = ChatPromptTokensService.loadResilient(gatedRt, scope);
     const waitDeadline = Date.now() + 4000;
     while (!entered && Date.now() < waitDeadline) {
       await sleep(5);
@@ -342,7 +343,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     release();
     try {
       const stats = await pending;
-      assert.equal(stats, null, "build 途中 run 起步应弃权回 null（保留旧标签）");
+      assert.ok(stats.ok && stats.value === null, "build 途中 run 起步应弃权回 null（保留旧标签）");
       assert.equal(
         listCalls,
         1,
@@ -354,7 +355,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   });
 
   it("T-DA3-ctl: 非弃权异常仍走 fallback（证明 T-DA3 的探针不是恒真）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const scope = { projectId, sessionId };
 
     // 只让**第一次**取消息抛普通异常：主路径挂掉 → 兜底必须重跑一遍 build 并
@@ -385,7 +388,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
       },
     }) as typeof rt;
 
-    const stats = await loadChatPromptTokenStatsResilient(flakyRt, scope);
+    const outcome = await ChatPromptTokensService.loadResilient(flakyRt, scope);
+    if (!outcome.ok) throw outcome.error;
+    const stats = outcome.value;
     assert.equal(listCalls, 2, "普通异常必须落进 fallback（重跑一次 build）");
     assert.ok(stats != null, "兜底应给出读数而不是 null");
     assert.equal(typeof stats.label, "string");

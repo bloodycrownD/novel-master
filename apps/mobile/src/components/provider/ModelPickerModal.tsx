@@ -8,17 +8,16 @@
  */
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {formatSavedModelDisplayName} from '@novel-master/core/provider';
+import {SavedModelDisplayName} from '@novel-master/core/provider';
+import {Result, AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
-import {
-  PickerListModal,
-  type PickerListLoadResult,
-} from '../ui/PickerListModal';
+import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
+import {ModelKey} from '../../utils/model-key';
 
-export interface SavedModelRow {
+interface SavedModelRow {
   readonly savedModelId: string;
   readonly label: string;
   readonly subtitle?: string;
@@ -35,43 +34,29 @@ type Props = {
   sessionId?: string;
 };
 
-function modelNameKey(providerId: string, modelName: string): string {
-  return `${providerId}\0${modelName}`;
-}
-
-export function ModelPickerModal({
-  visible,
-  onClose,
-  onSelected,
-  sessionId,
-}: Props) {
+export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
 
-  const load = useCallback(async (): Promise<
-    PickerListLoadResult<SavedModelRow>
-  > => {
+  const load = useCallback(async (): Promise<Result<PickerListLoadResult<SavedModelRow>, AppError>> => {
     let selectedId: string | undefined;
     if (sessionId != null) {
       // 会话级：只用 session 自己绑定的 modelId 高亮。即便为空，
       // 也不再回退 workspace 当前模型——否则用户会以为会话已经绑定了模型。
-      const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-        sessionId,
-      );
-      selectedId =
-        sessionConfig.modelId && sessionConfig.modelId.length > 0
-          ? sessionConfig.modelId
-          : undefined;
+      const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
+      if (!sessionConfig.ok) return Result.err(sessionConfig.error);
+      selectedId = sessionConfig.value.modelId && sessionConfig.value.modelId.length > 0 ? sessionConfig.value.modelId : undefined;
     } else {
       // workspace 全局：用 workspace 当前模型高亮。
-      const workspaceId = await runtime.state.getCurrentModelId();
-      selectedId = workspaceId ?? undefined;
+      const workspaceModel = await runtime.state.getCurrentModelId();
+      if (!workspaceModel.ok) return Result.err(workspaceModel.error);
+      selectedId = workspaceModel.value ?? undefined;
     }
-    const providers = await runtime.providers.list();
-    const nameById = new Map(
-      providers.map(provider => [provider.id, provider.displayName]),
-    );
+    const loadedProviders = await runtime.providers.list();
+    if (!loadedProviders.ok) return Result.err(loadedProviders.error);
+    const providers = loadedProviders.value;
+    const nameById = new Map(providers.map(provider => [provider.id, provider.displayName]));
     const allModels: Array<{
       id: string;
       providerId: string;
@@ -80,7 +65,8 @@ export function ModelPickerModal({
     }> = [];
     for (const provider of providers) {
       const saved = await runtime.providerModels.savedList(provider.id);
-      for (const model of saved) {
+      if (!saved.ok) return Result.err(saved.error);
+      for (const model of saved.value) {
         allModels.push({
           id: model.id,
           providerId: model.providerId,
@@ -91,26 +77,20 @@ export function ModelPickerModal({
     }
     const nameCounts = new Map<string, number>();
     for (const model of allModels) {
-      const key = modelNameKey(model.providerId, model.modelName);
+      const key = ModelKey.name(model.providerId, model.modelName);
       nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
     }
     const collected: SavedModelRow[] = allModels.map(model => {
-      const duplicate =
-        (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) >
-        1;
-      const providerDisplayName =
-        nameById.get(model.providerId) ?? '未知服务商';
+      const duplicate = (nameCounts.get(ModelKey.name(model.providerId, model.modelName)) ?? 0) > 1;
+      const providerDisplayName = nameById.get(model.providerId) ?? '未知服务商';
       return {
         savedModelId: model.id,
-        label: formatSavedModelDisplayName(
-          providerDisplayName,
-          model.modelName,
-        ),
+        label: SavedModelDisplayName.format(providerDisplayName, model.modelName),
         subtitle: duplicate ? model.vendorModelId : undefined,
       };
     });
     collected.sort((a, b) => a.label.localeCompare(b.label));
-    return {rows: collected, selectedId};
+    return Result.ok({rows: collected, selectedId});
   }, [runtime, sessionId]);
 
   const select = useCallback(
@@ -119,18 +99,25 @@ export function ModelPickerModal({
       // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
       try {
         if (sessionId != null) {
-          const current = await runtime.sessions.getSessionAgentConfig(
-            sessionId,
-          );
-          await runtime.sessions.updateSessionAgentConfig(sessionId, {
-            agentId: current.agentId,
-            modelId: savedModelId,
-          });
+          const current = await runtime.sessions.getSessionAgentConfig(sessionId);
+          if (!current.ok) {
+            showToast(ToastMessage.toast('设置失败', current.error));
+            return;
+          }
+          const updated = await runtime.sessions.updateSessionAgentConfig(sessionId, {agentId: current.value.agentId, modelId: savedModelId});
+          if (!updated.ok) {
+            showToast(ToastMessage.toast('设置失败', updated.error));
+            return;
+          }
         } else {
-          await runtime.state.setCurrentModelId(savedModelId);
+          const updated = await runtime.state.setCurrentModelId(savedModelId);
+          if (!updated.ok) {
+            showToast(ToastMessage.toast('设置失败', updated.error));
+            return;
+          }
         }
       } catch (cause) {
-        showToast(toastMessage('设置失败', cause));
+        showToast(ToastMessage.toast('设置失败', cause));
         return;
       }
       onSelected?.(savedModelId);
@@ -149,11 +136,7 @@ export function ModelPickerModal({
         <>
           <View style={styles.rowText}>
             <Text style={{color: tokens.text}}>{item.label}</Text>
-            {item.subtitle ? (
-              <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
-                {item.subtitle}
-              </Text>
-            ) : null}
+            {item.subtitle ? <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>{item.subtitle}</Text> : null}
           </View>
           {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
         </>

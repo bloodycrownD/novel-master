@@ -20,10 +20,7 @@
  */
 import {describe, expect, it} from '@jest/globals';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {
-  deriveComposerSendState,
-  findLastVisibleMessage,
-} from '@/components/chat/composer-send-state';
+import {ComposerSendState} from '@/components/chat/composer-send-state'
 
 function message(
   id: string,
@@ -48,8 +45,8 @@ function message(
 
 describe('composer-send-state 薄推导', () => {
   it('无消息：不可空续跑、末条非纯文本（发送键全灰）', () => {
-    expect(findLastVisibleMessage([])).toBeUndefined();
-    expect(deriveComposerSendState(undefined)).toEqual({
+    expect(ComposerSendState.findLastVisibleMessage([])).toBeUndefined();
+    expect(ComposerSendState.derive(undefined)).toEqual({
       canResumeWithoutInput: false,
       lastMessageIsPlainUserText: false,
     });
@@ -58,12 +55,12 @@ describe('composer-send-state 薄推导', () => {
   it('findLastVisibleMessage 跳过尾部隐藏消息（隐藏不改可见性语义）', () => {
     const visible = message('m1', 'user');
     const hiddenTail = message('m2', 'assistant', undefined, true);
-    expect(findLastVisibleMessage([visible, hiddenTail])).toBe(visible);
+    expect(ComposerSendState.findLastVisibleMessage([visible, hiddenTail])).toBe(visible);
   });
 
   it('末条为 user 纯文本：可空续跑 + 锁「带字发送」', () => {
     const last = message('m1', 'user', [{type: 'text', text: '看这里'}]);
-    expect(deriveComposerSendState(last)).toEqual({
+    expect(ComposerSendState.derive(last)).toEqual({
       canResumeWithoutInput: true,
       lastMessageIsPlainUserText: true,
     });
@@ -75,7 +72,7 @@ describe('composer-send-state 薄推导', () => {
     const last = message('m1', 'user', [
       {type: 'tool_result', toolUseId: 't1', content: 'done', ok: true},
     ]);
-    expect(deriveComposerSendState(last)).toEqual({
+    expect(ComposerSendState.derive(last)).toEqual({
       canResumeWithoutInput: true,
       lastMessageIsPlainUserText: false,
     });
@@ -83,7 +80,7 @@ describe('composer-send-state 薄推导', () => {
 
   it('末条为 assistant：不可空续跑（等回复中），末条非纯文本', () => {
     const last = message('m1', 'assistant');
-    expect(deriveComposerSendState(last)).toEqual({
+    expect(ComposerSendState.derive(last)).toEqual({
       canResumeWithoutInput: false,
       lastMessageIsPlainUserText: false,
     });

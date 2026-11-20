@@ -32,10 +32,13 @@ jest.mock('../src/debug/run-timing', () => ({
 }));
 
 const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
-jest.mock('../src/services/project-composer-status.service', () => ({
+jest.mock('../src/services/project-composer-status.service', () => {
+  const legacy = {
   projectComposerStatusForSession: (...args: unknown[]) =>
     mockProjectComposerStatus(...(args as [])),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {forSession: legacy.projectComposerStatusForSession}};
+});
 
 // token-ranges 探针：D1 水化优先的验收点是「持久化 ranges 生效时**不**扫描」，
 // 行为断言之外再用调用探针钉一次（spec T-CA2）。
@@ -46,12 +49,15 @@ jest.mock('../src/components/chat/native-composer/token-ranges', () => {
   >('../src/components/chat/native-composer/token-ranges');
   return {
     ...actual,
-    scanTokensToRanges: jest.fn(actual.scanTokensToRanges),
+    TokenRanges: {
+      ...actual.TokenRanges,
+      scanTokensToRanges: jest.fn(actual.TokenRanges.scanTokensToRanges),
+    },
   };
 });
 
 const mockStartRun = jest.fn(
-  (..._args: unknown[]) => ({ok: true}) as {ok: boolean; error?: string},
+  (..._args: unknown[]) => ({ok: true} as {ok: boolean; error?: string}),
 );
 const mockStopRun = jest.fn();
 
@@ -61,24 +67,19 @@ jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-import { useChatComposerController } from '../src/components/chat/useChatComposerController';
+import {useChatComposerController} from '../src/components/chat/useChatComposerController';
 
 type ChatComposerController = ReturnType<typeof useChatComposerController>;
-type UseChatComposerControllerOptions = Parameters<typeof useChatComposerController>[0];
-import {
-  applyComposerStatusAttachmentsReplace,
-  clearChatComposerDraft,
-  readChatComposerDraftState,
-  writeChatComposerDraft,
-  writeChatComposerDraftState,
-} from '../src/storage/chat-composer-draft';
-import {
-  scanTokensToRanges,
-} from '../src/components/chat/native-composer/token-ranges';
-import { chatAnnotateDraftStore } from '@novel-master/core/chat';
+type UseChatComposerControllerOptions = Parameters<
+  typeof useChatComposerController
+>[0];
+import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
+import {TokenRanges} from '../src/components/chat/native-composer/token-ranges';
+import {chatAnnotateDraftStore} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 
 /** 探针（模块被 jest.mock 包了一层计数，实现仍是 actual）。 */
-const mockScanTokensToRanges = jest.mocked(scanTokensToRanges);
+const mockScanTokensToRanges = jest.mocked(TokenRanges.scanTokensToRanges);
 
 type Mutable<T> = {-readonly [K in keyof T]: T[K]};
 
@@ -147,26 +148,31 @@ beforeEach(() => {
   mockStartRun.mockClear().mockImplementation(() => ({ok: true}));
   mockStopRun.mockClear();
   mockProjectComposerStatus.mockReset().mockResolvedValue([]);
-  clearChatComposerDraft('s1');
+  ChatComposerDraft.clear('s1');
   chatAnnotateDraftStore.resetForTests();
   __setKeyboardHeightForTests(0);
   Object.assign(mockRuntime, {
-    preferences: {getLlmStreamEnabled: jest.fn(async () => true)},
+    preferences: {
+      getLlmStreamEnabled: jest.fn(async () => ({ok: true as const, value: true})),
+    },
     sessions: {
-      get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-      getComposerDraftJson: jest.fn(
-        async (id: string) => mockDraftDb.get(id) ?? null,
-      ),
-      setComposerDraftJson: jest.fn(
-        async (id: string, json: string | null) => {
-          mockDraftDb.set(id, json);
-          return true;
-        },
-      ),
+      get: jest.fn(async () => ({
+        ok: true,
+        value: {id: 's1', projectId: 'p1'},
+      })),
+      // 错误通道迁移二期后草稿读写走 Result wire（`!ok` 即 throw）。
+      getComposerDraftJson: jest.fn(async (id: string) => ({
+        ok: true as const,
+        value: mockDraftDb.get(id) ?? null,
+      })),
+      setComposerDraftJson: jest.fn(async (id: string, json: string | null) => {
+        mockDraftDb.set(id, json);
+        return {ok: true as const, value: true};
+      }),
     },
     sessionStreamUnitManager: {
       startRun: mockStartRun,
-      stopRun: mockStopRun,
+      stop: mockStopRun,
     },
   });
 });
@@ -208,8 +214,9 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(args[0]).toBe('s1');
     expect(args[1]).toBe('p1');
     expect(args[2]).toBe('');
-    expect((args[3] as {allowResumeWithoutInput: boolean})
-      .allowResumeWithoutInput).toBe(true);
+    expect(
+      (args[3] as {allowResumeWithoutInput: boolean}).allowResumeWithoutInput,
+    ).toBe(true);
   });
 
   it('有正文：正常发送（content 为 trim 后正文，allowResume=false）', async () => {
@@ -225,12 +232,13 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(mockStartRun).toHaveBeenCalledTimes(1);
     const args = mockStartRun.mock.calls[0]!;
     expect(args[2]).toBe('你好');
-    expect((args[3] as {allowResumeWithoutInput: boolean})
-      .allowResumeWithoutInput).toBe(false);
+    expect(
+      (args[3] as {allowResumeWithoutInput: boolean}).allowResumeWithoutInput,
+    ).toBe(false);
   });
 
   it('T-CA9 ①: 贴邻两颗技能 $A$$B$ → 区间扫描两颗都进 attachments，掩码区间同步透传', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '$agent-config$$节拍成章$',
@@ -274,7 +282,7 @@ describe('useChatComposerController · send 三分支路由', () => {
   });
 
   it('T-CA9 ②: @docs/a.md@$写作$ → 路径无污染 + 技能各挂各的', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '@docs/a.md@$写作$',
@@ -296,7 +304,11 @@ describe('useChatComposerController · send 三分支路由', () => {
     const args = mockStartRun.mock.calls[0]!;
     expect(args[2]).toBe('@docs/a.md@$写作$');
     const options = args[3] as {
-      attachments?: readonly {action?: string; path?: string; skillName?: string}[];
+      attachments?: readonly {
+        action?: string;
+        path?: string;
+        skillName?: string;
+      }[];
       excludedScanRanges?: unknown;
     };
     const attachments = options.attachments ?? [];
@@ -345,7 +357,7 @@ describe('useChatComposerController · send 三分支路由', () => {
   });
 
   it('T-CA9 ③b: 区间外手输 token 仍经掩码全量扫描挂载（二段式的第 2 段）', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '$A$$B$ 手输 $C 与 @notes/a.md',
@@ -400,7 +412,7 @@ describe('useChatComposerController · send 三分支路由', () => {
 
   it('T-CA9 ④: 草稿首带空白 + 区间 → trimStart 换算不错位', async () => {
     // 草稿两端带空白：tokenRanges 相对原文，发送正文是 text.trim()。
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '  $agent-config$$节拍成章$ ',
@@ -456,7 +468,7 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(mockStartRun).not.toHaveBeenCalled();
   });
 
-  it('running 态：send 与 terminate 都落到 stopRun', async () => {
+  it('running 态：send 与 terminate 都落到 stop(agent key)', async () => {
     await mount({running: true});
 
     await act(async () => {
@@ -467,7 +479,7 @@ describe('useChatComposerController · send 三分支路由', () => {
     });
 
     expect(mockStopRun).toHaveBeenCalledTimes(2);
-    expect(mockStopRun).toHaveBeenCalledWith('s1');
+    expect(mockStopRun).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
     expect(mockStartRun).not.toHaveBeenCalled();
   });
 
@@ -537,7 +549,7 @@ describe('useChatComposerController · change 落库（纪律 A）', () => {
       current().onChangeText('hello');
     });
 
-    expect(readChatComposerDraftState('s1').text).toBe('hello');
+    expect(ChatComposerDraft.readState('s1').text).toBe('hello');
     expect(current().text).toBe('hello');
   });
 
@@ -549,7 +561,7 @@ describe('useChatComposerController · change 落库（纪律 A）', () => {
       current().onChangeText('看这里 $写作 ');
     });
 
-    expect(readChatComposerDraftState('s1').text).toBe('看这里 $写作 ');
+    expect(ChatComposerDraft.readState('s1').text).toBe('看这里 $写作 ');
   });
 
   it('同值回声（命令式写入后宿主的 onComposerChangeText）不重复落库', async () => {
@@ -577,22 +589,22 @@ describe('useChatComposerController · change 落库（纪律 A）', () => {
     // 别用「指望 writeChatComposerDraft 广播」写，那条路根本不存在。
     const tree = await mount();
     await act(async () => {
-      writeChatComposerDraft('s1', '回填后的文本', mockRuntime.sessions);
+      ChatComposerDraft.write('s1', '回填后的文本', mockRuntime.sessions);
     });
     await act(async () => {
       tree.update(<Harness draftRestoreToken={1} />);
     });
     await flush();
 
-    expect(readChatComposerDraftState('s1').text).toBe('回填后的文本');
+    expect(ChatComposerDraft.readState('s1').text).toBe('回填后的文本');
     expect(current().text).toBe('回填后的文本');
   });
 
   it('状态条整表替换（applyComposerStatusAttachmentsReplace）经订阅链同步 chips', async () => {
     await mount();
     await act(async () => {
-      writeChatComposerDraft('s1', 'x');
-      applyComposerStatusAttachmentsReplace({
+      ChatComposerDraft.write('s1', 'x');
+      ChatComposerDraft.applyComposerStatusAttachmentsReplace({
         sessionId: 's1',
         attachments: [
           {
@@ -632,7 +644,7 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
     const [text, cursor] = setComposerText.mock.calls[0]!;
     expect(text).toBe('看这里@docs/a.md@');
     expect(cursor).toBe((text as string).length);
-    expect(readChatComposerDraftState('s1').text).toBe('看这里@docs/a.md@');
+    expect(ChatComposerDraft.readState('s1').text).toBe('看这里@docs/a.md@');
     expect(current().pickerOpen).toBe(true); // 关闭由宿主 Modal 自己驱动
     // 插入咽喉点（CR-fix-04）：落文同时登记插入 token 的确认区间——
     // '@docs/a.md@' 落在 [3, 14)（'看这里' 之后，含终止符），打字改中段前它就是胶囊。
@@ -656,7 +668,7 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
     });
 
     expect(setComposerText).toHaveBeenCalledWith('$写作$', 4);
-    expect(readChatComposerDraftState('s1').text).toBe('$写作$');
+    expect(ChatComposerDraft.readState('s1').text).toBe('$写作$');
     // 插入咽喉点（CR-fix-04）：空草稿插入 $技能$，登记区间 [0, 4)（含两端
     // 触发符，'$写作$' 共 4 字符）。
     expect(current().tokenRanges).toEqual([{start: 0, end: 4}]);
@@ -781,7 +793,7 @@ describe('useChatComposerController · composerState 组装', () => {
 describe('useChatComposerController · tokenRanges 四咽喉点', () => {
   /** 预置带 token 的初始草稿（controller 初值对它做一次正则全扫引导）。 */
   function seedDraft(sessionId: string, text: string) {
-    writeChatComposerDraft(sessionId, text, mockRuntime.sessions);
+    ChatComposerDraft.write(sessionId, text, mockRuntime.sessions);
   }
 
   it('打字咽喉点：差分重映射（头部插入右移 / 中段改动摘除）', async () => {
@@ -803,7 +815,7 @@ describe('useChatComposerController · tokenRanges 四咽喉点', () => {
   });
 
   it('T-CA10: 相邻胶囊 $A$$B$ 删左颗 → 幸存区间保留且落库 payload 同值（D11 controller 跳）', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '$A$$B$',
@@ -955,7 +967,7 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
   it('T-CA3: 持久化旧区间被水化自愈丢弃并写回 []（不回退扫描）', async () => {
     // 缓存与 DB 双侧都带**旧格式**区间（`$技能` 无尾终止符，已被新正则判废）：
     // 初始 state 与 syncFromDraft 都要丢弃，且丢弃不是回退扫描。
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '$技能尾追',
@@ -1045,7 +1057,7 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
   });
 
   it('T-CA3: 同文本不同 ranges 切会话 → 各自归位（不按 textChanged 短路）', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '$技能$尾追',
@@ -1054,7 +1066,7 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
       },
       mockRuntime.sessions,
     );
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's2',
       {text: '$技能$尾追', attachments: [], tokenRanges: []},
       mockRuntime.sessions,
@@ -1074,7 +1086,7 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
   });
 
   it('T-CA4: 尾追打字 remap 保持区间不增长，落库 payload 带当前 ranges', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {text: '$技能$', attachments: [], tokenRanges: [{start: 0, end: 4}]},
       mockRuntime.sessions,
@@ -1093,7 +1105,7 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
   });
 
   it('T-CA4: 删除与胶囊相交 → 区间摘除并落库 []（不是缺字段）', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {
         text: '$技能$尾追',
@@ -1113,9 +1125,9 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
     const payload = readDbPayload('s1');
     expect(payload.text).toBe('$技$尾追');
     expect(payload.tokenRanges).toEqual([]);
-    expect(
-      Object.prototype.hasOwnProperty.call(payload, 'tokenRanges'),
-    ).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(payload, 'tokenRanges')).toBe(
+      true,
+    );
   });
 
   it('T-CA4: Picker 插入落库 payload 带登记区间', async () => {
@@ -1136,7 +1148,7 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
   });
 
   it('T-CA4: 发送清空 → DB 置 NULL（下次水化 undefined + 空文本，扫描必空）', async () => {
-    writeChatComposerDraftState(
+    ChatComposerDraft.writeState(
       's1',
       {text: '$技能$', attachments: [], tokenRanges: [{start: 0, end: 4}]},
       mockRuntime.sessions,

@@ -55,7 +55,7 @@ import {
   ipcProviderModelsSavedList,
   ipcProvidersList,
 } from "@/ipc/client";
-import { buildDefaultAgentDefinitionPreservingName } from "@shared/logic/stored-config-validity";
+import { DefaultAgentDefinition } from "@shared/logic/stored-config-validity";
 import { STORED_CONFIG_LABELS } from "@shared/logic/stored-config-validity";
 import { storedConfigInvalidReason } from "@shared/logic/stored-config-validity";
 import type { AgentDefinitionPlain } from "@shared/ipc-types";
@@ -463,7 +463,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     const record = wire as { name?: unknown };
     const wiredName = typeof record.name === "string" ? record.name.trim() : "";
     const preservedName = wiredName || agentId;
-    const def = buildDefaultAgentDefinitionPreservingName(preservedName);
+    const def = DefaultAgentDefinition.build(preservedName);
     setSaving(true);
     try {
       const args = { agentId, patch: toAgentDefinitionPatch(def) };

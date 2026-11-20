@@ -1,8 +1,8 @@
-import {buildFrontMatterDocumentHtml} from '@/components/vfs/build-front-matter-document-html';
+import {FrontMatterDocumentHtml} from '@/components/vfs/build-front-matter-document-html';
 
 describe('buildFrontMatterDocumentHtml', () => {
   it('renders key/value rows and escapes HTML', () => {
-    const html = buildFrontMatterDocumentHtml({
+    const html = FrontMatterDocumentHtml.build({
       fields: [{key: 'title', value: '<script>'}],
       invalid: false,
       empty: false,
@@ -15,7 +15,7 @@ describe('buildFrontMatterDocumentHtml', () => {
 
   it('returns empty when there is no FM content', () => {
     expect(
-      buildFrontMatterDocumentHtml({
+      FrontMatterDocumentHtml.build({
         fields: [],
         invalid: false,
         empty: false,

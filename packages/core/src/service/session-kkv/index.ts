@@ -4,7 +4,7 @@
  * @module service/session-kkv
  */
 
-export { createSessionKkvService } from "./create-session-kkv-service.js";
+export { SessionKkvServiceFactory } from "./create-session-kkv-service.js";
 export type { SessionKkvService } from "./session-kkv.port.js";
 export {
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -13,6 +13,4 @@ export {
   SESSION_KKV_COMPOSER_STATUS_DOMAINS,
   RULE_SNAPSHOT_CANON_KEY,
   USER_VFS_PENDING_QUEUE_KEY,
-  fileCacheKey,
-  type WorkplaceDisplayStatus,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";

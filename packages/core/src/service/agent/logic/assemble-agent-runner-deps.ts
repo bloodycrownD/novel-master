@@ -1,5 +1,5 @@
 /**
- * createAgentRunner 依赖单点装配；对话轨 / 事件轨差异经 includeCompactionOrchestrator 表达。
+ * AgentServiceFactory.createRunner 依赖单点装配；对话轨 / 事件轨差异经 includeCompactionOrchestrator 表达。
  *
  * @module service/agent/logic/assemble-agent-runner-deps
  */
@@ -8,8 +8,9 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
-import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
+import { assert } from "@/common/assert.js";
+import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
+import type { CreateAgentRunnerDeps } from "../agent-service-factory.js";
 import type { ChatAgentSession } from "../impl/chat-agent-session.js";
 import type { AgentTurnRuntimePort } from "./run-agent-turn.js";
 
@@ -19,15 +20,7 @@ export interface AssembleAgentRunnerDepsInput {
   /** AgentTurnRuntimePort 或 EventActionDeps 的 runtime 切片（modelRequests、eventBus 等）。 */
   readonly runtime: Pick<
     AgentTurnRuntimePort,
-    | "messages"
-    | "messageTranscriptEffects"
-    | "modelRequests"
-    | "messageCheckpoint"
-    | "eventBus"
-    | "sessionKkv"
-    | "streamRegistry"
-    | "skills"
-    | "preferences"
+    "messages" | "modelRequests" | "messageCheckpoint" | "eventBus" | "sessionKkv" | "streamRegistry" | "skills" | "preferences"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly savedModelRepo?: SavedModelRepository;
@@ -43,51 +36,55 @@ export interface AssembleAgentRunnerDepsInput {
   readonly includeCompactionOrchestrator: boolean;
 }
 
-/** 装配 createAgentRunner 依赖；listVisibleSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
-export function assembleAgentRunnerDeps(
-  input: AssembleAgentRunnerDepsInput
-): CreateAgentRunnerDeps {
-  const savedModels = input.runtime.savedModelRepo ?? input.runtime.savedModels;
-  const providers = input.runtime.providerRepo ?? input.runtime.providers;
+/** AgentServiceFactory.createRunner 依赖装配集合。 */
+export const AgentRunnerDepsAssembler = {
+  /** 装配 AgentServiceFactory.createRunner 依赖；listVisibleSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
+  assemble(input: AssembleAgentRunnerDepsInput): CreateAgentRunnerDeps {
+    const savedModels = input.runtime.savedModelRepo ?? input.runtime.savedModels;
+    const providers = input.runtime.providerRepo ?? input.runtime.providers;
 
-  const base: CreateAgentRunnerDeps = {
-    session: input.session,
-    modelRequests: input.runtime.modelRequests,
-    savedModels: savedModels as SavedModelRepository,
-    providers,
-    registry: input.registry,
-    toolCtx: input.toolCtx,
-    // skillAttach hydrate 用的技能服务工厂（透传 runtime.skills）。
-    skills: input.runtime.skills,
-    messageCheckpoint: input.runtime.messageCheckpoint,
-    eventBus: input.runtime.eventBus,
-    sessionKkv: input.runtime.sessionKkv,
-    streamRegistry: input.runtime.streamRegistry,
-    workplace: input.runtime.workplace,
-    // tool_use 查找源（Gemini functionResponse 的函数名解析）收窄为可见-only：
-    // 出站历史经 normalizeOrphanToolResultsForLlm（按可见历史配对）后，残留
-    // tool_result 的 tool_use 必在可见集内——hidden 行给不出任何解析力，却要
-    // 逐条解压（全量读 212ms vs 可见读 14ms，每步一发）。详见 agent-runner
-    // 该依赖的使用点注释。
-    listVisibleSessionMessages: () =>
-      input.runtime.messages.listBySession(input.toolCtx.sessionId, {
-        includeHidden: false,
-      }),
-    // 思考上下文偏好窄切片透传（可选；未注入时 runner 等同默认开）。
-    preferences: input.runtime.preferences,
-  };
+    const base: CreateAgentRunnerDeps = {
+      session: input.session,
+      modelRequests: input.runtime.modelRequests,
+      savedModels: savedModels as SavedModelRepository,
+      providers,
+      registry: input.registry,
+      toolCtx: input.toolCtx,
+      // skillAttach hydrate 用的技能服务工厂（透传 runtime.skills）。
+      skills: input.runtime.skills,
+      messageCheckpoint: input.runtime.messageCheckpoint,
+      eventBus: input.runtime.eventBus,
+      sessionKkv: input.runtime.sessionKkv,
+      streamRegistry: input.runtime.streamRegistry,
+      workplace: input.runtime.workplace,
+      // tool_use 查找源（Gemini functionResponse 的函数名解析）收窄为可见-only：
+      // 出站历史经 normalizeOrphanToolResultsForLlm（按可见历史配对）后，残留
+      // tool_result 的 tool_use 必在可见集内——hidden 行给不出任何解析力，却要
+      // 逐条解压（全量读 212ms vs 可见读 14ms，每步一发）。详见 agent-runner
+      // 该依赖的使用点注释。
+      // 读口改 Outcome 后在此转回数组：已知失败抛出交 runner 收口；未注入 hooks，
+      // 中断分支不可达，命中即不变量破坏（断言而非取消语义）。
+      listVisibleSessionMessages: async () => {
+        const read = await input.runtime.messages.listBySession(input.toolCtx.sessionId, { includeHidden: false });
+        if (read.kind === "failed") throw read.error;
+        assert(read.kind === "completed", "listVisibleSessionMessages 未注入 hooks，listBySession 不应产生中断");
+        return read.value;
+      },
+      // 思考上下文偏好窄切片透传（可选；未注入时 runner 等同默认开）。
+      preferences: input.runtime.preferences,
+    };
 
-  if (!input.includeCompactionOrchestrator) {
-    return base;
-  }
+    if (!input.includeCompactionOrchestrator) {
+      return base;
+    }
 
-  // 对话轨：注入压缩执行所需的 messages + messageTranscriptEffects，
-  // 以及压缩条件评估器。agent-runner 检测到 compactionConditions 命中时
-  // 直调 runCompaction，不再经 eventOrchestrator。
-  return {
-    ...base,
-    compactionConditions: input.runtime.compactionConditionEvaluator,
-    messages: input.runtime.messages,
-    messageTranscriptEffects: input.runtime.messageTranscriptEffects,
-  };
-}
+    // 对话轨：注入压缩执行所需的 messages 以及压缩条件评估器。
+    // agent-runner 检测到 compactionConditions 命中时直调 runCompaction，
+    // 不再经 eventOrchestrator。
+    return {
+      ...base,
+      compactionConditions: input.runtime.compactionConditionEvaluator,
+      messages: input.runtime.messages,
+    };
+  },
+} as const;

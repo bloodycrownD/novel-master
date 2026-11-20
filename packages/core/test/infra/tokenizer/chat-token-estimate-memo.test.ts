@@ -12,24 +12,13 @@
  * - memo 按会话数 64 条截断（r4q-5）。
  */
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  registerNodeTokenizerDriverForTests  } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
-import {
-  createDefaultTokenCounterRegistry,
-  resolveCurrentPromptTokens,
-  sessionApiPromptTokenCache,
-} from "../../../src/infra/tokenizer/index.js";
-import {
-  buildChatTokenEstimateMemoKey,
-  clearChatTokenEstimateMemo,
-  lookupChatTokenEstimateMemo,
-  rememberChatTokenEstimateMemo,
-  rememberWorkplaceEstimateByFingerprint,
-  stampMessagesForEstimateMemo,
-} from "../../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
+import {  DefaultTokenCounterRegistry, CurrentPromptTokens, sessionApiPromptTokenCache  } from "../../../src/infra/tokenizer/index.js";
+import {  ChatTokenEstimateMemo  } from "../../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
-import { emptyRegistryDeps } from "./registry-test-helpers.js";
+import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
 
 function msg(seq: number, text: string): ChatMessageData {
   return {
@@ -74,16 +63,16 @@ function params(
     layout: layoutOf(layout),
     ctx,
     savedModelId: "openai/gpt-4o",
-    registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
   };
 }
 
-/** 与被测参数同源的记忆键（走 buildChatTokenEstimateMemoKey 公开入口）。 */
+/** 与被测参数同源的记忆键（走 ChatTokenEstimateMemo.buildKey 公开入口）。 */
 function keyOf(
   ctx: PromptRenderContext,
   layout: {system?: string; workplace?: string} = {},
 ): string | null {
-  return buildChatTokenEstimateMemoKey({
+  return ChatTokenEstimateMemo.buildKey({
     savedModelId: "openai/gpt-4o",
     workplaceFingerprint: ctx.workplaceFingerprint,
     messages: ctx.messages,
@@ -92,8 +81,15 @@ function keyOf(
   });
 }
 
+/** Outcome 收窄：本文件用例只关心 completed 分支（弃权语义在 resolve-current-prompt-tokens.test.ts）。 */
+async function resolveCompleted(...args: Parameters<typeof resolveCurrentPromptTokens>) {
+  const outcome = await CurrentPromptTokens.resolve(...args);
+  assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
+  return outcome.value;
+}
+
 describe("chat-token-estimate-memo（单元）", () => {
-  beforeEach(() => clearChatTokenEstimateMemo());
+  beforeEach(() => ChatTokenEstimateMemo.clear());
 
   it("无 workplaceFingerprint → 键为 null（不缓存，宁可贵不陈旧）", () => {
     const key = keyOf(ctxWith({fingerprint: undefined}));
@@ -101,7 +97,7 @@ describe("chat-token-estimate-memo（单元）", () => {
   });
 
   it("无 layout → 键为 null（没有布局摘要就没有「产物没变」的判定依据）", () => {
-    const key = buildChatTokenEstimateMemoKey({
+    const key = ChatTokenEstimateMemo.buildKey({
       savedModelId: "m1",
       workplaceFingerprint: "fp",
       messages: [msg(1, "x")],
@@ -112,26 +108,26 @@ describe("chat-token-estimate-memo（单元）", () => {
   });
 
   it("消息尾戳对内容长度敏感：同 seq 不同长度 → 不同键", () => {
-    const a = stampMessagesForEstimateMemo([msg(1, "短")]);
-    const b = stampMessagesForEstimateMemo([msg(1, "长长长长长长")]);
+    const a = ChatTokenEstimateMemo.stampMessages([msg(1, "短")]);
+    const b = ChatTokenEstimateMemo.stampMessages([msg(1, "长长长长长长")]);
     assert.notEqual(a, b);
   });
 
   it("lookup 只吃逐字符相同的键；remember 覆盖旧条目", () => {
-    assert.equal(lookupChatTokenEstimateMemo("s1", "k1"), null);
-    rememberChatTokenEstimateMemo("s1", "k1", {
+    assert.equal(ChatTokenEstimateMemo.lookup("s1", "k1"), null);
+    ChatTokenEstimateMemo.remember("s1", "k1", {
       tokenCount: 10,
       estimated: true,
       counterKind: "heuristic",
     });
-    assert.equal(lookupChatTokenEstimateMemo("s1", "k2"), null);
-    assert.equal(lookupChatTokenEstimateMemo("s1", "k1")?.tokenCount, 10);
-    rememberChatTokenEstimateMemo("s1", "k1", {
+    assert.equal(ChatTokenEstimateMemo.lookup("s1", "k2"), null);
+    assert.equal(ChatTokenEstimateMemo.lookup("s1", "k1")?.tokenCount, 10);
+    ChatTokenEstimateMemo.remember("s1", "k1", {
       tokenCount: 20,
       estimated: false,
       counterKind: "tiktoken",
     });
-    assert.equal(lookupChatTokenEstimateMemo("s1", "k1")?.tokenCount, 20);
+    assert.equal(ChatTokenEstimateMemo.lookup("s1", "k1")?.tokenCount, 20);
   });
 
   it("仅 layout.system 变 ⇒ 键必变，旧键读数对新布局 lookup 必 miss（r4-core-1）", async () => {
@@ -149,96 +145,96 @@ describe("chat-token-estimate-memo（单元）", () => {
     assert.notEqual(segA[4], segB[4], "layout 摘要段必须随 system 变");
     assert.notEqual(keyA, keyB);
     // 编辑前落地的读数（精确档）不得被编辑后的布局读到。
-    rememberChatTokenEstimateMemo("sess-layout", keyA, {
+    ChatTokenEstimateMemo.remember("sess-layout", keyA, {
       tokenCount: 424242,
       estimated: false,
       counterKind: "tiktoken",
     });
     assert.equal(
-      lookupChatTokenEstimateMemo("sess-layout", keyB),
+      ChatTokenEstimateMemo.lookup("sess-layout", keyB),
       null,
       "layout 变后 lookup 必须 miss（旧实现键不含 layout，这里会命中 424242）",
     );
-    assert.equal(lookupChatTokenEstimateMemo("sess-layout", keyA)?.tokenCount, 424242);
+    assert.equal(ChatTokenEstimateMemo.lookup("sess-layout", keyA)?.tokenCount, 424242);
     // 调用方真的把 layout 传进了键：resolve 回写的条目落在含 layout 的新键上。
-    const fresh = await resolveCurrentPromptTokens(
+    const fresh = await resolveCompleted(
       "sess-layout",
       params(ctx, {system: "改版人设"}),
       { preferEstimate: true },
     );
     assert.notEqual(fresh.tokenCount, 424242, "估算读数不得复用编辑前旧键值");
     assert.ok(
-      lookupChatTokenEstimateMemo("sess-layout", keyB) != null,
+      ChatTokenEstimateMemo.lookup("sess-layout", keyB) != null,
       "resolve 必须按含 layout 摘要的键回写（调用方漏传 layout 时键为 null、这里即红）",
     );
   });
 
   it("同键下估算写不覆盖已落地的精确档（r4-core-3 升级单向）", () => {
-    rememberChatTokenEstimateMemo("s1", "k", {
+    ChatTokenEstimateMemo.remember("s1", "k", {
       tokenCount: 20,
       estimated: false,
       counterKind: "tiktoken",
     });
     // 起于精确写之前、落于其后的估算写：必须保留既有精确档。
-    rememberChatTokenEstimateMemo("s1", "k", {
+    ChatTokenEstimateMemo.remember("s1", "k", {
       tokenCount: 10,
       estimated: true,
       counterKind: "heuristic",
     });
-    const hit = lookupChatTokenEstimateMemo("s1", "k");
+    const hit = ChatTokenEstimateMemo.lookup("s1", "k");
     assert.equal(hit?.tokenCount, 20, "估算档不得覆盖同键精确档");
     assert.equal(hit?.estimated, false);
     assert.equal(hit?.counterKind, "tiktoken");
     // 反向（估算 → 精确）仍是允许的升级；同档覆盖照常生效。
-    rememberChatTokenEstimateMemo("s1", "k", {
+    ChatTokenEstimateMemo.remember("s1", "k", {
       tokenCount: 30,
       estimated: false,
       counterKind: "tiktoken",
     });
-    assert.equal(lookupChatTokenEstimateMemo("s1", "k")?.tokenCount, 30);
+    assert.equal(ChatTokenEstimateMemo.lookup("s1", "k")?.tokenCount, 30);
     // 键变了（内容变了）⇒ 守卫不适用，新键照常入册（不锁死旧档）。
-    rememberChatTokenEstimateMemo("s1", "k2", {
+    ChatTokenEstimateMemo.remember("s1", "k2", {
       tokenCount: 7,
       estimated: true,
       counterKind: "heuristic",
     });
-    const after = lookupChatTokenEstimateMemo("s1", "k2");
+    const after = ChatTokenEstimateMemo.lookup("s1", "k2");
     assert.equal(after?.tokenCount, 7);
     assert.equal(after?.estimated, true);
   });
 
   it("memo 按会话数截断：第 65 个会话挤掉最旧插入序（r4q-5）", () => {
     for (let i = 0; i < 64; i += 1) {
-      rememberChatTokenEstimateMemo(`sess-${i}`, "k", {
+      ChatTokenEstimateMemo.remember(`sess-${i}`, "k", {
         tokenCount: i + 1,
         estimated: true,
         counterKind: "heuristic",
       });
     }
     assert.ok(
-      lookupChatTokenEstimateMemo("sess-0", "k") != null,
+      ChatTokenEstimateMemo.lookup("sess-0", "k") != null,
       "前提：写满 64 条时上界未到，最旧会话仍在册",
     );
-    rememberChatTokenEstimateMemo("sess-64", "k", {
+    ChatTokenEstimateMemo.remember("sess-64", "k", {
       tokenCount: 64,
       estimated: true,
       counterKind: "heuristic",
     });
     assert.equal(
-      lookupChatTokenEstimateMemo("sess-0", "k"),
+      ChatTokenEstimateMemo.lookup("sess-0", "k"),
       null,
       "第 65 个会话入册必须逐出最旧插入序",
     );
-    assert.ok(lookupChatTokenEstimateMemo("sess-1", "k") != null);
-    assert.ok(lookupChatTokenEstimateMemo("sess-64", "k") != null);
+    assert.ok(ChatTokenEstimateMemo.lookup("sess-1", "k") != null);
+    assert.ok(ChatTokenEstimateMemo.lookup("sess-64", "k") != null);
     // 已有会话的覆盖写不触发逐出（不误伤在册会话）。
-    rememberChatTokenEstimateMemo("sess-1", "k2", {
+    ChatTokenEstimateMemo.remember("sess-1", "k2", {
       tokenCount: 1,
       estimated: true,
       counterKind: "heuristic",
     });
     assert.ok(
-      lookupChatTokenEstimateMemo("sess-2", "k") != null,
+      ChatTokenEstimateMemo.lookup("sess-2", "k") != null,
       "覆盖写不得挤出别的会话",
     );
   });
@@ -248,7 +244,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   beforeEach(() => {
     registerNodeTokenizerDriverForTests();
     sessionApiPromptTokenCache.clearAll();
-    clearChatTokenEstimateMemo();
+    ChatTokenEstimateMemo.clear();
   });
 
   it("同键估算二次调用：记忆在序列化之前命中，注入的精确档被原样吐出", async () => {
@@ -256,12 +252,12 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     const key = keyOf(ctx);
     assert.ok(key != null);
     // 注入精确档（模拟「上一轮精确升级已完成」的记忆态）。
-    rememberChatTokenEstimateMemo("sess-memo-1", key, {
+    ChatTokenEstimateMemo.remember("sess-memo-1", key, {
       tokenCount: 424242,
       estimated: false,
       counterKind: "glm",
     });
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-1",
       params(ctx),
       { preferEstimate: true },
@@ -273,7 +269,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   });
 
   it("估算 miss → 计算并记忆；消息变化 → 键变 → 重新计算", async () => {
-    const first = await resolveCurrentPromptTokens(
+    const first = await resolveCompleted(
       "sess-memo-2",
       params(ctxWith({fingerprint: "fp-2", messages: [msg(1, "一句话")]})),
       { preferEstimate: true },
@@ -281,14 +277,14 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     assert.equal(first.estimated, true);
     assert.ok(first.tokenCount > 0);
     // 同键再调 → 记忆命中同值。
-    const second = await resolveCurrentPromptTokens(
+    const second = await resolveCompleted(
       "sess-memo-2",
       params(ctxWith({fingerprint: "fp-2", messages: [msg(1, "一句话")]})),
       { preferEstimate: true },
     );
     assert.deepEqual(second, first);
     // 消息内容变长 → 键变 → miss → 数值按新内容重算（CJK 感知，必然更大）。
-    const third = await resolveCurrentPromptTokens(
+    const third = await resolveCompleted(
       "sess-memo-2",
       params(
         ctxWith({
@@ -302,7 +298,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   });
 
   it("无指纹（旧路径）→ 记忆不参与：注入条目不会串值", async () => {
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-3",
       params(ctxWith({fingerprint: undefined})),
       { preferEstimate: true },
@@ -312,19 +308,19 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   });
 
   it("精确分支完成 → 回写记忆 → 下一次估算帧直接拿精确档（升级语义）", async () => {
-    const estimate = await resolveCurrentPromptTokens(
+    const estimate = await resolveCompleted(
       "sess-memo-4",
       params(ctxWith({fingerprint: "fp-4"})),
       { preferEstimate: true },
     );
     assert.equal(estimate.estimated, true);
     // 完整口径（preferEstimate=false）：真分词器计数并回写记忆。
-    const precise = await resolveCurrentPromptTokens(
+    const precise = await resolveCompleted(
       "sess-memo-4",
       params(ctxWith({fingerprint: "fp-4"})),
     );
     assert.equal(precise.estimated, false, "前提：完整口径出精确读数");
-    const after = await resolveCurrentPromptTokens(
+    const after = await resolveCompleted(
       "sess-memo-4",
       params(ctxWith({fingerprint: "fp-4"})),
       { preferEstimate: true },
@@ -343,12 +339,12 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     assert.ok(key != null);
     // 注入精确档：完整口径（preferEstimate 缺省 false）必须直接吐出注入值，
     // 而不是跑一遍真分词器计数（无预查时实算值 ≠ 999999，即红）。
-    rememberChatTokenEstimateMemo("sess-memo-5", key, {
+    ChatTokenEstimateMemo.remember("sess-memo-5", key, {
       tokenCount: 999999,
       estimated: false,
       counterKind: "tiktoken",
     });
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-5",
       params(ctx),
     );
@@ -361,12 +357,12 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     const ctx = ctxWith({fingerprint: "fp-precise-est"});
     const key = keyOf(ctx);
     assert.ok(key != null);
-    rememberChatTokenEstimateMemo("sess-memo-6", key, {
+    ChatTokenEstimateMemo.remember("sess-memo-6", key, {
       tokenCount: 111,
       estimated: true,
       counterKind: "heuristic",
     });
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-6",
       params(ctx),
     );
@@ -378,8 +374,8 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     const ctx = ctxWith({fingerprint: "fp-inc"});
     // 注入夸张的指纹估读：分解路径必须采用缓存值（删掉 lookup 即现算真值
     // ≠ 注入值，断言即红）。layout 带 workplace 块（render 门控对齐）。
-    rememberWorkplaceEstimateByFingerprint("fp-inc", 12345);
-    const result = await resolveCurrentPromptTokens(
+    ChatTokenEstimateMemo.rememberWorkplaceEstimateByFingerprint("fp-inc", 12345);
+    const result = await resolveCompleted(
       "sess-inc",
       params(ctx, {workplace: "【工作区】"}),
       { preferEstimate: true },
@@ -390,7 +386,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
       `分解估读应采用注入的指纹缓存值（got ${result.tokenCount}）`,
     );
     // 跨会话共享：另一个会话同指纹不再重算 workplace 段（结果同值口径）。
-    const other = await resolveCurrentPromptTokens(
+    const other = await resolveCompleted(
       "sess-inc-2",
       params(ctxWith({fingerprint: "fp-inc"}), {workplace: "【工作区】"}),
       { preferEstimate: true },
@@ -400,12 +396,12 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
 
   it("增量分解与整串估算口径一致（哨兵替换法，差值 ≤ 各段 ceil 常数）", async () => {
     const wpLayout = {workplace: "【工作区】"};
-    const decomposed = await resolveCurrentPromptTokens(
+    const decomposed = await resolveCompleted(
       "sess-parity-a",
       params(ctxWith({fingerprint: "fp-parity"}), wpLayout),
       { preferEstimate: true },
     );
-    const whole = await resolveCurrentPromptTokens(
+    const whole = await resolveCompleted(
       "sess-parity-b",
       params(ctxWith({fingerprint: undefined}), wpLayout),
       { preferEstimate: true },

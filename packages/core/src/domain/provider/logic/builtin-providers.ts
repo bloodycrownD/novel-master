@@ -7,7 +7,7 @@
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 /** 内置 provider 种子行，与 PRD 内置表一致。 */
-export type BuiltinProviderSeedRow = {
+type BuiltinProviderSeedRow = {
   /** 稳定业务键（seed 幂等 / 协议护栏）；不对用户展示。 */
   readonly key: string;
   /** 跨安装一致的固定技术主键 UUID。 */
@@ -24,9 +24,9 @@ export const BUILTIN_PROVIDER_UUID_OPENAI = "c0ffeeee-0001-4000-8000-00000000000
 /** 内置 Anthropic 固定 UUID。 */
 export const BUILTIN_PROVIDER_UUID_ANTHROPIC = "c0ffeeee-0001-4000-8000-000000000002";
 /** 内置 Google Gemini 固定 UUID。 */
-export const BUILTIN_PROVIDER_UUID_GOOGLE = "c0ffeeee-0001-4000-8000-000000000003";
+const BUILTIN_PROVIDER_UUID_GOOGLE = "c0ffeeee-0001-4000-8000-000000000003";
 /** 内置 OpenRouter 固定 UUID。 */
-export const BUILTIN_PROVIDER_UUID_OPENROUTER = "c0ffeeee-0001-4000-8000-000000000004";
+const BUILTIN_PROVIDER_UUID_OPENROUTER = "c0ffeeee-0001-4000-8000-000000000004";
 /** 内置 OpenCode Zen 固定 UUID。 */
 export const BUILTIN_PROVIDER_UUID_OPENCODE = "c0ffeeee-0001-4000-8000-000000000005";
 
@@ -72,10 +72,12 @@ export const BUILTIN_PROVIDER_ROWS: readonly BuiltinProviderSeedRow[] = [
 
 const BUILTIN_DEFAULT_API_KEY_BY_KEY: Readonly<Record<string, string>> = Object.fromEntries(BUILTIN_PROVIDER_ROWS.flatMap((row) => (row.defaultApiKey != null ? [[row.key, row.defaultApiKey]] : [])));
 
-/** 内置 provider 在无 SKSP 密钥时的默认 apiKey；按 builtin_key 查；无则 undefined。 */
-export function builtinDefaultApiKey(builtinKey: string): string | undefined {
-  return BUILTIN_DEFAULT_API_KEY_BY_KEY[builtinKey];
-}
+export const BuiltinProviders = {
+  /** 内置 provider 在无 SKSP 密钥时的默认 apiKey；按 builtin_key 查；无则 undefined。 */
+  defaultApiKey(builtinKey: string): string | undefined {
+    return BUILTIN_DEFAULT_API_KEY_BY_KEY[builtinKey];
+  },
+} as const;
 
 /** builtin_key → LLM 协议种类（由 BUILTIN_PROVIDER_ROWS 派生）。 */
 export const BUILTIN_PROVIDER_PROTOCOLS: Readonly<Record<string, LlmProtocolKind>> = Object.fromEntries(BUILTIN_PROVIDER_ROWS.map((row) => [row.key, row.protocol])) as Readonly<Record<string, LlmProtocolKind>>;

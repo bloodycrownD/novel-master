@@ -1,7 +1,6 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { createCompositeSecretStore } from "../../../src/infra/sksp/impl/composite-secret-store.js";
-import { createEnvSecretStore } from "../../../src/infra/sksp/impl/env-secret-store.js";
+import {  SkspFactory  } from "../../../src/infra/sksp/impl/sksp-factory.js";
 import type { SecretStore } from "../../../src/infra/sksp/ports/secret-store.port.js";
 
 function memoryStore(initial?: Record<string, string>): SecretStore {
@@ -22,7 +21,7 @@ function memoryStore(initial?: Record<string, string>): SecretStore {
   };
 }
 
-describe("createCompositeSecretStore", () => {
+describe("SkspFactory.createCompositeSecretStore", () => {
   it("prefers env over db on get", async () => {
     const db = memoryStore({ "provider/openai/apiKey": "db-key" });
     const env = {
@@ -37,7 +36,7 @@ describe("createCompositeSecretStore", () => {
         return v !== null && v !== "";
       },
     };
-    const composite = createCompositeSecretStore({ db, env });
+    const composite = SkspFactory.createCompositeSecretStore({ db, env });
     assert.equal(await composite.get("provider/openai/apiKey"), "env-key");
   });
 
@@ -51,7 +50,7 @@ describe("createCompositeSecretStore", () => {
         return false;
       },
     };
-    const composite = createCompositeSecretStore({ db, env });
+    const composite = SkspFactory.createCompositeSecretStore({ db, env });
     assert.equal(await composite.get("provider/openai/apiKey"), "db-key");
   });
 
@@ -61,9 +60,9 @@ describe("createCompositeSecretStore", () => {
     process.env[key] = "";
     try {
       const db = memoryStore({ "provider/openai/apiKey": "db-key" });
-      const composite = createCompositeSecretStore({
+      const composite = SkspFactory.createCompositeSecretStore({
         db,
-        env: createEnvSecretStore(),
+        env: SkspFactory.createEnvSecretStore(),
       });
       assert.equal(await composite.get("provider/openai/apiKey"), "db-key");
       assert.equal(await composite.has("provider/openai/apiKey"), true);
@@ -82,7 +81,7 @@ describe("createCompositeSecretStore", () => {
         return true;
       },
     };
-    const composite = createCompositeSecretStore({ db, env });
+    const composite = SkspFactory.createCompositeSecretStore({ db, env });
     await composite.set("provider/x/apiKey", "stored");
     assert.equal(await db.get("provider/x/apiKey"), "stored");
     assert.equal(await composite.get("provider/x/apiKey"), "env-only");

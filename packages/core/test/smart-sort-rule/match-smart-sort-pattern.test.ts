@@ -5,28 +5,21 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  matchSmartSortPattern,
-  type SmartSortPatternMatch,
-} from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
-import {
-  FIXED_MAX_SORT_TUPLE,
-  FIXED_MIN_SORT_TUPLE,
-  formatSortTupleForDisplay,
-} from "../../src/domain/workplace/logic/smart-sort.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  SmartSortPattern, type SmartSortPatternMatch  } from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
+import {  FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, SmartSort  } from "../../src/domain/workplace/logic/smart-sort.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 function ok(
-  result: ReturnType<typeof matchSmartSortPattern>
+  result: ReturnType<typeof SmartSortPattern.match>
 ): asserts result is { ok: true; matches: readonly SmartSortPatternMatch[] } {
   assert.equal(result.ok, true, `期望成功结果，实际 ${JSON.stringify(result)}`);
 }
 
 describe("matchSmartSortPattern (正则测试预览核心)", () => {
   it("非 global flags 也找出全部匹配（内部克隆追加 g）", () => {
-    const result = matchSmartSortPattern("第[0-9]+章", "", "第1章开头 第22章结尾");
+    const result = SmartSortPattern.match("第[0-9]+章", "", "第1章开头 第22章结尾");
     ok(result);
     assert.deepEqual(
       result.matches.map((m) => m.text),
@@ -36,7 +29,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
 
   it("matches 携带原文起始偏移 index（重复文本/多行不错位，供 GUI 高亮切分）", () => {
     // 重复出现同一文本：indexOf 式回查会漂移，index 必须来自 matchAll 原生偏移。
-    const result = matchSmartSortPattern("第[0-9]+章", "", "第1章 第1章\n第12章");
+    const result = SmartSortPattern.match("第[0-9]+章", "", "第1章 第1章\n第12章");
     ok(result);
     assert.deepEqual(
       result.matches.map((m) => ({ text: m.text, index: m.index })),
@@ -50,13 +43,13 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
   });
 
   it("global flags 语义不重复（flags 已含 g 时正常迭代）", () => {
-    const result = matchSmartSortPattern("第[0-9]+章", "g", "第1章 第22章");
+    const result = SmartSortPattern.match("第[0-9]+章", "g", "第1章 第22章");
     ok(result);
     assert.equal(result.matches.length, 2);
   });
 
   it("捕获组逐组列出（多组全命中）", () => {
-    const result = matchSmartSortPattern(
+    const result = SmartSortPattern.match(
       "第([0-9]+)卷第([0-9]+)章",
       "",
       "第2卷第13章"
@@ -69,7 +62,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
   });
 
   it("未参与匹配的可选组为 null（GUI 渲染为 '-'）", () => {
-    const result = matchSmartSortPattern(
+    const result = SmartSortPattern.match(
       "第([0-9]+)章(?:[ \\t]+(\\S+))?",
       "",
       "第3章\n第4章 风起"
@@ -81,7 +74,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
   });
 
   it("非法正则返回 ok:false + 引擎错误消息（不 throw）", () => {
-    const result = matchSmartSortPattern("第([0-9+)章", "", "第1章");
+    const result = SmartSortPattern.match("第([0-9+)章", "", "第1章");
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.ok(result.error.length > 0, "错误消息非空");
@@ -89,19 +82,19 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
   });
 
   it("非法 flags 返回 ok:false（如 flags 含非法字符由 RegExp 构造报错）", () => {
-    const result = matchSmartSortPattern("x", "q", "x");
+    const result = SmartSortPattern.match("x", "q", "x");
     assert.equal(result.ok, false);
   });
 
   it("无匹配返回空 matches（ok 仍为 true）", () => {
-    const result = matchSmartSortPattern("第[0-9]+章", "", "Chapter 1");
+    const result = SmartSortPattern.match("第[0-9]+章", "", "Chapter 1");
     ok(result);
     assert.deepEqual(result.matches, []);
   });
 
   it("flags 含 g 时重复调用互不污染（lastIndex 不外泄）", () => {
     for (let i = 0; i < 2; i++) {
-      const result = matchSmartSortPattern("a+", "g", "aa b aaa");
+      const result = SmartSortPattern.match("a+", "g", "aa b aaa");
       ok(result);
       assert.deepEqual(
         result.matches.map((m) => m.text),
@@ -112,7 +105,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
   });
 
   it("大小写 flags 生效（'i' 命中小写形态）", () => {
-    const result = matchSmartSortPattern(
+    const result = SmartSortPattern.match(
       "(?:chapter)[ \\t]*([0-9]+)",
       "i",
       "chapter 12\nChapter 3"
@@ -125,7 +118,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
   });
 
   it("零宽匹配不死循环（matchAll 内部推进 lastIndex）", () => {
-    const result = matchSmartSortPattern("x*", "", "abc");
+    const result = SmartSortPattern.match("x*", "", "abc");
     ok(result);
     // matchAll 对零宽匹配按引擎语义逐位推进，返回有限个结果。
     assert.ok(result.matches.length >= 1 && result.matches.length <= 4);
@@ -140,7 +133,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
 
 describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => {
   it("smart 档（缺省）：捕获组→数字元组格式化为 (12,) 风格", () => {
-    const result = matchSmartSortPattern(
+    const result = SmartSortPattern.match(
       "第([0-9]+)卷第([0-9]+)章",
       "",
       "第2卷第13章 第十二卷第三章"
@@ -151,7 +144,7 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
   });
 
   it("smart 档：中文数字捕获组经 parseChineseNum 转换", () => {
-    const result = matchSmartSortPattern(
+    const result = SmartSortPattern.match(
       "第([0-9〇零一二两三四五六七八九十百千]+)章",
       "",
       "第十二章"
@@ -162,22 +155,22 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
 
   it("smart 档：无捕获组 / 转换失败 → tuple null（GUI 显「无序号」）", () => {
     // 无捕获组：tuple null。
-    const noGroup = matchSmartSortPattern("序章|楔子", "", "序章");
+    const noGroup = SmartSortPattern.match("序章|楔子", "", "序章");
     ok(noGroup);
     assert.equal(noGroup.matches[0]!.tuple, null);
     // 捕获组非数字且中文解析失败：tuple null。
-    const unparsable = matchSmartSortPattern("第(\\S+)章", "", "第风起章");
+    const unparsable = SmartSortPattern.match("第(\\S+)章", "", "第风起章");
     ok(unparsable);
     assert.equal(unparsable.matches[0]!.tuple, null);
     // 多组中任一组失败：整条 null（与提取管道「任一组失败跳过规则」一致）。
-    const mixed = matchSmartSortPattern("第([0-9]+)章(?:-(\\S+))?", "", "第3章-风起");
+    const mixed = SmartSortPattern.match("第([0-9]+)章(?:-(\\S+))?", "", "第3章-风起");
     ok(mixed);
     assert.equal(mixed.matches[0]!.tuple, null);
   });
 
   it("fixed 档：tuple 恒为哨兵文案，忽略捕获组（有无捕获组均可）", () => {
     // 无捕获组 + fixed_min。
-    const minNoGroup = matchSmartSortPattern(
+    const minNoGroup = SmartSortPattern.match(
       "^(序章?|楔子|引子)",
       "",
       "楔子 起源",
@@ -186,7 +179,7 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
     ok(minNoGroup);
     assert.deepEqual(minNoGroup.matches[0]!.tuple, {key: "label.smart_sort.pinned_min"});
     // 捕获组可解析 + fixed_max：捕获组被忽略，仍显哨兵文案。
-    const maxWithGroup = matchSmartSortPattern(
+    const maxWithGroup = SmartSortPattern.match(
       "^(番外|外传)([0-9]*)",
       "",
       "番外3 日常",
@@ -196,7 +189,7 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
     assert.equal(maxWithGroup.matches[0]!.groups.length, 2);
     assert.deepEqual(maxWithGroup.matches[0]!.tuple, {key: "label.smart_sort.pinned_max"});
     // 捕获组不可解析 + fixed：不影响 tuple（哨兵优先，不参与转换）。
-    const minUnparsable = matchSmartSortPattern(
+    const minUnparsable = SmartSortPattern.match(
       "^(终章|尾声)(\\S*)",
       "",
       "终章 大结局",
@@ -208,25 +201,25 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
 
   it("tuple 文案与 formatSortTupleForDisplay 同源（C-3 单源锁定）", () => {
     // match 通道不再内联哨兵文案：三档 tuple 必须与权威实现输出逐字一致。
-    const min = matchSmartSortPattern("^(序章?|楔子)", "", "序章", "fixed_min");
+    const min = SmartSortPattern.match("^(序章?|楔子)", "", "序章", "fixed_min");
     ok(min);
     assert.deepEqual(
       min.matches[0]!.tuple,
-      formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE)
+      SmartSort.formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE)
     );
-    const max = matchSmartSortPattern("^(番外)", "", "番外", "fixed_max");
+    const max = SmartSortPattern.match("^(番外)", "", "番外", "fixed_max");
     ok(max);
     assert.deepEqual(
       max.matches[0]!.tuple,
-      formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE)
+      SmartSort.formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE)
     );
-    const smart = matchSmartSortPattern(
+    const smart = SmartSortPattern.match(
       "第([0-9]+)卷第([0-9]+)章",
       "",
       "第2卷第13章"
     );
     ok(smart);
-    assert.equal(tCore(smart.matches[0]!.tuple!), tCore(formatSortTupleForDisplay([2, 13])));
+    assert.equal(tCore(smart.matches[0]!.tuple!), tCore(SmartSort.formatSortTupleForDisplay([2, 13])));
   });
 });
 

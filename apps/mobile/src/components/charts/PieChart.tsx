@@ -17,12 +17,12 @@
 import React, {useMemo, useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
 import Svg, {Circle, G, Path, Text as SvgText} from 'react-native-svg';
-import {formatTokenCount} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
 import {styles} from '@/screens/stack/token-usage/styles';
 
 /** 饼图数据行：调用方（SummaryTab）排好序原样传入，组件不折叠不改序。 */
-export interface PieChartDatum {
+interface PieChartDatum {
   /** 稳定键（扇区/图例 testID 与选中比对共用）。 */
   key: string;
   /** 展示名（{服务商} · {模型} 等三态组合，由调用方兑底）。 */
@@ -40,19 +40,22 @@ const PIE_PALETTE_FIXED = {
   slate: '#64748B',
 } as const;
 
-/** 固定循环色板（P2-5，与桌面同序：蓝→青→绿→黄→橙→红→紫→灰蓝）：
- * 索引超长后取模复用。 */
-export function pieChartColors(t: ThemeTokens): string[] {
-  return [
-    t.primary,
-    PIE_PALETTE_FIXED.teal,
-    t.success,
-    PIE_PALETTE_FIXED.yellow,
-    t.warning,
-    t.danger,
-    PIE_PALETTE_FIXED.purple,
-    PIE_PALETTE_FIXED.slate,
-  ];
+// 偏离登记：文件名 PieChart 与组件同名，tsx helper namespace 不得撞组件名；
+// helper 覆盖色板与几何两类渲染纯函数，按「视觉计算」主体起名 PieChartVisual。
+export namespace PieChartVisual {
+  /** 固定循环色板（P2-5，与桌面同序：蓝→青→绿→黄→橙→红→紫→灰蓝）：
+   * 索引超长后取模复用。 */
+  export function colors(t: ThemeTokens): string[] {
+    return [t.primary, PIE_PALETTE_FIXED.teal, t.success, PIE_PALETTE_FIXED.yellow, t.warning, t.danger, PIE_PALETTE_FIXED.purple, PIE_PALETTE_FIXED.slate];
+  }
+
+  /** 角度（弧度，从 12 点方向顺时针）→ 扇区路径端点坐标。 */
+  function arcPoint(angle: number): {x: number; y: number} {
+    return {
+      x: CENTER + RADIUS * Math.sin(angle),
+      y: CENTER - RADIUS * Math.cos(angle),
+    };
+  }
 }
 
 /** 饼图几何常量：viewBox 200×200，圆心 (100,100)，半径 80。 */
@@ -68,36 +71,7 @@ const SLICE_LABEL_MIN_SHARE = 0.1;
 /** 扇区标注位置：弧心角方向、约 0.62 半径处（视觉居中且远离圆心与弧缘）。 */
 const LABEL_RADIUS = RADIUS * 0.62;
 
-/** 角度（弧度，从 12 点方向顺时针）→ 扇区路径端点坐标。 */
-function arcPoint(angle: number): {x: number; y: number} {
-  return {
-    x: CENTER + RADIUS * Math.sin(angle),
-    y: CENTER - RADIUS * Math.cos(angle),
-  };
-}
-
 /** 角度（弧度）→ 扇区标注文字坐标（弧心角 × 0.62 半径）。 */
-function labelPoint(angle: number): {x: number; y: number} {
-  return {
-    x: CENTER + LABEL_RADIUS * Math.sin(angle),
-    y: CENTER - LABEL_RADIUS * Math.cos(angle),
-  };
-}
-
-/** 单个扇区 path：a 从 12 点起顺时针的起止弧度（start < end）。 */
-function sectorPath(start: number, end: number): string {
-  const from = arcPoint(start);
-  const to = arcPoint(end);
-  const largeArc = end - start > Math.PI ? 1 : 0;
-  return [
-    `M ${CENTER} ${CENTER}`,
-    `L ${from.x.toFixed(2)} ${from.y.toFixed(2)}`,
-    `A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${to.x.toFixed(2)} ${to.y.toFixed(
-      2,
-    )}`,
-    'Z',
-  ].join(' ');
-}
 
 export function PieChart({
   data,
@@ -112,7 +86,7 @@ export function PieChart({
   testID?: string;
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const palette = pieChartColors(tokens);
+  const palette = PieChartVisual.colors(tokens);
 
   // 扇区几何：按传入顺序累计角度（从 12 点顺时针），零值行不占角但保留图例。
   const sectors = useMemo(() => {
@@ -127,10 +101,7 @@ export function PieChart({
   }, [data]);
 
   const selected = data.find(d => d.key === selectedKey);
-  const selectedShare =
-    selected != null && totalTokens > 0
-      ? selected.totalTokens / totalTokens
-      : null;
+  const selectedShare = selected != null && totalTokens > 0 ? selected.totalTokens / totalTokens : null;
 
   if (data.length === 0) {
     return null;
@@ -142,39 +113,36 @@ export function PieChart({
         {/* 饼图主体 + 右侧竖排详情栏（用户拍板 2026-09-08：点选后详情
             不再横排在图下方，而是纵向逐行与饼图并放，常见图表排版）。
             未选中时详情栏不占位，饼图居中。 */}
-        <View
-          style={[
-            styles.pieMainRow,
-            selected == null ? {justifyContent: 'center'} : null,
-          ]}>
+        <View style={[styles.pieMainRow, selected == null ? {justifyContent: 'center'} : null]}>
           <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
             {sectors.map(({datum, start, end, sweep}, index) => {
               const color = palette[index % palette.length];
               const selectedSector = datum.key === selectedKey;
               // 扇区百分比标注（≥10% 才标，口径与图例同轨）：满圆退化场景
               // 放圆心，其余放弧心角 0.62 半径处；白色文字在色板八色上均可读。
-              const slicePercent =
-                totalTokens > 0
-                  ? Math.round((datum.totalTokens / totalTokens) * 100)
-                  : 0;
-              const showSliceLabel =
-                sweep > 0 && slicePercent >= SLICE_LABEL_MIN_SHARE * 100;
-              const labelPos = labelPoint((start + end) / 2);
-              const sliceLabel = showSliceLabel ? (
-                <G key={`${datum.key}-label`}>
-                  <SvgText
-                    testID={`pie-slice-label-${datum.key}`}
-                    x={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.x}
-                    y={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.y}
-                    fontSize={15}
-                    fontWeight="600"
-                    fill="#FFFFFF"
-                    textAnchor="middle"
-                    alignmentBaseline="central">
-                    {slicePercent}%
-                  </SvgText>
-                </G>
-              ) : null;
+              const slicePercent = totalTokens > 0 ? Math.round((datum.totalTokens / totalTokens) * 100) : 0;
+              const showSliceLabel = sweep > 0 && slicePercent >= SLICE_LABEL_MIN_SHARE * 100;
+              const labelAngle = (start + end) / 2;
+              const labelPos = {x: CENTER + LABEL_RADIUS * Math.sin(labelAngle), y: CENTER - LABEL_RADIUS * Math.cos(labelAngle)};
+              let sliceLabel: React.ReactNode = null;
+              if (showSliceLabel) {
+                sliceLabel = (
+                  <G key={`${datum.key}-label`}>
+                    <SvgText
+                      testID={`pie-slice-label-${datum.key}`}
+                      x={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.x}
+                      y={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.y}
+                      fontSize={15}
+                      fontWeight="600"
+                      fill="#FFFFFF"
+                      textAnchor="middle"
+                      alignmentBaseline="central"
+                    >
+                      {slicePercent}%
+                    </SvgText>
+                  </G>
+                );
+              }
               if (sweep <= 0) {
                 return null; // 零值行无扇区（角度退化），图例仍可点选查看
               }
@@ -191,25 +159,26 @@ export function PieChart({
                       fill={color}
                       stroke={selectedSector ? tokens.text : 'none'}
                       strokeWidth={selectedSector ? 3 : 0}
-                      onPress={() =>
-                        setSelectedKey(selectedSector ? null : datum.key)
-                      }
+                      onPress={() => setSelectedKey(selectedSector ? null : datum.key)}
                     />
                     {sliceLabel}
                   </G>
                 );
               }
+              // 单个扇区 path：a 从 12 点起顺时针的起止弧度（start < end）。
+              const from = {x: CENTER + RADIUS * Math.sin(start), y: CENTER - RADIUS * Math.cos(start)};
+              const to = {x: CENTER + RADIUS * Math.sin(end), y: CENTER - RADIUS * Math.cos(end)};
+              const largeArc = end - start > Math.PI ? 1 : 0;
+              const sectorD = [`M ${CENTER} ${CENTER}`, `L ${from.x.toFixed(2)} ${from.y.toFixed(2)}`, `A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${to.x.toFixed(2)} ${to.y.toFixed(2)}`, 'Z'].join(' ');
               return (
                 <G key={datum.key}>
                   <Path
                     testID={`pie-sector-${datum.key}`}
-                    d={sectorPath(start, end)}
+                    d={sectorD}
                     fill={color}
                     stroke={selectedSector ? tokens.text : 'none'}
                     strokeWidth={selectedSector ? 3 : 0}
-                    onPress={() =>
-                      setSelectedKey(selectedSector ? null : datum.key)
-                    }
+                    onPress={() => setSelectedKey(selectedSector ? null : datum.key)}
                   />
                   {sliceLabel}
                 </G>
@@ -218,29 +187,12 @@ export function PieChart({
           </Svg>
           {selected != null ? (
             <View testID="pie-detail" style={styles.pieSideDetail}>
-              <Text
-                style={[
-                  styles.pieSideDetailLabel,
-                  {color: tokens.primary},
-                ]}
-                numberOfLines={2}>
+              <Text style={[styles.pieSideDetailLabel, {color: tokens.primary}]} numberOfLines={2}>
                 {selected.label}
               </Text>
-              <Text
-                style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>
-                用量 {formatTokenCount(selected.totalTokens)}
-              </Text>
-              <Text
-                style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>
-                调用 {selected.calls} 次
-              </Text>
-              <Text
-                style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>
-                占比{' '}
-                {selectedShare == null
-                  ? '—'
-                  : `${Math.round(selectedShare * 100)}%`}
-              </Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>用量 {TokenFormat.count(selected.totalTokens)}</Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>调用 {selected.calls} 次</Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>占比 {selectedShare == null ? '—' : `${Math.round(selectedShare * 100)}%`}</Text>
             </View>
           ) : null}
         </View>
@@ -250,17 +202,12 @@ export function PieChart({
             const selectedLegend = datum.key === selectedKey;
             // 图例常驻百分比（分母与点选详情行同轨：传入的窗口 totalTokens），
             // 分母为 0 时显示 0%（除零安全）。RN Text，不新增 svg 元素。
-            const percent =
-              totalTokens > 0
-                ? Math.round((datum.totalTokens / totalTokens) * 100)
-                : 0;
+            const percent = totalTokens > 0 ? Math.round((datum.totalTokens / totalTokens) * 100) : 0;
             return (
               <Pressable
                 key={datum.key}
                 testID={`pie-legend-${datum.key}`}
-                onPress={() =>
-                  setSelectedKey(selectedLegend ? null : datum.key)
-                }
+                onPress={() => setSelectedKey(selectedLegend ? null : datum.key)}
                 accessibilityRole="button"
                 accessibilityLabel={datum.label}
                 style={styles.pieLegendItem}
@@ -277,14 +224,7 @@ export function PieChart({
                 >
                   {datum.label}
                 </Text>
-                <Text
-                  style={[
-                    styles.pieLegendPercent,
-                    {color: tokens.textTertiary},
-                  ]}
-                >
-                  {percent}%
-                </Text>
+                <Text style={[styles.pieLegendPercent, {color: tokens.textTertiary}]}>{percent}%</Text>
               </Pressable>
             );
           })}

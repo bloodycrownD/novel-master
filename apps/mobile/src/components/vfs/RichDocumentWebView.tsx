@@ -3,15 +3,7 @@
  * MD 批注：干净 HTML + Recogito 仅投影；新建走原生选区菜单「复制/批注」+ inject 采集。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {
-  BackHandler,
-  Linking,
-  Platform,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import {BackHandler, Linking, Platform, StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
@@ -19,19 +11,11 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type {ThemeTokens} from '@/theme/tokens';
-import {
-  encodeHostToRichDocument,
-  decodeRichDocumentToHost,
-  type HostToRichDocumentMessage,
-  type RichDocumentAnnotationMark,
-  type RichDocumentRecogitoCreatePayload,
-  type RichDocumentTheme,
-} from './RichDocumentBridge';
-import {
-  getRichDocumentPackageDirUri,
-  getRichDocumentUri,
-} from '@/webview-host/rich-document/uri';
-import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
+import {richDocumentBridge, type HostToRichDocumentMessage, type RichDocumentAnnotationMark, type RichDocumentRecogitoCreatePayload, type RichDocumentTheme} from './RichDocumentBridge';
+import {RICH_DOCUMENT_WEBVIEW_PACKAGE_ID} from '@/webview-host/rich-document/uri';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
+import {WebviewThemeInject} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
@@ -45,10 +29,9 @@ export const RICH_DOCUMENT_ANNOTATE_MENU_ITEMS = [
   {label: '批注', key: 'annotate'},
 ] as const;
 
-const COLLECT_RECOGITO_JS =
-  '(function(){try{window.__nmCollectRecogitoSelection&&window.__nmCollectRecogitoSelection();}catch(e){} true;})();';
+const COLLECT_RECOGITO_JS = '(function(){try{window.__nmCollectRecogitoSelection&&window.__nmCollectRecogitoSelection();}catch(e){} true;})();';
 
-export type RichDocumentWebViewProps = {
+type RichDocumentWebViewProps = {
   readonly html?: string;
   readonly plain?: string;
   readonly overLimit?: boolean;
@@ -63,9 +46,7 @@ export type RichDocumentWebViewProps = {
   /** Recogito 投影列表（仅含 renderStart/renderEnd 的草稿）。 */
   readonly annotations?: readonly RichDocumentAnnotationMark[];
   /** 菜单「批注」采集成功 → 宿主写草稿。 */
-  readonly onRecogitoCreate?: (
-    payload: RichDocumentRecogitoCreatePayload,
-  ) => void;
+  readonly onRecogitoCreate?: (payload: RichDocumentRecogitoCreatePayload) => void;
   /** 同文多条时传入全部 id，由上层弹出选择列表。 */
   readonly onAnnotateOpen?: (ids: readonly string[]) => void;
   /**
@@ -74,24 +55,13 @@ export type RichDocumentWebViewProps = {
   readonly clearAnnotateSelectionSignal?: number;
 };
 
+/** 主题组装：全量宿主主题取 rich-document 子集。 */
 function themeFromTokens(tokens: ThemeTokens): RichDocumentTheme {
-  return {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    surface: tokens.surface,
-    borderLight: tokens.borderLight,
-  };
+  const {background, text, textSecondary, primary, surface, borderLight} = HostThemeMapping.fromTokens(tokens);
+  return {background, text, textSecondary, primary, surface, borderLight};
 }
 
-function buildSetDocumentPayload(
-  html: string | undefined,
-  plain: string | undefined,
-  overLimit: boolean,
-  frontMatterHtml: string | undefined,
-  layout: 'plain' | 'rich' | undefined,
-): HostToRichDocumentMessage {
+function buildSetDocumentPayload(html: string | undefined, plain: string | undefined, overLimit: boolean, frontMatterHtml?: string, layout?: 'plain' | 'rich'): HostToRichDocumentMessage {
   const fm = frontMatterHtml || undefined;
   if (html != null && html.length > 0 && !overLimit) {
     return {
@@ -143,7 +113,7 @@ export function RichDocumentWebView({
   onAnnotateOpenRef.current = onAnnotateOpen;
 
   const postToWeb = useCallback((message: HostToRichDocumentMessage) => {
-    webRef.current?.postMessage(encodeHostToRichDocument(message));
+    webRef.current?.postMessage(richDocumentBridge.encodeToClient(message));
   }, []);
 
   const handleCustomMenuSelection = useCallback(
@@ -180,7 +150,7 @@ export function RichDocumentWebView({
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
-      const message = decodeRichDocumentToHost(event.nativeEvent.data);
+      const message = richDocumentBridge.decodeToHost(event.nativeEvent.data);
       if (message.type === 'copyCode') {
         // 代码块复制按钮：webview 收集源码文本，RN 侧原生剪贴板落盘
         const code = String(message.payload.code ?? '');
@@ -201,30 +171,20 @@ export function RichDocumentWebView({
         const quote = String(p.quote ?? '').replace(/\u00a0/g, ' ');
         const renderStart = Number(p.renderStart);
         const renderEnd = Number(p.renderEnd);
-        if (
-          !quote.trim() ||
-          !Number.isFinite(renderStart) ||
-          !Number.isFinite(renderEnd) ||
-          renderStart < 0 ||
-          renderEnd <= renderStart
-        ) {
+        if (!quote.trim() || !Number.isFinite(renderStart) || !Number.isFinite(renderEnd) || renderStart < 0 || renderEnd <= renderStart) {
           return;
         }
         onRecogitoCreateRef.current?.({
           quote,
           renderStart,
           renderEnd,
-          ...(typeof p.tempId === 'string' && p.tempId.length > 0
-            ? {tempId: p.tempId}
-            : {}),
+          ...(typeof p.tempId === 'string' && p.tempId.length > 0 ? {tempId: p.tempId} : {}),
         });
         return;
       }
       if (message.type === 'annotateOpen') {
         const rawIds = message.payload.ids;
-        const ids = Array.isArray(rawIds)
-          ? rawIds.map(id => String(id ?? '')).filter(id => id.length > 0)
-          : [];
+        const ids = Array.isArray(rawIds) ? rawIds.map(id => String(id ?? '')).filter(id => id.length > 0) : [];
         if (ids.length > 0) {
           onAnnotateOpenRef.current?.(ids);
         }
@@ -268,9 +228,7 @@ export function RichDocumentWebView({
     if (!webReady) {
       return;
     }
-    postToWeb(
-      buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml, layout),
-    );
+    postToWeb(buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml, layout));
   }, [webReady, html, plain, overLimit, frontMatterHtml, layout, postToWeb]);
 
   useEffect(() => {
@@ -321,41 +279,37 @@ export function RichDocumentWebView({
    * 随 focus 注册/注销；判 navigation.isFocused() 防吞上层屏返回
    * （GlobalTemplateScreen 注释先例：BackHandler 是全局的）。
    */
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== 'android') {
-        return;
+  const onBackFocus = useCallback(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!mermaidViewerOpenRef.current || !navigation.isFocused()) {
+        return false;
       }
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (!mermaidViewerOpenRef.current || !navigation.isFocused()) {
-          return false;
-        }
-        postToWeb({v: 1, type: 'closeMermaidViewer', payload: {}});
-        return true;
-      });
-      return () => sub.remove();
-    }, [navigation, postToWeb]),
-  );
+      postToWeb({v: 1, type: 'closeMermaidViewer', payload: {}});
+      return true;
+    });
+    return () => sub.remove();
+  }, [navigation, postToWeb]);
+  useFocusEffect(onBackFocus);
 
   /**
    * 导航守卫（sec/D-1）：只放行包目录内的 file:// 加载（初始 index.html 与同包相对资源）；
    * http/https 外跳系统浏览器并拒绝页内导航，其余 scheme 一律拒绝。
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
-  const shouldStartLoadWithRequest = useCallback(
-    (req: {url: string}): boolean => {
-      if (req.url.startsWith(getRichDocumentPackageDirUri())) {
-        return true;
-      }
-      if (/^https?:\/\//i.test(req.url)) {
-        // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
-        // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
-        void Linking.openURL(req.url).catch(() => undefined);
-      }
-      return false;
-    },
-    [],
-  );
+  const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
+    if (req.url.startsWith(WebviewAssetUri.getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID))) {
+      return true;
+    }
+    if (/^https?:\/\//i.test(req.url)) {
+      // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
+      // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
+      void Linking.openURL(req.url).catch(() => undefined);
+    }
+    return false;
+  }, []);
 
   /**
    * iOS window.open / target="_blank" 新开窗口兜底：拒绝 WebView 内打开，外跳系统浏览器。
@@ -377,9 +331,7 @@ export function RichDocumentWebView({
            本体，不挂外层 wrapper View。 */
         style={[styles.fill, {backgroundColor: tokens.background}]}
         /* 首帧主题预注入（白闪 B）——见 buildThemeInjectScript 注释。 */
-        injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(
-          tokens.background,
-        )}
+        injectedJavaScriptBeforeContentLoaded={WebviewThemeInject.buildThemeInjectScript(tokens.background)}
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
@@ -392,14 +344,11 @@ export function RichDocumentWebView({
            `shouldStartLoadWithRequest` 前缀判定与 originWhitelist=['file://']
            对带 hash 的 URI 均放行（prefix 命中 + scheme 不变）。 */
         source={{
-          uri:
-            getRichDocumentUri() +
-            '#bg=' +
-            encodeURIComponent(tokens.background),
+          uri: WebviewAssetUri.getWebViewPackageIndexUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
         }}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getRichDocumentPackageDirUri()}
+        allowingReadAccessToURL={WebviewAssetUri.getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onOpenWindow={handleOpenWindow}
         onMessage={handleMessage}
@@ -421,13 +370,7 @@ export function RichDocumentWebView({
           （handleMessage 已 setWebReady(true)）后不再渲染。无动画、无 spinner。
           上层 `key={path}` 重挂时 WebView 重建、webReady 复位，遮罩随之重新
           盖起——每次重挂生效属预期语义。 */}
-      {!webReady ? (
-        <View
-          testID="rich-document-flash-cover"
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, {backgroundColor: tokens.background}]}
-        />
-      ) : null}
+      {!webReady ? <View testID="rich-document-flash-cover" pointerEvents="none" style={[StyleSheet.absoluteFill, {backgroundColor: tokens.background}]} /> : null}
     </View>
   );
 }

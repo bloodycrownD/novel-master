@@ -12,18 +12,10 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 import {CodeEditorWebView} from '@/components/vfs/CodeEditorWebView';
-import {
-  getRichDocumentPackageDirUri,
-  getRichDocumentUri,
-} from '@/webview-host/rich-document/uri';
-import {
-  getCodeEditorPackageDirUri,
-  getCodeEditorUri,
-} from '@/webview-host/code-editor/uri';
-import {
-  getChatTranscriptPackageDirUri,
-  getChatTranscriptUri,
-} from '@/webview-host/chat-transcript/uri';
+import {RICH_DOCUMENT_WEBVIEW_PACKAGE_ID} from '@/webview-host/rich-document/uri';
+import {CODE_EDITOR_WEBVIEW_PACKAGE_ID} from '@/webview-host/code-editor/uri';
+import {CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID} from '@/webview-host/chat-transcript/uri';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri'
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -85,22 +77,22 @@ describe('WebView URI load (T-BB-04)', () => {
         configurable: true,
         get: () => 'android',
       });
-      expect(getRichDocumentUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageIndexUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///android_asset/webview/rich-document/index.html',
       );
-      expect(getCodeEditorUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageIndexUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///android_asset/webview/code-editor/index.html',
       );
-      expect(getRichDocumentPackageDirUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///android_asset/webview/rich-document/',
       );
-      expect(getCodeEditorPackageDirUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///android_asset/webview/code-editor/',
       );
-      expect(getChatTranscriptUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageIndexUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///android_asset/webview/chat-transcript/index.html',
       );
-      expect(getChatTranscriptPackageDirUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///android_asset/webview/chat-transcript/',
       );
     });
@@ -110,22 +102,22 @@ describe('WebView URI load (T-BB-04)', () => {
         configurable: true,
         get: () => 'ios',
       });
-      expect(getRichDocumentUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageIndexUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///App/NovelMaster.app/WebViewDist/rich-document/index.html',
       );
-      expect(getCodeEditorUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageIndexUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/index.html',
       );
-      expect(getRichDocumentPackageDirUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///App/NovelMaster.app/WebViewDist/rich-document/',
       );
-      expect(getCodeEditorPackageDirUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/',
       );
-      expect(getChatTranscriptUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageIndexUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///App/NovelMaster.app/WebViewDist/chat-transcript/index.html',
       );
-      expect(getChatTranscriptPackageDirUri()).toBe(
+      expect(WebviewAssetUri.getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)).toBe(
         'file:///App/NovelMaster.app/WebViewDist/chat-transcript/',
       );
     });

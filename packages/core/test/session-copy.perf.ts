@@ -8,43 +8,30 @@
  * @module performance/session-copy.perf
  */
 
-import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
-import { performance } from "node:perf_hooks";
-import {
-  bootstrapNovelMaster,
-  createPersistentState,
-  decode,
-  open,
-} from "@novel-master/core";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-} from "@novel-master/core/agent";
-import {
-  createMessageService,
-  createProjectService,
-  createSessionService,
-  textBlocks,
-} from "@novel-master/core/chat";
-import { createScopedVfsService } from "@novel-master/core/vfs";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { scopeKey as makeScopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import {  randomUUID  } from "node:crypto";
+import {  rmSync  } from "node:fs";
+import {  performance  } from "node:perf_hooks";
+import {  NovelMasterBootstrap, PersistentStateFactory, decode, open  } from "@novel-master/core";
+import {  agentDefinitionSchema, AgentServiceFactory  } from "@novel-master/core/agent";
+import {  ChatServiceFactory, TextBlocks  } from "@novel-master/core/chat";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {  SqliteProjectRepository  } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
+import {  DefaultProjectService  } from "@/service/chat/impl/project.service.js";
+import {  DefaultSessionService  } from "@/service/chat/impl/session.service.js";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  SqliteMessageRepository  } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteSessionRepository  } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  forkCopySeeder  } from "@/domain/chat/logic/fork-copy-seeder.js";
+import {  SessionFiles  } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  PathNormalizer  } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  WorkplaceScope  } from "@/domain/workplace/logic/workplace-scope.js";
 
 const DB_PATH = "/tmp/nm-session-copy-bench.db";
 
@@ -52,14 +39,14 @@ const fmt = (ms: number): string => `${ms.toFixed(1)}ms`;
 
 async function main(): Promise<void> {
   rmSync(DB_PATH, { force: true });
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   const conn = await open(`tdbc:sqlite:file:${DB_PATH}`, {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: DB_PATH,
   });
-  await bootstrapNovelMaster(conn);
-  const state = createPersistentState(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
+  await NovelMasterBootstrap.bootstrap(conn);
+  const state = PersistentStateFactory.create(conn);
+  const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   await agentRegistry.upsert(
     "bench-agent",
     decode(
@@ -73,9 +60,13 @@ async function main(): Promise<void> {
   );
   await state.setCurrentAgentId("bench-agent");
 
-  const projects = createProjectService(conn);
-  const sessions = createSessionService(conn, { state, agentRegistry });
-  const messages = createMessageService(conn);
+  const projectRepo = new SqliteProjectRepository(conn);
+  const sessionRepo = new SqliteSessionRepository(conn);
+  const messageRepo = new SqliteMessageRepository(conn);
+  const vfsRepo = new SqliteVfsEntryRepository(conn);
+  const projects = new DefaultProjectService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo });
+  const sessions = new DefaultSessionService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, state, agentRegistry });
+  const messages = ChatServiceFactory.createMessage(conn);
 
   const bench = async (
     label: string,
@@ -84,7 +75,7 @@ async function main(): Promise<void> {
   ): Promise<void> => {
     const project = await projects.create(`bench-${label}`);
     const session = await sessions.create(project.id);
-    const vfs = createScopedVfsService(conn, {
+    const vfs = VfsServiceFactory.createScoped(conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -97,7 +88,7 @@ async function main(): Promise<void> {
       await messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`msg ${i}: ${"body".repeat(120)}`),
+        TextBlocks.of(`msg ${i}: ${"body".repeat(120)}`),
       );
     }
     for (let round = 1; round <= 3; round++) {
@@ -133,7 +124,7 @@ async function main(): Promise<void> {
   ): Promise<void> => {
     const project = await projects.create(`bench-${label}`);
     const session = await sessions.create(project.id);
-    const vfs = createScopedVfsService(conn, {
+    const vfs = VfsServiceFactory.createScoped(conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -146,7 +137,7 @@ async function main(): Promise<void> {
       await messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
-        textBlocks(`msg ${i}: ${"body".repeat(120)}`),
+        TextBlocks.of(`msg ${i}: ${"body".repeat(120)}`),
       );
     }
 
@@ -173,7 +164,7 @@ async function main(): Promise<void> {
 
         const vfsRepo = new SqliteVfsEntryRepository(tx);
         t0 = performance.now();
-        await copyVfsTree(
+        await VfsTreeCopy.copyTree(
           vfsRepo,
           { scopeKey: `session:${project.id}:${session.id}` },
           "/",
@@ -204,10 +195,10 @@ async function main(): Promise<void> {
         const revisions2 = new SqliteVfsRevisionRepository(tx);
         const workplace2 = new SqliteWorkplaceRepository(tx);
         const checkpoints2 = new SqliteMessageCheckpointRepository(tx);
-        const targetScopeKey = makeScopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id });
+        const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id });
 
         let t1 = performance.now();
-        const heads = await listSessionFileHeads(entries2, project.id, copySession.id);
+        const heads = await SessionFiles.listHeads(entries2, project.id, copySession.id);
         phases.push(`sp-list-heads=${fmt(performance.now() - t1)}`);
 
         t1 = performance.now();
@@ -234,9 +225,9 @@ async function main(): Promise<void> {
 
         t1 = performance.now();
         await workplace2.copyScope(
-          workplaceScopeKey({ kind: "session", projectId: project.id, sessionId: session.id }),
-          workplaceScopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id }),
-          (p) => normalizePath(p),
+          WorkplaceScope.key({ kind: "session", projectId: project.id, sessionId: session.id }),
+          WorkplaceScope.key({ kind: "session", projectId: project.id, sessionId: copySession.id }),
+          (p) => PathNormalizer.normalize(p),
         );
         phases.push(`sp-workplace=${fmt(performance.now() - t1)}`);
 

@@ -4,32 +4,22 @@
  * @module infra/cloud-sync/impl/cloud-sync-coordinator
  */
 
-import { createLogger } from "@/infra/log/logger.js";
-import { CloudSyncError } from "../errors/cloud-sync-errors.js";
-import {
-  buildLease,
-  canAcquireLock,
-  DEFAULT_LEASE_SECONDS,
-  isEffectiveLock,
-  renewLease,
-} from "../logic/lock.js";
-import {
-  PushAgentMutex,
-  PushAgentMutexAcquireError,
-  type PushAgentLockHandle,
-} from "../logic/push-agent-mutex.js";
-import { snapshotKey, statusKey } from "../logic/paths.js";
-import {
-  EMPTY_CLOUD_SYNC_STATUS,
-  parseCloudSyncStatus,
-  type CloudSyncStatus,
-} from "../model/cloud-sync-status.js";
+import { LogFactory } from "@/infra/log/logger.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import type { Interrupt } from "@/errors/outcome.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { CloudSyncLease, DEFAULT_LEASE_SECONDS } from "../logic/lock.js";
+import { PushAgentMutex, type PushAgentLockHandle } from "../logic/push-agent-mutex.js";
+import { CloudSyncPaths } from "../logic/paths.js";
+import { CloudSyncStatusParser, EMPTY_CLOUD_SYNC_STATUS, type CloudSyncStatus } from "../model/cloud-sync-status.js";
 import type { DbSyncPort } from "../ports/db-sync.port.js";
 import type { ObjectStoragePort } from "../ports/object-storage.port.js";
 
-const log = createLogger("cloud-sync.coordinator");
+const log = LogFactory.create("cloud-sync.coordinator");
 
 /** 协调器依赖：哈希与文件读取由调用方注入（Core 不使用 node:crypto） */
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type CloudSyncCoordinatorDeps = {
   storage: ObjectStoragePort;
   dbSync: DbSyncPort;
@@ -51,7 +41,7 @@ export type CloudSyncCoordinatorDeps = {
    * 但 sync 之间（pull ↔ push）需要共享同一把锁，所以默认走单例。
    *
    * ⚠️ 事实态（注释诚实化）：**「sync ↔ agent」这一段目前是空的**——
-   * `getDefaultPushAgentMutex` 未从 `infra/cloud-sync/index.ts` 导出，
+   * `DefaultPushAgentMutex.get` 未从 `infra/cloud-sync/index.ts` 导出，
    * apps 侧（desktop / mobile）也零 acquire；agent 启动入口尚未接线，
    * 靠 `dbSync.isAgentActive()` 的入口复检兜底。见 M-25。
    */
@@ -63,23 +53,33 @@ export type CloudSyncCoordinatorDeps = {
 /** 模块级默认互斥锁单例；coordinator 与 apps runtime 共享。 */
 let defaultPushMutex: PushAgentMutex | null = null;
 
-/** 获取进程内默认 push/agent 互斥锁单例（apps runtime 的 agent 启动入口用同一个）。 */
-export function getDefaultPushAgentMutex(): PushAgentMutex {
-  if (defaultPushMutex == null) {
-    defaultPushMutex = new PushAgentMutex();
-  }
-  return defaultPushMutex;
-}
+/**
+ * 进程内默认 push/agent 互斥锁单例的访问器。
+ */
+// nm-style: keep-public — M-25：apps runtime 的 agent 启动入口要与 coordinator 共享同一把进程内单例锁；本对象是单例状态 defaultPushMutex 的唯一访问器，内联会把单例契约摊进构造器。
+export const DefaultPushAgentMutex = {
+  /** 获取进程内默认 push/agent 互斥锁单例（apps runtime 的 agent 启动入口用同一个）。 */
+  get(): PushAgentMutex {
+    if (defaultPushMutex == null) {
+      defaultPushMutex = new PushAgentMutex();
+    }
+    return defaultPushMutex;
+  },
+} as const;
 
-/** 重置默认单例（仅测试用；生产代码不要调）。 */
-export function __resetDefaultPushAgentMutexForTests(): void {
-  defaultPushMutex = null;
-}
-
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type PullOptions = {
   lastSyncedRev: number;
+  /**
+   * 真实阶段边界检查点（入口 / 下载完成 / 哈希校验前 / 换库前）。
+   *
+   * 命中即抛 `AbortError`：取消是控制流信号，不塞进 `Result.err`（业务失败通道）；
+   * service 出口对 `isAbortLikeError` 原样上抛（spec §五 移动云同步）。
+   */
+  readonly checkpoint?: () => Interrupt | null;
 };
 
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type PullResult = {
   rev: number;
   /**
@@ -91,11 +91,15 @@ export type PullResult = {
   databaseReplaced: boolean;
 };
 
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type PushOptions = {
   lastSyncedRev: number;
   forceOverwriteRemote?: boolean;
+  /** 真实阶段边界检查点（入口 / 快照导出后 / 上传前）；命中即抛 `AbortError`。 */
+  readonly checkpoint?: () => Interrupt | null;
 };
 
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type PushResult = {
   rev: number;
 };
@@ -130,27 +134,9 @@ export class CloudSyncCoordinator {
     this.hashSnapshotFile = deps.hashSnapshotFile;
     this.importTempPath = deps.importTempPath;
     this.leaseSeconds = deps.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
-    this.pushMutex = deps.pushMutex ?? getDefaultPushAgentMutex();
+    this.pushMutex = deps.pushMutex ?? DefaultPushAgentMutex.get();
     // 默认 30s：push 通常很快，agent 启动等 30s 还等不到就降级拒绝
     this.pushAcquireTimeoutMs = deps.pushAcquireTimeoutMs ?? 30_000;
-  }
-
-  /** Push 是否可走文件路径（分块哈希 + 单次读文件上传） */
-  private canUseFilePathPush(): boolean {
-    return (
-      this.hashSnapshotFile != null &&
-      typeof this.storage.putFile === "function"
-    );
-  }
-
-  /** Pull 是否可走文件路径（下载写盘 + 分块哈希 + 路径导入） */
-  private canUseFilePathPull(): boolean {
-    return (
-      this.importTempPath != null &&
-      this.hashSnapshotFile != null &&
-      typeof this.storage.getToPath === "function" &&
-      typeof this.dbSync.importSnapshotFromPath === "function"
-    );
   }
 
   /**
@@ -165,79 +151,254 @@ export class CloudSyncCoordinator {
    * 不应该因为 agent 正在跑而被拒。真正覆盖活动库文件之前再复检一次
    * （下载期间 agent 可能启动），两条 import 分支紧邻调用处各一次。
    */
-  async pull(options: PullOptions): Promise<PullResult> {
-    this.assertConfigured();
+  async pull(options: PullOptions): Promise<Result<PullResult, AppError>> {
+    const unconfigured = this.notConfiguredError();
+    if (unconfigured != null) return Result.err(unconfigured);
+    this.throwIfInterrupted("pull:entry", options.checkpoint);
 
-    const { status: remote } = await this.readRemoteStatus();
+    const remoteStatus = await this.readRemoteStatus();
+    if (!remoteStatus.ok) return Result.err(remoteStatus.error);
+    const { status: remote } = remoteStatus.value;
 
     if (remote.rev <= options.lastSyncedRev) {
-      throw new CloudSyncError("ALREADY_UP_TO_DATE", {key: "error.cloud_sync.already_up_to_date"});
+      return Result.err(new AppError("CLOUD_SYNC_ALREADY_UP_TO_DATE"));
     }
 
     if (remote.rev > 0 && remote.snapshotKey == null) {
-      throw new CloudSyncError("SNAPSHOT_MISSING", {key: "error.cloud_sync.snapshot_missing"});
+      return Result.err(new AppError("CLOUD_SYNC_SNAPSHOT_MISSING"));
     }
 
     // 进程内互斥锁：pull 会整库替换活动库文件，必须与 push（以及将来的 agent
     // 启动入口）串行；超时降级拒绝（拒绝优于脏快照）。
-    const lockHandle = await this.acquireSyncLock("pull");
+    const lock = await this.acquireSyncLock("pull");
+    if (!lock.ok) return Result.err(lock.error);
     try {
-      this.assertAgentIdleForPull();
+      const active = this.agentActiveError("pull");
+      if (active != null) return Result.err(active);
 
       const snapKey = remote.snapshotKey!;
       let databaseReplaced = false;
 
-      if (this.canUseFilePathPull()) {
+      if (this.importTempPath != null && this.hashSnapshotFile != null && typeof this.storage.getToPath === "function" && typeof this.dbSync.importSnapshotFromPath === "function") {
         const tempPath = this.importTempPath!;
-        await this.storage.getToPath!(snapKey, tempPath);
+        const downloaded = await this.storage.getToPath!(snapKey, tempPath);
+        if (!downloaded.ok) return Result.err(downloaded.error);
+        // 下载完成 → 哈希校验前：此时临时文件已落地，取消由 service 的 finally 清理。
+        this.throwIfInterrupted("pull:downloaded", options.checkpoint);
         const localHash = await this.hashSnapshotFile!(tempPath);
-        if (
-          remote.snapshotSha256 != null &&
-          localHash !== remote.snapshotSha256
-        ) {
-          throw new CloudSyncError("CHECKSUM_MISMATCH", {key: "error.cloud_sync.download_checksum_mismatch"});
+        if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
+          return Result.err(new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH"));
         }
+        // 换库窗口不可中断：覆盖活动库文件之前的最后一道检查点。
+        this.throwIfInterrupted("pull:before-import", options.checkpoint);
         // 覆盖活动库前二次复检：下载期间 agent 可能已经启动。
-        this.assertAgentIdleForPull();
-        const outcome = await this.dbSync.importSnapshotFromPath!(tempPath);
-        databaseReplaced = outcome?.databaseReplaced === true;
+        const activeBeforeImport = this.agentActiveError("pull");
+        if (activeBeforeImport != null) return Result.err(activeBeforeImport);
+        const imported = await this.dbSync.importSnapshotFromPath!(tempPath);
+        if (!imported.ok) return Result.err(imported.error);
+        databaseReplaced = imported.value.databaseReplaced;
       } else {
         const { body } = await this.storage.get(snapKey);
+        // 字节分支同款边界：下载完成 → 哈希校验前。
+        this.throwIfInterrupted("pull:downloaded", options.checkpoint);
         const localHash = this.computeSha256Hex(body);
-        if (
-          remote.snapshotSha256 != null &&
-          localHash !== remote.snapshotSha256
-        ) {
-          throw new CloudSyncError("CHECKSUM_MISMATCH", {key: "error.cloud_sync.download_checksum_mismatch"});
+        if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
+          return Result.err(new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH"));
         }
-        this.assertAgentIdleForPull();
-        const outcome = await this.dbSync.importSnapshot(body);
-        databaseReplaced = outcome?.databaseReplaced === true;
+        // 换库窗口不可中断：覆盖活动库文件之前的最后一道检查点。
+        this.throwIfInterrupted("pull:before-import", options.checkpoint);
+        const activeBeforeImport = this.agentActiveError("pull");
+        if (activeBeforeImport != null) return Result.err(activeBeforeImport);
+        const imported = await this.dbSync.importSnapshot(body);
+        if (!imported.ok) return Result.err(imported.error);
+        databaseReplaced = imported.value.databaseReplaced;
       }
 
-      return { rev: remote.rev, databaseReplaced };
+      return Result.ok({ rev: remote.rev, databaseReplaced });
     } finally {
-      this.pushMutex.release(lockHandle);
+      this.pushMutex.release(lock.value);
     }
   }
 
-  /** pull 侧 agent 复检：覆盖活动库文件会吃掉 agent 的在途写入或让它落进已废弃的 inode。 */
-  private assertAgentIdleForPull(): void {
-    if (this.dbSync.isAgentActive()) {
-      throw new CloudSyncError("AGENT_ACTIVE", {key: "error.cloud_sync.agent_active.pull"});
+  /**
+   * 阶段边界检查点：命中即抛 `AbortError`（Promise 只有 reject 通道），
+   * 由 service 出口对 `isAbortLikeError` 原样上抛。未注入时零开销。
+   */
+  private throwIfInterrupted(phase: string, checkpoint: (() => Interrupt | null) | undefined): void {
+    const hit = checkpoint?.();
+    if (hit == null) {
+      return;
     }
+    log.info("cloud sync interrupted", { phase, kind: hit.kind, ...(hit.kind === "cancelled" ? { reason: hit.reason } : {}) });
+    throw AbortError.create();
   }
 
-  /** 导出本机快照并推送到云端（进程内互斥 → 抢云端锁 → 上传 → 清锁） */
-  async push(options: PushOptions): Promise<PushResult> {
-    this.assertConfigured();
+  /**
+   * pull / push 侧 agent 复检：覆盖活动库文件会吃掉 agent 的在途写入或让它
+   * 落进已废弃的 inode。命中返回业务错误（调用方 `Result.err` 上行），空闲返回 null。
+   */
+  private agentActiveError(kind: "pull" | "push"): AppError | null {
+    if (!this.dbSync.isAgentActive()) return null;
+    return new AppError("CLOUD_SYNC_AGENT_ACTIVE", { descriptor: { key: `error.cloud_sync.agent_active.${kind}` } });
+  }
+
+  /**
+   * 导出本机快照并推送到云端（进程内互斥 → 抢云端锁 → 上传 → 清锁）。
+   *
+   * 收尾契约：**final status 条件写失败时，重读远端必须重新判定租约与 rev，
+   * 禁止只取 etag 就覆盖**（否则远端 rev 回退 + 抹掉他人租约 ⇒ 跨设备静默错位）。
+   */
+  async push(options: PushOptions): Promise<Result<PushResult, AppError>> {
+    const unconfigured = this.notConfiguredError();
+    if (unconfigured != null) return Result.err(unconfigured);
+    this.throwIfInterrupted("push:entry", options.checkpoint);
 
     // 进程内互斥锁：push 持锁期间 agent 启动入口排队；超时降级拒绝
-    const lockHandle = await this.acquireSyncLock("push");
+    const lock = await this.acquireSyncLock("push");
+    if (!lock.ok) return Result.err(lock.error);
     try {
-      return await this.runPush(options);
+      // 入口仍保留 isAgentActive 检查：兼容 apps runtime 尚未接入互斥锁的旧路径
+      // （旧 agent handler 不抢锁，只能靠这里拒绝）
+      const entryActive = this.agentActiveError("push");
+      if (entryActive != null) return Result.err(entryActive);
+
+      const remoteStatus = await this.readRemoteStatus();
+      if (!remoteStatus.ok) return Result.err(remoteStatus.error);
+      const { status: remote, etag: remoteEtag } = remoteStatus.value;
+
+      if (!options.forceOverwriteRemote && remote.rev > options.lastSyncedRev) {
+        return Result.err(new AppError("CLOUD_SYNC_NEED_PULL_FIRST", { descriptor: { key: "error.cloud_sync.need_pull_first.remote_ahead" } }));
+      }
+
+      const newLock = CloudSyncLease.build(this.deviceId, this.leaseSeconds);
+      if (!CloudSyncLease.canAcquire(remote.lock, this.deviceId)) {
+        return Result.err(new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
+      }
+
+      const lockedStatus: CloudSyncStatus = { ...remote, lock: newLock };
+      const lockPut = await this.conditionalPutStatus(lockedStatus, remoteEtag);
+      if (!lockPut.ok) return Result.err(lockPut.error);
+      let statusEtag: string | null = lockPut.value;
+      if (statusEtag == null) {
+        return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION"));
+      }
+
+      let lockHeldBySelf = true;
+
+      try {
+        await this.dbSync.exportSnapshotToPath(this.exportTempPath);
+        const size = await this.getSnapshotBytes(this.exportTempPath);
+        // 快照导出后：导出产物已落地，取消由 service 的 finally 清理临时文件。
+        this.throwIfInterrupted("push:exported", options.checkpoint);
+
+        const nextRev = remote.rev + 1;
+        const snapKey = CloudSyncPaths.snapshotKey(this.pathPrefix, nextRev);
+
+        let hash: string;
+        const uploadStart = Date.now();
+        if (this.hashSnapshotFile != null && typeof this.storage.putFile === "function") {
+          hash = await this.hashSnapshotFile!(this.exportTempPath);
+          // 上传前：算完哈希的最后一刻，之后进入单次网络传输（S3 无 abort 面）。
+          this.throwIfInterrupted("push:before-upload", options.checkpoint);
+          const uploaded = await this.storage.putFile!(snapKey, this.exportTempPath);
+          if (!uploaded.ok) return Result.err(uploaded.error);
+        } else {
+          const snapshotBytes = await this.readSnapshotBytes(this.exportTempPath);
+          hash = this.computeSha256Hex(snapshotBytes);
+          // 上传前：同上，进入单次网络传输前的最后一道检查点。
+          this.throwIfInterrupted("push:before-upload", options.checkpoint);
+          const uploaded = await this.storage.put(snapKey, snapshotBytes);
+          if (!uploaded.ok) return Result.err(uploaded.error);
+        }
+        const uploadElapsed = Date.now() - uploadStart;
+
+        // 续租点：上传耗时过长要续云端租约；同时复检本机 agent 状态。
+        // 互斥锁接入后理论上 agent 进不来，但 apps 旧路径可能未抢锁——
+        // agent 拍跑到这里就拒绝，走 finally 清云端锁，避免上传菲的快照续命。
+        const uploadActive = this.agentActiveError("push");
+        if (uploadActive != null) return Result.err(uploadActive);
+
+        if (uploadElapsed > this.leaseSeconds * 500) {
+          const renewedLock = CloudSyncLease.renew(newLock, this.leaseSeconds);
+          const renewedStatus: CloudSyncStatus = {
+            ...lockedStatus,
+            lock: renewedLock,
+          };
+          const renewedPut = await this.conditionalPutStatus(renewedStatus, statusEtag);
+          const renewedEtag = renewedPut.ok ? renewedPut.value : null;
+          if (renewedEtag != null) {
+            statusEtag = renewedEtag;
+          } else {
+            // 续租条件写失败：statusEtag 保持旧值，下面的 final 写必然走重读判定分支。
+            // 这里只留痕不抛错——重读分支已经能正确收尾，抛错会把「续租失败但收尾
+            // 安全」误判成整次 push 失败（快照已上传、计数已上去）。
+            // 目的是让下一个维护者不把「续租一定成功」当成不变量。
+            log.warn("续租失败，final status 将走重读判定分支");
+          }
+        }
+
+        const finalStatus: CloudSyncStatus = {
+          schemaVersion: 1,
+          rev: nextRev,
+          snapshotKey: snapKey,
+          snapshotSha256: hash,
+          snapshotBytes: size,
+          uploadedAt: new Date().toISOString(),
+          uploadedByDeviceId: this.deviceId,
+          lock: null,
+        };
+
+        const finalPut = await this.conditionalPutStatus(finalStatus, statusEtag);
+        if (!finalPut.ok) return Result.err(finalPut.error);
+        let finalEtag = finalPut.value;
+        if (finalEtag == null) {
+          // If-Match 失败 = 远端在我们上传期间被别人改过。重读远端后必须**重新判定**
+          // 租约与 rev，禁止只取 etag 就把 finalStatus 覆盖上去：
+          // finalStatus.rev 是最初 remote.rev + 1 算出的常量、lock 是 null，
+          // 无条件覆盖会把远端 rev 写回更小的值并抹掉第三方的有效租约
+          // ⇒ 跨设备静默数据错位，且两端都把自己记成成功。
+          const latestStatus = await this.readRemoteStatus();
+          if (!latestStatus.ok) return Result.err(latestStatus.error);
+          const { status: latest, etag: rereadEtag } = latestStatus.value;
+          // 两条判定必须并存：CloudSyncLease.canAcquire 在「他人租约已过期」时返回 true，
+          // 只判它仍会把已被别人推进的 rev 盖掉；latest.rev >= nextRev 才是
+          // 「rev 是否被别人推进过」的唯一判据。
+          if (!CloudSyncLease.canAcquire(latest.lock, this.deviceId)) {
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
+          }
+          if (latest.rev >= nextRev) {
+            return Result.err(new AppError("CLOUD_SYNC_NEED_PULL_FIRST", { descriptor: { key: "error.cloud_sync.need_pull_first.advanced_by_other" } }));
+          }
+          const retryPut = await this.conditionalPutStatus(finalStatus, rereadEtag);
+          if (!retryPut.ok) return Result.err(retryPut.error);
+          finalEtag = retryPut.value;
+          if (finalEtag == null) {
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION"));
+          }
+        }
+
+        lockHeldBySelf = false;
+        return Result.ok({ rev: nextRev });
+      } finally {
+        if (lockHeldBySelf) {
+          // Push 失败时尝试将锁清空（仅当仍由本机持有有效锁），尽力而为，不掩盖原始错误。
+          try {
+            const clearStatus = await this.readRemoteStatus();
+            if (clearStatus.ok) {
+              const { status: current, etag } = clearStatus.value;
+              const effectiveEtag = etag ?? statusEtag;
+              const currentLock = current.lock;
+              if (effectiveEtag != null && currentLock != null && CloudSyncLease.isEffective(currentLock) && currentLock.holderDeviceId === this.deviceId) {
+                await this.conditionalPutStatus({ ...current, lock: null }, effectiveEtag);
+              }
+            }
+          } catch {
+            // finally 清锁为尽力而为，不掩盖原始错误
+          }
+        }
+      }
     } finally {
-      this.pushMutex.release(lockHandle);
+      this.pushMutex.release(lock.value);
     }
   }
 
@@ -245,180 +406,32 @@ export class CloudSyncCoordinator {
    * 申请 sync 互斥锁（pull 与 push 共用同一把进程内锁）；超时转成
    * PUSH_MUTEX_TIMEOUT（错误码不扩面，调用方据此降级拒绝）。
    */
-  private async acquireSyncLock(
-    operation: "pull" | "push" = "push"
-  ): Promise<PushAgentLockHandle> {
+  private async acquireSyncLock(operation: "pull" | "push" = "push"): Promise<Result<PushAgentLockHandle, AppError>> {
     try {
-      return await this.pushMutex.acquire({
-        timeoutMs: this.pushAcquireTimeoutMs,
-      });
+      const handle = await this.pushMutex.acquire({ timeoutMs: this.pushAcquireTimeoutMs });
+      return Result.ok(handle);
     } catch (error) {
-      if (error instanceof PushAgentMutexAcquireError) {
-        throw new CloudSyncError(
-          "PUSH_MUTEX_TIMEOUT",
-          operation === "pull"
-            ? {key: "error.cloud_sync.push_mutex_timeout.pull"}
-            : {key: "error.cloud_sync.push_mutex_timeout.push"},
-          { cause: error }
-        );
+      if (AppErrorOps.is(error, "AGENT_BUSY")) {
+        const timeoutKey = operation === "pull" ? "error.cloud_sync.push_mutex_timeout.pull" : "error.cloud_sync.push_mutex_timeout.push";
+        return Result.err(new AppError("CLOUD_SYNC_PUSH_MUTEX_TIMEOUT", { descriptor: { key: timeoutKey } }, { cause: error }));
       }
       throw error;
     }
   }
 
-  /**
-   * @deprecated 旧名保留（core 内部测试以外的引用不因此断裂）；新代码用
-   * {@link CloudSyncCoordinator.acquireSyncLock}。
-   */
-  protected acquirePushLock(): Promise<PushAgentLockHandle> {
-    return this.acquireSyncLock("push");
-  }
-
-  /**
-   * push 主体；调用方负责持有进程内互斥锁。
-   *
-   * 收尾契约：**final status 条件写失败时，重读远端必须重新判定租约与 rev，
-   * 禁止只取 etag 就覆盖**（否则远端 rev 回退 + 抹掉他人租约 ⇒ 跨设备静默错位）。
-   */
-  private async runPush(options: PushOptions): Promise<PushResult> {
-    // 入口仍保留 isAgentActive 检查：兼容 apps runtime 尚未接入互斥锁的旧路径
-    // （旧 agent handler 不抢锁，只能靠这里拒绝）
-    if (this.dbSync.isAgentActive()) {
-      throw new CloudSyncError("AGENT_ACTIVE", {key: "error.cloud_sync.agent_active.push"});
-    }
-
-    const { status: remote, etag: remoteEtag } = await this.readRemoteStatus();
-
-    if (!options.forceOverwriteRemote && remote.rev > options.lastSyncedRev) {
-      throw new CloudSyncError("NEED_PULL_FIRST", {key: "error.cloud_sync.need_pull_first.remote_ahead"});
-    }
-
-    const newLock = buildLease(this.deviceId, this.leaseSeconds);
-    if (!canAcquireLock(remote.lock, this.deviceId)) {
-      throw new CloudSyncError(
-        "LOCK_HELD_BY_OTHER",
-        {key: "error.cloud_sync.lock_held_by_other"}
-      );
-    }
-
-    const lockedStatus: CloudSyncStatus = { ...remote, lock: newLock };
-    let statusEtag = await this.conditionalPutStatus(lockedStatus, remoteEtag);
-    if (statusEtag == null) {
-      throw new CloudSyncError("LOCK_CONTENTION", {key: "error.cloud_sync.lock_contention"});
-    }
-
-    let lockHeldBySelf = true;
-
-    try {
-      await this.dbSync.exportSnapshotToPath(this.exportTempPath);
-      const size = await this.getSnapshotBytes(this.exportTempPath);
-
-      const nextRev = remote.rev + 1;
-      const snapKey = snapshotKey(this.pathPrefix, nextRev);
-
-      let hash: string;
-      const uploadStart = Date.now();
-      if (this.canUseFilePathPush()) {
-        hash = await this.hashSnapshotFile!(this.exportTempPath);
-        await this.storage.putFile!(snapKey, this.exportTempPath);
-      } else {
-        const snapshotBytes = await this.readSnapshotBytes(this.exportTempPath);
-        hash = this.computeSha256Hex(snapshotBytes);
-        await this.storage.put(snapKey, snapshotBytes);
-      }
-      const uploadElapsed = Date.now() - uploadStart;
-
-      // 续租点：上传耗时过长要续云端租约；同时复检本机 agent 状态。
-      // 互斥锁接入后理论上 agent 进不来，但 apps 旧路径可能未抢锁——
-      // agent 拍跑到这里就拒绝，走 finally 清云端锁，避免上传菲的快照续命。
-      if (this.dbSync.isAgentActive()) {
-        throw new CloudSyncError("AGENT_ACTIVE", {key: "error.cloud_sync.agent_active.push"});
-      }
-
-      if (uploadElapsed > this.leaseSeconds * 500) {
-        const renewedLock = renewLease(newLock, this.leaseSeconds);
-        const renewedStatus: CloudSyncStatus = {
-          ...lockedStatus,
-          lock: renewedLock,
-        };
-        const renewedEtag = await this.conditionalPutStatus(
-          renewedStatus,
-          statusEtag
-        );
-        if (renewedEtag != null) {
-          statusEtag = renewedEtag;
-        } else {
-          // 续租条件写失败：statusEtag 保持旧值，下面的 final 写必然走重读判定分支。
-          // 这里只留痕不抛错——重读分支已经能正确收尾，抛错会把「续租失败但收尾
-          // 安全」误判成整次 push 失败（快照已上传、计数已上去）。
-          // 目的是让下一个维护者不把「续租一定成功」当成不变量。
-          log.warn("续租失败，final status 将走重读判定分支");
-        }
-      }
-
-      const finalStatus: CloudSyncStatus = {
-        schemaVersion: 1,
-        rev: nextRev,
-        snapshotKey: snapKey,
-        snapshotSha256: hash,
-        snapshotBytes: size,
-        uploadedAt: new Date().toISOString(),
-        uploadedByDeviceId: this.deviceId,
-        lock: null,
-      };
-
-      let finalEtag = await this.conditionalPutStatus(finalStatus, statusEtag);
-      if (finalEtag == null) {
-        // If-Match 失败 = 远端在我们上传期间被别人改过。重读远端后必须**重新判定**
-        // 租约与 rev，禁止只取 etag 就把 finalStatus 覆盖上去：
-        // finalStatus.rev 是最初 remote.rev + 1 算出的常量、lock 是 null，
-        // 无条件覆盖会把远端 rev 写回更小的值并抹掉第三方的有效租约
-        // ⇒ 跨设备静默数据错位，且两端都把自己记成成功。
-        const { status: latest, etag: rereadEtag } = await this.readRemoteStatus();
-        // 两条判定必须并存：canAcquireLock 在「他人租约已过期」时返回 true，
-        // 只判它仍会把已被别人推进的 rev 盖掉；latest.rev >= nextRev 才是
-        // 「rev 是否被别人推进过」的唯一判据。
-        if (!canAcquireLock(latest.lock, this.deviceId)) {
-          throw new CloudSyncError(
-            "LOCK_HELD_BY_OTHER",
-            {key: "error.cloud_sync.lock_held_by_other"}
-          );
-        }
-        if (latest.rev >= nextRev) {
-          throw new CloudSyncError(
-            "NEED_PULL_FIRST",
-            {key: "error.cloud_sync.need_pull_first.advanced_by_other"}
-          );
-        }
-        finalEtag = await this.conditionalPutStatus(finalStatus, rereadEtag);
-        if (finalEtag == null) {
-          throw new CloudSyncError("LOCK_CONTENTION", {key: "error.cloud_sync.lock_contention"});
-        }
-      }
-
-      lockHeldBySelf = false;
-      return { rev: nextRev };
-    } finally {
-      if (lockHeldBySelf) {
-        await this.tryClearLock(statusEtag);
-      }
-    }
-  }
-
-  private assertConfigured(): void {
+  /** 未配置 deviceId 时返回业务错误（调用方 `Result.err` 上行），已配置返回 null。 */
+  private notConfiguredError(): AppError | null {
     if (this.deviceId.trim().length === 0) {
-      throw new CloudSyncError("NOT_CONFIGURED", {key: "error.cloud_sync.not_configured"});
+      return new AppError("CLOUD_SYNC_NOT_CONFIGURED");
     }
+    return null;
   }
 
-  private async readRemoteStatus(): Promise<{
-    status: CloudSyncStatus;
-    etag?: string;
-  }> {
-    const key = statusKey(this.pathPrefix);
+  private async readRemoteStatus(): Promise<Result<{ status: CloudSyncStatus; etag?: string }, AppError>> {
+    const key = CloudSyncPaths.statusKey(this.pathPrefix);
     const head = await this.storage.head(key);
     if (!head.exists) {
-      return { status: { ...EMPTY_CLOUD_SYNC_STATUS }, etag: undefined };
+      return Result.ok({ status: { ...EMPTY_CLOUD_SYNC_STATUS }, etag: undefined });
     }
 
     const { body, etag } = await this.storage.get(key);
@@ -426,62 +439,26 @@ export class CloudSyncCoordinator {
     try {
       parsed = JSON.parse(new TextDecoder().decode(body));
     } catch (error) {
-      throw new CloudSyncError("INVALID_STATUS", {key: "error.cloud_sync.invalid_status.unparseable"}, {
-        cause: error,
-      });
+      return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", { descriptor: { key: "error.cloud_sync.invalid_status.unparseable" } }, { cause: error }));
     }
 
-    return { status: parseCloudSyncStatus(parsed), etag };
-  }
-
-  private encodeStatus(status: CloudSyncStatus): Uint8Array {
-    return new TextEncoder().encode(JSON.stringify(status));
+    const validated = CloudSyncStatusParser.parse(parsed);
+    if (!validated.ok) return Result.err(validated.error);
+    return Result.ok({ status: validated.value, etag });
   }
 
   /**
-   * 条件写入 status.json；If-Match 失败返回 null（不抛错）。
+   * 条件写入 status.json；If-Match 竞态返回 ok(null)（业务态，不是失败），
+   * 其它失败沿 Result.err 上行，决定权交给调用方。
    */
-  private async conditionalPutStatus(
-    status: CloudSyncStatus,
-    ifMatch?: string
-  ): Promise<string | null> {
-    try {
-      const { etag } = await this.storage.put(
-        statusKey(this.pathPrefix),
-        this.encodeStatus(status),
-        ifMatch != null ? { ifMatch } : undefined
-      );
-      return etag;
-    } catch (error) {
-      if (error instanceof CloudSyncError && error.code === "LOCK_CONTENTION") {
-        return null;
+  private async conditionalPutStatus(status: CloudSyncStatus, ifMatch?: string): Promise<Result<string | null, AppError>> {
+    const put = await this.storage.put(CloudSyncPaths.statusKey(this.pathPrefix), new TextEncoder().encode(JSON.stringify(status)), ifMatch != null ? { ifMatch } : undefined);
+    if (!put.ok) {
+      if (AppErrorOps.is(put.error, "CLOUD_SYNC_LOCK_CONTENTION")) {
+        return Result.ok(null);
       }
-      throw error;
+      return Result.err(put.error);
     }
-  }
-
-  /** Push 失败时尝试将锁清空（仅当仍由本机持有有效锁） */
-  private async tryClearLock(lastKnownEtag?: string): Promise<void> {
-    try {
-      const { status, etag } = await this.readRemoteStatus();
-      const effectiveEtag = etag ?? lastKnownEtag;
-      if (effectiveEtag == null) {
-        return;
-      }
-
-      const lock = status.lock;
-      if (
-        lock == null ||
-        !isEffectiveLock(lock) ||
-        lock.holderDeviceId !== this.deviceId
-      ) {
-        return;
-      }
-
-      const cleared: CloudSyncStatus = { ...status, lock: null };
-      await this.conditionalPutStatus(cleared, effectiveEtag);
-    } catch {
-      // finally 清锁为尽力而为，不掩盖原始错误
-    }
+    return Result.ok(put.value.etag);
   }
 }

@@ -16,9 +16,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
+// nm-style: keep-public — 测试契约：apps/desktop/test/tool-result-viewer-modal.test.tsx:23 动态 import 解构直引
 export const OPEN_TOOL_RESULT_EVENT = "open-tool-result-view";
 
-export type ToolResultViewDetail = {
+type ToolResultViewDetail = {
   /** Modal 标题（工具名，如 `search`）。 */
   readonly title: string;
   /** tool_result 正文全文。 */

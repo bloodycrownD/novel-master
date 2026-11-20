@@ -17,13 +17,13 @@ export interface SavedModelSamplingSettings {
 }
 
 /** 内部预算：不直接映射 HTTP 生成 body。 */
-export interface SavedModelInternalSettings {
+interface SavedModelInternalSettings {
   readonly contextWindowTokens: number;
   readonly tokenCounterMode: TokenizerOverride;
 }
 
 /** 生成参数：采样与思考强度档位。 */
-export interface SavedModelGenerationSettings {
+interface SavedModelGenerationSettings {
   readonly sampling: SavedModelSamplingSettings;
   readonly thinkingLevel: ThinkingLevel;
 }
@@ -43,42 +43,44 @@ export interface SavedModelSettingsPatch {
   readonly thinkingLevel?: ThinkingLevel;
 }
 
-/** 读取上下文窗口 token 上限。 */
-export function savedModelContextWindowTokens(settings: SavedModelSettings): number {
-  return settings.internal.contextWindowTokens;
-}
+export const SavedModelSettings = {
+  /** 读取上下文窗口 token 上限。 */
+  contextWindowTokens(settings: SavedModelSettings): number {
+    return settings.internal.contextWindowTokens;
+  },
 
-/** 读取 token 计数器模式。 */
-export function savedModelTokenCounterMode(settings: SavedModelSettings): TokenizerOverride {
-  return settings.internal.tokenCounterMode;
-}
+  /** 读取 token 计数器模式。 */
+  tokenCounterMode(settings: SavedModelSettings): TokenizerOverride {
+    return settings.internal.tokenCounterMode;
+  },
 
-/** 读取生成采样小节。 */
-export function savedModelSampling(settings: SavedModelSettings): SavedModelSamplingSettings {
-  return settings.generation.sampling;
-}
+  /** 读取生成采样小节。 */
+  sampling(settings: SavedModelSettings): SavedModelSamplingSettings {
+    return settings.generation.sampling;
+  },
 
-/** 读取思考强度档位。 */
-export function savedModelThinkingLevel(settings: SavedModelSettings): ThinkingLevel {
-  return settings.generation.thinkingLevel;
-}
+  /** 读取思考强度档位。 */
+  thinkingLevel(settings: SavedModelSettings): ThinkingLevel {
+    return settings.generation.thinkingLevel;
+  },
 
-/**
- * 将扁平 patch 合并进已有 v2 设置。
- *
- * @param settings 当前设置。
- * @param patch 部分更新。
- */
-export function applySavedModelSettingsPatch(settings: SavedModelSettings, patch: SavedModelSettingsPatch): SavedModelSettings {
-  return {
-    schemaVersion: 2,
-    internal: {
-      contextWindowTokens: patch.contextWindowTokens ?? settings.internal.contextWindowTokens,
-      tokenCounterMode: patch.tokenCounterMode ?? settings.internal.tokenCounterMode,
-    },
-    generation: {
-      sampling: patch.sampling ?? settings.generation.sampling,
-      thinkingLevel: patch.thinkingLevel ?? settings.generation.thinkingLevel,
-    },
-  };
-}
+  /**
+   * 将扁平 patch 合并进已有 v2 设置。
+   *
+   * @param settings 当前设置。
+   * @param patch 部分更新。
+   */
+  applyPatch(settings: SavedModelSettings, patch: SavedModelSettingsPatch): SavedModelSettings {
+    return {
+      schemaVersion: 2,
+      internal: {
+        contextWindowTokens: patch.contextWindowTokens ?? settings.internal.contextWindowTokens,
+        tokenCounterMode: patch.tokenCounterMode ?? settings.internal.tokenCounterMode,
+      },
+      generation: {
+        sampling: patch.sampling ?? settings.generation.sampling,
+        thinkingLevel: patch.thinkingLevel ?? settings.generation.thinkingLevel,
+      },
+    };
+  },
+} as const;

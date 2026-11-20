@@ -67,9 +67,10 @@ describe('入口接线源码契约（T-S5）', () => {
 });
 
 describe('NewSkillModal 消费 core 单源（front matter 重写回收）', () => {
-  it('经 skill-ui 再导出消费 withSkillFrontMatterValues，无私有实现', () => {
+  it('经 skill-ui 再导出消费 SkillFrontMatterValues，无私有实现', () => {
+    // nm style 单行化后仍是「从 skill-ui 具名导入」：成员顺序不再是前置条件。
     expect(newSkillSrc).toMatch(
-      /import \{[\s\S]*?withSkillFrontMatterValues,[\s\S]*?\} from '\.\/skill-ui'/,
+      /import \{[^}]*SkillFrontMatterValues[^}]*\} from '\.\/skill-ui'/,
     );
     // 私有实现已删：不得再出现旧签名的函数定义
     expect(newSkillSrc).not.toMatch(
@@ -83,7 +84,7 @@ describe('NewSkillModal 消费 core 单源（front matter 重写回收）', () =
   it('skill-ui.ts 再导出来自 core 单源', () => {
     const skillUiSrc = readSrc('components', 'skills', 'skill-ui.ts');
     expect(skillUiSrc).toMatch(
-      /export \{withSkillFrontMatterValues\} from '@novel-master\/core\/skills'/,
+      /export \{SkillFrontMatterValues\} from '@novel-master\/core\/skills'/,
     );
   });
 });

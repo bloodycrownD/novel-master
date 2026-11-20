@@ -1,7 +1,7 @@
 /**
  * fork / session.copy 共用：种带 content 的 revision、复制 workplace 规则、挂同树 checkpoint。
  *
- * entry_id 化后 revision append / adjustRef 吃 entryId；checkpoint files 直接存 entryId。
+ * entry_id 化后 revision append / RevisionRefCount.adjust 吃 entryId；checkpoint files 直接存 entryId。
  *
  * **唯一入口**：workplace / checkpoints / revisions / entries 的 Sqlite 实例仅在此 helper 内自建；
  * message.service / session.service 的 reposFor 不得重复构造上述 repo。
@@ -9,20 +9,20 @@
  * @module domain/chat/logic/fork-copy-seeder
  */
 
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
+import { WorkplaceScope } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
-type ForkCopySeedError = AppError<"VFS_CONTENT_BLOB_MISSING">;
+type ForkCopySeedError = AppError;
 
 /** {@link ForkCopySeeder.seed} 入参。 */
 interface SeedForkCopyParityInput {
@@ -41,7 +41,7 @@ interface SeedForkCopyParityInput {
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
  */
 class ForkCopySeeder {
-  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；其它仓储异常仍按仓储边界抛出。 */
+  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；copyScope 的失败（含 mapper 路径非法）同样经 `Err` 透传，由事务回调解包抛出触发回滚（总纲 §五例外 2）。 */
   async seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
     const entries = new SqliteVfsEntryRepository(tx);
     const contentStore = new SqliteVfsContentStore(tx);
@@ -50,14 +50,15 @@ class ForkCopySeeder {
     const checkpoints = new SqliteMessageCheckpointRepository(tx);
 
     const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
-    const targetScopeKey = scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
+    const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
 
-    const heads = await listSessionFileHeads(entries, projectId, targetSessionId);
+    const heads = await SessionFiles.listHeads(entries, projectId, targetSessionId);
 
     // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
     // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
-    const fileMetas = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
-    const metaByEntryId = new Map(fileMetas.map((m) => [m.entryId, m]));
+    const scanned = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
+    if (!scanned.ok) return Result.err(scanned.error);
+    const metaByEntryId = new Map(scanned.value.map((m) => [m.entryId, m]));
 
     if (heads.length > 0) {
       // 批量验 blob 存在性：同库 fork/copy 时 copyVfsTree 已确保 blob 落位，
@@ -67,12 +68,12 @@ class ForkCopySeeder {
         const existingBlobs = await contentStore.findExistingBlobHashes(hashes);
         const missing = hashes.find((h) => !existingBlobs.has(h));
         if (missing != null) {
-          return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", `vfs_content_blob 缺失且无可回退明文: ${missing}`));
+          return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失且无可回退明文: ${missing}` }));
         }
       }
 
       // 一次批量 INSERT 落全部 revision（ref_count 直接置 1，等价于逐条
-      // append + adjustRef(+1)，且省去 adjustRef 的存在性回查）。
+      // append + RevisionRefCount.adjust(+1)，且省去 RevisionRefCount.adjust 的存在性回查）。
       const now = Date.now();
       const items = heads.map((head) => {
         const meta = metaByEntryId.get(head.entryId);
@@ -99,13 +100,12 @@ class ForkCopySeeder {
       await revisions.batchAppendWithRefCount(items);
     }
 
-    const sourceScope = workplaceScopeKey({ kind: "session", projectId, sessionId: sourceSessionId });
-    const targetScope = workplaceScopeKey({ kind: "session", projectId, sessionId: targetSessionId });
-    await workplace.copyScope(sourceScope, targetScope, (p) => {
-      const normalized = normalizePath(p);
-      if (!normalized.ok) throw normalized.error;
-      return normalized.value;
-    });
+    const sourceScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: sourceSessionId });
+    const targetScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: targetSessionId });
+    const copied = await workplace.copyScope(sourceScope, targetScope, (p) => PathNormalizer.normalize(p));
+    if (!copied.ok) {
+      return Result.err(copied.error);
+    }
 
     if (heads.length === 0 || newMessages.length === 0) {
       return Result.ok(undefined);

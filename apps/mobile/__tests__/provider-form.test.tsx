@@ -15,13 +15,7 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: jest.fn()}),
 }));
 
-import {
-  EMPTY_PROVIDER_FORM,
-  parseBodyParamsJson,
-  providerFormToCreateInput,
-  providerFormToEditPatch,
-  type ProviderFormValues,
-} from '@/components/provider/ProviderForm';
+import {EMPTY_PROVIDER_FORM, type ProviderFormValues, ProviderFormMapper} from '@/components/provider/ProviderForm';
 
 const baseValues: ProviderFormValues = {
   ...EMPTY_PROVIDER_FORM,
@@ -32,7 +26,7 @@ const baseValues: ProviderFormValues = {
 
 describe('providerForm helpers (T-PI9)', () => {
   it('providerFormToCreateInput 要求 displayName 且无用户 id', () => {
-    const input = providerFormToCreateInput(baseValues);
+    const input = ProviderFormMapper.toCreateInput(baseValues);
     expect(input).toMatchObject({
       displayName: '智谱',
       baseUrl: 'https://api.example.com/v1',
@@ -43,7 +37,7 @@ describe('providerForm helpers (T-PI9)', () => {
 
   it('providerFormToCreateInput 拒绝空白名称（翻转原 omit displayName）', () => {
     expect(() =>
-      providerFormToCreateInput({
+      ProviderFormMapper.toCreateInput({
         ...baseValues,
         displayName: '   ',
       }),
@@ -51,7 +45,7 @@ describe('providerForm helpers (T-PI9)', () => {
   });
 
   it('providerFormToEditPatch 可携带 displayName（翻转原 omit）', () => {
-    const patch = providerFormToEditPatch({
+    const patch = ProviderFormMapper.toEditPatch({
       ...baseValues,
       displayName: '新名称',
       baseUrl: 'https://api.example.com/v2',
@@ -63,7 +57,7 @@ describe('providerForm helpers (T-PI9)', () => {
 
 describe('providerForm 自定义参数（provider-body-params）', () => {
   it('create：非空自定义参数原样进入 bodyParams（值任意 JSON）', () => {
-    const input = providerFormToCreateInput({
+    const input = ProviderFormMapper.toCreateInput({
       ...baseValues,
       bodyParamsJson:
         '{"tool_stream": true, "top_k": 5, "nested": {"a": [1, null]}}',
@@ -76,19 +70,19 @@ describe('providerForm 自定义参数（provider-body-params）', () => {
   });
 
   it('create：空文本自定义参数为显式空对象', () => {
-    const input = providerFormToCreateInput(baseValues);
+    const input = ProviderFormMapper.toCreateInput(baseValues);
     expect(input.bodyParams).toEqual({});
   });
 
   it('create：数组根/非 JSON 拖中文错误', () => {
     expect(() =>
-      providerFormToCreateInput({
+      ProviderFormMapper.toCreateInput({
         ...baseValues,
         bodyParamsJson: '[1,2]',
       }),
     ).toThrow(/自定义参数必须是 JSON 对象/);
     expect(() =>
-      providerFormToCreateInput({
+      ProviderFormMapper.toCreateInput({
         ...baseValues,
         bodyParamsJson: 'not-json',
       }),
@@ -96,7 +90,7 @@ describe('providerForm 自定义参数（provider-body-params）', () => {
   });
 
   it('edit：空文本保存 → 显式清空 bodyParams（区别于不传）', () => {
-    const patch = providerFormToEditPatch({
+    const patch = ProviderFormMapper.toEditPatch({
       ...baseValues,
       bodyParamsJson: '',
     });
@@ -106,7 +100,7 @@ describe('providerForm 自定义参数（provider-body-params）', () => {
   });
 
   it('edit：非空自定义参数透传解析结果', () => {
-    const patch = providerFormToEditPatch({
+    const patch = ProviderFormMapper.toEditPatch({
       ...baseValues,
       bodyParamsJson: '{"temperature": 0.9}',
     });
@@ -114,7 +108,7 @@ describe('providerForm 自定义参数（provider-body-params）', () => {
   });
 
   it('edit：headers 空文本仍不写入 patch（既有行为不变）', () => {
-    const patch = providerFormToEditPatch({
+    const patch = ProviderFormMapper.toEditPatch({
       ...baseValues,
       headersJson: '',
       bodyParamsJson: '',
@@ -125,9 +119,9 @@ describe('providerForm 自定义参数（provider-body-params）', () => {
   });
 
   it('parseBodyParamsJson：null 根拖中文错误，空文本返回 {}', () => {
-    expect(parseBodyParamsJson('')).toEqual({});
-    expect(parseBodyParamsJson('  ')).toEqual({});
-    expect(() => parseBodyParamsJson('null')).toThrow(
+    expect(ProviderFormMapper.parseBodyParamsJson('')).toEqual({});
+    expect(ProviderFormMapper.parseBodyParamsJson('  ')).toEqual({});
+    expect(() => ProviderFormMapper.parseBodyParamsJson('null')).toThrow(
       /自定义参数必须是 JSON 对象/,
     );
   });

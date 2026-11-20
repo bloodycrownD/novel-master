@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
-import {
-  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
-  userVfsUnifiedToolTurnFlag,
-} from "../../../src/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  afterEach, describe, it  } from "node:test";
+import {  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN, userVfsUnifiedToolTurnFlag  } from "../../../src/domain/feature-flags/user-vfs-unified-tool-turn.js";
 
 describe("user-vfs-unified-tool-turn", () => {
   const envKey = "NM_USER_VFS_UNIFIED_TOOL_TURN";

@@ -10,7 +10,7 @@
  * `allowedPaths` 任一前缀下；只要有一条越界就拒绝。`allowedPaths === undefined`
  * 表示不限制（向后兼容）。
  *
- * ⚠️ 现状：三个装配点（`run-agent-turn.ts` 的两处、`create-user-vfs-turn-service.ts`
+ * ⚠️ 现状：三个装配点（`run-agent-turn.ts` 的两处、`chat-service-factory.ts`
  * 的一处）**全部硬写 `allowedPaths: undefined`**，故本模块在生产中恒放行、
  * 运行时成本为零。这是有意分期占位（A-14），不是缺陷。
  *
@@ -21,6 +21,8 @@
  *
  * @module domain/tool/logic/tool-path-policy
  */
+
+import { Path } from "@/common/path.js";
 
 /** 约定：tool input 顶层这些字段出现时一律视为路径参与校验。 */
 const PATH_FIELDS = ["path", "filePath", "from", "to"] as const;
@@ -34,115 +36,98 @@ const PATH_FIELDS = ["path", "filePath", "from", "to"] as const;
  */
 const PATH_ARRAY_FIELDS = ["fileAttachment"] as const;
 
-/** 从 tool input 顶层提取所有路径字段（约定字段名见 {@link PATH_FIELDS} / {@link PATH_ARRAY_FIELDS}）。 */
-export function extractInputPaths(input: unknown): readonly string[] {
-  if (typeof input !== "object" || input === null) {
-    return [];
-  }
-  const rec = input as Record<string, unknown>;
-  const paths: string[] = [];
-  for (const key of PATH_FIELDS) {
-    const v = rec[key];
-    if (typeof v === "string" && v.length > 0) {
-      paths.push(v);
+export const ToolPathPolicy = {
+  /** 从 tool input 顶层提取所有路径字段（约定字段名见 {@link PATH_FIELDS} / {@link PATH_ARRAY_FIELDS}）。 */
+  extractInputPaths(input: unknown): readonly string[] {
+    if (typeof input !== "object" || input === null) {
+      return [];
     }
-  }
-  for (const key of PATH_ARRAY_FIELDS) {
-    const v = rec[key];
-    if (!Array.isArray(v)) {
-      continue;
-    }
-    for (const item of v) {
-      if (typeof item === "string" && item.length > 0) {
-        paths.push(item);
+    const rec = input as Record<string, unknown>;
+    const paths: string[] = [];
+    for (const key of PATH_FIELDS) {
+      const v = rec[key];
+      if (typeof v === "string" && v.length > 0) {
+        paths.push(v);
       }
     }
-  }
-  return paths;
-}
-
-/**
- * 单条路径是否落在 `prefix` 之下。
- *
- * @remarks
- * `prefix` 是相对 session root 的逻辑前缀；自动忽略尾部斜杠。
- * 同时容忍 `/` 与 `\` 两种分隔符，方便 Windows 端直接复用。
- * 空前缀或 `/` 表示「整个工作区」，恒为通过。
- */
-export function pathStartsWithPrefix(path: string, prefix: string): boolean {
-  if (prefix === "" || prefix === "/" || prefix === "\\") {
-    return true;
-  }
-  const normalizedPrefix = prefix.endsWith("/") || prefix.endsWith("\\") ? prefix.slice(0, -1) : prefix;
-  if (path === normalizedPrefix) {
-    return true;
-  }
-  return path.startsWith(normalizedPrefix + "/") || path.startsWith(normalizedPrefix + "\\");
-}
-
-/**
- * 单条路径是否被 `allowedPaths` 放行。
- *
- * `allowedPaths === undefined` 表示不限制（向后兼容）。
- */
-export function isPathAllowed(path: string, allowedPaths?: readonly string[]): boolean {
-  if (allowedPaths === undefined) {
-    return true;
-  }
-  return allowedPaths.some((prefix) => pathStartsWithPrefix(path, prefix));
-}
-
-/**
- * 在所有路径里找出第一条越界的；全部放行返回 `null`。
- *
- * 给 `ToolRunner.call()` 用——它只需要知道「是否要拒」以及「拒哪条路径」，
- * 不需要知道每条具体校验过程。
- */
-export function findDisallowedPath(paths: readonly string[], allowedPaths?: readonly string[]): string | null {
-  if (allowedPaths === undefined) {
-    return null;
-  }
-  for (const p of paths) {
-    if (!isPathAllowed(p, allowedPaths)) {
-      return p;
+    for (const key of PATH_ARRAY_FIELDS) {
+      const v = rec[key];
+      if (!Array.isArray(v)) {
+        continue;
+      }
+      for (const item of v) {
+        if (typeof item === "string" && item.length > 0) {
+          paths.push(item);
+        }
+      }
     }
-  }
-  return null;
-}
+    return paths;
+  },
 
-/**
- * 鸭子读 ctx 上的 `allowedPaths` 字段（不强制 ctx 必须是 BuiltinToolContext）。
- *
- * @remarks
- * `ToolRunner` 是 `Ctx = unknown` 的泛型，这里用 duck typing 把 path
- * policy 与具体上下文类型解耦：只要 ctx 长得像 `{ allowedPaths?: string[] }`
- * 就能套上策略。
- */
-export function readAllowedPaths(ctx: unknown): readonly string[] | undefined {
-  if (typeof ctx !== "object" || ctx === null) {
-    return undefined;
-  }
-  if (!("allowedPaths" in ctx)) {
-    return undefined;
-  }
-  const v = (ctx as { allowedPaths?: unknown }).allowedPaths;
-  if (v === undefined || v === null) {
-    return undefined;
-  }
-  if (Array.isArray(v)) {
-    return v as readonly string[];
-  }
-  return undefined;
-}
+  /**
+   * 单条路径是否被 `allowedPaths` 放行。
+   *
+   * `allowedPaths === undefined` 表示不限制（向后兼容）。
+   */
+  isPathAllowed(path: string, allowedPaths?: readonly string[]): boolean {
+    if (allowedPaths === undefined) {
+      return true;
+    }
+    return allowedPaths.some((prefix) => Path.hasPrefix(path, prefix));
+  },
 
-/**
- * 一次性把策略跑完，返回首个越界路径或 `null`。
- *
- * 这是 `ToolRunner.call()` 实际调的入口——把 input 抽取与 ctx 读取封装在一起，
- * runner 那边只关心结果。
- */
-export function checkToolPathPolicy(input: unknown, ctx: unknown): string | null {
-  const allowedPaths = readAllowedPaths(ctx);
-  const paths = extractInputPaths(input);
-  return findDisallowedPath(paths, allowedPaths);
-}
+  /**
+   * 在所有路径里找出第一条越界的；全部放行返回 `null`。
+   *
+   * 给 `ToolRunner.call()` 用——它只需要知道「是否要拒」以及「拒哪条路径」，
+   * 不需要知道每条具体校验过程。
+   */
+  findDisallowedPath(paths: readonly string[], allowedPaths?: readonly string[]): string | null {
+    if (allowedPaths === undefined) {
+      return null;
+    }
+    for (const p of paths) {
+      if (!ToolPathPolicy.isPathAllowed(p, allowedPaths)) {
+        return p;
+      }
+    }
+    return null;
+  },
+
+  /**
+   * 鸭子读 ctx 上的 `allowedPaths` 字段（不强制 ctx 必须是 BuiltinToolContext）。
+   *
+   * @remarks
+   * `ToolRunner` 是 `Ctx = unknown` 的泛型，这里用 duck typing 把 path
+   * policy 与具体上下文类型解耦：只要 ctx 长得像 `{ allowedPaths?: string[] }`
+   * 就能套上策略。
+   */
+  readAllowedPaths(ctx: unknown): readonly string[] | undefined {
+    if (typeof ctx !== "object" || ctx === null) {
+      return undefined;
+    }
+    if (!("allowedPaths" in ctx)) {
+      return undefined;
+    }
+    const v = (ctx as { allowedPaths?: unknown }).allowedPaths;
+    if (v === undefined || v === null) {
+      return undefined;
+    }
+    if (Array.isArray(v)) {
+      return v as readonly string[];
+    }
+    return undefined;
+  },
+
+  /**
+   * 一次性把策略跑完，返回首个越界路径或 `null`。
+   *
+   * 这是 `ToolRunner.call()` 实际调的入口——把 input 抽取与 ctx 读取封装在一起，
+   * runner 那边只关心结果。
+   */
+  check(input: unknown, ctx: unknown): string | null {
+    const allowedPaths = ToolPathPolicy.readAllowedPaths(ctx);
+    const paths = ToolPathPolicy.extractInputPaths(input);
+    return ToolPathPolicy.findDisallowedPath(paths, allowedPaths);
+  },
+} as const;

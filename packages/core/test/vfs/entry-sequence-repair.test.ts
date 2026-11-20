@@ -5,17 +5,14 @@
  * @module test/vfs/entry-sequence-repair
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { createVfsEntrySequenceRepairOperation } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
-import { runIntegrityRepair } from "../../src/service/integrity-repair.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  EntrySequenceRepair  } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
+import {  IntegrityRepair  } from "../../src/service/integrity-repair.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -26,14 +23,14 @@ const SKILL_MD = (name: string) =>
 async function seedOrphanOccupiedIds(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
 ): Promise<{ orphanIds: number[] }> {
-  const skills = createSkillsService(ctx.conn);
+  const skills = SkillsServiceFactory.create(ctx.conn);
   const names = [
     `orph-a-${testIsolationSuffix()}`,
     `orph-b-${testIsolationSuffix()}`,
   ];
   const ids: number[] = [];
   for (const n of names) {
-    await skills.writeSkillFile("global", n, undefined, SKILL_MD(n));
+    unwrap(await skills.writeSkillFile("global", n, undefined, SKILL_MD(n)));
     const row = await ctx.conn.query<{ id: number }>(
       "SELECT entry_id AS id FROM vfs_entry WHERE scope_key = 'global:meta' AND path = ?",
       [`/meta/skills/${n}/SKILL.md`],
@@ -61,11 +58,11 @@ describe("vfs entry-sequence repair", () => {
     const { orphanIds } = await seedOrphanOccupiedIds(ctx);
     const maxOrphan = Math.max(...orphanIds);
 
-    const op = createVfsEntrySequenceRepairOperation(ctx.conn);
-    const det = await op.detect();
+    const op = EntrySequenceRepair.create(ctx.conn);
+    const det = unwrap(await op.detect());
     assert.equal(det.needsRepair, true, "应检出发号器低于孤儿占号");
 
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const doomed = `doomed-${testIsolationSuffix()}`;
     // 未修复：新 entry 复用孤儿 entry_id → revision (id, v1) 撞唯一键
     await assert.rejects(
@@ -82,11 +79,11 @@ describe("vfs entry-sequence repair", () => {
     );
 
     await op.repair();
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false, "修复后不再检出");
 
     const ok = `healed-${testIsolationSuffix()}`;
-    const r = await skills.writeSkillFile("global", ok, undefined, SKILL_MD(ok));
+    const r = unwrap(await skills.writeSkillFile("global", ok, undefined, SKILL_MD(ok)));
     assert.ok(r.version >= 1);
 
     // 发号器已越过孤儿最大号
@@ -101,11 +98,11 @@ describe("vfs entry-sequence repair", () => {
 
   it("健康库：detect 为 false，repair 无副作用", async () => {
     const ctx = getNovelMasterTestContext();
-    const op = createVfsEntrySequenceRepairOperation(ctx.conn);
-    const det = await op.detect();
+    const op = EntrySequenceRepair.create(ctx.conn);
+    const det = unwrap(await op.detect());
     assert.equal(det.needsRepair, false);
     await op.repair();
-    const after = await op.detect();
+    const after = unwrap(await op.detect());
     assert.equal(after.needsRepair, false);
   });
 
@@ -126,7 +123,7 @@ describe("vfs entry-sequence repair", () => {
       },
       async close() {},
     };
-    const op = createVfsEntrySequenceRepairOperation(brokenConn);
+    const op = EntrySequenceRepair.create(brokenConn);
 
     // detect 不吞错：异常直接上抛，绝不返回「健康」
     await assert.rejects(
@@ -135,7 +132,7 @@ describe("vfs entry-sequence repair", () => {
     );
 
     // 经 registry 编排：detect 抛错被保守地判为需要修复，repair 再试抛错挂报告
-    const report = await runIntegrityRepair(op);
+    const report = await IntegrityRepair.run(op);
     assert.equal(
       report.detection.needsRepair,
       true,

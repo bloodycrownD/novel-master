@@ -66,13 +66,23 @@ export interface LlmSseNativeModule {
     callTimeoutMs: number,
   ): void;
   sseAbort(requestId: string): void;
+  /**
+   * 非流式请求-响应。`requestId` 只是取消路由键（JS 侧生成，与流式路径的
+   * requestId 各自独立命名空间），不影响请求/响应内容。
+   */
   request(
+    requestId: string,
     method: "GET" | "POST",
     url: string,
     headersKv: string[],
     body: string | null,
     callTimeoutMs: number,
   ): Promise<{ status: number; contentType: string | null; body: string }>;
+  /**
+   * 取消进行中的 `request`：native 侧 `Call.cancel()` 真断连，原 promise 以
+   * `code: "abort"` reject；`requestId` 不存在（已结束/从未发起）静默 no-op。
+   */
+  requestAbort(requestId: string): void;
 }
 
 /** bridge = native 模块 + 事件通道（transport 的全部环境依赖，测试注入点）。 */

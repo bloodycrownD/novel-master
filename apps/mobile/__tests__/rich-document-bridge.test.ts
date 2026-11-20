@@ -1,10 +1,4 @@
-import {
-  decodeHostToRichDocument,
-  decodeRichDocumentToHost,
-  encodeHostToRichDocument,
-  encodeRichDocumentToHost,
-  RICH_DOCUMENT_BRIDGE_VERSION,
-} from '@/components/vfs/RichDocumentBridge';
+import {richDocumentBridge, RICH_DOCUMENT_BRIDGE_VERSION} from '@/components/vfs/RichDocumentBridge';
 
 describe('rich-document-bridge', () => {
   it('round-trips RN→Web setDocument envelope', () => {
@@ -17,8 +11,8 @@ describe('rich-document-bridge', () => {
         overLimit: false,
       },
     };
-    const raw = encodeHostToRichDocument(message);
-    const parsed = decodeHostToRichDocument(raw);
+    const raw = richDocumentBridge.encodeToClient(message);
+    const parsed = richDocumentBridge.decodeToClient(raw);
     expect(parsed).toEqual(message);
   });
 
@@ -28,8 +22,8 @@ describe('rich-document-bridge', () => {
       type: 'ready' as const,
       payload: {version: 1},
     };
-    const raw = encodeRichDocumentToHost(message);
-    const parsed = decodeRichDocumentToHost(raw);
+    const raw = richDocumentBridge.encodeToHost(message);
+    const parsed = richDocumentBridge.decodeToHost(raw);
     expect(parsed).toEqual(message);
   });
 
@@ -43,7 +37,7 @@ describe('rich-document-bridge', () => {
         overLimit: true,
       },
     };
-    expect(decodeHostToRichDocument(encodeHostToRichDocument(message))).toEqual(
+    expect(richDocumentBridge.decodeToClient(richDocumentBridge.encodeToClient(message))).toEqual(
       message,
     );
   });
@@ -54,7 +48,7 @@ describe('rich-document-bridge', () => {
       type: 'setAnnotateEnabled' as const,
       payload: {enabled: true},
     };
-    expect(decodeHostToRichDocument(encodeHostToRichDocument(enabled))).toEqual(
+    expect(richDocumentBridge.decodeToClient(richDocumentBridge.encodeToClient(enabled))).toEqual(
       enabled,
     );
     const marks = {
@@ -72,7 +66,7 @@ describe('rich-document-bridge', () => {
         sourceText: 'line1\nhello\nline3\n',
       },
     };
-    expect(decodeHostToRichDocument(encodeHostToRichDocument(marks))).toEqual(
+    expect(richDocumentBridge.decodeToClient(richDocumentBridge.encodeToClient(marks))).toEqual(
       marks,
     );
   });
@@ -88,7 +82,7 @@ describe('rich-document-bridge', () => {
         contextAfter: '后',
       },
     };
-    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(collect))).toEqual(
+    expect(richDocumentBridge.decodeToHost(richDocumentBridge.encodeToHost(collect))).toEqual(
       collect,
     );
     const open = {
@@ -96,7 +90,7 @@ describe('rich-document-bridge', () => {
       type: 'annotateOpen' as const,
       payload: {ids: ['a1', 'a2']},
     };
-    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(open))).toEqual(
+    expect(richDocumentBridge.decodeToHost(richDocumentBridge.encodeToHost(open))).toEqual(
       open,
     );
   });
@@ -107,14 +101,14 @@ describe('rich-document-bridge', () => {
       type: 'selectionAnnotate' as const,
       payload: {text: '选中原文'},
     };
-    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(sel))).toEqual(
+    expect(richDocumentBridge.decodeToHost(richDocumentBridge.encodeToHost(sel))).toEqual(
       sel,
     );
   });
 
   it('rejects invalid bridge version', () => {
     expect(() =>
-      decodeRichDocumentToHost(
+      richDocumentBridge.decodeToHost(
         JSON.stringify({v: 99, type: 'ready', payload: {version: 1}}),
       ),
     ).toThrow(/version/i);

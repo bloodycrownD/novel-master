@@ -21,7 +21,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {parseStreamFinalRateSnapshot} from '@novel-master/core/format';
+import {StreamFinalRate} from '@novel-master/core/format';
 import {
   SESSION_KKV_DOMAIN_STREAM_METRICS,
   STREAM_METRICS_FINAL_RATE_KEY,
@@ -31,11 +31,8 @@ import type {
   SessionRunStateSettleInput,
   SessionRunStatus,
 } from '@novel-master/core/session-run-state';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
-import {buildChatStreamMetricsLine} from '@/hooks/useAgentStreamMetrics';
+import {agentActivity} from '@/runtime/agent-activity';
+import {AgentStreamMetrics} from '@/hooks/useAgentStreamMetrics'
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 const TEST_SETTLED_GRACE_MS = 5_000;
@@ -125,8 +122,8 @@ function buildHarness(options?: {
       sessions: {get: async (sessionId: string) => ({id: sessionId, title: '会话'})},
       projects: {get: async (projectId: string) => ({id: projectId, name: '项目'})},
       messages: {
-        listBySessionTail: jest.fn(async () => []),
-        listBySessionPage: jest.fn(async () => []),
+        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
       },
       ...(options?.sessionKkv == null
         ? {}
@@ -206,7 +203,7 @@ function buildLineFrom(
   sessionId: string,
 ): string {
   const projection = manager.getSettledProjection(sessionId)!;
-  return buildChatStreamMetricsLine({
+  return AgentStreamMetrics.buildChatLine({
     running: false,
     elapsedMs: projection.elapsedMs,
     completionTokens: projection.metrics.completionTokens,
@@ -218,12 +215,12 @@ function buildLineFrom(
 describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   it('活跃期实时速率可读，暂停期随时刻衰减', () => {
@@ -332,7 +329,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     finishRun(h.eventBus);
 
     const raw = kkv.read('s1');
-    const parsed = parseStreamFinalRateSnapshot(raw ?? null);
+    const parsed = StreamFinalRate.parseSnapshot(raw ?? null);
     const projection = h.manager.getSettledProjection('s1');
     expect(parsed).not.toBeNull();
     expect(parsed!.rate).toBe(projection!.rateTokensPerSecond);
@@ -481,7 +478,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     // 文案省略速率段（缺值即省略，不把上一轮的速度拼到本轮「上次生成」上）。
     expect(hydrated!.metrics.completionTokens).toBe(0);
     expect(
-      buildChatStreamMetricsLine({
+      AgentStreamMetrics.buildChatLine({
         running: false,
         elapsedMs: hydrated!.elapsedMs,
         completionTokens: hydrated!.metrics.completionTokens,
@@ -507,7 +504,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     );
 
     // 编解码侧：缺 runId 的旧值照常解析成功（不因缺字段判坏数据）。
-    const parsedLegacy = parseStreamFinalRateSnapshot(legacyRaw);
+    const parsedLegacy = StreamFinalRate.parseSnapshot(legacyRaw);
     expect(parsedLegacy).not.toBeNull();
     expect(parsedLegacy!.rate).toBe(42.5);
     expect(parsedLegacy!.runId).toBeUndefined();
@@ -533,7 +530,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     driveRun(first.eventBus, first.manager);
     finishRun(first.eventBus);
     const rawAfterFirst = kkv.read('s1');
-    expect(parseStreamFinalRateSnapshot(rawAfterFirst ?? null)!.runId).toBe('r1');
+    expect(StreamFinalRate.parseSnapshot(rawAfterFirst ?? null)!.runId).toBe('r1');
     expect(
       first.manager.getSettledProjection('s1')!.rateTokensPerSecond,
     ).not.toBeNull();
@@ -581,7 +578,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
 
     // 宽限窗口内：单元仍在表（终态投影平滑落点）。
     expect(h.manager.snapshot(childId)).not.toBeNull();
-    expect(isMobileAgentActive()).toBe(false); // 消费型 run 不占 refcount
+    expect(agentActivity.isActive()).toBe(false); // 消费型 run 不占 refcount
 
     // 宽限到期：单元按 onGraceExpired 出表（此前无回调会永久残留）。
     jest.advanceTimersByTime(TEST_SETTLED_GRACE_MS + 1);
@@ -592,7 +589,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     expect(h.manager.rateTokensPerSecond(childId, Date.now())).toBe(
       projection!.rateTokensPerSecond,
     );
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     h.manager.dispose();
   });

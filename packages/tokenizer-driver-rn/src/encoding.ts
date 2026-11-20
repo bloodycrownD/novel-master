@@ -10,14 +10,7 @@
  */
 
 export {
-  getRnEncoding,
-  getDefaultRnEncoding,
-  countTextWithDefaultEncoding,
-  DEFAULT_RN_ENCODING_NAME,
+  EncodingCache,
   type RnEncodingName,
   type RnTokenEncoding,
-} from "./impl/encoding-cache.js";
-export {
-  __resetRnEncodingCacheForTests,
-  __setRnEncodingFactoryForTests,
 } from "./impl/encoding-cache.js";

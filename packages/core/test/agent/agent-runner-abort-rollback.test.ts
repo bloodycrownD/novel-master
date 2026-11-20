@@ -8,27 +8,21 @@
  * @module test/agent/agent-runner-abort-rollback.test
  */
 
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  ChatAgentSession,
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  registerBuiltinTools,
-  ToolRegistry,
-  ToolRunner,
-  type BuiltinToolContext,
-} from "@novel-master/core";
-import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
+import {  describe, it, mock  } from "node:test";
+import {  AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
+import {  novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 import type { VfsService } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -109,11 +103,11 @@ function singleTextModel(text: string): ModelRequestService & { callCount: () =>
     callCount: () => calls,
     request: mock.fn(async () => {
       calls += 1;
-      return {
+      return Result.ok({
         assistantText: text,
         blocks: [{ type: "text", text }],
         raw: {},
-      } satisfies LlmChatResult;
+      }) satisfies LlmChatResult;
     }),
   };
 }
@@ -125,7 +119,7 @@ function singleToolUseModel(): ModelRequestService & { callCount: () => number }
     callCount: () => calls,
     request: mock.fn(async () => {
       calls += 1;
-      return {
+      return Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -136,7 +130,7 @@ function singleToolUseModel(): ModelRequestService & { callCount: () => number }
           },
         ],
         raw: {},
-      } satisfies LlmChatResult;
+      } satisfies LlmChatResult);
     }),
   };
 }
@@ -172,12 +166,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 1 loop_start：循环开头已 abort，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -188,12 +182,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
     const controller = new AbortController();
     controller.abort();
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -203,7 +197,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 2 after_session_list：session.list() 后 abort，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // 包一层 session，让 list() 解析后再 abort
     const wrappedSession: typeof session = {
@@ -217,8 +211,8 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const controller = new AbortController();
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: wrappedSession,
         modelRequests: model,
@@ -227,12 +221,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -242,13 +236,13 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 6 after_compaction_eval：compaction 评估后 abort，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -264,12 +258,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -279,23 +273,23 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 7 post_model：模型返回后 abort，未写入 partial（append 前退出）", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
       request: async () => {
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "partial",
           blocks: [{ type: "text", text: "partial" }],
           raw: { partial: true },
-        };
+        });
       },
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -304,12 +298,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -328,7 +322,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 model_request_catch：模型 throw AbortError，session 干净", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
@@ -341,8 +335,8 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -351,12 +345,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -366,12 +360,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 8 before_tool_run：assistant 已写、tool 未跑前 abort，保留 partial", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model = singleToolUseModel();
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const abortBeforeToolRunner = {
       runParallel: async (..._args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -380,7 +374,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -390,12 +384,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = abortBeforeToolRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -406,12 +400,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("检测点 9 after_tool_checkpoint：tool 跑完、checkpoint 后 abort，保留 partial", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -422,10 +416,10 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
           },
         ],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const trackingRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -435,7 +429,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -449,12 +443,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -467,12 +461,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     // 用 ChatAgentSession 路径模拟：让 checkpoint.capture 抛 AbortError，
     // 此时 assistant 已写入；catch 应识别为 abort 并回滚到 turn 起点。
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -483,10 +477,10 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
           },
         ],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const trackingRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -500,7 +494,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     // capture 在 abort 后抛 AbortError → 命中 outer catch
     const err = new Error("aborted");
     err.name = "AbortError";
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -516,12 +510,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     const msgs = await session.list();
@@ -531,11 +525,11 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
   it("catch 分支：非 AbortError 不回滚，错误向上抛", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -546,11 +540,11 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
           },
         ],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -590,7 +584,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     } = {
       listBySession: async () => [],
       append: async () => ({}) as never,
-      truncateAfter: async () => undefined,
+      truncateAfter: async () => Result.ok(undefined),
     };
     const cs = new ChatAgentSession(fake as never, "s1");
     await cs.truncateAfterMessage(null);

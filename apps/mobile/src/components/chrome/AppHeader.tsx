@@ -31,10 +31,7 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
     const base = PAGE_HEADER_CONFIG[pageKey];
     // ownerRouteKey 过滤：转场动画期间两个屏的 header 同时可见，
     // override 只在归属屏应用，避免「?」/标题闪烁到相邻屏。
-    const owned =
-      stackOverride != null &&
-      (stackOverride.ownerRouteKey == null ||
-        stackOverride.ownerRouteKey === ownerRouteKey);
+    const owned = stackOverride != null && (stackOverride.ownerRouteKey == null || stackOverride.ownerRouteKey === ownerRouteKey);
     if (owned && pageKey !== 'chat') {
       return {
         title: stackOverride.title ?? base.title,
@@ -54,10 +51,7 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
         showBack = true;
       } else if (state.sessionListPanel === 'projects') {
         title = '项目工作区';
-      } else if (
-        state.chatSubview === 'list' &&
-        state.sessionListPanel === 'sessions'
-      ) {
+      } else if (state.chatSubview === 'list' && state.sessionListPanel === 'sessions') {
         title = state.projectName ?? base.title;
       }
       return {
@@ -78,12 +72,7 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
     };
   }, [pageKey, chatNav, stackOverride, onBack, onMenu, ownerRouteKey]);
 
-  const menuLabel =
-    pageKey === 'chat' &&
-    chatNav != null &&
-    chatNav.state.chatSubview === 'conversation'
-      ? '会话操作'
-      : '项目列表';
+  const menuLabel = pageKey === 'chat' && chatNav != null && chatNav.state.chatSubview === 'conversation' ? '会话操作' : '项目列表';
 
   return (
     <View
@@ -98,36 +87,20 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
     >
       <View style={styles.row}>
         {resolved.showBack ? (
-          <Pressable
-            onPress={resolved.onBack}
-            style={styles.iconBtn}
-            accessibilityLabel="返回"
-          >
+          <Pressable onPress={resolved.onBack} style={styles.iconBtn} accessibilityLabel="返回">
             <BackIcon color={tokens.primary} />
           </Pressable>
         ) : (
           <View style={styles.iconPlaceholder} />
         )}
-        <Text
-          style={[styles.title, {color: tokens.text}]}
-          numberOfLines={1}
-          accessibilityRole="header"
-        >
+        <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1} accessibilityRole="header">
           {resolved.title}
         </Text>
         <Pressable onPress={() => toggleMode()} style={styles.iconBtn}>
-          {mode === 'dark' ? (
-            <SunIcon color={tokens.text} />
-          ) : (
-            <MoonIcon color={tokens.text} />
-          )}
+          {mode === 'dark' ? <SunIcon color={tokens.text} /> : <MoonIcon color={tokens.text} />}
         </Pressable>
         {resolved.showMenu ? (
-          <Pressable
-            onPress={resolved.onMenu}
-            style={styles.iconBtn}
-            accessibilityLabel={menuLabel}
-          >
+          <Pressable onPress={resolved.onMenu} style={styles.iconBtn} accessibilityLabel={menuLabel}>
             {resolved.menuIcon ?? <MenuIcon color={tokens.text} />}
           </Pressable>
         ) : (

@@ -211,9 +211,9 @@ const WORKPLACE_LINE_PREFIX = /^ *│/;                  // 留在 render-prompt
 
 **为什么不能一刀切**：`Coerce.nonEmptyText` 是「trim 后非空则返回原串」，而 `requireString` 是「是字符串且非空串」（不 trim）——两者在 `"  "` 这种输入上结果不同。强行统一会改行为。
 
-### 5.3 工具模块用 object namespace，不建无状态 class
+### 5.3 工具模块用 object namespace，纯函数族优先于无状态 class
 
-`common/` 的纯函数按类别收进 **object namespace**，不建 `class Xxx { static f() {} }`（无状态 class 见 §9.3 明确禁止）。
+`common/` 的纯函数按类别收进 **object namespace**。无状态 `class Xxx { static f() {} }` 允许（用户裁决：静态 class 不禁），但纯函数族**优先** object namespace——class 壳只用到了名字空间功能，却额外背上可 new / 可 extends / 成员默认可变 / prototype 链四样用不上的语义；object 字面量一步构造、`as const` 天然只读、`Object.keys` 可枚举（dup/门禁友好）。已有 namespace 不返工改 class；有共享可变状态才用 class。
 
 ```ts
 // common/coerce.ts
@@ -367,7 +367,7 @@ nm-style gate bare                             # bare-exports 基线门禁（新
 不要 OOP 的情况：
 
 - 纯函数工具（`composer-at-path`、`build-attachment-action-xml` 这类）——建类只增加壳，用 object namespace；
-- **无状态 `class Xxx { static f() {} }` 一律不用**；
+- 无状态 `class Xxx { static f() {} }` 允许，但纯函数族优先 object namespace（§5.3）；
 - DTO / schema / factory（`MessageContent` 这类持久化数据）；
 - 单个函数、React hook（hook 本身就是状态边界）；
 - 只是为了"看起来面向对象"。
@@ -484,7 +484,7 @@ class ChatMessageEntity {
 1. **行为归被包装对象**：把 `ChatMessage` 从 interface 提升为 class，字段仍在，方法直接挂在 `this` 上；
 2. **数据归边界**：另设 `ChatMessageData`（DB / IPC 纯形状），持久化与 DTO 只认它；不要为了省一个 mapper 让 class 跨 `JSON.stringify` / IPC；
 3. **子字段不是 Entity**：`MessageContent` 是 `ChatMessage.content` 的值对象，不要把它的 `toolUseCount` 单独包装成 `MessageContentEntity`；
-4. **无状态 class 不是对象**：只有一个常量/一个无状态 helper 的 class 改成 object namespace 或模块函数，不要 `new` 一个壳。
+4. **单成员 class 优先 object namespace**：只有一个常量/一个无状态 helper 的 class 改成 object namespace（静态 class 允许但纯函数族优先 namespace，见 §5.3），不要 `new` 一个壳。
 
 审计 `logic` 目录时按四类标记：
 

@@ -19,7 +19,7 @@
  */
 
 /** 单个 sessionId 对应的流式 partial 快照。 */
-export interface AgentStreamPartial {
+interface AgentStreamPartial {
   /** 文本 delta 累积。 */
   readonly text: string;
   /** 思考链 delta 累积。 */

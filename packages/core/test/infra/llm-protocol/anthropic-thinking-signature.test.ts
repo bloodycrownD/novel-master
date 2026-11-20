@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  anthropicContentToBlocks,
-  blocksToAnthropicContent,
-  chatMessagesToAnthropic,
-} from "../../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
+import {  describe, it  } from "node:test";
+import {  AnthropicMapper  } from "../../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("anthropic thinking signature", () => {
   it("parses thinking block with signature", () => {
-    const blocks = anthropicContentToBlocks([
+    const blocks = AnthropicMapper.contentToBlocks([
       {
         type: "thinking",
         thinking: "internal",
@@ -25,7 +21,7 @@ describe("anthropic thinking signature", () => {
   });
 
   it("round-trips thinking signature on outbound content", () => {
-    const api = blocksToAnthropicContent([
+    const api = AnthropicMapper.blocksToContent([
       {
         type: "thinking",
         text: "plan",
@@ -34,7 +30,7 @@ describe("anthropic thinking signature", () => {
     ]);
     assert.equal(api[0]?.type, "thinking");
     assert.equal(api[0]?.signature, "sig-out");
-    const back = anthropicContentToBlocks(api);
+    const back = AnthropicMapper.contentToBlocks(api);
     assert.equal(back[0]?.type, "thinking");
     if (back[0]?.type === "thinking") {
       assert.equal(back[0].thinkingSignature, "sig-out");
@@ -42,7 +38,7 @@ describe("anthropic thinking signature", () => {
   });
 
   it("parses signature-only thinking (display omitted)", () => {
-    const blocks = anthropicContentToBlocks([
+    const blocks = AnthropicMapper.contentToBlocks([
       { type: "thinking", thinking: "", signature: "sig-only" },
     ]);
     assert.equal(blocks.length, 1);
@@ -54,13 +50,13 @@ describe("anthropic thinking signature", () => {
 
   it("round-trips redacted_thinking verbatim", () => {
     const wire = [{ type: "redacted_thinking", data: "opaque-blob-xyz" }];
-    const blocks = anthropicContentToBlocks(wire);
+    const blocks = AnthropicMapper.contentToBlocks(wire);
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "redacted_thinking");
     if (blocks[0]?.type === "redacted_thinking") {
       assert.equal(blocks[0].data, "opaque-blob-xyz");
     }
-    const api = blocksToAnthropicContent(blocks);
+    const api = AnthropicMapper.blocksToContent(blocks);
     assert.deepEqual(api, wire);
   });
 
@@ -97,7 +93,7 @@ describe("anthropic thinking signature", () => {
         },
       },
     ];
-    const out = chatMessagesToAnthropic(messages);
+    const out = AnthropicMapper.chatMessagesTo(messages);
     const assistant = out.find((m) => m.role === "assistant");
     assert.ok(assistant);
     assert.equal(assistant!.content[0]?.type, "thinking");

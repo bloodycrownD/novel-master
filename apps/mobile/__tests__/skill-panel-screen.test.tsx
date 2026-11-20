@@ -7,8 +7,8 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {VfsError} from '@novel-master/core/vfs';
 import {SkillPanelScreen} from '@/screens/stack/SkillPanelScreen';
+import {AppError, Result} from '@novel-master/core/errors';
 
 const mockEffectiveSkills = jest.fn();
 
@@ -44,9 +44,12 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (title: string, _err: unknown) => `${title}`,
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -131,8 +134,14 @@ beforeEach(() => {
 
 describe('SkillPanelScreen 空态容错', () => {
   it('NOT_FOUND（技能根目录不存在）静默显示空态，不弹 toast', async () => {
-    mockEffectiveSkills.mockRejectedValue(
-      new VfsError('NOT_FOUND', 'vfs entry not found: /meta/skills'),
+    // 错误通道迁移后 effectiveSkills 走 Result 通道（生产侧 `!list.ok` 判定）；
+    // screen 按 isAppError 判 VFS_NOT_FOUND 静默空态。
+    mockEffectiveSkills.mockResolvedValue(
+      Result.err(
+        new AppError('VFS_NOT_FOUND', {
+          detail: 'vfs entry not found: /meta/skills',
+        }),
+      ),
     );
 
     let renderer!: TestRenderer.ReactTestRenderer;

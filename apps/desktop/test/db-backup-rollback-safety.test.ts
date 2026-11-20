@@ -24,17 +24,10 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import {
-  DatabaseReplacedError,
-  __setDbBackupFsOpsForTest,
-  exportDatabaseBackupToPath,
-  importDatabaseBackupFromPath,
-} from "../src/main/services/db-backup.service.js";
-import {
-  getDesktopRuntime,
-  rebootstrapDesktopRuntime,
-} from "../src/main/runtime/desktop-runtime-singleton.js";
-import { resolveDbPath } from "../src/main/runtime/resolve-db-path.js";
+import { DbBackupService } from "../src/main/services/db-backup.service.js";
+import { DatabaseReplacedError } from "@novel-master/core";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { DesktopDbPath } from "../src/main/runtime/resolve-db-path.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -48,20 +41,22 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-backup-rollback-"));
     // 首次 getDesktopRuntime 会懒建出真实的库文件。
-    await getDesktopRuntime();
-    dbPath = resolveDbPath();
+    await DesktopRuntimeSingleton.get();
+    dbPath = DesktopDbPath.resolve();
     bakPath = `${dbPath}.nmbackup.bak`;
   });
 
   after(async () => {
-    __setDbBackupFsOpsForTest(null);
+    DbBackupService.setFsOpsForTest(null);
     await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("备份拷贝失败时抛错且不覆盖活动库文件", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-src.db");
-    await exportDatabaseBackupToPath(runtime, src);
+    await DbBackupService.exportToPath(runtime, src);
     // 造一行「只在本机存在」的内容：覆盖一旦发生就能看出来。
     await runtime.conn.execute(
       "CREATE TABLE IF NOT EXISTS rollback_probe (v TEXT)"
@@ -79,7 +74,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     await mkdir(bakPath, { recursive: true });
 
     await assert.rejects(
-      () => importDatabaseBackupFromPath(src),
+      () => DbBackupService.importFromPath(src),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.doesNotMatch(
@@ -100,15 +95,17 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
   });
 
   it("回滚拷贝失败时错误信息含备份路径且副本保留在磁盘", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-src2.db");
-    await exportDatabaseBackupToPath(runtime, src);
+    await DbBackupService.exportToPath(runtime, src);
     await rm(bakPath, { recursive: true, force: true });
 
     const realCopy = copyFile;
     // 注入：覆盖动作（* → dbPath）失败 + 回滚动作（bakPath → dbPath）也失败。
     // 备份步（dbPath → bakPath）必须仍然成功，否则测的就不是回滚分支了。
-    __setDbBackupFsOpsForTest({
+    DbBackupService.setFsOpsForTest({
       copyFile: (async (from: string, to: string) => {
         if (to === dbPath) {
           throw new Error(`注入的拷贝失败: ${from}`);
@@ -118,7 +115,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     });
     try {
       await assert.rejects(
-        () => importDatabaseBackupFromPath(src),
+        () => DbBackupService.importFromPath(src),
         (error: unknown) => {
           assert.ok(error instanceof Error);
           assert.match(error.message, /回滚失败/);
@@ -130,7 +127,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
         },
       );
     } finally {
-      __setDbBackupFsOpsForTest(null);
+      DbBackupService.setFsOpsForTest(null);
     }
 
     assert.equal(
@@ -139,25 +136,32 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
       "回滚失败时必须保留回滚副本（用户要能手工救回）",
     );
     // 导入链已关掉连接，runtime 作废。
-    await rebootstrapDesktopRuntime();
+    await DesktopRuntimeSingleton.rebootstrap();
   });
 
   it("正常导入成功后回滚副本被清理且回报 databaseReplaced", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-ok.db");
-    await exportDatabaseBackupToPath(runtime, src);
+    await DbBackupService.exportToPath(runtime, src);
 
-    const outcome = await importDatabaseBackupFromPath(src);
+    // 四期签名：importDatabaseBackupFromPath 沿 Result 回传，解包取回执。
+    const imported = await DbBackupService.importFromPath(src);
+    if (!imported.ok) throw imported.error;
+    const outcome = imported.value;
     assert.equal(outcome.databaseReplaced, true);
     assert.equal(outcome.providerTablesRestored, true);
     assert.equal(existsSync(bakPath), false, "回滚成功时 bak 冗余，必须清理");
-    await rebootstrapDesktopRuntime();
+    await DesktopRuntimeSingleton.rebootstrap();
   });
 
   it("覆盖已成功但收尾失败时抛 DatabaseReplacedError 且不回滚", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-provider-fail.db");
-    await exportDatabaseBackupToPath(runtime, src);
+    await DbBackupService.exportToPath(runtime, src);
     await rm(bakPath, { recursive: true, force: true });
 
     // 覆盖动作照常发生，但落进去的是一份「不是数据库」的内容 ⇒
@@ -166,7 +170,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     const notADb = join(tempDir, "not-a-db.bin");
     await writeFile(notADb, Buffer.alloc(4096, 0x41));
     const realCopy = copyFile;
-    __setDbBackupFsOpsForTest({
+    DbBackupService.setFsOpsForTest({
       copyFile: (async (from: string, to: string) => {
         if (to === dbPath) {
           return realCopy(notADb, to);
@@ -176,7 +180,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     });
     try {
       await assert.rejects(
-        () => importDatabaseBackupFromPath(src),
+        () => DbBackupService.importFromPath(src),
         (error: unknown) => {
           assert.ok(
             error instanceof DatabaseReplacedError,
@@ -194,7 +198,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
         },
       );
     } finally {
-      __setDbBackupFsOpsForTest(null);
+      DbBackupService.setFsOpsForTest(null);
     }
 
     const current = await readFile(dbPath);
@@ -215,7 +219,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     // 把库恢复成可用状态——本用例故意留下一份垃圾库文件，
     // 后续 rebootstrap / teardown 都会被它噎住。
     await copyFile(src, dbPath);
-    await rebootstrapDesktopRuntime();
+    await DesktopRuntimeSingleton.rebootstrap();
   });
 
   it("assertSqliteFileAtPath 只读前 16 字节（不整包读入）", async () => {
@@ -228,7 +232,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     const realOpen = openFileHandle as unknown as (
       ...a: unknown[]
     ) => Promise<{ read: (...a: unknown[]) => Promise<{ bytesRead: number }> }>;
-    __setDbBackupFsOpsForTest({
+    DbBackupService.setFsOpsForTest({
       open: (async (...args: unknown[]) => {
         const handle = await realOpen(...args);
         const realRead = handle.read.bind(handle);
@@ -242,13 +246,15 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
       }) as unknown as typeof openFileHandle,
     });
     try {
-      // 魔数不匹配 ⇒ 校验步抛错，导入不会开始（不破坏后续用例的库文件）。
-      await assert.rejects(
-        () => importDatabaseBackupFromPath(notSqlite),
-        /不是有效的 SQLite 数据库备份/,
-      );
+      // 魔数不匹配 ⇒ 校验步失败（四期签名沿 Result.err 回传，不再 throw），
+      // 导入不会开始（不破坏后续用例的库文件）。
+      const rejected = await DbBackupService.importFromPath(notSqlite);
+      assert.ok(!rejected.ok, "非 SQLite 备份必须被拒");
+      if (!rejected.ok) {
+        assert.match(rejected.error.message, /不是有效的 SQLite 数据库备份/);
+      }
     } finally {
-      __setDbBackupFsOpsForTest(null);
+      DbBackupService.setFsOpsForTest(null);
     }
 
     assert.equal(reads.length, 1, "校验步应当只做一次 read");

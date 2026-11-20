@@ -9,35 +9,19 @@
  * 域写仅含 SKILL.md 的新目录。
  */
 import React, {useEffect, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {ChatProject} from '@novel-master/core/chat';
-import {
-  previewSkillZip,
-  validateSkillName,
-  type SkillDomain,
-  type SkillZipPreview,
-} from '@novel-master/core/skills';
-import {createVfsZipIoService, type VfsScope} from '@novel-master/core/vfs';
+import {NewSkillDoc, SkillName, SkillZip, type SkillDomain, type SkillZipPreview} from '@novel-master/core/skills';
+import {VfsServiceFactory, type VfsScope} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {
-  buildNewSkillDoc,
-  withSkillFrontMatterValues,
-} from './skill-ui';
-import {pickZipFileBytes} from '@/services/vfs-zip.service';
+import {SkillFrontMatterValues} from './skill-ui';
+import {VfsZipService} from '@/services/vfs-zip.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {coreT} from '@/i18n/core';
 
-export type NewSkillTarget = {
+type NewSkillTarget = {
   domain: SkillDomain;
   name: string;
   projectId?: string;
@@ -60,21 +44,13 @@ type ImportedSkill = {
   readonly preview: SkillZipPreview;
 };
 
-export function NewSkillModal({
-  visible,
-  domain,
-  defaultProjectId,
-  onClose,
-  onCreated,
-}: Props) {
+export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCreated}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [projectId, setProjectId] = useState<string | undefined>(
-    defaultProjectId,
-  );
+  const [projectId, setProjectId] = useState<string | undefined>(defaultProjectId);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -108,9 +84,7 @@ export function NewSkillModal({
         if (!cancelled) {
           setProjects(list);
           // 无预选项目时默认第一个，避免「项目域但无 projectId」的空态
-          setProjectId(prev =>
-            prev != null && list.some(p => p.id === prev) ? prev : list[0]?.id,
-          );
+          setProjectId(prev => (prev != null && list.some(p => p.id === prev) ? prev : list[0]?.id));
         }
       } catch {
         if (!cancelled) {
@@ -123,25 +97,13 @@ export function NewSkillModal({
     };
   }, [visible, runtime, needsProjectPicker]);
 
-  const selectedProject = useMemo(
-    () => projects.find(p => p.id === projectId),
-    [projects, projectId],
-  );
+  const selectedProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
 
-  const nameReason = name.length > 0 ? validateSkillName(name) : null;
+  const nameReason = name.length > 0 ? SkillName.validate(name) : null;
   const nameIssue = nameReason == null ? null : coreT(nameReason);
-  const descriptionIssue =
-    description.length === 0
-      ? '描述不能为空（进入索引，供模型判断是否使用）'
-      : null;
-  const projectIssue =
-    domain === 'project' && projectId == null ? '请选择所属项目' : null;
-  const canSubmit =
-    name.length > 0 &&
-    description.length > 0 &&
-    nameIssue == null &&
-    projectIssue == null &&
-    !creating;
+  const descriptionIssue = description.length === 0 ? '描述不能为空（进入索引，供模型判断是否使用）' : null;
+  const projectIssue = domain === 'project' && projectId == null ? '请选择所属项目' : null;
+  const canSubmit = name.length > 0 && description.length > 0 && nameIssue == null && projectIssue == null && !creating;
 
   /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
   const handleImport = async () => {
@@ -151,11 +113,16 @@ export function NewSkillModal({
     setImporting(true);
     setError(undefined);
     try {
-      const bytes = await pickZipFileBytes();
-      if (bytes == null) {
+      const picked = await VfsZipService.pickBytes();
+      if (!picked.ok) {
+        setError(picked.error.message);
         return;
       }
-      const previewResult = previewSkillZip(bytes);
+      if (picked.value == null) {
+        return;
+      }
+      const bytes = picked.value;
+      const previewResult = SkillZip.preview(bytes);
       if (!previewResult.ok) {
         setError(previewResult.error.message);
         return;
@@ -183,10 +150,16 @@ export function NewSkillModal({
     setError(undefined);
     try {
       // 域内查重：同名技能已存在时拒绝（整包覆盖语义只在复制/提升链路，新建不覆盖）
-      const existing = await runtime
-        .skills()
-        .listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      if (existing.some(s => s.name === name)) {
+      const existing = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
+      if (existing.kind === 'failed') {
+        setError(existing.error.message);
+        return;
+      }
+      // listSkills 未注入 hooks：中断分支不可达；真出现时按「本次不创建」收尾。
+      if (existing.kind !== 'completed') {
+        return;
+      }
+      if (existing.value.some(s => s.name === name)) {
         setError(`目标域已存在同名技能「${name}」`);
         return;
       }
@@ -194,52 +167,22 @@ export function NewSkillModal({
         // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
         // 先过保留名校验，拒绝时不落盘（CR D-1）。SkillError 的中文
         // message 由 catch 分支冒泡展示。
-        await runtime
-          .skills()
-          .assertSkillNameNotReservedForCreate(
-            domain,
-            name,
-            domain === 'project' ? projectId : undefined,
-          );
+        await runtime.skills().assertSkillNameNotReservedForCreate(domain, name, domain === 'project' ? projectId : undefined);
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
         // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
-        const scope: VfsScope =
-          domain === 'global'
-            ? {kind: 'global-meta'}
-            : {kind: 'project-meta', projectId: projectId!};
-        const zipSvc = createVfsZipIoService(runtime.conn);
+        const scope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
+        const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
         await zipSvc.import(scope, imported.bytes, {
           confirmed: true,
           directoryPath: `/meta/skills/${name}`,
         });
-        if (
-          imported.preview.name !== name ||
-          imported.preview.description !== description
-        ) {
-          await runtime
-            .skills()
-            .writeSkillFile(
-              domain,
-              name,
-              'SKILL.md',
-              withSkillFrontMatterValues(imported.preview.skillMd!, {
-                name,
-                description,
-              }),
-              domain === 'project' ? projectId : undefined,
-            );
+        if (imported.preview.name !== name || imported.preview.description !== description) {
+          const skillDoc = SkillFrontMatterValues.rewrite(imported.preview.skillMd!, {name, description});
+          await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', skillDoc, domain === 'project' ? projectId : undefined);
         }
       } else {
-        await runtime
-          .skills()
-          .writeSkillFile(
-            domain,
-            name,
-            'SKILL.md',
-            buildNewSkillDoc(name, description),
-            domain === 'project' ? projectId : undefined,
-          );
+        await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', NewSkillDoc.build(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
       }
       onCreated({
         domain,
@@ -259,44 +202,20 @@ export function NewSkillModal({
       <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
       {imported != null ? (
         <View style={styles.importRow}>
-          <Text
-            style={{color: tokens.textSecondary, flex: 1}}
-            numberOfLines={1}
-          >
+          <Text style={{color: tokens.textSecondary, flex: 1}} numberOfLines={1}>
             已导入 ZIP · {imported.preview.fileCount} 个文件（创建后全部带入）
           </Text>
-          <Pressable
-            testID="new-skill-import-clear"
-            onPress={() => setImported(null)}
-            hitSlop={8}
-          >
+          <Pressable testID="new-skill-import-clear" onPress={() => setImported(null)} hitSlop={8}>
             <Text style={{color: tokens.primary}}>移除</Text>
           </Pressable>
         </View>
       ) : (
-        <Pressable
-          testID="new-skill-import-btn"
-          style={[styles.importBtn, {borderColor: tokens.border}]}
-          disabled={importing}
-          onPress={() => handleImport().catch(() => undefined)}
-        >
-          {importing ? (
-            <ActivityIndicator size="small" color={tokens.primary} />
-          ) : (
-            <Text style={{color: tokens.primary}}>从 ZIP 导入…</Text>
-          )}
+        <Pressable testID="new-skill-import-btn" style={[styles.importBtn, {borderColor: tokens.border}]} disabled={importing} onPress={() => handleImport().catch(() => undefined)}>
+          {importing ? <ActivityIndicator size="small" color={tokens.primary} /> : <Text style={{color: tokens.primary}}>从 ZIP 导入…</Text>}
         </Pressable>
       )}
-      <ScrollView
-        style={styles.form}
-        contentContainerStyle={styles.formContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text
-          style={[styles.label, {color: tokens.textSecondary}]}
-          testID="new-skill-name-label"
-        >
+      <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <Text style={[styles.label, {color: tokens.textSecondary}]} testID="new-skill-name-label">
           技能名（即目录名，可在管理页重命名）
         </Text>
         <TextInput
@@ -315,11 +234,7 @@ export function NewSkillModal({
           placeholderTextColor={tokens.textSecondary}
           autoCorrect={false}
         />
-        {nameIssue ? (
-          <Text style={[styles.error, {color: tokens.danger}]}>
-            {nameIssue}
-          </Text>
-        ) : null}
+        {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
         <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
         <TextInput
           testID="new-skill-description-input"
@@ -328,10 +243,7 @@ export function NewSkillModal({
             styles.descriptionInput,
             {
               color: tokens.text,
-              borderColor:
-                description.length > 0 && descriptionIssue
-                  ? tokens.danger
-                  : tokens.border,
+              borderColor: description.length > 0 && descriptionIssue ? tokens.danger : tokens.border,
               backgroundColor: tokens.background,
             },
           ]}
@@ -343,14 +255,8 @@ export function NewSkillModal({
         />
         {needsProjectPicker ? (
           <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              所属项目
-            </Text>
-            <Pressable
-              testID="new-skill-project-picker"
-              style={[styles.projectPicker, {borderColor: tokens.border}]}
-              onPress={() => setProjectMenuOpen(true)}
-            >
+            <Text style={[styles.label, {color: tokens.textSecondary}]}>所属项目</Text>
+            <Pressable testID="new-skill-project-picker" style={[styles.projectPicker, {borderColor: tokens.border}]} onPress={() => setProjectMenuOpen(true)}>
               <Text style={{color: tokens.text, flex: 1}} numberOfLines={1}>
                 {selectedProject ? selectedProject.name : '选择所属项目'}
               </Text>
@@ -358,9 +264,7 @@ export function NewSkillModal({
             </Pressable>
           </>
         ) : null}
-        {error ? (
-          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-        ) : null}
+        {error ? <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text> : null}
       </ScrollView>
       <View style={styles.foot}>
         <Pressable onPress={onClose} style={styles.footBtn}>
@@ -368,18 +272,11 @@ export function NewSkillModal({
         </Pressable>
         <Pressable
           testID="new-skill-submit"
-          style={[
-            styles.footBtn,
-            {backgroundColor: canSubmit ? tokens.primary : tokens.border},
-          ]}
+          style={[styles.footBtn, {backgroundColor: canSubmit ? tokens.primary : tokens.border}]}
           disabled={!canSubmit}
           onPress={() => handleCreate().catch(() => undefined)}
         >
-          {creating ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={{color: '#fff', fontWeight: '600'}}>创建</Text>
-          )}
+          {creating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>创建</Text>}
         </Pressable>
       </View>
     </>
@@ -387,14 +284,7 @@ export function NewSkillModal({
 
   return (
     <>
-      <ModalShell
-        visible={visible}
-        onClose={onClose}
-        variant="bottom"
-        animationType="slide"
-        keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
-        panelStyle={styles.panel}
-      >
+      <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
         {sheetContent}
       </ModalShell>
       <BottomSheetMenu

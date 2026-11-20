@@ -12,8 +12,8 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { handleProvidersDelete } from "../src/main/ipc/handlers/providers.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -31,7 +31,9 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
   });
 
   it("currentModelId 指向被删服务商的模型时，删除后必须清空", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
 
     const created = await rt.providers.create({
       protocol: "openai",
@@ -39,30 +41,43 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
       displayName: "CR-F04 悬空网关",
       apiKey: "sk-cr-f04",
     });
-    const saved = await rt.providerModels.create(created.id, "cr-f04-model");
+    if (!created.ok) throw created.error;
+    // 四期签名：providerModels.create 沿 Result 回传，解包取实体。
+    const savedCreated = await rt.providerModels.create(created.value.id, "cr-f04-model");
+    if (!savedCreated.ok) throw savedCreated.error;
+    const saved = savedCreated.value;
 
-    await rt.state.setCurrentProviderId(created.id);
+    await rt.state.setCurrentProviderId(created.value.id);
     await rt.state.setCurrentModelId(saved.id);
-    assert.equal(await rt.state.getCurrentModelId(), saved.id);
+    const currentModel = await rt.state.getCurrentModelId();
+    if (!currentModel.ok) throw currentModel.error;
+    assert.equal(currentModel.value, saved.id);
 
-    const res = await handleProvidersDelete({ providerId: created.id });
+    const res = await Providers.delete({ providerId: created.value.id });
     assert.equal(res.ok, true, res.ok ? "" : res.error.message);
 
+    const currentModelAfter = await rt.state.getCurrentModelId();
+    if (!currentModelAfter.ok) throw currentModelAfter.error;
     assert.equal(
-      await rt.state.getCurrentModelId(),
+      currentModelAfter.value,
       undefined,
       "currentModelId 指向已删模型 = 悬空指针，必须在删除成功后被清掉",
     );
+    const currentProviderAfter = await rt.state.getCurrentProviderId();
+    if (!currentProviderAfter.ok) throw currentProviderAfter.error;
     assert.equal(
-      await rt.state.getCurrentProviderId(),
+      currentProviderAfter.value,
       undefined,
       "currentProviderId 同理必须被清掉",
     );
 
     // 半套防护：模型行本身确实已被级联抹掉（证明用例不是空跑）。
     // ⚠️ 不能用 savedList 验：provider 已被删，savedList 开头 providers.get 会抛 NOT_FOUND。
+    // 四期签名：getSavedById 沿 Result 回传（Ok(null) = 行不存在）。
+    const ghost = await rt.providerModels.getSavedById(saved.id);
+    if (!ghost.ok) throw ghost.error;
     assert.equal(
-      await rt.providerModels.getSavedById(saved.id),
+      ghost.value,
       null,
       "被删服务商的模型行应已级联抹掉",
     );

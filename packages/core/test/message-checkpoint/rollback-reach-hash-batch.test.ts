@@ -1,38 +1,40 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
-import { restorePathToRevision, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
-import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
-import { scopeKey, toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  describe, it  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  MissingRevisions  } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
+import {  RestorePath, type RestorePathPrefetch  } from "../../src/domain/message-checkpoint/logic/restore-path.js";
+import {  RevisionPairKey  } from "../../src/domain/vfs/logic/revision-pair-key.js";
+import {  LogicalPath  } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import type { VfsRestorePort } from "../../src/domain/vfs/ports/vfs-restore.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 describe("rollback reach hash batch", () => {
   it("listDistinctCheckpointPointersForSession：同 path+version 跨 checkpoint 只计一次", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
 
     await svfs.write("/dup.md", "v1", { versionCheck: false });
-    const version = (await svfs.read("/dup.md")).version;
+    const version = unwrap(await svfs.read("/dup.md")).version;
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
-    });
-    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+    }));
+    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a2" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     const all = await repo.listFilePointersForSession(session.id);
     const distinct = await repo.listDistinctCheckpointPointersForSession(session.id);
@@ -44,7 +46,7 @@ describe("rollback reach hash batch", () => {
     assert.ok(typeof distinct[0]!.entryId === "number");
   });
 
-  it("findMissingRevisionPointers：批量 findMetasByEntryVersions，零逐条 exists", async () => {
+  it("MissingRevisions.findPointers：批量 findMetasByEntryVersions，零逐条 exists", async () => {
     const scope = {
       kind: "session" as const,
       projectId: "p1",
@@ -67,7 +69,7 @@ describe("rollback reach hash batch", () => {
         batchCalls++;
         const map = new Map<string, { status: "active"; contentHash: string | null }>();
         for (const pair of pairs) {
-          map.set(revisionPairKey(pair.entryId, pair.version), {
+          map.set(RevisionPairKey.build(pair.entryId, pair.version), {
             status: "active",
             contentHash: null,
           });
@@ -84,7 +86,8 @@ describe("rollback reach hash batch", () => {
       deleteUnreferencedUnderScope: async () => 0,
     };
     const entryRepo: VfsEntryRepository = {
-      findByPath: async () => ({ entryId: 1, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      // 四期后 findByPath 端口返回 Result（Err 通道），mock 需按新端口给 Ok 形态。
+      findByPath: async () => Result.ok({ entryId: 1, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
       findContentHash: async () => null,
       findContentHashesByPaths: async () => new Map(),
       list: async () => [],
@@ -107,23 +110,21 @@ describe("rollback reach hash batch", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = await findMissingRevisionPointers(
-      revisionRepo,
-      entryRepo,
+    const missing = unwrap(await MissingRevisions.findPointers({ revisionRepo, entryRepo }, {
       scope,
-      new Map([
+      targetTree: new Map([
         ["/a.md", 1],
         ["/b.md", 2],
       ]),
-      ["/a.md", "/b.md"]
-    );
+      pathsToReconcile: ["/a.md", "/b.md"],
+    }));
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
     assert.equal(findCalls, 0);
   });
 
-  it("restorePathToRevision：prefetch 命中时零逐条 findMeta / findContentHash", async () => {
+  it("RestorePath.restoreToRevision：prefetch 命中时零逐条 findMeta / findContentHash", async () => {
     let findMetaCalls = 0;
     let findFullCalls = 0;
     let findHashCalls = 0;
@@ -132,7 +133,7 @@ describe("rollback reach hash batch", () => {
       projectId: "p1",
       sessionId: "s1",
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const entryId = 1;
     const revisionRepo: VfsRevisionRepository = {
       findByEntryAndVersion: async () => {
@@ -169,11 +170,11 @@ describe("rollback reach hash batch", () => {
     };
     const prefetch: RestorePathPrefetch = {
       entryIdByPath: new Map([["/hash-same.md", entryId]]),
-      revisionMetaByKey: new Map([[revisionPairKey(entryId, 1), { status: "active", contentHash: "same-hash" }]]),
+      revisionMetaByKey: new Map([[RevisionPairKey.build(entryId, 1), { status: "active", contentHash: "same-hash" }]]),
       liveHashByPath: new Map([["/hash-same.md", "same-hash"]]),
     };
 
-    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/hash-same.md", 1, new Map([["/hash-same.md", 3]]), entryRepo, prefetch);
+    const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath: new Map([["/hash-same.md", 3]]), prefetch });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -185,8 +186,8 @@ describe("rollback reach hash batch", () => {
 
   it("deleteExceptReachable：批量删除不可达 revision 行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
@@ -195,16 +196,16 @@ describe("rollback reach hash batch", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     await svfs.write("/batch-del.md", "keep", { versionCheck: false });
     await svfs.write("/batch-del.md", "drop-me", { versionCheck: false });
     await svfs.write("/batch-del.md", "live", { versionCheck: false });
 
-    const entry = await entries.findByPath(sk, "/batch-del.md");
+    const entry = unwrap(await entries.findByPath(sk, "/batch-del.md"));
     assert.ok(entry != null);
-    const liveVersion = (await svfs.read("/batch-del.md")).version;
-    const reachable = new Set([revisionPairKey(entry.entryId, liveVersion)]);
+    const liveVersion = unwrap(await svfs.read("/batch-del.md")).version;
+    const reachable = new Set([RevisionPairKey.build(entry.entryId, liveVersion)]);
 
     const deleted = await revisions.deleteExceptReachable(sk, "/", reachable);
     const keys = await revisions.listKeysUnderScope(sk, "/");
@@ -212,6 +213,6 @@ describe("rollback reach hash batch", () => {
 
     assert.equal(deleted, 2);
     assert.deepEqual(versions, [liveVersion]);
-    assert.equal((await svfs.read("/batch-del.md")).content, "live");
+    assert.equal(unwrap(await svfs.read("/batch-del.md")).content, "live");
   });
 });

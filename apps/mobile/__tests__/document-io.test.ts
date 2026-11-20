@@ -38,14 +38,7 @@ jest.mock('react-native-blob-util', () => ({
   },
 }));
 
-import {
-  exportBytesViaDocumentPicker,
-  knownTypesForExtension,
-  pickAndReadBytes,
-  pickAndReadFileWithMeta,
-  pickAndReadText,
-  pickToLocalPath,
-} from '@/services/document-io';
+import {DocumentIo} from '@/services/document-io'
 
 describe('document-io', () => {
   beforeEach(() => {
@@ -67,7 +60,7 @@ describe('document-io', () => {
 
   describe('exportBytesViaDocumentPicker', () => {
     it('先写临时文件再弹保存 UI，成功后清理临时文件', async () => {
-      const result = await exportBytesViaDocumentPicker({
+      const result = await DocumentIo.exportBytes({
         fileName: 'a.zip',
         mimeType: 'application/zip',
         write: async tmpPath => {
@@ -89,7 +82,7 @@ describe('document-io', () => {
     it('用户取消返回 cancelled 且临时文件仍被 unlink（无残留）', async () => {
       mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
 
-      const result = await exportBytesViaDocumentPicker({
+      const result = await DocumentIo.exportBytes({
         fileName: 'a.zip',
         mimeType: 'application/zip',
         write: async () => undefined,
@@ -103,7 +96,7 @@ describe('document-io', () => {
       mockSaveDocuments.mockResolvedValue([{error: 'disk full'}]);
 
       await expect(
-        exportBytesViaDocumentPicker({
+        DocumentIo.exportBytes({
           fileName: 'a.zip',
           mimeType: 'application/zip',
           write: async () => undefined,
@@ -113,7 +106,7 @@ describe('document-io', () => {
     });
 
     it('copy 选项透传（备份在 Android 传 false）', async () => {
-      await exportBytesViaDocumentPicker({
+      await DocumentIo.exportBytes({
         fileName: 'b.nmbackup',
         mimeType: 'application/octet-stream',
         copy: false,
@@ -134,7 +127,7 @@ describe('document-io', () => {
         {status: 'success', localUri: 'file:///cache/%E4%B8%AD%E6%96%87.yaml'},
       ]);
 
-      const picked = await pickToLocalPath({
+      const picked = await DocumentIo.pickToLocalPath({
         mimeTypes: ['text/yaml'],
         fallbackLocalFileName: 'yaml-import.yaml',
       });
@@ -152,7 +145,7 @@ describe('document-io', () => {
         {status: 'success', localUri: 'file:///cache/import.zip'},
       ]);
 
-      await pickToLocalPath({
+      await DocumentIo.pickToLocalPath({
         mimeTypes: ['application/zip'],
         localFileName: 'import.zip',
       });
@@ -167,7 +160,7 @@ describe('document-io', () => {
       mockPick.mockResolvedValue([]);
 
       await expect(
-        pickAndReadBytes({mimeTypes: ['application/zip']}),
+        DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']}),
       ).resolves.toBeNull();
       expect(mockKeepLocalCopy).not.toHaveBeenCalled();
     });
@@ -176,7 +169,7 @@ describe('document-io', () => {
       mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.txt'}]);
 
       await expect(
-        pickToLocalPath({
+        DocumentIo.pickToLocalPath({
           mimeTypes: ['text/plain'],
           assertFileName: () => {
             throw new Error('请选择 .yaml 文件');
@@ -193,7 +186,7 @@ describe('document-io', () => {
       ]);
 
       await expect(
-        pickAndReadBytes({
+        DocumentIo.pickAndReadBytes({
           mimeTypes: ['application/zip'],
           buildCopyError: msg => new Error(`zip copy failed: ${msg}`),
         }),
@@ -207,7 +200,7 @@ describe('document-io', () => {
       ]);
       mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
 
-      const bytes = await pickAndReadBytes({mimeTypes: ['application/zip']});
+      const bytes = await DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']});
 
       expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
       expect(bytes).toEqual(new Uint8Array([0x68, 0x69]));
@@ -221,7 +214,7 @@ describe('document-io', () => {
       mockExists.mockResolvedValue(false);
 
       await expect(
-        pickAndReadBytes({
+        DocumentIo.pickAndReadBytes({
           mimeTypes: ['application/zip'],
           buildMissingError: fsPath => new Error(`missing: ${fsPath}`),
         }),
@@ -236,7 +229,7 @@ describe('document-io', () => {
       mockStat.mockResolvedValue({path: '/cache/a.png', size: 50 * 1024 * 1024});
 
       await expect(
-        pickAndReadBytes({
+        DocumentIo.pickAndReadBytes({
           mimeTypes: ['image/png'],
           maxBytes: 48 * 1024 * 1024,
           buildTooLargeError: size =>
@@ -256,7 +249,7 @@ describe('document-io', () => {
       mockStat.mockRejectedValue(new Error('stat failed'));
       mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
 
-      const bytes = await pickAndReadBytes({
+      const bytes = await DocumentIo.pickAndReadBytes({
         mimeTypes: ['image/png'],
         maxBytes: 48 * 1024 * 1024,
         buildTooLargeError: size => new Error(`too large: ${size}`),
@@ -273,7 +266,7 @@ describe('document-io', () => {
       ]);
       mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
 
-      await pickAndReadBytes({mimeTypes: ['application/zip']});
+      await DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']});
 
       expect(mockStat).not.toHaveBeenCalled();
       expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
@@ -286,7 +279,7 @@ describe('document-io', () => {
       ]);
       mockReadFile.mockResolvedValue('name: a');
 
-      await expect(pickAndReadText({mimeTypes: ['text/yaml']})).resolves.toBe(
+      await expect(DocumentIo.pickAndReadText({mimeTypes: ['text/yaml']})).resolves.toBe(
         'name: a',
       );
       expect(mockReadFile).toHaveBeenCalledWith('/cache/a.yaml', 'utf8');
@@ -309,7 +302,7 @@ describe('document-io', () => {
     it('返回 {bytes, fileName}：落盘用临时名，fileName 取原件名', async () => {
       arrangePick({uri: 'content://x', name: '资料.md'});
 
-      const result = await pickAndReadFileWithMeta({
+      const result = await DocumentIo.pickAndReadFileWithMeta({
         mimeTypes: ['text/plain'],
         localFileName: 'import.bin',
       });
@@ -328,7 +321,7 @@ describe('document-io', () => {
     it('原件名为空时退到 fallbackLocalFileName', async () => {
       arrangePick({uri: 'content://x'});
 
-      const result = await pickAndReadFileWithMeta({
+      const result = await DocumentIo.pickAndReadFileWithMeta({
         mimeTypes: ['text/plain'],
         fallbackLocalFileName: '资料.md',
       });
@@ -339,7 +332,7 @@ describe('document-io', () => {
     it('原件名为空且无兜底时退到 import.bin（保证非空）', async () => {
       arrangePick({uri: 'content://x', name: ''});
 
-      const result = await pickAndReadFileWithMeta({
+      const result = await DocumentIo.pickAndReadFileWithMeta({
         mimeTypes: ['text/plain'],
         localFileName: 'import.bin',
       });
@@ -351,7 +344,7 @@ describe('document-io', () => {
       mockPick.mockResolvedValue([]);
 
       await expect(
-        pickAndReadFileWithMeta({mimeTypes: ['text/plain']}),
+        DocumentIo.pickAndReadFileWithMeta({mimeTypes: ['text/plain']}),
       ).resolves.toBeNull();
       expect(mockKeepLocalCopy).not.toHaveBeenCalled();
       expect(mockReadFile).not.toHaveBeenCalled();
@@ -365,7 +358,7 @@ describe('document-io', () => {
       });
 
       await expect(
-        pickAndReadFileWithMeta({
+        DocumentIo.pickAndReadFileWithMeta({
           mimeTypes: ['application/octet-stream'],
           maxBytes: 32 * 1024 * 1024,
           buildTooLargeError: size => new Error(`too large: ${size}`),
@@ -383,7 +376,7 @@ describe('document-io', () => {
         size: 64 * 1024 * 1024,
       });
 
-      const result = await pickAndReadFileWithMeta({
+      const result = await DocumentIo.pickAndReadFileWithMeta({
         mimeTypes: ['application/octet-stream'],
         maxBytes: 32 * 1024 * 1024,
       });
@@ -397,7 +390,7 @@ describe('document-io', () => {
   describe('knownTypesForExtension', () => {
     it('返回 isKnownType 的 MIME', () => {
       mockIsKnownType.mockReturnValue({mimeType: 'image/png'});
-      expect(knownTypesForExtension('png')).toEqual(['image/png']);
+      expect(DocumentIo.knownTypesForExtension('png')).toEqual(['image/png']);
     });
 
     it('mimeType 缺失或抛错时返回空数组', () => {
@@ -405,8 +398,8 @@ describe('document-io', () => {
       mockIsKnownType.mockImplementationOnce(() => {
         throw new Error('unknown');
       });
-      expect(knownTypesForExtension('png')).toEqual([]);
-      expect(knownTypesForExtension('png')).toEqual([]);
+      expect(DocumentIo.knownTypesForExtension('png')).toEqual([]);
+      expect(DocumentIo.knownTypesForExtension('png')).toEqual([]);
     });
   });
 });

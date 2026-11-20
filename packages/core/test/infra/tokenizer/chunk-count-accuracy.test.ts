@@ -12,15 +12,12 @@
  * js-tiktoken，但本护栏正是要拿**真**词表断误差。
  */
 import assert from "node:assert/strict";
-import { performance } from "node:perf_hooks";
-import { beforeEach, describe, it } from "node:test";
-import { Tiktoken } from "js-tiktoken/lite";
+import {  performance  } from "node:perf_hooks";
+import {  beforeEach, describe, it  } from "node:test";
+import {  Tiktoken  } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
-import { splitTextIntoChunks } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
-import {
-  chunkHash16,
-  tokenChunkCache,
-} from "../../../src/infra/tokenizer/logic/token-chunk-cache.js";
+import {  ChunkSplitter  } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
+import {  TokenChunkCache, tokenChunkCache  } from "../../../src/infra/tokenizer/logic/token-chunk-cache.js";
 
 /** ranks 命名空间取默认导出兼容形态（ESM default vs CJS 命名导出）。 */
 function unwrapRanks(mod: unknown): unknown {
@@ -56,14 +53,14 @@ describe("T-TC4 分块计数误差护栏（真 cl100k）", () => {
 
   it("中文叙事长文：分块加和 vs 整串 encode 误差 ≤1%", () => {
     const truth = cl100kEncode(ZH_NARRATIVE);
-    const chunks = splitTextIntoChunks(ZH_NARRATIVE);
+    const chunks = ChunkSplitter.splitText(ZH_NARRATIVE);
     // 夹具自检：确为多块多段（防夹具退化成单块导致护栏失真）
     assert.ok(chunks.length >= 4, `夹具应切出多块，实际 ${chunks.length}`);
     assert.ok(ZH_NARRATIVE.includes("\n"), "夹具应为多段叙事");
 
     // 分块加和走 L2 全 miss 路径（逐块现算 + record）
     const sum = chunks.reduce((acc, chunk) => {
-      const h = chunkHash16(chunk);
+      const h = TokenChunkCache.chunkHash16(chunk);
       const hit = tokenChunkCache.lookup(h, "t-tc4-scope");
       const count = hit ?? cl100kEncode(chunk);
       if (hit === undefined) {
@@ -80,10 +77,10 @@ describe("T-TC4 分块计数误差护栏（真 cl100k）", () => {
   });
 
   it("分块求和的缓存口径：同文本二轮全命中，读数与一轮一致", () => {
-    const chunks = splitTextIntoChunks(ZH_NARRATIVE);
+    const chunks = ChunkSplitter.splitText(ZH_NARRATIVE);
     const sumVia = (): number =>
       chunks.reduce((acc, chunk) => {
-        const h = chunkHash16(chunk);
+        const h = TokenChunkCache.chunkHash16(chunk);
         const hit = tokenChunkCache.lookup(h, "t-tc4-round2");
         const count = hit ?? cl100kEncode(chunk);
         if (hit === undefined) {
@@ -97,7 +94,7 @@ describe("T-TC4 分块计数误差护栏（真 cl100k）", () => {
   });
 
   it("12K 无空白中文串：逐块 encode（块来自 splitTextIntoChunks）总耗时 ≤1s", () => {
-    const chunks = splitTextIntoChunks(NO_WHITESPACE_12K);
+    const chunks = ChunkSplitter.splitText(NO_WHITESPACE_12K);
     // 夹具自检：64 兜底硬切，块数 ≈ ceil(12000/64)
     assert.ok(chunks.length >= Math.ceil(12_000 / 64) - 1);
     for (const chunk of chunks) {

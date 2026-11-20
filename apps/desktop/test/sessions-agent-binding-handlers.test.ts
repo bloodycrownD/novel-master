@@ -7,13 +7,9 @@ import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
 } from "../shared/config-forms/agent.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import {
-  handleSessionsCreate,
-  handleSessionsSetAgentBinding,
-  handleSessionsSetModelOverride,
-} from "../src/main/ipc/handlers/sessions.js";
-import { handlePromptAgentMeta } from "../src/main/ipc/handlers/prompt.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { Prompt } from "../src/main/ipc/handlers/prompt.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -41,15 +37,17 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
 
   it("T-D1：setAgentBinding round-trip 写入 / 同步回 workspace 当前 agent", async () => {
     // 先触发 singleton 初始化（handler 内部调 getDesktopRuntime），再注册 agent + 设 workspace 指针。
-    const project = await handleProjectsCreate({ name: "绑定测试" });
+    const project = await Projects.create({ name: "绑定测试" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
-    const { getDesktopRuntime } = await import(
+    const { DesktopRuntimeSingleton } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-x", {
       name: "Agent X",
@@ -59,7 +57,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     // workspace 当前 agent 指向 agent-x，新建会话时会复制该指针落库。
     await rt.state.setCurrentAgentId("agent-x");
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "s1",
     });
@@ -75,7 +73,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       runtime: { maxSteps: 20 },
       prompts: basePrompts,
     });
-    const bound = await handleSessionsSetAgentBinding({
+    const bound = await Sessions.setAgentBinding({
       sessionId,
       agentId: "agent-y",
     });
@@ -85,7 +83,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     }
 
     // agentId=null → 同步到 workspace 当前 agent（仍是 agent-x）
-    const unbound = await handleSessionsSetAgentBinding({
+    const unbound = await Sessions.setAgentBinding({
       sessionId,
       agentId: null,
     });
@@ -96,15 +94,17 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
   });
 
   it("T-D1：setModelOverride 写 modelId；清除回 undefined", async () => {
-    const project = await handleProjectsCreate({ name: "模型覆盖测试" });
+    const project = await Projects.create({ name: "模型覆盖测试" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
-    const { getDesktopRuntime } = await import(
+    const { DesktopRuntimeSingleton } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-y", {
       name: "Agent Y",
@@ -113,7 +113,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     });
     await rt.state.setCurrentAgentId("agent-y");
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "s2",
     });
@@ -124,7 +124,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     const sessionId = session.data.id;
 
     // 写入模型覆盖（agentId 保持现状）
-    const overridden = await handleSessionsSetModelOverride({
+    const overridden = await Sessions.setModelOverride({
       sessionId,
       modelId: "model-override-1",
     });
@@ -135,7 +135,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     }
 
     // 清除覆盖（agentId 保持）
-    const cleared = await handleSessionsSetModelOverride({
+    const cleared = await Sessions.setModelOverride({
       sessionId,
       modelId: null,
     });
@@ -147,15 +147,17 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
   });
 
   it("T-D2 + T-M1：handlePromptAgentMeta 消费 sessionId，session source 与 modelSource 两档正确", async () => {
-    const project = await handleProjectsCreate({ name: "Meta 两档" });
+    const project = await Projects.create({ name: "Meta 两档" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
-    const { getDesktopRuntime } = await import(
+    const { DesktopRuntimeSingleton } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-plain", {
       name: "普通",
@@ -171,7 +173,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     });
     await rt.state.setCurrentAgentId("agent-plain");
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "meta-s",
     });
@@ -183,9 +185,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     const sessionId = session.data.id;
 
     // ① session + agent 无 pin + 无 modelId → modelSource = session
-    await handleSessionsSetAgentBinding({ sessionId, agentId: "agent-plain" });
+    await Sessions.setAgentBinding({ sessionId, agentId: "agent-plain" });
     await verifyBindingCommitted(sessionId, "agent-plain");
-    const metaPlain = await handlePromptAgentMeta({ projectId, sessionId });
+    const metaPlain = await Prompt.agentMeta({ projectId, sessionId });
     assert.equal(metaPlain.ok, true);
     if (metaPlain.ok) {
       assert.equal(metaPlain.data.source, "session");
@@ -196,12 +198,12 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
 
     // ② session + agent 无 pin + session modelId 覆盖 → modelSource 仍是 session
     //    （agent pin 才会切到 agent-pin；session modelId 不改变来源档位）
-    await handleSessionsSetModelOverride({
+    await Sessions.setModelOverride({
       sessionId,
       modelId: "session-model-x",
     });
     await verifyBindingCommitted(sessionId, "agent-plain");
-    const metaOverride = await handlePromptAgentMeta({ projectId, sessionId });
+    const metaOverride = await Prompt.agentMeta({ projectId, sessionId });
     assert.equal(metaOverride.ok, true);
     if (metaOverride.ok) {
       assert.equal(metaOverride.data.source, "session");
@@ -210,9 +212,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     }
 
     // ③ session + agent 带 pin → modelSource = agent-pin（pin 压制 session 覆盖）
-    await handleSessionsSetAgentBinding({ sessionId, agentId: "agent-pinned" });
+    await Sessions.setAgentBinding({ sessionId, agentId: "agent-pinned" });
     await verifyBindingCommitted(sessionId, "agent-pinned");
-    const metaPinned = await handlePromptAgentMeta({ projectId, sessionId });
+    const metaPinned = await Prompt.agentMeta({ projectId, sessionId });
     assert.equal(metaPinned.ok, true);
     if (metaPinned.ok) {
       assert.equal(metaPinned.data.source, "session");
@@ -223,19 +225,21 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
   });
 
   // au/C-orch-2（cr-fix-spec 条目 9，方向 b）：归一口径与 mobile 对齐——
-  // AgentRunResolveError（agentId 指向已删 agent）→ ok:true + source='none'
+  // agent 解析失败（AGENT_REFERENCED_NOT_FOUND）→ ok:true + source='none'
   // （待重选）；ChatError 等其它异常 → 外层 catch 包 ok:false（报错态，
   // 由 SessionDetailDrawer 的失败 toast 兜底，绝不冒充「已被删除」）。
-  it("T-C2：已删 agent → AgentRunResolveError 归一 source='none' 待重选；其它异常落外层 ok:false", async () => {
-    const project = await handleProjectsCreate({ name: "归一口径" });
+  it("T-C2：已删 agent → AGENT_REFERENCED_NOT_FOUND 归一 source='none' 待重选；其它异常落外层 ok:false", async () => {
+    const project = await Projects.create({ name: "归一口径" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
-    const { getDesktopRuntime } = await import(
+    const { DesktopRuntimeSingleton } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-gone", {
       name: "将被删除",
@@ -244,7 +248,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     });
     await rt.state.setCurrentAgentId("agent-gone");
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "gone-s",
     });
@@ -256,9 +260,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     await verifyBindingCommitted(sessionId, "agent-gone");
 
     // 删除绑定的 agent：registry 取不到 → resolveAgentForProject 抛
-    // AgentRunResolveError → handler 内层 catch 归一为 source='none'。
+    // AGENT_REFERENCED_NOT_FOUND → handler 内层 catch 归一为 source='none'。
     await rt.agentRegistry.delete("agent-gone");
-    const meta = await handlePromptAgentMeta({
+    const meta = await Prompt.agentMeta({
       projectId: project.data.id,
       sessionId,
     });
@@ -269,8 +273,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       assert.equal(meta.data.hasDedicatedModel, false);
     }
 
-    // 源码口径断言：内层 catch 只归一 AgentRunResolveError，其余 rethrow
-    // （ChatError 落外层 catch → ok:false，与 mobile loadChatAgentMeta 对称）。
+    // 源码口径断言：只归一 AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败（→ source='none'），
+    // 其余沿 Result 上行交 toIpcResult 转码成 ok:false（与 mobile loadChatAgentMeta 对称）。
+    // 错误通道迁移后不再有内层 catch / rethrow，判据落在 Result 通道的两条分支上。
     const promptSrc = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -279,12 +284,14 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
         "main",
         "ipc",
         "handlers",
-        "prompt.ts",
+        "prompt.ts"
       ),
-      "utf8",
+      "utf8"
     );
-    assert.match(promptSrc, /if \(error instanceof AgentRunResolveError\)/);
-    assert.match(promptSrc, /throw error;/);
+    assert.match(promptSrc, /if \(AGENT_RUN_RESOLVE_KEYS\.has\(resolved\.error\.key\)\)/);
+    // 非 resolve key 的失败沿 Result.err 上行，由 toIpcResult 转成 ok:false ——
+    // 与旧「其余 rethrow → 外层 catch」同一落点，语义强度不变。
+    assert.match(promptSrc, /return Result\.err\(resolved\.error\);/);
     assert.doesNotMatch(promptSrc, /ChatError/);
   });
 });
@@ -299,12 +306,16 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
  */
 async function verifyBindingCommitted(
   sessionId: string,
-  expectedAgentId: string,
+  expectedAgentId: string
 ): Promise<void> {
-  const { getDesktopRuntime } = await import(
+  const { DesktopRuntimeSingleton } = await import(
     "../src/main/runtime/desktop-runtime-singleton.js"
   );
-  const rt = await getDesktopRuntime();
+  const rtR = await DesktopRuntimeSingleton.get();
+  if (!rtR.ok) throw rtR.error;
+  const rt = rtR.value;
+  // 错误通道迁移二期后 getSessionAgentConfig 走 Result，解包取配置。
   const read = await rt.sessions.getSessionAgentConfig(sessionId);
-  assert.equal(read.agentId, expectedAgentId);
+  if (!read.ok) throw read.error;
+  assert.equal(read.value.agentId, expectedAgentId);
 }

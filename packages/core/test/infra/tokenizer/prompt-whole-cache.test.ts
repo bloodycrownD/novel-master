@@ -8,16 +8,10 @@
  * 只真读一次 L1 行、按 key 与 L2 分别计数、读失败/坏行撤销登记下轮重试）。
  */
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import {  beforeEach, describe, it  } from "node:test";
 import type { SessionKkvService } from "../../../src/service/session-kkv/session-kkv.port.js";
-import {
-  PROMPT_WHOLE_CACHE_KEY,
-  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-  TOKEN_CHUNKS_CACHE_KEY,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  promptWholeCache,
-} from "../../../src/infra/tokenizer/logic/prompt-whole-cache.js";
+import {  PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  promptWholeCache  } from "../../../src/infra/tokenizer/logic/prompt-whole-cache.js";
 
 /** 规格常量（缓存不再导出，测试按规格值本地锁定）。 */
 const PROMPT_WHOLE_CACHE_LRU_PER_SESSION = 32;

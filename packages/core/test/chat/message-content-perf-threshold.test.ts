@@ -16,16 +16,14 @@
  * @module test/chat/message-content-perf-threshold
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  randomUUID  } from "node:crypto";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 novelMasterTestFixture();
@@ -66,9 +64,9 @@ async function timeTail(
 ): Promise<{ count: number; ms: number }> {
   const repo = new SqliteMessageRepository(getNovelMasterTestContext().conn);
   // 预热一次（JIT / SQLite 页缓存），再计时取稳定值。
-  await repo.listBySessionTail(sessionId, ROWS);
+  outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
   const t0 = Date.now();
-  const tail = await repo.listBySessionTail(sessionId, ROWS);
+  const tail = outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
   return { count: tail.length, ms: Date.now() - t0 };
 }
 
@@ -78,13 +76,13 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
     const body = largeTextBody();
 
     // 明文形态库：走生产写路径（batchInsert 直写明文）。
-    const plainProject = await ctx.projects.create(
+    const plainProject = unwrap(await ctx.projects.create(
       `P-${testIsolationSuffix()}`
-    );
-    const plainSession = await ctx.sessions.create(
+    ));
+    const plainSession = unwrap(await ctx.sessions.create(
       plainProject.id,
       `S-${testIsolationSuffix()}`
-    );
+    ));
     const messages: ChatMessageData[] = [];
     for (let i = 1; i <= ROWS; i++) {
       messages.push({
@@ -92,7 +90,7 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
         sessionId: plainSession.id,
         seq: i,
         role: roleAt(i),
-        content: textBlocks(body),
+        content: TextBlocks.of(body),
         provider: null,
         raw: null,
         createdAtMs: Date.now() + i,
@@ -106,7 +104,7 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
 
     // 内容深比对：读回同一份正文，防「护栏量的是一个空/错结果的库」
     // （空 blocks / 内容错位必须红——原护栏同款口径）。
-    const tail = await repo.listBySessionTail(plainSession.id, ROWS);
+    const tail = outcomeValue(await repo.listBySessionTail(plainSession.id, ROWS));
     assert.deepEqual(
       tail.map((message) => message.content),
       messages.map((message) => message.content)

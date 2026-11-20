@@ -5,15 +5,14 @@
  * `listBySessionUpToSeq` 的调用数），不是「服务内部调了哪个方法」——后者在换实现后
  * 立刻失真（RULE「给读路径换实现后观测面必须同步换」）。
  */
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -57,15 +56,15 @@ async function seedSession(
   const ids: string[] = [];
   const seqs: number[] = [];
   for (let i = 0; i < count; i++) {
-    const m = await ctx.messages.append(
+    const m = unwrap(await ctx.messages.append(
       sessionId,
       i % 2 === 0 ? "user" : "assistant",
-      textBlocks(`消息 ${i}`)
-    );
+      TextBlocks.of(`消息 ${i}`)
+    ));
     ids.push(m.id);
     seqs.push(m.seq);
     if (i % 7 === 3) {
-      await ctx.messages.hide(m.id);
+      unwrap(await ctx.messages.hide(m.id));
     }
   }
   return { ids, seqs };
@@ -74,14 +73,14 @@ async function seedSession(
 describe("fork 上界读口（CD-13）", () => {
   it("T-FORK-UB1 锚点前 3 条：零次 listBySession、一次 listBySessionUpToSeq", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-fork-ub1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-fork-ub1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const { ids } = await seedSession(session.id, 100);
 
     const spy = spyReadMouths();
     let forkedId = "";
     try {
-      const forked = await ctx.messages.fork(session.id, ids[2]!);
+      const forked = unwrap(await ctx.messages.fork(session.id, ids[2]!));
       forkedId = forked.id;
     } finally {
       spy.restore();
@@ -89,20 +88,20 @@ describe("fork 上界读口（CD-13）", () => {
 
     assert.equal(spy.listBySession(), 0, "fork 不得触发全量读口");
     assert.equal(spy.listBySessionUpToSeq(), 1, "fork 必须恰好一次上界读口");
-    const forkedMsgs = await ctx.messages.listBySession(forkedId);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forkedId));
     assert.equal(forkedMsgs.length, 3);
   });
 
   it("T-FORK-UB2 上界读口与 listBySession().filter(seq<=N) 逐条等价（hidden 两侧分布）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-fork-ub2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-fork-ub2-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const { ids } = await seedSession(session.id, 40);
 
     const anchorId = ids[20]!;
-    const anchor = await ctx.messages.get(anchorId);
+    const anchor = unwrap(await ctx.messages.get(anchorId));
     const repo = new SqliteMessageRepository(ctx.conn);
-    const all = await repo.listBySession(session.id);
+    const all = outcomeValue(await repo.listBySession(session.id));
     const expected = all.filter((m) => m.seq <= anchor.seq);
     assert.ok(
       expected.filter((m) => m.hidden).length >= 2,
@@ -113,7 +112,7 @@ describe("fork 上界读口（CD-13）", () => {
       "夹具须含锚点两侧的可见行",
     );
 
-    const actual = await repo.listBySessionUpToSeq(session.id, anchor.seq);
+    const actual = outcomeValue(await repo.listBySessionUpToSeq(session.id, anchor.seq));
     assert.deepEqual(actual, expected, "上界读口必须逐条等价");
     // hidden 行逐条保留（若实现误加 `AND hidden = 0`，此处必红）。
     assert.equal(
@@ -121,8 +120,8 @@ describe("fork 上界读口（CD-13）", () => {
       expected.filter((m) => m.hidden).length
     );
 
-    const forked = await ctx.messages.fork(session.id, anchorId);
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forked = unwrap(await ctx.messages.fork(session.id, anchorId));
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, expected.length);
     for (const m of forkedMsgs) {
       const src = expected.find((e) => e.seq === m.seq);
@@ -133,8 +132,8 @@ describe("fork 上界读口（CD-13）", () => {
 
   it("T-FORK-UB3 空集合守卫仍在事务开之前抛出", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-fork-ub3-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-fork-ub3-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const { ids } = await seedSession(session.id, 5);
 
     // 锚点 seq 比库里最小 seq 还小 ⇒ 上界读口返回空集合。
@@ -144,7 +143,7 @@ describe("fork 上界读口（CD-13）", () => {
     const origTx = ctx.conn.transaction;
     let txCalls = 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (proto as any).listBySessionUpToSeq = async () => [];
+    (proto as any).listBySessionUpToSeq = async () => ({ kind: "completed", value: [] });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (ctx.conn as any).transaction = (...args: never[]) => {
       txCalls += 1;
@@ -152,9 +151,12 @@ describe("fork 上界读口（CD-13）", () => {
       return (origTx as any).apply(ctx.conn, args);
     };
     try {
-      await assert.rejects(
+      // 错误通道迁移二期：空集合守卫改走 Result.err（事务外拒绝，文案保留）。
+      await rejectsErr(
         () => ctx.messages.fork(session.id, ids[0]!),
-        /No messages to fork up to the given id/
+        (error: unknown) =>
+          AppErrorOps.is(error, "CHAT_INVALID_ARGUMENT") &&
+          error.message.includes("No messages to fork up to the given id"),
       );
       assert.equal(txCalls, 0, "空集合守卫必须发生在开事务之前");
     } finally {
@@ -166,25 +168,25 @@ describe("fork 上界读口（CD-13）", () => {
 
   it("T-FORK-UB4 上界闭区间：锚点是最后一条 ⇒ fork 出全部消息", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-fork-ub4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-fork-ub4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const { ids } = await seedSession(session.id, 12);
-    const forked = await ctx.messages.fork(session.id, ids[11]!);
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forked = unwrap(await ctx.messages.fork(session.id, ids[11]!));
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, 12);
   });
 
   it("T-FORK-UB5 100 条夹具下让步点 ≥1（证明走 mapRows 分片而非 rows.map 直通）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-fork-ub5-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-fork-ub5-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     await seedSession(session.id, 120);
 
     let yieldCount = 0;
     const repo = new SqliteMessageRepository(ctx.conn, async () => {
       yieldCount += 1;
     });
-    const rows = await repo.listBySessionUpToSeq(session.id, 1000);
+    const rows = outcomeValue(await repo.listBySessionUpToSeq(session.id, 1000));
     assert.equal(rows.length, 120);
     // 120 行 = 3 片（每片 ≤50）⇒ 2 个片间让步点。
     assert.equal(yieldCount, 2, "必须走 mapRows 的分片让步分支");

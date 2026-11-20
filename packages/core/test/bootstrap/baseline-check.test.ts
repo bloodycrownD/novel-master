@@ -1,30 +1,17 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { open, type TdbcConnection } from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import {
-  BASELINE_MIGRATION_IDS,
-  bootstrapNovelMaster,
-  assertMinimumBaseline,
-} from "../../src/bootstrap/novel-master-bootstrap.js";
-import { userMessageOf } from "../../src/i18n/error-message.js";
-import { tCore } from "../helpers/core-i18n.js";
-import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
-import {
-  execLegacyChatProjectWithAgentConfig,
-  execLegacySavedModelTable,
-  execLegacyV107ChatDdl,
-  execLegacyVfsEntryTable,
-  execLegacyWorktreeRuleTables,
-} from "./helpers/legacy-db-fixtures.js";
+import {  describe, it  } from "node:test";
+import {  TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BASELINE_MIGRATION_IDS, NovelMasterBootstrap  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  ErrorMessage  } from "../../src/i18n/error-message.js";
+import {  tCore  } from "../helpers/core-i18n.js";
+import {  SchemaMigrationsTable  } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
+import {  execLegacyChatProjectWithAgentConfig, execLegacySavedModelTable, execLegacyV107ChatDdl, execLegacyVfsEntryTable, execLegacyWorktreeRuleTables  } from "./helpers/legacy-db-fixtures.js";
 
 /** 打开一个内存库连接。 */
 async function openMemoryConn(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
-  return open("tdbc:sqlite:file::memory:", {
+  BetterSqlite3Register.register();
+  return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -32,7 +19,7 @@ async function openMemoryConn(): Promise<TdbcConnection> {
 
 /** 迁移后断言形态：错误经 userMessageOf 解析出 `error.infra.baseline_too_old`（文案在 core catalog）。 */
 function isBaselineTooOld(err: unknown): boolean {
-  const descriptor = userMessageOf(err);
+  const descriptor = ErrorMessage.userOf(err);
   return descriptor != null && descriptor.key === "error.infra.baseline_too_old";
 }
 
@@ -43,22 +30,19 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await execLegacySavedModelTable(conn);
 
     // schema_migrations 表里一条 baseline id 都没有登记。
-    await ensureSchemaMigrationsTable(conn);
-    await assert.rejects(
-      assertMinimumBaseline(conn),
-      (err: unknown) => {
-        const descriptor = userMessageOf(err);
-        assert.ok(descriptor != null && descriptor.key === "error.infra.baseline_too_old", "应解析出 baseline_too_old key");
-        // 牙齿：key 经 catalog 渲染出带最低版本参数的中文提示（不写死版本号，抬基线不用改这里）。
-        assert.match(
-          tCore(descriptor),
-          /^检测到当前数据库低于本版本最低支持版本（v[\d.]+）/,
-          "catalog 渲染应含最低支持版本参数",
-        );
-        return true;
-      },
-      "legacy 形态 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
-    );
+    await SchemaMigrationsTable.ensure(conn);
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(!baseline.ok, "legacy 形态 + 缺 baseline 登记，应返回 v1.4.27 升级提示（Result.err）");
+    {
+      const descriptor = ErrorMessage.userOf(baseline.error);
+      assert.ok(descriptor != null && descriptor.key === "error.infra.baseline_too_old", "应解析出 baseline_too_old key");
+      // 牙齿：key 经 catalog 渲染出带最低版本参数的中文提示（不写死版本号，抬基线不用改这里）。
+      assert.match(
+        tCore(descriptor),
+        /^检测到当前数据库低于本版本最低支持版本（v[\d.]+）/,
+        "catalog 渲染应含最低支持版本参数",
+      );
+    }
   });
 
   it("T-BL1（worktree 形态）：缺旧 migration id + worktree_* 表 → fail-fast", async () => {
@@ -66,12 +50,9 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     // 仅建 worktree_* 而不建 legacy llm_saved_model，覆盖另一个探测分支。
     await execLegacyWorktreeRuleTables(conn);
 
-    await ensureSchemaMigrationsTable(conn);
-    await assert.rejects(
-      assertMinimumBaseline(conn),
-      (err: unknown) => isBaselineTooOld(err),
-      "worktree_* 残留 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
-    );
+    await SchemaMigrationsTable.ensure(conn);
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(!baseline.ok && isBaselineTooOld(baseline.error), "worktree_* 残留 + 缺 baseline 登记，应返回 v1.4.27 升级提示（Result.err）");
   });
 
   it("T-BL1（vfs_entry 旧主键形态）：path 作 pk + 缺 baseline 登记 → fail-fast", async () => {
@@ -79,12 +60,9 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     // vfs-entry-id-redesign-v1 之前的形态：主键是 path，无 entry_id 主键。
     await execLegacyVfsEntryTable(conn);
 
-    await ensureSchemaMigrationsTable(conn);
-    await assert.rejects(
-      assertMinimumBaseline(conn),
-      (err: unknown) => isBaselineTooOld(err),
-      "vfs_entry 旧主键形态 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
-    );
+    await SchemaMigrationsTable.ensure(conn);
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(!baseline.ok && isBaselineTooOld(baseline.error), "vfs_entry 旧主键形态 + 缺 baseline 登记，应返回 v1.4.27 升级提示（Result.err）");
   });
 
   it("T-BL1（chat_session 缺 agent_config_json）：缺 baseline 登记 → fail-fast", async () => {
@@ -92,12 +70,9 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     // session-agent-config-v2 之前的形态：chat_session 无 agent_config_json 列。
     await execLegacyV107ChatDdl(conn);
 
-    await ensureSchemaMigrationsTable(conn);
-    await assert.rejects(
-      assertMinimumBaseline(conn),
-      (err: unknown) => isBaselineTooOld(err),
-      "chat_session 缺 agent_config_json + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
-    );
+    await SchemaMigrationsTable.ensure(conn);
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(!baseline.ok && isBaselineTooOld(baseline.error), "chat_session 缺 agent_config_json + 缺 baseline 登记，应返回 v1.4.27 升级提示（Result.err）");
   });
 
   it("T-BL1（chat_project 配置残留）：agent_config_json 非 NULL + 缺 baseline 登记 → fail-fast", async () => {
@@ -105,19 +80,16 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     // project-agent-config-cleanup-v1 之前的形态：列里残留非 NULL 配置。
     await execLegacyChatProjectWithAgentConfig(conn);
 
-    await ensureSchemaMigrationsTable(conn);
-    await assert.rejects(
-      assertMinimumBaseline(conn),
-      (err: unknown) => isBaselineTooOld(err),
-      "chat_project 配置残留 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
-    );
+    await SchemaMigrationsTable.ensure(conn);
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(!baseline.ok && isBaselineTooOld(baseline.error), "chat_project 配置残留 + 缺 baseline 登记，应返回 v1.4.27 升级提示（Result.err）");
   });
 
   it("T-BL2：schema_migrations 含旧 id → 不触发 fail-fast", async () => {
     // 已 apply 用户：表里有至少一条 baseline id。
     const conn = await openMemoryConn();
     await execLegacySavedModelTable(conn);
-    await ensureSchemaMigrationsTable(conn);
+    await SchemaMigrationsTable.ensure(conn);
 
     const sentinelId = BASELINE_MIGRATION_IDS[0]!;
     await conn.execute(
@@ -125,17 +97,17 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
       [sentinelId, Date.now()]
     );
 
-    // 不应抛错。
-    await assertMinimumBaseline(conn);
-    assert.ok(true, "已登记 baseline id 时不触发 fail-fast");
+    // 已登记 baseline id：应返回 ok（不触发 fail-fast）。
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(baseline.ok, "已登记 baseline id 时不触发 fail-fast");
   });
 
   it("T-BL2（空库）：全新数据库无 legacy 形态 → 不触发 fail-fast", async () => {
     // 新装路径：没有任何实体表，也没有登记任何 migration，但也没有 legacy 表征。
     const conn = await openMemoryConn();
-    await ensureSchemaMigrationsTable(conn);
-    await assertMinimumBaseline(conn);
-    assert.ok(true, "全新空库不触发 fail-fast");
+    await SchemaMigrationsTable.ensure(conn);
+    const baseline = await NovelMasterBootstrap.assertMinimumBaseline(conn);
+    assert.ok(baseline.ok, "全新空库不触发 fail-fast");
   });
 
   it("bootstrapNovelMaster 在 legacy 形态下整体 fail-fast（端到端）", async () => {
@@ -143,7 +115,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await execLegacySavedModelTable(conn);
 
     await assert.rejects(
-      bootstrapNovelMaster(conn),
+      NovelMasterBootstrap.bootstrap(conn),
       (err: unknown) => isBaselineTooOld(err),
       "bootstrapNovelMaster 应在 migration runner 之前 fail-fast"
     );

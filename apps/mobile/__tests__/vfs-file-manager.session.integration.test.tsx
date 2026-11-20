@@ -40,26 +40,28 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 }));
 
 /**
- * toastMessage 的真形态是「标题：错误详情」。这里保留标题前缀（真实实现见
- * src/errors/toast-message.ts），失败链才能断言到「导入失败」这类标题文案。
+ * toastMessage 用真实现：错误文案已迁 messageKey/catalog（VfsSingleFileError
+ * 退役后 err.message 是英文 desc），`err.message` 直拼的假实现会和生产的
+ * formatError 渲染分叉。
  */
-jest.mock('../src/errors/toast-message', () => ({
-  toastMessage: (title: string, err: unknown) =>
-    err instanceof Error ? `${title}：${err.message}` : title,
-}));
+jest.mock('../src/errors/toast-message', () =>
+  jest.requireActual('../src/errors/toast-message'),
+);
 
-jest.mock('../src/services/vfs-operations.service', () => ({
+jest.mock('../src/services/vfs-operations.service', () => {
+  const legacy = {
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
-  remapPathUnderDir: jest.fn(),
   renameVfsDirectory: jest.fn(),
   renameVfsFile: jest.fn(),
   sessionCreateVfsDirectory: jest.fn(),
   sessionCreateVfsFile: jest.fn(),
   sessionRenameVfsDirectory: jest.fn(),
   sessionRenameVfsFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
+});
 
 jest.mock('../src/services/workplace-operations.service', () => {
   const actual = jest.requireActual(
@@ -67,10 +69,13 @@ jest.mock('../src/services/workplace-operations.service', () => {
   ) as typeof import('../src/services/workplace-operations.service');
   return {
     ...actual,
-    batchSetDirRulesEnabled: jest.fn(),
-    cycleFileInclusion: jest.fn(),
-    migrateWorkplaceDirRename: jest.fn(),
-    toggleDirRuleEnabled: jest.fn(),
+    WorkplaceOperationsService: {
+      ...actual.WorkplaceOperationsService,
+      batchSetDirRulesEnabled: jest.fn(),
+      cycleFileInclusion: jest.fn(),
+      migrateDirRename: jest.fn(),
+      toggleDirRuleEnabled: jest.fn(),
+    },
   };
 });
 
@@ -142,29 +147,35 @@ jest.mock('../src/components/prompt/TemplatePullButton', () => ({
   TemplatePullButton: () => null,
 }));
 
-jest.mock('../src/services/vfs-zip.service', () => ({
+jest.mock('../src/services/vfs-zip.service', () => {
+  const legacy = {
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
-}));
+};
+  return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
+});
 
-jest.mock('../src/services/vfs-character-card.service', () => ({
+jest.mock('../src/services/vfs-character-card.service', () => {
+  const legacy = {
   importCharacterCard: jest.fn(),
-}));
+};
+  return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
+});
 
 // Step 5 起组件直接 import 单文件服务（导入走 picker / 系统 UI，测试里一律 mock）。
-jest.mock('../src/services/vfs-single-file.service', () => ({
+jest.mock('../src/services/vfs-single-file.service', () => {
+  const legacy = {
   exportVfsSingleFile: jest.fn(),
   importVfsSingleFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsSingleFileService: {exportFile: legacy.exportVfsSingleFile, importFile: legacy.importVfsSingleFile}};
+});
 
-import {cycleFileInclusion} from '../src/services/workplace-operations.service';
-import {importCharacterCard} from '../src/services/vfs-character-card.service';
-import {exportVfsZip, importVfsZip} from '../src/services/vfs-zip.service';
-import {
-  exportVfsSingleFile,
-  importVfsSingleFile,
-} from '../src/services/vfs-single-file.service';
-import {VfsSingleFileError} from '../src/errors/vfs-single-file-error';
+import {WorkplaceOperationsService} from '../src/services/workplace-operations.service'
+import {VfsCharacterCardService} from '../src/services/vfs-character-card.service'
+import {VfsZipService} from '../src/services/vfs-zip.service'
+import {VfsSingleFileService} from '../src/services/vfs-single-file.service'
+import {AppError} from '@novel-master/core/errors';
 
 const {VfsFileManager} =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
@@ -183,17 +194,21 @@ const fixedListRows = [
   },
 ];
 
-const buildListRows = jest.fn(async () => fixedListRows);
+const buildListRows = jest.fn(async () => ({
+  ok: true as const,
+  value: fixedListRows,
+}));
 // reload 现以 vfs.list() 为权威源（worktree 仅作元数据补丁）：
 // 不在 vfs.list 结果里的路径会被当孤儿残留过滤掉，因此 list 需返回
 // /note.md 的 VFS 条目，行才会渲染出行菜单按钮。
 // 显式标注返回类型：菜单收敛用例需要 mock 出目录行。
 type ListEntry = {path: string; kind: 'file' | 'directory'};
-const list = jest.fn(
-  async (): Promise<ListEntry[]> => [{path: '/note.md', kind: 'file'}],
-);
-const getDirRule = jest.fn(async () => null);
-const setDirRule = jest.fn(async () => undefined);
+const list = jest.fn(async (): Promise<{ok: true; value: ListEntry[]}> => ({
+  ok: true,
+  value: [{path: '/note.md', kind: 'file'}],
+}));
+const getDirRule = jest.fn(async () => ({ok: true as const, value: null}));
+const setDirRule = jest.fn(async () => ({ok: true as const, value: undefined}));
 
 const mockRuntime = {
   workplace: jest.fn(),
@@ -264,14 +279,14 @@ function renderSessionVfmWithoutWorkplace() {
 
 /** 复位被 mock 的服务：每次用例自己决定返回值。 */
 function resetMenuServiceMocks() {
-  mockFn(importVfsZip).mockReset();
-  mockFn(exportVfsZip).mockReset();
-  mockFn(exportVfsZip).mockResolvedValue('saved');
-  mockFn(importCharacterCard).mockReset();
-  mockFn(importCharacterCard).mockResolvedValue(undefined);
-  mockFn(importVfsSingleFile).mockReset();
-  mockFn(exportVfsSingleFile).mockReset();
-  mockFn(exportVfsSingleFile).mockResolvedValue('saved');
+  mockFn(VfsZipService.importZip).mockReset();
+  mockFn(VfsZipService.exportZip).mockReset();
+  mockFn(VfsZipService.exportZip).mockResolvedValue({ok: true, value: 'saved'});
+  mockFn(VfsCharacterCardService.import).mockReset();
+  mockFn(VfsCharacterCardService.import).mockResolvedValue(undefined);
+  mockFn(VfsSingleFileService.importFile).mockReset();
+  mockFn(VfsSingleFileService.exportFile).mockReset();
+  mockFn(VfsSingleFileService.exportFile).mockResolvedValue({ok: true, value: 'saved'});
 }
 
 describe('VfsFileManager session list (no BlockStore capture)', () => {
@@ -290,11 +305,14 @@ describe('VfsFileManager session list (no BlockStore capture)', () => {
     capturedMoreMenu = undefined;
     capturedImportSheet = undefined;
     capturedDismissOverlays = undefined;
-    (cycleFileInclusion as jest.Mock).mockReset();
-    (cycleFileInclusion as jest.Mock).mockResolvedValue('show');
-    buildListRows.mockResolvedValue(fixedListRows);
+    (WorkplaceOperationsService.cycleFileInclusion as jest.Mock).mockReset();
+    (WorkplaceOperationsService.cycleFileInclusion as jest.Mock).mockResolvedValue('show');
+    buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
     // 复位各用例可能改过的 list 返回值（默认只有 /note.md 文件行）。
-    list.mockResolvedValue([{path: '/note.md', kind: 'file'}]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [{path: '/note.md', kind: 'file'} as ListEntry],
+    });
     resetMenuServiceMocks();
   });
 
@@ -385,7 +403,7 @@ describe('VfsFileManager session list (no BlockStore capture)', () => {
       await flushPromises();
     });
 
-    expect(cycleFileInclusion).toHaveBeenCalled();
+    expect(WorkplaceOperationsService.cycleFileInclusion).toHaveBeenCalled();
   });
 });
 
@@ -404,8 +422,11 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     capturedMoreMenu = undefined;
     capturedImportSheet = undefined;
     capturedDismissOverlays = undefined;
-    list.mockResolvedValue([{path: '/note.md', kind: 'file'}]);
-    buildListRows.mockResolvedValue(fixedListRows);
+    list.mockResolvedValue({
+      ok: true,
+      value: [{path: '/note.md', kind: 'file'} as ListEntry],
+    });
+    buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
     resetMenuServiceMocks();
   });
 
@@ -452,10 +473,13 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
   }
 
   it('T-MM1：dir 行菜单与 more 菜单都是「导入」「导出」，旧三项已退役', async () => {
-    list.mockResolvedValue([
-      {path: '/sub', kind: 'directory'},
-      {path: '/note.md', kind: 'file'},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/sub', kind: 'directory'} as ListEntry,
+        {path: '/note.md', kind: 'file'} as ListEntry,
+      ],
+    });
     await renderAndSettle(renderSessionVfm());
 
     await openRowMenu('sub');
@@ -516,21 +540,24 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
       await flushPromises();
     });
 
-    expect(exportVfsSingleFile).toHaveBeenCalledWith(
+    expect(VfsSingleFileService.exportFile).toHaveBeenCalledWith(
       mockRuntime,
       expect.anything(),
       '/note.md',
     );
-    expect(exportVfsZip).not.toHaveBeenCalled();
+    expect(VfsZipService.exportZip).not.toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledWith('文件已保存到所选位置');
   });
 
   it('T-MM2：dir 行「导出」走 ZIP 导出服务（directoryPath=目录路径）', async () => {
     // 目录行才有 /sub 可导出：list 须先 mock 出该目录行（同 T-MM1）。
-    list.mockResolvedValue([
-      {path: '/sub', kind: 'directory'},
-      {path: '/note.md', kind: 'file'},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/sub', kind: 'directory'} as ListEntry,
+        {path: '/note.md', kind: 'file'} as ListEntry,
+      ],
+    });
     await renderAndSettle(renderSessionVfm());
     await openRowMenu('sub');
 
@@ -539,10 +566,10 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
       await flushPromises();
     });
 
-    expect(exportVfsZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
+    expect(VfsZipService.exportZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
       directoryPath: '/sub',
     });
-    expect(exportVfsSingleFile).not.toHaveBeenCalled();
+    expect(VfsSingleFileService.exportFile).not.toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledWith('ZIP 已保存到所选位置');
   });
 
@@ -586,7 +613,7 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     await act(async () => {
       await flushPromises();
     });
-    expect(importVfsZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
+    expect(VfsZipService.importZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
       confirmed: true,
       directoryPath: '/',
     });
@@ -607,7 +634,7 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     await act(async () => {
       await flushPromises();
     });
-    expect(importCharacterCard).toHaveBeenCalledWith(
+    expect(VfsCharacterCardService.import).toHaveBeenCalledWith(
       mockRuntime,
       expect.anything(),
       {confirmed: true, directoryPath: '/'},
@@ -617,21 +644,30 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
   it('T-MM4：dir 行「导入」→ sheet 选 file 走单文件导入；同名冲突先确认再落库', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const confirmMock = jest.fn(async () => ({
-      status: 'applied' as const,
-      report: {},
-      skippedBinary: ['/blob.png'],
+      ok: true as const,
+      value: {
+        status: 'applied' as const,
+        report: {},
+        skippedBinary: ['/blob.png'],
+      },
     }));
-    mockFn(importVfsSingleFile).mockResolvedValue({
-      status: 'needs-confirm',
-      conflictCount: 2,
-      fileName: 'note.md',
-      confirm: confirmMock,
+    mockFn(VfsSingleFileService.importFile).mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'needs-confirm',
+        conflictCount: 2,
+        fileName: 'note.md',
+        confirm: confirmMock,
+      },
     });
     // 目录行才有「导入」入口（file 行菜单不含 import），须先 mock 出 /sub 目录行。
-    list.mockResolvedValue([
-      {path: '/sub', kind: 'directory'},
-      {path: '/note.md', kind: 'file'},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/sub', kind: 'directory'} as ListEntry,
+        {path: '/note.md', kind: 'file'} as ListEntry,
+      ],
+    });
 
     await renderAndSettle(renderSessionVfm());
     await openRowMenu('sub');
@@ -646,7 +682,7 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     });
 
     // targetDir 是目录路径（行菜单来源 = menuPath），不是文件路径。
-    expect(importVfsSingleFile).toHaveBeenCalledWith(
+    expect(VfsSingleFileService.importFile).toHaveBeenCalledWith(
       mockRuntime,
       expect.anything(),
       {targetDir: '/sub'},
@@ -674,7 +710,10 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
 
   it('T-MM4：单文件导入 picker 取消静默（无 Alert 无 toast）', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockFn(importVfsSingleFile).mockResolvedValue({status: 'cancelled'});
+    mockFn(VfsSingleFileService.importFile).mockResolvedValue({
+      ok: true,
+      value: {status: 'cancelled'},
+    });
 
     await renderAndSettle(renderSessionVfm());
     await openMoreMenu();
@@ -693,11 +732,13 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
 
   it('T-MM4：单文件导入超限被拒（服务抛错）→ toast 含「导入失败」与超限详情', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockFn(importVfsSingleFile).mockRejectedValue(
-      new VfsSingleFileError(
-        '文件过大：34000000 字节，超过导入上限 33554432 字节（约 32MB），已拒绝导入',
-      ),
-    );
+    mockFn(VfsSingleFileService.importFile).mockResolvedValue({
+      ok: false,
+      error: new AppError('VFS_SINGLE_FILE_TOO_LARGE', {
+        sizeBytes: 34000000,
+        maxBytes: 33554432,
+      }),
+    });
 
     await renderAndSettle(renderSessionVfm());
     await openMoreMenu();

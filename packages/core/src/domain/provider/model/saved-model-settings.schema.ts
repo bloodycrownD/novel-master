@@ -5,9 +5,9 @@
  */
 
 import { z } from "zod";
-import { isValidTokenCounterModePref, parseTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
+import { TokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import { modelSamplingParamsSchema } from "./model-sampling-params.schema.js";
-import { migrateLegacyThinkingShape } from "./saved-model-preprocess.js";
+import { SavedModelPreprocess } from "./saved-model-preprocess.js";
 import type { SavedModelSettings } from "./saved-model-settings.js";
 
 const savedModelSamplingSettingsSchema = z.object({ enabled: z.boolean(), params: modelSamplingParamsSchema.optional() }).strict();
@@ -21,11 +21,11 @@ export const thinkingLevelSchema = z.enum(["off", "low", "medium", "high"]);
  */
 const savedModelGenerationObjectSchema = z.object({ sampling: savedModelSamplingSettingsSchema, thinkingLevel: thinkingLevelSchema.default("off") }).strict();
 
-const savedModelGenerationSettingsSchema = z.preprocess(migrateLegacyThinkingShape, savedModelGenerationObjectSchema);
+const savedModelGenerationSettingsSchema = z.preprocess(SavedModelPreprocess.migrateLegacyThinkingShape, savedModelGenerationObjectSchema);
 
-const tokenCounterModeBaseSchema = z.string().default("auto").refine(isValidTokenCounterModePref, { message: "Invalid tokenCounterMode" });
+const tokenCounterModeBaseSchema = z.string().default("auto").refine(TokenCounterModePref.isValid, { message: "Invalid tokenCounterMode" });
 
-const tokenCounterModeSchema = tokenCounterModeBaseSchema.transform((raw) => parseTokenCounterModePref(raw));
+const tokenCounterModeSchema = tokenCounterModeBaseSchema.transform((raw) => TokenCounterModePref.parse(raw));
 
 const savedModelInternalSettingsSchema = z.object({ contextWindowTokens: z.number().int().positive(), tokenCounterMode: tokenCounterModeSchema }).strict();
 

@@ -7,7 +7,7 @@
  * @module domain/chat/i18n/keys
  */
 
-import type { MessageDescriptor, MessageLike } from "@/common/i18n.js";
+import type { MessageDescriptor } from "@/common/i18n.js";
 
 export const CHAT_MESSAGE_KEYS = [
   "chat.rollback.confirm.primary.undo_send",
@@ -23,4 +23,3 @@ export const CHAT_MESSAGE_KEYS = [
 
 export type ChatMessageKey = (typeof CHAT_MESSAGE_KEYS)[number];
 export type ChatMessageDescriptor = MessageDescriptor<ChatMessageKey>;
-export type ChatMessageLike = MessageLike<ChatMessageKey>;

@@ -5,17 +5,7 @@
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {
-  MERMAID_VIEWER_DOUBLE_TAP_SCALE,
-  MERMAID_VIEWER_MAX_SCALE,
-  MERMAID_VIEWER_MIN_SCALE,
-  clampMermaidViewerPan,
-  clampMermaidViewerScale,
-  computeBakedSvgSize,
-  computeMermaidViewerPinch,
-  rebasePanAfterBake,
-  resolveMermaidViewerDoubleTap,
-} from '../src/web/shared/mermaid-fullscreen/mermaid-viewer-gestures';
+import {MERMAID_VIEWER_DOUBLE_TAP_SCALE, MERMAID_VIEWER_MAX_SCALE, MERMAID_VIEWER_MIN_SCALE, MermaidViewerGestures} from '../src/web/shared/mermaid-fullscreen/mermaid-viewer-gestures';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 const webSrc = (rel: string) =>
@@ -40,12 +30,12 @@ describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
     expect(runtime).toContain("classList.add('mermaid-viewer-open')");
   });
 
-  it('attach 幂等守卫 + open 前成对校验 _renderView/_post（防叠加监听/白屏开门）', () => {
+  it('attach 幂等守卫 + open 前成对校验 viewerSlot/_post（防叠加监听/白屏开门）', () => {
     const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
     // 重复 attach 只更新 post，不叠加 document 监听器
     expect(runtime).toMatch(/if \(_delegationAttached\)/);
     // 开门前成对校验：渲染器缺失白屏、post 缺失无法通知 RN 关闭
-    expect(runtime).toMatch(/if \(!_renderView \|\| !_post\)/);
+    expect(runtime).toMatch(/if \(!viewerSlot\.has\(\) \|\| !_post\)/);
   });
 
   it('样式常量：主题变量 + z-index 对齐 menu 量级 + 禁滚动', () => {
@@ -77,15 +67,15 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
     // （合成包 main.ts 只调 `createTranscriptRuntime`，不再直接出现这两个名字——
     // 照旧形态断言字面量会变成永远为真的空断言）。
     const richMain = webSrc('rich-document/webview/main.ts');
-    expect(richMain).toContain('mountMermaidViewerPortal');
-    expect(richMain).toContain('attachMermaidViewerDelegation');
+    expect(richMain).toContain('MermaidFullscreen.mountPortal(');
+    expect(richMain).toContain('MermaidFullscreen.attachDelegation(');
     const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
-    expect(factory).toContain('mountMermaidViewerPortal(');
-    expect(factory).toContain('attachMermaidViewerDelegation(');
+    expect(factory).toContain('MermaidFullscreen.mountPortal(');
+    expect(factory).toContain('MermaidFullscreen.attachDelegation(');
 
-    // 挂接块单源：mountMermaidViewerPortal 内含 Overlay 渲染与卸载
+    // 挂接块单源：MermaidFullscreen.mountPortal 内含 Overlay 渲染与卸载
     const mount = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
-    expect(mount).toContain('function mountMermaidViewerPortal');
+    expect(mount).toContain('mountPortal: (portalId: string): void => {');
     expect(mount).toContain('MermaidViewerOverlay');
 
     // 两 bridge：closeMermaidViewer 分支（关覆盖层 + post closed）
@@ -101,14 +91,14 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
     const main = webSrc('rich-document/webview/main.ts');
     // T-MV1 钉住的顺序仍成立
     expect(main).toMatch(
-      /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
+      /Mermaid\.render\(docRoot\)[\s\S]*Annotate\.refreshAfterDocument/,
     );
-    // 全屏挂接在 registerSetDocumentView 回调之外（模块刈处一行调用）。
-    // 断言意图 = 「`registerSetDocumentView(...)` 的闭合大括号之后才是
-    // bindAnnotateUi / mountMermaidViewerPortal」——即挂接不在回调体内。
+    // 全屏挂接在 documentViewSlot.register 回调之外（模块刈处一行调用）。
+    // 断言意图 = 「`documentViewSlot.register(...)` 的闭合大括号之后才是
+    // Annotate.bindUi / MermaidFullscreen.mountPortal」——即挂接不在回调体内。
     // 换行用 `[\s\S]+` 而不是字面 `\n\n`：仓库里两种换行都有（git 检出在
     // Windows 上是 CRLF，Linux CI 上是 LF），字面量断言会随平台红。
-    expect(main).toMatch(/\}\);[\s\S]+bindAnnotateUi[\s\S]*mountMermaidViewerPortal/);
+    expect(main).toMatch(/\}\);[\s\S]+Annotate\.bindUi[\s\S]*MermaidFullscreen\.mountPortal/);
   });
 });
 
@@ -135,12 +125,12 @@ describe('chat-transcript runtime 工厂装配链（Step 1 工厂化 / Step 8 �
   it('工厂体内装配动作齐全，mermaid 两挂接真被调用', () => {
     const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
     for (const symbol of [
-      'registerRenderContextMenu',
-      'registerRenderRows',
-      'measureRowWindow',
-      'mountMermaidViewerPortal(',
-      'attachMermaidViewerDelegation(',
-      'startTranscriptBoot(',
+      'contextMenuViewSlot.register(',
+      'rowsViewSlot.register(',
+      'RowWindow.measure',
+      'MermaidFullscreen.mountPortal(',
+      'MermaidFullscreen.attachDelegation(',
+      'BootTranscript.start(',
     ]) {
       expect(factory).toContain(symbol);
     }
@@ -148,7 +138,7 @@ describe('chat-transcript runtime 工厂装配链（Step 1 工厂化 / Step 8 �
     // #mermaid-viewer-portal 对应）
     expect(factory).toContain("'mermaid-viewer-portal'");
     // boot 收尾：两个可选参数按位透传（bindChannel / emitReady）
-    expect(factory).toContain('startTranscriptBoot({bindChannel, emitReady})');
+    expect(factory).toContain('BootTranscript.start({bindChannel, emitReady})');
   });
 });
 
@@ -260,28 +250,28 @@ describe('mermaid 全屏查看器烘焙纯函数 (T-MS1)', () => {
     // 舞台 400x800、viewBox 800x600 → fitRatio = min(400/800, 800/600) = 0.5
     // → fit 基准渲染尺寸 400x300（meet 内缩），不是 viewBox 的 800x600
     const baseRendered = {width: 400, height: 300};
-    expect(computeBakedSvgSize(baseRendered, 2.5)).toEqual({
+    expect(MermaidViewerGestures.computeBakedSvgSize(baseRendered, 2.5)).toEqual({
       width: 1000,
       height: 750,
     });
     // scale=1 即 fit 基准本身（总倍率回 fit 档的场合）
-    expect(computeBakedSvgSize(baseRendered, 1)).toEqual(baseRendered);
+    expect(MermaidViewerGestures.computeBakedSvgSize(baseRendered, 1)).toEqual(baseRendered);
     // NaN 等非法倍率按 1 兜底，不产出 NaN px
-    expect(computeBakedSvgSize(baseRendered, Number.NaN)).toEqual(baseRendered);
+    expect(MermaidViewerGestures.computeBakedSvgSize(baseRendered, Number.NaN)).toEqual(baseRendered);
   });
 
   it('rebasePanAfterBake：恒等映射，输出 pan 数值不变（锁坐标系）', () => {
     // 几何论证：flex 居中 + meet 居中 + transform-origin 中心三层对齐，
     // 烘焙只改布局尺寸不动中心，pan（translate 的屏幕 px 偏移）参考点与
     // 单位都不变——烘焙前后平移由同一坐标系承担，无需换算
-    expect(rebasePanAfterBake({x: -37.5, y: 12.25}, 2.5)).toEqual({
+    expect(MermaidViewerGestures.rebasePanAfterBake({x: -37.5, y: 12.25}, 2.5)).toEqual({
       x: -37.5,
       y: 12.25,
     });
-    expect(rebasePanAfterBake({x: 0, y: 0}, 6)).toEqual({x: 0, y: 0});
+    expect(MermaidViewerGestures.rebasePanAfterBake({x: 0, y: 0}, 6)).toEqual({x: 0, y: 0});
     // 返回新对象：调用方拿它直接写入 gesture.current，不共享旧引用
     const pan = {x: 1, y: 2};
-    expect(rebasePanAfterBake(pan, 3)).not.toBe(pan);
+    expect(MermaidViewerGestures.rebasePanAfterBake(pan, 3)).not.toBe(pan);
   });
 
   it('clamp 新坐标系边界 max(0,(contentRendered-stage)/2)：手势中（布局×scale）', () => {
@@ -290,7 +280,7 @@ describe('mermaid 全屏查看器烘焙纯函数 (T-MS1)', () => {
     const layout = {width: 400, height: 300};
     const scale = 3;
     expect(
-      clampMermaidViewerPan(
+      MermaidViewerGestures.clampPan(
         {x: 500, y: 60},
         layout.width * scale,
         layout.height * scale,
@@ -299,7 +289,7 @@ describe('mermaid 全屏查看器烘焙纯函数 (T-MS1)', () => {
       ),
     ).toEqual({x: 400, y: 50});
     expect(
-      clampMermaidViewerPan(
+      MermaidViewerGestures.clampPan(
         {x: -500, y: -60},
         layout.width * scale,
         layout.height * scale,
@@ -309,7 +299,7 @@ describe('mermaid 全屏查看器烘焙纯函数 (T-MS1)', () => {
     ).toEqual({x: -400, y: -50});
     // 界内不动
     expect(
-      clampMermaidViewerPan(
+      MermaidViewerGestures.clampPan(
         {x: 100, y: 20},
         layout.width * scale,
         layout.height * scale,
@@ -322,11 +312,11 @@ describe('mermaid 全屏查看器烘焙纯函数 (T-MS1)', () => {
   it('clamp 新坐标系边界：烘焙后（contentRendered=烘焙 px、scale=1）', () => {
     // 烘焙后布局即烘焙 px（fit 400x300 × 总倍率 3 = 1200x900）、scale=1，
     // 与手势中同公式同边界——两态经同一 clamp，落定瞬间平移不跳变
-    expect(clampMermaidViewerPan({x: 500, y: 60}, 1200, 900, 400, 800)).toEqual(
+    expect(MermaidViewerGestures.clampPan({x: 500, y: 60}, 1200, 900, 400, 800)).toEqual(
       {x: 400, y: 50},
     );
     // 内容不超舞台（fit 档）→ 边界 0，锁中心
-    expect(clampMermaidViewerPan({x: 120, y: -80}, 400, 300, 400, 800)).toEqual(
+    expect(MermaidViewerGestures.clampPan({x: 120, y: -80}, 400, 300, 400, 800)).toEqual(
       {x: 0, y: 0},
     );
   });
@@ -370,8 +360,8 @@ describe('mermaid 全屏查看器落定烘焙契约 (T-MS2)', () => {
     // 烘焙 px 会被 flex 收缩，内联 flexShrink 归零防护
     expect(bakeBody).toContain("svg.style.flexShrink = '0'");
     // 烘焙换算走纯函数，gesture 归一 scale=1、transform 复位纯 translate
-    expect(bakeBody).toContain('computeBakedSvgSize(base, total)');
-    expect(bakeBody).toContain('rebasePanAfterBake(');
+    expect(bakeBody).toContain('MermaidViewerGestures.computeBakedSvgSize(base, total)');
+    expect(bakeBody).toContain('MermaidViewerGestures.rebasePanAfterBake(');
     // 花括号内空格容忍（bracketSpacing:false），锁 scale=1 归一语义
     expect(bakeBody).toMatch(/gesture\.current = \{\s*scale: 1,\s*pan\s*\}/);
   });
@@ -423,21 +413,21 @@ describe('mermaid 全屏查看器落定烘焙契约 (T-MS2)', () => {
 
 describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
   it('pinch 缩放 clamp：不小于 min、不大于 max、非法值回退 min', () => {
-    expect(clampMermaidViewerScale(0.3)).toBe(MERMAID_VIEWER_MIN_SCALE);
-    expect(clampMermaidViewerScale(MERMAID_VIEWER_MIN_SCALE)).toBe(
+    expect(MermaidViewerGestures.clampScale(0.3)).toBe(MERMAID_VIEWER_MIN_SCALE);
+    expect(MermaidViewerGestures.clampScale(MERMAID_VIEWER_MIN_SCALE)).toBe(
       MERMAID_VIEWER_MIN_SCALE,
     );
-    expect(clampMermaidViewerScale(2.5)).toBe(2.5);
-    expect(clampMermaidViewerScale(99)).toBe(MERMAID_VIEWER_MAX_SCALE);
-    expect(clampMermaidViewerScale(Number.NaN)).toBe(MERMAID_VIEWER_MIN_SCALE);
-    expect(clampMermaidViewerScale(Number.POSITIVE_INFINITY)).toBe(
+    expect(MermaidViewerGestures.clampScale(2.5)).toBe(2.5);
+    expect(MermaidViewerGestures.clampScale(99)).toBe(MERMAID_VIEWER_MAX_SCALE);
+    expect(MermaidViewerGestures.clampScale(Number.NaN)).toBe(MERMAID_VIEWER_MIN_SCALE);
+    expect(MermaidViewerGestures.clampScale(Number.POSITIVE_INFINITY)).toBe(
       MERMAID_VIEWER_MAX_SCALE,
     );
   });
 
   it('pan clamp：按视觉内容尺寸算可达范围，内容不超舞台时锁中心', () => {
     // 布局 400x800（fit 档 = 舞台）、scale=1 → 不可平移
-    expect(clampMermaidViewerPan({x: 120, y: -80}, 400, 800, 400, 800)).toEqual(
+    expect(MermaidViewerGestures.clampPan({x: 120, y: -80}, 400, 800, 400, 800)).toEqual(
       {
         x: 0,
         y: 0,
@@ -445,19 +435,19 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
     );
     // 布局 400x800、scale=3 → contentRendered=1200x2400 → x ∈ [-400, 400]，y ∈ [-800, 800]
     expect(
-      clampMermaidViewerPan({x: 500, y: 900}, 1200, 2400, 400, 800),
+      MermaidViewerGestures.clampPan({x: 500, y: 900}, 1200, 2400, 400, 800),
     ).toEqual({
       x: 400,
       y: 800,
     });
     expect(
-      clampMermaidViewerPan({x: -500, y: -900}, 1200, 2400, 400, 800),
+      MermaidViewerGestures.clampPan({x: -500, y: -900}, 1200, 2400, 400, 800),
     ).toEqual({
       x: -400,
       y: -800,
     });
     expect(
-      clampMermaidViewerPan({x: 100, y: 200}, 1200, 2400, 400, 800),
+      MermaidViewerGestures.clampPan({x: 100, y: 200}, 1200, 2400, 400, 800),
     ).toEqual({
       x: 100,
       y: 200,
@@ -467,47 +457,38 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
   it('pinch 变换：中点锚定缩放且结果被 clamp', () => {
     // 原始档中心放大 2x：focus=(0,0) 时 pan 保持 0
     // （fit 档未烘焙：布局=舞台=400x800，contentRendered=布局×scale）
-    const centered = computeMermaidViewerPinch(
+    const centered = MermaidViewerGestures.computePinch(
       {scale: 1, pan: {x: 0, y: 0}},
       100,
       200,
-      0,
-      0,
-      400,
-      800,
-      400,
-      800,
+      {x: 0, y: 0},
+      {width: 400, height: 800},
+      {width: 400, height: 800},
     );
     expect(centered.scale).toBe(2);
     expect(centered.pan).toEqual({x: 0, y: 0});
 
     // 中点在 (50, 40)：锚点处内容不动 → pan = focus*(1-factor)
-    const anchored = computeMermaidViewerPinch(
+    const anchored = MermaidViewerGestures.computePinch(
       {scale: 1, pan: {x: 0, y: 0}},
       100,
       200,
-      50,
-      40,
-      400,
-      800,
-      400,
-      800,
+      {x: 50, y: 40},
+      {width: 400, height: 800},
+      {width: 400, height: 800},
     );
     expect(anchored.scale).toBe(2);
     expect(anchored.pan.x).toBeCloseTo(-50);
     expect(anchored.pan.y).toBeCloseTo(-40);
 
     // 过度捏合被 clamp 回 min，且不产生 NaN
-    const clamped = computeMermaidViewerPinch(
+    const clamped = MermaidViewerGestures.computePinch(
       {scale: 1, pan: {x: 0, y: 0}},
       100,
       0,
-      0,
-      0,
-      400,
-      800,
-      400,
-      800,
+      {x: 0, y: 0},
+      {width: 400, height: 800},
+      {width: 400, height: 800},
     );
     expect(clamped.scale).toBe(MERMAID_VIEWER_MIN_SCALE);
     expect(Number.isFinite(clamped.pan.x)).toBe(true);
@@ -516,14 +497,14 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
   it('双击状态机：两档切换与连触防抖', () => {
     const t0 = 1000;
     // 首次轻触（无上次记录）→ ignore
-    expect(resolveMermaidViewerDoubleTap(0, t0, 1)).toEqual({kind: 'ignore'});
+    expect(MermaidViewerGestures.resolveDoubleTap(0, t0, 1)).toEqual({kind: 'ignore'});
     // 阈值内二次轻触：原始 → 放大档
     expect(
-      resolveMermaidViewerDoubleTap(t0, t0 + 250, MERMAID_VIEWER_MIN_SCALE),
+      MermaidViewerGestures.resolveDoubleTap(t0, t0 + 250, MERMAID_VIEWER_MIN_SCALE),
     ).toEqual({kind: 'toggle', scale: MERMAID_VIEWER_DOUBLE_TAP_SCALE});
     // 放大档 → 切回原始
     expect(
-      resolveMermaidViewerDoubleTap(
+      MermaidViewerGestures.resolveDoubleTap(
         t0,
         t0 + 250,
         MERMAID_VIEWER_DOUBLE_TAP_SCALE,
@@ -531,7 +512,7 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
     ).toEqual({kind: 'toggle', scale: MERMAID_VIEWER_MIN_SCALE});
     // 超过间隔阈值 → 独立单击，ignore（防连触误判）
     expect(
-      resolveMermaidViewerDoubleTap(
+      MermaidViewerGestures.resolveDoubleTap(
         t0,
         t0 + 301 + 250,
         MERMAID_VIEWER_MIN_SCALE,

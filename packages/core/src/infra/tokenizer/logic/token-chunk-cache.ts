@@ -2,9 +2,9 @@
  * L2 块 token 平面缓存（message-token-cache 第二层，进程内跨会话单例）。
  *
  * 条目 `块hash16 × 计数器身份 → 块 token 数`：块文本经双 FNV-1a 轻量哈希
- * （{@link chunkHash16}，16 hex 内容寻址键段——2026-10-03 前为 sha256 截断，
+ * （{@link TokenChunkCache.chunkHash16}，16 hex 内容寻址键段——2026-10-03 前为 sha256 截断，
  * Hermes 每块固定开销过大而更换，键域随 KKV payload v2 一次性切换）；计数器
- * 身份（scope）由 {@link buildCounterScope} 从 vendorModelId / override /
+ * 身份（scope）由 {@link TokenChunkCache.buildCounterScope} 从 vendorModelId / override /
  * family / driver 拼成——同文本不同词表计数不同，换模型/换端自动 miss。
  * 跨会话共享是刻意的：实测全库唯一块中 34.7% 重复，不同会话复用同一份
  * 块计数。
@@ -40,16 +40,16 @@
  * @module infra/tokenizer/logic/token-chunk-cache
  */
 
-import { fnv1aHex16 } from "@/common/hash.js";
+import { Hash } from "@/common/hash.js";
 import { SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 
-const log = createLogger("tokenizer.chunk-cache");
+const log = LogFactory.create("tokenizer.chunk-cache");
 
-/** 块 hash 键段长度（16 hex = 64 bit；形态契约，见 {@link chunkHash16}）。 */
+/** 块 hash 键段长度（16 hex = 64 bit；形态契约，见 {@link TokenChunkCache.chunkHash16}）。 */
 const CHUNK_HASH_HEX_LENGTH = 16;
 
 /** 三代总量条数上限（≈10MB 上限：100K × (16 hex 键 + number)）。 */
@@ -72,36 +72,6 @@ interface CounterScopeInput {
   readonly tokenizerOverride?: TokenizerOverride | null;
   readonly tokenizerFamily?: TokenizerFamily | null;
   readonly driverName?: string | null;
-}
-
-/**
- * 拼计数器身份（scope）：四段以字面 `\u0000` 六字符文本分隔——模型名 /
- * 驱动名理论上是自由字符串，该文本不会出现在标识符里，防「字段组合碰撞」。
- * 注：join 的实参是 `"\\u0000"`（源码双反斜杠，运行时为字面文本而非 NUL），
- * 功能等价；**勿改成真 NUL**——会整体更换 scope 键、全部 L1/L2/KKV 缓存
- * 一次性 miss。
- */
-export function buildCounterScope(input: CounterScopeInput): string {
-  const parts = [input.vendorModelId, input.tokenizerOverride ?? "", input.tokenizerFamily ?? "", input.driverName ?? ""];
-  return parts.join("\\u0000");
-}
-
-/**
- * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link fnv1aHex16}）。
- *
- * 16 hex = 64 bit：100K 量级条目下碰撞概率可忽略（生日界 ~2^32 条才显著），
- * 且即便碰撞也只是读错一个块的计数（误差个位数 token），属可接受的缓存
- * 风险。L1 整串键与 L2 块键共用本函数——整串（百 KB 级）单次哈希的收益
- * 与块级（数千次小哈希）同源。
- */
-// nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口（public/provider 与双 driver 消费），哈希实现在 common/hash，直接暴露通用实现会让调用方耦合实现细节。
-export function chunkHash16(chunk: string): string {
-  return fnv1aHex16(chunk);
-}
-
-/** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
-function buildEntryKey(hash16: string, scope: string): string {
-  return `l2:${hash16}:${scope}`;
 }
 
 /** advanceGeneration 的持久化选项。 */
@@ -156,81 +126,113 @@ const seededSessions = new Set<string>();
  */
 let currentGenDirty = false;
 
-/** 总量超限时淘汰：先清最旧代，仍超再清次旧代，最后按插入序裁当前代。 */
-function enforceTotalCap(): void {
-  let total = genCurrent.size + genSecond.size + genThird.size;
-  if (total <= maxTotalEntries) {
-    return;
-  }
-  genThird.clear();
-  total = genCurrent.size + genSecond.size;
-  if (total <= maxTotalEntries) {
-    return;
-  }
-  genSecond.clear();
-  // 单代自身超限（测试注入小上限时的路径）：按插入序删当前代最旧条目。
-  while (genCurrent.size > maxTotalEntries) {
-    const oldest = genCurrent.keys().next();
-    if (oldest.done === true) {
-      break;
-    }
-    genCurrent.delete(oldest.value);
-  }
-}
+export const TokenChunkCache = {
+  /**
+   * 拼计数器身份（scope）：四段以字面 `\u0000` 六字符文本分隔——模型名 /
+   * 驱动名理论上是自由字符串，该文本不会出现在标识符里，防「字段组合碰撞」。
+   * 注：join 的实参是 `"\\u0000"`（源码双反斜杠，运行时为字面文本而非 NUL），
+   * 功能等价；**勿改成真 NUL**——会整体更换 scope 键、全部 L1/L2/KKV 缓存
+   * 一次性 miss。
+   */
+  buildCounterScope(input: CounterScopeInput): string {
+    const parts = [input.vendorModelId, input.tokenizerOverride ?? "", input.tokenizerFamily ?? "", input.driverName ?? ""];
+    return parts.join("\\u0000");
+  },
 
-/**
- * 解析持久化整表；缺失 / 损坏 / `v` 不符 / 任一条目字段非法 → 整体 null
- * （静默按 miss，不抛错、不造数）。未知键一律忽略（兼容未来加字段）。
- *
- * nm-style: keep-local — KKV 载荷 v2 版本守卫与 16-hex 键形态是持久化契约，seed 与解析共用同一份
- */
-export function parseTokenChunkCachePayload(raw: string | null | undefined): TokenChunkCacheItem[] | null {
-  if (raw == null || raw.length === 0) {
-    return null;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (parsed == null || typeof parsed !== "object") {
-    return null;
-  }
-  const { v, items } = parsed as { v?: unknown; items?: unknown };
-  if (v !== TOKEN_CHUNKS_PAYLOAD_VERSION) {
-    return null;
-  }
-  if (!Array.isArray(items)) {
-    return null;
-  }
-  const out: TokenChunkCacheItem[] = [];
-  for (const item of items) {
-    if (!Array.isArray(item) || item.length < 3) {
+  /**
+   * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link Hash.fnv1aHex16}）。
+   *
+   * 16 hex = 64 bit：100K 量级条目下碰撞概率可忽略（生日界 ~2^32 条才显著），
+   * 且即便碰撞也只是读错一个块的计数（误差个位数 token），属可接受的缓存
+   * 风险。L1 整串键与 L2 块键共用本函数——整串（百 KB 级）单次哈希的收益
+   * 与块级（数千次小哈希）同源。
+   */
+  // nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口（public/provider 与双 driver 消费），哈希实现在 common/hash，直接暴露通用实现会让调用方耦合实现细节。
+  chunkHash16(chunk: string): string {
+    return Hash.fnv1aHex16(chunk);
+  },
+
+  /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
+  buildEntryKey(hash16: string, scope: string): string {
+    return `l2:${hash16}:${scope}`;
+  },
+
+  /** 总量超限时淘汰：先清最旧代，仍超再清次旧代，最后按插入序裁当前代。 */
+  enforceTotalCap(): void {
+    let total = genCurrent.size + genSecond.size + genThird.size;
+    if (total <= maxTotalEntries) {
+      return;
+    }
+    genThird.clear();
+    total = genCurrent.size + genSecond.size;
+    if (total <= maxTotalEntries) {
+      return;
+    }
+    genSecond.clear();
+    // 单代自身超限（测试注入小上限时的路径）：按插入序删当前代最旧条目。
+    while (genCurrent.size > maxTotalEntries) {
+      const oldest = genCurrent.keys().next();
+      if (oldest.done === true) {
+        break;
+      }
+      genCurrent.delete(oldest.value);
+    }
+  },
+
+  /**
+   * 解析持久化整表；缺失 / 损坏 / `v` 不符 / 任一条目字段非法 → 整体 null
+   * （静默按 miss，不抛错、不造数）。未知键一律忽略（兼容未来加字段）。
+   *
+   * nm-style: keep-local — KKV 载荷 v2 版本守卫与 16-hex 键形态是持久化契约，seed 与解析共用同一份
+   */
+  parsePayload(raw: string | null | undefined): TokenChunkCacheItem[] | null {
+    if (raw == null || raw.length === 0) {
       return null;
     }
-    const [hash16, scope, count] = item as [unknown, unknown, unknown];
-    if (
-      typeof hash16 !== "string" ||
-      hash16.length !== CHUNK_HASH_HEX_LENGTH ||
-      !/^[0-9a-f]+$/.test(hash16)
-    ) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
       return null;
     }
-    if (typeof scope !== "string" || scope.length === 0) {
+    if (parsed == null || typeof parsed !== "object") {
       return null;
     }
-    if (
-      typeof count !== "number" ||
-      !Number.isFinite(count) ||
-      count < 0
-    ) {
+    const { v, items } = parsed as { v?: unknown; items?: unknown };
+    if (v !== TOKEN_CHUNKS_PAYLOAD_VERSION) {
       return null;
     }
-    out.push([hash16, scope, count]);
-  }
-  return out;
-}
+    if (!Array.isArray(items)) {
+      return null;
+    }
+    const out: TokenChunkCacheItem[] = [];
+    for (const item of items) {
+      if (!Array.isArray(item) || item.length < 3) {
+        return null;
+      }
+      const [hash16, scope, count] = item as [unknown, unknown, unknown];
+      if (
+        typeof hash16 !== "string" ||
+        hash16.length !== CHUNK_HASH_HEX_LENGTH ||
+        !/^[0-9a-f]+$/.test(hash16)
+      ) {
+        return null;
+      }
+      if (typeof scope !== "string" || scope.length === 0) {
+        return null;
+      }
+      if (
+        typeof count !== "number" ||
+        !Number.isFinite(count) ||
+        count < 0
+      ) {
+        return null;
+      }
+      out.push([hash16, scope, count]);
+    }
+    return out;
+  },
+} as const;
 
 /**
  * L2 平面缓存单例（进程内、跨会话共享）。
@@ -239,10 +241,10 @@ export const tokenChunkCache = {
   /**
    * 查一块的 token 数：命中任意一代即算命中并提升至当前代（回滚/压缩场景
    * 的旧块被再次触碰时「续命」）；三代皆 miss 返回 `undefined`，由调用方
-   * 现算（`countTextWithIncrementalTokenizer`）后 record。
+   * 现算（`TokenizerTextCount.count`）后 record。
    */
   lookup(hash16: string, scope: string): number | undefined {
-    const key = buildEntryKey(hash16, scope);
+    const key = TokenChunkCache.buildEntryKey(hash16, scope);
     const current = genCurrent.get(key);
     if (current !== undefined) {
       hits += 1;
@@ -264,9 +266,9 @@ export const tokenChunkCache = {
 
   /** 记一块的 token 数（写当前代，覆盖同键旧值），随后执行总量上限淘汰。 */
   record(hash16: string, scope: string, count: number): void {
-    genCurrent.set(buildEntryKey(hash16, scope), count);
+    genCurrent.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
     currentGenDirty = true;
-    enforceTotalCap();
+    TokenChunkCache.enforceTotalCap();
   },
 
   /**
@@ -348,7 +350,7 @@ export const tokenChunkCache = {
       seededSessions.delete(sessionId);
       return 0;
     }
-    const items = parseTokenChunkCachePayload(raw);
+    const items = TokenChunkCache.parsePayload(raw);
     if (items == null) {
       // 只有「行存在但坏」（截断 / 版本不符 / 字段非法）才撤销登记：那种行
       // 可能是别的写入方瞬态写坏、随后被修好，留着登记会让本进程永久按
@@ -362,9 +364,9 @@ export const tokenChunkCache = {
     }
     for (const [hash16, scope, count] of items) {
       // 合并进最旧代：同键以种子覆盖（种子即该会话最近一次落盘的当前代）。
-      genThird.set(buildEntryKey(hash16, scope), count);
+      genThird.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
     }
-    enforceTotalCap();
+    TokenChunkCache.enforceTotalCap();
     return items.length;
   },
 
@@ -388,7 +390,7 @@ export const tokenChunkCache = {
   /** 测试用：注入小总量上限（clearForTests 会恢复默认值）。 */
   setMaxTotalEntriesForTests(max: number): void {
     maxTotalEntries = max;
-    enforceTotalCap();
+    TokenChunkCache.enforceTotalCap();
   },
 
   /** 观测用：命中/未命中计数、总条数与各代条数（[当前, 第二, 第三]）。 */

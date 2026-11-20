@@ -17,16 +17,14 @@
  * @module test/chat/message-plaintext-write
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  randomUUID  } from "node:crypto";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type {
   ChatMessageData,
   MessageContent,
@@ -59,11 +57,11 @@ async function newSession(): Promise<{
   repo: SqliteMessageRepository;
 }> {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(
     project.id,
     `S-${testIsolationSuffix()}`
-  );
+  ));
   return { sessionId: session.id, repo: new SqliteMessageRepository(ctx.conn) };
 }
 
@@ -94,7 +92,7 @@ async function rawContentColumns(id: string): Promise<{
 describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
   it("T-MP1：append/batchInsert 写明文——content_json 非空、encoding/blob 为 NULL", async () => {
     const { sessionId, repo } = await newSession();
-    const content = textBlocks("明文化写入的第一条");
+    const content = TextBlocks.of("明文化写入的第一条");
 
     // append（insert）
     const single = messageFixture(sessionId, 1, content);
@@ -110,8 +108,8 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
 
     // batchInsert（fork/copy 的全量写口）
     const batched = [
-      messageFixture(sessionId, 2, textBlocks("批量写入的第二条")),
-      messageFixture(sessionId, 3, textBlocks("批量写入的第三条")),
+      messageFixture(sessionId, 2, TextBlocks.of("批量写入的第二条")),
+      messageFixture(sessionId, 3, TextBlocks.of("批量写入的第三条")),
     ];
     await repo.batchInsert(batched);
     for (const message of batched) {
@@ -122,14 +120,14 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
     }
 
     // 读回等价。
-    const list = await repo.listBySession(sessionId);
+    const list = outcomeValue(await repo.listBySession(sessionId));
     assert.equal(list.length, 3);
     assert.deepEqual(list[0]!.content, content);
   });
 
   it("T-MP1 反例：updateContent 改写既有行后三列齐置（行级单形态卫生，漏置 blob 两列会留下旧形态）", async () => {
     const { sessionId, repo } = await newSession();
-    const oldContent = textBlocks("编辑前的旧正文");
+    const oldContent = TextBlocks.of("编辑前的旧正文");
     const plain = messageFixture(sessionId, 1, oldContent);
     await repo.insert(plain);
 
@@ -139,8 +137,8 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
     assert.deepEqual(before!.content, oldContent);
 
     // 编辑：这条行走 updateContent。
-    const newContent = textBlocks("编辑后的新正文，应覆盖旧正文");
-    assert.equal(await repo.updateContent(plain.id, newContent), true);
+    const newContent = TextBlocks.of("编辑后的新正文，应覆盖旧正文");
+    assert.equal(unwrap(await repo.updateContent(plain.id, newContent)), true);
 
     // 三列齐置：明文列写新值，两列显式置 NULL。
     const raw = await rawContentColumns(plain.id);
@@ -165,7 +163,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
       "编辑后必须读到新正文（读到旧正文 = 三列未齐置）"
     );
     // listBySession 同款（读路径不止 findById 一处）。
-    const list = await repo.listBySession(sessionId);
+    const list = outcomeValue(await repo.listBySession(sessionId));
     assert.equal(list.length, 1);
     assert.deepEqual(list[0]!.content, newContent);
   });
@@ -174,9 +172,9 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
     const ctx = getNovelMasterTestContext();
     const { sessionId } = await newSession();
     const rows = [
-      messageFixture(sessionId, 1, textBlocks("事务内批量第一条")),
-      messageFixture(sessionId, 2, textBlocks("事务内批量第二条")),
-      messageFixture(sessionId, 3, textBlocks("事务内批量第三条")),
+      messageFixture(sessionId, 1, TextBlocks.of("事务内批量第一条")),
+      messageFixture(sessionId, 2, TextBlocks.of("事务内批量第二条")),
+      messageFixture(sessionId, 3, TextBlocks.of("事务内批量第三条")),
     ];
 
     // 生产路径形态：fork（message.service）与 copy（session.service）都在
@@ -189,7 +187,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
       await new SqliteMessageRepository(tx).batchInsert(rows);
     });
 
-    const list = await ctx.messages.listBySession(sessionId);
+    const list = outcomeValue(await ctx.messages.listBySession(sessionId));
     assert.equal(list.length, 3, "事务内 batchInsert 的三行都应落库且已提交");
     assert.deepEqual(
       list.map((m) => m.content),
@@ -199,7 +197,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
 
   it("T-MP6：无正文池环境下重复读结果一致", async () => {
     const { sessionId, repo } = await newSession();
-    const content = textBlocks(`重复读稳定性-${testIsolationSuffix()}`);
+    const content = TextBlocks.of(`重复读稳定性-${testIsolationSuffix()}`);
     const plain = messageFixture(sessionId, 1, content);
     await repo.insert(plain);
 
@@ -214,7 +212,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
         `第 ${i + 1} 次读结果不一致（无池环境下重复读必须稳定）`
       );
     }
-    const list = await repo.listBySession(sessionId);
+    const list = outcomeValue(await repo.listBySession(sessionId));
     assert.deepEqual(list[0]!.content, content);
   });
 });

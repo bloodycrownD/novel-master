@@ -3,10 +3,10 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
-import { normalizeForLlmExport } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
-import { messageBodyTextFromBlocks } from "../../src/domain/prompt/logic/message-body.js";
+import {  LlmExport  } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
+import {  MessageBodyText  } from "../../src/domain/prompt/logic/message-body.js";
 
 function msg(
   role: string,
@@ -32,18 +32,18 @@ function msg(
   };
 }
 
-describe("normalizeForLlmExport", () => {
+describe("LlmExport.normalize", () => {
   it("persist 区内连续 user 纯文本 merge", () => {
     const messages = [
       msg("user", "a", { id: "p1" }),
       msg("user", "b", { id: "p2" }),
     ];
-    const out = normalizeForLlmExport(messages, "anthropic", {
+    const out = LlmExport.normalize(messages, "anthropic", {
       persistCount: 2,
       dynamicCount: 0,
     });
     assert.equal(out.length, 1);
-    assert.equal(messageBodyTextFromBlocks(out[0]!.content.blocks), "a\n\nb");
+    assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "a\n\nb");
     assert.equal(out[0]!.id, "p1");
   });
 
@@ -52,13 +52,13 @@ describe("normalizeForLlmExport", () => {
       msg("user", "persist", { id: "p1" }),
       msg("user", "chat", { id: "c1" }),
     ];
-    const out = normalizeForLlmExport(messages, "anthropic", {
+    const out = LlmExport.normalize(messages, "anthropic", {
       persistCount: 1,
       dynamicCount: 0,
     });
     assert.equal(out.length, 2);
-    assert.equal(messageBodyTextFromBlocks(out[0]!.content.blocks), "persist");
-    assert.equal(messageBodyTextFromBlocks(out[1]!.content.blocks), "chat");
+    assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "persist");
+    assert.equal(MessageBodyText.fromBlocks(out[1]!.content.blocks), "chat");
   });
 
   it("vfs 段（metadata.kind）不与 plain chat merge", () => {
@@ -71,7 +71,7 @@ describe("normalizeForLlmExport", () => {
       },
     );
     const plain = msg("user", "hello", { id: "c1" });
-    const out = normalizeForLlmExport([vfsAction, plain], "anthropic", {
+    const out = LlmExport.normalize([vfsAction, plain], "anthropic", {
       persistCount: 0,
       dynamicCount: 0,
     });
@@ -84,7 +84,7 @@ describe("normalizeForLlmExport", () => {
       id: "u2",
       blocks: [{ type: "tool_result", toolUseId: "tu_1", content: "ok" }],
     });
-    const out = normalizeForLlmExport([text, tool], "anthropic", {
+    const out = LlmExport.normalize([text, tool], "anthropic", {
       persistCount: 0,
       dynamicCount: 0,
     });
@@ -106,7 +106,7 @@ describe("normalizeForLlmExport", () => {
         raw: { metadata: { kind: "user_vfs_ack", synthetic: true } },
       }),
     ];
-    const out = normalizeForLlmExport(ua, "anthropic", {
+    const out = LlmExport.normalize(ua, "anthropic", {
       persistCount: 0,
       dynamicCount: 0,
     });
@@ -119,7 +119,7 @@ describe("normalizeForLlmExport", () => {
       raw: { metadata: { kind: "tool_turn_bridge", synthetic: true } },
     });
     const chat = msg("user", "hi", { id: "c1" });
-    const out = normalizeForLlmExport([chat, bridge], "openai", {
+    const out = LlmExport.normalize([chat, bridge], "openai", {
       persistCount: 0,
       dynamicCount: 0,
     });
@@ -135,14 +135,14 @@ describe("normalizeForLlmExport", () => {
       }),
       msg("user", "chat", { id: "c1" }),
     ];
-    const out = normalizeForLlmExport(messages, "anthropic", {
+    const out = LlmExport.normalize(messages, "anthropic", {
       persistCount: 2,
       dynamicCount: 0,
     });
     assert.equal(out.length, 3);
-    assert.equal(messageBodyTextFromBlocks(out[0]!.content.blocks), "tree");
-    assert.equal(messageBodyTextFromBlocks(out[1]!.content.blocks), "【done】");
-    assert.equal(messageBodyTextFromBlocks(out[2]!.content.blocks), "chat");
+    assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "tree");
+    assert.equal(MessageBodyText.fromBlocks(out[1]!.content.blocks), "【done】");
+    assert.equal(MessageBodyText.fromBlocks(out[2]!.content.blocks), "chat");
   });
 
   it("T-PR1: 已 wrap 的带 attachments user 不与相邻 plain user merge", () => {
@@ -161,7 +161,7 @@ describe("normalizeForLlmExport", () => {
       ],
     };
     const plain = msg("user", "next", { id: "u-plain" });
-    const out = normalizeForLlmExport([withAtt, plain], "anthropic", {
+    const out = LlmExport.normalize([withAtt, plain], "anthropic", {
       persistCount: 0,
       dynamicCount: 0,
     });
@@ -170,15 +170,15 @@ describe("normalizeForLlmExport", () => {
     assert.equal(out[1]!.id, "u-plain");
   });
 
-  it("T-PR2: normalizeForLlmExport 仍为 sync（无 Promise / 无 async）", () => {
-    const result = normalizeForLlmExport(
+  it("T-PR2: LlmExport.normalize 仍为 sync（无 Promise / 无 async）", () => {
+    const result = LlmExport.normalize(
       [msg("user", "a"), msg("user", "b")],
       "anthropic",
     );
     assert.equal(typeof (result as { then?: unknown }).then, "undefined");
     assert.ok(Array.isArray(result));
     assert.equal(
-      normalizeForLlmExport.constructor.name,
+      LlmExport.normalize.constructor.name,
       "Function",
       "须为普通 sync function，而非 AsyncFunction",
     );

@@ -10,17 +10,12 @@ import {
   NM_VFS_PATHS_MIME,
   resolveMoveDestination,
 } from "@/features/workspace/vfs-tree-dnd";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import {
-  handleVfsMkdir,
-  handleVfsRead,
-  handleVfsRename,
-  handleVfsWrite,
-} from "../src/main/ipc/handlers/vfs.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -56,7 +51,7 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-vfs-move-"));
 
-    const project = await handleProjectsCreate({ name: "vfs-move-ipc" });
+    const project = await Projects.create({ name: "vfs-move-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -64,13 +59,13 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "vfs-move-session",
     });
@@ -80,7 +75,7 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
     }
     sessionId = session.data.id;
 
-    const mkdir = await handleVfsMkdir({
+    const mkdir = await Vfs.mkdir({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -88,7 +83,7 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
     });
     assert.equal(mkdir.ok, true);
 
-    const write = await handleVfsWrite({
+    const write = await Vfs.write({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -106,7 +101,7 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
     const newPath = resolveMoveDestination("/src/note.md", "/dest");
     assert.equal(newPath, "/dest/note.md");
 
-    const result = await handleVfsRename({
+    const result = await Vfs.rename({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -115,7 +110,7 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
     });
     assert.equal(result.ok, true);
 
-    const gone = await handleVfsRead({
+    const gone = await Vfs.read({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -123,7 +118,7 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
     });
     assert.equal(gone.ok, false);
 
-    const moved = await handleVfsRead({
+    const moved = await Vfs.read({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -134,9 +129,11 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
       assert.equal(moved.data.content, "move-me");
     }
 
-    const rt = await getDesktopRuntime();
-    await assert.rejects(() =>
-      rt.sessionVfs(projectId, sessionId).read("/src/note.md"),
-    );
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    // 错误通道迁移四期：read 已知失败沿 Result.err（不再 reject）。
+    const missing = await rt.sessionVfs(projectId, sessionId).read("/src/note.md");
+    assert.equal(missing.ok, false);
   });
 });

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  dynamicBlockToWire,
-  persistBlockToWire,
-} from "../../src/domain/prompt/logic/agent-prompt-layout-wire.js";
+import {  describe, it  } from "node:test";
+import {  AgentPromptLayoutWire  } from "../../src/domain/prompt/logic/agent-prompt-layout-wire.js";
 import type {
   DynamicPromptBlock,
   PersistTextPromptBlock,
@@ -17,7 +14,7 @@ describe("agent-prompt-layout-wire", () => {
       role: "user",
       content: "hello",
     };
-    assert.deepEqual(persistBlockToWire(block), {
+    assert.deepEqual(AgentPromptLayoutWire.persistBlock(block), {
       type: "text",
       role: "user",
       content: "hello",
@@ -31,7 +28,7 @@ describe("agent-prompt-layout-wire", () => {
       role: "user",
       content: "{{$filetree}}",
     };
-    assert.deepEqual(dynamicBlockToWire(block), {
+    assert.deepEqual(AgentPromptLayoutWire.dynamicBlock(block), {
       type: "text",
       role: "user",
       content: "{{$filetree}}",

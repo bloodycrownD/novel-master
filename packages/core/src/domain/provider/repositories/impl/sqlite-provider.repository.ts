@@ -6,10 +6,12 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { Coerce } from "@/common/coerce.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { LlmProvider } from "../../model/provider.js";
 import type { ProviderRepository } from "../provider.port.js";
 
@@ -22,24 +24,20 @@ const DELETE_SQL = "DELETE FROM llm_provider WHERE id = #{id}";
 
 /** 列 JSON 根必须是对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
 function parseJsonObject(json: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(json) as unknown;
-    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+  return Coerce.record(json) ?? {};
 }
 
-function rowToProvider(row: Row): LlmProvider {
+/** 毒行（display_name 为空等违反写入侧不变量的行）转 `Result.err`，不冒异常。 */
+function rowToProvider(row: Row): Result<LlmProvider, AppError> {
   const displayRaw = row.display_name;
   if (displayRaw == null || String(displayRaw).trim() === "") {
-    throw new ProviderError("INVALID_ARGUMENT", `服务商 display_name 不得为空（id=${String(row.id)}）`, { providerId: String(row.id) });
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `服务商 display_name 不得为空（id=${String(row.id)}）`, providerId: String(row.id) }));
   }
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(parseJsonObject(String(row.headers_json ?? "{}")))) {
     if (typeof value === "string") headers[key] = value;
   }
-  return {
+  return Result.ok({
     id: String(row.id),
     builtinKey: row.builtin_key != null ? String(row.builtin_key) : null,
     protocol: String(row.protocol) as LlmProtocolKind,
@@ -51,7 +49,7 @@ function rowToProvider(row: Row): LlmProvider {
     isBuiltin: Number(row.is_builtin) === 1,
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
-  };
+  });
 }
 
 /** TDBC-backed `llm_provider` repository. */
@@ -60,19 +58,25 @@ export class SqliteProviderRepository implements ProviderRepository {
 
   constructor(private readonly conn: TdbcConnection) {}
 
-  async list(): Promise<LlmProvider[]> {
-    const rows = await queryTemplate(this.conn, this.parser, SELECT_ALL_SQL, {});
-    return rows.map(rowToProvider);
+  async list(): Promise<Result<LlmProvider[], AppError>> {
+    const rows = await TdbcTemplate.query(this.conn, this.parser, SELECT_ALL_SQL, {});
+    const providers: LlmProvider[] = [];
+    for (const row of rows) {
+      const mapped = rowToProvider(row);
+      if (!mapped.ok) return Result.err(mapped.error);
+      providers.push(mapped.value);
+    }
+    return Result.ok(providers);
   }
 
-  async findById(id: string): Promise<LlmProvider | null> {
-    const rows = await queryTemplate(this.conn, this.parser, SELECT_BY_ID_SQL, { id });
-    if (rows.length === 0) return null;
+  async findById(id: string): Promise<Result<LlmProvider | null, AppError>> {
+    const rows = await TdbcTemplate.query(this.conn, this.parser, SELECT_BY_ID_SQL, { id });
+    if (rows.length === 0) return Result.ok(null);
     return rowToProvider(rows[0]!);
   }
 
   async insert(provider: LlmProvider): Promise<void> {
-    await executeTemplate(this.conn, this.parser, INSERT_SQL, {
+    await TdbcTemplate.execute(this.conn, this.parser, INSERT_SQL, {
       id: provider.id,
       builtinKey: provider.builtinKey,
       protocol: provider.protocol,
@@ -88,7 +92,7 @@ export class SqliteProviderRepository implements ProviderRepository {
   }
 
   async update(provider: LlmProvider): Promise<void> {
-    await executeTemplate(this.conn, this.parser, UPDATE_SQL, {
+    await TdbcTemplate.execute(this.conn, this.parser, UPDATE_SQL, {
       id: provider.id,
       protocol: provider.protocol,
       baseUrl: provider.baseUrl,
@@ -101,7 +105,7 @@ export class SqliteProviderRepository implements ProviderRepository {
   }
 
   async delete(id: string): Promise<boolean> {
-    const result = await executeTemplate(this.conn, this.parser, DELETE_SQL, { id });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, DELETE_SQL, { id });
     return result.changes > 0;
   }
 }

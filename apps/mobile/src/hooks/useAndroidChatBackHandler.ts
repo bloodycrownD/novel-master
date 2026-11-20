@@ -45,10 +45,7 @@ export type AndroidChatBackActions = {
 };
 
 /** Registers hardwareBackPress while Chat Tab is focused; no-op on iOS. */
-export function useAndroidChatBackHandler(
-  state: AndroidChatBackState,
-  actions: AndroidChatBackActions,
-): void {
+export function useAndroidChatBackHandler(state: AndroidChatBackState, actions: AndroidChatBackActions): void {
   const {
     chatSubview,
     conversationPanel,
@@ -175,13 +172,12 @@ export function useAndroidChatBackHandler(
     showSessionsPanel,
   ]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== 'android') {
-        return;
-      }
-      const sub = BackHandler.addEventListener('hardwareBackPress', handler);
-      return () => sub.remove();
-    }, [handler]),
-  );
+  const onScreenFocus = useCallback(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+    return () => sub.remove();
+  }, [handler]);
+  useFocusEffect(onScreenFocus);
 }

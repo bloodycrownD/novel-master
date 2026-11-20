@@ -8,65 +8,47 @@
  */
 import type {AppUiPreferences} from './app-ui-prefs';
 
-/** Reads an enum pref; missing/invalid values and KKV errors fall back. */
-export async function readEnumPref<T extends string>(
-  appUi: AppUiPreferences | null | undefined,
-  key: string,
-  allowed: readonly T[],
-  fallback: T,
-): Promise<T> {
-  if (appUi == null) {
-    return fallback;
-  }
-  try {
-    const raw = await appUi.get(key);
-    if (raw != null && (allowed as readonly string[]).includes(raw)) {
-      return raw as T;
+export const AppUiPrefIo = {
+  /** Reads an enum pref; missing/invalid values and KKV errors fall back. */
+  readEnumPref: async <T extends string>(appUi: AppUiPreferences | null | undefined, key: string, allowed: readonly T[], fallback: T): Promise<T> => {
+    if (appUi == null) {
+      return fallback;
     }
-  } catch {
-    // 读失败按未配置处理，回退默认值。
-  }
-  return fallback;
-}
-
-/** Reads a `'true' | 'false'` pref; missing/invalid values and KKV errors fall back. */
-export async function readBoolPref(
-  appUi: AppUiPreferences | null | undefined,
-  key: string,
-  fallback: boolean,
-): Promise<boolean> {
-  if (appUi == null) {
-    return fallback;
-  }
-  try {
+    // 读失败按未配置处理，回退默认值（错误通道迁移四期：get 走 Result）。
     const raw = await appUi.get(key);
-    if (raw === 'true') {
+    if (raw.ok && raw.value != null && (allowed as readonly string[]).includes(raw.value)) {
+      return raw.value as T;
+    }
+    return fallback;
+  },
+
+  /** Reads a `'true' | 'false'` pref; missing/invalid values and KKV errors fall back. */
+  readBoolPref: async (appUi: AppUiPreferences | null | undefined, key: string, fallback: boolean): Promise<boolean> => {
+    if (appUi == null) {
+      return fallback;
+    }
+    const raw = await appUi.get(key);
+    if (raw.ok && raw.value === 'true') {
       return true;
     }
-    if (raw === 'false') {
+    if (raw.ok && raw.value === 'false') {
       return false;
     }
-  } catch {
-    // 读失败按未配置处理，回退默认值。
-  }
-  return fallback;
-}
+    return fallback;
+  },
 
-/**
- * Persists a bool pref as `'true' | 'false'`.
- *
- * 写失败仍然 reject：AboutScreen / ChatConfigScreen 等调用方依赖 reject 做
- * 失败提示或回滚，吞掉会让持久化失败静默。
- */
-export async function writeBoolPref(
-  appUi: AppUiPreferences,
-  key: string,
-  value: boolean,
-): Promise<void> {
-  try {
-    await appUi.set(key, value ? 'true' : 'false');
-  } catch (error) {
-    console.warn(`[app-ui-pref] write ${key} failed:`, error);
-    throw error;
-  }
-}
+  /**
+   * Persists a bool pref as `'true' | 'false'`.
+   *
+   * 写失败仍然 reject：AboutScreen / ChatConfigScreen 等调用方依赖 reject 做
+   * 失败提示或回滚，吞掉会让持久化失败静默。
+   */
+  writeBoolPref: async (appUi: AppUiPreferences, key: string, value: boolean): Promise<void> => {
+    try {
+      await appUi.set(key, value ? 'true' : 'false');
+    } catch (error) {
+      console.warn(`[app-ui-pref] write ${key} failed:`, error);
+      throw error;
+    }
+  },
+} as const;

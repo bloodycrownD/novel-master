@@ -1,6 +1,6 @@
-export { protectUtf8, unprotectUtf8, setDpapiTestPassthrough } from "./dpapi.js";
+export { Dpapi } from "./dpapi.js";
 export {
   SqliteSecretStore,
-  createWindowsSecretStore,
+  WindowsSecretStore,
 } from "./sqlite-secret-store.js";
-export { registerSkspWindowsDriver } from "./register.js";
+export { SkspWindowsRegister } from "./register.js";

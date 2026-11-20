@@ -94,7 +94,7 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-PH-05: renderRows Preact 装配 + TrustedHtml（行/工具）', () => {
     const script = bootScript();
-    // minify 重命名所有组件/工厂标识符（registerRenderRows / RowList /
+    // minify 重命名所有组件/工厂标识符（rowsViewSlot / RowList /
     // MessageRow / ToolGroup / TrustedHtml）。断言换它们留下的稳定面：
     //   · 行列表渲染根 = #rows（唯一挂载口，删了 Preact 装配就没了）
     //   · 消息行 / 工具组 = data-action 与 data-* 标记字符串
@@ -126,7 +126,7 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // 必须保留（ISD SPEC 契约测修订矩阵）
     // minify 重命名所有函数标识符（layoutContextMenu / handleMenuOverlayEvent /
     // openContextMenuFromAnchor / attachMenuNativeTextBlock /
-    // registerRenderContextMenu / MenuOverlay / ContextMenu）。断言换稳定面：
+    // contextMenuViewSlot / MenuOverlay / ContextMenu）。断言换稳定面：
     // 上行协议 type、DOM id/类名/属性名、state 字段名、数值常量。
     // ① overlay 关闭监听位：click + touchend 都挂在 state.menuOverlayHandler 上
     //    （state 字段名是属性名，压缩改不了）

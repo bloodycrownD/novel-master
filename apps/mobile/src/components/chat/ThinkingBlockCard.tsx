@@ -5,7 +5,7 @@ import React, {useState} from 'react';
 import {StyleSheet, Text} from 'react-native';
 import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
 import {RichContentBody} from '@/components/rich-content/RichContentBody';
-import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
+import {RichContentLimits} from '@/components/rich-content/rich-content-limits';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -41,18 +41,13 @@ export function ThinkingBlockCard({
     return null;
   }
 
-  const useRich =
-    expanded && richTextEnabled && !isRichContentOverLimit(trimmed);
+  const useRich = expanded && richTextEnabled && !RichContentLimits.isOverLimit(trimmed);
 
   return (
     <CollapsibleCard
       expanded={expanded}
       onToggle={setExpanded}
-      title={
-        <Text style={[styles.title, {color: tokens.textSecondary}]}>
-          思考过程
-        </Text>
-      }
+      title={<Text style={[styles.title, {color: tokens.textSecondary}]}>思考过程</Text>}
       style={[
         embedded ? styles.embedded : styles.card,
         !embedded && {
@@ -63,17 +58,7 @@ export function ThinkingBlockCard({
       ]}
       showDividerBelow={showDividerBelow}
     >
-      {useRich ? (
-        <RichContentBody
-          content={trimmed}
-          tokens={tokens}
-          fallbackTextColor={tokens.textSecondary}
-        />
-      ) : (
-        <Text style={[styles.body, {color: tokens.textSecondary}]}>
-          {trimmed}
-        </Text>
-      )}
+      {useRich ? <RichContentBody content={trimmed} tokens={tokens} fallbackTextColor={tokens.textSecondary} /> : <Text style={[styles.body, {color: tokens.textSecondary}]}>{trimmed}</Text>}
     </CollapsibleCard>
   );
 }

@@ -9,22 +9,15 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import { execLegacyV7ChatMessageDdl } from "./helpers/legacy-db-fixtures.js";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  execLegacyV7ChatMessageDdl  } from "./helpers/legacy-db-fixtures.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
-  return await open("tdbc:sqlite:file::memory:", {
+  BetterSqlite3Register.register();
+  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -70,7 +63,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
   it("新库直建：bootstrap 后含三新列与 created_at 索引", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assertNewColumns(await tableColumnNames(conn, "chat_message"));
       assert.equal(
@@ -102,7 +95,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
       );
       await conn.execute("PRAGMA user_version = 7");
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assertNewColumns(await tableColumnNames(conn, "chat_message"));
       assert.equal(
@@ -129,7 +122,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
       assert.equal(rows[0]!.model_name, null, "新列默认 NULL");
 
       // 二次 bootstrap 走快路径（user_version 已达 8），幂等无错。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       assertNewColumns(await tableColumnNames(conn, "chat_message"));
     } finally {
       await conn.close();

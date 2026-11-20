@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  parseMessageContent,
-  parseMessageContentValue,
-} from "../../src/domain/chat/content/parse-message-content.js";
+import {  describe, it  } from "node:test";
+import {  MessageContentParse  } from "../../src/domain/chat/content/parse-message-content.js";
 
-describe("parseMessageContent", () => {
+describe("MessageContentParse.parse", () => {
   it("round-trips all five block types", () => {
     const payload = {
       blocks: [
@@ -36,7 +33,7 @@ describe("parseMessageContent", () => {
         { type: "thinking", text: "hmm" },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(payload));
+    const parsed = MessageContentParse.parse(JSON.stringify(payload));
     assert.ok(parsed.ok);
     assert.equal(parsed.value.blocks.length, 6);
     assert.equal(parsed.value.blocks[0]!.type, "text");
@@ -44,7 +41,7 @@ describe("parseMessageContent", () => {
   });
 
   it("accepts thinking-only blocks (no empty text)", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({ blocks: [{ type: "thinking", text: "chain only" }] }),
     );
     assert.ok(parsed.ok);
@@ -59,11 +56,11 @@ describe("parseMessageContent", () => {
         { type: "text", text: "" },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(legacy));
+    const parsed = MessageContentParse.parse(JSON.stringify(legacy));
     assert.ok(parsed.ok);
     assert.equal(parsed.value.blocks.length, 1);
 
-    const inMemory = parseMessageContentValue(legacy);
+    const inMemory = MessageContentParse.parseValue(legacy);
     assert.ok(inMemory.ok);
     assert.equal(inMemory.value.blocks.length, 1);
     // 不再就地改写调用方对象：归一结果是新值。
@@ -71,7 +68,7 @@ describe("parseMessageContent", () => {
   });
 
   it("rejects legacy { content } shape with CHAT_INVALID_ARGUMENT", () => {
-    const parsed = parseMessageContent(JSON.stringify({ content: "x" }));
+    const parsed = MessageContentParse.parse(JSON.stringify({ content: "x" }));
     assert.equal(parsed.ok, false);
     if (parsed.ok) return;
     assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
@@ -80,7 +77,7 @@ describe("parseMessageContent", () => {
   });
 
   it("rejects legacy { parts } shape", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({ parts: [{ type: "text", text: "x" }] }),
     );
     assert.equal(parsed.ok, false);
@@ -90,7 +87,7 @@ describe("parseMessageContent", () => {
   });
 
   it("rejects unknown block type", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({ blocks: [{ type: "video", url: "x" }] }),
     );
     assert.equal(parsed.ok, false);
@@ -99,21 +96,21 @@ describe("parseMessageContent", () => {
   });
 
   it("allows empty blocks array", () => {
-    const parsed = parseMessageContent(JSON.stringify({ blocks: [] }));
+    const parsed = MessageContentParse.parse(JSON.stringify({ blocks: [] }));
     assert.ok(parsed.ok);
     assert.deepEqual(parsed.value.blocks, []);
   });
 
   it("rejects invalid JSON", () => {
-    const parsed = parseMessageContent("{");
+    const parsed = MessageContentParse.parse("{");
     assert.equal(parsed.ok, false);
     if (parsed.ok) return;
     assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
     assert.match(parsed.error.message, /Invalid JSON in message content/);
   });
 
-  it("parseMessageContentValue validates in memory", () => {
-    const parsed = parseMessageContentValue({
+  it("MessageContentParse.parseValue validates in memory", () => {
+    const parsed = MessageContentParse.parseValue({
       blocks: [{ type: "text", text: "ok" }],
     });
     assert.ok(parsed.ok);
@@ -121,7 +118,7 @@ describe("parseMessageContent", () => {
   });
 
   it("rejects tool_result with non-boolean ok", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({
         blocks: [
           {
@@ -140,7 +137,7 @@ describe("parseMessageContent", () => {
   });
 
   it("rejects tool_result with non-string summary", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({
         blocks: [
           {
@@ -171,7 +168,7 @@ describe("parseMessageContent", () => {
         },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(payload));
+    const parsed = MessageContentParse.parse(JSON.stringify(payload));
     assert.ok(parsed.ok);
     if (!parsed.ok) return;
     assert.equal(parsed.value.blocks.length, 1);

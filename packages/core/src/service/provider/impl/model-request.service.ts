@@ -4,38 +4,24 @@
  * @module service/provider/impl/model-request.service
  */
 
-import {
-  ProviderError,
-  providerModelNotSavedMessage,
-} from "@/errors/provider-errors.js";
-import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
-import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import { ErrorGuards } from "@/errors/guards.js";
+import { SavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
+import { ThinkingLevelPresets } from "@/domain/provider/logic/thinking-level-presets.js";
+import { ProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
-import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
-import type {
-  LlmChatResult,
-  LlmProtocolAdapter,
-  LlmProtocolKind,
-  LlmStreamEvent,
-} from "@/infra/llm-protocol/ports/adapter.port.js";
+import { Registry } from "@/infra/llm-protocol/logic/registry.js";
+import type { LlmChatResult, LlmProtocolAdapter, LlmProtocolKind, LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import type {
-  ModelRetryPolicy,
-  ModelRetryPolicyService,
-} from "../model-retry-policy.port.js";
-import type {
-  ModelRequestOptions,
-  ModelRequestService,
-} from "../model-request.port.js";
-import {
-  createAbortError,
-  isAbortLikeError,
-} from "@/infra/llm-protocol/logic/request-abort.js";
-import { LlmStreamTimeoutError } from "@/infra/llm-protocol/logic/llm-stream-timeout-error.js";
+import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
+import type { ModelRequestOptions, ModelRequestService } from "../model-request.port.js";
+import { RequestAbort } from "@/infra/llm-protocol/logic/request-abort.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 
-export interface DefaultModelRequestServiceDeps {
+interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
@@ -57,16 +43,6 @@ const DEFAULT_RETRY_POLICY = {
   jitterRatio: 0.2,
 } as const;
 
-function parseHttpStatusFromProviderError(
-  error: ProviderError
-): number | undefined {
-  const m = /HTTP\s+(\d{3})/.exec(error.message);
-  if (m == null) {
-    return undefined;
-  }
-  return Number(m[1]);
-}
-
 /**
  * 「本 attempt 已产出可见内容」的可判据事件族。
  *
@@ -76,66 +52,54 @@ function parseHttpStatusFromProviderError(
  * 「只收到一个 usage 就断流」的黑洞会被误判成已产出而彻底不重试——
  * 那是把重试闩锁修成反向 bug。
  */
-const PRODUCED_EVENT_TYPES = new Set<LlmStreamEvent["type"]>([
-  "text-delta",
-  "thinking-delta",
-  "tool-use",
-]);
+const PRODUCED_EVENT_TYPES = new Set<LlmStreamEvent["type"]>(["text-delta", "thinking-delta", "tool-use"]);
 
+/**
+ * 重试策略矩阵：abort 形态 / 流超时相位 / 领域错误 / HTTP 状态四段判定。
+ *
+ * nm-style: keep-local — 分支顺序本身就是不变量（超时相位必须先于「非 PROVIDER_* 默认 true」，
+ * abort 文本判定又必须先于「无状态码默认可重试」）；内联进 catch 会把顺序敏感的矩阵拆进重试编排。
+ */
 function isRetryableError(error: unknown): boolean {
-  if (isAbortLikeError(error)) {
+  if (RequestAbort.isAbortLikeError(error)) {
     return false;
   }
   // 流式超时分级（spec llm-stream-timeout 回炉版）：0 字节耗尽整调用预算
   // （黑洞形态）无任何输出、无副作用，与 429/5xx 同列可重试；流中断（idle，
   // 已有部分输出）不重试，避免重复输出/重复计费。本分支必须置于下方
-  // 「非 ProviderError 默认 true」之前——否则 idle 超时会被当未知瞬时错误
+  // 「非 PROVIDER_* AppError 默认 true」之前——否则 idle 超时会被当未知瞬时错误
   // 误判为可重试。
-  if (error instanceof LlmStreamTimeoutError) {
-    return error.phase === "first-chunk";
+  if (AppErrorOps.is(error, "PROVIDER_STREAM_TIMEOUT")) {
+    return error.details?.phase === "first-chunk";
   }
-  if (!(error instanceof ProviderError)) {
+  if (!ErrorGuards.inDomain(error, "PROVIDER")) {
     // Unknown transport/runtime failures are treated as transient once.
     return true;
   }
-  // abort 形态的 ProviderError（XHR onabort 链 reject 的 "Request aborted"）
+  // abort 形态的 PROVIDER_HTTP_ERROR（XHR onabort 链 reject 的 "Request aborted"）
   // 绝不可重试：一旦因时序窗口逃离 adapter 的 isRequestAborted 吞错
   // （signal 晚于错误判定等竞态），若落入下方「无状态码 → 默认可重试」
   // 分支，用户停止会触发自动重发形成僵尸循环（黑洞复现实验 r3 实锤）。
   // 口径与 request-abort.ts 的 isRequestAborted 第三判据对齐。
-  if (
-    error.code === "HTTP_ERROR" &&
-    error.message.toLowerCase().includes("abort")
-  ) {
+  if (error.message.toLowerCase().includes("abort")) {
     return false;
   }
-  if (error.code !== "HTTP_ERROR") {
+  if (error.key !== "PROVIDER_HTTP_ERROR") {
     return false;
   }
-  const status = parseHttpStatusFromProviderError(error);
-  if (status == null) {
+  const matched = /HTTP\s+(\d{3})/.exec(error.message);
+  if (matched == null) {
     return true;
   }
+  const status = Number(matched[1]);
   return status === 429 || status >= 500;
 }
 
-function computeBackoffMs(
-  attempt: number,
-  policy: ModelRetryPolicy | undefined
-): number {
-  const p = policy ?? DEFAULT_RETRY_POLICY;
-  const base = Math.min(
-    p.baseDelayMs * 2 ** Math.max(0, attempt - 1),
-    p.maxDelayMs
-  );
-  const jitterRange = base * p.jitterRatio;
-  return Math.max(0, Math.round(base + (Math.random() * 2 - 1) * jitterRange));
-}
-
-async function delayWithSignal(
-  ms: number,
-  signal?: AbortSignal
-): Promise<void> {
+/**
+ * nm-style: keep-local — timer 与 abort listener 必须成对注册/移除（生命周期不变量），
+ * 内联进重试分支会把清理句柄拆散，泄漏 timer 或触发已 settle 的 reject。
+ */
+async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) {
     return;
   }
@@ -146,7 +110,7 @@ async function delayWithSignal(
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(createAbortError());
+      reject(AbortError.create());
     };
     if (signal == null) {
       return;
@@ -163,34 +127,21 @@ async function delayWithSignal(
 export class DefaultModelRequestService implements ModelRequestService {
   constructor(private readonly deps: DefaultModelRequestServiceDeps) {}
 
-  async request(
-    savedModelId: string,
-    userContent: string,
-    options?: ModelRequestOptions
-  ): Promise<LlmChatResult> {
-    const asserted = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
+  async request(savedModelId: string, userContent: string, options?: ModelRequestOptions): Promise<Result<LlmChatResult, AppError>> {
+    const asserted = await SavedModelUuid.assert(savedModelId, this.deps.savedModels);
     if (!asserted.ok) {
-      throw new ProviderError(
-        "MODEL_NOT_SAVED",
-        providerModelNotSavedMessage(savedModelId),
-        { modelId: savedModelId }
-      );
+      return Result.err(new AppError("PROVIDER_MODEL_NOT_SAVED", { detail: `Model not saved: ${savedModelId}. Fetch and save the model first.`, modelId: savedModelId }));
     }
     const saved = asserted.value;
     const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
-    if (!provider) {
-      throw new ProviderError(
-        "NOT_FOUND",
-        `Provider not found: ${providerId}`,
-        {
-          providerId,
-        }
-      );
+    if (!provider.ok || provider.value == null) {
+      return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${providerId}`, providerId }));
     }
-    const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
+    const row = provider.value;
+    const apiKeyResult = await ProviderApiKey.resolve(row, this.deps.secretStore);
     if (!apiKeyResult.ok) {
-      throw new ProviderError("API_KEY_NOT_SET", apiKeyResult.error.message, { providerId: provider.id });
+      return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: row.id }));
     }
     const apiKey = apiKeyResult.value;
     let sampling = options?.sampling;
@@ -205,21 +156,22 @@ export class DefaultModelRequestService implements ModelRequestService {
     if (thinking === undefined) {
       const thinkingLevel = saved.settings.generation.thinkingLevel;
       if (thinkingLevel !== "off") {
-        thinking = resolveThinkingParamsForLevel(
-          thinkingLevel,
-          provider.protocol,
-          saved.settings.generation.sampling,
-          vendorModelId
-        );
+        thinking = ThinkingLevelPresets.toModelThinkingParams(thinkingLevel, row.protocol, vendorModelId, saved.settings.generation.sampling);
       }
     }
 
-    const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
-    const adapter = resolveAdapter(provider.protocol);
-    const policy =
-      (await this.deps.retryPolicies?.getPolicy()) ??
-      this.deps.retryPolicy ??
-      DEFAULT_RETRY_POLICY;
+    const resolveAdapter = this.deps.resolveAdapter ?? Registry.getProtocolAdapter;
+    const adapter = resolveAdapter(row.protocol);
+    // 无 options 的调用方显式表达「不可取消」：建一个无定时器、无父的 scope。
+    const scope = options?.scope ?? AbortScopeFactory.create();
+    let policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
+    if (this.deps.retryPolicies != null) {
+      const fetched = await this.deps.retryPolicies.getPolicy();
+      if (!fetched.ok) return Result.err(fetched.error);
+      if (fetched.value != null) {
+        policy = fetched.value;
+      }
+    }
     let attempt = 0;
     // 「本 attempt 是否已产出」闩锁：只看错误形态的重试判定会让「已流式吐了半段
     // 文本、随后传输层断掉」的请求再发一次 attempt ⇒ 同一段文本在屏幕上出现两遍、
@@ -232,25 +184,27 @@ export class DefaultModelRequestService implements ModelRequestService {
       // 「已产出后续传」类策略，逐 attempt 复位是它能成立的前提）。
       attemptEmitted = false;
       // 非流式请求直接传 undefined、**不要造闭包**（不该凭空多一层）。
-      const onStream =
-        options?.onStream == null
-          ? undefined
-          : (ev: LlmStreamEvent): void => {
-              // ⚠️ **先置闩、再转发**：顺序反了的话，一旦下游 onStream 自身抛错，
-              // 闩锁会来不及置位 ⇒ 变成静默可重试。
-              if (PRODUCED_EVENT_TYPES.has(ev.type)) {
-                attemptEmitted = true;
-              }
-              options.onStream!(ev);
-            };
+      let onStream: ((event: LlmStreamEvent) => void) | undefined;
+      if (options?.onStream != null) {
+        onStream = (ev) => {
+          // ⚠️ **先置闩、再转发**：顺序反了的话，一旦下游 onStream 自身抛错，
+          // 闩锁会来不及置位 ⇒ 变成静默可重试。
+          if (PRODUCED_EVENT_TYPES.has(ev.type)) {
+            attemptEmitted = true;
+          }
+          options.onStream!(ev);
+        };
+      }
       try {
-        return await adapter.chat({
-          baseUrl: provider.baseUrl,
+        // 传输层失败仍沿 throw 通道（retry 按 catch + code 分派，spec-2-core §2.1 D 类），
+        // 只有预检失败（上方三处 + policy 读取）走 `Result.err`。
+        const chatArgs = {
+          baseUrl: row.baseUrl,
           apiKey,
           vendorModelId,
           userContent,
-          extraHeaders: provider.headers,
-          extraBody: provider.bodyParams,
+          extraHeaders: row.headers,
+          extraBody: row.bodyParams,
           history: options?.history,
           toolUseLookupMessages: options?.toolUseLookupMessages,
           system: options?.system,
@@ -259,21 +213,19 @@ export class DefaultModelRequestService implements ModelRequestService {
           onStream,
           sampling,
           thinking,
-          signal: options?.signal,
-        });
+          scope,
+        };
+        return Result.ok(await adapter.chat(chatArgs));
       } catch (error) {
-        const canRetry =
-          attempt <= policy.maxRetries &&
-          !attemptEmitted &&
-          isRetryableError(error);
+        const canRetry = attempt <= policy.maxRetries && !attemptEmitted && isRetryableError(error);
         // WHY: cancel must short-circuit retries so terminate actions feel immediate.
-        if (!canRetry || isAbortLikeError(error)) {
+        if (!canRetry || RequestAbort.isAbortLikeError(error)) {
           throw error;
         }
-        await delayWithSignal(
-          computeBackoffMs(attempt, policy),
-          options?.signal
-        );
+        const retryPolicy = policy ?? DEFAULT_RETRY_POLICY;
+        const baseDelay = Math.min(retryPolicy.baseDelayMs * 2 ** Math.max(0, attempt - 1), retryPolicy.maxDelayMs);
+        const jitterRange = baseDelay * retryPolicy.jitterRatio;
+        await delayWithSignal(Math.max(0, Math.round(baseDelay + (Math.random() * 2 - 1) * jitterRange)), scope.signal);
       }
     }
   }

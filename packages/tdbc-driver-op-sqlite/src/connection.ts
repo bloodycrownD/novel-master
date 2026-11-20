@@ -11,10 +11,10 @@ import type {
   TdbcConnection,
 } from "@novel-master/core";
 import { TdbcError } from "@novel-master/core";
+import { AsyncMutex } from "@novel-master/core/tdbc";
 import type { OpSqliteAdapter } from "./adapter.js";
-import { normalizeOpSqliteBindings } from "./bindings.js";
-import { AsyncMutex } from "./mutex.js";
-import { rowsFromResult } from "./row-mapper.js";
+import { OpSqliteBindings } from "./bindings.js";
+import { RowMapper } from "./row-mapper.js";
 
 export class OpSqliteConnection implements TdbcConnection {
   private closed = false;
@@ -25,33 +25,17 @@ export class OpSqliteConnection implements TdbcConnection {
   private lastYieldAt = 0;
   private readonly mutex = new AsyncMutex();
 
-  constructor(
-    private readonly adapter: OpSqliteAdapter,
-    /**
-     * 可选后台探测函数（app 层经注册工厂注入）：返回 true 时事务内
-     * 跳过休眠量子让步；未注入恒按前台口径让步，行为与现状一致。
-     */
-    private readonly isBackground?: () => boolean,
-  ) {}
+  constructor(private readonly adapter: OpSqliteAdapter, /** * 可选后台探测函数（app 层经注册工厂注入）：返回 true 时事务内 * 跳过休眠量子让步；未注入恒按前台口径让步，行为与现状一致。 */ private readonly isBackground?: () => boolean,) {}
 
-  execute(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<ExecuteResult> {
+  execute(sql: string, parameters?: readonly unknown[],): Promise<ExecuteResult> {
     return this.mutex.run(() => this.executeDirect(sql, parameters));
   }
 
-  query<T extends Row = Row>(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<T[]> {
+  query<T extends Row = Row>(sql: string, parameters?: readonly unknown[],): Promise<T[]> {
     return this.mutex.run(() => this.queryDirect<T>(sql, parameters));
   }
 
-  batch(
-    sql: string,
-    parametersList: readonly (readonly unknown[])[],
-  ): Promise<BatchResult> {
+  batch(sql: string, parametersList: readonly (readonly unknown[])[],): Promise<BatchResult> {
     return this.mutex.run(() => this.batchDirect(sql, parametersList));
   }
 
@@ -59,11 +43,7 @@ export class OpSqliteConnection implements TdbcConnection {
     return this.mutex.run(async () => {
       this.assertOpen();
       if (this.inTransaction) {
-        throw new TdbcError(
-          "NESTED_TRANSACTION",
-          "Nested transactions are not supported",
-          { driver: "op-sqlite" },
-        );
+        throw new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "op-sqlite" },);
       }
 
       this.inTransaction = true;
@@ -90,12 +70,7 @@ export class OpSqliteConnection implements TdbcConnection {
         try {
           await this.runAdapter("ROLLBACK", undefined);
         } catch (rollbackError) {
-          console.warn(
-            "[op-sqlite-tdbc] ROLLBACK 失败（事务可能已被自动中断）:",
-            rollbackError instanceof Error
-              ? rollbackError.message
-              : String(rollbackError),
-          );
+          console.warn("[op-sqlite-tdbc] ROLLBACK 失败（事务可能已被自动中断）:", rollbackError instanceof Error ? rollbackError.message : String(rollbackError),);
         }
         if (cause instanceof TdbcError) {
           throw cause;
@@ -117,33 +92,21 @@ export class OpSqliteConnection implements TdbcConnection {
   }
 
   /** @internal 不重复进互斥锁的直接查询。 */
-  async queryDirect<T extends Row = Row>(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<T[]> {
+  async queryDirect<T extends Row = Row>(sql: string, parameters?: readonly unknown[],): Promise<T[]> {
     this.assertOpen();
     try {
-      const result = await this.runAdapter(
-        sql,
-        normalizeOpSqliteBindings(parameters),
-      );
-      return rowsFromResult(result) as T[];
+      const result = await this.runAdapter(sql, OpSqliteBindings.normalize(parameters),);
+      return RowMapper.fromResult(result) as T[];
     } catch (cause) {
       throw this.wrapSqlite(cause);
     }
   }
 
   /** @internal 供事务委托连接使用的直接 execute。 */
-  async executeDirect(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<ExecuteResult> {
+  async executeDirect(sql: string, parameters?: readonly unknown[],): Promise<ExecuteResult> {
     this.assertOpen();
     try {
-      const result = await this.runAdapter(
-        sql,
-        normalizeOpSqliteBindings(parameters),
-      );
+      const result = await this.runAdapter(sql, OpSqliteBindings.normalize(parameters),);
       return {
         changes: result.rowsAffected ?? 0,
         lastInsertRowid: result.insertId ?? 0,
@@ -154,10 +117,7 @@ export class OpSqliteConnection implements TdbcConnection {
   }
 
   /** @internal 供事务委托连接使用的直接 batch。 */
-  async batchDirect(
-    sql: string,
-    parametersList: readonly (readonly unknown[])[],
-  ): Promise<BatchResult> {
+  async batchDirect(sql: string, parametersList: readonly (readonly unknown[])[],): Promise<BatchResult> {
     this.assertOpen();
     if (parametersList.length === 0) {
       return { totalChanges: 0, count: 0 };
@@ -166,10 +126,7 @@ export class OpSqliteConnection implements TdbcConnection {
     const runStatements = async (): Promise<BatchResult> => {
       let totalChanges = 0;
       for (const params of parametersList) {
-        const result = await this.runAdapter(
-          sql,
-          normalizeOpSqliteBindings(params),
-        );
+        const result = await this.runAdapter(sql, OpSqliteBindings.normalize(params),);
         totalChanges += result.rowsAffected ?? 0;
       }
       return { totalChanges, count: parametersList.length };
@@ -192,12 +149,7 @@ export class OpSqliteConnection implements TdbcConnection {
           await this.runAdapter(`ROLLBACK TO ${sp}`, undefined);
           await this.runAdapter(`RELEASE ${sp}`, undefined);
         } catch (rollbackError) {
-          console.warn(
-            "[op-sqlite-tdbc] SAVEPOINT 回滚失败（事务可能已被自动中断）:",
-            rollbackError instanceof Error
-              ? rollbackError.message
-              : String(rollbackError),
-          );
+          console.warn("[op-sqlite-tdbc] SAVEPOINT 回滚失败（事务可能已被自动中断）:", rollbackError instanceof Error ? rollbackError.message : String(rollbackError),);
         }
         throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
           driver: "op-sqlite",
@@ -219,12 +171,7 @@ export class OpSqliteConnection implements TdbcConnection {
       try {
         await this.runAdapter("ROLLBACK", undefined);
       } catch (rollbackError) {
-        console.warn(
-          "[op-sqlite-tdbc] batch ROLLBACK 失败（事务可能已被自动中断）:",
-          rollbackError instanceof Error
-            ? rollbackError.message
-            : String(rollbackError),
-        );
+        console.warn("[op-sqlite-tdbc] batch ROLLBACK 失败（事务可能已被自动中断）:", rollbackError instanceof Error ? rollbackError.message : String(rollbackError),);
       }
       throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
         driver: "op-sqlite",
@@ -250,15 +197,9 @@ export class OpSqliteConnection implements TdbcConnection {
    * 长期霸占 JS 线程。adapter 无 executeSync 能力时（如测试 mock）落回
    * async，行为与旧版一致。
    */
-  private async runAdapter(
-    sql: string,
-    params: readonly unknown[] | undefined,
-  ): Promise<import("./adapter.js").OpSqliteResult> {
+  private async runAdapter(sql: string, params: readonly unknown[] | undefined,): Promise<import("./adapter.js").OpSqliteResult> {
     if (this.inTransaction && this.adapter.executeSync) {
-      const result = this.adapter.executeSync(
-        sql,
-        params as unknown[] | undefined,
-      );
+      const result = this.adapter.executeSync(sql, params as unknown[] | undefined,);
       // 按时间量子让出事件循环（16ms）：防 ANR 只需事件循环不被长期剥夺，
       // 逐语句 setTimeout(0) 会让大批量小语句（会话复制 2 万条）每条都付
       // 一次定时器往返（真机实测几十秒级卡顿）；量子化后让步次数从 O(语句数)
@@ -281,46 +222,27 @@ export class OpSqliteConnection implements TdbcConnection {
   }
 
   private wrapSqlite(cause: unknown): TdbcError {
-    return new TdbcError(
-      "SQLITE_ERROR",
-      cause instanceof Error ? cause.message : String(cause),
-      { driver: "op-sqlite", cause },
-    );
+    return new TdbcError("SQLITE_ERROR", cause instanceof Error ? cause.message : String(cause), { driver: "op-sqlite", cause },);
   }
 }
 
 class TransactionalConnection implements TdbcConnection {
   constructor(private readonly parent: OpSqliteConnection) {}
 
-  execute(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<ExecuteResult> {
+  execute(sql: string, parameters?: readonly unknown[],): Promise<ExecuteResult> {
     return this.parent.executeDirect(sql, parameters);
   }
 
-  query<T extends Row = Row>(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<T[]> {
+  query<T extends Row = Row>(sql: string, parameters?: readonly unknown[],): Promise<T[]> {
     return this.parent.queryDirect<T>(sql, parameters);
   }
 
-  batch(
-    sql: string,
-    parametersList: readonly (readonly unknown[])[],
-  ): Promise<BatchResult> {
+  batch(sql: string, parametersList: readonly (readonly unknown[])[],): Promise<BatchResult> {
     return this.parent.batchDirect(sql, parametersList);
   }
 
   transaction<T>(_fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
-    return Promise.reject(
-      new TdbcError(
-        "NESTED_TRANSACTION",
-        "Nested transactions are not supported",
-        { driver: "op-sqlite" },
-      ),
-    );
+    return Promise.reject(new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "op-sqlite" },),);
   }
 
   close(): Promise<void> {

@@ -3,7 +3,7 @@
  * 1. 测试结果区语义「结果只属于上次点击『测试』时的输入快照」——改正则
  *    （applyPatternInput）或换捕获数字档位（PickerListModal onPick）后，
  *    旧结果清空、结果区回 idle 占位文案（与 changeTestText 同范式）。
- * 2. 高亮渲染走 core 单源 splitSmartSortHighlightSegments：匹配段以 primary
+ * 2. 高亮渲染走 core 单源 SmartSortHighlight.splitSegments：匹配段以 primary
  *    色嵌套 Text 渲染（切分算法本身由 core 单测覆盖，此处只锁渲染链路）。
  */
 import React from 'react';
@@ -42,9 +42,12 @@ jest.mock('@/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),

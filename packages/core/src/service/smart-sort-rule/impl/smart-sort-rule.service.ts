@@ -6,16 +6,17 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
-import { compileSmartSortRule, validateSmartSortRuleDraft } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
-import { bundleRulesToEntities, decodeSmartSortRuleBundle, encodeSmartSortRuleBundle, type SmartSortRuleBundleDocument } from "@/domain/smart-sort-rule/model/smart-sort-rule-io.js";
-import { isBuiltinSmartSortRuleId, type SmartSortCaptureKind, type SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
-import { parseCreateSmartSortRuleInput, parseUpdateSmartSortRuleInput, type CreateSmartSortRuleInput, type UpdateSmartSortRuleInput } from "@/domain/smart-sort-rule/model/smart-sort-rule.schema.js";
+import { Result } from "@/errors/either.js";
+import { SmartSortRuleCompiler } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
+import { SmartSortRuleIo, type SmartSortRuleBundleDocument } from "@/domain/smart-sort-rule/model/smart-sort-rule-io.js";
+import { SmartSortRule, type SmartSortCaptureKind } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+import { SmartSortRuleSchema, type CreateSmartSortRuleInput, type UpdateSmartSortRuleInput } from "@/domain/smart-sort-rule/model/smart-sort-rule.schema.js";
 import type { SmartSortRuleRepository } from "@/domain/smart-sort-rule/repositories/smart-sort-rule.port.js";
-import { compareSmartBasenames, extractSortKey, extractSortKeyDetail, type CompiledSmartSortRule, type SmartSortKeyCache } from "@/domain/workplace/logic/smart-sort.js";
+import { SmartSort, type CompiledSmartSortRule, type SmartSortKeyCache } from "@/domain/workplace/logic/smart-sort.js";
 import type { SmartSortRuleMoveTarget, SmartSortRulePreviewDraft, SmartSortRulePreviewLine, SmartSortRulePreviewResult, SmartSortRuleService } from "../smart-sort-rule.port.js";
 
 /** resetDefaults 重灌用的内置 seed 行（结构兼容 bootstrap 常量）。 */
-export interface SmartSortBuiltinSeedRow {
+interface SmartSortBuiltinSeedRow {
   readonly ruleId: string;
   readonly name: string;
   readonly pattern: string;
@@ -25,7 +26,7 @@ export interface SmartSortBuiltinSeedRow {
   readonly sortOrder: number;
 }
 
-export interface SmartSortRuleServiceDeps {
+interface SmartSortRuleServiceDeps {
   /** 根连接：多语句写入口用它开事务（**单语句入口不开**）。 */
   readonly conn: TdbcConnection;
   /**
@@ -85,12 +86,12 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     return this.rules().listOrdered();
   }
 
-  async createRule(input: CreateSmartSortRuleInput): Promise<SmartSortRule> {
-    const parsedInput = parseCreateSmartSortRuleInput(input);
-    if (!parsedInput.ok) throw parsedInput.error;
+  async createRule(input: CreateSmartSortRuleInput): Promise<Result<SmartSortRule, AppError>> {
+    const parsedInput = SmartSortRuleSchema.parseCreateInput(input);
+    if (!parsedInput.ok) return Result.err(parsedInput.error);
     const fields = parsedInput.value;
-    const draft = validateSmartSortRuleDraft(fields);
-    if (!draft.ok) throw draft.error;
+    const draft = SmartSortRuleCompiler.validateDraft(fields);
+    if (!draft.ok) return Result.err(draft.error);
     // 用户规则 id 生成（时间戳 + 随机，避免与现存撞号）。
     let ruleId: string | null = null;
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -100,7 +101,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         break;
       }
     }
-    if (ruleId == null) throw new AppError("SMART_SORT_RULE_CONFLICT", "Failed to generate a unique rule id");
+    if (ruleId == null) return Result.err(new AppError("SMART_SORT_RULE_CONFLICT", { detail: "Failed to generate a unique rule id" }));
     const now = Date.now();
     const sortOrder = await this.rules().nextSortOrder();
     const rule: SmartSortRule = {
@@ -116,22 +117,24 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       updatedAtMs: now,
     };
     await this.rules().insert(rule);
-    return rule;
+    return Result.ok(rule);
   }
 
-  async updateRule(ruleId: string, patch: UpdateSmartSortRuleInput): Promise<SmartSortRule> {
-    const parsedInput = parseUpdateSmartSortRuleInput(patch);
-    if (!parsedInput.ok) throw parsedInput.error;
+  async updateRule(ruleId: string, patch: UpdateSmartSortRuleInput): Promise<Result<SmartSortRule, AppError>> {
+    const parsedInput = SmartSortRuleSchema.parseUpdateInput(patch);
+    if (!parsedInput.ok) return Result.err(parsedInput.error);
     const parsed = parsedInput.value;
-    const existing = await this.getRuleOrThrow(ruleId);
+    const found = await this.getRule(ruleId);
+    if (!found.ok) return Result.err(found.error);
+    const existing = found.value;
     const merged = {
       name: parsed.name ?? existing.name,
       pattern: parsed.pattern ?? existing.pattern,
       flags: parsed.flags ?? existing.flags,
       captureKind: parsed.captureKind ?? existing.captureKind,
     };
-    const draft = validateSmartSortRuleDraft(merged, { ruleId });
-    if (!draft.ok) throw draft.error;
+    const draft = SmartSortRuleCompiler.validateDraft(merged, { ruleId });
+    if (!draft.ok) return Result.err(draft.error);
     const updated: SmartSortRule = {
       ...existing,
       name: merged.name,
@@ -143,29 +146,33 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       updatedAtMs: Date.now(),
     };
     await this.rules().update(updated);
-    return updated;
+    return Result.ok(updated);
   }
 
-  async deleteRule(ruleId: string): Promise<void> {
-    const rule = await this.getRuleOrThrow(ruleId);
-    if (isBuiltinSmartSortRuleId(rule.ruleId)) {
-      throw new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, { ruleId });
+  async deleteRule(ruleId: string): Promise<Result<void, AppError>> {
+    const found = await this.getRule(ruleId);
+    if (!found.ok) return Result.err(found.error);
+    if (SmartSortRule.isBuiltinId(found.value.ruleId)) {
+      return Result.err(new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", { detail: `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, ruleId }));
     }
-    await this.rules().delete(rule.ruleId);
+    await this.rules().delete(found.value.ruleId);
+    return Result.ok(undefined);
   }
 
-  async deleteBatch(ruleIds: readonly string[]): Promise<void> {
+  /** nm-style: keep-public — SmartSortRuleService 端口方法；desktop IPC 批量删除单点消费。 */
+  async deleteBatch(ruleIds: readonly string[]): Promise<Result<void, AppError>> {
     // 全量校验（存在 + 非 builtin）**留在事务外**：读多写零，进事务只是多持锁。
     for (const ruleId of ruleIds) {
-      const rule = await this.getRuleOrThrow(ruleId);
-      if (isBuiltinSmartSortRuleId(rule.ruleId)) {
-        throw new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, { ruleId });
+      const found = await this.getRule(ruleId);
+      if (!found.ok) return Result.err(found.error);
+      if (SmartSortRule.isBuiltinId(found.value.ruleId)) {
+        return Result.err(new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", { detail: `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, ruleId }));
       }
     }
     // 逐条 delete 包一条事务：中途失败不留半删状态。
     // ⚠️ 事务内一律 `this.rules(tx)`——经根连接写会撞 AsyncMutex 不可重入（挂起）。
     if (ruleIds.length === 0) {
-      return;
+      return Result.ok(undefined);
     }
     await this.deps.conn.transaction(async (tx) => {
       const rules = this.rules(tx);
@@ -173,12 +180,15 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         await rules.delete(ruleId);
       }
     });
+    return Result.ok(undefined);
   }
 
-  async setEnabled(ruleId: string, enabled: boolean): Promise<SmartSortRule> {
-    const existing = await this.getRuleOrThrow(ruleId);
+  async setEnabled(ruleId: string, enabled: boolean): Promise<Result<SmartSortRule, AppError>> {
+    const found = await this.getRule(ruleId);
+    if (!found.ok) return Result.err(found.error);
+    const existing = found.value;
     if (existing.enabled === enabled) {
-      return existing;
+      return Result.ok(existing);
     }
     const updated: SmartSortRule = {
       ...existing,
@@ -186,7 +196,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       updatedAtMs: Date.now(),
     };
     await this.rules().update(updated);
-    return updated;
+    return Result.ok(updated);
   }
 
   async setEnabledBatch(ruleIds: readonly string[], enabled: boolean): Promise<void> {
@@ -203,9 +213,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       for (const ruleId of ruleIds) {
         const existing = await rules.find(ruleId);
         if (existing == null) {
-          throw new AppError("SMART_SORT_RULE_NOT_FOUND", `Rule not found: ${ruleId}`, {
-            ruleId,
-          });
+          throw new AppError("SMART_SORT_RULE_NOT_FOUND", { detail: `Rule not found: ${ruleId}`, ruleId });
         }
         if (existing.enabled === enabled) {
           continue;
@@ -219,16 +227,14 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     });
   }
 
-  async moveRule(ruleId: string, to: SmartSortRuleMoveTarget): Promise<SmartSortRule[]> {
+  async moveRule(ruleId: string, to: SmartSortRuleMoveTarget): Promise<Result<SmartSortRule[], AppError>> {
     // 快照在**事务外**读：它同时是 id 序的来源与 renumber 的第②参数
     // （renumber 内部不再 listOrdered，否则事务内会多一次读）。
     const snapshot = await this.rules().listOrdered();
     const ids = snapshot.map((r) => r.ruleId);
     const from = ids.indexOf(ruleId);
     if (from < 0) {
-      throw new AppError("SMART_SORT_RULE_NOT_FOUND", `Rule not found: ${ruleId}`, {
-        ruleId,
-      });
+      return Result.err(new AppError("SMART_SORT_RULE_NOT_FOUND", { detail: `Rule not found: ${ruleId}`, ruleId }));
     }
     let target: number;
     if (to === "top") {
@@ -250,45 +256,47 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       return this.deps.conn.transaction(async (tx) => {
         const rules = this.rules(tx);
         await this.renumber(rules, snapshot, ids);
-        return rules.listOrdered();
+        return Result.ok(await rules.listOrdered());
       });
     }
-    return this.rules().listOrdered();
+    return Result.ok(await this.rules().listOrdered());
   }
 
-  async reorderRules(orderedIds: readonly string[]): Promise<SmartSortRule[]> {
+  /** nm-style: keep-public — SmartSortRuleService 端口方法；desktop IPC 整表重排单点消费。 */
+  async reorderRules(orderedIds: readonly string[]): Promise<Result<SmartSortRule[], AppError>> {
     // 全部校验留在事务外（重复/全覆盖检查是纯读），顺带取 renumber 的快照。
     const snapshot = await this.rules().listOrdered();
     const existingIds = new Set(snapshot.map((r) => r.ruleId));
     const orderedSet = new Set(orderedIds);
     if (orderedSet.size !== orderedIds.length) {
-      throw new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", "orderedIds contains duplicates");
+      return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: "orderedIds contains duplicates" }));
     }
     if (orderedIds.length !== existingIds.size || [...orderedIds].some((id) => !existingIds.has(id))) {
-      throw new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", "orderedIds must cover exactly the full rule set");
+      return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: "orderedIds must cover exactly the full rule set" }));
     }
     return this.deps.conn.transaction(async (tx) => {
       const rules = this.rules(tx);
       await this.renumber(rules, snapshot, orderedIds);
-      return rules.listOrdered();
+      return Result.ok(await rules.listOrdered());
     });
   }
 
   async exportRules(): Promise<SmartSortRuleBundleDocument> {
-    return encodeSmartSortRuleBundle(await this.rules().listOrdered());
+    return SmartSortRuleIo.encodeBundle(await this.rules().listOrdered());
   }
 
-  async importRules(raw: unknown): Promise<SmartSortRule[]> {
-    const doc = decodeSmartSortRuleBundle(raw);
-    const entities = bundleRulesToEntities(doc, Date.now());
+  async importRules(raw: unknown): Promise<Result<SmartSortRule[], AppError>> {
+    const doc = SmartSortRuleIo.decodeBundle(raw);
+    if (!doc.ok) return Result.err(doc.error);
+    const entities = SmartSortRuleIo.bundleRulesToEntities(doc.value, Date.now());
     const seen = new Set<string>();
     for (const entity of entities) {
       if (seen.has(entity.ruleId)) {
-        throw new AppError("SMART_SORT_RULE_CONFLICT", `Duplicate ruleId in bundle: ${entity.ruleId}`, { ruleId: entity.ruleId });
+        return Result.err(new AppError("SMART_SORT_RULE_CONFLICT", { detail: `Duplicate ruleId in bundle: ${entity.ruleId}`, ruleId: entity.ruleId }));
       }
       seen.add(entity.ruleId);
-      const draft = validateSmartSortRuleDraft(entity, { ruleId: entity.ruleId });
-      if (!draft.ok) throw draft.error;
+      const draft = SmartSortRuleCompiler.validateDraft(entity, { ruleId: entity.ruleId });
+      if (!draft.ok) return Result.err(draft.error);
     }
     // 校验段**保持在事务外**（读多写零；放进事务只会多持锁，且撞号防御的位置不变）。
     // ⚠️ 替换式语义要求原子：deleteAll + N 条 insert 必须同生共死——
@@ -299,7 +307,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       for (const entity of entities) {
         await rules.insert(entity);
       }
-      return rules.listOrdered();
+      return Result.ok(await rules.listOrdered());
     });
   }
 
@@ -310,7 +318,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     // 删除 builtin 前先按当前列表序快照用户规则的相对顺序（B-2）：重灌的种子
     // sortOrder 1..4 会与用户规则的存量 sort_order 撞号，若事后用 listOrdered()
     // 兜底重排，撞号会按 rule_id 隐式决胜，把用户规则交错到 builtin 中间。
-    const userIds = snapshot.filter((rule) => !isBuiltinSmartSortRuleId(rule.ruleId)).map((rule) => rule.ruleId);
+    const userIds = snapshot.filter((rule) => !SmartSortRule.isBuiltinId(rule.ruleId)).map((rule) => rule.ruleId);
     // 三段（删 builtin → 重灌 seed → renumber）整体包一条事务：中途失败不留
     // 「builtin 已删但没重灌」的残局。
     // 注：service 层用的是**普通 INSERT**（不是 bootstrap 的 INSERT OR IGNORE），
@@ -318,7 +326,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     await this.deps.conn.transaction(async (tx) => {
       const rules = this.rules(tx);
       for (const rule of snapshot) {
-        if (isBuiltinSmartSortRuleId(rule.ruleId)) {
+        if (SmartSortRule.isBuiltinId(rule.ruleId)) {
           await rules.delete(rule.ruleId);
         }
       }
@@ -344,12 +352,13 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     });
   }
 
-  async previewSort(names: readonly string[], draftRules?: readonly SmartSortRulePreviewDraft[]): Promise<SmartSortRulePreviewResult> {
+  /** nm-style: keep-public — SmartSortRuleService 端口方法；CLI `sort-rule preview` 单点消费。 */
+  async previewSort(names: readonly string[], draftRules?: readonly SmartSortRulePreviewDraft[]): Promise<Result<SmartSortRulePreviewResult, AppError>> {
     let compiled: readonly CompiledSmartSortRule[];
     if (draftRules !== undefined) {
       const compiledDrafts: CompiledSmartSortRule[] = [];
       for (const draft of draftRules) {
-        const compiledRule = compileSmartSortRule({
+        const compiledRule = SmartSortRuleCompiler.compile({
           ruleId: draft.ruleId,
           name: draft.name,
           pattern: draft.pattern,
@@ -361,15 +370,17 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
           createdAtMs: 0,
           updatedAtMs: 0,
         });
-        if (!compiledRule.ok) throw compiledRule.error;
+        if (!compiledRule.ok) return Result.err(compiledRule.error);
         compiledDrafts.push(compiledRule.value);
       }
       compiled = compiledDrafts;
     } else {
-      compiled = await this.listCompiledRules();
+      const listed = await this.listCompiledRules();
+      if (!listed.ok) return Result.err(listed.error);
+      compiled = listed.value;
     }
     const lines: SmartSortRulePreviewLine[] = names.map((name) => {
-      const detail = extractSortKeyDetail(name, compiled);
+      const detail = SmartSort.extractSortKeyDetail(name, compiled);
       return {
         name,
         matchedRuleId: detail?.ruleId ?? null,
@@ -379,35 +390,34 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     const cache: SmartSortKeyCache = new Map();
     for (const name of names) {
       if (!cache.has(name)) {
-        cache.set(name, extractSortKey(name, compiled));
+        cache.set(name, SmartSort.extractSortKey(name, compiled));
       }
     }
-    const sortedNames = [...names].sort((a, b) => compareSmartBasenames(a, b, "asc", cache));
-    return { lines, sortedNames };
+    const sortedNames = [...names].sort((a, b) => SmartSort.compareBasenames(a, b, "asc", cache));
+    return Result.ok({ lines, sortedNames });
   }
 
-  async listCompiledRules(): Promise<CompiledSmartSortRule[]> {
+  /** 启用规则逐条预编译；任一编译失败（存量数据违约）经 `Result.err` 原样接力。 */
+  async listCompiledRules(): Promise<Result<CompiledSmartSortRule[], AppError>> {
     const rules = await this.rules().listOrdered();
     const out: CompiledSmartSortRule[] = [];
     for (const rule of rules) {
       if (!rule.enabled) {
         continue;
       }
-      const compiled = compileSmartSortRule(rule);
-      if (!compiled.ok) throw compiled.error;
+      const compiled = SmartSortRuleCompiler.compile(rule);
+      if (!compiled.ok) return Result.err(compiled.error);
       out.push(compiled.value);
     }
-    return out;
+    return Result.ok(out);
   }
 
-  private async getRuleOrThrow(ruleId: string): Promise<SmartSortRule> {
+  private async getRule(ruleId: string): Promise<Result<SmartSortRule, AppError>> {
     const rule = await this.rules().find(ruleId);
     if (!rule) {
-      throw new AppError("SMART_SORT_RULE_NOT_FOUND", `Rule not found: ${ruleId}`, {
-        ruleId,
-      });
+      return Result.err(new AppError("SMART_SORT_RULE_NOT_FOUND", { detail: `Rule not found: ${ruleId}`, ruleId }));
     }
-    return rule;
+    return Result.ok(rule);
   }
 
   /**

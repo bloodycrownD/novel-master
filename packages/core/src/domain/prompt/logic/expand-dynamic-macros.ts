@@ -7,12 +7,12 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
-import { formatLocalDateTime } from "@/infra/date-format.js";
-import { renderMacro } from "@/infra/prompt-template/macro-render.js";
-import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
+import { DateTime } from "@/common/datetime.js";
+import { MacroRender } from "@/infra/prompt-template/macro-render.js";
+import { WeekCn } from "@/infra/prompt-template/week-cn.js";
 
 /** dynamic 宏展开上下文。 */
-export interface DynamicMacroContext {
+interface DynamicMacroContext {
   readonly now?: Date;
   readonly workplace?: WorkplaceService;
   /**
@@ -25,26 +25,38 @@ export interface DynamicMacroContext {
 /** 本模块的领域失败：dynamic 宏模板非法。 */
 type DynamicMacroError = AppError<"PROMPT_INVALID_MACRO">;
 
-/**
- * 展开 dynamic 文本中的白名单宏；每轮 assembly 实时计算。
- *
- * @returns 宏模板非法时返回 `PROMPT_INVALID_MACRO`，不把 infra 的 PromptError 漏出本层。
- */
-export async function expandDynamicMacros(content: string, ctx: DynamicMacroContext): Promise<Result<string, DynamicMacroError>> {
-  const now = ctx.now ?? new Date();
-  let filetree = "";
-  if (content.includes("$filetree")) {
-    filetree = ctx.filetree ?? (ctx.workplace != null ? await ctx.workplace.renderFileTree() : "");
-  }
-  const root = {
-    time: formatLocalDateTime(now),
-    week_cn: formatWeekCn(now),
-    filetree,
-  };
-  try {
-    return Result.ok(renderMacro(content, { dot: {}, root }));
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.macro_expand_failed", params: { detail } }, { cause: error }));
-  }
-}
+export const DynamicMacrosExpansion = {
+  /**
+   * 展开 dynamic 文本中的白名单宏；每轮 assembly 实时计算。
+   *
+   * @returns 宏模板非法时返回 `PROMPT_INVALID_MACRO`，不把 infra 的 AppError 漏出本层。
+   */
+  expand: async (content: string, ctx: DynamicMacroContext): Promise<Result<string, DynamicMacroError>> => {
+    const now = ctx.now ?? new Date();
+    let filetree = "";
+    if (content.includes("$filetree")) {
+      if (ctx.filetree != null) {
+        filetree = ctx.filetree;
+      } else if (ctx.workplace != null) {
+        const rendered = await ctx.workplace.renderFileTree();
+        if (!rendered.ok) {
+          // 本层契约：不把 infra 的 AppError 漏出（见 @returns），统一收口为 PROMPT_INVALID_MACRO。
+          return Result.err(new AppError("PROMPT_INVALID_MACRO", { detail: `$filetree render failed: ${rendered.error.message}`, cause: rendered.error }));
+        }
+        filetree = rendered.value;
+      }
+    }
+    const root = {
+      time: DateTime.localDateTime(now),
+      week_cn: WeekCn.format(now),
+      filetree,
+    };
+    // MacroRender.render 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，
+    // 不把 infra 的 AppError 漏出），detail/cause 与旧 catch 路径一致。
+    const rendered = MacroRender.render(content, { dot: {}, root });
+    if (!rendered.ok) {
+      return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.macro_expand_failed", params: { detail: rendered.error.message } }, cause: rendered.error }));
+    }
+    return Result.ok(rendered.value);
+  },
+} as const;

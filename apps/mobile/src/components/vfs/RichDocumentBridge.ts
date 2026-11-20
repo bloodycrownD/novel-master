@@ -2,7 +2,7 @@
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
  * MD 批注：Recogito createAnnotation → recogitoCreate；草稿投影 → setAnnotations。
  */
-import { isRecord } from '@novel-master/core/common';
+import {TypedMessageBridge} from '@/webview-host/typed-message-bridge';
 
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
@@ -21,7 +21,7 @@ export type RichDocumentTheme = {
   readonly borderLight: string;
 };
 
-export type RichDocumentSetPayload = {
+type RichDocumentSetPayload = {
   readonly mode: 'html' | 'plain';
   readonly html?: string;
   readonly plain?: string;
@@ -49,7 +49,7 @@ export type RichDocumentAnnotationMark = {
  * @deprecated 旧 menuItems / selectionCollect 遗留载荷；生产不再发送。
  * 仅保留解码兼容；MD 主路径已改 recogitoCreate。
  */
-export type RichDocumentSelectionCollectPayload = {
+type RichDocumentSelectionCollectPayload = {
   readonly originalText: string;
   readonly mode: 'plain' | 'markdown';
   readonly selectionStart?: number;
@@ -84,7 +84,7 @@ export type HostToRichDocumentMessage =
   | BridgeEnvelope<'closeMermaidViewer', Record<string, never>>;
 
 /** Document WebView → host */
-export type RichDocumentToHostMessage =
+type RichDocumentToHostMessage =
   | BridgeEnvelope<'ready', {version: number}>
   /** @deprecated 不再作为主通道；保留解码兼容。 */
   | BridgeEnvelope<'selectionAnnotate', {text: string}>
@@ -102,41 +102,4 @@ export type RichDocumentToHostMessage =
   /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
   | BridgeEnvelope<'copyCode', {code: string}>;
 
-export function encodeHostToRichDocument(
-  message: HostToRichDocumentMessage,
-): string {
-  return JSON.stringify(message);
-}
-
-export function encodeRichDocumentToHost(
-  message: RichDocumentToHostMessage,
-): string {
-  return JSON.stringify(message);
-}
-
-export function decodeRichDocumentToHost(
-  raw: string,
-): RichDocumentToHostMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
-    throw new Error('Invalid rich-document bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string' || !isRecord(parsed.payload)) {
-    throw new Error('Invalid rich-document bridge envelope shape');
-  }
-  return parsed as RichDocumentToHostMessage;
-}
-
-export function decodeHostToRichDocument(
-  raw: string,
-): HostToRichDocumentMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
-    throw new Error('Invalid rich-document bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string') {
-    throw new Error('Invalid rich-document bridge envelope shape');
-  }
-  return parsed as HostToRichDocumentMessage;
-}
-
+export const richDocumentBridge = TypedMessageBridge.create<HostToRichDocumentMessage, RichDocumentToHostMessage>(RICH_DOCUMENT_BRIDGE_VERSION, 'rich-document');

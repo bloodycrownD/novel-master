@@ -3,7 +3,7 @@
  */
 import { ALLOWED_DYNAMIC_ROOT_MACROS } from "@shared/logic/prompt";
 
-export type PromptInsertableMacro = {
+type PromptInsertableMacro = {
   readonly label: string;
   readonly token: string;
 };
@@ -16,7 +16,7 @@ export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] =
 
 const ALLOWED_ROOT_MACRO_KEYS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 
-export type WhitelistMacroRange = {
+type WhitelistMacroRange = {
   readonly start: number;
   readonly end: number;
   readonly value: string;

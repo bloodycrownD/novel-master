@@ -2,12 +2,12 @@
  * attachmentChipLabel：消息附件中文 action:path。
  */
 import {describe, expect, it} from '@jest/globals';
-import {attachmentChipLabel} from '@/web/chat-transcript/webview/runtime/render/row-logic';
+import {RowLogic} from '@/web/chat-transcript/webview/runtime/render/row-logic';
 
 describe('attachmentChipLabel', () => {
   it('user_ops + action → 中文二字:path', () => {
     expect(
-      attachmentChipLabel({
+      RowLogic.attachmentChipLabel({
         source: 'user_ops',
         type: 'text',
         name: '/a.md',
@@ -16,7 +16,7 @@ describe('attachmentChipLabel', () => {
       }),
     ).toBe('创建:/a.md');
     expect(
-      attachmentChipLabel({
+      RowLogic.attachmentChipLabel({
         source: 'user_ops',
         name: '/n.md',
         path: '/n.md',
@@ -27,7 +27,7 @@ describe('attachmentChipLabel', () => {
 
   it('T-CR8: workplace + action/无 action → 规则:path', () => {
     expect(
-      attachmentChipLabel({
+      RowLogic.attachmentChipLabel({
         source: 'workplace',
         name: '/r.md',
         path: '/r.md',
@@ -35,7 +35,7 @@ describe('attachmentChipLabel', () => {
       }),
     ).toBe('规则:/r.md');
     expect(
-      attachmentChipLabel({
+      RowLogic.attachmentChipLabel({
         source: 'workplace',
         name: '/r.md',
         path: '/r.md',
@@ -45,7 +45,7 @@ describe('attachmentChipLabel', () => {
 
   it('无 action 旧 name=write:/x → 创建:/x', () => {
     expect(
-      attachmentChipLabel({
+      RowLogic.attachmentChipLabel({
         source: 'user_ops',
         name: 'write:/ops.md',
         path: '/ops.md',
@@ -55,7 +55,7 @@ describe('attachmentChipLabel', () => {
 
   it('attach → @path（不进中文状态口径）', () => {
     expect(
-      attachmentChipLabel({
+      RowLogic.attachmentChipLabel({
         source: 'attach',
         name: '/a.md',
         path: '/a.md',

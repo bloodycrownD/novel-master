@@ -5,42 +5,40 @@
  * 让它有个显式消费点，别被后人当成漏改）、**值一律忽略**（历史版本写入的
  * `legacy-rn` 也照样按 `webview` 走）。
  */
-import {
-  defaultChatTranscriptEngine,
-  readChatTranscriptEngine,
-} from '@/storage/chat-transcript-engine';
+import {ChatTranscriptEngine} from '@/storage/chat-transcript-engine';
 
 describe('chat-transcript-engine（legacy-rn 已退役）', () => {
   it('默认恒为 webview', () => {
-    expect(defaultChatTranscriptEngine()).toBe('webview');
+    expect(ChatTranscriptEngine.default()).toBe('webview');
   });
 
   it('KKV 留着 legacy-rn 也按 webview 走（值忽略）', async () => {
     const appUi = {
-      get: jest.fn(async () => 'legacy-rn'),
+      get: jest.fn(async () => ({ok: true, value: 'legacy-rn'})),
     };
-    expect(await readChatTranscriptEngine(appUi as never)).toBe('webview');
+    expect(await ChatTranscriptEngine.read(appUi as never)).toBe('webview');
     // 键仍被读：读动作保留是为了留消费点，不是死代码
     expect(appUi.get).toHaveBeenCalledWith('chatTranscriptEngine');
   });
 
   it('KKV 未设 / 读失败都回落 webview', async () => {
     expect(
-      await readChatTranscriptEngine({
-        get: jest.fn(async () => undefined),
+      await ChatTranscriptEngine.read({
+        get: jest.fn(async () => ({ok: true, value: undefined})),
       } as never),
     ).toBe('webview');
     expect(
-      await readChatTranscriptEngine({
-        get: jest.fn(async () => {
-          throw new Error('KKV 炸了');
-        }),
+      await ChatTranscriptEngine.read({
+        get: jest.fn(async () => ({
+          ok: false,
+          error: new Error('KKV 炸了'),
+        })),
       } as never),
     ).toBe('webview');
   });
 
   it('appUi 缺失时也返回 webview（不抛）', async () => {
-    expect(await readChatTranscriptEngine(null)).toBe('webview');
-    expect(await readChatTranscriptEngine(undefined)).toBe('webview');
+    expect(await ChatTranscriptEngine.read(null)).toBe('webview');
+    expect(await ChatTranscriptEngine.read(undefined)).toBe('webview');
   });
 });

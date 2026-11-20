@@ -7,7 +7,7 @@ import type { TextAnnotation } from "@recogito/text-annotator";
 import type { AnnotateDraft } from "@shared/logic/chat";
 
 /** 从 Recogito 注解抽出半开渲染坐标 + quote。 */
-export type RecogitoRenderRange = {
+type RecogitoRenderRange = {
   readonly quote: string;
   readonly renderStart: number;
   readonly renderEnd: number;

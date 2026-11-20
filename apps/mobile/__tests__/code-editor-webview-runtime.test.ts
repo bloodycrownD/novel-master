@@ -208,12 +208,7 @@ jest.mock('@web/code-editor/webview/runtime/post', () => ({
 /* ------------------------------------------------------------------ *
  * 被测 runtime（桩装好之后再 import，拿到的是带 facet 的扩展）
  * ------------------------------------------------------------------ */
-import {
-  blurEditor,
-  destroyEditor,
-  mountEditor,
-  setDocument,
-} from '@web/code-editor/webview/runtime/editor';
+import {CodeEditor} from '@web/code-editor/webview/runtime/editor';
 import {EditorView as StubEditorView} from '@codemirror/view';
 
 type StubView = InstanceType<any> & {
@@ -312,7 +307,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  destroyEditor();
+  CodeEditor.destroy();
   flushRaf();
   g.window = originalWindow;
   g.requestAnimationFrame = originalRaf;
@@ -321,7 +316,7 @@ afterEach(() => {
 
 describe('code-editor web runtime change 合帧（T-CE）', () => {
   it('T-CE-01: 同帧多次 docChanged 只上行一次，且上行文本是最后一次的全文', () => {
-    mountEditor(new FakeElement() as never, '', 'notes/a.md');
+    CodeEditor.mount(new FakeElement() as never, '', 'notes/a.md');
     const view = lastMountedView();
 
     // 排掉 mount 时 bindCaretRevealOnResize 自带的那一支 rAF，
@@ -342,14 +337,14 @@ describe('code-editor web runtime change 合帧（T-CE）', () => {
   });
 
   it('T-CE-02: blur 同步 flush（不等 rAF）', () => {
-    mountEditor(new FakeElement() as never, '', 'notes/a.md');
+    CodeEditor.mount(new FakeElement() as never, '', 'notes/a.md');
     const view = lastMountedView();
     typeInSameFrame(view, '', ['h', 'i']);
 
     expect(changePosts()).toEqual([]);
 
     // RN 侧保存前的 codeEditorRef.blur() 就是这条路径（跨桥落到 blur handler）。
-    blurEditor();
+    CodeEditor.blur();
 
     expect(changePosts()).toEqual(['hi']);
     // rAF 后来再排，也不得重复上行（挂起标记已清）。
@@ -358,12 +353,12 @@ describe('code-editor web runtime change 合帧（T-CE）', () => {
   });
 
   it('T-CE-03: setDocument 丢弃挂起快照，旧文档不得迟到回环', () => {
-    mountEditor(new FakeElement() as never, '', 'notes/a.md');
+    CodeEditor.mount(new FakeElement() as never, '', 'notes/a.md');
     const view = lastMountedView();
     typeInSameFrame(view, '', ['X', 'Y']);
 
     // 宿主整体替换文档：挂起那条描述的是旧文档，放行会经 RN 镜像把旧内容吃回来。
-    setDocument('REPLACED', 'notes/a.md');
+    CodeEditor.setDocument('REPLACED', 'notes/a.md');
 
     flushRaf();
     expect(changePosts()).toEqual([]);
@@ -371,14 +366,14 @@ describe('code-editor web runtime change 合帧（T-CE）', () => {
   });
 
   it('T-CE-04: destroy 后迟到的 rAF 不上行', () => {
-    mountEditor(new FakeElement() as never, '', 'notes/a.md');
+    CodeEditor.mount(new FakeElement() as never, '', 'notes/a.md');
     const view = lastMountedView();
     // 同上：先排掉 mount 自带的 caret rAF，下面的 pending 才是 change 那支。
     flushRaf();
     typeInSameFrame(view, '', ['Q']);
     expect(rafQueue.length).toBeGreaterThan(0);
 
-    destroyEditor();
+    CodeEditor.destroy();
 
     // 桩的 cancelAnimationFrame 是空实现，回调会真的迟到执行。
     flushRaf();
@@ -387,7 +382,7 @@ describe('code-editor web runtime change 合帧（T-CE）', () => {
   });
 
   it('T-CE-05: 非 composer 路径的选区变更不上行 selectionChange', () => {
-    mountEditor(new FakeElement() as never, '', 'notes/a.md');
+    CodeEditor.mount(new FakeElement() as never, '', 'notes/a.md');
     const view = lastMountedView();
     view.dispatch({selection: {anchor: 1, head: 1}});
     flushRaf();
@@ -397,8 +392,8 @@ describe('code-editor web runtime change 合帧（T-CE）', () => {
   });
 
   it('T-CE-06: setDocument 程序化替换自身不上行 change（宿主写入不回环）', () => {
-    mountEditor(new FakeElement() as never, '', 'notes/a.md');
-    setDocument('FROM_HOST', 'notes/a.md');
+    CodeEditor.mount(new FakeElement() as never, '', 'notes/a.md');
+    CodeEditor.setDocument('FROM_HOST', 'notes/a.md');
     flushRaf();
 
     expect(changePosts()).toEqual([]);

@@ -4,10 +4,10 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ContentBlock } from "../../../src/domain/chat/model/content-block.js";
-import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
+import {  ThinkingContext  } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
 
 function msg(
   role: string,
@@ -85,7 +85,7 @@ describe("applyThinkingContextForLlm", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const a2 = assistantThinking({ id: "a2", withSignature: true });
     const messages = [user("u1", "u-1"), a1, user("u2", "u-2"), a2];
-    const out = applyThinkingContextForLlm(messages, {
+    const out = ThinkingContext.applyForLlm(messages, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -102,7 +102,7 @@ describe("applyThinkingContextForLlm", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const a2 = assistantThinking({ id: "a2", withSignature: true });
     const a3 = assistantThinking({ id: "a3", withSignature: true });
-    const out = applyThinkingContextForLlm(
+    const out = ThinkingContext.applyForLlm(
       [user("u1", "u-1"), a1, user("u2", "u-2"), a2, user("u3", "u-3"), a3],
       {
         enabled: true,
@@ -127,7 +127,7 @@ describe("applyThinkingContextForLlm", () => {
       withSignature: true,
     });
     const r2 = toolResultUser("tu_a2", "r-2");
-    const out = applyThinkingContextForLlm([u, a1, r1, a2, r2], {
+    const out = ThinkingContext.applyForLlm([u, a1, r1, a2, r2], {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -140,7 +140,7 @@ describe("applyThinkingContextForLlm", () => {
 
   it("T-TC2 开·跨轮纯文本回复的思考保留：非工具回复的 thinking 同样回传", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
-    const out = applyThinkingContextForLlm(
+    const out = ThinkingContext.applyForLlm(
       [user("u1", "u-1"), a1, user("u2", "u-2")],
       {
         enabled: true,
@@ -163,7 +163,7 @@ describe("applyThinkingContextForLlm", () => {
       withSignature: true,
     });
     const r2 = toolResultUser("tu_a2", "r-2");
-    const out = applyThinkingContextForLlm([u, a1, r1, a2, r2], {
+    const out = ThinkingContext.applyForLlm([u, a1, r1, a2, r2], {
       enabled: false,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -183,7 +183,7 @@ describe("applyThinkingContextForLlm", () => {
     const r1 = toolResultUser("tu_a1", "r-1");
     const a2 = msg("assistant", { id: "a2" });
     const u2 = user("u2", "u-2");
-    const out = applyThinkingContextForLlm([u1, a1, r1, a2, u2], {
+    const out = ThinkingContext.applyForLlm([u1, a1, r1, a2, u2], {
       enabled: false,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -203,7 +203,7 @@ describe("applyThinkingContextForLlm", () => {
       withSignature: true,
     });
     const r2 = toolResultUser("tu_a2", "r-2");
-    const out = applyThinkingContextForLlm([u, a1, r1, a2, r2], {
+    const out = ThinkingContext.applyForLlm([u, a1, r1, a2, r2], {
       enabled: false,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -218,7 +218,7 @@ describe("applyThinkingContextForLlm", () => {
     const u = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
-    const out = applyThinkingContextForLlm([u, a1, r1], {
+    const out = ThinkingContext.applyForLlm([u, a1, r1], {
       enabled: false,
       protocol: "gemini",
       retainProtocolMinimum: true,
@@ -231,7 +231,7 @@ describe("applyThinkingContextForLlm", () => {
     const u = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
-    const out = applyThinkingContextForLlm([u, a1, r1], {
+    const out = ThinkingContext.applyForLlm([u, a1, r1], {
       enabled: false,
       protocol: "openai",
       retainProtocolMinimum: true,
@@ -244,13 +244,13 @@ describe("applyThinkingContextForLlm", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const a2 = assistantThinking({ id: "a2", withSignature: true });
     const messages = [user("u1", "u-1"), a1, user("u2", "u-2"), a2];
-    const anthropicOut = applyThinkingContextForLlm(messages, {
+    const anthropicOut = ThinkingContext.applyForLlm(messages, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    const openaiOut = applyThinkingContextForLlm(messages, {
+    const openaiOut = ThinkingContext.applyForLlm(messages, {
       enabled: true,
       protocol: "openai",
       retainProtocolMinimum: true,
@@ -262,7 +262,7 @@ describe("applyThinkingContextForLlm", () => {
   it("T-TC5 全量保留不依赖 user 消息：无任何 user 输入时 assistant 思考仍保留", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
-    const out = applyThinkingContextForLlm([a1, r1], {
+    const out = ThinkingContext.applyForLlm([a1, r1], {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -284,7 +284,7 @@ describe("applyThinkingContextForLlm", () => {
     });
     const a2 = assistantThinking({ id: "a2", withSignature: true });
     const r2 = toolResultUser("tu_a2", "r-2");
-    const out = applyThinkingContextForLlm([u1, a1, vfsAction, bridge, a2, r2], {
+    const out = ThinkingContext.applyForLlm([u1, a1, vfsAction, bridge, a2, r2], {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -303,7 +303,7 @@ describe("applyThinkingContextForLlm", () => {
     const snapshot = JSON.stringify(input);
 
     // 开态：全量保留，元素保持原引用（浅拷贝新数组）
-    const onOut = applyThinkingContextForLlm(input, {
+    const onOut = ThinkingContext.applyForLlm(input, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -316,7 +316,7 @@ describe("applyThinkingContextForLlm", () => {
     assert.equal(onOut[3], a2);
 
     // 关态（openai，全剥）：被剥消息新对象，其余原引用，入参不变
-    const offOut = applyThinkingContextForLlm(input, {
+    const offOut = ThinkingContext.applyForLlm(input, {
       enabled: false,
       protocol: "openai",
       retainProtocolMinimum: true,
@@ -346,7 +346,7 @@ describe("applyThinkingContextForLlm", () => {
       id: "prompt:skills",
       blocks: [{ type: "text", text: "<skills/>" }],
     });
-    const out = applyThinkingContextForLlm([
+    const out = ThinkingContext.applyForLlm([
       u1,
       a1,
       u2,
@@ -376,7 +376,7 @@ describe("applyThinkingContextForLlm", () => {
     });
     const r2 = toolResultUser("tu_a2", "r-2");
     for (const protocol of ["anthropic", "gemini"] as const) {
-      const out = applyThinkingContextForLlm([u, a1, r1, a2, r2], {
+      const out = ThinkingContext.applyForLlm([u, a1, r1, a2, r2], {
         enabled: true,
         protocol,
         retainProtocolMinimum: true,
@@ -393,13 +393,13 @@ describe("applyThinkingContextForLlm", () => {
     const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
     const input = [u, a1, r1];
-    const onOff = applyThinkingContextForLlm(input, {
+    const onOff = ThinkingContext.applyForLlm(input, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
       requestThinkingEnabled: false,
     });
-    const offOff = applyThinkingContextForLlm(input, {
+    const offOff = ThinkingContext.applyForLlm(input, {
       enabled: false,
       protocol: "anthropic",
       retainProtocolMinimum: true,
@@ -415,7 +415,7 @@ describe("applyThinkingContextForLlm", () => {
     const a2 = assistantThinking({ id: "a2", withToolUse: true, withRedacted: true });
 
     // 关态预览：协议最低保留不进预览
-    const previewOff = applyThinkingContextForLlm([u, a1, r1], {
+    const previewOff = ThinkingContext.applyForLlm([u, a1, r1], {
       enabled: false,
       protocol: "anthropic",
       retainProtocolMinimum: false,
@@ -433,13 +433,13 @@ describe("applyThinkingContextForLlm", () => {
     });
     const wireInput = [u, a1, r1, a2, synthetic];
     const previewInput = [u, a1, r1, a2];
-    const wireOut = applyThinkingContextForLlm(wireInput, {
+    const wireOut = ThinkingContext.applyForLlm(wireInput, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    const previewOut = applyThinkingContextForLlm(previewInput, {
+    const previewOut = ThinkingContext.applyForLlm(previewInput, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: false,

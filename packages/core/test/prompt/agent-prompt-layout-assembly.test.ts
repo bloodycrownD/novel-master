@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it, mock  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  TextBlocks, type ChatMessageData  } from "@novel-master/core/chat";
 
-import {
-  buildPromptLlmInputFromLayout,
-  formatPromptLlmInputForCliFromLayout,
-  messageBodyTextFromBlocks,
-  type AgentPromptLayout,
-} from "@novel-master/core/prompt";
+import {  PromptBuilder, MessageBodyText, type AgentPromptLayout  } from "@novel-master/core/prompt";
 
 import type { WorkplaceService } from "@novel-master/core/workplace";
 
@@ -19,7 +16,7 @@ function message(role: string, content: string, seq: number): ChatMessageData {
     sessionId: "s1",
     seq,
     role,
-    content: textBlocks(content),
+    content: TextBlocks.of(content),
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -29,7 +26,8 @@ function message(role: string, content: string, seq: number): ChatMessageData {
 
 function mockWorktree(fileTree: string): WorkplaceService {
   return {
-    renderFileTree: async () => fileTree,
+    // port 已改返回 Result<string, AppError>，mock 同形
+    renderFileTree: async () => Result.ok(fileTree),
   } as unknown as WorkplaceService;
 }
 
@@ -55,7 +53,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
 
   it("顺序：system 字段 + worktree 对 + persist 文本 + chat + dynamic", async () => {
     const workplace = mockWorktree("/\n└── readme.md 全部加载");
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       layout,
       {
         workplaceDisplay: "WT-BODY",
@@ -64,7 +62,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
         workplace,
       },
       { agentStepIndex: 0 }
-    );
+    ));
     assert.equal(input.system, "sys");
     assert.equal(input.messages.length, 6);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
@@ -76,11 +74,11 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   });
 
   it("dynamic 块在 step≥1 跳过（once 语义）", async () => {
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       layout,
       { workplaceDisplay: "WT", messages: [], workplace: mockWorktree("/") },
       { agentStepIndex: 1 }
-    );
+    ));
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
@@ -89,13 +87,14 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   });
 
   it("$filetree 走 WorkplaceService.renderFileTree，不调用 vfs.list", async () => {
-    const renderFileTree = mock.fn(async () => "/\n└── x.md 全部加载");
+    // port 已改返回 Result<string, AppError>，mock 同形
+    const renderFileTree = mock.fn(async () => Result.ok("/\n└── x.md 全部加载"));
     const workplace = { renderFileTree } as unknown as WorkplaceService;
     const list = mock.fn(async () => []);
     const vfs = {
       list,
     } as unknown as import("@novel-master/core/vfs").VfsService;
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       {
         dynamicEnabled: true,
         persist: [],
@@ -104,19 +103,19 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
         ],
       },
       { workplaceDisplay: "", messages: [], workplace, vfs }
-    );
+    ));
     assert.equal(renderFileTree.mock.callCount(), 1);
     assert.equal(list.mock.callCount(), 0);
-    assert.match(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), /x\.md 全部加载/);
+    assert.match(MessageBodyText.fromBlocks(input.messages[0]!.content.blocks), /x\.md 全部加载/);
   });
 });
 
 describe("formatPromptLlmInputForCliFromLayout", () => {
   it("system 段在首行", async () => {
-    const out = await formatPromptLlmInputForCliFromLayout(
+    const out = unwrap(await PromptBuilder.cliText(
       { system: "ctx", persist: [], dynamic: [] },
       { workplaceDisplay: "", messages: [] }
-    );
+    ));
     assert.equal(out, "system: ctx");
   });
 });

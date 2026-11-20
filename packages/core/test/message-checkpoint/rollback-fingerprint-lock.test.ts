@@ -21,13 +21,15 @@
  * @module test/message-checkpoint/rollback-fingerprint-lock
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
-import { isSessionFsError } from "@/errors/session-fs-errors.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  after, before, describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory  } from "@/service/message-checkpoint/message-checkpoint-factory.js";
+import {  isSessionFsError  } from "@/errors/guards.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import type { Row } from "../../src/infra/tdbc/types.js";
 
@@ -88,20 +90,20 @@ interface Fixture {
 
 /** user1 → assistantA(+capture) → user2 → assistantB(+capture)。 */
 async function seedRollbackFixture(prefix: string): Promise<Fixture> {
-  const project = await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`);
+  const project = unwrap(await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  await ctx.messages.append(session.id, "user", textBlocks("q1"));
-  const anchorA = await ctx.messages.append(session.id, "assistant", textBlocks("a1"));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("q1")));
+  const anchorA = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a1")));
   await svfs.write("/base.md", "anchor-body", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, anchorA.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, anchorA.id));
 
-  await ctx.messages.append(session.id, "user", textBlocks("q2"));
-  const anchorB = await ctx.messages.append(session.id, "assistant", textBlocks("a2"));
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("q2")));
+  const anchorB = unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a2")));
   await svfs.write("/base.md", "tail-body", { versionCheck: false });
   await svfs.write("/extra.md", "created-after-anchor", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, anchorB.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, anchorB.id));
 
   return {
     projectId: project.id,
@@ -131,7 +133,7 @@ describe("C2-10 R3: 间隙改文件 ⇒ ROLLBACK_CONFLICT 且不静默", () => {
     const fx = await seedRollbackFixture("r3");
 
     // 前置：锚点时消息数 N；注入只写文件，不碰 chat_message。
-    const messageCountBefore = (await ctx.messages.listBySession(fx.sessionId)).length;
+    const messageCountBefore = (outcomeValue(await ctx.messages.listBySession(fx.sessionId))).length;
 
     // 每次进入事务都写一个**新路径** ⇒ 指纹每次都变 ⇒ 冲突不会被重试化解。
     const { conn, attempts } = gapInjectingConn(ctx.conn, async (attempt) => {
@@ -139,18 +141,17 @@ describe("C2-10 R3: 间隙改文件 ⇒ ROLLBACK_CONFLICT 且不静默", () => {
         .sessionVfs(fx.projectId, fx.sessionId)
         .write(`/gap-${attempt}.md`, `gap-${attempt}`, { versionCheck: false });
     });
-    const rollback = createMessageRollbackService(conn);
+    const rollback = MessageCheckpointFactory.createRollback(conn);
 
-    await assert.rejects(
+    await rejectsErr(
       () => rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId),
       (error: unknown) => {
         assert.ok(
           isSessionFsError(error, "ROLLBACK_CONFLICT"),
-          `必须是 ROLLBACK_CONFLICT，实际：${String(error)}`
+          `文件面变了就必须报 ROLLBACK_CONFLICT（旧乐观锁只比消息行数，这一支会静默绿），实际：${String(error)}`
         );
         return true;
       },
-      "文件面变了就必须报冲突（旧乐观锁只比消息行数，这一支会静默绿）"
     );
 
     assert.ok(
@@ -159,13 +160,13 @@ describe("C2-10 R3: 间隙改文件 ⇒ ROLLBACK_CONFLICT 且不静默", () => {
     );
     // 注入没碰消息表 ⇒ 消息行数不变，这正是旧锁漏掉的那种间隙。
     assert.equal(
-      (await ctx.messages.listBySession(fx.sessionId)).length,
+      (outcomeValue(await ctx.messages.listBySession(fx.sessionId))).length,
       messageCountBefore,
       "注入只动文件面，消息行数必须保持不变"
     );
     // 事务整体回滚 ⇒ 工作区未被半途改写（/base.md 仍是 tail 版本）。
     assert.equal(
-      (await ctx.sessionVfs(fx.projectId, fx.sessionId).read("/base.md")).content,
+      unwrap(await ctx.sessionVfs(fx.projectId, fx.sessionId).read("/base.md")).content,
       "tail-body",
       "冲突后不得留下半途写盘的结果"
     );
@@ -187,7 +188,7 @@ describe("C2-10 R4: 间隙新增文件 ⇒ 删集合按事务内 live 树重算"
         await svfs.write("/gap-once.md", "gap", { versionCheck: false });
       }
     });
-    const rollback = createMessageRollbackService(conn);
+    const rollback = MessageCheckpointFactory.createRollback(conn);
 
     await rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId);
 
@@ -207,9 +208,9 @@ describe("C2-10 R4: 间隙新增文件 ⇒ 删集合按事务内 live 树重算"
       ["/base.md"],
       `最终工作区应只剩锚点期的 /base.md，实际 ${JSON.stringify(paths)}`
     );
-    assert.equal((await svfs.read("/base.md")).content, fx.anchorBody);
+    assert.equal(unwrap(await svfs.read("/base.md")).content, fx.anchorBody);
     // 消息按 afterSeq 截断到锚点。
-    assert.equal((await ctx.messages.listBySession(fx.sessionId)).length, 2);
+    assert.equal((outcomeValue(await ctx.messages.listBySession(fx.sessionId))).length, 2);
   });
 });
 
@@ -222,7 +223,7 @@ describe("C2-10 R5: 间隙换掉一条 tail 消息 ⇒ ROLLBACK_TAIL_DRIFT 且�
     const fx = await seedRollbackFixture("r5");
 
     // 找到 tail 里 seq 最小的那条（rewind 锚点之后的第一条）。
-    const all = await ctx.messages.listBySession(fx.sessionId);
+    const all = outcomeValue(await ctx.messages.listBySession(fx.sessionId));
     const anchorSeq = all.find((m) => m.id === fx.anchorId)!.seq;
     const tail = all.filter((m) => m.seq > anchorSeq);
     assert.ok(tail.length >= 2, "夹具要求 tail 至少两条");
@@ -237,30 +238,29 @@ describe("C2-10 R5: 间隙换掉一条 tail 消息 ⇒ ROLLBACK_TAIL_DRIFT 且�
       if (attempt !== 0) {
         return;
       }
-      await ctx.messages.delete(victim.id);
-      const fresh = await ctx.messages.append(
+      unwrap(await ctx.messages.delete(victim.id));
+      const fresh = unwrap(await ctx.messages.append(
         fx.sessionId,
         "user",
-        textBlocks("gap-injected")
-      );
+        TextBlocks.of("gap-injected")
+      ));
       injectedId = fresh.id;
     });
-    const rollback = createMessageRollbackService(conn);
+    const rollback = MessageCheckpointFactory.createRollback(conn);
 
-    await assert.rejects(
+    await rejectsErr(
       () => rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId),
       (error: unknown) => {
         assert.ok(
           isSessionFsError(error, "ROLLBACK_TAIL_DRIFT"),
-          `必须是 ROLLBACK_TAIL_DRIFT，实际：${String(error)}`
+          `tail 构成变了必须拒绝截断（否则会连带截断用户从没回滚过的新消息）：${String(error)}`
         );
         return true;
       },
-      "tail 构成变了必须拒绝截断（否则会连带截断用户从没回滚过的新消息）"
     );
 
     // 事务整体回滚 ⇒ 注入的两条消息都还在（未被截断）。
-    const after = await ctx.messages.listBySession(fx.sessionId);
+    const after = outcomeValue(await ctx.messages.listBySession(fx.sessionId));
     assert.equal(
       after.some((m) => m.id === injectedId),
       true,

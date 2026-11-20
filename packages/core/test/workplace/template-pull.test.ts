@@ -1,11 +1,14 @@
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
 
-import { createTemplatePullService, createWorkplaceService } from "@novel-master/core/workplace";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  TemplatePullServiceFactory  } from "../../src/service/template/create-template-pull-service.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  WorkplaceDisplayAssembler  } from "@/service/workplace/assemble-workplace-display.js";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
 // CR-F03：本文件原先用「让出 5 次 setImmediate」等 assemble 的 fire-and-forget
 // file_cache 回填。回填写入经 load-or-fill-file-cache 的 scheduleBackfill 推迟到
 // `setTimeout(0)` **宏任务**，而 setImmediate 跑在 check 队列——同一轮里连让 5 次
@@ -15,16 +18,11 @@ import { createSessionKkvService } from "@/service/session-kkv/create-session-kk
 //
 // ⚠️ 该 pending 集合是**按进程共享**的：settle 会连带等掉本进程其它用例的在途
 // 回填。这在本文件无害（多等而已），但别把它当「只等本次组装」。
-import { settlePendingFileCacheBackfills } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USAGE_STATS,
-  USAGE_STATS_TOOL_USE_COUNT_KEY,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  FileCache  } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 novelMasterTestFixture();
@@ -35,12 +33,12 @@ async function assembleWorkplace(
   sessionId: string
 ): Promise<string> {
   const ctx = getNovelMasterTestContext();
-  return (
-    await assembleWorkplaceDisplay(
+  return outcomeValue(
+    await WorkplaceDisplayAssembler.assemble(
       { kind: "session", projectId, sessionId },
       {
-        sessionKkv: createSessionKkvService(ctx.conn),
-        workplace: createWorkplaceService(ctx.conn, {
+        sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
+        workplace: WorkplaceServiceFactory.create(ctx.conn, {
           kind: "session",
           projectId,
           sessionId,
@@ -59,7 +57,7 @@ async function pinFullRule(
   path: string
 ): Promise<void> {
   const ctx = getNovelMasterTestContext();
-  const swt = createWorkplaceService(ctx.conn, {
+  const swt = WorkplaceServiceFactory.create(ctx.conn, {
     kind: "session",
     projectId,
     sessionId,
@@ -71,9 +69,9 @@ async function pinFullRule(
 describe("template pull", () => {
   it("session create copies worktree with path mapping", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/a.md", "A");
-    const pwt = createWorkplaceService(ctx.conn, {
+    const pwt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "project",
       projectId: project.id,
     });
@@ -86,13 +84,13 @@ describe("template pull", () => {
       inclusionMode: "show",
     });
 
-    const session = await ctx.sessions.create(project.id);
-    const swt = createWorkplaceService(ctx.conn, {
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const swt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
-    const rows = await swt.buildListRows();
+    const rows = unwrap(await swt.buildListRows());
     const fileRow = rows.find((r) => r.kind === "file" && r.path === "/a.md");
     assert.ok(fileRow);
     assert.equal(fileRow.inclusionMode, "show");
@@ -103,19 +101,19 @@ describe("template pull", () => {
 
   it("session pull clears message checkpoints but keeps messages", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/x.md", "X");
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only.md", "local");
-    await ctx.messages.append(session.id, "user", textBlocks("hi"));
-    const assistant = await ctx.messages.append(
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+    const assistant = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("wrote"),
-    );
+      TextBlocks.of("wrote"),
+    ));
     await svfs.write("/x.md", "snap", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
     const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
     assert.equal(
       await checkpointRepo.hasCheckpoint(session.id, assistant.id),
@@ -125,14 +123,14 @@ describe("template pull", () => {
     await ctx.projectVfs(project.id).write("/x.md", "NEW", {
       versionCheck: false,
     });
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path);
     assert.deepEqual(paths, ["/x.md"]);
-    assert.equal((await svfs.read("/x.md")).content, "NEW");
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
+    assert.equal(unwrap(await svfs.read("/x.md")).content, "NEW");
+    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 2);
     assert.equal(
       (await checkpointRepo.listFilePointersForSession(session.id)).length,
       0,
@@ -141,13 +139,13 @@ describe("template pull", () => {
 
   it("session create 仅复制 template 文件", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/a.md", "A");
     await ctx.projectVfs(project.id).write("/b.md", "B");
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path)
       .sort();
@@ -156,15 +154,15 @@ describe("template pull", () => {
 
   it("session pull replace 语义移除 session 独有孤儿文件", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/a.md", "A");
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/orphan.md", "orphan");
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path)
       .sort();
@@ -176,16 +174,16 @@ describe("template pull", () => {
   it("T-P1: 模板拉取后 rule_snapshot / file_cache 两域被清空", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     await pinFullRule(project.id, session.id, "/a.md");
 
     // 先组装一次，让 rule_snapshot + file_cache 两域都有真实行
     const before = await assembleWorkplace(project.id, session.id);
     assert.ok(before.includes("A-"), "前置条件：组装应命中 /a.md 的正文");
-    await settlePendingFileCacheBackfills();
-    const kkv = createSessionKkvService(ctx.conn);
+    await FileCache.settlePendingBackfills();
+    const kkv = SessionKkvServiceFactory.create(ctx.conn);
     assert.ok(
       (await kkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT)).length > 0,
       "前置条件：rule_snapshot 域应有行",
@@ -195,7 +193,7 @@ describe("template pull", () => {
       "前置条件：file_cache 域应有行",
     );
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
     assert.equal(
       (await kkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT)).length,
@@ -212,10 +210,10 @@ describe("template pull", () => {
   it("T-P2: 模板拉取后 usage_stats.toolUseCount 被写哨兵空串", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
-    const kkv = createSessionKkvService(ctx.conn);
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const kkv = SessionKkvServiceFactory.create(ctx.conn);
     await kkv.set(
       session.id,
       SESSION_KKV_DOMAIN_USAGE_STATS,
@@ -223,14 +221,14 @@ describe("template pull", () => {
       "42"
     );
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
     assert.equal(
-      await kkv.get(
+      unwrap(await kkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USAGE_STATS,
         USAGE_STATS_TOOL_USE_COUNT_KEY,
-      ),
+      )),
       "",
       "拉取后 toolUseCount 应被写哨兵空串（失效协议是哨兵而非 delete）",
     );
@@ -239,9 +237,9 @@ describe("template pull", () => {
   it("T-P3: 同路径内容变更后拉取，workplace 前缀不再命中陈旧 file_cache", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `v1-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     await pinFullRule(project.id, session.id, "/a.md");
 
     // 第一次组装：file_cache 缓存住 v1
@@ -252,10 +250,10 @@ describe("template pull", () => {
     );
     // 关键前置条件：file_cache 必须真的落了行，否则第二次组装是走 miss 回填、
     // 本用例就成了一条测不到「陈旧缓存续命」的废断言。
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
     assert.ok(
       (
-        await createSessionKkvService(ctx.conn).listKeys(
+        await SessionKkvServiceFactory.create(ctx.conn).listKeys(
           session.id,
           SESSION_KKV_DOMAIN_FILE_CACHE,
         )
@@ -270,7 +268,7 @@ describe("template pull", () => {
       .projectVfs(project.id)
       .write("/a.md", `v2-${suffix}`, { versionCheck: false });
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
     const second = await assembleWorkplace(project.id, session.id);
     assert.ok(
@@ -288,9 +286,9 @@ describe("template pull", () => {
   it("模板拉取后 session scope 无 ref_count=0 的残留 revision", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sessionScope = `session:${project.id}:${session.id}`;
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
@@ -299,14 +297,14 @@ describe("template pull", () => {
     await ctx
       .sessionVfs(project.id, session.id)
       .write("/orphan.md", `orphan-${suffix}`);
-    const orphan = await entryRepo.findByPath(sessionScope, "/orphan.md");
+    const orphan = unwrap(await entryRepo.findByPath(sessionScope, "/orphan.md"));
     assert.ok(orphan != null, "前置条件：会话侧孤儿文件应存在");
     const orphanVersion = await revisionRepo.findMaxVersionForEntry(
       orphan.entryId,
     );
     assert.ok(orphanVersion != null, "前置条件：孤儿文件应有 live-head revision");
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await TemplatePullServiceFactory.create(ctx.conn).pullSessionTemplate(session.id);
 
     const rows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n

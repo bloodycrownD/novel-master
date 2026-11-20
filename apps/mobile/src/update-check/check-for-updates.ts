@@ -1,28 +1,16 @@
 /**
- * Orchestrates local vs remote version comparison for mobile update checks.
+ * 移动端更新检查平台壳：本地版本默认取 APP_VERSION，release notes 回落 mobile 文案。
+ *
+ * 拉取 / tag 解析 / 域名白名单 / 版本比较全部走 core 的 `UpdateCheck`（与 desktop
+ * 同源）；本文件只保留平台默认值与 jest mock 缝。
  */
 
+import {UpdateCheck, type FetchFn, type UpdateCheckData} from '@novel-master/core/common';
+import {type AppError, Result} from '@novel-master/core/errors';
 import {APP_VERSION} from './app-meta';
-import {
-  compareAppVersions,
-  excerptReleaseNotes,
-} from '@novel-master/core/common';
-import {resolveLatestRelease, type FetchFn} from './resolve-latest-release';
-import type {UpdateCheckData} from './types';
 
-export async function checkForUpdates(
-  localVersion: string = APP_VERSION,
-  fetchFn?: FetchFn,
-): Promise<UpdateCheckData> {
-  const release = await resolveLatestRelease(fetchFn);
-  const cmp = compareAppVersions(localVersion, release.version);
-  const status = cmp < 0 ? 'update-available' : 'up-to-date';
-  return {
-    localVersion,
-    remoteVersion: release.version,
-    tagName: release.tagName,
-    releaseUrl: release.htmlUrl,
-    releaseNotesExcerpt: excerptReleaseNotes(release.body, 'mobile'),
-    status,
-  };
+export namespace CheckForUpdates {
+  export function check(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
+    return UpdateCheck.check(localVersion, fetchFn, 'mobile');
+  }
 }

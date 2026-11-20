@@ -7,20 +7,14 @@
  * @module test/message-checkpoint/restore-path-reset-head
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import {
-  createMessageRollbackService,
-  type MessageRollbackService,
-} from "@novel-master/core/message-checkpoint";
-import { type VfsService } from "@novel-master/core/vfs";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory, type MessageRollbackService  } from "@novel-master/core/message-checkpoint";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -37,10 +31,10 @@ describe("restore-path resetHead semantics", () => {
   it("T-W1: 回滚到 checkpoint 后 revision 表行数不变", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-W1-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-W1-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
 
     // 写若干 version
     await svfs.write("/file.md", "v1", { versionCheck: false });
@@ -49,10 +43,10 @@ describe("restore-path resetHead semantics", () => {
     const countBeforeCapture = await revisionCount(ctx);
 
     // capture checkpoint
-    const assistant = await ctx.messages.append(session.id, "assistant", {
+    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "checkpoint-1" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     // 再写新 version
     await svfs.write("/file.md", "v4", { versionCheck: false });
@@ -74,7 +68,7 @@ describe("restore-path resetHead semantics", () => {
     );
 
     // 内容已恢复到 v3
-    const result = await svfs.read("/file.md");
+    const result = unwrap(await svfs.read("/file.md"));
     assert.equal(result.content, "v3", "rollback 后文件内容应恢复到 v3");
     assert.equal(result.version, 3, "rollback 后 head version 应为 3");
   });
@@ -82,8 +76,8 @@ describe("restore-path resetHead semantics", () => {
   it("T-W2: 同文短路仍生效，不产生冗余 version 行（V12）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-W2-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-W2-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 写初始版本
@@ -100,7 +94,7 @@ describe("restore-path resetHead semantics", () => {
     );
 
     // 再确认 version 没增长
-    const result = await svfs.read("/short-circuit.md");
+    const result = unwrap(await svfs.read("/short-circuit.md"));
     assert.equal(result.version, 1, "同文短路后 head version 应保持 1");
     assert.equal(result.content, "hello", "内容应保持不变");
 

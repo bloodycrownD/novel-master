@@ -5,14 +5,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  SKILL_NAME_PATTERN,
-  SKILL_NAME_PATTERN_SOURCE,
-  isValidSkillName,
-  validateSkillName,
-} from "@/domain/skills/model/skill-name.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  SKILL_NAME_PATTERN, SKILL_NAME_PATTERN_SOURCE, SkillName  } from "@/domain/skills/model/skill-name.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("SKILL_NAME_PATTERN 校验", () => {
   it("合法名通过：字母 / 数字 / 连字符 / 下划线 / 中文 / 中间点", () => {
@@ -25,35 +20,35 @@ describe("SKILL_NAME_PATTERN 校验", () => {
       "v1.2-final",
       "技能-中文",
     ]) {
-      assert.equal(validateSkillName(name), null, `${name} 应合法`);
+      assert.equal(SkillName.validate(name), null, `${name} 应合法`);
       assert.ok(SKILL_NAME_PATTERN.test(name));
-      assert.ok(isValidSkillName(name));
+      assert.ok(SkillName.isValid(name));
     }
   });
 
   it("含空白或 / 的名字被拒绝", () => {
     for (const name of ["my skill", "my\tskill", "my/skill", "a\nb", " "]) {
-      assert.ok(validateSkillName(name) != null, `${JSON.stringify(name)} 应非法`);
-      assert.ok(!isValidSkillName(name));
+      assert.ok(SkillName.validate(name) != null, `${JSON.stringify(name)} 应非法`);
+      assert.ok(!SkillName.isValid(name));
     }
   });
 
   it("以 . 开头的名字被拒绝", () => {
-    assert.ok(validateSkillName(".hidden") != null);
+    assert.ok(SkillName.validate(".hidden") != null);
     assert.ok(!SKILL_NAME_PATTERN.test(".hidden"));
-    assert.ok(validateSkillName("..") != null);
+    assert.ok(SkillName.validate("..") != null);
   });
 
   it("保留名 SKILL.md 大小写不敏感被拒绝", () => {
     for (const name of ["SKILL.md", "skill.md", "Skill.MD", "skill.Md"]) {
-      const reason = validateSkillName(name);
+      const reason = SkillName.validate(name);
       assert.ok(reason != null, `${name} 应非法`);
       assert.match(tCore(reason!), /保留名/);
     }
   });
 
   it("空名被拒绝", () => {
-    assert.ok(validateSkillName("") != null);
+    assert.ok(SkillName.validate("") != null);
   });
 
   it("SKILL_NAME_PATTERN_SOURCE 可组合（$ token 捕获形态）", () => {

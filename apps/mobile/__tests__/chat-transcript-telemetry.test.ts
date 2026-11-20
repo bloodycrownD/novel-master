@@ -1,7 +1,4 @@
-import {
-  CHAT_TRANSCRIPT_TELEMETRY_ENABLED,
-  emitChatTranscriptTelemetry,
-} from '@/services/chat-transcript-telemetry';
+import {CHAT_TRANSCRIPT_TELEMETRY_ENABLED, ChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry'
 
 describe('chat-transcript-telemetry', () => {
   const infoSpy = jest
@@ -18,7 +15,7 @@ describe('chat-transcript-telemetry', () => {
 
   it('emits structured log when enabled', () => {
     if (!CHAT_TRANSCRIPT_TELEMETRY_ENABLED) {
-      emitChatTranscriptTelemetry({
+      ChatTranscriptTelemetry.emit({
         name: 'transcript_ready',
         sessionKey: 'p:s',
         rowCount: 3,
@@ -28,7 +25,7 @@ describe('chat-transcript-telemetry', () => {
       expect(infoSpy).not.toHaveBeenCalled();
       return;
     }
-    emitChatTranscriptTelemetry({
+    ChatTranscriptTelemetry.emit({
       name: 'scroll_restore',
       mode: 'offset',
       offsetY: 120,
@@ -45,7 +42,7 @@ describe('chat-transcript-telemetry', () => {
     if (!CHAT_TRANSCRIPT_TELEMETRY_ENABLED) {
       return;
     }
-    emitChatTranscriptTelemetry({
+    ChatTranscriptTelemetry.emit({
       name: 'legacy_cache_discarded',
       reason: 'wrong_version',
     });
@@ -58,11 +55,11 @@ describe('chat-transcript-telemetry', () => {
 
   it('logs menu_open event', () => {
     if (!CHAT_TRANSCRIPT_TELEMETRY_ENABLED) {
-      emitChatTranscriptTelemetry({name: 'menu_open'});
+      ChatTranscriptTelemetry.emit({name: 'menu_open'});
       expect(infoSpy).not.toHaveBeenCalled();
       return;
     }
-    emitChatTranscriptTelemetry({name: 'menu_open'});
+    ChatTranscriptTelemetry.emit({name: 'menu_open'});
     expect(infoSpy).toHaveBeenCalledWith(
       '[ChatTranscriptTelemetry]',
       'menu_open',

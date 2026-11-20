@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-  createLoggingFetch,
-  redactUrl,
-} from "../../../src/infra/llm-protocol/logic/debug-fetch.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  afterEach, beforeEach, describe, it  } from "node:test";
+import {  DebugFetch  } from "../../../src/infra/llm-protocol/logic/debug-fetch.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 describe("debug-fetch redactUrl", () => {
   it("redacts key query param on valid URL", () => {
-    const redacted = redactUrl(
+    const redacted = DebugFetch.redactUrl(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini:generateContent?key=SECRET123",
     );
     assert.ok(!redacted.includes("SECRET123"));
@@ -17,20 +14,20 @@ describe("debug-fetch redactUrl", () => {
   });
 
   it("preserves non-key query params", () => {
-    const redacted = redactUrl("https://api.example.com/v1?alt=sse&key=SECRET");
+    const redacted = DebugFetch.redactUrl("https://api.example.com/v1?alt=sse&key=SECRET");
     assert.match(redacted, /alt=sse/);
     assert.match(redacted, /key=\*\*\*/);
   });
 
   it("falls back to regex when URL constructor fails", () => {
-    const redacted = redactUrl("not-a-url?key=SECRET&foo=bar");
+    const redacted = DebugFetch.redactUrl("not-a-url?key=SECRET&foo=bar");
     assert.ok(!redacted.includes("SECRET"));
     assert.match(redacted, /key=\*\*\*/);
   });
 
   it("leaves URLs without key unchanged", () => {
     const url = "https://api.anthropic.com/v1/messages";
-    assert.equal(redactUrl(url), url);
+    assert.equal(DebugFetch.redactUrl(url), url);
   });
 });
 
@@ -76,7 +73,7 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
   beforeEach(() => {
     process.env.NM_DEBUG_LLM_FETCH = "1";
     records = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
   });
 
   afterEach(() => {
@@ -85,11 +82,11 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
     } else {
       process.env.NM_DEBUG_LLM_FETCH = originalDebugEnv;
     }
-    restoreDefaultLogSink();
+    LogFactory.restoreDefaultSink();
   });
 
   it("非流式请求响应 body 为 null：不告警（listModels / chatNonStream 形态）", async () => {
-    const fetchFn = createLoggingFetch(async () => stubResponse());
+    const fetchFn = DebugFetch.createLoggingFetch(async () => stubResponse());
     // GET 无 body（三家 listModels 形态）。
     await fetchFn("https://api.openai.com/v1/models", { method: "GET" });
     // POST 显式非流式 body（chatNonStream 形态；mobile 走 fetch shim 时
@@ -102,7 +99,7 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
   });
 
   it("OpenAI 风格 body stream:true + 响应 body 为 null：仍告警", async () => {
-    const fetchFn = createLoggingFetch(async () => stubResponse());
+    const fetchFn = DebugFetch.createLoggingFetch(async () => stubResponse());
     await fetchFn("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       body: JSON.stringify({ model: "gpt", stream: true }),
@@ -112,7 +109,7 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
   });
 
   it("Gemini 风格 URL alt=sse + 响应 body 为 null：仍告警", async () => {
-    const fetchFn = createLoggingFetch(async () => stubResponse());
+    const fetchFn = DebugFetch.createLoggingFetch(async () => stubResponse());
     await fetchFn(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini:streamGenerateContent?alt=sse&key=SECRET",
       { method: "POST", body: JSON.stringify({ contents: [] }) }
@@ -127,7 +124,7 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
 
   it("B6: 非 JSON 请求体不落原文，只记 chars（脱敏硬要求）", async () => {
     const secret = "RAW-BODY-SECRET-0123456789";
-    const fetchFn = createLoggingFetch(async () => stubResponse());
+    const fetchFn = DebugFetch.createLoggingFetch(async () => stubResponse());
     await fetchFn("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       body: `not-json-payload ${secret}`,

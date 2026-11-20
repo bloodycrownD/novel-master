@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  compareSmartBasenames,
-  extractSortKey,
-  extractSortKeyDetail,
-  formatSortTupleForDisplay,
-  parseChineseNum,
-  tokenizeNatural,
-  type CompiledSmartSortRule,
-  type SmartSortKeyCache,
-} from "../../src/domain/workplace/logic/smart-sort.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  SmartSort, type CompiledSmartSortRule, type SmartSortKeyCache  } from "../../src/domain/workplace/logic/smart-sort.js";
+import {  Number  } from "../../src/common/number.js";
+import {  Text  } from "../../src/common/text.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 function compile(
   ruleId: string,
@@ -37,7 +30,7 @@ function decorate(
 ): SmartSortKeyCache {
   const cache: SmartSortKeyCache = new Map();
   for (const name of names) {
-    cache.set(name, extractSortKey(name, rules));
+    cache.set(name, SmartSort.extractSortKey(name, rules));
   }
   return cache;
 }
@@ -48,124 +41,124 @@ function sortSmart(
   order: "asc" | "desc" = "asc",
 ): string[] {
   const cache = decorate(names, rules);
-  return [...names].sort((a, b) => compareSmartBasenames(a, b, order, cache));
+  return [...names].sort((a, b) => SmartSort.compareBasenames(a, b, order, cache));
 }
 
 describe("parseChineseNum (T-SS1)", () => {
   it("converts single and small power-form numerals", () => {
-    assert.equal(parseChineseNum("一"), 1);
-    assert.equal(parseChineseNum("零"), 0);
-    assert.equal(parseChineseNum("两"), 2);
-    assert.equal(parseChineseNum("九"), 9);
-    assert.equal(parseChineseNum("十"), 10);
-    assert.equal(parseChineseNum("十一"), 11);
-    assert.equal(parseChineseNum("二十"), 20);
-    assert.equal(parseChineseNum("二十五"), 25);
+    assert.equal(Number.parseChineseNum("一"), 1);
+    assert.equal(Number.parseChineseNum("零"), 0);
+    assert.equal(Number.parseChineseNum("两"), 2);
+    assert.equal(Number.parseChineseNum("九"), 9);
+    assert.equal(Number.parseChineseNum("十"), 10);
+    assert.equal(Number.parseChineseNum("十一"), 11);
+    assert.equal(Number.parseChineseNum("二十"), 20);
+    assert.equal(Number.parseChineseNum("二十五"), 25);
   });
 
   it("converts power form with embedded zeros up to the spec boundary", () => {
-    assert.equal(parseChineseNum("一百"), 100);
-    assert.equal(parseChineseNum("一百零一"), 101);
-    assert.equal(parseChineseNum("一千零二十五"), 1025);
-    assert.equal(parseChineseNum("两千零一"), 2001);
+    assert.equal(Number.parseChineseNum("一百"), 100);
+    assert.equal(Number.parseChineseNum("一百零一"), 101);
+    assert.equal(Number.parseChineseNum("一千零二十五"), 1025);
+    assert.equal(Number.parseChineseNum("两千零一"), 2001);
     // T-SS1 点名边界：「一」~「一万零一百零一」
-    assert.equal(parseChineseNum("一万零一百零一"), 10101);
+    assert.equal(Number.parseChineseNum("一万零一百零一"), 10101);
   });
 
   it("converts positional form digit-by-digit (一零二五 = 1025)", () => {
-    assert.equal(parseChineseNum("一零二五"), 1025);
-    assert.equal(parseChineseNum("〇〇一二"), 12);
-    assert.equal(parseChineseNum("零零"), 0);
+    assert.equal(Number.parseChineseNum("一零二五"), 1025);
+    assert.equal(Number.parseChineseNum("〇〇一二"), 12);
+    assert.equal(Number.parseChineseNum("零零"), 0);
   });
 
   it("converts uppercase numerals (壹贰叁…拾)", () => {
-    assert.equal(parseChineseNum("壹"), 1);
-    assert.equal(parseChineseNum("玖"), 9);
-    assert.equal(parseChineseNum("壹佰贰拾叁"), 123);
-    assert.equal(parseChineseNum("贰仟零壹"), 2001);
+    assert.equal(Number.parseChineseNum("壹"), 1);
+    assert.equal(Number.parseChineseNum("玖"), 9);
+    assert.equal(Number.parseChineseNum("壹佰贰拾叁"), 123);
+    assert.equal(Number.parseChineseNum("贰仟零壹"), 2001);
   });
 
   it("handles unit abbreviations (一千二 = 1200) and 亿-level carry", () => {
-    assert.equal(parseChineseNum("一千二"), 1200);
-    assert.equal(parseChineseNum("两千五"), 2500);
-    assert.equal(parseChineseNum("十二亿"), 1200000000);
-    assert.equal(parseChineseNum("一万亿"), 1000000000000);
+    assert.equal(Number.parseChineseNum("一千二"), 1200);
+    assert.equal(Number.parseChineseNum("两千五"), 2500);
+    assert.equal(Number.parseChineseNum("十二亿"), 1200000000);
+    assert.equal(Number.parseChineseNum("一万亿"), 1000000000000);
   });
 
   it("converts whole ASCII integer runs via Number(), keeping leading zeros", () => {
-    assert.equal(parseChineseNum("001"), 1);
-    assert.equal(parseChineseNum("2024"), 2024);
-    assert.equal(parseChineseNum("００１"), 1); // full-width digits fold to half-width
+    assert.equal(Number.parseChineseNum("001"), 1);
+    assert.equal(Number.parseChineseNum("2024"), 2024);
+    assert.equal(Number.parseChineseNum("００１"), 1); // full-width digits fold to half-width
   });
 
   it("returns null for digit runs that overflow Number() to ±Infinity (core/B-4)", () => {
     // ~309 位以上的纯数字串经 Number() 溢出为 ±Infinity，与 fixed_min/max
     // 哨兵元组数值平权；必须按「转换失败」返回 null，数字管道永不产出 ±Infinity。
-    assert.equal(parseChineseNum("9".repeat(400)), null);
-    assert.equal(parseChineseNum(`-${"9".repeat(400)}`), null);
+    assert.equal(Number.parseChineseNum("9".repeat(400)), null);
+    assert.equal(Number.parseChineseNum(`-${"9".repeat(400)}`), null);
     // 中文逐位分支同型溢出："一"*400 → digits 400 位 → Infinity → null。
-    assert.equal(parseChineseNum("一".repeat(400)), null);
+    assert.equal(Number.parseChineseNum("一".repeat(400)), null);
     // 仍在有限范围内的长数字串正常返回（10^299 < Number.MAX_VALUE）。
-    const finite = parseChineseNum(`1${"0".repeat(299)}`);
-    assert.ok(finite !== null && Number.isFinite(finite));
+    const finite = Number.parseChineseNum(`1${"0".repeat(299)}`);
+    assert.ok(finite !== null && globalThis.Number.isFinite(finite));
     assert.equal(finite, 1e299);
   });
 
   it("returns null for empty / mixed / unknown inputs", () => {
-    assert.equal(parseChineseNum(""), null);
-    assert.equal(parseChineseNum("  "), null); // whitespace-only collapses to empty
-    assert.equal(parseChineseNum("第1章"), null); // mixed CJK + ASCII digit
-    assert.equal(parseChineseNum("一二三4"), null);
-    assert.equal(parseChineseNum("章"), null);
-    assert.equal(parseChineseNum("点五"), null);
-    assert.equal(parseChineseNum("1.5"), null);
+    assert.equal(Number.parseChineseNum(""), null);
+    assert.equal(Number.parseChineseNum("  "), null); // whitespace-only collapses to empty
+    assert.equal(Number.parseChineseNum("第1章"), null); // mixed CJK + ASCII digit
+    assert.equal(Number.parseChineseNum("一二三4"), null);
+    assert.equal(Number.parseChineseNum("章"), null);
+    assert.equal(Number.parseChineseNum("点五"), null);
+    assert.equal(Number.parseChineseNum("1.5"), null);
   });
 
   it("strips internal whitespace before parsing (legado stringToInt semantics)", () => {
-    assert.equal(parseChineseNum(" 一 千 "), 1000);
-    assert.equal(parseChineseNum("2 4"), 24);
+    assert.equal(Number.parseChineseNum(" 一 千 "), 1000);
+    assert.equal(Number.parseChineseNum("2 4"), 24);
   });
 });
 
 describe("tokenizeNatural (T-SS2)", () => {
   it("splits alternating ASCII-digit / non-digit chunks (digits are exactly 0-9)", () => {
-    assert.deepEqual(tokenizeNatural("2.txt"), ["2", ".txt"]);
-    assert.deepEqual(tokenizeNatural("10.txt"), ["10", ".txt"]);
-    assert.deepEqual(tokenizeNatural("第10话a2"), ["第", "10", "话a", "2"]);
-    assert.deepEqual(tokenizeNatural("abc"), ["abc"]);
-    assert.deepEqual(tokenizeNatural("007"), ["007"]);
-    assert.deepEqual(tokenizeNatural(""), []);
+    assert.deepEqual(Text.tokenizeNatural("2.txt"), ["2", ".txt"]);
+    assert.deepEqual(Text.tokenizeNatural("10.txt"), ["10", ".txt"]);
+    assert.deepEqual(Text.tokenizeNatural("第10话a2"), ["第", "10", "话a", "2"]);
+    assert.deepEqual(Text.tokenizeNatural("abc"), ["abc"]);
+    assert.deepEqual(Text.tokenizeNatural("007"), ["007"]);
+    assert.deepEqual(Text.tokenizeNatural(""), []);
   });
 
   it("orders numeric chunks by value (2.txt < 10.txt, natural fallback path)", () => {
     // No cache → both ordinal-less → natural order (total-order clause 3).
-    assert.ok(compareSmartBasenames("2.txt", "10.txt", "asc") < 0);
-    assert.ok(compareSmartBasenames("1.txt", "2.txt", "asc") < 0);
-    assert.ok(compareSmartBasenames("第2话.txt", "第10话.txt", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("2.txt", "10.txt", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("1.txt", "2.txt", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("第2话.txt", "第10话.txt", "asc") < 0);
   });
 
   it("orders non-digit chunks by code unit (Chinese code points)", () => {
     // 作 U+4F5C < 公 U+516C < 封 U+5C01 — PRD 验收序列
-    assert.ok(compareSmartBasenames("作者的话.txt", "公告.txt", "asc") < 0);
-    assert.ok(compareSmartBasenames("公告.txt", "封面.txt", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("作者的话.txt", "公告.txt", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("公告.txt", "封面.txt", "asc") < 0);
   });
 
   it("compares mixed chunk types by whole-chunk code unit order", () => {
     // Digit chunk vs non-digit chunk at the same position: code-unit order.
-    assert.ok(compareSmartBasenames("1.txt", "a.txt", "asc") < 0); // '1'(0x31) < 'a'(0x61)
-    assert.ok(compareSmartBasenames("a1.txt", "aa.txt", "asc") < 0); // '1' < 'a'
+    assert.ok(SmartSort.compareBasenames("1.txt", "a.txt", "asc") < 0); // '1'(0x31) < 'a'(0x61)
+    assert.ok(SmartSort.compareBasenames("a1.txt", "aa.txt", "asc") < 0); // '1' < 'a'
   });
 
   it("breaks digit-tie by chunk length first (007 > 7 by design)", () => {
     // Spec note: length-first is the deterministic design — equal values with
     // leading zeros converge via ordinal extraction + tiebreak instead.
-    assert.ok(compareSmartBasenames("007.txt", "7.txt", "asc") > 0);
-    assert.ok(compareSmartBasenames("08.txt", "007.txt", "asc") < 0); // 2 digits < 3 digits
+    assert.ok(SmartSort.compareBasenames("007.txt", "7.txt", "asc") > 0);
+    assert.ok(SmartSort.compareBasenames("08.txt", "007.txt", "asc") < 0); // 2 digits < 3 digits
   });
 
   it("orders the shorter exhausted string first", () => {
-    assert.ok(compareSmartBasenames("ab", "abc", "asc") < 0);
-    assert.ok(compareSmartBasenames("第1章", "第1章外传", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("ab", "abc", "asc") < 0);
+    assert.ok(SmartSort.compareBasenames("第1章", "第1章外传", "asc") < 0);
   });
 });
 
@@ -174,22 +167,22 @@ describe("extractSortKey (T-SS3)", () => {
 
   it("takes the first matching rule by priority", () => {
     const volume = compile("t-volume", "第([0-9]{1,4})卷");
-    assert.deepEqual(extractSortKey("第3章", [zhChapter, volume]), [3]);
-    assert.deepEqual(extractSortKey("第3卷", [zhChapter, volume]), [3]);
+    assert.deepEqual(SmartSort.extractSortKey("第3章", [zhChapter, volume]), [3]);
+    assert.deepEqual(SmartSort.extractSortKey("第3卷", [zhChapter, volume]), [3]);
     // Coarse rule wins even though a later rule matches more precisely:
     const coarse = compile("t-coarse", "(\\d+)");
     const strict = compile("t-strict", "^(\\d+)-(\\d+)$");
-    assert.deepEqual(extractSortKey("1-2", [coarse, strict]), [1]);
+    assert.deepEqual(SmartSort.extractSortKey("1-2", [coarse, strict]), [1]);
   });
 
   it("falls through to the next rule when a capture group is unparsable", () => {
     // Group 2 captures "" for 第12章 → unparsable → skip rule 1, use rule 2.
     const broken = compile("t-broken", "(第)章?(\\d*)");
-    assert.deepEqual(extractSortKey("第12章", [broken, zhChapter]), [12]);
+    assert.deepEqual(SmartSort.extractSortKey("第12章", [broken, zhChapter]), [12]);
     // A group that did not participate in the match (undefined) also skips.
     const alt = compile("t-alt", "^(?:a(\\d+)|b(\\d+))$");
     const anyDigit = compile("t-digit", "(\\d+)");
-    assert.deepEqual(extractSortKey("b5", [alt, anyDigit]), [5]);
+    assert.deepEqual(SmartSort.extractSortKey("b5", [alt, anyDigit]), [5]);
   });
 
   it("treats an overflowing capture group as a conversion failure and skips the rule (core/B-4)", () => {
@@ -197,9 +190,9 @@ describe("extractSortKey (T-SS3)", () => {
     // 规则（与 unparsable 组同语义），绝不产出 ±Infinity 数字元组与哨兵混序。
     const huge = compile("t-huge", "第(\\d+)章");
     const firstDigit = compile("t-first", "第(\\d)");
-    assert.equal(extractSortKey(`第${"9".repeat(400)}章`, [huge]), null);
+    assert.equal(SmartSort.extractSortKey(`第${"9".repeat(400)}章`, [huge]), null);
     assert.deepEqual(
-      extractSortKey(`第${"9".repeat(400)}章`, [huge, firstDigit]),
+      SmartSort.extractSortKey(`第${"9".repeat(400)}章`, [huge, firstDigit]),
       [9]
     );
   });
@@ -208,27 +201,27 @@ describe("extractSortKey (T-SS3)", () => {
     // Compile-time validation (Step 7) is the real gate; extractSortKey must
     // simply never let such a rule claim the basename.
     const noGroup = compile("t-nogroup", "第\\d+章");
-    assert.equal(extractSortKey("第12章", [noGroup, zhChapter])[0], 12);
+    assert.equal(SmartSort.extractSortKey("第12章", [noGroup, zhChapter])[0], 12);
   });
 
   it("returns null when nothing matches or no rules are given", () => {
-    assert.equal(extractSortKey("公告.txt", [zhChapter]), null);
-    assert.equal(extractSortKey("第12章", []), null);
+    assert.equal(SmartSort.extractSortKey("公告.txt", [zhChapter]), null);
+    assert.equal(SmartSort.extractSortKey("第12章", []), null);
   });
 
   it("converts Chinese-numeral capture groups into values", () => {
-    assert.deepEqual(extractSortKey("第十二章.txt", [zhChapter]), [12]);
-    assert.deepEqual(extractSortKey("第两千零一章.txt", [zhChapter]), [2001]);
+    assert.deepEqual(SmartSort.extractSortKey("第十二章.txt", [zhChapter]), [12]);
+    assert.deepEqual(SmartSort.extractSortKey("第两千零一章.txt", [zhChapter]), [2001]);
   });
 
   it("D13 fixed 档：命中即哨兵元组，忽略捕获组管道", () => {
     const prologue = compileFixed("t-prologue", "^(序章?|楔子|引子)", "fixed_min");
     const finale = compileFixed("t-finale", "^(终章|尾声|后记)", "fixed_max");
     // 无捕获组 pattern：fixed 档照常命中（捕获组被忽略，语义固定元组优先）。
-    const detailMin = extractSortKeyDetail("序章 起源.txt", [prologue]);
+    const detailMin = SmartSort.extractSortKeyDetail("序章 起源.txt", [prologue]);
     assert.equal(detailMin?.ruleId, "t-prologue");
     assert.equal(detailMin?.nums[0], -Infinity);
-    const detailMax = extractSortKeyDetail("终章 大结局.txt", [finale]);
+    const detailMax = SmartSort.extractSortKeyDetail("终章 大结局.txt", [finale]);
     assert.equal(detailMax?.ruleId, "t-finale");
     assert.equal(detailMax?.nums[0], Infinity);
     // 捕获组与 fixed 档共存：捕获组存在但被忽略（仍哨兵元组）。
@@ -236,9 +229,9 @@ describe("extractSortKey (T-SS3)", () => {
       ...compileFixed("t-extra", "^(番外|外传)", "fixed_max"),
       regex: new RegExp("^(番外|外传)([0-9]+)"),
     };
-    assert.equal(extractSortKeyDetail("番外3.txt", [withGroups])?.nums[0], Infinity);
+    assert.equal(SmartSort.extractSortKeyDetail("番外3.txt", [withGroups])?.nums[0], Infinity);
     // smart 档行为零变化：未命中 fixed 规则的名字照旧走捕获组管道。
-    assert.deepEqual(extractSortKey("第一章.txt", [prologue, zhChapter]), [1]);
+    assert.deepEqual(SmartSort.extractSortKey("第一章.txt", [prologue, zhChapter]), [1]);
   });
 });
 
@@ -255,7 +248,7 @@ describe("compareSmartBasenames total order (T-SS4)", () => {
       "公告.txt",
       "封面.txt",
     ]);
-    assert.ok(compareSmartBasenames("第一章", "公告", "asc", decorate(["第一章", "公告"], rules)) < 0);
+    assert.ok(SmartSort.compareBasenames("第一章", "公告", "asc", decorate(["第一章", "公告"], rules)) < 0);
   });
 
   it("clause 2: tuples compare element-wise; equal prefix → shorter first", () => {
@@ -300,8 +293,8 @@ describe("compareSmartBasenames total order (T-SS4)", () => {
       for (const b of names) {
         if (a === b) continue;
         assert.equal(
-          compareSmartBasenames(a, b, "desc", cache),
-          -compareSmartBasenames(a, b, "asc", cache),
+          SmartSort.compareBasenames(a, b, "desc", cache),
+          -SmartSort.compareBasenames(a, b, "asc", cache),
         );
       }
     }
@@ -355,13 +348,13 @@ describe("compareSmartBasenames total order (T-SS4)", () => {
   });
 
   it("D13 formatSortTupleForDisplay：数字元组 string / 哨兵 descriptor", () => {
-    assert.equal(formatSortTupleForDisplay([12]), "(12,)");
-    assert.equal(formatSortTupleForDisplay([2, 13]), "(2,13,)");
-    assert.deepEqual(formatSortTupleForDisplay([-Infinity]), {key: "label.smart_sort.pinned_min"});
-    assert.deepEqual(formatSortTupleForDisplay([Infinity]), {key: "label.smart_sort.pinned_max"});
+    assert.equal(SmartSort.formatSortTupleForDisplay([12]), "(12,)");
+    assert.equal(SmartSort.formatSortTupleForDisplay([2, 13]), "(2,13,)");
+    assert.deepEqual(SmartSort.formatSortTupleForDisplay([-Infinity]), {key: "label.smart_sort.pinned_min"});
+    assert.deepEqual(SmartSort.formatSortTupleForDisplay([Infinity]), {key: "label.smart_sort.pinned_max"});
     // descriptor 经 translator 渲染回旧文案（zh-CN catalog 值）
-    assert.equal(tCore(formatSortTupleForDisplay([-Infinity])), "(固定最小,)");
-    assert.equal(tCore(formatSortTupleForDisplay([Infinity])), "(固定最大,)");
+    assert.equal(tCore(SmartSort.formatSortTupleForDisplay([-Infinity])), "(固定最小,)");
+    assert.equal(tCore(SmartSort.formatSortTupleForDisplay([Infinity])), "(固定最大,)");
   });
 });
 
@@ -389,49 +382,49 @@ describe("builtin rule set, appendix A verbatim (T-SS5)", () => {
   const [, , , volumeChapter, zhChapter, enChapter, numeric] = builtinRules;
 
   it("D13 fixed 三条：序章类哨兵排最前、终章/番外类沉底", () => {
-    const prologue = extractSortKeyDetail("楔子 起源", builtinRules);
+    const prologue = SmartSort.extractSortKeyDetail("楔子 起源", builtinRules);
     assert.equal(prologue?.ruleId, "builtin-zh-prologue");
     assert.equal(prologue?.nums[0], -Infinity);
-    const finale = extractSortKeyDetail("终章 大结局", builtinRules);
+    const finale = SmartSort.extractSortKeyDetail("终章 大结局", builtinRules);
     assert.equal(finale?.ruleId, "builtin-zh-finale");
     assert.equal(finale?.nums[0], Infinity);
-    const extra = extractSortKeyDetail("番外一 日常", builtinRules);
+    const extra = SmartSort.extractSortKeyDetail("番外一 日常", builtinRules);
     assert.equal(extra?.ruleId, "builtin-zh-extra");
     assert.equal(extra?.nums[0], Infinity);
     // 序章类不在开头不命中（pattern 锚定 ^）：退回数字规则。
-    assert.deepEqual(extractSortKey("非番外 第一章", builtinRules), [1]);
+    assert.deepEqual(SmartSort.extractSortKey("非番外 第一章", builtinRules), [1]);
   });
 
   it("each builtin rule matches its own example with the right ordinal", () => {
-    assert.deepEqual(extractSortKey("第2卷 第13章", [volumeChapter]), [2, 13]);
-    assert.deepEqual(extractSortKey("第十二章 风起", [zhChapter]), [12]);
-    assert.deepEqual(extractSortKey("Chapter 12", [enChapter]), [12]);
-    assert.deepEqual(extractSortKey("001、开端", [numeric]), [1]); // leading zeros → 1
+    assert.deepEqual(SmartSort.extractSortKey("第2卷 第13章", [volumeChapter]), [2, 13]);
+    assert.deepEqual(SmartSort.extractSortKey("第十二章 风起", [zhChapter]), [12]);
+    assert.deepEqual(SmartSort.extractSortKey("Chapter 12", [enChapter]), [12]);
+    assert.deepEqual(SmartSort.extractSortKey("001、开端", [numeric]), [1]); // leading zeros → 1
   });
 
   it("en-chapter is case-insensitive via flags 'i'", () => {
-    assert.deepEqual(extractSortKey("chapter 5", [enChapter]), [5]);
-    assert.deepEqual(extractSortKey("PART 3", [enChapter]), [3]);
-    assert.deepEqual(extractSortKey("Episode.21", [enChapter]), [21]);
+    assert.deepEqual(SmartSort.extractSortKey("chapter 5", [enChapter]), [5]);
+    assert.deepEqual(SmartSort.extractSortKey("PART 3", [enChapter]), [3]);
+    assert.deepEqual(SmartSort.extractSortKey("Episode.21", [enChapter]), [21]);
   });
 
   it("zh-volume-chapter must precede zh-chapter (appendix note 1)", () => {
     // zh-chapter alone matches 第2卷 first and would drop the chapter number.
-    assert.deepEqual(extractSortKey("第2卷 第13章", [zhChapter]), [2]);
+    assert.deepEqual(SmartSort.extractSortKey("第2卷 第13章", [zhChapter]), [2]);
     // With the compound rule first in priority, the full tuple is extracted.
-    assert.deepEqual(extractSortKey("第2卷 第13章", builtinRules), [2, 13]);
+    assert.deepEqual(SmartSort.extractSortKey("第2卷 第13章", builtinRules), [2, 13]);
   });
 
   it("priority list assigns each example to the intended rule", () => {
-    assert.deepEqual(extractSortKey("第2卷 第13章", builtinRules), [2, 13]);
-    assert.deepEqual(extractSortKey("第十二章 风起", builtinRules), [12]);
-    assert.deepEqual(extractSortKey("Chapter 12", builtinRules), [12]);
-    assert.deepEqual(extractSortKey("001、开端", builtinRules), [1]);
+    assert.deepEqual(SmartSort.extractSortKey("第2卷 第13章", builtinRules), [2, 13]);
+    assert.deepEqual(SmartSort.extractSortKey("第十二章 风起", builtinRules), [12]);
+    assert.deepEqual(SmartSort.extractSortKey("Chapter 12", builtinRules), [12]);
+    assert.deepEqual(SmartSort.extractSortKey("001、开端", builtinRules), [1]);
   });
 
   it("directory names 第一卷/第十卷 hit zh-chapter (appendix note 2)", () => {
-    assert.deepEqual(extractSortKey("第一卷", builtinRules), [1]);
-    assert.deepEqual(extractSortKey("第十卷", builtinRules), [10]);
+    assert.deepEqual(SmartSort.extractSortKey("第一卷", builtinRules), [1]);
+    assert.deepEqual(SmartSort.extractSortKey("第十卷", builtinRules), [10]);
     assert.deepEqual(sortSmart(["第十卷", "第一卷", "第三卷"], builtinRules), [
       "第一卷",
       "第三卷",
@@ -440,8 +433,8 @@ describe("builtin rule set, appendix A verbatim (T-SS5)", () => {
   });
 
   it("handles uppercase numerals and larger ordinals through the builtin patterns", () => {
-    assert.deepEqual(extractSortKey("第贰卷 第拾叁章", [volumeChapter]), [2, 13]);
-    assert.deepEqual(extractSortKey("第一千零一章", [zhChapter]), [1001]);
+    assert.deepEqual(SmartSort.extractSortKey("第贰卷 第拾叁章", [volumeChapter]), [2, 13]);
+    assert.deepEqual(SmartSort.extractSortKey("第一千零一章", [zhChapter]), [1001]);
   });
 });
 

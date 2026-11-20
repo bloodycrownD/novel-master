@@ -7,13 +7,8 @@
  * 用例输入由 `NORMALIZED_OPTIONAL_FIELDS` 驱动，**不再硬编码字段名**。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  assertNormalizeCoversAllFields,
-  NORMALIZED_OPTIONAL_FIELDS,
-  NORMALIZE_FIELD_SENTINELS,
-  normalizeAgentPromptLayoutDomain,
-} from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
+import {  describe, it  } from "node:test";
+import {  AgentPromptLayoutNormalize, NORMALIZED_OPTIONAL_FIELDS, NORMALIZE_FIELD_SENTINELS  } from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import type { NormalizedOptionalField } from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
 
 const OPTIONAL_FIELDS = Object.keys(
@@ -37,7 +32,7 @@ describe("normalize 白名单完整性：字段全集（wave-e H2）", () => {
     // 主用例：所有可选字段都取哨兵值，一次 normalize 后逐键比对。
     // 牙齿自检：删掉 normalize 里 skillsEnabled 那条 spread ⇒ 本用例红；
     //   新增第 8 个字段时只要补进两张表，就自动进入断言面，不必改本文件。
-    const normalized = normalizeAgentPromptLayoutDomain({
+    const normalized = AgentPromptLayoutNormalize.normalizeDomain({
       ...NORMALIZE_FIELD_SENTINELS,
       persist: [],
       dynamic: [],
@@ -55,11 +50,11 @@ describe("normalize 白名单完整性：字段全集（wave-e H2）", () => {
     // 逐字段单独跑一遍：防止「A 的 spread 误写了 B 的键值」这类互相掩盖的错误
     // （上一条全字段夹具里同时塞了所有哨兵，一次误写可能恰好被另一处兜住）。
     for (const field of OPTIONAL_FIELDS) {
-      const normalized = normalizeAgentPromptLayoutDomain({
+      const normalized = AgentPromptLayoutNormalize.normalizeDomain({
         [field]: NORMALIZE_FIELD_SENTINELS[field],
         persist: [],
         dynamic: [],
-      } as Parameters<typeof normalizeAgentPromptLayoutDomain>[0]);
+      } as Parameters<typeof AgentPromptLayoutNormalize.normalizeDomain>[0]);
       assert.equal(
         normalized[field],
         NORMALIZE_FIELD_SENTINELS[field],
@@ -70,16 +65,16 @@ describe("normalize 白名单完整性：字段全集（wave-e H2）", () => {
 
   it("缺省字段不被写入（输出键集恰为 persist / dynamic）", () => {
     // 牙齿自检：把某个 `layoutHasX` 判断写成恒真 ⇒ 空值会被写进结果 ⇒ 键集多出该项 ⇒ 红。
-    const normalized = normalizeAgentPromptLayoutDomain({
+    const normalized = AgentPromptLayoutNormalize.normalizeDomain({
       persist: [],
       dynamic: [],
     });
     assert.deepEqual(Object.keys(normalized).sort(), ["dynamic", "persist"]);
   });
 
-  it("assertNormalizeCoversAllFields 不抛", () => {
+  it("AgentPromptLayoutNormalize.assertNormalizeCoversAllFields 不抛", () => {
     assert.doesNotThrow(() => {
-      assertNormalizeCoversAllFields();
+      AgentPromptLayoutNormalize.assertNormalizeCoversAllFields();
     });
   });
 });

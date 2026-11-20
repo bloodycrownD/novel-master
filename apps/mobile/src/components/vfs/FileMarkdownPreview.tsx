@@ -6,38 +6,31 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
-import {truncateText} from '@novel-master/core/common';
+import {FrontMatter, Text as CommonText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {
-  defaultVfsMarkdownPreviewEngine,
-  readVfsMarkdownPreviewEngine,
-  type VfsMarkdownPreviewEngine,
-} from '../../storage/vfs-markdown-preview-engine';
-import { chatAnnotateDraftStore } from '@novel-master/core/chat';
-import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
+import {VfsMarkdownPreviewEngine} from '../../storage/vfs-markdown-preview-engine';
+import {chatAnnotateDraftStore} from '@novel-master/core/chat';
+import {ChatComposerDraft} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
-import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
-import {
-  isRichContentOverLimit,
-  isWebViewDocumentOverLimit,
-} from '../rich-content/rich-content-limits';
+import {TranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
+import {RichContentLimits} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
-import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
-import {parseFrontMatterFields} from './front-matter-fields';
-import type {
-  RichDocumentAnnotationMark,
-  RichDocumentRecogitoCreatePayload,
-} from './RichDocumentBridge';
+import {FrontMatterDocumentHtml} from './build-front-matter-document-html';
+import type {RichDocumentAnnotationMark, RichDocumentRecogitoCreatePayload} from './RichDocumentBridge';
 import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
 
-export function isMarkdownPreviewPath(path: string): boolean {
-  return MARKDOWN_PATH.test(path);
+// 偏离登记：文件名 FileMarkdownPreview 与组件同名，tsx helper namespace 不得撞组件名；
+// helper 主体是 markdown 预览档位判定，按内容主体起名 MarkdownPreview。
+export namespace MarkdownPreview {
+  // nm-style: keep-public — 预览档位判定谓词（FileEditorScreen 消费）
+  export function isPath(path: string): boolean {
+    return MARKDOWN_PATH.test(path);
+  }
 }
 
 /**
@@ -46,7 +39,7 @@ export function isMarkdownPreviewPath(path: string): boolean {
  * - `txt`：文本档（也是非 md 文件的兜底），纯文本铺开可长按复制；
  * - `rich`：富文本直读档（提示词轮/叶子全屏用）。**跳过 front-matter 拆分与
  *   扩展名判定**，直接进 WebView 富文本管线——刻意不做「伪 .md 路径」那条路：
- *   `splitMarkdownFrontMatter` 会把 `---` 开头的正文误当 YAML，
+ *   `FrontMatter.splitMarkdown` 会把 `---` 开头的正文误当 YAML，
  *   markdown-it 的 linkify 又会把 `[段名]` 渲染成坏链。
  */
 export type PreviewRenderKind = 'markdown' | 'txt' | 'rich';
@@ -69,80 +62,30 @@ interface FileMarkdownPreviewProps {
 }
 
 function newAnnotateId(): string {
-  return `ann-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
+  return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** Wrap plain/RN markdown in ScrollView when previewFill — WebView paths skip this. */
-function PreviewScrollWrap({
-  previewFill,
-  children,
-}: {
-  previewFill: boolean;
-  children: React.ReactNode;
-}) {
+function PreviewScrollWrap({previewFill, children}: {previewFill: boolean; children: React.ReactNode}) {
   if (!previewFill) {
     return <>{children}</>;
   }
   return (
-    <ScrollView
-      style={styles.rnBodyScroll}
-      contentContainerStyle={styles.rnBodyContent}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={styles.rnBodyScroll} contentContainerStyle={styles.rnBodyContent} keyboardShouldPersistTaps="handled">
       {children}
     </ScrollView>
   );
 }
 
-/** 仅成对 renderStart/renderEnd 的草稿可投影（R8）。 */
-export function pathDraftsToRecogitoMarks(
-  drafts: readonly AnnotateDraft[],
-): RichDocumentAnnotationMark[] {
-  const out: RichDocumentAnnotationMark[] = [];
-  for (const d of drafts) {
-    if (
-      typeof d.renderStart !== 'number' ||
-      typeof d.renderEnd !== 'number' ||
-      d.renderStart < 0 ||
-      d.renderEnd <= d.renderStart
-    ) {
-      continue;
-    }
-    out.push({
-      id: d.id,
-      originalText: d.originalText,
-      renderStart: d.renderStart,
-      renderEnd: d.renderEnd,
-    });
-  }
-  return out;
-}
-
-export function FileMarkdownPreview({
-  path,
-  content,
-  tokens,
-  previewFill = false,
-  renderKind = 'markdown',
-  annotateEnabled = false,
-  sessionId,
-}: FileMarkdownPreviewProps) {
+export function FileMarkdownPreview({path, content, tokens, previewFill = false, renderKind = 'markdown', annotateEnabled = false, sessionId}: FileMarkdownPreviewProps) {
   const {appUi} = useNovelMaster();
-  const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(
-    defaultVfsMarkdownPreviewEngine(),
-  );
+  const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(VfsMarkdownPreviewEngine.default());
   /** store 变更时递增，驱动 pathDrafts 同步重算（禁止仅靠滞后 useEffect 派生）。 */
   const [draftTick, setDraftTick] = useState(0);
-  const [clearAnnotateSelectionSignal, setClearAnnotateSelectionSignal] =
-    useState(0);
+  const [clearAnnotateSelectionSignal, setClearAnnotateSelectionSignal] = useState(0);
   const [addVisible, setAddVisible] = useState(false);
   const [pendingOriginalText, setPendingOriginalText] = useState('');
-  const [pendingRenderRange, setPendingRenderRange] = useState<{
-    renderStart: number;
-    renderEnd: number;
-  } | null>(null);
+  const [pendingRenderRange, setPendingRenderRange] = useState<{renderStart: number; renderEnd: number} | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [editVisible, setEditVisible] = useState(false);
@@ -150,18 +93,17 @@ export function FileMarkdownPreview({
   const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
 
   const refreshPreviewEngine = useCallback(async () => {
-    setPreviewEngine(await readVfsMarkdownPreviewEngine(appUi));
+    setPreviewEngine(await VfsMarkdownPreviewEngine.read(appUi));
   }, [appUi]);
 
   useEffect(() => {
     refreshPreviewEngine().catch(() => undefined);
   }, [refreshPreviewEngine]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshPreviewEngine().catch(() => undefined);
-    }, [refreshPreviewEngine]),
-  );
+  const onScreenFocus = useCallback(() => {
+    refreshPreviewEngine().catch(() => undefined);
+  }, [refreshPreviewEngine]);
+  useFocusEffect(onScreenFocus);
 
   /**
    * path/session 变化时在 render 期同步派生当前文件草稿。
@@ -174,10 +116,22 @@ export function FileMarkdownPreview({
     return chatAnnotateDraftStore.list(sessionId).filter(d => d.path === path);
   }, [annotateEnabled, sessionId, path, draftTick]);
 
-  const recogitoMarks = useMemo(
-    () => pathDraftsToRecogitoMarks(pathDrafts),
-    [pathDrafts],
-  );
+  // 仅成对 renderStart/renderEnd 的草稿可投影（R8）。
+  const recogitoMarks = useMemo((): RichDocumentAnnotationMark[] => {
+    const out: RichDocumentAnnotationMark[] = [];
+    for (const d of pathDrafts) {
+      if (typeof d.renderStart !== 'number' || typeof d.renderEnd !== 'number' || d.renderStart < 0 || d.renderEnd <= d.renderStart) {
+        continue;
+      }
+      out.push({
+        id: d.id,
+        originalText: d.originalText,
+        renderStart: d.renderStart,
+        renderEnd: d.renderEnd,
+      });
+    }
+    return out;
+  }, [pathDrafts]);
 
   useEffect(() => {
     if (!annotateEnabled || sessionId == null || sessionId === '') {
@@ -190,22 +144,19 @@ export function FileMarkdownPreview({
     });
   }, [annotateEnabled, sessionId]);
 
-  const handleRecogitoCreate = useCallback(
-    (payload: RichDocumentRecogitoCreatePayload) => {
-      // 采集侧已 trim（策略 b）；此处勿二次 trim，以免与 renderStart/End 错位
-      const quote = payload.quote;
-      if (!quote) {
-        return;
-      }
-      setPendingOriginalText(quote);
-      setPendingRenderRange({
-        renderStart: payload.renderStart,
-        renderEnd: payload.renderEnd,
-      });
-      setAddVisible(true);
-    },
-    [],
-  );
+  const handleRecogitoCreate = useCallback((payload: RichDocumentRecogitoCreatePayload) => {
+    // 采集侧已 trim（策略 b）；此处勿二次 trim，以免与 renderStart/End 错位
+    const quote = payload.quote;
+    if (!quote) {
+      return;
+    }
+    setPendingOriginalText(quote);
+    setPendingRenderRange({
+      renderStart: payload.renderStart,
+      renderEnd: payload.renderEnd,
+    });
+    setAddVisible(true);
+  }, []);
 
   const handleAddConfirm = useCallback(
     async (userAnnotation: string) => {
@@ -225,7 +176,7 @@ export function FileMarkdownPreview({
             }
           : {}),
       });
-      refreshComposerAnnotateChips(sessionId);
+      ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
       setPendingRenderRange(null);
     },
     [annotateEnabled, sessionId, path, pendingOriginalText, pendingRenderRange],
@@ -252,7 +203,7 @@ export function FileMarkdownPreview({
       return;
     }
     chatAnnotateDraftStore.remove(sessionId, detailDraft.id);
-    refreshComposerAnnotateChips(sessionId);
+    ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
     setDetailVisible(false);
     setDetailDraft(null);
   }, [sessionId, detailDraft]);
@@ -272,21 +223,18 @@ export function FileMarkdownPreview({
         return;
       }
       chatAnnotateDraftStore.update(sessionId, editingDraft.id, {userAnnotation});
-      refreshComposerAnnotateChips(sessionId);
+      ChatComposerDraft.refreshComposerAnnotateChips(sessionId);
       setEditingDraft(null);
     },
     [sessionId, editingDraft],
   );
 
-  const isMdPath = isMarkdownPreviewPath(path);
-  const split = useMemo(
-    () => (isMdPath ? splitMarkdownFrontMatter(content) : null),
-    [content, isMdPath],
-  );
+  const isMdPath = MarkdownPreview.isPath(path);
+  const split = useMemo(() => (isMdPath ? FrontMatter.splitMarkdown(content) : null), [content, isMdPath]);
 
   const fmLines = split?.frontMatterLines ?? null;
   const showFrontMatter = isMdPath && fmLines !== null;
-  const fmFields = showFrontMatter ? parseFrontMatterFields(fmLines) : [];
+  const fmFields = showFrontMatter ? FrontMatter.parseFields(fmLines) : [];
 
   /** 干净 MD 正文（禁止源串插锚注再渲染）。 */
   const mdBody = useMemo(() => {
@@ -295,10 +243,7 @@ export function FileMarkdownPreview({
 
   // WebView 引擎走浏览器整页渲染，用放宽阈值（20 万字）；rn 兜底引擎维持
   // RenderHTML 的 12k FlatList 护栏（RichContentBody 内部同款判定）。
-  const overLimitFor =
-    previewEngine === 'webview'
-      ? isWebViewDocumentOverLimit
-      : isRichContentOverLimit;
+  const overLimitFor = previewEngine === 'webview' ? RichContentLimits.isWebViewDocumentOverLimit : RichContentLimits.isOverLimit;
   const mdOverLimit = overLimitFor(mdBody);
 
   const mdBodyHtml = useMemo(() => {
@@ -306,51 +251,46 @@ export function FileMarkdownPreview({
       return undefined;
     }
     try {
-      return prepareTranscriptRichHtml(mdBody);
+      return TranscriptRichHtml.prepare(mdBody);
     } catch {
       return undefined;
     }
   }, [mdBody, mdOverLimit, previewEngine]);
 
-  const mdUseWebViewPreview =
-    previewEngine === 'webview' &&
-    isMdPath &&
-    (mdBody.length > 0 || showFrontMatter);
+  const mdUseWebViewPreview = previewEngine === 'webview' && isMdPath && (mdBody.length > 0 || showFrontMatter);
 
   const frontMatterHtml = useMemo(() => {
     if (!mdUseWebViewPreview || !showFrontMatter) {
       return undefined;
     }
-    return buildFrontMatterDocumentHtml({
+    return FrontMatterDocumentHtml.build({
       fields: fmFields,
       empty: fmLines.length === 0,
     });
   }, [mdUseWebViewPreview, showFrontMatter, fmFields, fmLines]);
 
   /** 仅 MD Tab 挂 Recogito；plain 永不 annotate。 */
-  const mdAnnotateActive =
-    annotateEnabled === true && renderKind === 'markdown';
+  const mdAnnotateActive = annotateEnabled === true && renderKind === 'markdown';
 
   const bumpClearAnnotateSelection = useCallback(() => {
     setClearAnnotateSelectionSignal(n => n + 1);
   }, []);
 
-  const annotateWebProps = mdAnnotateActive
-    ? {
-        annotateEnabled: true as const,
-        annotations: recogitoMarks,
-        onRecogitoCreate: handleRecogitoCreate,
-        onAnnotateOpen: handleAnnotateOpen,
-        clearAnnotateSelectionSignal,
-      }
-    : {annotateEnabled: false as const};
+  const activeAnnotateWebProps = {
+    annotateEnabled: true as const,
+    annotations: recogitoMarks,
+    onRecogitoCreate: handleRecogitoCreate,
+    onAnnotateOpen: handleAnnotateOpen,
+    clearAnnotateSelectionSignal,
+  };
+  const annotateWebProps = mdAnnotateActive ? activeAnnotateWebProps : {annotateEnabled: false as const};
 
   const annotateModals = (
     <>
       <MessageEditModal
         visible={addVisible}
         title="批注"
-        label={truncateText(pendingOriginalText, 80)}
+        label={CommonText.truncate(pendingOriginalText, 80)}
         placeholder="批注说明"
         confirmLabel="添加"
         onClose={() => {
@@ -378,7 +318,7 @@ export function FileMarkdownPreview({
       <MessageEditModal
         visible={editVisible}
         title="编辑批注"
-        label={editingDraft ? truncateText(editingDraft.originalText, 80) : undefined}
+        label={editingDraft ? CommonText.truncate(editingDraft.originalText, 80) : undefined}
         placeholder="批注说明"
         initialValue={editingDraft?.userAnnotation ?? ''}
         confirmLabel="保存"
@@ -406,11 +346,7 @@ export function FileMarkdownPreview({
   );
 
   if (!content.trim()) {
-    return (
-      <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-        （空文件）
-      </Text>
-    );
+    return <Text style={[styles.empty, {color: tokens.textSecondary}]}>（空文件）</Text>;
   }
 
   // rich 档：跳过 front-matter 拆分与扩展名判定，整段进 WebView 富文本管线。
@@ -418,25 +354,19 @@ export function FileMarkdownPreview({
   // 路径，落到 `!isMdPath` 就被吃掉退化成纯文本了。
   // 200k 超限降级与 rn 引擎回退沿用既有语义（与 md 档同一套阈值/引擎开关）。
   if (renderKind === 'rich') {
-    const richOverLimit = isWebViewDocumentOverLimit(content);
+    const richOverLimit = RichContentLimits.isWebViewDocumentOverLimit(content);
     if (previewEngine === 'webview') {
       let richHtml: string | undefined;
       if (!richOverLimit) {
         try {
-          richHtml = prepareTranscriptRichHtml(content);
+          richHtml = TranscriptRichHtml.prepare(content);
         } catch {
           richHtml = undefined;
         }
       }
       return (
         <View style={[styles.root, previewFill && styles.fillRoot]}>
-          <RichDocumentWebView
-            key={path}
-            html={richHtml}
-            plain={content}
-            overLimit={richOverLimit}
-            style={previewFill ? styles.webBody : undefined}
-          />
+          <RichDocumentWebView key={path} html={richHtml} plain={content} overLimit={richOverLimit} style={previewFill ? styles.webBody : undefined} />
         </View>
       );
     }
@@ -456,19 +386,11 @@ export function FileMarkdownPreview({
         {content}
       </Text>
     );
-    return (
-      <PreviewScrollWrap previewFill={previewFill}>{plain}</PreviewScrollWrap>
-    );
+    return <PreviewScrollWrap previewFill={previewFill}>{plain}</PreviewScrollWrap>;
   }
 
   return (
-    <View
-      style={[
-        styles.root,
-        previewFill && mdUseWebViewPreview && styles.fillRoot,
-        previewFill && mdAnnotateActive && styles.fillRoot,
-      ]}
-    >
+    <View style={[styles.root, previewFill && mdUseWebViewPreview && styles.fillRoot, previewFill && mdAnnotateActive && styles.fillRoot]}>
       {mdUseWebViewPreview || mdAnnotateActive ? (
         <RichDocumentWebView
           key={path}
@@ -481,27 +403,15 @@ export function FileMarkdownPreview({
         />
       ) : mdBody ? (
         <>
-          {showFrontMatter ? (
-            <FrontMatterCard
-              tokens={tokens}
-              fields={fmFields}
-              empty={fmLines.length === 0}
-            />
-          ) : null}
+          {showFrontMatter ? <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} /> : null}
           <PreviewScrollWrap previewFill={previewFill}>
             <RichContentBody content={mdBody} tokens={tokens} />
           </PreviewScrollWrap>
         </>
       ) : showFrontMatter ? (
         <>
-          <FrontMatterCard
-            tokens={tokens}
-            fields={fmFields}
-            empty={fmLines.length === 0}
-          />
-          <Text style={{color: tokens.textSecondary, fontSize: 14}}>
-            （正文为空）
-          </Text>
+          <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} />
+          <Text style={{color: tokens.textSecondary, fontSize: 14}}>（正文为空）</Text>
         </>
       ) : null}
       {mdAnnotateActive ? annotateModals : null}
@@ -526,28 +436,17 @@ function FrontMatterCard({tokens, fields, empty}: FrontMatterCardProps) {
         },
       ]}
     >
-      <Text style={[styles.fmTitle, {color: tokens.textSecondary}]}>
-        Front Matter
-      </Text>
-      {empty ? (
-        <Text style={{color: tokens.textSecondary, fontSize: 13}}>
-          （空 Front Matter）
-        </Text>
-      ) : null}
+      <Text style={[styles.fmTitle, {color: tokens.textSecondary}]}>Front Matter</Text>
+      {empty ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>（空 Front Matter）</Text> : null}
       {!empty
         ? fields.map((field, index) => (
             <View key={`${field.key}-${index}`} style={styles.fmRow}>
               {field.key ? (
-                <Text
-                  style={[styles.fmKey, {color: tokens.textSecondary}]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.fmKey, {color: tokens.textSecondary}]} numberOfLines={1}>
                   {field.key}
                 </Text>
               ) : null}
-              <Text style={[styles.fmValue, {color: tokens.text}]}>
-                {field.value}
-              </Text>
+              <Text style={[styles.fmValue, {color: tokens.text}]}>{field.value}</Text>
             </View>
           ))
         : null}

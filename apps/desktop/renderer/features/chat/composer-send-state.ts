@@ -52,7 +52,7 @@ export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
   });
 }
 
-export type ComposerSendState = {
+type ComposerSendState = {
   /** 末条为 user 时可空发续跑。 */
   readonly canResumeWithoutInput: boolean;
   /** 末条为 plain user 文本（禁止带文字发送）。 */

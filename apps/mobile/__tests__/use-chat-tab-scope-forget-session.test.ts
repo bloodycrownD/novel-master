@@ -22,7 +22,8 @@ import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
 /** 本文件挂过的 renderer；统一在 afterEach 里于 act 内卸载。 */
 const mounted: TestRenderer.ReactTestRenderer[] = [];
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -32,15 +33,15 @@ jest.mock('../src/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // 防御性补键（tokenizer-native-cancel）：hook 的换 key 分支 / 卸载 cleanup
-  // 也会调 cancelPreciseUpgrade，缺键即 undefined 抛。
-  cancelPreciseUpgrade: jest.fn(),
-  // Part D 新导出（cr2-E-2 同族——其余三个 scope 测试的 mock 都补了，此处漏网）。
-  cancelPreciseUpgradeDelay: jest.fn(),
+  // 也会调 PreciseUpgrade.cancel，缺键即 undefined 抛。
+  PreciseUpgrade: {cancel: jest.fn(), cancelDelay: jest.fn()},
 }));
 
 const deletedSessionIds: string[] = [];
@@ -64,22 +65,28 @@ const allProjectSessionRows = [
 const topLevelRows = () =>
   allProjectSessionRows.filter(r => r.parentSessionId == null);
 
+// 错误通道迁移二期后 get/listByProject/delete 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
     delete: jest.fn(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   sessions: {
-    listByProject: jest.fn(async () => topLevelRows()),
+    listByProject: jest.fn(async () => ({ok: true, value: topLevelRows()})),
     delete: jest.fn(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   state: {
-    getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
+    getCurrentModelId: jest.fn(async () => ({
+      ok: true as const,
+      value: 'openai/gpt-4o-mini',
+    })),
   },
   sessionVfs: jest.fn(() => ({})),
   workplace: jest.fn(() => ({})),
@@ -149,13 +156,16 @@ describe('AM-1 删除链路补调 forgetSession', () => {
     deletedProjectIds.length = 0;
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     });
     mockRuntime.projects.delete.mockImplementation(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     });
-    mockRuntime.sessions.listByProject.mockImplementation(async () =>
-      topLevelRows(),
-    );
+    mockRuntime.sessions.listByProject.mockImplementation(async () => ({
+      ok: true,
+      value: topLevelRows(),
+    }));
   });
 
   it('T-AM1-1 单个删除成功 → forgetSession(id) 恰一次；删除失败 → 零次', async () => {
@@ -171,7 +181,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
     // 失败路径不得误清：delete 抛错 ⇒ forget 零次（否则会清掉还活着的会话状态）
     mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
     mockRuntime.sessions.delete.mockImplementation(async () => {
-      throw new Error('db locked');
+      return {ok: false as const, error: new Error('db locked')};
     });
     await act(async () => {
       await api.handleDeleteSession('s10');
@@ -184,9 +194,10 @@ describe('AM-1 删除链路补调 forgetSession', () => {
   it('T-AM1-2 批量删除部分成功 → 只 forget 已删成功的，失败及其后的不清', async () => {
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       if (id === 's2') {
-        throw new Error('db locked');
+        return {ok: false as const, error: new Error('db locked')};
       }
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     });
     const api = await mountScope();
     await act(async () => {
@@ -217,7 +228,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
     // projects.delete 抛错 ⇒ 一个都不许清
     mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
     mockRuntime.projects.delete.mockImplementation(async () => {
-      throw new Error('fs busy');
+      return {ok: false as const, error: new Error('fs busy')};
     });
     await act(async () => {
       await api.handleDeleteProjects(['p1']);

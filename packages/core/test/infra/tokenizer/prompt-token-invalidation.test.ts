@@ -15,23 +15,17 @@
  *
  * 压缩（run-compaction）的同类断言在 `compaction-conditions/run-compaction.test.ts`。
  */
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { textBlocks } from "../../../src/domain/chat/content/text-blocks.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { createMessageTranscriptEffectsService } from "../../../src/service/chat/create-message-transcript-effects.js";
-import { clearSessionPromptCaches } from "../../../src/service/vfs/logic/clear-session-prompt-caches.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  TextBlocks  } from "../../../src/domain/chat/content/text-blocks.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  sessionApiPromptTokenCache  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  SessionApiPromptTokenEntry  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  ChatServiceFactory  } from "../../../src/service/chat/chat-service-factory.js";
+import {  SessionPromptCaches  } from "../../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
 import type { SessionKkvService } from "../../../src/service/session-kkv/session-kkv.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -46,7 +40,7 @@ async function seedRow(
     sessionId,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens: 4321,
       atMs: Date.now(),
     })
@@ -68,11 +62,11 @@ async function assertRowGone(
   sessionKkv: SessionKkvService,
   sessionId: string
 ): Promise<void> {
-  const raw = await sessionKkv.get(
+  const raw = unwrap(await sessionKkv.get(
     sessionId,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY
-  );
+  ));
   assert.equal(raw, null, "prompt_tokens 行应已被清");
   assert.equal(
     sessionApiPromptTokenCache.get(sessionId),
@@ -83,8 +77,8 @@ async function assertRowGone(
 
 async function makeSession() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   return { ctx, project, session };
 }
 
@@ -97,12 +91,12 @@ describe("prompt 占用失效挂点", () => {
     const { ctx, session } = await makeSession();
     await seedRow(ctx.sessionKkv, session.id);
 
-    await ctx.messages.append(session.id, "user", textBlocks("new turn"));
-    const raw = await ctx.sessionKkv.get(
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("new turn")));
+    const raw = unwrap(await ctx.sessionKkv.get(
       session.id,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY
-    );
+    ));
     assert.notEqual(raw, null, "纯追加不得失效 API 基线（读口用 anchorSeq 增量覆盖）");
     assert.equal(
       sessionApiPromptTokenCache.get(session.id)?.promptTokens,
@@ -113,123 +107,123 @@ describe("prompt 占用失效挂点", () => {
 
   it("message.delete 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const message = await ctx.messages.append(
+    const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hi")
-    );
+      TextBlocks.of("hi")
+    ));
     await seedRow(ctx.sessionKkv, session.id);
 
-    await ctx.messages.delete(message.id);
+    unwrap(await ctx.messages.delete(message.id));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.updateContent 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const message = await ctx.messages.append(
+    const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("before")
-    );
+      TextBlocks.of("before")
+    ));
     await seedRow(ctx.sessionKkv, session.id);
 
-    await ctx.messages.updateContent(message.id, textBlocks("after"));
+    unwrap(await ctx.messages.updateContent(message.id, TextBlocks.of("after")));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.hide 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const message = await ctx.messages.append(
+    const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hide me")
-    );
+      TextBlocks.of("hide me")
+    ));
     await seedRow(ctx.sessionKkv, session.id);
 
-    await ctx.messages.hide(message.id);
+    unwrap(await ctx.messages.hide(message.id));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.show 后 KKV 行被清（可见性恢复同样改变可见 prompt）", async () => {
     const { ctx, session } = await makeSession();
-    const message = await ctx.messages.append(
+    const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("show me")
-    );
-    await ctx.messages.hide(message.id);
+      TextBlocks.of("show me")
+    ));
+    unwrap(await ctx.messages.hide(message.id));
     await seedRow(ctx.sessionKkv, session.id);
 
-    await ctx.messages.show(message.id);
+    unwrap(await ctx.messages.show(message.id));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.hideRange 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const message = await ctx.messages.append(
+    const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("hide range")
-    );
+      TextBlocks.of("hide range")
+    ));
     await seedRow(ctx.sessionKkv, session.id);
 
-    const count = await ctx.messages.hideRange(session.id, message.seq, message.seq);
+    const count = unwrap(await ctx.messages.hideRange(session.id, message.seq, message.seq));
     assert.equal(count, 1);
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.showRange 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const message = await ctx.messages.append(
+    const message = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("show range")
-    );
-    await ctx.messages.hideRange(session.id, message.seq, message.seq);
+      TextBlocks.of("show range")
+    ));
+    unwrap(await ctx.messages.hideRange(session.id, message.seq, message.seq));
     await seedRow(ctx.sessionKkv, session.id);
 
-    const count = await ctx.messages.showRange(session.id, message.seq, message.seq);
+    const count = unwrap(await ctx.messages.showRange(session.id, message.seq, message.seq));
     assert.equal(count, 1);
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.truncateAfter 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const first = await ctx.messages.append(
+    const first = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("keep")
-    );
-    await ctx.messages.append(session.id, "assistant", textBlocks("tail"));
+      TextBlocks.of("keep")
+    ));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("tail")));
     await seedRow(ctx.sessionKkv, session.id);
 
-    await ctx.messages.truncateAfter(session.id, first.id);
+    unwrap(await ctx.messages.truncateAfter(session.id, first.id));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
-  it("回滚（sessionFs.rollbackToMessage）后 KKV 行被清", async () => {
+  it("回滚（sessionFs.rollbackFilesToMessage）后 KKV 行被清", async () => {
     const { ctx, project, session } = await makeSession();
     const svfs = ctx.sessionVfs(project.id, session.id);
-    await ctx.messages.append(session.id, "user", textBlocks("poem"));
-    const assistant1 = await ctx.messages.append(
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
+    const assistant1 = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("here")
-    );
+      TextBlocks.of("here")
+    ));
     await svfs.write("/rb.md", "anchor-body", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    const assistant2 = await ctx.messages.append(
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+    const assistant2 = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("later")
-    );
+      TextBlocks.of("later")
+    ));
     await svfs.write("/rb.md", "later-body", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     await seedRow(ctx.sessionKkv, session.id);
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id
@@ -239,16 +233,16 @@ describe("prompt 占用失效挂点", () => {
 
   it("置位（setMessageFloorAtMessage）后 KKV 行被清", async () => {
     const { ctx, project, session } = await makeSession();
-    const anchor = await ctx.messages.append(
+    const anchor = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("anchor")
-    );
-    await ctx.messages.append(session.id, "assistant", textBlocks("reply"));
+      TextBlocks.of("anchor")
+    ));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("reply")));
     await seedRow(ctx.sessionKkv, session.id);
 
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
-    await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
+    unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id));
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
@@ -272,36 +266,36 @@ describe("prompt 占用失效挂点", () => {
 
   it("切 Agent（sessions.updateSessionAgentConfig）后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
-    const before = await ctx.sessions.getSessionAgentConfig(session.id);
+    const before = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     await seedRow(ctx.sessionKkv, session.id);
 
     // agentId 变更时 savedModelId 指纹不变，读口没有任何 agent 指纹可作第二道
     // 防线：正确性完全依赖这一个失效挂点，所以它必须被本用例钉住。
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const after = unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "other-agent",
-    });
+    }));
     assert.notEqual(after.agentId, before.agentId);
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("updateSessionAgentConfig 传与当前相同的配置 → KKV 行保留（收窄口径）", async () => {
     const { ctx, session } = await makeSession();
-    const current = await ctx.sessions.getSessionAgentConfig(session.id);
+    const current = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     await seedRow(ctx.sessionKkv, session.id);
 
     // overlay 语义下 patch 常常带与当前相同的值（前端表单整体回传 / CLI 重放
     // 同配置）。这类无效写不该清缓存，否则收窄白写、还多一次 KKV 写。
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const after = unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: current.agentId,
       ...(current.modelId != null ? { modelId: current.modelId } : {}),
-    });
+    }));
     assert.deepEqual(after, current);
 
-    const raw = await ctx.sessionKkv.get(
+    const raw = unwrap(await ctx.sessionKkv.get(
       session.id,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY
-    );
+    ));
     assert.notEqual(raw, null, "配置未变时不应清掉 prompt_tokens 行");
     assert.equal(
       sessionApiPromptTokenCache.get(session.id)?.promptTokens,
@@ -315,11 +309,11 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
     await ctx.sessionKkv.set(session.id, "user_vfs_pending", "queue", "[]");
 
-    await clearSessionPromptCaches(session.id, ctx.sessionKkv);
+    await SessionPromptCaches.clear(session.id, ctx.sessionKkv);
     await assertRowGone(ctx.sessionKkv, session.id);
 
     assert.equal(
-      await ctx.sessionKkv.get(session.id, "user_vfs_pending", "queue"),
+      unwrap(await ctx.sessionKkv.get(session.id, "user_vfs_pending", "queue")),
       "[]",
       "导入对齐只清提示词相关域，pending 域保留"
     );
@@ -329,13 +323,13 @@ describe("prompt 占用失效挂点", () => {
     const { ctx, session } = await makeSession();
     await seedRow(ctx.sessionKkv, session.id);
     // 走 service 层会话删除：session_kkv 整表清是该路径的既有语义
-    await ctx.sessions.delete(session.id);
+    unwrap(await ctx.sessions.delete(session.id));
     assert.equal(
-      await ctx.sessionKkv.get(
+      unwrap(await ctx.sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_PROMPT_TOKENS,
         PROMPT_TOKENS_LAST_USAGE_KEY
-      ),
+      )),
       null
     );
   });

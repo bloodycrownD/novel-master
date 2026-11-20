@@ -2,8 +2,8 @@
  * Composer chip 判定（迁并双端 T-ATD1 / T-AT1 / T-CHIP1/T-AN1；T-X2-1）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { composerChips } from "../../src/domain/chat/logic/composer/composer-chips.js";
+import {  describe, it  } from "node:test";
+import {  composerChips  } from "../../src/domain/chat/logic/composer/composer-chips.js";
 
 type Chip = { readonly source: string; readonly action?: string };
 

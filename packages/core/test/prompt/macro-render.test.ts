@@ -1,91 +1,75 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { formatLocalDateTime } from "@novel-master/core/provider";
-import { PromptError } from "../../src/errors/prompt-errors.js";
-import { renderMacro } from "../../src/infra/prompt-template/macro-render.js";
+import {  describe, it  } from "node:test";
+import {  DateTime  } from "../../src/common/datetime.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  MacroRender  } from "../../src/infra/prompt-template/macro-render.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const fixedNow = new Date(2026, 4, 24, 15, 30, 45);
 
 describe("renderMacro", () => {
   it("substitutes $filetree via root context", () => {
-    const out = renderMacro("tree:\n{{ $filetree }}", {
+    const out = unwrap(MacroRender.render("tree:\n{{ $filetree }}", {
       dot: {},
       root: { time: "t", week_cn: "w", filetree: "/\n└── a.md" },
-    });
+    }));
     assert.equal(out, "tree:\n/\n└── a.md");
   });
 
   it("substitutes $.time with fixed now", () => {
-    const out = renderMacro("at {{ $.time }}", {
+    const out = unwrap(MacroRender.render("at {{ $.time }}", {
       dot: {},
       root: {
-        time: formatLocalDateTime(fixedNow),
+        time: DateTime.localDateTime(fixedNow),
         week_cn: fixedNow.toLocaleDateString("zh-CN", { weekday: "long" }),
       },
-    });
+    }));
     assert.equal(out, "at 2026-05-24 15:30:45");
   });
 
   it("substitutes $.week_cn", () => {
     const week = fixedNow.toLocaleDateString("zh-CN", { weekday: "long" });
-    const out = renderMacro("{{ $.week_cn }}", {
+    const out = unwrap(MacroRender.render("{{ $.week_cn }}", {
       dot: {},
       root: { time: "t", week_cn: week },
-    });
+    }));
     assert.equal(out, week);
     assert.match(week, /星期/);
   });
 
   it("removes comments", () => {
-    const out = renderMacro("a{{/* hidden */}}b", {
+    const out = unwrap(MacroRender.render("a{{/* hidden */}}b", {
       dot: {},
       root: { time: "t", week_cn: "w" },
-    });
+    }));
     assert.equal(out, "ab");
   });
 
   it("throws UNSUPPORTED_SYNTAX for if", () => {
-    assert.throws(
-      () =>
-        renderMacro("{{ if .x }}", {
-          dot: {},
-          root: { time: "t", week_cn: "w" },
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptError);
-        assert.equal(error.code, "UNSUPPORTED_SYNTAX");
-        return true;
-      },
-    );
+    // 四期签名：renderMacro 失败沿 Result.err 回传，不再 throw。
+    const r = MacroRender.render("{{ if .x }}", {
+      dot: {},
+      root: { time: "t", week_cn: "w" },
+    });
+    assert.ok(!r.ok);
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNSUPPORTED_SYNTAX"));
   });
 
   it("throws UNKNOWN_FIELD for unknown root key", () => {
-    assert.throws(
-      () =>
-        renderMacro("{{ $.foo }}", {
-          dot: {},
-          root: { time: "t", week_cn: "w" },
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptError);
-        assert.equal(error.code, "UNKNOWN_FIELD");
-        return true;
-      },
-    );
+    const r = MacroRender.render("{{ $.foo }}", {
+      dot: {},
+      root: { time: "t", week_cn: "w" },
+    });
+    assert.ok(!r.ok);
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
   });
 
   it("throws UNKNOWN_FIELD for missing dot path when dot is empty", () => {
-    assert.throws(
-      () =>
-        renderMacro("{{ .missing }}", {
-          dot: {},
-          root: { time: "t", week_cn: "w" },
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptError);
-        assert.equal(error.code, "UNKNOWN_FIELD");
-        return true;
-      },
-    );
+    const r = MacroRender.render("{{ .missing }}", {
+      dot: {},
+      root: { time: "t", week_cn: "w" },
+    });
+    assert.ok(!r.ok);
+    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
   });
 });

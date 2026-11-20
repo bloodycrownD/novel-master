@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
-import { ProviderError } from "../../src/errors/provider-errors.js";
-import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
+import {  describe, it  } from "node:test";
+import {  BUILTIN_PROVIDER_UUID_OPENAI  } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  DefaultModelRequestService  } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
-import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
-import { LlmStreamTimeoutError } from "../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
+import {  DefaultSavedModelSettings  } from "../../src/domain/provider/model/default-saved-model-settings.js";
 
 const providerRepo: ProviderRepository = {
-  list: async () => [],
-  findById: async () => ({
+  list: async () => Result.ok([]),
+  findById: async () => Result.ok({
     id: BUILTIN_PROVIDER_UUID_OPENAI,
     builtinKey: null,
     protocol: "openai",
@@ -33,19 +35,19 @@ const providerRepo: ProviderRepository = {
 const SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000001";
 
 const savedModels: SavedModelRepository = {
-  listByProvider: async () => [],
+  listByProvider: async () => Result.ok([]),
   findById: async (id) =>
     id === SAVED_MODEL_ID
-      ? {
+      ? Result.ok({
           id: SAVED_MODEL_ID,
           providerId: BUILTIN_PROVIDER_UUID_OPENAI,
           vendorModelId: "gpt-4o-mini",
           modelName: "gpt-4o-mini",
-          settings: defaultSavedModelSettings("gpt-4o-mini"),
+          settings: DefaultSavedModelSettings.of("gpt-4o-mini"),
           createdAtMs: 0,
           updatedAtMs: 0,
-        }
-      : null,
+        })
+      : Result.ok(null),
   insert: async () => undefined,
   updateById: async () => undefined,
   deleteById: async () => false,
@@ -59,9 +61,10 @@ const secretStore: SecretStore = {
 };
 
 const noRetryPolicies: ModelRetryPolicyService = {
-  getPolicy: async () => null,
-  setPolicy: async () => undefined,
-  clearPolicy: async () => undefined,
+  // port 已改返回 Result：getPolicy 成功未设置 => ok(null)，set/clear 幂等成功
+  getPolicy: async () => Result.ok(null),
+  setPolicy: async () => Result.ok(undefined),
+  clearPolicy: async () => Result.ok(undefined),
 };
 
 describe("DefaultModelRequestService retry", () => {
@@ -73,7 +76,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async () => {
         calls += 1;
         if (calls < 3) {
-          throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+          throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 500: upstream");
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
       },
@@ -86,7 +89,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3);
   });
@@ -121,7 +124,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async () => {
         calls += 1;
         if (calls === 1) {
-          throw new ProviderError("HTTP_ERROR", "HTTP 429: rate limited");
+          throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 429: rate limited");
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
       },
@@ -134,7 +137,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 2);
   });
@@ -160,7 +163,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3);
   });
@@ -172,7 +175,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+        throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 500: upstream");
       },
     };
     const svc = new DefaultModelRequestService({
@@ -185,8 +188,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
-      (error: unknown) =>
-        error instanceof ProviderError && error.code === "HTTP_ERROR",
+      (error: unknown) => AppErrorOps.is(error, "PROVIDER_HTTP_ERROR"),
     );
     assert.equal(calls, 3);
   });
@@ -198,7 +200,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+        throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 500: upstream");
       },
     };
     const svc = new DefaultModelRequestService({
@@ -212,7 +214,7 @@ describe("DefaultModelRequestService retry", () => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(() =>
-      svc.request(SAVED_MODEL_ID, "hello", { signal: controller.signal }),
+      svc.request(SAVED_MODEL_ID, "hello", { scope: AbortScopeFactory.create({ controller }) }),
     );
     assert.equal(calls, 1);
   });
@@ -226,7 +228,7 @@ describe("DefaultModelRequestService retry", () => {
         calls += 1;
         // 黑洞复现实验 r3 实锤形态：用户停止后 onabort 链 reject 的错误
         // 若逃离 adapter 吞错，不得落入「无状态码 → 默认可重试」触发僵尸重发
-        throw new ProviderError("HTTP_ERROR", "Request aborted");
+        throw new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted" });
       },
     };
     const svc = new DefaultModelRequestService({
@@ -239,8 +241,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
-      (error: unknown) =>
-        error instanceof ProviderError && error.code === "HTTP_ERROR",
+      (error: unknown) => AppErrorOps.is(error, "PROVIDER_HTTP_ERROR"),
     );
     assert.equal(calls, 1, "abort 形态错误不应重试");
   });
@@ -254,7 +255,7 @@ describe("DefaultModelRequestService retry", () => {
         calls += 1;
         if (calls < 3) {
           // 传输层首字超时：无任何输出、无副作用，应与 429/5xx 同列可重试
-          throw new LlmStreamTimeoutError("first-chunk", 120_000);
+          throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "first-chunk", timeoutMs: 120_000, detail: "LLM stream timed out after 120000ms waiting for the first chunk"});
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
       },
@@ -267,7 +268,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3, "first-chunk 超时应按既有重试上限重试");
   });
@@ -280,7 +281,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async () => {
         calls += 1;
         // 流中断：已有部分输出，不重试（避免重复输出/重复计费）
-        throw new LlmStreamTimeoutError("idle", 90_000);
+        throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
       },
     };
     const svc = new DefaultModelRequestService({
@@ -294,7 +295,7 @@ describe("DefaultModelRequestService retry", () => {
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
       (error: unknown) =>
-        error instanceof LlmStreamTimeoutError && error.phase === "idle",
+        AppErrorOps.is(error, "PROVIDER_STREAM_TIMEOUT") && error.details?.phase === "idle",
     );
     assert.equal(calls, 1, "idle 超时不应重试");
   });
@@ -310,7 +311,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new ProviderError("HTTP_ERROR", "HTTP 400: bad request");
+        throw new AppError("PROVIDER_HTTP_ERROR", { detail: "HTTP 400: bad request" });
       },
     };
     const svc = new DefaultModelRequestService({
@@ -324,8 +325,7 @@ describe("DefaultModelRequestService retry", () => {
     try {
       await assert.rejects(
         () => svc.request(SAVED_MODEL_ID, "hello"),
-        (error: unknown) =>
-          error instanceof ProviderError && error.code === "HTTP_ERROR",
+        (error: unknown) => AppErrorOps.is(error, "PROVIDER_HTTP_ERROR"),
       );
       assert.equal(calls, 1);
     } finally {
@@ -395,19 +395,19 @@ describe("DefaultModelRequestService retry", () => {
       resolveAdapter: () => adapter,
     });
 
-    const out = await svc.request(SAVED_MODEL_ID, "hello", {
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello", {
       stream: true,
       onStream: (ev) => {
         if (ev.type === "text-delta") seen.push(ev.text);
       },
-    });
+    }));
     assert.equal(calls, 2);
     assert.equal(out.assistantText, "ok");
     assert.deepEqual(seen, ["ok"]);
   });
 
   it("T-RR-1c: 已产出的 idle 超时仍不重试（两条路径并存、归因不漂移）", async () => {
-    // 证明 §修法 5：闩锁与 `LlmStreamTimeoutError.phase` 分级**并存**而非互相顶掉。
+    // 证明 §修法 5：闩锁与 PROVIDER_STREAM_TIMEOUT details.phase 分级**并存**而非互相顶掉。
     // 若实现把 `:78-80` 改写成「先看闩锁再判 phase」，这条的失败归因会变得不可分辨。
     let calls = 0;
     const seen: string[] = [];
@@ -417,7 +417,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async (req) => {
         calls += 1;
         req.onStream?.({ type: "text-delta", text: "半句" });
-        throw new LlmStreamTimeoutError("idle", 90_000);
+        throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
       },
     };
     const svc = new DefaultModelRequestService({
@@ -438,7 +438,7 @@ describe("DefaultModelRequestService retry", () => {
           },
         }),
       (error: unknown) =>
-        error instanceof LlmStreamTimeoutError && error.phase === "idle",
+        AppErrorOps.is(error, "PROVIDER_STREAM_TIMEOUT") && error.details?.phase === "idle",
     );
     assert.equal(calls, 1);
     assert.equal(seen.length, 1);
@@ -480,10 +480,10 @@ describe("DefaultModelRequestService retry", () => {
       resolveAdapter: () => adapter,
     });
 
-    const out = await svc.request(SAVED_MODEL_ID, "hello", {
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello", {
       stream: true,
       onStream: () => undefined,
-    });
+    }));
     assert.equal(calls, 2);
     assert.equal(out.assistantText, "ok");
   });

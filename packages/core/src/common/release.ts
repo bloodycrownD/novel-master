@@ -7,41 +7,23 @@
  */
 
 import {AppError} from "@/errors/app-error.js";
-import {truncateText} from "./text.js";
+import {Result} from "@/errors/either.js";
+import {Text} from "./text.js";
 
-function parseParts(version: string): [number, number, number] {
+function parseParts(version: string): Result<[number, number, number], AppError> {
     const parts = version.split(".");
     if (parts.length !== 3) {
-        throw new AppError("FORMAT_INVALID_VERSION", `无效的版本号: ${version}`);
+        return Result.err(new AppError("FORMAT_INVALID_VERSION", { detail: `无效的版本号: ${version}` }));
     }
-    const nums = parts.map((p) => {
+    const nums: number[] = [];
+    for (const p of parts) {
         const n = Number.parseInt(p, 10);
         if (!Number.isFinite(n) || n < 0) {
-            throw new AppError("FORMAT_INVALID_VERSION", `无效的版本号: ${version}`);
+            return Result.err(new AppError("FORMAT_INVALID_VERSION", { detail: `无效的版本号: ${version}` }));
         }
-        return n;
-    });
-    return [nums[0]!, nums[1]!, nums[2]!];
-}
-
-/**
- * App 版本号比较（只认 major.minor.patch 三段纯数字）。
- *
- * 返回值约定：local 比 remote 旧返回 -1，相等返回 0，更新返回 1。
- */
-export function compareAppVersions(local: string, remote: string): -1 | 0 | 1 {
-    const [lMajor, lMinor, lPatch] = parseParts(local);
-    const [rMajor, rMinor, rPatch] = parseParts(remote);
-    if (lMajor !== rMajor) {
-        return lMajor < rMajor ? -1 : 1;
+        nums.push(n);
     }
-    if (lMinor !== rMinor) {
-        return lMinor < rMinor ? -1 : 1;
-    }
-    if (lPatch !== rPatch) {
-        return lPatch < rPatch ? -1 : 1;
-    }
-    return 0;
+    return Result.ok([nums[0]!, nums[1]!, nums[2]!]);
 }
 
 type ReleaseNotesFocus = "desktop" | "mobile";
@@ -84,29 +66,56 @@ function excerptPlainSection(markdown: string): string {
 }
 
 function truncateExcerpt(text: string): string {
-    return truncateText(text, NOTES_EXCERPT_MAX);
+    return Text.truncate(text, NOTES_EXCERPT_MAX);
 }
 
-/**
- * 抽取 release notes 摘要。
- *
- * CI 注入的 release body 一般是 markdown 表格，直接剥掉会留下 `|` 噪声，
- * 这里额外做表格剥离 + markdown 净化。优先读 CI 从 CHANGELOG.md 注入的
- * 「更新说明」段，没命中再回退到对应平台的下载段落。
- *
- * 默认 focus 是 desktop；mobile 端调用时显式传 `"mobile"`。两端调用方
- * 目前都显式传参，所以默认值更多是给单元测试或独立调用兜底。
- */
-export function excerptReleaseNotes(body: string, focus: ReleaseNotesFocus = "desktop"): string {
-    const changelog = excerptPlainSection(extractSection(body, CHANGELOG_HEADING));
-    if (changelog) {
-        return truncateExcerpt(changelog);
-    }
-    const headings = focus === "desktop" ? ["## 下载 · Desktop", "## Desktop"] : ["## 下载 · Android", "## Android"];
-    const platformSection = headings.map((heading) => extractSection(body, heading)).find((section) => section.trim()) ?? "";
-    const plain = excerptPlainSection(platformSection);
-    if (!plain) {
-        return FALLBACK[focus];
-    }
-    return truncateExcerpt(plain);
-}
+export const Release = {
+    /**
+     * App 版本号比较（只认 major.minor.patch 三段纯数字）。
+     *
+     * 返回值约定：local 比 remote 旧返回 -1，相等返回 0，更新返回 1；
+     * 版本号非法走 `Result.err`（FORMAT_INVALID_VERSION）。
+     */
+    compareVersions: (local: string, remote: string): Result<-1 | 0 | 1, AppError> => {
+        const lParts = parseParts(local);
+        if (!lParts.ok) return Result.err(lParts.error);
+        const rParts = parseParts(remote);
+        if (!rParts.ok) return Result.err(rParts.error);
+        const [lMajor, lMinor, lPatch] = lParts.value;
+        const [rMajor, rMinor, rPatch] = rParts.value;
+        if (lMajor !== rMajor) {
+            return Result.ok(lMajor < rMajor ? -1 : 1);
+        }
+        if (lMinor !== rMinor) {
+            return Result.ok(lMinor < rMinor ? -1 : 1);
+        }
+        if (lPatch !== rPatch) {
+            return Result.ok(lPatch < rPatch ? -1 : 1);
+        }
+        return Result.ok(0);
+    },
+
+    /**
+     * 抽取 release notes 摘要。
+     *
+     * CI 注入的 release body 一般是 markdown 表格，直接剥掉会留下 `|` 噪声，
+     * 这里额外做表格剥离 + markdown 净化。优先读 CI 从 CHANGELOG.md 注入的
+     * 「更新说明」段，没命中再回退到对应平台的下载段落。
+     *
+     * 默认 focus 是 desktop；mobile 端调用时显式传 `"mobile"`。两端调用方
+     * 目前都显式传参，所以默认值更多是给单元测试或独立调用兜底。
+     */
+    excerptNotes: (body: string, focus: ReleaseNotesFocus = "desktop"): string => {
+        const changelog = excerptPlainSection(extractSection(body, CHANGELOG_HEADING));
+        if (changelog) {
+            return truncateExcerpt(changelog);
+        }
+        const headings = focus === "desktop" ? ["## 下载 · Desktop", "## Desktop"] : ["## 下载 · Android", "## Android"];
+        const platformSection = headings.map((heading) => extractSection(body, heading)).find((section) => section.trim()) ?? "";
+        const plain = excerptPlainSection(platformSection);
+        if (!plain) {
+            return FALLBACK[focus];
+        }
+        return truncateExcerpt(plain);
+    },
+} as const;

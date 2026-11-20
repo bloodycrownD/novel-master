@@ -14,7 +14,7 @@ import {
   tryAtomicMacroDelete,
 } from "./prompt-macro-input";
 
-export type PromptMacroTextareaProps = {
+type PromptMacroTextareaProps = {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (text: string) => void;

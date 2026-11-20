@@ -9,6 +9,8 @@
  * vfs-file-manager.session.integration.test.tsx 里行为化断言），此处保留源码契约。
  */
 import {readFileSync} from 'node:fs';
+import {VfsSingleFileService} from '@/services/vfs-single-file.service';
+import {VfsZipService} from '@/services/vfs-zip.service';
 import {join} from 'node:path';
 
 const root = join(__dirname, '..');
@@ -93,7 +95,7 @@ describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5�
     expect(src).toContain('const {conflictCount, confirm} = result;');
     expect(src).toContain('const applied = await confirm();');
     expect(flat).toContain(
-      'importVfsSingleFile(runtime, scope, { targetDir: targetPath, });',
+      'VfsSingleFileService.importFile(runtime, scope, {targetDir: targetPath});',
     );
     // 二进制跳过明示（D6）。
     expect(src).toContain('跳过 ${skippedBinary.length} 个非 UTF-8 文件');
@@ -119,16 +121,18 @@ describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5�
     expect(flat.match(/if \(exporting\) \{ return; \}/g)?.length).toBe(1);
     // 服务调用与成功文案：形参名钉死为 targetPath（收敛后不再叫 logicalPath）。
     expect(flat).toContain(
-      'kind === \'zip\' ? exportVfsZip(runtime, scope, {directoryPath: targetPath}) : exportVfsSingleFile(runtime, scope, targetPath);',
+      'kind === \'zip\' ? VfsZipService.exportZip(runtime, scope, {directoryPath: targetPath}) : VfsSingleFileService.exportFile(runtime, scope, targetPath);',
     );
-    expect(src).not.toContain('exportVfsSingleFile(runtime, scope, logicalPath)');
+    expect(src).not.toContain('VfsSingleFileService.exportFile(runtime, scope, logicalPath)');
     expect(src).toContain("'文件已保存到所选位置'");
     expect(src).toContain("'ZIP 已保存到所选位置'");
   });
 
   it('format-error 走 AppError 统一分支', () => {
     const src = readSrc('src/errors/format-error.ts');
-    expect(src).toContain('error instanceof AppError');
+    // 错误类已退役（AppErrorOps.is 判 key 收窄），不再有 instanceof 类分支。
+    expect(src).toContain('AppErrorOps.is(error');
+    expect(src).not.toContain('instanceof AppError');
     expect(src).not.toContain('CharacterCardError');
   });
 });

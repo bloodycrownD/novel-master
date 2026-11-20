@@ -10,10 +10,10 @@
  * 本模块把**解压后的产物**按内容身份收进进程内 LRU，作为唯一一层
  * （不是每个读口一份补丁）：谁先读谁付一次解压，之后全是内存命中。
  *
- * ## 单池：内容正文池（contentBodyPool）
+ * ## 单池：内容正文池（decodedContentCache）
  *
  * 键 = 明文 sha256 hex。`vfs_content_blob` 与 `session_file_cache_blob`
- * 的 content_hash 都是 `hashContent(明文)`（同一个纯函数），所以同一位文件
+ * 的 content_hash 都是 `ContentHash.hash(明文)`（同一个纯函数），所以同一位文件
  * 正文在两套存储里天然同键——一份内存同时服务 vfs.read（文件预览 / 工具
  * 读盘 / workplace 冷回填）与 file_cache 读链。**这池不需要任何失效
  * 机制**：键是内容的密码学哈希，同键必同值（value 是 key 的函数），不存在
@@ -39,8 +39,8 @@
  *
  * 池是模块级单例，按**进程**共享，前提是每进程单库单连接（desktop /
  * mobile 现状）。同进程若出现第二个连接或换库，池会继续拿旧库的内容作答，
- * 必须走 `bootstrapNovelMaster` 清池——它已在入口调用
- * {@link clearDecodedContentCaches}（见 bootstrap 模块头的说明）。
+ * 必须走 `NovelMasterBootstrap.bootstrap` 清池——它已在入口调用
+ * {@link decodedContentCache} 的 `clear()`（见 bootstrap 模块头的说明）。
  *
  * ## 只存字符串，不存解析结果
  *
@@ -60,14 +60,14 @@
  */
 
 /** 单池上界与命名（name 只进诊断输出，用于定位是哪层在抖）。 */
-export interface DecodedContentPoolLimits {
+interface DecodedContentPoolLimits {
   readonly name: string;
   readonly maxEntries: number;
   readonly maxChars: number;
 }
 
 /** 池快照（测试与诊断观测面）。 */
-export interface DecodedContentPoolStats {
+interface DecodedContentPoolStats {
   readonly name: string;
   readonly entries: number;
   readonly chars: number;
@@ -80,7 +80,7 @@ export interface DecodedContentPoolStats {
  * 一个带双上界的 LRU 字符串池。
  *
  * @remarks 导出是为了可直测 LRU / 预算行为；生产接线只用本模块顶部的
- * 两个单例池与那组 lookup/remember 函数，不需要自己 new。
+ * 单例 {@link decodedContentCache}，不需要自己 new。
  */
 export class DecodedContentPool {
   /** 迭代序 = 插入序：命中先删再插即 LRU 刷新，逐出取最前键。 */
@@ -119,7 +119,14 @@ export class DecodedContentPool {
     }
     this.lru.set(key, value);
     this.chars += value.length;
-    this.evictOverBudget();
+    while (this.lru.size > this.limits.maxEntries || this.chars > this.limits.maxChars) {
+      const oldest = this.lru.keys().next().value;
+      if (oldest == null) {
+        return;
+      }
+      this.delete(oldest);
+      this.evictions++;
+    }
   }
 
   delete(key: string): void {
@@ -150,20 +157,6 @@ export class DecodedContentPool {
       evictions: this.evictions,
     };
   }
-
-  private evictOverBudget(): void {
-    while (
-      this.lru.size > this.limits.maxEntries ||
-      this.chars > this.limits.maxChars
-    ) {
-      const oldest = this.lru.keys().next().value;
-      if (oldest == null) {
-        return;
-      }
-      this.delete(oldest);
-      this.evictions++;
-    }
-  }
 }
 
 /**
@@ -177,42 +170,22 @@ export class DecodedContentPool {
 const CONTENT_BODY_POOL_MAX_CHARS = 8_000_000;
 const CONTENT_BODY_POOL_MAX_ENTRIES = 1024;
 
-const contentBodyPool = new DecodedContentPool({
+/**
+ * 内容正文池（进程内唯一一层解压产物缓存）。
+ *
+ * 键 = 明文 sha256 hex（`vfs_content_blob` 与 `session_file_cache_blob` 的
+ * content_hash 同源），同键必同值，因此**不需要任何失效机制**；`clear()`
+ * 只在 bootstrap 换库与测试隔离时调用。调用方保证
+ * `contentHash === ContentHash.hash(body)`；喂错键等于投毒，本层不做校验（校验
+ * 就得再哈希一遍，正是本层要消灭的线性成本）。
+ *
+ * @remarks 传 `vfs_content_blob` / `session_file_cache_blob` 的 content_hash；
+ * 不需要也不允许按会话隔离——同 hash 必同正文。
+ * nm-style: keep-public — 池是跨读口共享的进程级单例（三个生产读口 + bootstrap
+ * 换库清池）；类只为其 LRU/预算行为可直测而导出，生产接线只认这一个实例。
+ */
+export const decodedContentCache = new DecodedContentPool({
   name: "content-body",
   maxEntries: CONTENT_BODY_POOL_MAX_ENTRIES,
   maxChars: CONTENT_BODY_POOL_MAX_CHARS,
 });
-
-/**
- * 查内容正文（键 = 明文 sha256 hex，两套内容寻址存储共用）。
- *
- * @remarks 传 `vfs_content_blob` / `session_file_cache_blob` 的 content_hash；
- * 不需要也不允许按会话隔离——同 hash 必同正文。
- */
-export function lookupDecodedContentBody(contentHash: string): string | null {
-  return contentBodyPool.get(contentHash);
-}
-
-/**
- * 回填内容正文。
- *
- * @remarks 调用方保证 `contentHash === hashContent(body)`（两套存储的写侧
- * 都是这么算的）；喂错键等于投毒，本层不做校验（校验就得再哈希一遍，
- * 正是本层要消灭的线性成本）。
- */
-export function rememberDecodedContentBody(
-  contentHash: string,
-  body: string
-): void {
-  contentBodyPool.set(contentHash, body);
-}
-
-/** 仅测试与诊断：清空内容正文池（条目与计数器一并归零，保证用例隔离）。 */
-export function clearDecodedContentCaches(): void {
-  contentBodyPool.clear();
-}
-
-/** 内容正文池快照（测试断言命中形态 / 排查内存占用时用）。 */
-export function decodedContentCacheStats(): readonly DecodedContentPoolStats[] {
-  return [contentBodyPool.stats()];
-}

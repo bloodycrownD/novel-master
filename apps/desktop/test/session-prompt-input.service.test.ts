@@ -12,19 +12,17 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
-import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/stored-config-validity";
-import { serializeRuleSnapshot } from "@novel-master/core/workplace";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { TextBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
+import { DefaultAgentDefinition } from "@novel-master/core/stored-config-validity";
+import { RuleSnapshotCodec } from "@novel-master/core/workplace";
+import { ChatPromptBuildBailedError } from "@novel-master/core";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
-import {
-  buildSessionPromptInput,
-  ChatPromptBuildBailedError,
-} from "../src/main/services/session-prompt-input.service.js";
+import { SessionPromptInputService } from "../src/main/services/session-prompt-input.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -58,19 +56,19 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-session-prompt-"));
 
-    const project = await handleProjectsCreate({ name: "extra-info-preview" });
+    const project = await Projects.create({ name: "extra-info-preview" });
     assert.equal(project.ok, true);
     if (!project.ok) return;
     projectId = project.data.id;
 
     // 注册空白 agent 并设为 workspace 当前，保证 session create 能复制到 agentId。
-    const agent = await handleAgentRegistryCreateBlank();
+    const agent = await AgentRegistry.createBlank();
     assert.equal(agent.ok, true);
     if (!agent.ok) return;
-    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
     assert.equal(setAgent.ok, true);
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "extra-info-session",
     });
@@ -78,8 +76,10 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
     if (!session.ok) return;
     sessionId = session.data.id;
 
-    const rt = await getDesktopRuntime();
-    await rt.messages.append(sessionId, "user", textBlocks("你好，请记住附加信息"));
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    await rt.messages.append(sessionId, "user", TextBlocks.of("你好，请记住附加信息"));
   });
 
   after(async () => {
@@ -87,19 +87,23 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
   });
 
   it("T-CA5: definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块", async () => {
-    const rt = await getDesktopRuntime();
-    const definition = buildDefaultAgentDefinitionPreservingName("extra-info-agent");
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    const definition = DefaultAgentDefinition.build("extra-info-agent");
     // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
     definition.prompts = {
       ...definition.prompts,
       customAttach: "这是常驻附加信息：优先级最高",
     };
 
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await SessionPromptInputService.buildAdapter(
       rt,
       { projectId, sessionId },
       definition,
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;
 
     const userBody = bundle.ctx.messages
       .filter((m) => m.role === "user")
@@ -148,26 +152,28 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-attach-budget-"));
-    const project = await handleProjectsCreate({ name: "attach-budget" });
+    const project = await Projects.create({ name: "attach-budget" });
     assert.equal(project.ok, true);
     if (!project.ok) return;
     projectId = project.data.id;
-    const agent = await handleAgentRegistryCreateBlank();
+    const agent = await AgentRegistry.createBlank();
     assert.equal(agent.ok, true);
     if (!agent.ok) return;
-    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
     assert.equal(setAgent.ok, true);
-    const session = await handleSessionsCreate({ projectId, title: "attach-budget" });
+    const session = await Sessions.create({ projectId, title: "attach-budget" });
     assert.equal(session.ok, true);
     if (!session.ok) return;
     sessionId = session.data.id;
 
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 真写一份超预算正文进 VFS：prepare 首次全文 hydrate 走
     // file_cache miss → vfs.read 这条路。
     await rt.sessionVfs(projectId, sessionId).write(HUGE_PATH, OVER_BUDGET_BODY);
     // content: null ⇒ prepare 不走「已是 action XML」旁路，预算判据真的生效。
-    await rt.messages.append(sessionId, "user", textBlocks("帮我看看这个附件"), {
+    await rt.messages.append(sessionId, "user", TextBlocks.of("帮我看看这个附件"), {
       attachments: [
         {
           name: HUGE_PATH,
@@ -185,8 +191,12 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
   });
 
   it("T-A8: 超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）", async () => {
-    const rt = await getDesktopRuntime();
-    const bundle = await buildSessionPromptInput(rt, { projectId, sessionId });
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    const bundleResult = await SessionPromptInputService.buildAdapter(rt, { projectId, sessionId })
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;
 
     const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? "";
     // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
@@ -231,21 +241,23 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-build-bail-"));
-    const project = await handleProjectsCreate({ name: "build-bail" });
+    const project = await Projects.create({ name: "build-bail" });
     assert.equal(project.ok, true);
     if (!project.ok) return;
     projectId = project.data.id;
-    const agent = await handleAgentRegistryCreateBlank();
+    const agent = await AgentRegistry.createBlank();
     assert.equal(agent.ok, true);
     if (!agent.ok) return;
-    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
     assert.equal(setAgent.ok, true);
-    const session = await handleSessionsCreate({ projectId, title: "build-bail" });
+    const session = await Sessions.create({ projectId, title: "build-bail" });
     assert.equal(session.ok, true);
     if (!session.ok) return;
     sessionId = session.data.id;
-    const rt = await getDesktopRuntime();
-    await rt.messages.append(sessionId, "user", textBlocks("他把伞收了"));
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    await rt.messages.append(sessionId, "user", TextBlocks.of("他把伞收了"));
   });
 
   after(async () => {
@@ -306,10 +318,12 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   }
 
   it("检查点①（解析 agent 之后）翻真：取消息一步都不许跑", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      SessionPromptInputService.buildAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
@@ -322,10 +336,12 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("检查点②（取消息之后）翻真：工作区装配不许起步", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      SessionPromptInputService.buildAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
@@ -342,14 +358,19 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("检查点③（工作区装配之后）翻真：prepare 段不许起步", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      SessionPromptInputService.buildAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
-        { shouldBail: bailAt(3) },
+        // 八期给 listBySession 加了 checkpoint（分片级），shouldBail 的调用次数
+        // 因此前移，"第 N 次调用" 不再是稳定坐标。改用**足迹判据**：workplace 句柄
+        // 已取过（装配起步）且 skills 还没取（prepare 未进）时才翻真。
+        { shouldBail: () => counts.workplace > 0 && counts.skills === 0 },
       ),
       (error: unknown) => error instanceof ChatPromptBuildBailedError,
     );
@@ -362,14 +383,18 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("检查点④（prepare 之后）翻真：四段足迹全见过才抛（layout 不再碰 runtime）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      SessionPromptInputService.buildAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
-        { shouldBail: bailAt(4) },
+        // 同上：四段足迹全部出现过（list/workplace/skills 各 ≥1）才翻真，
+        // 不依赖 shouldBail 的调用序号。
+        { shouldBail: () => counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1 },
       ),
       (error: unknown) => error instanceof ChatPromptBuildBailedError,
     );
@@ -383,11 +408,13 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("workplace 段内中止：assemble 文件粒度抛错 → build 转抛 ChatPromptBuildBailedError", async () => {
-    const rt = await getDesktopRuntime();
-    const project = await handleProjectsCreate({ name: "wp-bail" });
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    const project = await Projects.create({ name: "wp-bail" });
     assert.equal(project.ok, true);
     if (!project.ok) return;
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "wp-bail",
     });
@@ -404,7 +431,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
       sessionId,
       "rule_snapshot",
       "canon",
-      serializeRuleSnapshot([
+      RuleSnapshotCodec.serialize([
         { path: "/a.md", status: "full" },
         { path: "/b.md", status: "full" },
       ]),
@@ -430,7 +457,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     };
     rt.sessionVfs = wrapped;
     try {
-      const definition = buildDefaultAgentDefinitionPreservingName("wp-bail");
+      const definition = DefaultAgentDefinition.build("wp-bail");
       definition.prompts = {
         ...definition.prompts,
         persist: [],
@@ -438,7 +465,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
         workplace: "【工作区】",
       };
       await assert.rejects(
-        buildSessionPromptInput(rt, { projectId, sessionId }, definition, {
+        SessionPromptInputService.buildAdapter(rt, { projectId, sessionId }, definition, {
           shouldBail: () => readCalls >= 1,
         }),
         (error: unknown) => error instanceof ChatPromptBuildBailedError,
@@ -451,22 +478,28 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("判据恒假 / 不传 options ⇒ 行为零变化（弃权检查点不许误伤）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await SessionPromptInputService.buildAdapter(
       runtime,
       { projectId, sessionId },
       undefined,
       { shouldBail: () => false },
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;
     assert.equal(bundle.rawMessages.length, 1);
     assert.ok(counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1);
 
     // 预览消费方（不传 options）：原签名调用零变化。
-    const previewBundle = await buildSessionPromptInput(
+    const previewResult = await SessionPromptInputService.buildAdapter(
       runtime,
       { projectId, sessionId },
     );
+    if (!previewResult.ok) throw previewResult.error;
+    const previewBundle = previewResult.value;
     assert.equal(previewBundle.rawMessages.length, 1);
   });
 });

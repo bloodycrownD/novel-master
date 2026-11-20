@@ -14,14 +14,14 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload, serializeFileCachePayload, type FileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
-import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
+import {  after, before, describe, it  } from "node:test";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec, type FileCachePayload  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import {  openSqlCountingNovelMasterTestConnection, type SqlCounter  } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -37,7 +37,7 @@ after(async () => {
 
 /** 解析必须成功（非法载荷直接让用例红），返回载荷本体。 */
 function parsePayload(raw: string): FileCachePayload {
-  const parsed = parseFileCachePayload(raw);
+  const parsed = RuleSnapshotCodec.parseFileCachePayload(raw);
   assert.ok(parsed.ok);
   return parsed.value;
 }
@@ -64,14 +64,14 @@ async function entryHash(conn: { query<T extends Record<string, unknown>>(sql: s
 
 describe("file_cache × 进程内解压产物层", () => {
   it("第二次 get 走内存：blob 被投毒仍读到原正文；mtime 取自 entry 行现拼", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
-    const sessionKkv = createSessionKkvService(conn);
+    const sessionKkv = SessionKkvServiceFactory.create(conn);
     const sessionId = `s-${testIsolationSuffix()}`;
     const key = `full:/正文-${testIsolationSuffix()}.md`;
     const body = `文件正文-${testIsolationSuffix()}：${"段落内容\n".repeat(70)}`;
 
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 1000 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 1000 }));
     const first = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
     assert.equal(parsePayload(first!).body, body);
 
@@ -90,22 +90,22 @@ describe("file_cache × 进程内解压产物层", () => {
     assert.equal(payload.mtimeMs, 2000, "mtime 是行上的新值，不是缓存里的旧值");
 
     // 反向锁：清池后再读 → 投毒的 blob 解压失败 → 按 miss 自愈返回 null
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key), null);
   });
 
   it("getMany：部分命中时命中项不吃投毒、未命中项照常解压", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
-    const sessionKkv = createSessionKkvService(conn);
+    const sessionKkv = SessionKkvServiceFactory.create(conn);
     const sessionId = `s-${testIsolationSuffix()}`;
     const cachedKey = `full:/已读-${testIsolationSuffix()}.md`;
     const freshKey = `full:/未读-${testIsolationSuffix()}.md`;
     const cachedBody = `已读正文-${testIsolationSuffix()}`;
     const freshBody = `未读正文-${testIsolationSuffix()}`;
 
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey, serializeFileCachePayload({ body: cachedBody, mtimeMs: 11 }));
-    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, freshKey, serializeFileCachePayload({ body: freshBody, mtimeMs: 22 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey, RuleSnapshotCodec.serializeFileCachePayload({ body: cachedBody, mtimeMs: 11 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, freshKey, RuleSnapshotCodec.serializeFileCachePayload({ body: freshBody, mtimeMs: 22 }));
 
     // 只把 cachedKey 读一次（进池），freshKey 保持未读
     const single = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey);
@@ -119,9 +119,9 @@ describe("file_cache × 进程内解压产物层", () => {
   });
 
   it("全命中时连 blob 表 SQL 都不发（workplace 批次读形态）", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const ctx = countingCtx!;
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
     const sessionId = `s-count-${testIsolationSuffix()}`;
     const keys = [1, 2, 3].map((n) => `full:/f${n}-${testIsolationSuffix()}.md`);
     for (const [index, key] of keys.entries()) {
@@ -129,7 +129,7 @@ describe("file_cache × 进程内解压产物层", () => {
         sessionId,
         SESSION_KKV_DOMAIN_FILE_CACHE,
         key,
-        serializeFileCachePayload({
+        RuleSnapshotCodec.serializeFileCachePayload({
           body: `第 ${index} 个文件正文-${testIsolationSuffix()}`,
           mtimeMs: index,
         })

@@ -7,35 +7,33 @@
  * INVALID_ARGUMENT 且文案含「definition.name 必填」，并确认拒绝后
  * 注册表无落盘。
  */
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
-import { createAgentRegistryService } from "@novel-master/core/agent";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  AgentServiceFactory  } from "@novel-master/core/agent";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
 function makeRunner(): ToolRunner<BuiltinToolContext> {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return new ToolRunner(registry);
 }
 
 /** 真实链路的工具上下文：registry 接真实 SQLite 连接（非 fake）。 */
 function makeRealCtx(): BuiltinToolContext {
   const ctx = getNovelMasterTestContext();
-  const registry = createAgentRegistryService(ctx.conn);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn);
   const probe = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(probe);
+  BuiltinTools.register(probe);
   return {
     vfs: {} as never,
     projectId: "proj-1",
@@ -51,10 +49,10 @@ function makeRealCtx(): BuiltinToolContext {
 describe("agent 工具 create 端到端（真实 registry）", () => {
   it("缺 definition.name：报错文案含「definition.name 必填」且注册表无落盘", async () => {
     const testCtx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(testCtx.conn);
+    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
     const idsBefore = new Set(await registry.listAgentIds());
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         makeRunner().call(
           "agent",
@@ -66,9 +64,11 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
           makeRealCtx(),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
-        e.message.includes("error.agent.invalid_schema.name_required"),
+        assert.ok(
+          AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+          e.key === "TOOL_INVALID_ARGUMENT" &&
+          e.message.includes("error.agent.invalid_schema.name_required"),
+        ),
     );
 
     // 拒绝后无落盘：持久化 id 集合与调用前一致（无 agent- 前缀新行）。
@@ -80,7 +80,7 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
 describe("agent 工具 update patch 端到端（真实 registry）", () => {
   it("patch 只改 description：其余字段与 prompts 布局保留，get 可读回", async () => {
     const testCtx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(testCtx.conn);
+    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
     // 种一个带完整字段的现状
     const agentId = "agent-patch-e2e-1";
     await registry.upsert(agentId, {
@@ -103,10 +103,10 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
       },
       makeRealCtx(),
     );
-    assert.equal(out.action, "update");
+    assert.equal(unwrap(out).action, "update");
 
     // 读回：description 已改，prompts 布局原样保留
-    const saved = await registry.get(agentId);
+    const saved = unwrap(await registry.get(agentId));
     assert.equal(saved.description, "新描述");
     assert.equal(saved.name, "patch-e2e-alpha");
     // wire 往返会给块补 type: "text"（归一），断言对齐落盘后的形状。
@@ -122,13 +122,13 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
 
   it("patch 改名撞名：服务层 DUPLICATE_NAME 转译为 INVALID_ARGUMENT", async () => {
     const testCtx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(testCtx.conn);
+    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
     const a = "agent-patch-e2e-a";
     const b = "agent-patch-e2e-b";
     await registry.upsert(a, { name: "dup-target" } as never);
     await registry.upsert(b, { name: "dup-source" } as never);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         makeRunner().call(
           "agent",
@@ -136,9 +136,11 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
           makeRealCtx(),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
-        e.message.includes("error.agent.duplicate_name"),
+        assert.ok(
+          AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+          e.key === "TOOL_INVALID_ARGUMENT" &&
+          e.message.includes("error.agent.duplicate_name"),
+        ),
     );
 
     await registry.delete(a);

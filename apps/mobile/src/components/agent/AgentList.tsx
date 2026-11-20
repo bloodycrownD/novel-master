@@ -4,21 +4,13 @@
  * 内置 general 子智能体在子 tab 以只读合成行展示（不可勾选、不可增删）。
  */
 import React, {useCallback, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 import type {AgentDefinition} from '@novel-master/core/agent';
-import {agentModeMatchesTab, type AgentSettingsTab} from '@/config-forms/agent';
+import {Result, AppError} from '@novel-master/core/errors';
+import {AgentModeTab, type AgentSettingsTab} from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
@@ -30,13 +22,13 @@ import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
-import {resolveModelDisplayLabel} from '../../services/model-display-label';
+import {ModelDisplayLabel} from '../../services/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {pickEntityIcon} from '../../utils/entity-icon';
-import {agentDisplayNameFromWire} from './agent-editor/useAgentEditorFormState';
+import {ToastMessage} from '../../errors/toast-message';
+import {EntityIcon} from '../../utils/entity-icon';
+import {AgentEditorFormState} from './agent-editor/useAgentEditorFormState';
 import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -68,10 +60,8 @@ const GENERAL_ROW: AgentRow = {
 };
 
 const TAB_HINTS: Record<AgentSettingsTab, string> = {
-  primary:
-    '主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。',
-  subagent:
-    '子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。',
+  primary: '主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。',
+  subagent: '子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。',
 };
 
 const EMPTY_TEXTS: Record<AgentSettingsTab, string> = {
@@ -99,9 +89,7 @@ export function AgentList({onCreate}: Props) {
   const [rows, setRows] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuAgentId, setMenuAgentId] = useState<string | undefined>();
-  const [renamePrompt, setRenamePrompt] = useState<
-    {agentId: string; initialName: string} | undefined
-  >();
+  const [renamePrompt, setRenamePrompt] = useState<{agentId: string; initialName: string} | undefined>();
   const batch = useBatchSelection();
 
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
@@ -113,15 +101,20 @@ export function AgentList({onCreate}: Props) {
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
   // nm-style: keep-local — 列表装载与工作区模型解析的状态链，内联回 useCallback 会让调用参数跨行
-  const reloadAgentList = async () => {
+  const reloadAgentList = async (): Promise<Result<void, AppError>> => {
     setLoading(true);
     try {
       const ids = await runtime.agentRegistry.listAgentIds();
-      const workspaceModelId = await runtime.state.getCurrentModelId();
+      const workspaceModel = await runtime.state.getCurrentModelId();
+      // 失败沿 Result 接力（错误通道迁移四期）：焦点回归时 toast，删除后
+      // 重载失败按各调用点原收场提示。
+      if (!workspaceModel.ok) return Result.err(workspaceModel.error);
+      const workspaceModelId = workspaceModel.value ?? undefined;
       let wsLabel = '—';
       if (workspaceModelId) {
         try {
-          wsLabel = await resolveModelDisplayLabel(runtime, workspaceModelId);
+          const wsLabelResolved = await ModelDisplayLabel.resolve(runtime, workspaceModelId);
+          wsLabel = wsLabelResolved.ok ? wsLabelResolved.value : workspaceModelId;
         } catch {
           wsLabel = workspaceModelId;
         }
@@ -135,14 +128,15 @@ export function AgentList({onCreate}: Props) {
         if (raw == null) {
           continue;
         }
-        const health = storedConfig.assessAgentDefinitionWire(raw);
+        const health = storedConfig.AgentDefinitionWire.assess(raw);
         if (health.status === 'valid') {
           const def = health.value;
           let meta: string;
           if (def.model) {
             let label = def.model;
             try {
-              label = await resolveModelDisplayLabel(runtime, def.model);
+              const labelResolved = await ModelDisplayLabel.resolve(runtime, def.model);
+              if (labelResolved.ok) label = labelResolved.value;
             } catch {
               /* 使用原始 model id */
             }
@@ -159,34 +153,37 @@ export function AgentList({onCreate}: Props) {
         } else {
           enriched.push({
             id,
-            name: agentDisplayNameFromWire(raw, id),
+            name: AgentEditorFormState.agentDisplayNameFromWire(raw, id),
             configInvalid: true,
-            meta: coreT(storedConfig.storedConfigInvalidReason(health.code)),
+            meta: coreT(storedConfig.StoredConfigLabels.invalidReason(health.code)),
           });
         }
       }
       setRows(enriched);
+      return Result.ok(undefined);
     } finally {
       setLoading(false);
     }
   };
   const reload = useCallback(reloadAgentList, [runtime]);
 
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  useFocusEffect(
-    useCallback(() => {
-      reload().catch(err => showToast(toastMessage('加载智能体列表失败', err)));
-    }, [reload, showToast]),
-  );
+  const onScreenFocus = useCallback(() => {
+    reload()
+      .then(r => {
+        if (!r.ok) {
+          showToast(ToastMessage.toast('加载智能体列表失败', r.error));
+        }
+      })
+      .catch(err => showToast(ToastMessage.toast('加载智能体列表失败', err)));
+  }, [reload, showToast]);
+  useFocusEffect(onScreenFocus);
 
   // 全量加载后前端过滤（不重载）；invalid 行读不到 mode，按 all 双边显示。
   // 子 tab 头部合成内置 general 行（GENERAL_ROW def.mode 为 subagent，
   // 天然只落在子侧）。
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const visibleRows = useMemo(() => {
-    const filtered = rows.filter(row =>
-      agentModeMatchesTab(row.def?.mode, tab),
-    );
+    const filtered = rows.filter(row => AgentModeTab.agentModeMatchesTab(row.def?.mode, tab));
     return tab === 'subagent' ? [GENERAL_ROW, ...filtered] : filtered;
   }, [rows, tab]);
 
@@ -208,8 +205,11 @@ export function AgentList({onCreate}: Props) {
               await runtime.agentRegistry.delete(agentId);
             }
             batch.exit();
-            await reload();
-          })().catch(err => showToast(toastMessage('删除失败', err)));
+            const lr = await reload();
+            if (!lr.ok) {
+              showToast(ToastMessage.toast('删除失败', lr.error));
+            }
+          })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
         },
       },
     ]);
@@ -225,15 +225,7 @@ export function AgentList({onCreate}: Props) {
         onCancelBatch={batch.exit}
         onDelete={confirmBatchDelete}
         hint="选择要删除的 Agent"
-        normalActions={
-          onCreate ? (
-            <PrimaryButton
-              label="新建"
-              tokens={tokens}
-              onPress={() => onCreate(tab)}
-            />
-          ) : null
-        }
+        normalActions={onCreate ? <PrimaryButton label="新建" tokens={tokens} onPress={() => onCreate(tab)} /> : null}
       />
       {/* 切 tab 退出批量模式（照技能管理页先例，两侧勾选集不互通） */}
       <SegmentedControl
@@ -256,9 +248,7 @@ export function AgentList({onCreate}: Props) {
         }}
         tokens={tokens}
       />
-      <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>
-        {TAB_HINTS[tab]}
-      </Text>
+      <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>{TAB_HINTS[tab]}</Text>
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={styles.loader} />
       ) : (
@@ -266,14 +256,8 @@ export function AgentList({onCreate}: Props) {
           data={visibleRows}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={reload} />
-          }
-          ListEmptyComponent={
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              {EMPTY_TEXTS[tab]}
-            </Text>
-          }
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          ListEmptyComponent={<Text style={[styles.empty, {color: tokens.textSecondary}]}>{EMPTY_TEXTS[tab]}</Text>}
           renderItem={({item, index}) => (
             <ElevatedCard
               tokens={tokens}
@@ -294,91 +278,39 @@ export function AgentList({onCreate}: Props) {
               }}
             >
               {batch.active && !item.builtin ? (
-                <BatchCheckbox
-                  checked={batch.isSelected(item.id)}
-                  onToggle={() => batch.toggle(item.id)}
-                />
+                <BatchCheckbox checked={batch.isSelected(item.id)} onToggle={() => batch.toggle(item.id)} />
               ) : (
-                <View
-                  style={[styles.avatar, {backgroundColor: tokens.bgSecondary}]}
-                >
-                  <Text style={styles.avatarIcon}>
-                    {item.builtin ? '🤖' : pickEntityIcon(item.id, AGENT_ICONS)}
-                  </Text>
+                <View style={[styles.avatar, {backgroundColor: tokens.bgSecondary}]}>
+                  <Text style={styles.avatarIcon}>{item.builtin ? '🤖' : EntityIcon.pick(item.id, AGENT_ICONS)}</Text>
                 </View>
               )}
               <View style={styles.info}>
                 <View style={styles.nameRow}>
-                  <Text
-                    style={[styles.name, {color: tokens.text}]}
-                    numberOfLines={1}
-                  >
+                  <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
                     {item.name}
                   </Text>
                   {/* mode 归一后为 all（显式/缺省）挂「全部」徽标；invalid 行读不到 def 也按 all */}
                   {item.builtin ? (
-                    <View
-                      style={[
-                        styles.tagBadge,
-                        {backgroundColor: `${tokens.primary}1A`},
-                      ]}
-                    >
-                      <Text
-                        style={[styles.tagBadgeText, {color: tokens.primary}]}
-                      >
-                        内置
-                      </Text>
+                    <View style={[styles.tagBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                      <Text style={[styles.tagBadgeText, {color: tokens.primary}]}>内置</Text>
                     </View>
                   ) : (item.def?.mode ?? 'all') === 'all' ? (
-                    <View
-                      style={[
-                        styles.tagBadge,
-                        {backgroundColor: `${tokens.textTertiary}1A`},
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.tagBadgeText,
-                          {color: tokens.textTertiary},
-                        ]}
-                      >
-                        全部
-                      </Text>
+                    <View style={[styles.tagBadge, {backgroundColor: `${tokens.textTertiary}1A`}]}>
+                      <Text style={[styles.tagBadgeText, {color: tokens.textTertiary}]}>全部</Text>
                     </View>
                   ) : null}
                 </View>
                 {item.configInvalid ? (
                   <View style={styles.metaRow}>
-                    <View
-                      style={[
-                        styles.invalidBadge,
-                        {backgroundColor: tokens.warningMuted},
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.invalidBadgeText,
-                          {color: tokens.warning},
-                        ]}
-                      >
-                        {coreT(storedConfig.AGENT_LIST_LABELS.configInvalid)}
-                      </Text>
+                    <View style={[styles.invalidBadge, {backgroundColor: tokens.warningMuted}]}>
+                      <Text style={[styles.invalidBadgeText, {color: tokens.warning}]}>{coreT(storedConfig.AGENT_LIST_LABELS.configInvalid)}</Text>
                     </View>
-                    <Text
-                      style={[
-                        styles.meta,
-                        {color: tokens.textSecondary, flex: 1},
-                      ]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.meta, {color: tokens.textSecondary, flex: 1}]} numberOfLines={1}>
                       {item.meta}
                     </Text>
                   </View>
                 ) : (
-                  <Text
-                    style={[styles.meta, {color: tokens.textSecondary}]}
-                    numberOfLines={2}
-                  >
+                  <Text style={[styles.meta, {color: tokens.textSecondary}]} numberOfLines={2}>
                     {item.meta}
                   </Text>
                 )}
@@ -392,15 +324,9 @@ export function AgentList({onCreate}: Props) {
                       setMenuAgentId(item.id);
                     }}
                   >
-                    <Text
-                      style={[styles.menuDots, {color: tokens.textSecondary}]}
-                    >
-                      ⋮
-                    </Text>
+                    <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>⋮</Text>
                   </Pressable>
-                  <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-                    ›
-                  </Text>
+                  <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
                 </>
               ) : null}
             </ElevatedCard>
@@ -436,10 +362,11 @@ export function AgentList({onCreate}: Props) {
           } else if (action === 'duplicate') {
             void (async () => {
               const def = await runtime.agentRegistry.get(id);
+              if (!def.ok) throw def.error;
               const copyId = `agent-${Date.now()}`;
               await runtime.agentRegistry.upsert(copyId, {
-                ...def,
-                name: `${def.name}-copy`,
+                ...def.value,
+                name: `${def.value.name}-copy`,
               });
               await reload();
               navigation.navigate('AgentEditor', {agentId: copyId});
@@ -454,8 +381,11 @@ export function AgentList({onCreate}: Props) {
                 onPress: () => {
                   void (async () => {
                     await runtime.agentRegistry.delete(id);
-                    await reload();
-                  })().catch(err => showToast(toastMessage('删除失败', err)));
+                    const lr = await reload();
+                    if (!lr.ok) {
+                      showToast(ToastMessage.toast('删除失败', lr.error));
+                    }
+                  })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
                 },
               },
             ]);
@@ -477,8 +407,9 @@ export function AgentList({onCreate}: Props) {
             const trimmed = values[0].trim();
             if (trimmed !== '') {
               const def = await runtime.agentRegistry.get(prompt.agentId);
+              if (!def.ok) throw def.error;
               await runtime.agentRegistry.upsert(prompt.agentId, {
-                ...def,
+                ...def.value,
                 name: trimmed,
               });
               await reload();

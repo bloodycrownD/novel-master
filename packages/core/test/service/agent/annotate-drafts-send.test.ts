@@ -2,27 +2,21 @@
  * annotateDrafts 发送契约（T-AN3/T-AN4/T-AN6 Core 位点）。
  */
 
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import {
-  describe,
-  it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import {
-  AgentTurnError,
-  runAgentTurn,
-  type AgentTurnRuntimePort,
-  } from "@/service/agent/logic/run-agent-turn.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { userMessageFormatter } from "@/domain/chat/logic/prompt/user-message-formatter.js";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
-import {
-  messageAttachmentSchema,
-  type MessageAttachment,
-} from "@/domain/chat/model/message-attachment.schema.js";
+import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  userMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
+import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  messageAttachmentSchema, type MessageAttachment  } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -53,28 +47,34 @@ function makeRuntime(overrides: {
   readonly delete?: (id: string) => Promise<void>;
   readonly userVfsTurn?: UserVfsTurnService;
   readonly sessionVfs?: () => {
-    read: (path: string) => Promise<{ content: string }>;
+    read: (path: string) => Promise<unknown>;
   };
 }): AgentTurnRuntimePort {
   return {
     state: {
-      getCurrentAgentId: async () => "a1",
-      getCurrentModelId: async () => "openai/gpt",
+      getCurrentAgentId: async () => Result.ok("a1"),
+      getCurrentModelId: async () => Result.ok("openai/gpt"),
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
       list: async () => [sampleDefinition],
-      get: async () => sampleDefinition,
+      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+      get: async () => Result.ok(sampleDefinition) as never,
     },
     projects: {
-      getAgentConfig: async () => ({ mode: "follow" }),
+      getAgentConfig: async () => Result.ok({ mode: "follow" }),
     } as AgentTurnRuntimePort["projects"],
     messages: {
       listBySession: overrides.listBySession ?? (async () => []),
+      // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
       append:
-        overrides.append ??
-        (async () => ({ id: "m1", role: "user", content: { blocks: [] } })),
-      delete: overrides.delete ?? (async () => undefined),
+        overrides.append != null
+          ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
+          : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
+      delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
+        await overrides.delete!(...args);
+        return Result.ok(undefined);
+      }) as AgentTurnRuntimePort["messages"]["delete"],
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
       capture: async () => undefined,
@@ -88,13 +88,15 @@ function makeRuntime(overrides: {
       {} as AgentTurnRuntimePort["eventOrchestrator"],
     sessionVfs:
       overrides.sessionVfs ??
-      (() => ({} as never)),
+      // annotate 行号补算会先 read 草稿 path：默认给「读不到」的 Err 通道
+      // （静默跳过行号补算，不阻断 append 编排）。
+      (() => ({ read: async () => Result.err(new Error("no vfs in stub")) })),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => emptyRuleView(),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+        evaluateRuleView: async () => Result.ok(emptyRuleView()),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
@@ -106,7 +108,7 @@ function makeRuntime(overrides: {
     } as AgentTurnRuntimePort["savedModelRepo"],
     userVfsTurn: overrides.userVfsTurn,
     sessions: {
-      getSessionAgentConfig: async () => ({ mode: "follow" }),
+      getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
     },
   } as AgentTurnRuntimePort;
 }
@@ -139,7 +141,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     // 改为：mock 到 append 后抛错——实际上 runAgentTurn 会继续 runner。
     // 最小：断言空 content + annotate 不抛「消息不能为空」，且 delete 未调用。
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "",
@@ -155,7 +157,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 缺依赖可能失败；门闩与 append 语义仍可检
     }
@@ -183,7 +185,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hello",
@@ -201,7 +203,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
             callbackCount += 1;
           },
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }
@@ -262,7 +264,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
       userVfsTurn: mockUserVfsTurn(),
     });
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hello",
@@ -270,7 +272,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           annotateDrafts: drafts,
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败；append 语义仍可检
     }
@@ -299,19 +301,20 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.equal(messageAttachmentSchema.safeParse(att).success, true);
   });
 
-  it("无输入且无 annotate → 仍抛消息不能为空", async () => {
+  it("无输入且无 annotate → 仍返回消息不能为空", async () => {
     userVfsUnifiedToolTurnFlag.refresh(true);
     const runtime = makeRuntime({ userVfsTurn: mockUserVfsTurn() });
-    await assert.rejects(
+    // 发送门是业务失败：沿 Result.err 交回（AGENT_MESSAGE_EMPTY 自带 code + messageKey）。
+    await rejectsErr(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           runtime,
           { projectId: "p1", sessionId: "s1" },
           "  ",
           { stream: false },
         ),
       (err: unknown) =>
-        err instanceof AgentTurnError && err.messageKey === "error.agent.message_empty",
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY") && err.messageKey === "error.agent.message_empty"),
     );
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
@@ -368,12 +371,12 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
       },
       userVfsTurn: mockUserVfsTurn(),
       sessionVfs: () => ({
-        read: async () => ({ content: source }),
+        read: async () => Result.ok({ content: source }),
       }),
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -388,7 +391,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败；append 已发生即可
     }
@@ -413,14 +416,13 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
       },
       userVfsTurn: mockUserVfsTurn(),
       sessionVfs: () => ({
-        read: async () => {
-          throw new Error("no such file");
-        },
+        // 错误通道迁移四期：read 失败走 Result.err（不再 throw）
+        read: async () => Result.err(new Error("no such file")),
       }),
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -435,7 +437,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }
@@ -461,12 +463,12 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
       },
       userVfsTurn: mockUserVfsTurn(),
       sessionVfs: () => ({
-        read: async () => ({ content: source }),
+        read: async () => Result.ok({ content: source }),
       }),
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -481,7 +483,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }
@@ -509,7 +511,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -526,7 +528,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }

@@ -1,7 +1,7 @@
 /**
  * TDBC (TypeScript Database Connectivity): async SQLite protocol, registry, and helpers.
  *
- * Zero native dependencies in this module; drivers register via {@link registerDriver}.
+ * Zero native dependencies in this module; drivers register via {@link TdbcRegistry.register}.
  *
  * @module infra/tdbc
  */
@@ -10,18 +10,13 @@ export type { TdbcConnection } from "./ports/connection.port.js";
 export type { TdbcDriver } from "./ports/driver.port.js";
 export { TdbcError } from "./errors.js";
 export type { TdbcErrorCode } from "./errors.js";
-export { normalizeBindings } from "./logic/normalize-bindings.js";
-export { open, parseUrl } from "./logic/open.js";
+export { AsyncMutex } from "./logic/async-mutex.js";
+export { TdbcBindings } from "./logic/normalize-bindings.js";
+export { TdbcOpen } from "./logic/open.js";
 export type { ParsedTdbcUrl } from "./logic/open.js";
-export {
-  clearDrivers,
-  getDriver,
-  listDrivers,
-  registerDriver,
-  resolveDriver,
-} from "./logic/registry.js";
-export { executeTemplate, queryTemplate } from "./logic/template-helper.js";
-export { runInTransactionOrConn } from "./logic/transaction-helper.js";
+export { TdbcRegistry } from "./logic/registry.js";
+export { TdbcTemplate } from "./logic/template-helper.js";
+export { TdbcTransaction } from "./logic/transaction-helper.js";
 export type {
   BatchResult,
   ExecuteResult,

@@ -10,13 +10,19 @@ import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/services/app-toast', () => ({
+jest.mock('@/services/app-toast', () => {
+  const legacy = {
   showAppToast: (...args: unknown[]) => mockShowToast(...args),
-}));
+};
+  return {...legacy, AppToast: {show: legacy.showAppToast}};
+});
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (title: string, _err: unknown) => title,
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('react-native', () => ({
   Alert: {alert: jest.fn()},
@@ -24,7 +30,7 @@ jest.mock('react-native', () => ({
 
 type AlertButton = {text: string; style?: string; onPress?: () => void};
 
-const deleteOne = jest.fn<(id: string) => Promise<void>>();
+const deleteOne = jest.fn<(id: string) => Promise<{ok: boolean; value?: undefined; error?: unknown}>>();
 const onDone = jest.fn(() => Promise.resolve());
 
 function mountConfirm(): (items: readonly string[]) => void {
@@ -68,7 +74,7 @@ beforeEach(() => {
 
 describe('useBatchDeleteConfirm', () => {
   it('确认：Alert 文案带条目数，逐条删除后回调 onDone，不弹 toast', async () => {
-    deleteOne.mockResolvedValue(undefined);
+    deleteOne.mockResolvedValue({ok: true, value: undefined});
     const confirm = mountConfirm();
 
     confirm(['a', 'b']);
@@ -90,7 +96,7 @@ describe('useBatchDeleteConfirm', () => {
   });
 
   it('取消：点取消按钮（或不确认）不触发删除与 onDone', async () => {
-    deleteOne.mockResolvedValue(undefined);
+    deleteOne.mockResolvedValue({ok: true, value: undefined});
     const confirm = mountConfirm();
 
     confirm(['a']);
@@ -108,7 +114,7 @@ describe('useBatchDeleteConfirm', () => {
   });
 
   it('中途失败：顺序删除到失败项即中断，toast 删除失败，不回调 onDone', async () => {
-    deleteOne.mockResolvedValueOnce(undefined);
+    deleteOne.mockResolvedValueOnce({ok: true, value: undefined});
     deleteOne.mockRejectedValueOnce(new Error('boom'));
     const confirm = mountConfirm();
 

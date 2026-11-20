@@ -12,21 +12,14 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
-  return await open("tdbc:sqlite:file::memory:", {
+  BetterSqlite3Register.register();
+  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -67,7 +60,7 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
   it("新建库 bootstrap 后由 DDL 直接建出两表与索引", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assert.equal(await tableExists(conn, "vfs_content_pack"), true);
       assert.equal(await tableExists(conn, "vfs_content_pack_member"), true);
@@ -102,13 +95,13 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
       // 模拟「已升版到上一代」的老库：完整 bootstrap 后删掉两表、
       // 把 user_version 钉回 SCHEMA_BOOT_VERSION - 1，下次 bootstrap
       // 会走「版本落后 → 跑 DDL」的慢路径。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       await dropPackTables(conn);
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION - 1}`);
       assert.equal(await tableExists(conn, "vfs_content_pack"), false);
       assert.equal(await tableExists(conn, "vfs_content_pack_member"), false);
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assert.equal(
         await tableExists(conn, "vfs_content_pack"),
@@ -157,7 +150,7 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
   it("已升版库再 bootstrap 走快路径，DDL 不重跑——但 pack 两表由事务外无条件段兜底补建（pbm-7 方案 A）", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       // 版本保持 SCHEMA_BOOT_VERSION 不动，仅删掉两表——模拟「曾占 v18 后撤回」
       // 测试机残留库的形态（user_version=18 快路径、pack 表缺失，荣耀真机
       // 2026-10-01 实锤：打包任务每轮 no such table）。方案 A 后，事务内 DDL
@@ -166,7 +159,7 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
       await dropPackTables(conn);
       assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       assert.equal(
         await tableExists(conn, "vfs_content_pack"),

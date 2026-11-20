@@ -4,59 +4,35 @@
  * @module infra/llm-protocol/impl/gemini.adapter
  */
 
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
-import { textBlocks } from "@/domain/chat/content/text-blocks.js";
-import type {
-  FetchFn,
-  LlmChatRequest,
-  LlmChatResult,
-  LlmListModelsResult,
-  LlmProtocolAdapter,
-} from "../ports/adapter.port.js";
-import {
-  blocksToGeminiParts,
-  chatMessagesToGeminiContents,
-  geminiPartsToBlocks,
-  toolsToGeminiFunctionDeclarations,
-} from "../logic/gemini-content-mapper.js";
-import {
-  createGeminiSseParserState,
-  feedGeminiSseChunk,
-  finishGeminiSse,
-  finishGeminiSsePartial,
-} from "../logic/gemini-sse-parser.js";
-import { fetchJson, joinUrl } from "../logic/http-util.js";
-import { postSse } from "../logic/llm-sse-transport.js";
-import { isRequestAborted } from "../logic/request-abort.js";
-import { applyGeminiThinkingToBody } from "../logic/apply-thinking-to-body.js";
-import { parseGeminiUsage } from "../logic/usage-parser.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
+import { TextBlocks } from "@/domain/chat/content/text-blocks.js";
+import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter } from "../ports/adapter.port.js";
+import { GeminiMapper } from "../logic/gemini-content-mapper.js";
+import { GeminiSseParser } from "../logic/gemini-sse-parser.js";
+import { HttpUtil } from "../logic/http-util.js";
+import { LlmSseTransport } from "../logic/llm-sse-transport.js";
+import { RequestAbort } from "../logic/request-abort.js";
+import { ThinkingBody } from "../logic/apply-thinking-to-body.js";
+import { UsageParser } from "../logic/usage-parser.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   readonly kind = "gemini" as const;
 
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
-  async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">
-  ): Promise<LlmListModelsResult> {
-    const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(
-      req.apiKey
-    )}`;
-    const data = (await fetchJson(this.fetchFn, url, {
-      method: "GET",
-      headers: { ...req.extraHeaders },
-    })) as { models?: Array<{ name?: string; displayName?: string }> };
+  async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
+    const url = `${HttpUtil.joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
+    const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders }, signal: req.scope?.signal });
+    if (!fetched.ok) throw fetched.error;
+    const data = fetched.value as { models?: Array<{ name?: string; displayName?: string }> };
     const models = (data.models ?? [])
       .filter((m) => typeof m.name === "string")
       .map((m) => {
         const name = m.name!;
-        const vendorModelId = name.includes("/")
-          ? name.split("/").pop()!
-          : name;
+        const vendorModelId = name.includes("/") ? name.split("/").pop()! : name;
         return {
           vendorModelId,
-          displayName:
-            typeof m.displayName === "string" ? m.displayName : undefined,
+          displayName: typeof m.displayName === "string" ? m.displayName : undefined,
         };
       });
     return { models };
@@ -64,119 +40,78 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     if (req.stream) {
-      return this.chatStream(req);
-    }
-    return this.chatNonStream(req);
-  }
+      const url = this.modelUrl(req, "streamGenerateContent");
+      const parser = GeminiSseParser.create({ onStream: req.onStream });
 
-  private buildContents(req: LlmChatRequest) {
-    return req.history != null && req.history.length > 0
-      ? chatMessagesToGeminiContents(req.history, {
-          toolLookupMessages: req.toolUseLookupMessages,
-          knownToolNames: req.tools?.map((t) => t.name),
-        })
-      : [
-          {
-            role: "user",
-            parts: blocksToGeminiParts(textBlocks(req.userContent).blocks),
-          },
-        ];
+      try {
+        const headers = { "Content-Type": "application/json", ...req.extraHeaders };
+        const init = { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal };
+        await LlmSseTransport.post(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+      } catch (error) {
+        if (!RequestAbort.isAborted(error, req.scope?.signal)) {
+          throw error;
+        }
+      }
+
+      const aborted = req.scope?.signal.aborted === true;
+      const finishResult = aborted ? parser.finishPartial() : parser.finish();
+      const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
+      const assistantText = MessageBodyText.fromBlocks(blocks);
+      const usage = UsageParser.parse("gemini", streamRaw);
+      const result: LlmChatResult = {
+        assistantText,
+        blocks,
+        raw: streamRaw ?? { streamed: true },
+        usage,
+        ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
+      };
+      req.onStream?.({ type: "done", result });
+      return result;
+    }
+
+    const url = this.modelUrl(req, "generateContent");
+    const headers = { "Content-Type": "application/json", ...req.extraHeaders };
+    const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal });
+    if (!fetched.ok) throw fetched.error;
+    const raw = fetched.value;
+    const record = raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> };
+    const parts = record.candidates?.[0]?.content?.parts ?? [];
+    const blocks = GeminiMapper.partsToBlocks(parts);
+    const assistantText = MessageBodyText.fromBlocks(blocks);
+    const usage = UsageParser.parse("gemini", raw);
+    return { assistantText, blocks, raw, usage };
   }
 
   private buildRequestBody(req: LlmChatRequest): Record<string, unknown> {
-    const body: Record<string, unknown> = {
-      contents: this.buildContents(req),
-    };
+    let contents: unknown[];
+    if (req.history != null && req.history.length > 0) {
+      const mapped = GeminiMapper.chatMessagesToContents(req.history, { toolLookupMessages: req.toolUseLookupMessages, knownToolNames: req.tools?.map((t) => t.name) });
+      if (!mapped.ok) throw mapped.error;
+      contents = mapped.value;
+    } else {
+      const parts = GeminiMapper.blocksToParts(TextBlocks.of(req.userContent).blocks);
+      if (!parts.ok) throw parts.error;
+      contents = [{ role: "user", parts: parts.value }];
+    }
+    const body: Record<string, unknown> = { contents };
     if (req.system != null && req.system !== "") {
       body.systemInstruction = { parts: [{ text: req.system }] };
     }
     if (req.tools != null && req.tools.length > 0) {
-      body.tools = toolsToGeminiFunctionDeclarations(req.tools);
+      body.tools = GeminiMapper.toolsToFunctionDeclarations(req.tools);
     }
     if (req.sampling?.protocol === "gemini") {
       body.generationConfig = { ...req.sampling.gemini };
     }
-    applyGeminiThinkingToBody(body, req.thinking);
+    ThinkingBody.apply("gemini", body, req.thinking);
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 generationConfig）。
     Object.assign(body, req.extraBody);
     return body;
   }
 
-  private modelUrl(
-    req: LlmChatRequest,
-    action: "generateContent" | "streamGenerateContent"
-  ): string {
+  private modelUrl(req: LlmChatRequest, action: "generateContent" | "streamGenerateContent"): string {
     const path = `/models/${encodeURIComponent(req.vendorModelId)}:${action}`;
-    const base = `${joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(
-      req.apiKey
-    )}`;
+    const base = `${HttpUtil.joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(req.apiKey)}`;
     return action === "streamGenerateContent" ? `${base}&alt=sse` : base;
-  }
-
-  private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
-    const url = this.modelUrl(req, "generateContent");
-    const raw = await fetchJson(this.fetchFn, url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...req.extraHeaders,
-      },
-      body: JSON.stringify(this.buildRequestBody(req)),
-      signal: req.signal,
-    });
-    const record = raw as {
-      candidates?: Array<{
-        content?: { parts?: unknown[] };
-      }>;
-    };
-    const parts = record.candidates?.[0]?.content?.parts ?? [];
-    const blocks = geminiPartsToBlocks(parts);
-    const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseGeminiUsage(raw);
-    return { assistantText, blocks, raw, usage };
-  }
-
-  private async chatStream(req: LlmChatRequest): Promise<LlmChatResult> {
-    const url = this.modelUrl(req, "streamGenerateContent");
-    const state = createGeminiSseParserState();
-
-    try {
-      await postSse(
-        url,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...req.extraHeaders,
-          },
-          body: JSON.stringify(this.buildRequestBody(req)),
-          signal: req.signal,
-        },
-        (chunk) => feedGeminiSseChunk(state, chunk, req.onStream),
-        undefined,
-        { fetchFn: this.fetchFn, signal: req.signal }
-      );
-    } catch (error) {
-      if (!isRequestAborted(error, req.signal)) {
-        throw error;
-      }
-    }
-
-    const aborted = req.signal?.aborted === true;
-    const finishResult = aborted
-      ? finishGeminiSsePartial(state, req.onStream)
-      : finishGeminiSse(state, req.onStream);
-    const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
-    const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseGeminiUsage(streamRaw);
-    const result: LlmChatResult = {
-      assistantText,
-      blocks,
-      raw: streamRaw ?? { streamed: true },
-      usage,
-      ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
-    };
-    req.onStream?.({ type: "done", result });
-    return result;
   }
 }

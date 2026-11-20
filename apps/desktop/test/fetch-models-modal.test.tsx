@@ -7,6 +7,10 @@
  * 行为用例与 real-prompt-panel-rounds.test.tsx 同范式：注册 react-alias-hook.mjs
  * 把整棵依赖树动态导入统一到根 react 副本上，用 react-test-renderer 真渲组件；
  * mock 拦在 window.novelMasterDesktop.invoke（ipc client 底层出口），按 channel 路由。
+ *
+ * 取消拉取（signal-abort-scope Step 14 / T-S22 UI 侧）：拉取中显示「取消」，
+ * 点击发 `nm:run/abort {kind:'models', id:providerId}`；`IPC_ABORTED` 收成
+ * 「已取消 + 重试」态，不报错也不弹错误 toast。
  */
 import assert from "node:assert/strict";
 import { register } from "node:module";
@@ -413,6 +417,154 @@ describe("FetchModelsModal 全选/全不选 (T-FM9-11)", () => {
       const selected = rowClassNames(root).filter((c) => c.includes("is-selected"));
       assert.equal(selected.length, 2);
       assert.equal(selectedCountText(root), "已选 2 项");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+});
+
+describe("FetchModelsModal 取消拉取（Step 14 / T-S22 UI）", () => {
+  it("拉取中显示取消；点击发 {kind:'models', id:'p1'}；取消后回到「已取消 + 重试」态且不报错", async () => {
+    const calls: { channel: string; payload: unknown }[] = [];
+    const errors: string[] = [];
+    let resolveFetch!: (value: unknown) => void;
+    const pendingFetch = new Promise<unknown>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const invoke = (channel: string, payload: unknown): Promise<unknown> => {
+      calls.push({ channel, payload });
+      if (channel === "nm:providerModels/fetch") {
+        return pendingFetch;
+      }
+      if (channel === "nm:run/abort") {
+        // 模拟 main：abort 命中 registry 后，拉取以 IPC_ABORTED 自然收尾。
+        resolveFetch({ ok: false, error: { code: "IPC_ABORTED", message: "已取消" } });
+        return Promise.resolve({ ok: true, data: null });
+      }
+      if (channel === "nm:providerModels/suggestList") {
+        return Promise.reject(new Error("取消后不应继续建议列表拉取"));
+      }
+      return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
+    };
+    const restore = mockWindow(invoke);
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(
+          <FetchModelsModal
+            open
+            providerId="p1"
+            savedVendorIds={[]}
+            onClose={() => {}}
+            onSaved={() => {}}
+            onError={(message) => errors.push(message)}
+          />,
+        );
+      });
+      assert.ok(renderer != null, "渲染失败");
+      const root = renderer.root;
+      const cancel = root.findAll(
+        (node) =>
+          node.type === "button" &&
+          node.props.className === "fetch-models-modal__cancel",
+      )[0];
+      assert.ok(cancel != null, "拉取中应显示取消按钮");
+      assert.equal(cancel.props.disabled, false);
+
+      await act(async () => {
+        (cancel as unknown as { props: { onClick: () => void } }).props.onClick();
+      });
+      await act(async () => {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      });
+
+      const abortCall = calls.find((call) => call.channel === "nm:run/abort");
+      assert.deepEqual(abortCall?.payload, { kind: "models", id: "p1" });
+      assert.equal(
+        calls.filter((call) => call.channel === "nm:providerModels/suggestList").length,
+        0,
+        "取消后不应继续拉建议列表",
+      );
+
+      // 取消终态：不渲染错误、错误回调不触发、给出可重试入口。
+      assert.equal(
+        root.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.includes("fetch-models-modal__status--error"),
+        ).length,
+        0,
+      );
+      assert.ok(
+        root.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.includes("fetch-models-modal__status--cancelled"),
+        ).length > 0,
+        "应显示已取消态",
+      );
+      const retry = root.findAll(
+        (node) =>
+          node.type === "button" &&
+          node.props.className === "fetch-models-modal__retry",
+      )[0];
+      assert.ok(retry != null, "取消后应提供重试入口");
+      assert.deepEqual(errors, []);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("非取消错误仍原样展示错误文本并保留重试（既有语义不变）", async () => {
+    const invoke = (channel: string): Promise<unknown> => {
+      if (channel === "nm:providerModels/fetch") {
+        return Promise.resolve({
+          ok: false,
+          error: { code: "PROVIDER_AUTH_FAILED", message: "401 未授权" },
+        });
+      }
+      return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
+    };
+    const restore = mockWindow(invoke);
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(
+          <FetchModelsModal
+            open
+            providerId="p1"
+            savedVendorIds={[]}
+            onClose={() => {}}
+            onSaved={() => {}}
+          />,
+        );
+      });
+      assert.ok(renderer != null, "渲染失败");
+      const root = renderer.root;
+      assert.equal(
+        root.findAll(
+          (node) =>
+            node.type === "p" &&
+            (node.children as unknown[]).some((child) => child === "401 未授权"),
+        ).length,
+        1,
+        "错误文本应原样展示",
+      );
+      assert.equal(
+        root.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.includes("fetch-models-modal__status--cancelled"),
+        ).length,
+        0,
+        "非取消错误不应落入已取消态",
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();

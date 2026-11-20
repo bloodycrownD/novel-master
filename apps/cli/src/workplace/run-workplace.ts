@@ -14,16 +14,10 @@
  * @module workplace/run-workplace
  */
 
-import {
-  assembleWorkplaceDisplay,
-  type FillPolicy,
-  type InclusionMode,
-  type SortField,
-  type SortOrder,
-  type WorkplaceService,
-} from "@novel-master/core/workplace";
+import { assembleWorkplaceDisplay, type FillPolicy, type InclusionMode, type Outcome, type SortField, type SortOrder, type WorkplaceService } from "@novel-master/core/workplace";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 import type { VfsService } from "@novel-master/core/vfs";
+import { OUTCOME_COMPLETED } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 /**
@@ -37,39 +31,48 @@ export interface WorkplaceDisplayAssembleContext {
   readonly vfs: VfsService;
 }
 
-export async function runWorkplace(
-  service: WorkplaceService,
-  args: readonly string[],
-  assemble?: WorkplaceDisplayAssembleContext,
-): Promise<void> {
+export async function runWorkplace(service: WorkplaceService, args: readonly string[], assemble?: WorkplaceDisplayAssembleContext): Promise<Outcome<void>> {
   const { positional, flags } = parseCliArgs(args);
   const sub = positional[0];
   const rest = positional.slice(1);
 
   switch (sub) {
     case "list": {
-      const rows = await service.buildListRows();
+      const built = await service.buildListRows();
+      if (!built.ok) return { kind: "failed", error: built.error };
       console.log("kind\tpath\trule_state\tinclusion_mode\tdisplay_state");
-      for (const row of rows) {
+      for (const row of built.value) {
         if (row.kind === "dir") {
           console.log(`${row.kind}\t${row.path}\t${row.ruleState}\t\t`);
         } else {
-          console.log(
-            `${row.kind}\t${row.path}\t\t${row.inclusionMode}\t${row.displayState}`,
-          );
+          console.log(`${row.kind}\t${row.path}\t\t${row.inclusionMode}\t${row.displayState}`);
         }
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "display": {
-      const text = await resolveWorkplaceDisplay(service, assemble);
-      if (text.length > 0) {
-        process.stdout.write(text);
-        if (!text.endsWith("\n")) {
+      let displayText: string;
+      if (assemble == null) {
+        // 调试 live materialize：无 session kkv，与 Agent 常驻前缀不同源。
+        const rendered = await service.renderDisplay();
+        if (!rendered.ok) return { kind: "failed", error: rendered.error };
+        displayText = rendered.value;
+      } else {
+        const scope = { kind: "session" as const, projectId: assemble.projectId, sessionId: assemble.sessionId };
+        // CLI 显式要看常驻正文时强制开 workplace（与 Mobile assembleWorkplaceForMobile 一致）。
+        const assembled = await assembleWorkplaceDisplay(scope, { sessionKkv: assemble.sessionKkv, workplace: service, vfs: assemble.vfs, layout: { workplace: "on" } });
+        // failed 与 cancelled/replaced 同走 Outcome 通道：failed 交 main 边界 unwrap
+        // 汇入 catch 统一出口，中断走 EXIT_CANCELLED（错误通道迁移三期）。
+        if (assembled.kind !== "completed") return assembled;
+        displayText = assembled.value.workplaceDisplay;
+      }
+      if (displayText.length > 0) {
+        process.stdout.write(displayText);
+        if (!displayText.endsWith("\n")) {
           process.stdout.write("\n");
         }
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "dir": {
       const logicalPath = rest[0];
@@ -82,106 +85,54 @@ export async function runWorkplace(
       const headRaw = flags.get("head");
       const tailRaw = flags.get("tail");
       const fillRaw = flags.get("fill");
-      await service.setDirRule({
-        logicalPath,
-        ruleEnabled:
-          ruleRaw === "on"
-            ? true
-            : ruleRaw === "off"
-              ? false
-              : undefined,
-        sortField: parseSortField(sortRaw),
-        sortOrder: parseSortOrder(orderRaw),
-        headCount: headRaw != null ? parseCount(headRaw, "head") : undefined,
-        tailCount: tailRaw != null ? parseCount(tailRaw, "tail") : undefined,
-        fillPolicy: parseFillPolicy(fillRaw),
-      });
-      return;
+      const ruleEnabled = ruleRaw === "on" ? true : ruleRaw === "off" ? false : undefined;
+      let sortField: SortField | undefined;
+      if (typeof sortRaw === "string") {
+        if (sortRaw === "name" || sortRaw === "created" || sortRaw === "updated" || sortRaw === "smart") {
+          sortField = sortRaw;
+        } else {
+          throw new Error(`invalid --sort: ${sortRaw}`);
+        }
+      }
+      let sortOrder: SortOrder | undefined;
+      if (typeof orderRaw === "string") {
+        if (orderRaw === "asc" || orderRaw === "desc") {
+          sortOrder = orderRaw;
+        } else {
+          throw new Error(`invalid --order: ${orderRaw}`);
+        }
+      }
+      const headCount = headRaw != null ? parseCount(headRaw, "head") : undefined;
+      const tailCount = tailRaw != null ? parseCount(tailRaw, "tail") : undefined;
+      let fillPolicy: FillPolicy | undefined;
+      if (typeof fillRaw === "string") {
+        if (fillRaw === "hidden" || fillRaw === "filename" || fillRaw === "header" || fillRaw === "full") {
+          fillPolicy = fillRaw;
+        } else {
+          throw new Error(`invalid --fill: ${fillRaw}`);
+        }
+      }
+      await service.setDirRule({ logicalPath, ruleEnabled, sortField, sortOrder, headCount, tailCount, fillPolicy });
+      return OUTCOME_COMPLETED;
     }
     case "file": {
       const logicalPath = rest[0];
       const modeRaw = flags.get("mode");
       if (logicalPath == null || typeof modeRaw !== "string") {
-        throw new Error(
-          "Usage: workplace file <logicalPath> --mode auto|show|hide",
-        );
+        throw new Error("Usage: workplace file <logicalPath> --mode auto|show|hide");
       }
-      await service.setFileRule({
-        logicalPath,
-        inclusionMode: parseInclusionMode(modeRaw),
-      });
-      return;
+      let inclusionMode: InclusionMode;
+      if (modeRaw === "auto" || modeRaw === "show" || modeRaw === "hide") {
+        inclusionMode = modeRaw;
+      } else {
+        throw new Error(`invalid --mode: ${modeRaw}`);
+      }
+      await service.setFileRule({ logicalPath, inclusionMode });
+      return OUTCOME_COMPLETED;
     }
     default:
-      throw new Error(
-        "Usage: workplace <display|dir|file|list> ...",
-      );
+      throw new Error("Usage: workplace <display|dir|file|list> ...");
   }
-}
-
-/**
- * Session → assemble（聊天同源）；否则 → live materialize（调试盘面）。
- */
-async function resolveWorkplaceDisplay(
-  service: WorkplaceService,
-  assemble: WorkplaceDisplayAssembleContext | undefined,
-): Promise<string> {
-  if (assemble == null) {
-    // 调试 live materialize：无 session kkv，与 Agent 常驻前缀不同源。
-    return service.renderDisplay();
-  }
-  const scope = {
-    kind: "session" as const,
-    projectId: assemble.projectId,
-    sessionId: assemble.sessionId,
-  };
-  // CLI 显式要看常驻正文时强制开 workplace（与 Mobile assembleWorkplaceForMobile 一致）。
-  const { workplaceDisplay } = await assembleWorkplaceDisplay(scope, {
-    sessionKkv: assemble.sessionKkv,
-    workplace: service,
-    vfs: assemble.vfs,
-    layout: { workplace: "on" },
-  });
-  return workplaceDisplay;
-}
-
-function parseSortField(value: string | true | undefined): SortField | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  if (value === "name" || value === "created" || value === "updated" || value === "smart") {
-    return value;
-  }
-  throw new Error(`invalid --sort: ${value}`);
-}
-
-function parseSortOrder(value: string | true | undefined): SortOrder | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  if (value === "asc" || value === "desc") {
-    return value;
-  }
-  throw new Error(`invalid --order: ${value}`);
-}
-
-function parseFillPolicy(
-  value: string | true | undefined,
-): FillPolicy | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  if (value === "hidden" || value === "filename" || value === "header" || value === "full") {
-    return value;
-  }
-  throw new Error(`invalid --fill: ${value}`);
-}
-
-function parseInclusionMode(value: string): InclusionMode {
-  if (value === "auto" || value === "show" || value === "hide") {
-    return value;
-  }
-  throw new Error(`invalid --mode: ${value}`);
 }
 
 function parseCount(value: string | true, label: string): number {

@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach } from "node:test";
-import { TdbcError } from "@/infra/tdbc/errors.js";
-import { open, parseUrl } from "@/infra/tdbc/logic/open.js";
-import {
-  clearDrivers,
-  registerDriver,
-} from "@/infra/tdbc/logic/registry.js";
+import {  describe, it, beforeEach  } from "node:test";
+import {  AssertionError  } from "@/common/assert.js";
+import {  TdbcError  } from "@/infra/tdbc/errors.js";
+import {  TdbcOpen  } from "@/infra/tdbc/logic/open.js";
+import {  TdbcRegistry  } from "@/infra/tdbc/logic/registry.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { TdbcDriver } from "@/infra/tdbc/ports/driver.port.js";
 
@@ -18,35 +16,38 @@ function mockDriver(name: string, connection: TdbcConnection): TdbcDriver {
 
 describe("parseUrl", () => {
   it("parses file path", () => {
-    assert.deepEqual(parseUrl("tdbc:sqlite:./data/app.db"), {
+    const parsed = TdbcOpen.parseUrl("tdbc:sqlite:./data/app.db");
+    if (!parsed.ok) assert.fail(parsed.error.message);
+    assert.deepEqual(parsed.value, {
       filename: "./data/app.db",
     });
   });
 
   it("parses memory URL", () => {
-    assert.deepEqual(parseUrl("tdbc:sqlite:file::memory:"), {
+    const parsed = TdbcOpen.parseUrl("tdbc:sqlite:file::memory:");
+    if (!parsed.ok) assert.fail(parsed.error.message);
+    assert.deepEqual(parsed.value, {
       filename: ":memory:",
     });
   });
 
   it("rejects invalid scheme", () => {
-    assert.throws(() => parseUrl("http:sqlite:x"), (e: unknown) => {
-      assert.ok(e instanceof TdbcError);
-      assert.equal(e.code, "INVALID_URL");
-      return true;
-    });
+    const parsed = TdbcOpen.parseUrl("http:sqlite:x");
+    if (parsed.ok) assert.fail(`expected invalid URL, got ${JSON.stringify(parsed.value)}`);
+    assert.ok(parsed.error instanceof TdbcError);
+    assert.equal(parsed.error.code, "INVALID_URL");
   });
 });
 
 describe("open", () => {
-  beforeEach(() => clearDrivers());
+  beforeEach(() => TdbcRegistry.clear());
 
-  it("throws UNKNOWN_DRIVER when none registered", async () => {
+  it("throws AssertionError when none registered", async () => {
     await assert.rejects(
-      () => open("tdbc:sqlite:file::memory:"),
+      () => TdbcOpen.open("tdbc:sqlite:file::memory:"),
       (e: unknown) => {
-        assert.ok(e instanceof TdbcError);
-        assert.equal(e.code, "UNKNOWN_DRIVER");
+        assert.ok(e instanceof AssertionError);
+        assert.ok(e.message.includes("TDBC: no driver registered"));
         return true;
       },
     );
@@ -63,10 +64,10 @@ describe("open", () => {
         closed.closed = true;
       },
     };
-    registerDriver(mockDriver("better-sqlite3", conn));
-    registerDriver(mockDriver("rn", conn));
+    TdbcRegistry.register(mockDriver("better-sqlite3", conn));
+    TdbcRegistry.register(mockDriver("rn", conn));
 
-    const c = await open("tdbc:sqlite:file::memory:", {
+    const c = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: "better-sqlite3",
     });
     await c.close();

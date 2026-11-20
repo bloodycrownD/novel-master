@@ -4,163 +4,94 @@
  * @module service/compaction-conditions/impl/compaction-conditions-store.service
  */
 
-import { decode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { compactionConditionsSchema } from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
-import {
-  DEFAULT_HIDE_START_DEPTH,
-  type CompactionConditions,
-} from "@/domain/compaction-conditions/model/compaction-conditions.js";
-import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
-import { compactionConditionsInvalidSchema } from "@/errors/compaction-conditions-errors.js";
-import { isAppError } from "@/errors/app-error.js";
+import { DEFAULT_HIDE_START_DEPTH, type CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
 
 const MODULE = "nm-compaction-conditions";
 const KEY_POLICY = "policy";
 
-function isV2Document(raw: unknown): raw is Record<string, unknown> {
-  if (raw == null || typeof raw !== "object") {
-    return false;
-  }
-  const doc = raw as Record<string, unknown>;
-  return doc.schemaVersion === 2 || doc.tokenThreshold != null;
+/** v2/v3 文档的 visibleFloor 兼容两种键（camelCase 与历史 kebab-case）。 */
+function visibleFloorOf(doc: Record<string, unknown>): number | undefined {
+  return typeof doc.visibleFloor === "number" ? doc.visibleFloor : typeof doc["visible-floor"] === "number" ? (doc["visible-floor"] as number) : undefined;
 }
 
-function isV3Document(raw: unknown): raw is Record<string, unknown> {
-  if (raw == null || typeof raw !== "object") {
-    return false;
-  }
-  const doc = raw as Record<string, unknown>;
-  return doc.schemaVersion === 3;
+/** decode 失败转码：CONFIG_DECODE_INVALID_SCHEMA → 本域码。 */
+function invalidSchemaError(error: AppError): AppError {
+  return new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: error.message });
 }
 
-function migrateV2ToV3(raw: Record<string, unknown>): Record<string, unknown> {
-  const visibleFloor =
-    typeof raw.visibleFloor === "number"
-      ? raw.visibleFloor
-      : typeof raw["visible-floor"] === "number"
-      ? (raw["visible-floor"] as number)
-      : undefined;
-  return {
-    schemaVersion: 3,
-    enabled: Boolean(raw.enabled),
-    tokenRatio: typeof raw.tokenRatio === "number" ? raw.tokenRatio : 0.8,
-    ...(visibleFloor != null ? { visibleFloor } : {}),
-  };
-}
-
-/**
- * v3 → v4 迁移：补 `hideStartDepth` 默认值（与历史事件配置默认值一致）。
- *
- * 返回的是「待 decode 的 v4 wire 原型」，字段约束交给 {@link compactionConditionsSchema} 兜底。
- */
-function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
-  const visibleFloor =
-    typeof raw.visibleFloor === "number"
-      ? raw.visibleFloor
-      : typeof raw["visible-floor"] === "number"
-      ? (raw["visible-floor"] as number)
-      : undefined;
-  const tokenRatio =
-    typeof raw.tokenRatio === "number" ? raw.tokenRatio : undefined;
-  return {
-    schemaVersion: 4,
-    enabled: Boolean(raw.enabled),
-    ...(tokenRatio != null ? { tokenRatio } : {}),
-    ...(visibleFloor != null ? { visibleFloor } : {}),
-    hideStartDepth: DEFAULT_HIDE_START_DEPTH,
-  };
-}
-
-function rethrowDecodeError(error: unknown): never {
-  if (error instanceof ConfigDecodeError && error.code === "INVALID_SCHEMA") {
-    throw compactionConditionsInvalidSchema(error.message);
-  }
-  throw error;
-}
-
-export class DefaultCompactionConditionsStore
-  implements CompactionConditionsStore
-{
+export class DefaultCompactionConditionsStore implements CompactionConditionsStore {
   constructor(private readonly kkv: KkvService) {}
 
-  async getConditions(): Promise<CompactionConditions | null> {
-    const raw = await this.getRaw();
-    if (raw === undefined) {
-      return null;
+  async getConditions(): Promise<Result<CompactionConditions | null, AppError>> {
+    const raw = await this.kkv.get(MODULE, KEY_POLICY);
+    if (!raw.ok && !AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    if (!raw.ok) return Result.ok(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw.value) as unknown;
+    } catch (error) {
+      return Result.err(new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}` }));
     }
-    return this.parseAndDecode(raw);
+    if (parsed != null && typeof parsed === "object") {
+      const doc = parsed as Record<string, unknown>;
+      if (doc.schemaVersion === 2 || doc.tokenThreshold != null) {
+        // v2 → v4 一步等价于旧的 v2→v3→v4：先归一化 visibleFloor/tokenRatio，再补 hideStartDepth。
+        const visibleFloor = visibleFloorOf(doc);
+        const migrated = {
+          schemaVersion: 4,
+          enabled: Boolean(doc.enabled),
+          tokenRatio: typeof doc.tokenRatio === "number" ? doc.tokenRatio : 0.8,
+          ...(visibleFloor != null ? { visibleFloor } : {}),
+          hideStartDepth: DEFAULT_HIDE_START_DEPTH,
+        };
+        const validated = SerializationDecode.decode(migrated, compactionConditionsSchema);
+        if (!validated.ok) return Result.err(invalidSchemaError(validated.error));
+        await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
+        return Result.ok(validated.value);
+      }
+      if (doc.schemaVersion === 3) {
+        // v3 → v4：补 hideStartDepth 默认值（与历史事件配置默认值一致），
+        // 其余字段原样带入，约束交给 compactionConditionsSchema 兜底。
+        const visibleFloor = visibleFloorOf(doc);
+        const tokenRatio = typeof doc.tokenRatio === "number" ? doc.tokenRatio : undefined;
+        const migrated = {
+          schemaVersion: 4,
+          enabled: Boolean(doc.enabled),
+          ...(tokenRatio != null ? { tokenRatio } : {}),
+          ...(visibleFloor != null ? { visibleFloor } : {}),
+          hideStartDepth: DEFAULT_HIDE_START_DEPTH,
+        };
+        const validated = SerializationDecode.decode(migrated, compactionConditionsSchema);
+        if (!validated.ok) return Result.err(invalidSchemaError(validated.error));
+        await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
+        return Result.ok(validated.value);
+      }
+    }
+    const direct = SerializationDecode.decode(parsed, compactionConditionsSchema);
+    if (!direct.ok) return Result.err(invalidSchemaError(direct.error));
+    return Result.ok(direct.value);
   }
 
   async setConditions(conditions: CompactionConditions): Promise<void> {
-    let validated: CompactionConditions;
-    try {
-      validated = decode(conditions, compactionConditionsSchema);
-    } catch (error) {
-      rethrowDecodeError(error);
-    }
-    await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated));
+    const validated = SerializationDecode.decode(conditions, compactionConditionsSchema);
+    // 端口无失败位、apps set 路径按异常收口：schema 违约在写入口仍走 throw（边界决定，见 port 注）。
+    if (!validated.ok) throw invalidSchemaError(validated.error);
+    await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
   }
 
+  /** nm-style: keep-public — CompactionConditionsStore 端口方法；CLI `nm compaction-conditions clear` 单点消费。 */
   async clearConditions(): Promise<void> {
     try {
       await this.kkv.delete(MODULE, KEY_POLICY);
     } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+      if (AppErrorOps.is(error, "KKV_NOT_FOUND")) {
         return;
-      }
-      throw error;
-    }
-  }
-
-  private async parseAndDecode(raw: string): Promise<CompactionConditions> {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw) as unknown;
-    } catch (error) {
-      throw compactionConditionsInvalidSchema(
-        `invalid JSON in nm-compaction-conditions/policy: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
-    if (isV2Document(parsed)) {
-      // v2 → v3 → v4 两步迁移：先升到 v3 形态，再补 hideStartDepth 升 v4。
-      const v4 = migrateV3ToV4(migrateV2ToV3(parsed));
-      let validatedFromV2: CompactionConditions;
-      try {
-        validatedFromV2 = decode(v4, compactionConditionsSchema);
-      } catch (error) {
-        rethrowDecodeError(error);
-      }
-      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validatedFromV2));
-      return validatedFromV2;
-    }
-    if (isV3Document(parsed)) {
-      const migrated = migrateV3ToV4(parsed);
-      let validated: CompactionConditions;
-      try {
-        validated = decode(migrated, compactionConditionsSchema);
-      } catch (error) {
-        rethrowDecodeError(error);
-      }
-      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated));
-      return validated;
-    }
-    try {
-      return decode(parsed, compactionConditionsSchema);
-    } catch (error) {
-      rethrowDecodeError(error);
-    }
-  }
-
-  private async getRaw(): Promise<string | undefined> {
-    try {
-      return await this.kkv.get(MODULE, KEY_POLICY);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
-        return undefined;
       }
       throw error;
     }

@@ -1,10 +1,4 @@
-import {
-  decodeHostToCodeEditor,
-  decodeCodeEditorToHost,
-  encodeHostToCodeEditor,
-  encodeCodeEditorToHost,
-  CODE_EDITOR_BRIDGE_VERSION,
-} from '@/components/vfs/CodeEditorBridge';
+import {codeEditorBridge, CODE_EDITOR_BRIDGE_VERSION} from '@/components/vfs/CodeEditorBridge';
 
 describe('code-editor-bridge', () => {
   it('round-trips RN→Web init envelope', () => {
@@ -22,8 +16,8 @@ describe('code-editor-bridge', () => {
         },
       },
     };
-    const raw = encodeHostToCodeEditor(message);
-    const parsed = decodeHostToCodeEditor(raw);
+    const raw = codeEditorBridge.encodeToClient(message);
+    const parsed = codeEditorBridge.decodeToClient(raw);
     expect(parsed).toEqual(message);
   });
 
@@ -33,7 +27,7 @@ describe('code-editor-bridge', () => {
       type: 'setDocument' as const,
       payload: {text: '# Hello', path: '/notes/readme.md'},
     };
-    expect(decodeHostToCodeEditor(encodeHostToCodeEditor(message))).toEqual(
+    expect(codeEditorBridge.decodeToClient(codeEditorBridge.encodeToClient(message))).toEqual(
       message,
     );
   });
@@ -49,7 +43,7 @@ describe('code-editor-bridge', () => {
         selectionEnd: 19,
       },
     };
-    const parsed = decodeHostToCodeEditor(encodeHostToCodeEditor(message));
+    const parsed = codeEditorBridge.decodeToClient(codeEditorBridge.encodeToClient(message));
     expect(parsed).toEqual(message);
     // 选区字段必须落在 setDocument 载荷上（web 侧 mountEditor/setDocument 的
     // selectionSpec 读的就是这两个键；改名/改层会静默丢选区）
@@ -63,7 +57,7 @@ describe('code-editor-bridge', () => {
       type: 'selectionChange' as const,
       payload: {start: 12, end: 18},
     };
-    const parsed = decodeCodeEditorToHost(encodeCodeEditorToHost(message));
+    const parsed = codeEditorBridge.decodeToHost(codeEditorBridge.encodeToHost(message));
     expect(parsed).toEqual(message);
     // 宿主按这两个字段切出「光标前的活跃 @/$ 查询」；字段名与坐标口径
     // （与 change.text 同一 plain 文本坐标系）不能漂
@@ -88,7 +82,7 @@ describe('code-editor-bridge', () => {
         },
       },
     };
-    const parsed = decodeHostToCodeEditor(encodeHostToCodeEditor(message));
+    const parsed = codeEditorBridge.decodeToClient(codeEditorBridge.encodeToClient(message));
     const theme = (parsed as {payload: {theme: {primaryMuted?: string}}}).payload
       .theme;
     // 胶囊底色由宿主算好下发（web 侧只做条件式写入 --primary-muted）
@@ -101,7 +95,7 @@ describe('code-editor-bridge', () => {
       type: 'ready' as const,
       payload: {version: 1},
     };
-    expect(decodeCodeEditorToHost(encodeCodeEditorToHost(ready))).toEqual(
+    expect(codeEditorBridge.decodeToHost(codeEditorBridge.encodeToHost(ready))).toEqual(
       ready,
     );
 
@@ -110,7 +104,7 @@ describe('code-editor-bridge', () => {
       type: 'change' as const,
       payload: {text: 'updated'},
     };
-    expect(decodeCodeEditorToHost(encodeCodeEditorToHost(change))).toEqual(
+    expect(codeEditorBridge.decodeToHost(codeEditorBridge.encodeToHost(change))).toEqual(
       change,
     );
 
@@ -119,7 +113,7 @@ describe('code-editor-bridge', () => {
       type: 'focus' as const,
       payload: {},
     };
-    expect(decodeCodeEditorToHost(encodeCodeEditorToHost(focus))).toEqual(
+    expect(codeEditorBridge.decodeToHost(codeEditorBridge.encodeToHost(focus))).toEqual(
       focus,
     );
 
@@ -128,12 +122,12 @@ describe('code-editor-bridge', () => {
       type: 'blur' as const,
       payload: {},
     };
-    expect(decodeCodeEditorToHost(encodeCodeEditorToHost(blur))).toEqual(blur);
+    expect(codeEditorBridge.decodeToHost(codeEditorBridge.encodeToHost(blur))).toEqual(blur);
   });
 
   it('rejects invalid bridge version', () => {
     expect(() =>
-      decodeCodeEditorToHost(
+      codeEditorBridge.decodeToHost(
         JSON.stringify({v: 99, type: 'ready', payload: {version: 1}}),
       ),
     ).toThrow(/version/i);

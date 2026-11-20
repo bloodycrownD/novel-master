@@ -3,53 +3,48 @@
  *
  * @module storage/app-ui-prefs
  */
-import { isAppError } from "@novel-master/core/agent";
+import { AppErrorOps, type AppError } from "@novel-master/core/errors";
+import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 
-export const DESKTOP_UI_KKV_MODULE = "nm-desktop-ui";
+const DESKTOP_UI_KKV_MODULE = "nm-desktop-ui";
 
 export const DESKTOP_UI_KEY_THEME = "theme";
-export const DESKTOP_UI_KEY_CHAT_RICH_TEXT = "chatRichText";
+const DESKTOP_UI_KEY_CHAT_RICH_TEXT = "chatRichText";
 
 /** Update-check preferences (Client UI layer — not nm-preferences). */
-export const DESKTOP_UI_KEY_UPDATES_AUTO_CHECK = "updates.autoCheck";
-export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_AT = "updates.lastCheckAt";
-export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_STATUS = "updates.lastCheckStatus";
-export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION =
-  "updates.lastCheckRemoteVersion";
-export const DESKTOP_UI_KEY_UPDATES_DISMISSED_VERSION = "updates.dismissedVersion";
+const DESKTOP_UI_KEY_UPDATES_AUTO_CHECK = "updates.autoCheck";
 /** ISO-8601 — suppress auto-check result modal until this instant. */
 export const DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL = "updates.snoozeUntil";
 
-export const DESKTOP_UI_DEFAULTS: Record<string, string> = {
+const DESKTOP_UI_DEFAULTS: Record<string, string> = {
   [DESKTOP_UI_KEY_THEME]: "light",
   [DESKTOP_UI_KEY_CHAT_RICH_TEXT]: "false",
   [DESKTOP_UI_KEY_UPDATES_AUTO_CHECK]: "true",
 };
 
-export interface DesktopAppUiPreferences {
-  get(key: string): Promise<string | undefined>;
+interface DesktopAppUiPreferences {
+  get(key: string): Promise<Result<string | undefined, AppError>>;
   set(key: string, value: string): Promise<void>;
 }
 
-export function createDesktopAppUiPreferences(
-  kkv: KkvService,
-): DesktopAppUiPreferences {
-  return {
-    async get(key: string) {
-      try {
-        return await kkv.get(DESKTOP_UI_KKV_MODULE, key);
-      } catch (error) {
-        if (isAppError(error, "KKV_NOT_FOUND")) {
-          return key in DESKTOP_UI_DEFAULTS
-            ? DESKTOP_UI_DEFAULTS[key]
-            : undefined;
+// nm-style 注记：命名镜像 mobile storage/app-ui-prefs.ts 的 AppUiPrefs 先例。
+export namespace AppUiPrefs {
+  export function create(kkv: KkvService): DesktopAppUiPreferences {
+    return {
+      async get(key: string): Promise<Result<string | undefined, AppError>> {
+        const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
+        if (!raw.ok) {
+          if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
+            return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
+          }
+          return raw;
         }
-        throw error;
-      }
-    },
-    async set(key: string, value: string) {
-      await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);
-    },
-  };
+        return raw;
+      },
+      async set(key: string, value: string) {
+        await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);
+      },
+    };
+  }
 }

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open, SCHEMA_BOOT_VERSION } from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 import type { TdbcConnection } from "@novel-master/tdbc";
 
 /** v10 及更早版本的正则两表 DDL（源自 regex-schema.ts，随系统移除仅存于此作升级夹具）。 */
@@ -71,14 +69,14 @@ async function readUserVersion(conn: TdbcConnection): Promise<number> {
 /** T-RX1：正则系统移除后 schema 幂等清理三场景。 */
 describe("regex 表幂等清理（T-RX1）", () => {
   it("v10 存量库（含表与数据）boot 后两表消失且 user_version 推进到当前版本", async () => {
-    registerBetterSqlite3Driver();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    BetterSqlite3Register.register();
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
     await seedLegacyRegexTables(conn);
 
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.deepEqual(await listRegexTables(conn), [], "正则两表应被 DROP");
     assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION, "版本应推进到 SCHEMA_BOOT_VERSION");
@@ -87,13 +85,13 @@ describe("regex 表幂等清理（T-RX1）", () => {
   });
 
   it("全新库 boot 后无正则表且 user_version 推进到当前版本", async () => {
-    registerBetterSqlite3Driver();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    BetterSqlite3Register.register();
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
 
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.deepEqual(await listRegexTables(conn), []);
     assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
@@ -102,19 +100,19 @@ describe("regex 表幂等清理（T-RX1）", () => {
   });
 
   it("恢复 v10 备份（user_version 回退且表重现）后再 boot，表再次被清", async () => {
-    registerBetterSqlite3Driver();
-    const conn = await open("tdbc:sqlite:file::memory:", {
+    BetterSqlite3Register.register();
+    const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
       filename: ":memory:",
     });
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
     // 模拟整库恢复旧备份：user_version 回退到 10 且正则两表重现（旧库文件里的数据）。
     await seedLegacyRegexTables(conn);
     assert.equal(await readUserVersion(conn), 10);
 
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.deepEqual(await listRegexTables(conn), [], "再次 boot 应再次清理");
     assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);

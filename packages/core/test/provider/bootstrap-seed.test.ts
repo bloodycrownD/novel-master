@@ -1,13 +1,8 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { bootstrapNovelMaster } from "../../src/bootstrap/novel-master-bootstrap.js";
-import {
-  BUILTIN_PROVIDER_KEYS,
-  BUILTIN_PROVIDER_PROTOCOLS,
-  BUILTIN_PROVIDER_UUIDS,
-  BUILTIN_UUID_TO_KEY,
-} from "../../src/domain/provider/logic/builtin-providers.js";
-import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
+import {  NovelMasterBootstrap  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BUILTIN_PROVIDER_KEYS, BUILTIN_PROVIDER_PROTOCOLS, BUILTIN_PROVIDER_UUIDS, BUILTIN_UUID_TO_KEY  } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -26,7 +21,7 @@ describe("bootstrap seed providers", () => {
       new Set(rows.map((r) => r.id)),
       new Set(BUILTIN_PROVIDER_UUIDS),
     );
-    await bootstrapNovelMaster(ctx.conn);
+    await NovelMasterBootstrap.bootstrap(ctx.conn);
     const again = await ctx.conn.query<{ id: string }>(
       "SELECT id FROM llm_provider ORDER BY id",
     );

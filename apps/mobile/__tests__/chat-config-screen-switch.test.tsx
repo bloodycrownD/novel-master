@@ -10,6 +10,7 @@
  * ProfileSwitchItem mock 成可点击节点，文本里带 label 与当前值便于断言回滚。
  */
 import React from 'react';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification';
 import {Platform, Switch} from 'react-native';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
@@ -155,34 +156,27 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-const mockWriteChatRichTextEnabled = jest.fn();
-const mockReadChatRichTextEnabled = jest.fn();
+const mockReadBoolPref = jest.fn();
+const mockWriteBoolPref = jest.fn();
 const mockAppUi = {get: jest.fn(), set: jest.fn()};
 
-jest.mock('@/storage/chat-rich-text-pref', () => ({
-  readChatRichTextEnabled: (...args: unknown[]) =>
-    mockReadChatRichTextEnabled(...args),
-  writeChatRichTextEnabled: (...args: unknown[]) =>
-    mockWriteChatRichTextEnabled(...args),
-}));
+// 富文本 / 消息通知两个布尔开关都经 app-ui-pref-io 的通用读写口。
+jest.mock('@/storage/app-ui-pref-io', () => {
+  const legacy = {
+  readBoolPref: (...args: unknown[]) => mockReadBoolPref(...args),
+  writeBoolPref: (...args: unknown[]) => mockWriteBoolPref(...args),
+};
+  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref, writeBoolPref: legacy.writeBoolPref}};
+});
 
-// 消息通知开关的存储与通知模块副作用（ui/G-1：ChatConfigScreen 直连的
-// 新导出，全部 mock；平台门禁在服务内部，屏幕侧只断言调用接线）。
-const mockReadMessageNotificationEnabled = jest.fn();
-const mockWriteMessageNotificationEnabled = jest.fn();
+// 消息通知开关的通知模块副作用（平台门禁在服务内部，屏幕侧只断言调用接线）。
 const mockSetKeepAliveResidentEnabled = jest.fn();
 const mockEnsureAgentNotificationPermission = jest.fn();
 const mockGetAgentNotificationPermissionStatus = jest.fn();
 const mockRequestAgentNotificationPermissionManually = jest.fn();
 
-jest.mock('@/storage/message-notification-pref', () => ({
-  readMessageNotificationEnabled: (...args: unknown[]) =>
-    mockReadMessageNotificationEnabled(...args),
-  writeMessageNotificationEnabled: (...args: unknown[]) =>
-    mockWriteMessageNotificationEnabled(...args),
-}));
-
-jest.mock('@/services/agent-finished-notification', () => ({
+jest.mock('@/services/agent-finished-notification', () => {
+  const legacy = {
   setKeepAliveResidentEnabled: (...args: unknown[]) =>
     mockSetKeepAliveResidentEnabled(...args),
   ensureAgentNotificationPermission: (...args: unknown[]) =>
@@ -191,13 +185,16 @@ jest.mock('@/services/agent-finished-notification', () => ({
     mockGetAgentNotificationPermissionStatus(...args),
   requestAgentNotificationPermissionManually: (...args: unknown[]) =>
     mockRequestAgentNotificationPermissionManually(...args),
-}));
+};
+  return {...legacy, AgentFinishedNotification: {setResidentEnabled: legacy.setKeepAliveResidentEnabled, ensurePermission: legacy.ensureAgentNotificationPermission, getPermissionStatus: legacy.getAgentNotificationPermissionStatus, requestPermissionManually: legacy.requestAgentNotificationPermissionManually}};
+});
 
 jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: mockAppUi, status: 'ready'}),
 }));
 
 import {ChatConfigScreen} from '@/screens/stack/ChatConfigScreen';
+import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
 function treeText(
@@ -287,22 +284,22 @@ async function toggleSwitchAsync(
 describe('ChatConfigScreen 开关持久化失败回滚', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
     mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({
+    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       tokenRatio: 0.8,
       hideStartDepth: 6,
-    });
+    }});
     mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
-    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
   });
 
   it('B-3: 父会话流式写入失败回滚并 toast', async () => {
@@ -329,7 +326,7 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
   });
 
   it('B-3: 富文本消息写入失败回滚并 toast', async () => {
-    mockWriteChatRichTextEnabled.mockRejectedValueOnce(new Error('盘炸了'));
+    mockWriteBoolPref.mockRejectedValueOnce(new Error('盘炸了'));
     const {renderer} = await renderScreen();
 
     await toggleSwitchAsync(renderer.root, '富文本消息');
@@ -377,24 +374,24 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
 describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
     mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({
+    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       tokenRatio: 0.8,
       hideStartDepth: 6,
-    });
-    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
-    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
+    }});
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
     mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadMessageNotificationEnabled.mockReset().mockResolvedValue(false);
-    mockWriteMessageNotificationEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
     mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
     mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
     mockGetAgentNotificationPermissionStatus
@@ -407,15 +404,16 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
     setPlatform('ios');
   });
 
-  it('T-K10: 开关开 persist 成功 → setKeepAliveResidentEnabled(true) 被调且不回滚；关→开附带 ensureAgentNotificationPermission', async () => {
+  it('T-K10: 开关开 persist 成功 → AgentFinishedNotification.setResidentEnabled(true) 被调且不回滚；关→开附带 ensureAgentNotificationPermission', async () => {
     // 开关行为与平台无关（resident 的平台门禁在服务内部，已 mock）。
     const {renderer} = await renderScreen();
     expect(json(renderer)).toContain('消息通知:关');
 
     // 关 → 开：存储先持久化成功，通知模块副作用照常接线
     await toggleSwitchAsync(renderer.root, '消息通知');
-    expect(mockWriteMessageNotificationEnabled).toHaveBeenCalledWith(
+    expect(mockWriteBoolPref).toHaveBeenCalledWith(
       mockAppUi,
+      APP_UI_KEY_MESSAGE_NOTIFICATION,
       true,
     );
     expect(mockSetKeepAliveResidentEnabled).toHaveBeenCalledWith(true);
@@ -523,24 +521,22 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
 describe('ChatConfigScreen 压缩配置即时保存', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
     mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({
+    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       tokenRatio: 0.8,
       hideStartDepth: 6,
-    });
+    }});
     mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
-    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
-    mockReadMessageNotificationEnabled.mockReset().mockResolvedValue(false);
-    mockWriteMessageNotificationEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
     mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
     mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
     mockGetAgentNotificationPermissionStatus
@@ -572,11 +568,11 @@ describe('ChatConfigScreen 压缩配置即时保存', () => {
   });
 
   it('启用但 token 比例为空 → toast 提示、开关回滚、不落库', async () => {
-    mockGetConditions.mockResolvedValue({
+    mockGetConditions.mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       hideStartDepth: 6,
-    });
+    }});
     const {renderer} = await renderScreen();
 
     await act(async () => {

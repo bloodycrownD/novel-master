@@ -10,7 +10,7 @@
  */
 
 /** Anchor row per Agent message with mutating tools. */
-export const MESSAGE_CHECKPOINT_TABLE_DDL = `
+const MESSAGE_CHECKPOINT_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS message_checkpoint (
   session_id TEXT NOT NULL,
   message_id TEXT NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS message_checkpoint (
  * deleted-entry 修复）。快照列可空——迁移前的存量行与 entry 已删的回填残留
  * 为 NULL，读取侧回退 JOIN 现路径。WITHOUT ROWID 表追加可空尾列不改变 PK。
  */
-export const MESSAGE_CHECKPOINT_FILE_TABLE_DDL = `
+const MESSAGE_CHECKPOINT_FILE_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS message_checkpoint_file (
   session_id TEXT NOT NULL,
   message_id TEXT NOT NULL,
@@ -35,17 +35,6 @@ CREATE TABLE IF NOT EXISTS message_checkpoint_file (
   path TEXT NULL,
   PRIMARY KEY (session_id, message_id, entry_id)
 ) WITHOUT ROWID`.trim();
-
-/** Session-scoped checkpoint lookup.
- *
- * 冗余索引，已退役：WITHOUT ROWID 表 PK (session_id, message_id) 的 B-tree
- * 天然支持 session_id 前缀查询，二级索引纯属写放大。且部分真机的 quick-sqlite
- * 对「WITHOUT ROWID 表 + CREATE INDEX」报 disk I/O error（实测），不再创建。
- * 常量保留供老库路径 DROP 清理时引用。
- */
-export const MESSAGE_CHECKPOINT_SESSION_INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS idx_message_checkpoint_session
-  ON message_checkpoint(session_id)`.trim();
 
 /** All message checkpoint bootstrap statements in execution order. */
 export const MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS: readonly string[] = [

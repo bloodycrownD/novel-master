@@ -1,39 +1,23 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, it } from "node:test";
-import {
-  textBlocks,
-  userMessageFormatter,
-  type ChatMessageData,
-  type ContentBlock,
-} from "@novel-master/core/chat";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  readFileSync  } from "node:fs";
+import {  join  } from "node:path";
+import {  describe, it  } from "node:test";
+import {  TextBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock  } from "@novel-master/core/chat";
+import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 /** DTO 断言 helper：summaryText 为 MessageLike、metaText 为 MessageLike[]（G3.5），渲染后比对。 */
 const summaryOf = (m: unknown) => tCore(m as Parameters<typeof tCore>[0]);
 const metaOf = (parts: readonly unknown[]) => parts.map((m) => summaryOf(m)).join(" · ");
-import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import {  UserVfsActionXml  } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 
-import {
-  buildPromptAssemblyFromLayout,
-  buildPromptLlmInputFromLayout,
-  buildPromptPreviewSegmentsFromLayout,
-  buildPromptPreviewTurnsFromLayout,
-  formatPromptLlmInputForCliFromLayout,
-  messageBodyTextFromBlocks,
-  type AgentPromptLayout,
-  type PromptPreviewTurn,
-  type PromptRenderContext,
-  type PromptToolGroupCardData,
-  type PromptTurnCardData,
-} from "@novel-master/core/prompt";
+import {  PromptBuilder, MessageBodyText, type AgentPromptLayout, type  PromptPreviewTurn, type  PromptRenderContext, type  PromptToolGroupCardData, type  PromptTurnCardData  } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
 function message(role: string, content: string, seq: number): ChatMessageData {
-  return blocksMessage(role, textBlocks(content).blocks, seq);
+  return blocksMessage(role, TextBlocks.of(content).blocks, seq);
 }
 
 function blocksMessage(
@@ -65,7 +49,7 @@ const chatOnlyLayout: AgentPromptLayout = {
   dynamic: [],
 };
 
-function itemIds(turns: Awaited<ReturnType<typeof buildPromptPreviewTurnsFromLayout>>): string[][] {
+function itemIds(turns: readonly PromptPreviewTurn[]): string[][] {
   return turns.map((turn) => turn.items.map((item) => item.id));
 }
 
@@ -102,7 +86,7 @@ describe("T-R1 切轮正确性", () => {
   ];
 
   it("真用户输入开新轮，含 tool_result 的 user 消息归 assistant 轮", async () => {
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages)));
     // 前四轮是合成段（system / workplace / workplace·done / persist-persona），
     // kind = 各段真实消息 role。
     assert.deepEqual(
@@ -132,7 +116,7 @@ describe("T-R1 切轮正确性", () => {
   });
 
   it("workplace 合成 user 段（role user、source template）不误切", async () => {
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages)));
     const workplace = turns.find((turn) => turn.id === "prompt-workplace");
     // kind = 段的真实消息 role（无 template 分类）：workplace 是 user 段、
     // workplace·done 是 assistant 段。
@@ -150,7 +134,7 @@ describe("T-R1 切轮正确性", () => {
         { path: "meta/info.md", display: "header", body: "---\ntitle: x\n---" },
       ],
     };
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctx);
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctx));
     const workplace = turns.find((turn) => turn.id === "prompt-workplace")!;
     assert.equal(workplace.cards.length, 1);
     const card = workplace.cards[0]!;
@@ -177,13 +161,13 @@ describe("T-R1 切轮正确性", () => {
     // 纯函数、不改入参：ctx.workplaceFiles 的原 body 仍带行号（T-PL7 判据②）。
     assert.equal(ctx.workplaceFiles![0]!.body, "1|第一行\n2|第二行");
     // 无结构化数据（缺省 ctx）退普通 text 卡——旧调用方不空窗。
-    const legacy = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const legacy = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages)));
     const legacyCard = legacy.find((turn) => turn.id === "prompt-workplace")!.cards[0]!;
     assert.equal(legacyCard.type, "text");
   });
 
   it("assembly chat 段带 messageId / seq 供聚合层分组", async () => {
-    const segments = await buildPromptAssemblyFromLayout(layout, ctxOf(messages));
+    const segments = unwrap(await PromptBuilder.assemble(layout, ctxOf(messages)));
     const chat = segments.filter((segment) => segment.source === "message");
     assert.equal(chat.length, 7);
     assert.ok(chat.every((segment) => segment.messageId != null));
@@ -199,7 +183,7 @@ describe("T-R1 切轮正确性", () => {
   });
 
   it("段上的 seq 真参与轮 id：message 轮 id 为 turn-${seq}，合成段轮不含", async () => {
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages)));
     // 合成段轮按 id 前缀识别（kind 已是消息 role，不再可区分来源）。
     const isSynthetic = (turn: PromptPreviewTurn) =>
       !turn.id.startsWith("turn-");
@@ -234,7 +218,7 @@ describe("T-R2 首轮与空轮守卫", () => {
       message("user", "hi", 2),
       message("assistant", "yo", 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.deepEqual(
       turns.map((turn) => turn.kind),
       ["assistant", "user", "assistant"]
@@ -249,14 +233,14 @@ describe("T-R2 首轮与空轮守卫", () => {
 
   it("无段的 user 消息不产出空轮", async () => {
     const messages = [message("user", "", 1), message("assistant", "ok", 2)];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.deepEqual(itemIds(turns), [["chat-m2-0"]]);
     assert.ok(turns.every((turn) => turn.items.length > 0));
   });
 
   it("user 轮正文按序拼接；summaryText 取真摘要、metaText 带字数", async () => {
     const messages = [message("user", "第一句", 1), message("assistant", "好", 2)];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const userTurn = turns[0]!;
     assert.equal(userTurn.kind, "user");
     // 旧 summary 字段保留段名形态（兼容面），新 summaryText 才是真摘要
@@ -287,7 +271,7 @@ describe("T-R3 模板段各自独立", () => {
       dynamic: [{ name: "state", type: "text", role: "user", content: "dyn" }],
     };
     const messages = [message("user", "hi", 1), message("assistant", "yo", 2)];
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages, "")));
     // message 轮 id 由 seq 生成（turn-1 / turn-2）；合成段轮无 seq，沿用段 id。
     assert.deepEqual(
       turns.map((turn) => turn.id),
@@ -331,7 +315,7 @@ describe("T-R4 assistant 轮摘要", () => {
         { type: "text", text: `${long}\n第二行不参与摘要` },
       ], 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.equal(turn.kind, "assistant");
     const expectedChars = turn.items.reduce((sum, item) => sum + item.body.length, 0);
@@ -355,7 +339,7 @@ describe("T-R4 assistant 轮摘要", () => {
   it("首行恰好 70 字不截断", async () => {
     const exact = "字".repeat(70);
     const messages = [message("user", "hi", 1), message("assistant", exact, 2)];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.match(turns[1]!.summary, /^字{70} · 工具调用 0 次 · 70 字$/);
     assert.equal(summaryOf(turns[1]!.summaryText), exact);
     assert.equal(metaOf(turns[1]!.metaText), "#2 · 工具调用 0 次 · 70 字");
@@ -369,7 +353,7 @@ describe("T-R4 assistant 轮摘要", () => {
       ], 2),
       blocksMessage("user", [{ type: "tool_result", toolUseId: "t1", content: "读完" }], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     const expectedChars = turn.items.reduce((sum, item) => sum + item.body.length, 0);
     // 旧 summary 字段仍按 items 段数占位
@@ -392,7 +376,7 @@ describe("T-R4 assistant 轮摘要", () => {
       ], 3),
       message("assistant", "收尾", 4),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.equal(turn.kind, "assistant");
     assert.deepEqual(cardTypes(turn), ["toolGroup", "text", "text"]);
@@ -410,10 +394,10 @@ describe("T-R4 assistant 轮摘要", () => {
       ], 2),
     ];
     const ctx = ctxOf(messages, "");
-    const off = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctx);
-    const on = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctx, {
+    const off = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctx));
+    const on = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctx, {
       includeThinkingBlocks: true,
-    });
+    }));
     const offTurn = off[1]!;
     const onTurn = on[1]!;
     assert.equal(offTurn.items.length, 2);
@@ -451,11 +435,11 @@ describe("T-R5 CLI parity 契约不受影响", () => {
       dynamic: [],
     };
     const ctx = ctxOf([message("user", "{{literal}}", 1)]);
-    const segments = await buildPromptPreviewSegmentsFromLayout(layout, ctx);
+    const segments = unwrap(await PromptBuilder.previewSegments(layout, ctx));
     const joined = segments
       .map((segment) => `${segment.role}: ${segment.body}`)
       .join("\n");
-    assert.equal(joined, await formatPromptLlmInputForCliFromLayout(layout, ctx));
+    assert.equal(joined, unwrap(await PromptBuilder.cliText(layout, ctx)));
   });
 
   it("轮聚合不改动段产出（同样的段集合，只是折叠成轮）", async () => {
@@ -468,8 +452,8 @@ describe("T-R5 CLI parity 契约不受影响", () => {
     };
     const messages = [message("user", "hi", 1), message("assistant", "yo", 2)];
     const ctx = ctxOf(messages);
-    const segments = await buildPromptPreviewSegmentsFromLayout(layout, ctx);
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctx);
+    const segments = unwrap(await PromptBuilder.previewSegments(layout, ctx));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctx));
     assert.deepEqual(
       turns.flatMap((turn) => turn.items),
       segments
@@ -500,7 +484,7 @@ function userMessageWithAttachments(
   count: number
 ): ChatMessageData {
   return {
-    ...blocksMessage("user", textBlocks(content).blocks, seq),
+    ...blocksMessage("user", TextBlocks.of(content).blocks, seq),
     attachments: Array.from({ length: count }, (_, index) => ({
       name: `a${index}.md`,
       source: "attach" as const,
@@ -521,7 +505,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
         { type: "tool_result", toolUseId: "t1", content: "读完 a.md", ok: true },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.equal(turn.kind, "assistant");
     // 结果块不单独成卡：收进组卡的 result 格
@@ -546,7 +530,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
         { type: "tool_use", id: "t1", name: "list", input: {} },
       ], 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(
       groupCards(turns[1]!)[0]!.inputJson,
       "[tool_use name=list id=t1]"
@@ -567,7 +551,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
         hidden: true,
       },
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const [group] = groupCards(turns[1]!);
     assert.equal(group!.result, null);
     assert.equal(group!.status, "lost");
@@ -589,7 +573,7 @@ describe("T-PT2 并行工具调用按 id 配对", () => {
         { type: "tool_result", toolUseId: "t1", content: "读完 a.md", ok: true },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const groups = groupCards(turns[1]!);
     assert.equal(groups.length, 2);
     assert.deepEqual(
@@ -610,7 +594,7 @@ describe("T-PT2 并行工具调用按 id 配对", () => {
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
       ], 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(groupCards(turns[1]!)[0]!.parallel, false);
   });
 });
@@ -629,7 +613,7 @@ describe("T-PT3 失败双路判定", () => {
         { type: "tool_result", toolUseId: "t2", content: "Error: legacy 失败" },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const groups = groupCards(turns[1]!);
     assert.ok(groups.every((card) => card.status === "error"));
     assert.equal(groups[0]!.result?.ok, false);
@@ -649,7 +633,7 @@ describe("T-PT3 失败双路判定", () => {
         { type: "tool_result", toolUseId: "t1", content: "legacy 成功" },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(groupCards(turns[1]!)[0]!.status, "ok");
   });
 });
@@ -664,7 +648,7 @@ describe("T-PT4 悬挂 tool_use 丢失占位", () => {
         { type: "tool_use", id: "t2", name: "glob", input: { pattern: "*.ts" } },
       ], 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     // 两个悬挂 use 都在，文本卡顺序不变
     assert.deepEqual(cardTypes(turn), ["toolGroup", "text", "toolGroup"]);
@@ -686,7 +670,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("user", "帮我看看这段\n第二行不参与摘要", 1),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(summaryOf(turns[0]!.summaryText), "帮我看看这段");
   });
 
@@ -706,7 +690,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       userMessageWithAttachments(wrapped, 1, 2),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[0]!;
     assert.equal(summaryOf(turn.summaryText), "帮我改这段");
     // 卡片正文 = 完整 wrap 后文本（发给模型的形态）
@@ -725,7 +709,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("user", "hi", 1),
       message("assistant", "yo", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(metaOf(turns[0]!.metaText), "#1 · 2 字");
   });
 
@@ -734,7 +718,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("user", "问".repeat(100), 1),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(summaryOf(turns[0]!.summaryText), `${"问".repeat(69)}…`);
   });
 
@@ -747,7 +731,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       ),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(summaryOf(turns[0]!.summaryText), "（无文本）");
   });
 });
@@ -761,7 +745,7 @@ describe("T-PT6 合成段轮摘要", () => {
       dynamic: [],
     };
     const messages: ChatMessageData[] = [message("user", "hi", 1)];
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages, "")));
     const system = turns[0]!;
     assert.equal(system.kind, "system");
     assert.equal(summaryOf(system.summaryText), "system");
@@ -789,7 +773,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
         { type: "tool_result", toolUseId: "t1", content: "读完", ok: true },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.equal(summaryOf(turn.summaryText), "1 段");
     assert.equal(metaOf(turn.metaText), `#2 · 工具调用 1 次 · ${cardChars(turn)} 字`);
@@ -809,7 +793,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
         { type: "tool_result", toolUseId: "t2", content: "Error: 炸了", ok: false },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.equal(summaryOf(turn.summaryText), "收工");
     // 字数硬编码 74 = 三个 inputJson 各 20（`{\n  "path": "…"\n}`）+ 结果 3 + 9 + 文本 2，
@@ -828,7 +812,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
       message("user", "hi", 1),
       message("assistant", "答", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(metaOf(turns[1]!.metaText), "#2 · 工具调用 0 次 · 1 字");
   });
 });
@@ -846,7 +830,7 @@ describe("T-PT8 cards 因果顺序与 items 段序解耦", () => {
         { type: "text", text: "继续" },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     // items：tool_result 段被 parity 提到 m3 首位
     assert.deepEqual(
@@ -872,7 +856,7 @@ describe("T-PT8 cards 因果顺序与 items 段序解耦", () => {
         { type: "text", text: "读了" },
       ], 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.deepEqual(
       turn.cards.map((card) => card.id),
@@ -893,7 +877,7 @@ describe("T-PT8 cards 因果顺序与 items 段序解耦", () => {
         { type: "text", text: "第二段" },
       ], 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     assert.deepEqual(cardTypes(turn), ["text"]);
     assert.equal(turn.cards[0]!.id, "card-m2-0");
@@ -924,7 +908,7 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
   ];
 
   it("切轮 kind / 轮 id 与新增字段无关", async () => {
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages)));
     assert.deepEqual(
       turns.map((turn) => turn.kind),
       ["system", "user", "assistant", "user", "user", "assistant", "user", "assistant"]
@@ -937,21 +921,21 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
 
   it("items 与扁平段 deepEqual（CLI parity 面未被 cards 触碰）", async () => {
     const ctx = ctxOf(messages);
-    const segments = await buildPromptPreviewSegmentsFromLayout(layout, ctx);
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctx);
+    const segments = unwrap(await PromptBuilder.previewSegments(layout, ctx));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctx));
     assert.deepEqual(
       turns.flatMap((turn) => turn.items),
       segments
     );
     assert.equal(
       segments.map((segment) => `${segment.role}: ${segment.body}`).join("\n"),
-      await formatPromptLlmInputForCliFromLayout(layout, ctx)
+      unwrap(await PromptBuilder.cliText(layout, ctx))
     );
   });
 
   it("body 与 summary 旧字段形态不变（新增字段是纯加法）", async () => {
     const ctx = ctxOf(messages);
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctx);
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctx));
     const assistantTurn = turns[5]!;
     assert.match(
       assistantTurn.body,
@@ -962,7 +946,7 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
   });
 
   it("每轮都产出三个新字段（无 undefined 洞）", async () => {
-    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const turns = unwrap(await PromptBuilder.previewTurns(layout, ctxOf(messages)));
     assert.ok(turns.length > 0);
     for (const turn of turns) {
       assert.ok(turn.summaryText != null);
@@ -983,10 +967,10 @@ describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
       ], 2),
     ];
     const ctx = ctxOf(messages, "");
-    const off = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctx);
-    const on = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctx, {
+    const off = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctx));
+    const on = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctx, {
       includeThinkingBlocks: true,
-    });
+    }));
     assert.deepEqual(cardTypes(off[1]!), ["text"]);
     assert.deepEqual(cardTypes(on[1]!), ["thinking", "text"]);
     const thinkingCard = on[1]!.cards[0]!;
@@ -1002,11 +986,11 @@ describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
         { type: "text", text: "答案" },
       ], 2),
     ];
-    const on = await buildPromptPreviewTurnsFromLayout(
+    const on = unwrap(await PromptBuilder.previewTurns(
       chatOnlyLayout,
       ctxOf(messages, ""),
       { includeThinkingBlocks: true }
-    );
+    ));
     const turn = on[1]!;
     assert.deepEqual(cardTypes(turn), ["thinking", "text"]);
     assert.equal(
@@ -1024,11 +1008,11 @@ describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
         { type: "text", text: "后段" },
       ], 2),
     ];
-    const on = await buildPromptPreviewTurnsFromLayout(
+    const on = unwrap(await PromptBuilder.previewTurns(
       chatOnlyLayout,
       ctxOf(messages, ""),
       { includeThinkingBlocks: true }
-    );
+    ));
     const turn = on[1]!;
     assert.deepEqual(cardTypes(turn), ["text", "thinking", "text"]);
     assert.deepEqual(
@@ -1052,7 +1036,7 @@ async function workplaceTurnOf(
   files: NonNullable<PromptRenderContext["workplaceFiles"]>
 ): Promise<PromptPreviewTurn> {
   const ctx: PromptRenderContext = { ...ctxOf([], "WT"), workplaceFiles: files };
-  const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+  const turns = unwrap(await PromptBuilder.previewTurns(workplaceLayout, ctx));
   return turns.find((turn) => turn.id === "prompt-workplace")!;
 }
 
@@ -1067,7 +1051,7 @@ function workplaceFilesOf(turn: PromptPreviewTurn) {
  * 一轮「assistant 工具调用 + tool_result 回传」：组卡的 result.body 即断言对象。
  *
  * @param toolName 工具名（只影响组卡标签，不影响正文判据）。
- * @param content tool_result 原始 content（走 `formatToolResultContentForDisplay`）。
+ * @param content tool_result 原始 content（走 `ToolOutput.formatContentForDisplay`）。
  */
 async function toolResultBodyOf(toolName: string, content: string): Promise<string> {
   const messages: ChatMessageData[] = [
@@ -1077,7 +1061,7 @@ async function toolResultBodyOf(toolName: string, content: string): Promise<stri
     ], 2),
     blocksMessage("user", [{ type: "tool_result", toolUseId: "t1", content }], 3),
   ];
-  const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+  const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
   const [group] = groupCards(turns[1]!);
   return group!.result!.body;
 }
@@ -1227,7 +1211,7 @@ describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
       message("user", "hi", 1),
       message("assistant", "1|第一行\n2|第二行", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const textCard = turns[1]!.cards[0]!;
     assert.equal(textCard.type === "text" ? textCard.body : "", "1|第一行\n2|第二行");
   });
@@ -1239,11 +1223,11 @@ describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
         { type: "thinking", text: "     1|我在想" },
       ], 2),
     ];
-    const on = await buildPromptPreviewTurnsFromLayout(
+    const on = unwrap(await PromptBuilder.previewTurns(
       chatOnlyLayout,
       ctxOf(messages, ""),
       { includeThinkingBlocks: true }
-    );
+    ));
     const thinkingCard = on[1]!.cards[0]!;
     assert.equal(
       thinkingCard.type === "thinking" ? thinkingCard.body : "",
@@ -1256,30 +1240,31 @@ describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
       message("user", "1|这是用户正文\n2|第二行", 1),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const card = turns[0]!.cards[0]!;
     assert.equal(card.type === "text" ? card.body : "", "1|这是用户正文\n2|第二行");
   });
 });
 
 describe("T-PL7 wire 不变（三段结构判据）", () => {
-  it("① wire 组装链不经 cards 构造路径（源码 import 关系断言）", async () => {
-    // 仓内无字节级 golden 机制，故用「源码零交集」作结构判据：wire 链的
-    // `render-prompt.ts` 不得引用剥离函数，也不得 import cards 构造模块。
+  it("① wire 组装链不经 cards 构造路径（源码区段 / 单一内核断言）", async () => {
+    // 仓内无字节级 golden 机制，故用源码结构作判据。轮聚合已并入
+    // `render-prompt.ts`（`PromptBuilder.previewTurns`），模块边界不再成立，
+    // 改为按文件内区段断言：wire 成员区段（preview turns 标记之前）不得引用剥离函数。
     const src = readFileSync(
       join(import.meta.dirname, "../../src/service/prompt/render-prompt.ts"),
       "utf8"
     );
-    assert.doesNotMatch(src, /stripWorkplaceLinePrefix/);
-    assert.doesNotMatch(src, /stripToolResultLinePrefix/);
-    assert.doesNotMatch(src, /stripAttachmentContentLinePrefix/);
+    const previewTurnsAt = src.indexOf("// ==== Preview turns");
+    assert.ok(previewTurnsAt > 0, "render-prompt.ts 须保留 preview turns 区段标记");
+    const wireSrc = src.slice(0, previewTurnsAt);
+    assert.doesNotMatch(wireSrc, /stripWorkplaceLinePrefix/);
+    assert.doesNotMatch(wireSrc, /stripToolResultLinePrefix/);
+    assert.doesNotMatch(wireSrc, /stripAttachmentContentLinePrefix/);
+    // 反向：cards 构造（轮聚合）复用同一个 wire 组装遍历（分叉方向单一）。
+    assert.match(src, /async function buildPromptPreviewTurnsFromLayout[\s\S]*?await buildPromptAssemblyFromLayout\(layout, ctx, options\)/);
+    // 且 render-prompt 不再 import cards 构造模块（单一模块内聚）。
     assert.doesNotMatch(src, /prompt-preview-turns/);
-    // 反向：cards 构造模块 import wire 组装函数（分叉方向单一）。
-    const turnsSrc = readFileSync(
-      join(import.meta.dirname, "../../src/service/prompt/prompt-preview-turns.ts"),
-      "utf8"
-    );
-    assert.match(turnsSrc, /buildPromptAssemblyFromLayout/);
   });
 
   it("① 补充：wire 产物里的行号一字未动（行为面交叉核实）", async () => {
@@ -1289,12 +1274,12 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
       ...ctxOf([message("user", "hi", 1)], "<file path=\"a.md\">\n1|第一行\n2|第二行\n</file>"),
       workplaceFiles: [{ path: "a.md", display: "full", body: "1|第一行\n2|第二行" }],
     };
-    const wire = await buildPromptLlmInputFromLayout(workplaceLayout, ctx);
+    const wire = unwrap(await PromptBuilder.llmInput(workplaceLayout, ctx));
     const workplaceMsg = wire.messages.find((m) => m.role === "user")!;
-    const body = messageBodyTextFromBlocks(workplaceMsg.content.blocks);
+    const body = MessageBodyText.fromBlocks(workplaceMsg.content.blocks);
     assert.match(body, /1\|第一行\n2\|第二行/);
     // 同一次组装产出的 cards 侧已剥——两条通道各自独立。
-    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const turns = unwrap(await PromptBuilder.previewTurns(workplaceLayout, ctx));
     assert.deepEqual(
       workplaceFilesOf(turns.find((t) => t.id === "prompt-workplace")!).map((f) => f.body),
       ["第一行\n第二行"]
@@ -1306,7 +1291,7 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
       { path: "a.md", display: "full", body: "1|第一行\n2|第二行" },
     ];
     const ctx: PromptRenderContext = { ...ctxOf([], "WT"), workplaceFiles: files };
-    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const turns = unwrap(await PromptBuilder.previewTurns(workplaceLayout, ctx));
     const card = turns.find((t) => t.id === "prompt-workplace")!.cards[0]!;
     assert.notEqual(card.type === "workplace" ? card.files[0] : null, files[0]);
     assert.equal(files[0]!.body, "1|第一行\n2|第二行");
@@ -1318,7 +1303,7 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
       ...ctxOf([], "WT"),
       workplaceFiles: [{ path: "a.md", display: "full", body: "1|第一行\n2|第二行" }],
     };
-    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const turns = unwrap(await PromptBuilder.previewTurns(workplaceLayout, ctx));
     const turn = turns.find((t) => t.id === "prompt-workplace")!;
     // items / body 走 `ctx.workplaceDisplay`，这里用 chat 轮交叉核实同一断言：
     // 轮 body 完全由 items 拼成，段 body 未被剥。
@@ -1326,10 +1311,10 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
       message("user", "hi", 1),
       message("assistant", "1|第一行\n2|第二行", 2),
     ];
-    const chatTurns = await buildPromptPreviewTurnsFromLayout(
+    const chatTurns = unwrap(await PromptBuilder.previewTurns(
       chatOnlyLayout,
       ctxOf(messages, "")
-    );
+    ));
     const assistantTurn = chatTurns[1]!;
     assert.match(assistantTurn.items[0]!.body, /^1\|第一行\n2\|第二行$/);
     assert.equal(assistantTurn.body, "[#2 · assistant]\n1|第一行\n2|第二行");
@@ -1346,7 +1331,7 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
       ...ctxOf([], "<file path=\"a.md\">\n1|第一行\n2|第二行\n</file>"),
       workplaceFiles: [{ path: "a.md", display: "full", body: "1|第一行\n2|第二行" }],
     };
-    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const turns = unwrap(await PromptBuilder.previewTurns(workplaceLayout, ctx));
     const turn = turns.find((t) => t.id === "prompt-workplace")!;
     // wire parity 侧：items / body 一字未动（剥行号只发生在 cards 构造层）。
     assert.match(turn.items[0]!.body, /1\|第一行\n2\|第二行/);
@@ -1376,7 +1361,7 @@ describe("T-PL8 metaText 字数按剥后正文", () => {
         { type: "tool_result", toolUseId: "t1", content: readOutputJson("甲\n乙") },
       ], 3),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const turn = turns[1]!;
     // inputJson `{\n  "path": "a.md"\n}` = 20 字 + 剥后 result 正文 3 字 = 23
     assert.equal(metaOf(turn.metaText), "#2 · 工具调用 1 次 · 23 字");
@@ -1405,10 +1390,10 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   /** user 轮 text 卡正文（唯一的 user 轮卡片）。 */
   async function userCardBody(text: string): Promise<string> {
     const messages: ChatMessageData[] = [
-      blocksMessage("user", textBlocks(text).blocks, 1),
+      blocksMessage("user", TextBlocks.of(text).blocks, 1),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     const card = turns[0]!.cards[0]!;
     return card.type === "text" ? card.body : "";
   }
@@ -1426,13 +1411,13 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     // 本用例的 items/body 断言立刻红。
     const wrapped = userAttachBody("1|第一行\n2|第二行");
     const messages: ChatMessageData[] = [
-      blocksMessage("user", textBlocks(wrapped).blocks, 1),
+      blocksMessage("user", TextBlocks.of(wrapped).blocks, 1),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(
+    const turns = unwrap(await PromptBuilder.previewTurns(
       chatOnlyLayout,
       ctxOf(messages, "")
-    );
+    ));
     const turn = turns[0]!;
     // wire parity 侧：段 body 原样带行号。
     assert.match(turn.items[0]!.body, /"content": "1\|第一行\\n2\|第二行"/);
@@ -1455,7 +1440,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("annotate 块不动（没有 `content` 键，原文一律不碰）", async () => {
-    const actionXml = buildUserVfsActionXml("annotate", {
+    const actionXml = UserVfsActionXml.build("annotate", {
       path: "notes/a.md",
       originalText: "1|这行不是行号",
       userAnnotation: "2|批注也不是",
@@ -1489,18 +1474,18 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     const messages: ChatMessageData[] = [
       blocksMessage(
         "user",
-        textBlocks(userAttachBody("1|附件行")).blocks,
+        TextBlocks.of(userAttachBody("1|附件行")).blocks,
         1
       ),
       message("assistant", "好", 2),
     ];
-    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turns = unwrap(await PromptBuilder.previewTurns(chatOnlyLayout, ctxOf(messages, "")));
     assert.equal(summaryOf(turns[0]!.summaryText), "看看这个");
     assert.match(turns[0]!.cards[0]!.type === "text" ? turns[0]!.cards[0]!.body : "", /<user-input>\n看看这个\n<\/user-input>/);
   });
 
   it("skillAttach 块不动（`content` 是无行号原文，判据不适用）", async () => {
-    const actionXml = buildUserVfsActionXml("skillAttach", {
+    const actionXml = UserVfsActionXml.build("skillAttach", {
       name: "novel-master",
       content: "第一行\n12|这不是行号",
     });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { GeminiProtocolAdapter } from "../../../src/infra/llm-protocol/impl/gemini.adapter.js";
+import {  describe, it, mock  } from "node:test";
+import {  GeminiProtocolAdapter  } from "../../../src/infra/llm-protocol/impl/gemini.adapter.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
 
 describe("gemini partial stream", () => {
   it("abort mid-stream returns partial text blocks", async () => {
@@ -37,7 +38,7 @@ describe("gemini partial stream", () => {
       vendorModelId: "gemini-2.0-flash",
       userContent: "hi",
       stream: true,
-      signal: controller.signal,
+      scope: AbortScopeFactory.create({ controller }),
     });
 
     assert.ok(

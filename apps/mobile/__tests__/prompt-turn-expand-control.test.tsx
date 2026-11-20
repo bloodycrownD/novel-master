@@ -15,7 +15,7 @@ import {View} from 'react-native';
 import type {PromptPreviewTurn} from '@novel-master/core/prompt';
 import {RealPromptScreen} from '@/screens/stack/RealPromptScreen';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
-import {takePromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
 const mockBuildTurns = jest.fn(async () => [] as unknown[]);
@@ -54,14 +54,13 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('@/services/prompt-preview.service', () => ({
-  buildRealPromptPreviewTurns: (...args: unknown[]) =>
+jest.mock('@/services/prompt-preview.service', () => {
+  const legacy = {
+  buildRealPromptPreviewTurnsAdapter: (...args: unknown[]) =>
     mockBuildTurns(...(args as [])),
-}));
-
-jest.mock('@/services/agent-run.service', () => ({
-  AgentRunError: class AgentRunError extends Error {},
-}));
+};
+  return {...legacy, PromptPreviewService: {buildRealTurns: legacy.buildRealPromptPreviewTurnsAdapter}};
+});
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -160,7 +159,7 @@ const TURN_B: PromptPreviewTurn = {
 async function renderScreen(
   turns: PromptPreviewTurn[] = [TURN],
 ): Promise<TestRenderer.ReactTestRenderer> {
-  mockBuildTurns.mockResolvedValue(turns);
+  mockBuildTurns.mockResolvedValue({ok: true, value: turns});
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => {
     tree = TestRenderer.create(<RealPromptScreen />);
@@ -243,9 +242,9 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFocus.handler = undefined;
-    mockBuildTurns.mockResolvedValue([TURN]);
+    mockBuildTurns.mockResolvedValue({ok: true, value: [TURN]});
     // 模块级单例复位：残留正文会让下一条用例读到上一轮的数据。
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-MP3-1 toggle 改屏级 openTurnIds：展开区随之挂载/卸载', async () => {
@@ -303,7 +302,7 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
       title: 'assistant',
       turnId: TURN.id,
     });
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'assistant',
       body: '好的，我来看看。',
       leafId: 'card-12-0',

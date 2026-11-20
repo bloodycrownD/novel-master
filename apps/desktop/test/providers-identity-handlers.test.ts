@@ -8,14 +8,8 @@ import type {
   ProviderListItemDto,
   ProviderModelSavedDto,
 } from "../shared/ipc-types.js";
-import {
-  handleProvidersCreate,
-  handleProvidersList,
-} from "../src/main/ipc/handlers/providers.js";
-import {
-  handleProviderModelsSave,
-  handleProviderModelsSavedList,
-} from "../src/main/ipc/handlers/provider-models.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { ProviderModels } from "../src/main/ipc/handlers/provider-models.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -52,7 +46,7 @@ describe("provider-identity Desktop IPC (T-PI8)", () => {
   });
 
   it("create 返回生成 UUID；list 标题为 displayName；模型 DTO 前缀为服务商名称", async () => {
-    const created = await handleProvidersCreate({
+    const created = await Providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "我的网关",
@@ -64,7 +58,7 @@ describe("provider-identity Desktop IPC (T-PI8)", () => {
     }
     assert.match(created.data.providerId, UUID_RE);
 
-    const listed = await handleProvidersList();
+    const listed = await Providers.list();
     assert.equal(listed.ok, true);
     if (!listed.ok) {
       return;
@@ -76,14 +70,14 @@ describe("provider-identity Desktop IPC (T-PI8)", () => {
     assert.equal(row!.displayName, "我的网关");
     assert.notEqual(row!.displayName, row!.id);
 
-    const saved = await handleProviderModelsSave({
+    const saved = await ProviderModels.save({
       providerId: created.data.providerId,
       vendorModelId: "gw-model",
       modelName: "网关模型",
     });
     assert.equal(saved.ok, true, saved.ok ? "" : saved.error.message);
 
-    const models = await handleProviderModelsSavedList({
+    const models = await ProviderModels.savedList({
       providerId: created.data.providerId,
     });
     assert.equal(models.ok, true);

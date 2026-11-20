@@ -31,10 +31,10 @@
 import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {Platform, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
+import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
-import {conversationThemeFromTokens} from '@/components/chat/conversation-theme';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
 import {
   NativeChatComposer,
   type NativeChatComposerInstance,
@@ -56,18 +56,13 @@ import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
 import {useToast} from '@/components/chrome/ToastHost';
 import {useTheme} from '@/theme/ThemeProvider';
-import {
-  AGENT_LOCK_TOAST_GUIDE,
-  isAgentLocked,
-  isModelLocked,
-  MODEL_LOCK_TOAST,
-} from '@/services/chat-agent-meta';
+import {AGENT_LOCK_TOAST_GUIDE, ChatAgentMeta, MODEL_LOCK_TOAST} from '@/services/chat-agent-meta';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 import {useChatTabController} from './useChatTabController';
 
-export type ChatConversationPanelProps = {
+type ChatConversationPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
   /**
@@ -183,17 +178,17 @@ function ChatConversationWebSurface(props: {
    */
   const {tokens: themeTokens} = useTheme();
   const composerTheme = useMemo(
-    () => conversationThemeFromTokens(themeTokens),
+    () => HostThemeMapping.fromTokens(themeTokens),
     [themeTokens],
   );
 
   /**
-   * chip 文案表（I 组）：core `formatStatusChipLabelFromAttachment` 单一真源，
+   * chip 文案表（I 组）：core `AttachmentChip.formatStatusLabelFromAttachment` 单一真源，
    * 与 web dock 的 resolveChipLabels 同口径；chips 引用稳定时文案引用随稳。
    */
   const chipLabels = useMemo(
-    () =>
-      composer.composerState.chips.map(formatStatusChipLabelFromAttachment),
+    // 显式单参回调：core 该函数第二参是 chip 口径 options，直接当 map 回调会把 index 当 options。
+    () => composer.composerState.chips.map(a => AttachmentChip.formatStatusLabelFromAttachment(a)),
     [composer.composerState.chips],
   );
 
@@ -361,7 +356,7 @@ export function ChatConversationPanel({
   // 点击直接弹 picker 重选（meta 条已带已删标识，不再额外弹 toast）。
   // model 卡：none / agent-pin 态维持锁定。
   const openAgentPicker = useCallback(() => {
-    if (isAgentLocked(agentMeta)) {
+    if (ChatAgentMeta.isLocked(agentMeta)) {
       showToast(AGENT_LOCK_TOAST_GUIDE);
       return;
     }
@@ -369,7 +364,7 @@ export function ChatConversationPanel({
   }, [agentMeta, showToast, setAgentPickerOpen]);
 
   const openModelPicker = useCallback(() => {
-    if (isModelLocked(agentMeta)) {
+    if (ChatAgentMeta.isModelLocked(agentMeta)) {
       showToast(MODEL_LOCK_TOAST);
       return;
     }

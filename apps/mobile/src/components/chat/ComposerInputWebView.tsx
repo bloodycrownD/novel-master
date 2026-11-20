@@ -13,46 +13,16 @@
  *
  * metrics 为挂载期静态参数（协议无 setMetrics）。
  */
-import React, {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {
-  Linking,
-  StyleSheet,
-  type NativeSyntheticEvent,
-  type StyleProp,
-  type TextInputSelectionChangeEventData,
-  type ViewStyle,
-} from 'react-native';
+import React, {forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
+import {Linking, StyleSheet, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type ViewStyle} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useTheme} from '@/theme/ThemeProvider';
-import {
-  getComposerInputPackageDirUri,
-  getComposerInputUri,
-} from '@/webview-host/composer-input/uri';
-import {
-  COMPOSER_INPUT_BRIDGE_VERSION,
-  decodeComposerInputToHost,
-  encodeHostToComposerInput,
-  type ComposerInputMetrics,
-  type ComposerInputMode,
-  type ComposerInputSelection,
-  type ComposerInputTheme,
-  type HostToComposerInputMessage,
-} from './ComposerInputBridge';
+import {COMPOSER_INPUT_WEBVIEW_PACKAGE_ID} from '@/webview-host/composer-input/uri';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
+import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge, type ComposerInputMetrics, type ComposerInputMode, type ComposerInputSelection, type ComposerInputTheme as ComposerInputThemeData, type HostToComposerInputMessage} from './ComposerInputBridge';
 
 /**
  * 高度台阶过渡时长：高度按行粒度跳（22px 一跳），80ms 的出缓动足够把「弹一下」
@@ -61,7 +31,7 @@ import {
  */
 const HEIGHT_TRANSITION_MS = 80;
 
-export type ComposerInputWebViewProps = {
+type ComposerInputWebViewProps = {
   /** 高亮分段来源：chat 链 token / 宏链白名单宏。 */
   readonly mode: ComposerInputMode;
   /** 外部真源文本（只为识别「外部变化」；打字真源在 web 侧）。 */
@@ -81,7 +51,7 @@ export type ComposerInputWebViewProps = {
    * 主题覆盖（宏壳 props.tokens 通道）；缺省用 useTheme() tokens 组装
    * （`primaryMuted = ${primary}22`，web 不做颜色计算）。
    */
-  readonly theme?: ComposerInputTheme | null;
+  readonly theme?: ComposerInputThemeData | null;
   readonly testID?: string;
   /** 容器样式；高度由宿主按 metrics 与 heightChange 管理，勿在此覆盖。 */
   readonly style?: StyleProp<ViewStyle>;
@@ -100,64 +70,41 @@ export type ComposerInputWebViewHandle = {
   blur: () => void;
 };
 
-/** 主题组装：tokens → 桥主题（胶囊 = primary 字 + primaryMuted 底）。 */
-export function themeFromTokens(tokens: ThemeTokens): ComposerInputTheme {
-  return {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    primaryMuted: `${tokens.primary}22`,
-    selection: tokens.selection,
-  };
+// 偏离登记：文件名 ComposerInputWebView 与组件同名，tsx helper namespace 不得撞组件名，
+// 按任务提示用主题主体名 ComposerInputTheme（与同名 type 值/类型空间分离共存）；
+// toNativeSelectionEvent 语义上属选区事件包装，随文件级 namespace 收容。
+export namespace ComposerInputTheme {
+  /** 主题组装：全量宿主主题（`hostThemeFromTokens`）取 composer 子集（胶囊 = primary 字 + primaryMuted 底）。 */
+  export function fromTokens(tokens: ThemeTokens): ComposerInputThemeData {
+    const {background, text, textSecondary, primary, primaryMuted, selection} = HostThemeMapping.fromTokens(tokens);
+    return {background, text, textSecondary, primary, primaryMuted, selection};
+  }
+
+  /**
+   * web 上报的选区 → RN 事件形状（`nativeEvent.selection`，ChatComposer 的 setCursor 链）。
+   *
+   * `TextInputSelectionChangeEventData` 的 target 等字段为 TextInput 专属，RN 侧两壳
+   * 只消费 `nativeEvent.selection`，这里按 main 版口径整体断言类型。
+   */
+  export function toNativeSelectionEvent(selection: ComposerInputSelection): NativeSyntheticEvent<TextInputSelectionChangeEventData> {
+    return {
+      nativeEvent: {
+        selection: {start: selection.start, end: selection.end},
+      },
+    } as NativeSyntheticEvent<TextInputSelectionChangeEventData>;
+  }
+
+  function finiteOrNull(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  function sameSelection(a: ComposerInputSelection | null, b: ComposerInputSelection | null): boolean {
+    return a != null && b != null && a.start === b.start && a.end === b.end;
+  }
 }
 
-/**
- * web 上报的选区 → RN 事件形状（`nativeEvent.selection`，ChatComposer 的 setCursor 链）。
- *
- * `TextInputSelectionChangeEventData` 的 target 等字段为 TextInput 专属，RN 侧两壳
- * 只消费 `nativeEvent.selection`，这里按 main 版口径整体断言类型。
- */
-export function toNativeSelectionEvent(
-  selection: ComposerInputSelection,
-): NativeSyntheticEvent<TextInputSelectionChangeEventData> {
-  return {
-    nativeEvent: {
-      selection: {start: selection.start, end: selection.end},
-    },
-  } as NativeSyntheticEvent<TextInputSelectionChangeEventData>;
-}
-
-function finiteOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function sameSelection(
-  a: ComposerInputSelection | null,
-  b: ComposerInputSelection | null,
-): boolean {
-  return a != null && b != null && a.start === b.start && a.end === b.end;
-}
-
-export const ComposerInputWebView = forwardRef<
-  ComposerInputWebViewHandle,
-  ComposerInputWebViewProps
->(function ComposerInputWebView(
-  {
-    mode,
-    value,
-    onChangeText,
-    onSelectionChange,
-    disabled = false,
-    selection = null,
-    metrics,
-    placeholder = '',
-    theme,
-    testID,
-    style,
-  },
-  ref,
-) {
+export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, ComposerInputWebViewProps>(function ComposerInputWebView(props, ref) {
+  const {mode, value, onChangeText, onSelectionChange, disabled = false, selection = null, metrics, placeholder = '', theme, testID, style} = props;
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
@@ -192,10 +139,7 @@ export const ComposerInputWebView = forwardRef<
   onChangeTextRef.current = onChangeText;
   onSelectionChangeRef.current = onSelectionChange;
 
-  const resolvedTheme = useMemo(
-    () => theme ?? themeFromTokens(tokens),
-    [theme, tokens],
-  );
+  const resolvedTheme = useMemo(() => theme ?? ComposerInputTheme.fromTokens(tokens), [theme, tokens]);
 
   /** init 是 ready 后一次性快照：取当拍值（此后变化各有专线消息）。 */
   const initSnapshotRef = useRef({
@@ -214,7 +158,7 @@ export const ComposerInputWebView = forwardRef<
   };
 
   const postToWeb = useCallback((message: HostToComposerInputMessage) => {
-    webRef.current?.postMessage(encodeHostToComposerInput(message));
+    webRef.current?.postMessage(composerInputBridge.encodeToClient(message));
   }, []);
 
   /** 高度落位：目标值进 state（测试/无障碍可见），视觉高度走缓动过渡。 */
@@ -234,43 +178,46 @@ export const ComposerInputWebView = forwardRef<
     [heightAV],
   );
 
-  const handleMessage = useCallback((event: WebViewMessageEvent) => {
-    let message: ReturnType<typeof decodeComposerInputToHost>;
-    try {
-      message = decodeComposerInputToHost(event.nativeEvent.data);
-    } catch {
-      // 坏信封（JSON 坏 / v 不符 / type 缺失）静默丢弃，对齐三域先例。
-      return;
-    }
-    if (message.type === 'ready') {
-      setWebReady(true);
-      return;
-    }
-    if (message.type === 'change') {
-      const text = String(message.payload.text ?? '');
-      // 打字真源在 web：只推进基线 + 上抛，绝不回写 setText。
-      webTextRef.current = text;
-      onChangeTextRef.current(text);
-      return;
-    }
-    if (message.type === 'selectionChange') {
-      const next = {
-        start: finiteOrNull(message.payload.start) ?? 0,
-        end: finiteOrNull(message.payload.end) ?? 0,
-      };
-      lastSelectionRef.current = next;
-      onSelectionChangeRef.current?.(next);
-      return;
-    }
-    if (message.type === 'heightChange') {
-      const height = finiteOrNull(message.payload.height);
-      if (height != null) {
-        applyHeight(height);
+  const handleMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      let message: ReturnType<typeof composerInputBridge.decodeToHost>;
+      try {
+        message = composerInputBridge.decodeToHost(event.nativeEvent.data);
+      } catch {
+        // 坏信封（JSON 坏 / v 不符 / type 缺失）静默丢弃，对齐三域先例。
+        return;
       }
-      return;
-    }
-    // focus / blur：键盘链路由 keyboard-controller insets 驱动，当前无消费，丢弃。
-  }, [applyHeight]);
+      if (message.type === 'ready') {
+        setWebReady(true);
+        return;
+      }
+      if (message.type === 'change') {
+        const text = String(message.payload.text ?? '');
+        // 打字真源在 web：只推进基线 + 上抛，绝不回写 setText。
+        webTextRef.current = text;
+        onChangeTextRef.current(text);
+        return;
+      }
+      if (message.type === 'selectionChange') {
+        const next = {
+          start: typeof message.payload.start === 'number' && Number.isFinite(message.payload.start) ? message.payload.start : 0,
+          end: typeof message.payload.end === 'number' && Number.isFinite(message.payload.end) ? message.payload.end : 0,
+        };
+        lastSelectionRef.current = next;
+        onSelectionChangeRef.current?.(next);
+        return;
+      }
+      if (message.type === 'heightChange') {
+        const height = typeof message.payload.height === 'number' && Number.isFinite(message.payload.height) ? message.payload.height : null;
+        if (height != null) {
+          applyHeight(height);
+        }
+        return;
+      }
+      // focus / blur：键盘链路由 keyboard-controller insets 驱动，当前无消费，丢弃。
+    },
+    [applyHeight],
+  );
 
   // init：ready 后一次（web 一切装配的入口）。
   useEffect(() => {
@@ -339,7 +286,7 @@ export const ComposerInputWebView = forwardRef<
     if (!webReady || selection == null) {
       return;
     }
-    if (sameSelection(lastSelectionRef.current, selection)) {
+    if (lastSelectionRef.current != null && lastSelectionRef.current.start === selection.start && lastSelectionRef.current.end === selection.end) {
       return;
     }
     const next = {start: selection.start, end: selection.end};
@@ -367,47 +314,44 @@ export const ComposerInputWebView = forwardRef<
     });
   }, [webReady, disabled, postToWeb]);
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      setText(text: string, nextSelection?: ComposerInputSelection | null) {
-        if (!webReady) {
-          // 未就绪不写基线：ready 后 value 差分 effect 会用最新 props 补齐全量写入。
-          return;
-        }
-        webTextRef.current = text;
-        if (nextSelection != null) {
-          lastSelectionRef.current = {
-            start: nextSelection.start,
-            end: nextSelection.end,
-          };
-        }
-        postToWeb({
-          v: COMPOSER_INPUT_BRIDGE_VERSION,
-          type: 'setText',
-          payload:
-            nextSelection == null
-              ? {text}
-              : {
-                  text,
-                  selectionStart: nextSelection.start,
-                  selectionEnd: nextSelection.end,
-                },
-        });
-      },
-      blur() {
-        if (!webReady) {
-          return;
-        }
-        postToWeb({
-          v: COMPOSER_INPUT_BRIDGE_VERSION,
-          type: 'blur',
-          payload: {},
-        });
-      },
-    }),
-    [webReady, postToWeb],
-  );
+  const createComposerHandle = () => ({
+    setText(text: string, nextSelection?: ComposerInputSelection | null) {
+      if (!webReady) {
+        // 未就绪不写基线：ready 后 value 差分 effect 会用最新 props 补齐全量写入。
+        return;
+      }
+      webTextRef.current = text;
+      if (nextSelection != null) {
+        lastSelectionRef.current = {
+          start: nextSelection.start,
+          end: nextSelection.end,
+        };
+      }
+      postToWeb({
+        v: COMPOSER_INPUT_BRIDGE_VERSION,
+        type: 'setText',
+        payload:
+          nextSelection == null
+            ? {text}
+            : {
+                text,
+                selectionStart: nextSelection.start,
+                selectionEnd: nextSelection.end,
+              },
+      });
+    },
+    blur() {
+      if (!webReady) {
+        return;
+      }
+      postToWeb({
+        v: COMPOSER_INPUT_BRIDGE_VERSION,
+        type: 'blur',
+        payload: {},
+      });
+    },
+  });
+  useImperativeHandle(ref, createComposerHandle, [webReady, postToWeb]);
 
   /**
    * 导航守卫（sec/D-1，照 code-editor）：只放行包目录内的 file:// 加载（初始
@@ -415,7 +359,7 @@ export const ComposerInputWebView = forwardRef<
    * 其余 scheme 一律拒绝。外部页面无法在 WebView 内落地，其伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getComposerInputPackageDirUri())) {
+    if (req.url.startsWith(WebviewAssetUri.getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -429,19 +373,16 @@ export const ComposerInputWebView = forwardRef<
   const unbounded = metrics.maxHeight == null;
 
   return (
-    <Animated.View
-      style={[unbounded ? styles.fill : animatedHeightStyle, style]}
-      testID={testID}
-    >
+    <Animated.View style={[unbounded ? styles.fill : animatedHeightStyle, style]} testID={testID}>
       <WebView
         ref={webRef}
         /* 背景透明：底色由 RN 容器给（web 侧 html/body 亦不上色）。 */
         style={styles.webview}
         originWhitelist={['file://']}
-        source={{uri: getComposerInputUri()}}
+        source={{uri: WebviewAssetUri.getWebViewPackageIndexUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getComposerInputPackageDirUri()}
+        allowingReadAccessToURL={WebviewAssetUri.getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onMessage={handleMessage}
         javaScriptEnabled

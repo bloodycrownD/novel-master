@@ -4,7 +4,9 @@
  * @module domain/chat/logic/attachment/prompt-path-seen
  */
 
-import {resolveLogicalPath} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {AppError} from "@/errors/app-error.js";
+import {Result} from "@/errors/either.js";
 
 /** 提示词 seen 路径命名空间（无实例状态）。 */
 export const promptPathSeen = {
@@ -14,16 +16,18 @@ export const promptPathSeen = {
         return trimmed.endsWith("/") || trimmed.endsWith("\\");
     },
 
-    /** 落库 / 短提示 XML 用 path：一律带前导 `/`；目录可选保留尾 `/`。 */
-    normalizeStore(path: string, options?: { readonly keepDirTrailingSlash?: boolean }): string {
+    /** 落库 / 短提示 XML 用 path：一律带前导 `/`；目录可选保留尾 `/`。
+     * 失败（`VFS_INVALID_PATH`）走返回值通道，由调用方接力决定（错误通道迁移四期门：throw x.error 清零）。
+     */
+    normalizeStore(path: string, options?: { readonly keepDirTrailingSlash?: boolean }): Result<string, AppError> {
         const keepSlash = options?.keepDirTrailingSlash === true;
         const isDir = this.isDirToken(path);
-        const seen = resolveLogicalPath(path);
-        if (!seen.ok) throw seen.error;
+        const seen = LogicalPath.resolve(path);
+        if (!seen.ok) return seen;
         if (keepSlash && isDir && seen.value !== "/") {
-            return `${seen.value}/`;
+            return Result.ok(`${seen.value}/`);
         }
-        return seen.value;
+        return Result.ok(seen.value);
     },
 
     /** 尝试规范化；非法 path 返回 `null`（不抛）。 */
@@ -31,7 +35,7 @@ export const promptPathSeen = {
         if (path.trim() === "") {
             return null;
         }
-        const seen = resolveLogicalPath(path);
+        const seen = LogicalPath.resolve(path);
         return seen.ok ? seen.value : null;
     },
 

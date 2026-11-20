@@ -3,19 +3,15 @@
  */
 import {type FillPolicy} from '@novel-master/core/workplace';
 
-/** Maps deprecated `full` to `hidden`; coalesces unknown values to `hidden`. */
-export function normalizeFillPolicyForMobile(
-  fillPolicy: FillPolicy | undefined,
-): FillPolicy {
-  if (fillPolicy === 'full') {
+export namespace FillPolicyMobile {
+  /** Maps deprecated `full` to `hidden`; coalesces unknown values to `hidden`. */
+  export function normalize(fillPolicy: FillPolicy | undefined): FillPolicy {
+    if (fillPolicy === 'full') {
+      return 'hidden';
+    }
+    if (fillPolicy === 'filename' || fillPolicy === 'header' || fillPolicy === 'hidden') {
+      return fillPolicy;
+    }
     return 'hidden';
   }
-  if (
-    fillPolicy === 'filename' ||
-    fillPolicy === 'header' ||
-    fillPolicy === 'hidden'
-  ) {
-    return fillPolicy;
-  }
-  return 'hidden';
 }

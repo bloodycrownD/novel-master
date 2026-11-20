@@ -58,7 +58,7 @@ export interface ToolResultBlock {
    * - `failureReason`：phase-1-abort-reflow 中断回流时，子 agent 被用户停止
    *   的失败原因文案，让 UI 能在卡片上提示「用户停止」而非笼统失败。
    * - `skillRef`：`skill` 的跳转三元组（domain/projectId/name）。read 缺省
-   *   域命中生效副本时实际命中域只有工具输出知道，由 `buildToolResultBlock`
+   *   域命中生效副本时实际命中域只有工具输出知道，由 `ToolResultBlock.build`
    *   从输出自动检测透传到这里；write/edit 必含于 tool_use 输入，UI 侧照
    *   `resolveSkillToolRefFromInput` 解析即可。
    */

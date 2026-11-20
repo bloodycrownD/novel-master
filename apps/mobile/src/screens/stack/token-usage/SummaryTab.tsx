@@ -1,20 +1,11 @@
 import React, {useMemo} from 'react';
 import {Text, View} from 'react-native';
-import type {
-  UsageStatsModelRow,
-  UsageStatsSummary,
-} from '@novel-master/core/chat';
-import {formatTokenCount} from '@novel-master/core/common';
+import type {UsageStatsModelRow, UsageStatsSummary} from '@novel-master/core/chat';
+import {TokenFormat} from '@novel-master/core/common';
 import {PieChart} from '../../../components/charts/PieChart';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
-import {
-  SUMMARY_EMPTY_TEXT,
-  formatFirstTokenMs,
-  formatHitRate,
-  formatTokensPerSecond,
-  hitRate,
-} from './format';
+import {SUMMARY_EMPTY_TEXT, UsageStats} from './format';
 import {styles} from './styles';
 
 /** 汇总页签指标小卡：half 两列一行（默认），third 三列一行（输入/输出/命中率）。 */
@@ -34,24 +25,9 @@ function SummaryTile({
   testID?: string;
 }) {
   return (
-    <View
-      testID={testID}
-      style={[
-        styles.tile,
-        layout === 'third' && styles.tileThird,
-        {backgroundColor: tokens.surface},
-      ]}
-    >
-      <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
-        {label}
-      </Text>
-      <Text
-        style={[
-          styles.tileValue,
-          {color: tone === 'success' ? tokens.success : tokens.text},
-        ]}
-        numberOfLines={1}
-      >
+    <View testID={testID} style={[styles.tile, layout === 'third' && styles.tileThird, {backgroundColor: tokens.surface}]}>
+      <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>{label}</Text>
+      <Text style={[styles.tileValue, {color: tone === 'success' ? tokens.success : tokens.text}]} numberOfLines={1}>
         {value}
       </Text>
     </View>
@@ -84,9 +60,7 @@ export function SummaryTab({
       [...modelRows]
         .sort((a, b) => b.totalTokens - a.totalTokens)
         .map(row => ({
-          key: `${row.providerId ?? '__np__'}::${
-            row.modelName ?? '__unlogged__'
-          }`,
+          key: `${row.providerId ?? '__np__'}::${row.modelName ?? '__unlogged__'}`,
           // label 三态：未记录服务商兜 provider_id IS NULL 的合并行（core
           // 已归并为单行，不拼模型后缀）；名称解析不到兑底「未知服务
           // 商」；modelName 为 null 归「{服务商}/其他模型」（斜杠格式与
@@ -96,9 +70,7 @@ export function SummaryTab({
               ? '未记录服务商'
               : row.modelName == null
               ? `${providerLabels[row.providerId] ?? '未知服务商'}/其他模型`
-              : `${providerLabels[row.providerId] ?? '未知服务商'}/${
-                  row.modelName
-                }`,
+              : `${providerLabels[row.providerId] ?? '未知服务商'}/${row.modelName}`,
           totalTokens: row.totalTokens,
           calls: row.calls,
         })),
@@ -109,77 +81,29 @@ export function SummaryTab({
     <>
       <ListSectionTitle title={`总览 · ${rangeLabel}`} tokens={tokens} />
       <View style={styles.summaryGrid}>
-        <SummaryTile
-          testID="summary-metric-total"
-          label="总 token"
-          value={formatTokenCount(summary?.totalTokens ?? 0)}
-          tokens={tokens}
-        />
-        <SummaryTile
-          testID="summary-metric-calls"
-          label="调用次数"
-          value={String(summary?.calls ?? 0)}
-          tokens={tokens}
-        />
+        <SummaryTile testID="summary-metric-total" label="总 token" value={TokenFormat.count(summary?.totalTokens ?? 0)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-calls" label="调用次数" value={String(summary?.calls ?? 0)} tokens={tokens} />
         {/* 平均速率/首字延迟上移为第二行两卡（用户拍板 2026-09-28 重排）；
             无有效行为 null → 空态横杠而非 0 */}
-        <SummaryTile
-          testID="summary-metric-avgTokensPerSecond"
-          label="平均速率"
-          value={formatTokensPerSecond(
-            summary?.avgTokensPerSecond ?? null,
-            SUMMARY_EMPTY_TEXT,
-          )}
-          tokens={tokens}
-        />
-        <SummaryTile
-          testID="summary-metric-avgFirstTokenMs"
-          label="平均首字延迟"
-          value={formatFirstTokenMs(
-            summary?.avgFirstTokenMs ?? null,
-            SUMMARY_EMPTY_TEXT,
-          )}
-          tokens={tokens}
-        />
+        <SummaryTile testID="summary-metric-avgTokensPerSecond" label="平均速率" value={UsageStats.formatTokensPerSecond(summary?.avgTokensPerSecond ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-avgFirstTokenMs" label="平均首字延迟" value={UsageStats.formatFirstTokenMs(summary?.avgFirstTokenMs ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
       </View>
       {/* 输入/输出/命中率下移为第三行三卡一行（31% 列）；marginTop 补与
           上半卡行的垂直间距 */}
       <View style={[styles.summaryGrid, styles.tileThirdRow]}>
-        <SummaryTile
-          testID="summary-metric-input"
-          label="输入"
-          value={formatTokenCount(summary?.promptTokens ?? 0)}
-          layout="third"
-          tokens={tokens}
-        />
-        <SummaryTile
-          testID="summary-metric-output"
-          label="输出"
-          value={formatTokenCount(summary?.completionTokens ?? 0)}
-          layout="third"
-          tokens={tokens}
-        />
+        <SummaryTile testID="summary-metric-input" label="输入" value={TokenFormat.count(summary?.promptTokens ?? 0)} layout="third" tokens={tokens} />
+        <SummaryTile testID="summary-metric-output" label="输出" value={TokenFormat.count(summary?.completionTokens ?? 0)} layout="third" tokens={tokens} />
         <SummaryTile
           testID="summary-metric-hitRate"
           label="命中率"
-          value={formatHitRate(
-            hitRate(
-              summary?.cacheReadTokens ?? 0,
-              summary?.billedInputTokens ?? 0,
-            ),
-          )}
+          value={UsageStats.formatHitRate(UsageStats.hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0))}
           tone="success"
           layout="third"
           tokens={tokens}
         />
       </View>
       <ListSectionTitle title="分服务商×模型汇总" tokens={tokens} />
-      <PieChart
-        testID="provider-model-pie"
-        data={pieData}
-        totalTokens={summary?.totalTokens ?? 0}
-        tokens={tokens}
-      />
+      <PieChart testID="provider-model-pie" data={pieData} totalTokens={summary?.totalTokens ?? 0} tokens={tokens} />
     </>
   );
 }

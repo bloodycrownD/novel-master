@@ -9,24 +9,20 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
-import {
-  type LlmChatRequest,
-  type LlmChatResult,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { SimpleEventBus } from "@novel-master/core/events";
+import {  describe, it, mock  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  BuiltinTools, ToolRegistry, type BuiltinToolContext  } from "@novel-master/core";
+import {  type LlmChatRequest, type  ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
+import {  SimpleEventBus  } from "@novel-master/core/events";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
@@ -117,10 +113,10 @@ function installFakeClock(): { clock: { now: number }; restore: () => void } {
 function makeRunner(
   session: InMemoryAgentSession,
   model: ModelRequestService,
-): ReturnType<typeof createAgentRunner> {
+): ReturnType<typeof AgentServiceFactory.createRunner> {
   const registry = new ToolRegistry();
-  registerBuiltinTools(registry);
-  return createAgentRunner(
+  BuiltinTools.register(registry);
+  return AgentServiceFactory.createRunner(
     runnerDeps({
       session,
       modelRequests: model,
@@ -135,7 +131,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
     const { clock, restore } = installFakeClock();
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      await session.append("user", TextBlocks.of("go"));
 
       const model: ModelRequestService = {
         request: async (_id, _prompt, req: LlmChatRequest) => {
@@ -152,18 +148,18 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
             raw: {},
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
           };
-          return result;
+          return Result.ok(result);
         },
       };
 
       const runner = makeRunner(session, model);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition: minimalDefinition(),
         stream: true,
         onStream: () => {},
         ...defaultRunScope,
-      });
+      }));
 
       assert.equal(result.stopReason, "completed");
       const msgs = await session.list();
@@ -184,27 +180,27 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
     const { clock, restore } = installFakeClock();
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      await session.append("user", TextBlocks.of("go"));
 
       const model: ModelRequestService = {
         request: async (_id, _prompt, _req: LlmChatRequest) => {
           const started = Date.now();
           clock.now = started + 1800;
-          return {
+          return Result.ok({
             assistantText: "hi",
             blocks: [{ type: "text", text: "hi" }],
             raw: {},
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         },
       };
 
       const runner = makeRunner(session, model);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition: minimalDefinition(),
         ...defaultRunScope,
-      });
+      }));
 
       assert.equal(result.stopReason, "completed");
       const msgs = await session.list();
@@ -225,7 +221,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
     const { clock, restore } = installFakeClock();
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      await session.append("user", TextBlocks.of("go"));
 
       const controller = new AbortController();
       const model: ModelRequestService = {
@@ -234,22 +230,22 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
           // 请求进行中 abort，但 request 正常返回（post-model abort 路径）
           controller.abort();
           clock.now = started + 900;
-          return {
+          return Result.ok({
             assistantText: "partial",
             blocks: [{ type: "text", text: "partial" }],
             raw: {},
             // 无 usage：断言 usage 仅含两个耗时字段
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         },
       };
 
       const runner = makeRunner(session, model);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 2,
         definition: minimalDefinition(),
-        signal: controller.signal,
+        scope: AbortScopeFactory.create({ controller }),
         ...defaultRunScope,
-      });
+      }));
 
       assert.equal(result.stopReason, "cancelled");
       const msgs = await session.list();

@@ -23,20 +23,6 @@ export function ChatTabIcon({color, size = 24}: IconProps) {
   );
 }
 
-export function AgentTabIcon({color, size = 24}: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 export function ProfileTabIcon({color, size = 24}: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -131,58 +117,6 @@ export function MenuIcon({color, size = 22}: IconProps) {
   );
 }
 
-/** 列表管理（技能面板右上角）：三行条目 + 右侧滑块，区别于菜单汉堡。 */
-export function ManageListIcon({color, size = 22}: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Line
-        x1={4}
-        y1={6}
-        x2={12}
-        y2={6}
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={4}
-        y1={12}
-        x2={12}
-        y2={12}
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={4}
-        y1={18}
-        x2={12}
-        y2={18}
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={16.5}
-        y1={4.5}
-        x2={16.5}
-        y2={19.5}
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-      <Circle
-        cx={14}
-        cy={9}
-        r={2.6}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-      />
-    </Svg>
-  );
-}
-
 /** 帮助（问号圆圈）：标题栏帮助入口，区别于菜单汉堡。 */
 export function HelpIcon({color, size = 22}: IconProps) {
   return (
@@ -268,36 +202,6 @@ export function SyncPushIcon({color, size = 22}: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 15V3M8 7l4-4 4 4M5 21h14"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** Export current worktree as ZIP. */
-export function ZipExportIcon({color, size = 22}: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M8 17H6a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-2M12 12v7M9 16l3 3 3-3"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** Import ZIP to replace current worktree files. */
-export function ZipImportIcon({color, size = 22}: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M8 17H6a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-2M12 19V12M9 15l3-3 3 3"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"

@@ -5,20 +5,23 @@
  * v1.5.41 同批；本文件只测读路径）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { __getVfsPackDecodeCountersForTests, __resetVfsPackDecodeCountersForTests, decodeFossilChainSpans, decodeZlibConcatSpans, encodeFossilChainPack, encodeZlibConcatPack, parseFossilSegmentTable, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat } from "@/domain/vfs/content-store/logic/pack-codec.js";
-import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { compressZlib } from "@/domain/vfs/content-store/logic/zlib-codec.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
-import type { Result } from "@/errors/either.js";
-import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
+import {  describe, it  } from "node:test";
+import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {  PackCodec, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat  } from "@/domain/vfs/content-store/logic/pack-codec.js";
+import {  encodeFossilChainPack, encodeZlibConcatPack  } from "../helpers/pack-fixtures.js";
+import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import {  ZlibCodec  } from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES  } from "@/domain/character-card/logic/character-card-limits.js";
+import {  Result  } from "@/errors/either.js";
+import {  AppError  } from "@/errors/app-error.js";
+import {  FileCache  } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
 import type { TdbcConnection } from "@novel-master/core";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -72,8 +75,8 @@ async function insertPackRows(conn: TdbcConnection, entryId: number, format: Vfs
   for (let index = 0; index < utf8s.length; index++) {
     const plain = plains[index]!;
     const span = encoded.spans[index]!;
-    const contentHash = hashContent(plain);
-    const compressedByteLen = compressZlib(utf8s[index]!).byteLength;
+    const contentHash = ContentHash.hash(plain);
+    const compressedByteLen = ZlibCodec.compress(utf8s[index]!).byteLength;
     await conn.execute(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
        VALUES (?, ?, ?, ?, ?)`,
@@ -204,11 +207,11 @@ function forgedOversizeDelta(declaredLimit: number, sourceLength: number, copyCo
 
 /**
  * 手工拼一条两段 fossil pack 流（段 0 = zlib(正常 base 明文)，段 1 = zlib(伪造
- * 超限 delta)），返回流字节 + 段 1 的区间（供 `decodeFossilChainSpans` 作 span）。
+ * 超限 delta)），返回流字节 + 段 1 的区间（供 `PackCodec.decodeFossilChainSpans` 作 span）。
  */
 function buildTwoSegmentFossilPack(basePlain: Uint8Array, segment1Plain: Uint8Array): { bytes: Uint8Array; segment1Span: { offset: number; length: number } } {
-  const segment0 = compressZlib(basePlain);
-  const segment1 = compressZlib(segment1Plain);
+  const segment0 = ZlibCodec.compress(basePlain);
+  const segment1 = ZlibCodec.compress(segment1Plain);
   const header = new Uint8Array(4 + 4 * 2);
   const headerView = new DataView(header.buffer);
   headerView.setUint32(0, 2, true);
@@ -254,7 +257,7 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     const corpus = buildCorpus();
     const { bytes, spans } = unwrapResult(encodeFossilChainPack(corpus));
 
-    const table = unwrapResult(parseFossilSegmentTable(bytes));
+    const table = unwrapResult(PackCodec.parseFossilSegmentTable(bytes));
     assert.equal(table.segmentCount, corpus.length);
     assert.equal(table.segments.length, corpus.length);
 
@@ -276,28 +279,28 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
       assert.deepEqual(spans[i], table.segments[i]);
     }
     // 段 0 = zlib(首成员明文全量)（可独立重算验证，无实现自证）。
-    assert.equal(table.segments[0]!.length, compressZlib(corpus[0]!).byteLength);
+    assert.equal(table.segments[0]!.length, ZlibCodec.compress(corpus[0]!).byteLength);
   });
 
   it("逐层 apply 后明文与原件逐字节全等（整组 + 单成员取中间段）", () => {
     const corpus = buildCorpus();
     const { bytes, spans } = unwrapResult(encodeFossilChainPack(corpus));
 
-    const all = unwrapResult(decodeFossilChainSpans(bytes, spans));
+    const all = unwrapResult(PackCodec.decodeFossilChainSpans(bytes, spans));
     assert.equal(all.length, corpus.length);
     for (let i = 0; i < corpus.length; i++) {
       assert.ok(bytesEqual(all[i]!, corpus[i]!), `成员 ${i} 应与原件逐字节全等`);
     }
 
     // 单成员取中间段（段 2）：解段 0 → 沿链 apply 两次。
-    const alone = unwrapResult(decodeFossilChainSpans(bytes, [spans[2]!]))[0]!;
+    const alone = unwrapResult(PackCodec.decodeFossilChainSpans(bytes, [spans[2]!]))[0]!;
     assert.ok(bytesEqual(alone, corpus[2]!));
   });
 
   it("zlib-concat 回环：整组一次解压 + 明文切片逐字节全等", () => {
     const corpus = buildCorpus();
     const { bytes, spans } = unwrapResult(encodeZlibConcatPack(corpus));
-    const decoded = unwrapResult(decodeZlibConcatSpans(bytes, spans));
+    const decoded = unwrapResult(PackCodec.decodeZlibConcatSpans(bytes, spans));
     for (let i = 0; i < corpus.length; i++) {
       assert.ok(bytesEqual(decoded[i]!, corpus[i]!));
     }
@@ -308,16 +311,16 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
 
     const fossil = unwrapResult(encodeFossilChainPack(corpus));
     // 流截断 1 字节：段长合计与流长不符。
-    expectResultError(parseFossilSegmentTable(fossil.bytes.subarray(0, fossil.bytes.byteLength - 1)), /段表与流长不符/);
+    expectResultError(PackCodec.parseFossilSegmentTable(fossil.bytes.subarray(0, fossil.bytes.byteLength - 1)), /段表与流长不符/);
     // offset 界内但不在段表（headerLength-1 必小于首段 offset）。
-    const table = unwrapResult(parseFossilSegmentTable(fossil.bytes));
-    expectResultError(decodeFossilChainSpans(fossil.bytes, [{ offset: 4 + 4 * table.segmentCount - 1, length: 1 }]), /member offset 与段表不符/);
+    const table = unwrapResult(PackCodec.parseFossilSegmentTable(fossil.bytes));
+    expectResultError(PackCodec.decodeFossilChainSpans(fossil.bytes, [{ offset: 4 + 4 * table.segmentCount - 1, length: 1 }]), /member offset 与段表不符/);
 
     // —— pbp-19：段表防御分支四条 + 「段表长度区不完整」，逐条钉错误文案 ——
     // 判据钉文案而不是「只要 Err 就算过」：byteLength<4 那条若把闸门删掉，
     // DataView.getUint32 越界同样会抛 RangeError；只断言失败会成恒绿。
     // 1) 流短到连段数头都读不到。
-    expectResultError(parseFossilSegmentTable(new Uint8Array(3)), /连段数头都读不到/);
+    expectResultError(PackCodec.parseFossilSegmentTable(new Uint8Array(3)), /连段数头都读不到/);
 
     /** 复制一份可写流字节并改写段数（不污染 encode 产物本体）。 */
     const withSegmentCount = (bytes: Uint8Array, count: number): Uint8Array => {
@@ -327,40 +330,40 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     };
 
     // 2) 段数置 0：进段长累加前先被「段数为 0」拦。
-    expectResultError(parseFossilSegmentTable(withSegmentCount(fossil.bytes, 0)), /段表段数为 0/);
+    expectResultError(PackCodec.parseFossilSegmentTable(withSegmentCount(fossil.bytes, 0)), /段表段数为 0/);
 
     // 3) 段数置 0xFFFFFFFF：headerLength 溢出到 ~17GB，闸门必须在**按段数分配
     //    段数组之前**拦下——同一步断言堆增量 <20MB，证明没有巨大分配。
     const heapBefore = process.memoryUsage().heapUsed;
-    expectResultError(parseFossilSegmentTable(withSegmentCount(fossil.bytes, 0xffffffff)), /段表长度区不完整/);
+    expectResultError(PackCodec.parseFossilSegmentTable(withSegmentCount(fossil.bytes, 0xffffffff)), /段表长度区不完整/);
     const heapDeltaBytes = process.memoryUsage().heapUsed - heapBefore;
     assert.ok(heapDeltaBytes < 20 * 1024 * 1024, `段数闸门应在分配段数组之前拦下，堆增量应 <20MB，实际 ${(heapDeltaBytes / 1024 / 1024).toFixed(1)}MB`);
 
     // 4) offset 对、length 不符：不得被「offset 命中段表」蒙混过去。
-    expectResultError(decodeFossilChainSpans(fossil.bytes, [{ offset: table.segments[1]!.offset, length: table.segments[1]!.length - 1 }]), /member length 与段表不符/);
+    expectResultError(PackCodec.decodeFossilChainSpans(fossil.bytes, [{ offset: table.segments[1]!.offset, length: table.segments[1]!.length - 1 }]), /member length 与段表不符/);
 
     // 5) 段表长度区不完整：段数头读得到、N×4B 段长区读不全（流只剩头 4 字节）。
-    expectResultError(parseFossilSegmentTable(fossil.bytes.subarray(0, 4)), /段表长度区不完整/);
+    expectResultError(PackCodec.parseFossilSegmentTable(fossil.bytes.subarray(0, 4)), /段表长度区不完整/);
 
     const concat = unwrapResult(encodeZlibConcatPack(corpus));
     // 切片长度越过解压后明文总长。
     const totalPlain = corpus.reduce((sum, p) => sum + p.byteLength, 0);
-    expectResultError(decodeZlibConcatSpans(concat.bytes, [{ offset: 0, length: totalPlain + 1 }]), /member 区间越界/);
+    expectResultError(PackCodec.decodeZlibConcatSpans(concat.bytes, [{ offset: 0, length: totalPlain + 1 }]), /member 区间越界/);
   });
 
   it("空 spans 短路：zlib-concat 空 spans 返回 [] 且不计 zlibConcatInflates（pbp-15）", () => {
     const corpus = buildCorpus();
     const concat = unwrapResult(encodeZlibConcatPack(corpus));
 
-    __resetVfsPackDecodeCountersForTests();
-    const decoded = unwrapResult(decodeZlibConcatSpans(concat.bytes, []));
+    PackCodec.__resetDecodeCountersForTests();
+    const decoded = unwrapResult(PackCodec.decodeZlibConcatSpans(concat.bytes, []));
     assert.deepEqual(decoded, [], "空 spans 应直接返回空数组");
     // 恒红判据：空 spans 还要整组解压就是白做，且污染「整组只解压一次」这条断言
     // （T-VP15 钉的 zlibConcatInflates===1 会因此失真）。删掉短路本句必红。
-    assert.equal(__getVfsPackDecodeCountersForTests().zlibConcatInflates, 0, "空 spans 不应触发任何整组解压");
+    assert.equal(PackCodec.__getDecodeCountersForTests().zlibConcatInflates, 0, "空 spans 不应触发任何整组解压");
     // 非空 spans 仍照旧计一次（顺带证明上面的 0 不是探针坏了）。
-    assert.equal(unwrapResult(decodeZlibConcatSpans(concat.bytes, [concat.spans[0]!])).length, 1);
-    assert.equal(__getVfsPackDecodeCountersForTests().zlibConcatInflates, 1);
+    assert.equal(unwrapResult(PackCodec.decodeZlibConcatSpans(concat.bytes, [concat.spans[0]!])).length, 1);
+    assert.equal(PackCodec.__getDecodeCountersForTests().zlibConcatInflates, 1);
   });
 
   it("段级错误包装：段 2 的 deflate 数据体中段翻 1 字节 → 报错同时含「段 2」与「inflate 失败」（pbp-16）", () => {
@@ -377,7 +380,7 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     // 夹具自检：翻的位置确实落在段 2 数据体内（不在段表、不在流尾 adler32）。
     assert.ok(flipAt > segment2.offset && flipAt < segment2.offset + segment2.length - 4, `翻转位置应落在段 2 deflate 数据体中段，实际 ${flipAt}（段区间 ${segment2.offset}..${segment2.offset + segment2.length}）`);
 
-    const error = expectResultError(decodeFossilChainSpans(corrupt, [segment2]), /段 2/);
+    const error = expectResultError(PackCodec.decodeFossilChainSpans(corrupt, [segment2]), /段 2/);
     // 两层上下文缺一不可：段号（哪一段）+ 阶段（解不开 vs apply 炸）。
     assert.match(error.message, /inflate 失败/);
     // 底层原因随文案带出（不再只有裸 `invalid zlib data`）。
@@ -397,7 +400,7 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     assert.ok(segment1Span.length < 2048, `伪造坏段压缩后应仅数百字节，实际 ${segment1Span.length}`);
 
     const heapBefore = process.memoryUsage().heapUsed;
-    const error = expectResultError(decodeFossilChainSpans(bytes, [segment1Span]), /超过上限/);
+    const error = expectResultError(PackCodec.decodeFossilChainSpans(bytes, [segment1Span]), /超过上限/);
     assert.match(error.message, /段 1/);
     const heapDeltaBytes = process.memoryUsage().heapUsed - heapBefore;
     assert.ok(heapDeltaBytes < 50 * 1024 * 1024, `闸门应在 apply 之前拦下，堆增量应 <50MB，实际 ${(heapDeltaBytes / 1024 / 1024).toFixed(1)}MB`);
@@ -420,8 +423,8 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const pA = plainChunk(`pack-a`, suffix, 120);
     const pB = plainChunk(`pack-b`, suffix, 90);
     const pHead = plainChunk(`pack-head`, suffix, 60);
-    const hA = hashContent(pA);
-    const hB = hashContent(pB);
+    const hA = ContentHash.hash(pA);
+    const hB = ContentHash.hash(pB);
     const hHead = await store.put(pHead);
 
     const pathPack = `/tvp1/pack-${suffix}.md`;
@@ -435,17 +438,17 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const pack = await insertPackRows(conn, entryIdPack, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, [pA, pB]);
     await conn.execute(`DELETE FROM vfs_content_blob WHERE content_hash IN (?, ?)`, [hA, hB]);
 
-    assert.equal(await store.get(hA), pA);
-    assert.equal(await store.get(hB), pB);
-    assert.equal(await store.get(hHead), pHead, "head 仍走 blob 原路径");
+    assert.equal(unwrapResult(await store.get(hA)), pA);
+    assert.equal(unwrapResult(await store.get(hB)), pB);
+    assert.equal(unwrapResult(await store.get(hHead)), pHead, "head 仍走 blob 原路径");
     // 一 hash 一 member 行（主键保证）；重复 hash 不产生第二行。
     assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?`, [pack.packId]), 2);
 
     // —— fossil 组：三版本链（局部修改 + 追加），head 独立保留 blob ——
     const [f0, f1, f2] = fossilVersions(suffix);
-    const hf0 = hashContent(f0);
-    const hf1 = hashContent(f1);
-    const hf2 = hashContent(f2);
+    const hf0 = ContentHash.hash(f0);
+    const hf1 = ContentHash.hash(f1);
+    const hf2 = ContentHash.hash(f2);
     const pHeadF = plainChunk(`fossil-head`, suffix, 40);
     const hHeadF = await store.put(pHeadF);
 
@@ -460,13 +463,13 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     await insertPackRows(conn, entryIdFossil, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, [f0, f1, f2]);
     await conn.execute(`DELETE FROM vfs_content_blob WHERE content_hash IN (?, ?, ?)`, [hf0, hf1, hf2]);
 
-    assert.equal(await store.get(hf0), f0);
-    assert.equal(await store.get(hf1), f1);
-    assert.equal(await store.get(hf2), f2);
-    assert.equal(await store.get(hHeadF), pHeadF);
+    assert.equal(unwrapResult(await store.get(hf0)), f0);
+    assert.equal(unwrapResult(await store.get(hf1)), f1);
+    assert.equal(unwrapResult(await store.get(hf2)), f2);
+    assert.equal(unwrapResult(await store.get(hHeadF)), pHeadF);
 
     // 混组批量读回（getMany 的 member 聚合路径）。
-    const many = await store.getMany([hA, hB, hHead, hf0, hf1, hf2, hHeadF]);
+    const many = unwrapResult(await store.getMany([hA, hB, hHead, hf0, hf1, hf2, hHeadF]));
     assert.equal(many.size, 7);
     assert.equal(many.get(hA), pA);
     assert.equal(many.get(hB), pB);
@@ -503,8 +506,8 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     // live head 永不被打包的读侧体现：blob 表始终有 head 行、get 命中即返回。
     assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`, [hHead]), 1);
 
-    assert.equal(await store.get(hHead), pHead);
-    assert.equal((await store.getMany([hHead])).get(hHead), pHead);
+    assert.equal(unwrapResult(await store.get(hHead)), pHead);
+    assert.equal(unwrapResult(await store.getMany([hHead])).get(hHead), pHead);
   });
 
   it("T-VP4: GC 语义——无引用 pack 回收 / 成员被引用整包保留 / 孤儿 member 回收 / ref_count 触发器互不干扰", async () => {
@@ -601,7 +604,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     assert.equal(await store.ensureBlob(members[0]!.contentHash, null), members[0]!.contentHash);
     assert.equal(await store.ensureBlob(members[1]!.contentHash, null), members[1]!.contentHash);
 
-    const hMissing = hashContent(`tvp5-missing-${suffix}`);
+    const hMissing = ContentHash.hash(`tvp5-missing-${suffix}`);
     const existing = await store.findExistingBlobHashes([members[0]!.contentHash, members[1]!.contentHash, hMissing]);
     assert.equal(existing.size, 2);
     assert.ok(existing.has(members[0]!.contentHash));
@@ -621,7 +624,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     // 直接填合法值即可。
     const [f0] = fossilVersions(suffix);
     const { packId } = await insertPackRows(conn, /* entryId 无引用语义，占位即可 */ 987654322, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, [f0]);
-    const bulkHashes = Array.from({ length: 500 }, (_, index) => hashContent(`tvp5b-bulk-${suffix}-${index}`));
+    const bulkHashes = Array.from({ length: 500 }, (_, index) => ContentHash.hash(`tvp5b-bulk-${suffix}-${index}`));
     await conn.batch(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
        VALUES (?, ?, ?, ?, ?)`,
@@ -653,7 +656,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
     // 再加 1 个真缺失的 hash → 逼出第二条（长度为 1 的）chunk 语句，两条都 ≤500。
     probe.statements.length = 0;
-    const hMissing = hashContent(`tvp5b-missing-${suffix}`);
+    const hMissing = ContentHash.hash(`tvp5b-missing-${suffix}`);
     const mixed = await store.findExistingBlobHashes([...bulkHashes, hMissing]);
     assert.equal(mixed.size, 500);
     assert.ok(!mixed.has(hMissing), "真缺失的 hash 不得误报已存在（互斥）");
@@ -685,7 +688,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
     const pathFossil = `/tvp6/fossil-${suffix}.md`;
     await entryRepo.insertWithContentHash(sk, pathFossil, member2.contentHash);
-    const sizeFossil = await entryRepo.findContentSizeByPath(sk, pathFossil);
+    const sizeFossil = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathFossil));
     assert.ok(sizeFossil != null);
     assert.equal(sizeFossil!.kind, "blobCompressedBytes");
     assert.equal(sizeFossil!.size, member2.compressedByteLen, "应返回原 blob 行 byte_len 的复制值（非 delta 段长）");
@@ -693,7 +696,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     // blob 行存在时优先 blob：byte_len 取 X、member 造 Y≠X 的垃圾值，实现必须读 X。
     const pBoth = plainChunk(`both`, suffix, 50);
     const hBoth = await store.put(pBoth);
-    const bothByteLen = compressZlib(new TextEncoder().encode(pBoth)).byteLength;
+    const bothByteLen = ZlibCodec.compress(new TextEncoder().encode(pBoth)).byteLength;
     const { packId } = await insertPackRows(conn, 987654321, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, [plainChunk(`filler`, suffix, 5)]);
     await conn.execute(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
@@ -702,15 +705,15 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     );
     const pathBoth = `/tvp6/both-${suffix}.md`;
     await entryRepo.insertWithContentHash(sk, pathBoth, hBoth);
-    const sizeBoth = await entryRepo.findContentSizeByPath(sk, pathBoth);
+    const sizeBoth = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathBoth));
     assert.ok(sizeBoth != null);
     assert.equal(sizeBoth!.size, bothByteLen, "blob 行存在时不得回退 member");
 
     // 真 hash 无 blob 亦无 member → 维持 null（探测不到）。
     const pathGhost = `/tvp6/ghost-${suffix}.md`;
-    const hGhost = hashContent(`tvp6-ghost-${suffix}`);
+    const hGhost = ContentHash.hash(`tvp6-ghost-${suffix}`);
     await entryRepo.insertWithContentHash(sk, pathGhost, hGhost);
-    assert.equal(await entryRepo.findContentSizeByPath(sk, pathGhost), null);
+    assert.equal(unwrapResult(await entryRepo.findContentSizeByPath(sk, pathGhost)), null);
   });
 
   // T-VP6 的后半句（pbp-13）：member 回退值必须恒等于「被替换 blob 行的byte_len
@@ -753,12 +756,12 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     await entryRepo.insertWithContentHash(sk, pathUnder, hashUnder);
 
     // —— 探测层：回退值口径（承 T-VP6，这里落在超限侧）——
-    const sizeOver = await entryRepo.findContentSizeByPath(sk, pathOver);
+    const sizeOver = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathOver));
     assert.ok(sizeOver != null);
     assert.equal(sizeOver!.kind, "blobCompressedBytes");
     assert.equal(sizeOver!.size, overBytes, "member 回退值必须是 compressed_byte_len（不是段长）");
     assert.ok(sizeOver!.size > gate, "超限组必须真的过闸门");
-    const sizeUnder = await entryRepo.findContentSizeByPath(sk, pathUnder);
+    const sizeUnder = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathUnder));
     assert.ok(sizeUnder != null);
     assert.equal(sizeUnder!.size, memberUnder!.compressedByteLen);
     assert.ok(sizeUnder!.size <= gate, `对照组不得超闸门（实测 ${sizeUnder!.size} vs ${gate}）`);
@@ -773,22 +776,22 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
       },
       async read(target: string) {
         readCalls += 1;
-        const entry = await entryRepo.findByPath(sk, target);
+        const entry = unwrapResult(await entryRepo.findByPath(sk, target));
         if (entry == null) {
-          throw new Error(`vfs_not_found: ${target}`);
+          return Result.err(new AppError("VFS_NOT_FOUND", { path: target }));
         }
-        return {
+        return Result.ok({
           path: target,
           content: entry.content,
           version: entry.version,
           mtimeMs: entry.mtimeMs,
-        };
+        });
       },
     } as unknown as VfsService;
 
     const sessionId = `tvp6b-${suffix}`;
     const sessionKkv = createMemorySessionKkv();
-    const placeholder = await loadOrFillFileCache({
+    const placeholder = await FileCache.loadOrFill({
       sessionId,
       sessionKkv,
       vfs,
@@ -797,9 +800,9 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     });
     assert.equal(placeholder.body, `（文件过大，已跳过，约 ${overBytes * 4} 字符）`, "member 形态的超限文件必须走占位（数字取compressed_byte_len 的 4× 折算）");
     assert.equal(readCalls, 0, "超限组不得触发全文读取");
-    assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", pathOver)), null, "占位结果不得写进 file_cache");
+    assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", pathOver)), null, "占位结果不得写进 file_cache");
 
-    const under = await loadOrFillFileCache({
+    const under = await FileCache.loadOrFill({
       sessionId,
       sessionKkv,
       vfs,
@@ -814,15 +817,11 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const suffix = testIsolationSuffix();
-    const hGhost = hashContent(`no-blob-no-member-${suffix}`);
-    await assert.rejects(
-      () => store.get(hGhost),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.equal(error.message, `vfs_content_blob 缺失: ${hGhost}`);
-        return true;
-      }
-    );
+    const hGhost = ContentHash.hash(`no-blob-no-member-${suffix}`);
+    const ghostResult = await store.get(hGhost);
+    assert.ok(!ghostResult.ok, "预期 Err 分支（get 已改返回 Result，不再 throw）");
+    assert.ok(ghostResult.error instanceof Error);
+    assert.equal(ghostResult.error.message, `vfs_content_blob 缺失: ${hGhost}`);
   });
 
   it("T-VP14: 抽回死区——put 抽回 fossil 组首成员后 blob/member 双侧读回全等、pack 流字节不变", async () => {
@@ -861,11 +860,11 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     assert.ok(bytesEqual(bytesBefore, afterRows[0]!.bytes), "pack 流字节应不变");
 
     // 双侧读回全等：h0 走 blob 路径；h1/h2 沿段链（含已成死区的段 0 作 base）。
-    assert.equal(await store.get(m0.contentHash), f0);
-    assert.equal(await store.get(m1.contentHash), f1);
-    assert.equal(await store.get(m2.contentHash), f2);
+    assert.equal(unwrapResult(await store.get(m0.contentHash)), f0);
+    assert.equal(unwrapResult(await store.get(m1.contentHash)), f1);
+    assert.equal(unwrapResult(await store.get(m2.contentHash)), f2);
 
-    const many = await store.getMany([m0.contentHash, m1.contentHash, m2.contentHash]);
+    const many = unwrapResult(await store.getMany([m0.contentHash, m1.contentHash, m2.contentHash]));
     assert.equal(many.get(m0.contentHash), f0);
     assert.equal(many.get(m1.contentHash), f1);
     assert.equal(many.get(m2.contentHash), f2);
@@ -885,8 +884,8 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const fossilPlains = fossilVersions(suffix);
     const fossil = await insertPackRows(conn, 987654321, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, fossilPlains);
 
-    __resetVfsPackDecodeCountersForTests();
-    const many = await store.getMany([hB, ...pack.members.map((m) => m.contentHash), ...fossil.members.map((m) => m.contentHash)]);
+    PackCodec.__resetDecodeCountersForTests();
+    const many = unwrapResult(await store.getMany([hB, ...pack.members.map((m) => m.contentHash), ...fossil.members.map((m) => m.contentHash)]));
 
     assert.equal(many.size, 6);
     assert.equal(many.get(hB), pB);
@@ -897,7 +896,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
       assert.equal(many.get(fossil.members[i]!.contentHash), fossilPlains[i]);
     }
 
-    const counters = __getVfsPackDecodeCountersForTests();
+    const counters = PackCodec.__getDecodeCountersForTests();
     // 恒红判据：若 pack 组逐成员解压 → 2；若 fossil 组逐成员从链头重解 → 1+2+3=6。
     assert.equal(counters.zlibConcatInflates, 1, `pack 组应整组只解压一次，实际 ${counters.zlibConcatInflates}`);
     assert.equal(counters.fossilSegmentInflates, fossilPlains.length, `fossil 组应按段数解压（链式中间结果复用），实际 ${counters.fossilSegmentInflates}`);

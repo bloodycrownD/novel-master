@@ -1,12 +1,12 @@
 /**
  * VfsFileManager 内联单输入弹窗（重命名/新建文件/新建目录）。
  * 骨架复用 ModalShell（居中卡片 + translate 0.5 键盘避让）。
- * 提交前本地校验条目名（validateVfsEntryName，与 core 服务层同规则）：
+ * 提交前本地校验条目名（EntryNameValidator.validate，与 core 服务层同规则）：
  * 不合法时 toast 中文 reason 且不提交、不关窗。
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
-import {validateVfsEntryName} from '@novel-master/core/vfs';
+import {EntryNameValidator} from '@novel-master/core/vfs';
 import {coreT} from '@/i18n/core';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -35,7 +35,7 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
   }, [state]);
 
   const handleSubmit = () => {
-    const check = validateVfsEntryName(value);
+    const check = EntryNameValidator.validate(value);
     if (!check.ok) {
       showToast(coreT(check.reason));
       return;

@@ -1,8 +1,4 @@
-import {
-  buildRichContentCssRules,
-  CHAT_TRANSCRIPT_RICH_CSS,
-  RICH_DOCUMENT_RICH_CSS,
-} from '@/web/shared/rich-content-styles';
+import {CHAT_TRANSCRIPT_RICH_CSS, RICH_DOCUMENT_RICH_CSS, RichContentStyles} from '@/web/shared/rich-content-styles';
 
 /** 抠出选择器**独占整行开头**的规则声明体；命中同名前缀（如 `th, td` 里含 `td`）时跳过。 */
 function cssBlock(css: string, selector: string): string {
@@ -38,13 +34,13 @@ describe('rich-content-styles', () => {
   });
 
   it('builds compound selectors for multiple roots', () => {
-    const css = buildRichContentCssRules(['.a.rich', '.b.rich']);
+    const css = RichContentStyles.buildCssRules(['.a.rich', '.b.rich']);
     expect(css).toContain('.a.rich p, .b.rich p');
     expect(css).toContain('.a.rich ol, .b.rich ol, .a.rich ul, .b.rich ul');
   });
 
   it('soft-wraps pre code blocks without nested horizontal scrollport', () => {
-    const css = buildRichContentCssRules(['.bubble.rich']);
+    const css = RichContentStyles.buildCssRules(['.bubble.rich']);
     const preRule = cssBlock(css, '.bubble.rich pre');
     expect(preRule).toContain('white-space: pre-wrap');
     expect(preRule).toContain('overflow-wrap: anywhere');
@@ -53,7 +49,7 @@ describe('rich-content-styles', () => {
   });
 
   it('横向滚动落在内层 code 上，pre 只当定位基准（复制按钮不随内容滚走）', () => {
-    const css = buildRichContentCssRules(['.bubble.rich']);
+    const css = RichContentStyles.buildCssRules(['.bubble.rich']);
     const rule = cssBlock(css, '.bubble.rich pre[data-lang] > code');
     // 带分号：white-space: pre 是 pre-wrap 的前缀，不带分号会假绿
     expect(rule).toContain('white-space: pre;');
@@ -64,7 +60,7 @@ describe('rich-content-styles', () => {
   });
 
   it('表格：外壳 ≤ 气泡宽负责横滚，列宽 = min(单行自然宽, 72vw)', () => {
-    const css = buildRichContentCssRules(['.bubble.rich']);
+    const css = RichContentStyles.buildCssRules(['.bubble.rich']);
     const wrapRule = cssBlock(css, '.bubble.rich .table-wrap');
     expect(wrapRule).toContain('max-width: 100%');
     expect(wrapRule).toContain('overflow-x: auto');

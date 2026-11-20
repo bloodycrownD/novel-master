@@ -2,7 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {FileEditorScreen} from '@/screens/stack/FileEditorScreen';
-import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 
 const mockDismiss = jest.fn();
 const mockShowToast = jest.fn();
@@ -14,7 +14,7 @@ const mockRead = jest.fn(async () => ({
   mtimeMs: 1_700_000_000_000,
 }));
 
-const mockWrite = jest.fn(async () => undefined);
+const mockWrite = jest.fn(async () => ({ok: true as const, value: {version: 1}}));
 
 const mockRuntime = {
   globalVfs: () => ({read: mockRead, write: mockWrite}),
@@ -68,10 +68,13 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 // session 域保存那一支的两个开关。jest.mock 工厂被提升到 import 之前，
 // 不能引用后面声明的 const（TDZ）——所以只导出 jest.fn()，
@@ -80,9 +83,12 @@ jest.mock('@novel-master/core/feature-flags', () => ({
   userVfsUnifiedToolTurnFlag: {isEnabled: jest.fn(() => false)},
 }));
 
-jest.mock('@/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => {
+  const legacy = {
   sessionSaveVfsFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsOperationsService: {sessionSaveFile: legacy.sessionSaveVfsFile}};
+});
 
 jest.mock('@/components/vfs/FileMarkdownPreview', () => {
   const mockReact = require('react');
@@ -92,7 +98,7 @@ jest.mock('@/components/vfs/FileMarkdownPreview', () => {
         testID: 'file-markdown-preview',
         ...props,
       }),
-    isMarkdownPreviewPath: () => true,
+    MarkdownPreview: {isPath: () => true},
   };
 });
 
@@ -270,9 +276,12 @@ describe('FileEditorScreen', () => {
     mockRouteParams.path = '/notes/readme.md';
     mockRouteParams.scopeKind = 'global';
     mockRead.mockResolvedValue({
-      content: '# Hello\n\nworld',
-      version: 1,
-      mtimeMs: 1_700_000_000_000,
+      ok: true,
+      value: {
+        content: '# Hello\n\nworld',
+        version: 1,
+        mtimeMs: 1_700_000_000_000,
+      },
     });
   });
 
@@ -503,11 +512,11 @@ describe('FileEditorScreen', () => {
       sessionSaveVfsFile: jest.Mock;
     };
     featureFlags.userVfsUnifiedToolTurnFlag.isEnabled.mockReturnValue(true);
-    vfsOps.sessionSaveVfsFile.mockResolvedValue(undefined);
+    vfsOps.sessionSaveVfsFile.mockResolvedValue({ok: true, value: undefined});
 
     // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）
     const spy = jest.fn();
-    setFileEditorOnSessionVfsSaved(spy);
+    fileEditorOnSessionVfsSavedSlot.set(spy);
 
     const tree = await renderLoadedScreen();
     await switchToEditMode(tree);

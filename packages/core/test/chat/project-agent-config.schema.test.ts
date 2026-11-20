@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
-import { projectAgentConfigSchema, projectAgentModeSchema } from "../../src/domain/chat/model/project-agent-config.schema.js";
-import { agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
-import { ConfigDecodeError } from "../../src/errors/config-decode-errors.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
+import type { ZodType } from "zod";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  const r = SerializationDecode.decode(raw, schema);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+import {  projectAgentConfigSchema, projectAgentModeSchema  } from "../../src/domain/chat/model/project-agent-config.schema.js";
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 function minimalDefinitionWire() {
   return {
@@ -34,17 +42,19 @@ describe("projectAgentConfigSchema", () => {
   });
 
   it("custom 缺 definition 拒绝", () => {
-    assert.throws(() => decode({ mode: "custom" }, projectAgentConfigSchema), ConfigDecodeError);
+    assert.throws(() => decode({ mode: "custom" }, projectAgentConfigSchema), (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"));
   });
 
   it("非法 mode 拒绝", () => {
-    assert.throws(() => decode({ mode: "registry" }, projectAgentModeSchema), ConfigDecodeError);
+    assert.throws(() => decode({ mode: "registry" }, projectAgentModeSchema), (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA"));
   });
 
-  it("configToWire 对重名块 definition 抛错（第二份同款循环已被收敛点覆盖）", () => {
+  it("configToWire 对重名块 definition 返回 Err（第二份同款循环已被收敛点覆盖）", () => {
     // configToWire 转调 agentDefinitionSchema.toWire，两条塌缩循环的收敛点
-    // 就是 definitionToDocument；这条钉住「即便绕过 validateAgentDefinition
+    // 就是 definitionToDocument；这条钉住「即便绕过 AgentDefinitionValidator.validate
     // 直接走 projectAgentConfigSchema.toWire，收敛点仍能兜住」。
+    // toWire 已改返回 Result（五期门⑦）：块名唯一性门禁失败沿 Result.err
+    // 回传，不再抛——错误本体（key / messageKey）与旧 throw 契约一致。
     const base = decode(minimalDefinitionWire(), agentDefinitionSchema);
     const dup = {
       ...base,
@@ -66,14 +76,12 @@ describe("projectAgentConfigSchema", () => {
         ],
       },
     };
-    assert.throws(
-      () =>
-        projectAgentConfigSchema.toWire({
-          mode: "custom",
-          definition: dup,
-        }),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
-    );
+    const wire = projectAgentConfigSchema.toWire({
+      mode: "custom",
+      definition: dup,
+    });
+    assert.ok(!wire.ok, "重名块 toWire 必须失败（块名唯一性门禁 RT-04）");
+    assert.ok(AppErrorOps.is(wire.error, "PROMPT_INVALID_LAYOUT") && wire.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
   });
 });
 

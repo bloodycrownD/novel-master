@@ -12,15 +12,17 @@
  *    agent-runner 不再经事件编排器走压缩路径。
  */
 import assert from "node:assert/strict";
-import { after, describe, it, mock } from "node:test";
+import {  after, describe, it, mock  } from "node:test";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import type {
   AgentDefinition,
   CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import type { BuiltinToolContext } from "@novel-master/core";
-import type { LlmChatResult, ModelRequestService } from "@novel-master/core/provider";
+import type { ModelRequestService } from "@novel-master/core/provider";
+import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type { VfsService } from "@novel-master/core/vfs";
 
 /** 捕获 runCompaction 调用参数，供断言。 */
@@ -28,7 +30,6 @@ const runCompactionCalls: Array<{
   deps: unknown;
   params: {
     sessionId: unknown;
-    projectId: unknown;
     hideStartDepth?: unknown;
     trigger?: unknown;
   };
@@ -39,7 +40,6 @@ const runCompactionMock = mock.fn(
     _deps: unknown,
     params: {
       sessionId: unknown;
-      projectId: unknown;
       hideStartDepth?: unknown;
       trigger?: unknown;
     },
@@ -52,17 +52,20 @@ const runCompactionMock = mock.fn(
 // 必须在 import 任何会间接触发 run-compaction 模块加载的代码之前注册 mock。
 mock.module("../../src/service/compaction-conditions/run-compaction.js", {
   namedExports: {
-    runCompaction: runCompactionMock,
+    Compaction: {
+      run: runCompactionMock,
+    },
   },
 });
 
-const {
-  createAgentRunner,
-  InMemoryAgentSession,
-} = await import("@novel-master/core/agent");
-const { textBlocks } = await import("@novel-master/core/chat");
+const { AgentServiceFactory } = await import("@novel-master/core/agent");
+// InMemoryAgentSession 只服务测试，已不在 core/agent 公开面；直接从源模块取（与其余 agent-runner 用例同款）。
+const { InMemoryAgentSession } = await import(
+  "../../src/domain/agent/session/impl/in-memory-agent-session.js"
+);
+const { TextBlocks } = await import("@novel-master/core/chat");
 const { SimpleEventBus } = await import("@novel-master/core/events");
-const { registerBuiltinTools, ToolRegistry } = await import("@novel-master/core");
+const { BuiltinTools, ToolRegistry } = await import("@novel-master/core");
 const { createMemorySessionKkv } = await import(
   "../helpers/prompt-layout-test-helpers.js"
 );
@@ -71,8 +74,8 @@ const { noopSavedModelRepository } = await import(
 );
 // RT-02 牙齿用例必须装**真实** VisibleFloorTrigger（纯 stub 的 evaluator 从不
 // list()，第二次读根本不存在 ⇒ listCalls 恒等于 stepCount，断言无牙）。
-const { createCompactionConditionEvaluator } = await import(
-  "../../src/service/compaction-conditions/create-compaction-condition-evaluator.js"
+const { CompactionFactory } = await import(
+  "../../src/service/compaction-conditions/compaction-factory.js"
 );
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -137,7 +140,7 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -152,9 +155,9 @@ function createCompactionConditionsStub(hideStartDepth: number) {
     shouldRequestCompaction: mock.fn(async () => {
       const hit = firstCall;
       firstCall = false;
-      return hit;
+      return Result.ok(hit);
     }),
-    getHideStartDepth: mock.fn(async () => hideStartDepth),
+    getHideStartDepth: mock.fn(async () => Result.ok(hideStartDepth)),
   };
 }
 
@@ -165,7 +168,7 @@ after(() => {
 describe("AgentRunner compaction (T-AR1)", () => {
   it("条件压缩命中时直调 runCompaction，传入 evaluator 的 hideStartDepth，不经事件编排器", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model = createMockModel([
       {
@@ -176,24 +179,18 @@ describe("AgentRunner compaction (T-AR1)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
 
     const HIDE_START_DEPTH = 7;
     const compactionConditions = createCompactionConditionsStub(
       HIDE_START_DEPTH,
     );
 
-    // messages / messageTranscriptEffects 只需满足 runCompaction 被 mock 后
-    // 不会真用到；用最小桩即可。非 null 即可让 agent-runner 走直调分支。
+    // messages 只需满足 runCompaction 被 mock 后不会真用到；用最小桩即可。
+    // 非 null 即可让 agent-runner 走直调分支。
     const messagesStub = {
       listBySession: async () => [],
     } as unknown as MessageService;
-    const effectsStub = {
-      hideMessagesInRange: async () => {},
-      showMessagesInRange: async () => {},
-      truncateMessagesAfter: async () => {},
-      setMessageFloorAtMessage: async () => {},
-    } as unknown as MessageTranscriptEffectsService;
 
     const deps: CreateAgentRunnerDeps = {
       session,
@@ -216,20 +213,19 @@ describe("AgentRunner compaction (T-AR1)", () => {
         }) as never,
       compactionConditions,
       messages: messagesStub,
-      messageTranscriptEffects: effectsStub,
     };
-    const runner = createAgentRunner(deps);
+    const runner = AgentServiceFactory.createRunner(deps);
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
-    // run 正常完成（说明没有触发 "messages/messageTranscriptEffects 缺失" 的硬错误，
+    // run 正常完成（说明没有触发 "compaction requires messages" 的硬错误，
     // 也没有任何 eventOrchestrator 相关的依赖报错——CreateAgentRunnerDeps 根本没这个字段）。
     assert.equal(result.finished, true);
 
@@ -237,10 +233,9 @@ describe("AgentRunner compaction (T-AR1)", () => {
     assert.equal(runCompactionMock.mock.callCount(), 1);
     assert.equal(runCompactionCalls.length, 1);
 
-    // 收到正确的 sessionId / projectId / hideStartDepth。
+    // 收到正确的 sessionId / hideStartDepth（projectId 不再是 runCompaction 参数）。
     const call = runCompactionCalls[0];
     assert.equal(call.params.sessionId, MOCK_SESSION_ID);
-    assert.equal(call.params.projectId, MOCK_PROJECT_ID);
     assert.equal(call.params.hideStartDepth, HIDE_START_DEPTH);
 
     // T-CR8：自动压缩路径**不传 trigger**（缺省即 "auto"）——回合中段压缩
@@ -282,14 +277,15 @@ class CountingAgentSession extends InMemoryAgentSession {
  * tokenRatio != null 时才 new TokenRatioConditionTrigger）。
  */
 function realVisibleFloorEvaluator(visibleFloor: number) {
-  return createCompactionConditionEvaluator({
+  return CompactionFactory.createEvaluator({
     conditionsStore: {
-      getConditions: async () => ({
-        schemaVersion: 4,
-        enabled: true,
-        visibleFloor,
-        hideStartDepth: 6,
-      }),
+      getConditions: async () =>
+        Result.ok({
+          schemaVersion: 4,
+          enabled: true,
+          visibleFloor,
+          hideStartDepth: 6,
+        }),
     },
     // 只配 visibleFloor 时这两个依赖永不被调用，给空壳即可。
     tokenCounters: {} as never,
@@ -331,25 +327,19 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
   const messagesStub = {
     listBySession: async () => [],
   } as unknown as MessageService;
-  const effectsStub = {
-    hideMessagesInRange: async () => {},
-    showMessagesInRange: async () => {},
-    truncateMessagesAfter: async () => {},
-    setMessageFloorAtMessage: async () => {},
-  } as unknown as MessageTranscriptEffectsService;
 
   it("T-RT02-a（计数）：visibleFloor 配置下每个 step 只发一次全会话读", async () => {
     const session = new CountingAgentSession(MOCK_SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     // visibleFloor: 999 —— 刻意不触发压缩：runCompaction 桩若真跑会改变步数、
     // 干扰 stepCompactionEmitted 的门控语义，把「读次数」这口锅搅浑。
     const compactionConditions = realVisibleFloorEvaluator(999);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: createMockModel(threeStepResponses()),
       savedModels: noopSavedModelRepository(),
@@ -370,17 +360,16 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
         }) as never,
       compactionConditions,
       messages: messagesStub,
-      messageTranscriptEffects: effectsStub,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(result.stepsExecuted, 3);
@@ -396,17 +385,17 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
 
   it("T-RT02-b（语义）：visibleMessageCount 透传后压缩仍按 visibleFloor 命中", async () => {
     const session = new CountingAgentSession(MOCK_SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     // visibleFloor: 0 —— 任一可见消息即命中，防止「少读一次」被误实现成「不读」。
     const compactionConditions = realVisibleFloorEvaluator(0);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
 
     const callsBefore = runCompactionCalls.length;
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: createMockModel(threeStepResponses()),
       savedModels: noopSavedModelRepository(),
@@ -427,17 +416,16 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
         }) as never,
       compactionConditions,
       messages: messagesStub,
-      messageTranscriptEffects: effectsStub,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     // 步数与 stopReason 口径不变。
     assert.equal(result.stopReason, "completed");
@@ -491,16 +479,16 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
     async function runOnce(visibleFloor: number, visibleCount: number) {
       const session = new CountingAgentSession(MOCK_SESSION_ID);
       for (let i = 0; i < visibleCount; i++) {
-        await session.append("user", textBlocks(`go-${i}`));
+        await session.append("user", TextBlocks.of(`go-${i}`));
       }
       // N = 装配后 session 里的可见条数本身（与 runner 取值点同口径）
       const n = (await session.list()).length;
 
       const registry = new ToolRegistry();
-      registerBuiltinTools(registry);
+      BuiltinTools.register(registry);
 
       const callsBefore = runCompactionCalls.length;
-      const runner = createAgentRunner({
+      const runner = AgentServiceFactory.createRunner({
         session,
         modelRequests: createMockModel(singleStepResponses),
         savedModels: noopSavedModelRepository(),
@@ -521,17 +509,16 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
           }) as never,
         compactionConditions: realVisibleFloorEvaluator(visibleFloor),
         messages: messagesStub,
-        messageTranscriptEffects: effectsStub,
       });
 
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition,
         sessionId: MOCK_SESSION_ID,
         projectId: MOCK_PROJECT_ID,
         savedModelId: RUN_MODEL_ID,
         workspaceModelId: RUN_MODEL_ID,
-      });
+      }));
       return {
         n,
         result,

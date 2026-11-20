@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { resetDesktopRuntimeForTest } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { createDesktopNovelMasterRuntime } from "../src/main/runtime/create-desktop-runtime.js";
-import {
-  handleAgentRegistryCreateBlank,
-  handleAgentRegistryGet,
-  handleAgentRegistryList,
-} from "../src/main/ipc/handlers/agent-registry.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { DesktopRuntimeFactory } from "../src/main/runtime/create-desktop-runtime.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -24,13 +20,16 @@ describe("agent-registry IPC handlers", () => {
   });
 
   it("list 对单条失效 wire 返回 invalid 且保留其余行", async () => {
-    const created = await handleAgentRegistryCreateBlank();
+    const created = await AgentRegistry.createBlank();
     assert.equal(created.ok, true);
     if (!created.ok) {
       return;
     }
 
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await DesktopRuntimeFactory.create();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const now = Date.now();
     const brokenWire = {
       schemaVersion: 1,
@@ -43,9 +42,9 @@ describe("agent-registry IPC handlers", () => {
       ) VALUES (?, ?, ?, ?)`,
       ["broken-agent", JSON.stringify(brokenWire), now, now],
     );
-    await resetDesktopRuntimeForTest();
+    await DesktopRuntimeSingleton.resetForTest();
 
-    const listed = await handleAgentRegistryList();
+    const listed = await AgentRegistry.list();
     assert.equal(listed.ok, true);
     if (!listed.ok) {
       return;
@@ -67,13 +66,13 @@ describe("agent-registry IPC handlers", () => {
   });
 
   it("get 返回 assessed StoredConfigHealthDto（valid）", async () => {
-    const created = await handleAgentRegistryCreateBlank();
+    const created = await AgentRegistry.createBlank();
     assert.equal(created.ok, true);
     if (!created.ok) {
       return;
     }
 
-    const got = await handleAgentRegistryGet({ agentId: created.data.agentId });
+    const got = await AgentRegistry.get({ agentId: created.data.agentId });
     assert.equal(got.ok, true);
     if (!got.ok) {
       return;
@@ -87,7 +86,10 @@ describe("agent-registry IPC handlers", () => {
   });
 
   it("get 对失效 wire 返回 assessed invalid", async () => {
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await DesktopRuntimeFactory.create();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const now = Date.now();
     const brokenWire = {
       schemaVersion: 1,
@@ -100,9 +102,9 @@ describe("agent-registry IPC handlers", () => {
       ) VALUES (?, ?, ?, ?)`,
       ["broken-get-agent", JSON.stringify(brokenWire), now, now],
     );
-    await resetDesktopRuntimeForTest();
+    await DesktopRuntimeSingleton.resetForTest();
 
-    const got = await handleAgentRegistryGet({ agentId: "broken-get-agent" });
+    const got = await AgentRegistry.get({ agentId: "broken-get-agent" });
     assert.equal(got.ok, true);
     if (!got.ok) {
       return;
@@ -128,23 +130,26 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
 
   it("T-D1：list valid 行带出 mode 三档各一；mode 缺省 valid 行无 mode 字段；invalid 行无 mode", async () => {
     // createBlank 的 agentId 为 `agent-<Date.now()>`，间隔数毫秒防同毫秒撞 id。
-    const primary = await handleAgentRegistryCreateBlank({ mode: "primary" });
+    const primary = await AgentRegistry.createBlank({ mode: "primary" });
     assert.equal(primary.ok, true);
     await new Promise((r) => setTimeout(r, 5));
-    const subagent = await handleAgentRegistryCreateBlank({ mode: "subagent" });
+    const subagent = await AgentRegistry.createBlank({ mode: "subagent" });
     assert.equal(subagent.ok, true);
     await new Promise((r) => setTimeout(r, 5));
-    const all = await handleAgentRegistryCreateBlank({ mode: "all" });
+    const all = await AgentRegistry.createBlank({ mode: "all" });
     assert.equal(all.ok, true);
     await new Promise((r) => setTimeout(r, 5));
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (!primary.ok || !subagent.ok || !all.ok || !blank.ok) {
       return;
     }
 
     // invalid 行（removed_feature）直接落库，读不出定义 → 天然无 mode。
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await DesktopRuntimeFactory.create();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const now = Date.now();
     await rt.conn.execute(
       `INSERT INTO agent_definition (
@@ -161,9 +166,9 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
         now,
       ],
     );
-    await resetDesktopRuntimeForTest();
+    await DesktopRuntimeSingleton.resetForTest();
 
-    const listed = await handleAgentRegistryList();
+    const listed = await AgentRegistry.list();
     assert.equal(listed.ok, true);
     if (!listed.ok) {
       return;
@@ -202,17 +207,20 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
   });
 
   it("T-D2：createBlank 带 mode 落库 wire 含 mode；不传 payload 落库无 mode（现行为回归）", async () => {
-    const sub = await handleAgentRegistryCreateBlank({ mode: "subagent" });
+    const sub = await AgentRegistry.createBlank({ mode: "subagent" });
     assert.equal(sub.ok, true);
     if (!sub.ok) {
       return;
     }
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await DesktopRuntimeFactory.create();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const subRows = await rt.conn.query<{ prompts_json: string }>(
       `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
       [sub.data.agentId],
     );
-    await resetDesktopRuntimeForTest();
+    await DesktopRuntimeSingleton.resetForTest();
     assert.equal(subRows.length, 1);
     const subWire = JSON.parse(
       String(subRows[0]!.prompts_json),
@@ -220,17 +228,20 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
     assert.equal(subWire.mode, "subagent");
 
     await new Promise((r) => setTimeout(r, 5));
-    const plain = await handleAgentRegistryCreateBlank();
+    const plain = await AgentRegistry.createBlank();
     assert.equal(plain.ok, true);
     if (!plain.ok) {
       return;
     }
-    const rt2 = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rt2R = await DesktopRuntimeFactory.create();
+    if (!rt2R.ok) throw rt2R.error;
+    const rt2 = rt2R.value;
     const plainRows = await rt2.conn.query<{ prompts_json: string }>(
       `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
       [plain.data.agentId],
     );
-    await resetDesktopRuntimeForTest();
+    await DesktopRuntimeSingleton.resetForTest();
     assert.equal(plainRows.length, 1);
     const plainWire = JSON.parse(
       String(plainRows[0]!.prompts_json),

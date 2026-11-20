@@ -3,15 +3,13 @@
  * Per-model `tokenCounterMode` validation helpers remain exported; only the preferences loader is banned.
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import * as core from "@novel-master/core";
 import * as provider from "@novel-master/core/provider";
+import * as tokenizerPub from "@novel-master/core/tokenizer";
 import * as tokenizer from "../../../src/infra/tokenizer/index.js";
 import * as readPref from "../../../src/infra/tokenizer/logic/read-token-counter-mode-pref.js";
-import {
-  TOKEN_COUNTER_MODE_OPTIONS,
-  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
-} from "../../../src/domain/provider/model/token-counter-mode-options.js";
+import {  TOKEN_COUNTER_MODE_OPTIONS, TOKEN_COUNTER_MODE_SELECT_OPTIONS  } from "../../../src/domain/provider/model/token-counter-mode-options.js";
 
 const BANNED_EXPORTS = ["readTokenCounterModeFromPreferences"] as const;
 
@@ -57,9 +55,13 @@ describe("T9 tokenCounter.mode no public read path", () => {
     assert.equal(mainEntry.TOKEN_COUNTER_MODE_PREF_KEY, undefined);
   });
 
-  it("saved-model 校验只剩 isValid 走 public，解析器与 pref 键已收窄", () => {
+  it("saved-model 校验只剩 isValid 走 tokenizer 公开面，解析器与 pref 键已收窄", () => {
+    // isValidTokenCounterModePref 已从 provider 门面撤到 tokenizer 公开面；
+    // provider 上它与解析器、pref 键一样保持 undefined。
+    const tokenizerSurface = tokenizerPub as Record<string, unknown>;
+    assert.equal(typeof (tokenizerSurface.TokenCounterModePref as { isValid?: unknown } | undefined)?.isValid, "function");
     const pub = provider as Record<string, unknown>;
-    assert.equal(typeof pub.isValidTokenCounterModePref, "function");
+    assert.equal(pub.isValidTokenCounterModePref, undefined);
     assert.equal(pub.parseTokenCounterModePref, undefined);
     assert.equal(pub.TOKEN_COUNTER_MODE_PREF_KEY, undefined);
   });
@@ -88,15 +90,15 @@ describe("T-S8 heuristic removed from user-selectable options", () => {
     assert.equal(values.includes("auto"), true);
   });
 
-  it("parseTokenCounterModePref normalizes legacy 'heuristic' to 'auto'", () => {
-    assert.equal(readPref.parseTokenCounterModePref("heuristic"), "auto");
+  it("TokenCounterModePref.parse normalizes legacy 'heuristic' to 'auto'", () => {
+    assert.equal(readPref.TokenCounterModePref.parse("heuristic"), "auto");
     // 其他正常值不受影响
-    assert.equal(readPref.parseTokenCounterModePref("tiktoken"), "tiktoken");
-    assert.equal(readPref.parseTokenCounterModePref("auto"), "auto");
+    assert.equal(readPref.TokenCounterModePref.parse("tiktoken"), "tiktoken");
+    assert.equal(readPref.TokenCounterModePref.parse("auto"), "auto");
   });
 
-  it("isValidTokenCounterModePref still accepts 'heuristic' (VALID_FAMILIES 保留宽容旧数据)", () => {
-    assert.equal(readPref.isValidTokenCounterModePref("heuristic"), true);
-    assert.equal(readPref.isValidTokenCounterModePref("tiktoken"), true);
+  it("TokenCounterModePref.isValid still accepts 'heuristic' (VALID_FAMILIES 保留宽容旧数据)", () => {
+    assert.equal(readPref.TokenCounterModePref.isValid("heuristic"), true);
+    assert.equal(readPref.TokenCounterModePref.isValid("tiktoken"), true);
   });
 });

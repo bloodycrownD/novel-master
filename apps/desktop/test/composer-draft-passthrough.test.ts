@@ -7,11 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  parseComposerDraftJson,
-  serializeComposerDraftJson,
-  type ComposerDraftTokenRange,
-} from "@shared/logic/chat";
+import { ComposerDraftSchema, type ComposerDraftTokenRange } from "@shared/logic/chat";
 import {
   resolveComposerDraftPersistPayload,
   type HydratedComposerDraft,
@@ -35,7 +31,7 @@ function hasOwnTokenRanges(value: object): boolean {
 function serializePayload(
   payload: ReturnType<typeof resolveComposerDraftPersistPayload>,
 ): string {
-  const json = serializeComposerDraftJson(payload);
+  const json = ComposerDraftSchema.serializeJson(payload);
   assert.notEqual(json, null, "非空正文不应被序列化成 null");
   return json as string;
 }
@@ -50,7 +46,7 @@ describe("T-CA7: resolveComposerDraftPersistPayload（D6 desktop 写回）", () 
     assert.equal(payload.text, HYDRATED_TEXT);
     assert.deepEqual(payload.tokenRanges, RANGES);
 
-    const parsed = parseComposerDraftJson(serializePayload(payload));
+    const parsed = ComposerDraftSchema.parseJson(serializePayload(payload));
     assert.equal(parsed.text, HYDRATED_TEXT);
     assert.deepEqual(parsed.tokenRanges, RANGES);
   });
@@ -66,7 +62,7 @@ describe("T-CA7: resolveComposerDraftPersistPayload（D6 desktop 写回）", () 
     const json = serializePayload(payload);
     assert.equal(hasOwnTokenRanges(JSON.parse(json)), false);
 
-    const parsed = parseComposerDraftJson(json);
+    const parsed = ComposerDraftSchema.parseJson(json);
     assert.equal(hasOwnTokenRanges(parsed), false);
     assert.equal(parsed.tokenRanges, undefined);
   });
@@ -92,7 +88,7 @@ describe("T-CA7: resolveComposerDraftPersistPayload（D6 desktop 写回）", () 
 
     assert.equal(hasOwnTokenRanges(payload), false);
 
-    const parsed = parseComposerDraftJson(serializePayload(payload));
+    const parsed = ComposerDraftSchema.parseJson(serializePayload(payload));
     assert.equal(hasOwnTokenRanges(parsed), false);
     assert.deepEqual(parsed.attachments, []);
   });
@@ -111,7 +107,7 @@ describe("T-CA7: resolveComposerDraftPersistPayload（D6 desktop 写回）", () 
 
     assert.deepEqual(payload.tokenRanges, []);
 
-    const parsed = parseComposerDraftJson(serializePayload(payload));
+    const parsed = ComposerDraftSchema.parseJson(serializePayload(payload));
     assert.equal(hasOwnTokenRanges(parsed), true);
     assert.deepEqual(parsed.tokenRanges, []);
   });
@@ -129,7 +125,7 @@ describe("T-CA7: resolveComposerDraftPersistPayload（D6 desktop 写回）", () 
       { text: HYDRATED_TEXT, tokenRanges: dirty },
       HYDRATED_TEXT,
     );
-    const parsed = parseComposerDraftJson(serializePayload(payload));
+    const parsed = ComposerDraftSchema.parseJson(serializePayload(payload));
 
     assert.deepEqual(parsed.tokenRanges, [{ start: 0, end: 3 }]);
   });
@@ -147,6 +143,6 @@ describe("T-CA7: resolveComposerDraftPersistPayload（D6 desktop 写回）", () 
 
     assert.equal(raw.text, HYDRATED_TEXT);
     assert.deepEqual(raw.tokenRanges, []);
-    assert.deepEqual(parseComposerDraftJson(json).tokenRanges, []);
+    assert.deepEqual(ComposerDraftSchema.parseJson(json).tokenRanges, []);
   });
 });

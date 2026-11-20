@@ -37,21 +37,15 @@ import {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {SESSION_STREAM_MESSAGES_PAGE_SIZE} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {
-  clearAllSessionViewCaches,
-  getSessionViewCache,
   SESSION_VIEW_HYDRATE_WINDOW,
-  sessionViewCacheKey,
-  setSessionViewCache,
+  SessionViewCache,
 } from '@/services/chat-session-view-cache';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 import * as finishedNotification from '@/services/agent-finished-notification';
 import type {ChatMessageData} from '@novel-master/core/chat';
 import type {
@@ -115,23 +109,25 @@ function makeMessage(
  */
 function makeMessageStore(db: Map<string, ChatMessageData[]>) {
   return {
+    // 八期起读口返回 Outcome：mock 必须给 {kind:'completed', value}，
+    // 直接返回裸数组会让 unit 走「非 completed → 本次不采纳」分支，消息面恒空。
     listBySessionTail: jest.fn(
-      async (sid: string, options: {limit: number}): Promise<ChatMessageData[]> => {
+      async (sid: string, options: {limit: number}): Promise<{kind: 'completed'; value: ChatMessageData[]}> => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
-        return rows.slice(-options.limit);
+        return {kind: 'completed' as const, value: rows.slice(-options.limit)};
       },
     ),
     listBySessionPage: jest.fn(
       async (
         sid: string,
         options: {limit: number; beforeSeq?: number},
-      ): Promise<ChatMessageData[]> => {
+      ): Promise<{kind: 'completed'; value: ChatMessageData[]}> => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
         const filtered =
           options.beforeSeq == null
             ? rows
             : rows.filter(r => r.seq < options.beforeSeq);
-        return filtered.slice(-options.limit);
+        return {kind: 'completed' as const, value: filtered.slice(-options.limit)};
       },
     ),
   };
@@ -271,19 +267,19 @@ function createControlRecordingHandle(handleId: string): {
 }
 
 beforeEach(() => {
-  setMobileAgentActive(false);
+  agentActivity.setActive(false);
   jest.clearAllMocks();
-  resetKeepAliveStateForTests();
-  clearAllSessionViewCaches();
+  AgentFinishedNotification.resetKeepAliveStateForTests();
+  SessionViewCache.clearAll();
   jest.useFakeTimers();
   jest.setSystemTime(CLOCK_START_MS);
 });
 
 afterEach(() => {
   jest.useRealTimers();
-  setMobileAgentActive(false);
-  resetKeepAliveStateForTests();
-  clearAllSessionViewCaches();
+  agentActivity.setActive(false);
+  AgentFinishedNotification.resetKeepAliveStateForTests();
+  SessionViewCache.clearAll();
 });
 
 describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
@@ -313,8 +309,8 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     expect(snapB?.messages.every(m => m.sessionId === 'sess-b')).toBe(true);
 
     // 视图缓存按各自 (projectId, sessionId) 键落盘，只含属主会话的行
-    const cacheA = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
-    const cacheB = getSessionViewCache(sessionViewCacheKey('p2', 'sess-b'));
+    const cacheA = SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'));
+    const cacheB = SessionViewCache.get(SessionViewCache.key('p2', 'sess-b'));
     expect(cacheA?.messages.every(m => m.sessionId === 'sess-a')).toBe(true);
     expect(cacheB?.messages.every(m => m.sessionId === 'sess-b')).toBe(true);
 
@@ -330,7 +326,7 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
   it('hydrate 语义：缓存命中不回源 DB；miss 回源并写缓存', async () => {
     const h = createHarness();
     // 预置 A 的视图缓存（会话切换水合命中路径）
-    setSessionViewCache(sessionViewCacheKey('p1', 'sess-a'), {
+    SessionViewCache.set(SessionViewCache.key('p1', 'sess-a'), {
       messages: [makeMessage('sess-a', 9, 'assistant')],
       hasMoreMessages: false,
     });
@@ -339,19 +335,19 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     startRunningRun(h, 'sess-b', 'rb', 'p1');
 
     // 命中：直接采纳缓存行，不回源
-    const rowsA = await h.manager.loadSessionTailMessages('sess-a');
+    const rowsA = (await h.manager.loadSessionTailMessages('sess-a')).value;
     expect(rowsA).toHaveLength(1);
     expect(rowsA?.[0].seq).toBe(9);
     expect(h.messages.listBySessionTail).not.toHaveBeenCalled();
 
     // miss：回源 DB + 单查询 hasMore 判定 + 写缓存
-    const rowsB = await h.manager.loadSessionTailMessages('sess-b');
+    const rowsB = (await h.manager.loadSessionTailMessages('sess-b')).value;
     expect(rowsB).toHaveLength(2);
     expect(h.messages.listBySessionTail).toHaveBeenCalledWith('sess-b', {
       limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
     expect(h.messages.listBySessionPage).not.toHaveBeenCalled();
-    const cacheB = getSessionViewCache(sessionViewCacheKey('p1', 'sess-b'));
+    const cacheB = SessionViewCache.get(SessionViewCache.key('p1', 'sess-b'));
     expect(cacheB?.messages).toHaveLength(2);
     expect(cacheB?.hasMoreMessages).toBe(false); // 单查询：不足一页即无更多
   });
@@ -379,7 +375,7 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     expect(snap?.loadingMoreMessages).toBe(false); // 防重入标志复位
 
     // 分页结果同步写视图缓存（重进水合到完整 50 行）
-    const cache = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
+    const cache = SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'));
     expect(cache?.messages).toHaveLength(50);
     expect(cache?.hasMoreMessages).toBe(false);
   });
@@ -406,18 +402,18 @@ describe('T-U5: 后台收尾缓存刷新（消息丢失回归）', () => {
     expect(settled?.messages[1].role).toBe('assistant');
 
     // 无 attach 也照常刷视图缓存——重进水合即最新
-    const cacheB = getSessionViewCache(sessionViewCacheKey('p2', 'sess-b'));
+    const cacheB = SessionViewCache.get(SessionViewCache.key('p2', 'sess-b'));
     expect(cacheB?.messages).toHaveLength(2);
     expect(cacheB?.messages.some(m => m.role === 'assistant')).toBe(true);
 
     // 重进（非 force load）：缓存命中返回最终行、不再回源 DB
     const tailCallsBefore = h.messages.listBySessionTail.mock.calls.length;
-    const rows = await h.manager.loadSessionTailMessages('sess-b');
+    const rows = (await h.manager.loadSessionTailMessages('sess-b')).value;
     expect(rows).toHaveLength(2);
     expect(h.messages.listBySessionTail.mock.calls.length).toBe(
       tailCallsBefore,
     );
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 });
 
@@ -438,7 +434,7 @@ describe('step 级 reload：STEP_COMMITTED 后落库行进消息面与缓存', (
     expect(snap?.partialText).toBe(''); // 冲刷后 partial 清零（管线语义）
     expect(snap?.messages).toHaveLength(2);
     expect(snap?.messages[1].role).toBe('assistant');
-    expect(getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages)
+    expect(SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages)
       .toHaveLength(2);
   });
 });
@@ -575,13 +571,13 @@ describe('cr2-E-1: 缓存水合的窗口化只限冷启动', () => {
     expect(grown).toBeGreaterThan(SESSION_STREAM_MESSAGES_PAGE_SIZE);
     expect(snap?.messages[0].seq).toBe(total - grown + 1);
     expect(snap?.hasMoreMessages).toBe(true);
-    expect(getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages)
+    expect(SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages)
       .toHaveLength(grown);
 
     // 非 force 重进/切会话：缓存命中水合——面已非空，必须整面收下
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       projectId: 'p1',
-    });
+    })).value;
     expect(rows).toHaveLength(grown);
     snap = h.manager.snapshot('sess-a');
     expect(snap?.messages).toHaveLength(grown); // 没被截回 40
@@ -606,9 +602,9 @@ describe('cr2-E-1: 缓存水合的窗口化只限冷启动', () => {
     expect(grown).toBeGreaterThan(SESSION_STREAM_MESSAGES_PAGE_SIZE);
 
     // 非 force + 带 projectId：命中缓存水合，idle 面非空 → 整面收下
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       projectId: 'p1',
-    });
+    })).value;
     expect(rows).toHaveLength(grown);
     const view = h.manager.readMessagesSnapshot('sess-a');
     expect(view?.messages).toHaveLength(grown);
@@ -624,10 +620,10 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
       Array.from({length: 50}, (_, i) => makeMessage('sess-a', i + 1)),
     );
     // 不 startRun（无单元）→ loadSessionTailMessages 走 manager 的 idle 路径
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       force: true,
       projectId: 'p1',
-    });
+    })).value;
 
     // 一次往返：tail 查询 limit = 页大小 + 1，无第二次探针查询
     expect(h.messages.listBySessionTail).toHaveBeenCalledTimes(1);
@@ -645,7 +641,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
     const view = h.manager.readMessagesSnapshot('sess-a');
     expect(view?.hasMoreMessages).toBe(true);
     expect(view?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
-    const cache = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
+    const cache = SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'));
     expect(cache?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
     expect(cache?.messages[0].seq).toBe(11);
     expect(cache?.hasMoreMessages).toBe(true);
@@ -654,10 +650,10 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
   it('不足一页时 hasMore=false 原样采纳（无裁剪），缓存口径不变', async () => {
     const h = createHarness();
     h.db.set('sess-a', [makeMessage('sess-a', 1), makeMessage('sess-a', 2)]);
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       force: true,
       projectId: 'p1',
-    });
+    })).value;
     expect(rows).toHaveLength(2);
     expect(rows?.[0].seq).toBe(1);
     expect(h.messages.listBySessionPage).not.toHaveBeenCalled();
@@ -665,7 +661,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
       false,
     );
     expect(
-      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.hasMoreMessages,
+      SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.hasMoreMessages,
     ).toBe(false);
   });
 
@@ -686,7 +682,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
     expect(view?.messages[0].seq).toBe(1);
     expect(view?.hasMoreMessages).toBe(false); // 不足一整页 → 无更多
     expect(
-      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages,
+      SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages,
     ).toHaveLength(50);
   });
 
@@ -744,7 +740,7 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
     count: number,
   ): void {
     for (let i = 0; i < count; i++) {
-      h.manager.hydrateSessionMessages('p1', `flood-${i}`);
+      h.manager.hydrateSessionMessages(`flood-${i}`, 'p1');
     }
   }
 
@@ -777,9 +773,12 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
           options.beforeSeq == null
             ? rows
             : rows.filter(r => r.seq < options.beforeSeq);
-        return new Promise<ChatMessageData[]>(resolve => {
-          releasePage = () => resolve(filtered.slice(-options.limit));
-        });
+        return new Promise<{kind: 'completed'; value: ChatMessageData[]}>(
+          resolve => {
+            releasePage = () =>
+              resolve({kind: 'completed', value: filtered.slice(-options.limit)});
+          },
+        );
       },
     );
 
@@ -802,7 +801,7 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
     expect(view?.hasMoreMessages).toBe(false);
     expect(view?.loadingMoreMessages).toBe(false); // 标记已复位
     expect(
-      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages,
+      SessionViewCache.get(SessionViewCache.key('p1', 'sess-a'))?.messages,
     ).toHaveLength(50);
   });
 
@@ -937,7 +936,7 @@ describe('F-B3 复用子会话：宽限期内二次 RUN_STARTED 替换吸收（H
     // ③ 二轮 FINISHED 能被 finishRun 收口（runId 没回填就会永远 running），
     // 且消耗型单元照旧不写持久层、不发完成通知。
     const notifySpy = jest
-      .spyOn(finishedNotification, 'notifyAgentRunFinished')
+      .spyOn(AgentFinishedNotification, 'notifyRunFinished')
       .mockResolvedValue(undefined);
     try {
       publishFinished(h.eventBus, 'kid', 'r2');

@@ -4,6 +4,8 @@
  * @module service/session-fs/session-fs.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { RollbackOptions } from "@/service/message-checkpoint/message-rollback.port.js";
 
 /**
@@ -17,11 +19,9 @@ export interface SessionFsService {
    * Reconciles only paths in `tail checkpoint files ∪ target tree keys` — pre-anchor manual
    * VFS writes (FileEditor) stay unless a tail checkpoint touched the same path.
    * Anchor without its own checkpoint uses the nearest prior checkpoint tree (or empty baseline).
+   *
+   * 名字点明「files」：本门面只负责工作区/VFS 面（分层的稳定 API），消息截断与
+   * 回滚计划装配的唯一实现在 `MessageRollbackService.rollbackToMessage`。
    */
-  rollbackToMessage(
-    sessionId: string,
-    projectId: string,
-    messageId: string,
-    options?: RollbackOptions
-  ): Promise<void>;
+  rollbackFilesToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>>;
 }

@@ -3,16 +3,17 @@ import { describe, it } from "node:test";
 import { buildAgentStreamMetricsLabel } from "@/hooks/useAgentStreamMetrics";
 // 文案格式化（含 elapsed）从 core 唯一实现经 @shared/logic/format 再导出消费：
 // desktop hook 不再保留本地副本（core-metrics/C-2）。
-import { formatCharCount, formatStreamElapsed } from "@shared/logic/format";
+import { Number } from "@novel-master/core/common";
+import { StreamMetricsLine } from "@shared/logic/format";
 
 describe("useAgentStreamMetrics formatters", () => {
-  it("formatStreamElapsed 在 60s 内保留一位小数", () => {
-    assert.equal(formatStreamElapsed(12.34), "12.3s");
-    assert.equal(formatStreamElapsed(61), "61s");
+  it("StreamMetricsLine.formatElapsed 在 60s 内保留一位小数", () => {
+    assert.equal(StreamMetricsLine.formatElapsed(12.34), "12.3s");
+    assert.equal(StreamMetricsLine.formatElapsed(61), "61s");
   });
 
-  it("formatCharCount 使用 zh-CN 分组", () => {
-    const formatted = formatCharCount(1234);
+  it("Number.charCount 使用 zh-CN 分组", () => {
+    const formatted = Number.charCount(1234);
     assert.match(formatted, /1/);
     assert.ok(formatted.length > 3);
   });

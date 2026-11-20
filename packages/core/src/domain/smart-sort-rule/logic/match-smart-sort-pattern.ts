@@ -28,7 +28,8 @@
  */
 
 import type { SmartSortCaptureKind } from "../model/smart-sort-rule.js";
-import { FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, formatSortTupleForDisplay, parseChineseNum } from "@/domain/workplace/logic/smart-sort.js";
+import { FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, SmartSort } from "@/domain/workplace/logic/smart-sort.js";
+import { Number } from "@/common/number.js";
 import type { MessageLike } from "@/common/i18n.js";
 
 /**
@@ -52,65 +53,67 @@ export interface SmartSortPatternMatch {
 }
 
 /** Success shape: all matches in first-occurrence order. */
-export interface MatchSmartSortPatternOk {
+interface MatchSmartSortPatternOk {
   readonly ok: true;
   readonly matches: readonly SmartSortPatternMatch[];
 }
 
 /** Failure shape: regex did not compile (message from the engine). */
-export interface MatchSmartSortPatternErr {
+interface MatchSmartSortPatternErr {
   readonly ok: false;
   readonly error: string;
 }
 
 export type MatchSmartSortPatternResult = MatchSmartSortPatternOk | MatchSmartSortPatternErr;
 
-/**
- * Runs a pattern against free text and lists every match + capture groups.
- * Pure and side-effect free: the returned result is fully derived from the
- * arguments, safe to call on every keystroke (the editor still triggers it
- * manually via the test button, fix ②).
- *
- * captureKind（D13，缺省 'smart'）只影响每个 match 的 `tuple` 展示字段：
- * fixed 档恒显哨兵文案（捕获组被忽略）；smart 档走捕获组→数字转换，
- * 任一组失败则该 match 的 tuple 为 null。匹配本身（text/index/groups）
- * 与档位无关。
- */
-export function matchSmartSortPattern(pattern: string, flags: string, text: string, captureKind: SmartSortCaptureKind = "smart"): MatchSmartSortPatternResult {
-  let base: RegExp;
-  try {
-    base = new RegExp(pattern, flags);
-  } catch (e: unknown) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  // Clone with g for matchAll (needs g even when flags lack it); cloning
-  // leaves `base.lastIndex` (and any caller-held regex) untouched.
-  const globalFlags = base.flags.includes("g") ? base.flags : `${base.flags}g`;
-  const matcher = new RegExp(base.source, globalFlags);
-  const matches: SmartSortPatternMatch[] = [];
-  for (const m of text.matchAll(matcher)) {
-    // m.slice(1) keeps holes as undefined; normalize to null for JSON-safe
-    // IPC transport (desktop DTO) and a stable '-' rendering on both GUIs.
-    const groups = m.slice(1).map((g) => g ?? null);
-    // tuple（D13）：fixed 档哨兵元组与 smart 档数字元组统一经
-    // formatSortTupleForDisplay 格式化（C-3 单源）；smart 档无捕获组或任一
-    // 组转换失败 → null（GUI 渲染「无序号」）。
-    let tuple: MessageLike | null;
-    if (captureKind === "fixed_min") {
-      tuple = formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE);
-    } else if (captureKind === "fixed_max") {
-      tuple = formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE);
-    } else {
-      const nums = groups.map((g) => (typeof g === "string" ? parseChineseNum(g) : null)).filter((n): n is number => n !== null);
-      tuple = nums.length > 0 && nums.length === groups.length ? formatSortTupleForDisplay(nums) : null;
+export const SmartSortPattern = {
+  /**
+   * Runs a pattern against free text and lists every match + capture groups.
+   * Pure and side-effect free: the returned result is fully derived from the
+   * arguments, safe to call on every keystroke (the editor still triggers it
+   * manually via the test button, fix ②).
+   *
+   * captureKind（D13，缺省 'smart'）只影响每个 match 的 `tuple` 展示字段：
+   * fixed 档恒显哨兵文案（捕获组被忽略）；smart 档走捕获组→数字转换，
+   * 任一组失败则该 match 的 tuple 为 null。匹配本身（text/index/groups）
+   * 与档位无关。
+   */
+  match(pattern: string, flags: string, text: string, captureKind: SmartSortCaptureKind = "smart"): MatchSmartSortPatternResult {
+    let base: RegExp;
+    try {
+      base = new RegExp(pattern, flags);
+    } catch (e: unknown) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-    matches.push({
-      text: m[0],
-      // matchAll 的 m.index 恒为数字；?? 0 仅为类型收窄（never hit）。
-      index: m.index ?? 0,
-      groups,
-      tuple,
-    });
-  }
-  return { ok: true, matches };
-}
+    // Clone with g for matchAll (needs g even when flags lack it); cloning
+    // leaves `base.lastIndex` (and any caller-held regex) untouched.
+    const globalFlags = base.flags.includes("g") ? base.flags : `${base.flags}g`;
+    const matcher = new RegExp(base.source, globalFlags);
+    const matches: SmartSortPatternMatch[] = [];
+    for (const m of text.matchAll(matcher)) {
+      // m.slice(1) keeps holes as undefined; normalize to null for JSON-safe
+      // IPC transport (desktop DTO) and a stable '-' rendering on both GUIs.
+      const groups = m.slice(1).map((g) => g ?? null);
+      // tuple（D13）：fixed 档哨兵元组与 smart 档数字元组统一经
+      // formatSortTupleForDisplay 格式化（C-3 单源）；smart 档无捕获组或任一
+      // 组转换失败 → null（GUI 渲染「无序号」）。
+      let tuple: MessageLike | null;
+      if (captureKind === "fixed_min") {
+        tuple = SmartSort.formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE);
+      } else if (captureKind === "fixed_max") {
+        tuple = SmartSort.formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE);
+      } else {
+        const nums = groups.map((g) => (typeof g === "string" ? Number.parseChineseNum(g) : null)).filter((n): n is number => n !== null);
+        tuple = nums.length > 0 && nums.length === groups.length ? SmartSort.formatSortTupleForDisplay(nums) : null;
+      }
+      matches.push({
+        text: m[0],
+        // matchAll 的 m.index 恒为数字；?? 0 仅为类型收窄（never hit）。
+        index: m.index ?? 0,
+        groups,
+        tuple,
+      });
+    }
+    return { ok: true, matches };
+  },
+} as const;

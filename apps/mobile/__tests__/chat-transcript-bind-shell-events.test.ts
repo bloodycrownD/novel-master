@@ -24,18 +24,17 @@ const SHELL_MODULE =
 // 路径必须逐字写死：jest.mock 会被 babel 提升到文件顶部，变量形态的模块路径在
 // 那里还没初始化（TDZ），注册会静默失效、被测模块转而加载真依赖链。
 jest.mock('../src/web/chat-transcript/webview/runtime/scroll/scroll', () => ({
-  onScroll: jest.fn(),
-  stickIfNearBottomNow: jest.fn(),
+  Scroll: {on: jest.fn(), stickIfNearBottomNow: jest.fn()},
 }));
-jest.mock(
-  '../src/web/chat-transcript/webview/runtime/render/rows-click',
-  () => ({onRowsClick: jest.fn()}),
-);
+jest.mock('../src/web/chat-transcript/webview/runtime/render/rows-click', () => {
+  const legacy = {onRowsClick: jest.fn()};
+  return {...legacy, RowsClick: {on: legacy.onRowsClick}};
+});
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
   post: jest.fn(),
 }));
 jest.mock('@web/shared/code-copy', () => ({
-  attachCodeCopyDelegation: jest.fn(),
+  CodeCopy: {attach: jest.fn()},
 }));
 
 /* ------------------------------------------------------------------ *
@@ -142,11 +141,11 @@ beforeEach(() => {
   g.ResizeObserver = FakeResizeObserver;
 
   const scroll = require(SCROLL_MODULE) as {
-    stickIfNearBottomNow: jest.Mock;
+    Scroll: {stickIfNearBottomNow: jest.Mock};
   };
-  stickIfNearBottomNow = scroll.stickIfNearBottomNow;
-  const shell = require(SHELL_MODULE) as {bindShellEvents: () => void};
-  bindShellEvents = shell.bindShellEvents;
+  stickIfNearBottomNow = scroll.Scroll.stickIfNearBottomNow;
+  const shell = require(SHELL_MODULE) as {BindShellEvents: {bind: () => void}};
+  bindShellEvents = shell.BindShellEvents.bind;
 });
 
 afterEach(() => {

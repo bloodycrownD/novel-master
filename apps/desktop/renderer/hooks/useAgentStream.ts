@@ -68,7 +68,7 @@ export interface UseAgentStreamCallbacks {
 /** usage 旁路的尾随节流间隔（与指标条 250ms 渲染 tick 对齐）。 */
 const USAGE_NOTE_THROTTLE_MS = 250;
 
-export interface UseAgentStreamOptions {
+interface UseAgentStreamOptions {
   readonly sessionId: string | undefined;
   /**
    * 回调集合 ref。消费方在调本 hook 后定义回调，再写入 ref.current；
@@ -78,7 +78,7 @@ export interface UseAgentStreamOptions {
   readonly batchEnabled?: boolean;
 }
 
-export interface UseAgentStreamResult {
+interface UseAgentStreamResult {
   readonly streamingText: string;
   readonly streamingThinking: string;
   readonly streamingTextRef: MutableRefObject<string>;

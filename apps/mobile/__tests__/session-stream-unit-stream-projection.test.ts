@@ -20,15 +20,12 @@ import {
   EVENT_AGENT_STREAM_TOOL_USE,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
-import {addLogSink} from '@novel-master/core/log';
+import {agentActivity} from '@/runtime/agent-activity';
+import {LogFactory} from '@novel-master/core/log';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 import type {ChatMessageData} from '@novel-master/core/chat';
 
 const CLOCK_START_MS = 2_000_000;
@@ -69,10 +66,11 @@ function makeMessageStore(db: Map<string, ChatMessageData[]>) {
     listBySessionTail: jest.fn(
       async (sid: string, options: {limit: number}) => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
-        return rows.slice(-options.limit);
+        // 大结果集读口已换 Outcome（signal-abort-scope 长循环 hooks，T-S16 同批）。
+        return {kind: 'completed' as const, value: rows.slice(-options.limit)};
       },
     ),
-    listBySessionPage: jest.fn(async () => []),
+    listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
   };
 }
 
@@ -207,17 +205,17 @@ function recordingHandle(handleId: string): {
 
 describe('SessionStreamUnit 流式 step 记录（T-SP15）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('assistant STEP_COMMITTED 冻结旧记录（文本保留）并开新 streamId，不发 reset-stream', () => {
@@ -280,9 +278,9 @@ describe('tool-use 订阅与 tools-only stream-batch（T-SP16）', () => {
   let h: ReturnType<typeof createHarness>;
 
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
     h = createHarness();
@@ -291,8 +289,8 @@ describe('tool-use 订阅与 tools-only stream-batch（T-SP16）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('生效即推 tools-only batch（带当前 streamId）；按 toolUseId 去重', () => {
@@ -342,9 +340,9 @@ describe('DB 接管映射（T-SP17）', () => {
   let h: ReturnType<typeof createHarness>;
 
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
     h = createHarness();
@@ -353,8 +351,8 @@ describe('DB 接管映射（T-SP17）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('reload 后新增 assistant 一一配对：messageId + streamRowIds，行身份仍是 streamId', async () => {
@@ -418,13 +416,13 @@ describe('DB 接管映射（T-SP17）', () => {
         call += 1;
         if (call === 1) {
           // step 边界自动 kick 的 force reload 卡住（模拟查询先于落库行可见）
-          return new Promise<readonly ChatMessageData[]>(resolve => {
-            releaseForce = rows => resolve(rows);
+          return new Promise<{kind: 'completed'; value: readonly ChatMessageData[]}>(resolve => {
+            releaseForce = rows => resolve({kind: 'completed', value: rows});
           });
         }
-        return Promise.resolve<readonly ChatMessageData[]>([row]);
+        return Promise.resolve({kind: 'completed' as const, value: [row]});
       }),
-      listBySessionPage: jest.fn(async () => []),
+      listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
     };
     const onProjectionChanged = jest.fn();
     const unit = new SessionStreamUnit({
@@ -460,7 +458,7 @@ describe('DB 接管映射（T-SP17）', () => {
 
   it('待接管记录配不到新增 assistant 时记 warn（spec §2.1.3 规则 5 / S1）', async () => {
     const warnings: string[] = [];
-    const removeSink = addLogSink({
+    const removeSink = LogFactory.addSink({
       write: record => {
         if (record.level === 'warn') {
           warnings.push(record.message);
@@ -472,8 +470,8 @@ describe('DB 接管映射（T-SP17）', () => {
         sessionId: 'warn-s',
         projectId: 'p',
         messageStore: {
-          listBySessionTail: async () => [],
-          listBySessionPage: async () => [],
+          listBySessionTail: async () => ({kind: 'completed' as const, value: []}),
+          listBySessionPage: async () => ({kind: 'completed' as const, value: []}),
         },
       });
       unit.begin();
@@ -705,9 +703,9 @@ describe('streamRowIds 生命周期（P1-3 / P2-18f）', () => {
   let h: ReturnType<typeof createHarness>;
 
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
     h = createHarness({settledGraceMs: 1000});
@@ -716,8 +714,8 @@ describe('streamRowIds 生命周期（P1-3 / P2-18f）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   /** 跑一轮、接管 assistant、收尾并等宽限到期——单元出表、映射交接到 idle。 */

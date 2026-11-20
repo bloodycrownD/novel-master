@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
-import {
-  createAnthropicSseParserState,
-  feedAnthropicSseChunk,
-  finishAnthropicSsePartial,
-} from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
+import {  describe, it, mock  } from "node:test";
+import {  AnthropicProtocolAdapter  } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  AnthropicSseParser  } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
 
 describe("anthropic partial stream", () => {
   it("finishAnthropicSsePartial: only thinking → thinking only", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
-      'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"partial"}}\n',
-    );
-    const { blocks } = finishAnthropicSsePartial(state);
+    const parser = AnthropicSseParser.create();
+    parser.feed('data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"partial"}}\n');
+    const { blocks } = parser.finishPartial();
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
     if (blocks[0]?.type === "thinking") {
@@ -56,7 +50,7 @@ describe("anthropic partial stream", () => {
       vendorModelId: "claude",
       userContent: "hi",
       stream: true,
-      signal: controller.signal,
+      scope: AbortScopeFactory.create({ controller }),
     });
 
     assert.equal(result.blocks.length, 1);

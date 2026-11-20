@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -17,7 +14,7 @@ describe("worktree rule engine (integration)", () => {
     await pvfs.write("/parity/a.md", "A");
     await pvfs.write("/parity/b.md", "B");
 
-    const wt = createWorkplaceService(testCtx.conn, {
+    const wt = WorkplaceServiceFactory.create(testCtx.conn, {
       kind: "project",
       projectId: project.id,
     });
@@ -26,7 +23,7 @@ describe("worktree rule engine (integration)", () => {
       inclusionMode: "show",
     });
 
-    const live = await wt.materializeLiveView();
+    const live = unwrap(await wt.materializeLiveView());
     const dirRoot = live.listRows.find((r) => r.kind === "dir" && r.path === "/");
     assert.ok(dirRoot);
     assert.equal(dirRoot.ruleState, "rule_on");

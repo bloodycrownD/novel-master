@@ -49,25 +49,28 @@ test("listPickerChildRows：点目录进 cwd 后仅显示直子（含隐藏文�
 });
 
 test("勾选目录确认产出 @path/ token", () => {
-  assert.deepEqual(composerAtPath.tokensFromPickerSelection(["/notes"], []), [
-    "@/notes/",
-  ]);
-  assert.deepEqual(composerAtPath.tokensFromPickerSelection(["/"], []), ["@/"]);
+  const dirs = composerAtPath.tokensFromPickerSelection(["/notes"], []);
+  if (!dirs.ok) throw dirs.error;
+  assert.deepEqual(dirs.value, ["@/notes/"]);
+  const root = composerAtPath.tokensFromPickerSelection(["/"], []);
+  if (!root.ok) throw root.error;
+  assert.deepEqual(root.value, ["@/"]);
 });
 
 test("文件多选确认产出多条 @path token", () => {
-  assert.deepEqual(
-    composerAtPath.tokensFromPickerSelection([], ["/a.md", "/notes/b.md"]),
-    ["@/a.md", "@/notes/b.md"],
-  );
+  const files = composerAtPath.tokensFromPickerSelection([], [
+    "/a.md",
+    "/notes/b.md",
+  ]);
+  if (!files.ok) throw files.error;
+  assert.deepEqual(files.value, ["@/a.md", "@/notes/b.md"]);
 });
 
 test("多目录与多文件同确认不互斥", () => {
-  assert.deepEqual(
-    composerAtPath.tokensFromPickerSelection(
-      ["/notes", "/"],
-      ["/a.md", "/notes/b.md"],
-    ),
-    ["@/notes/", "@/", "@/a.md", "@/notes/b.md"],
+  const mixed = composerAtPath.tokensFromPickerSelection(
+    ["/notes", "/"],
+    ["/a.md", "/notes/b.md"],
   );
+  if (!mixed.ok) throw mixed.error;
+  assert.deepEqual(mixed.value, ["@/notes/", "@/", "@/a.md", "@/notes/b.md"]);
 });

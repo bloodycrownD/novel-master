@@ -3,10 +3,7 @@
  */
 import React, {useCallback, useLayoutEffect} from 'react';
 import {StyleSheet, View} from 'react-native';
-import {
-  useNavigation,
-  type CompositeNavigationProp,
-} from '@react-navigation/native';
+import {useNavigation, type CompositeNavigationProp} from '@react-navigation/native';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -17,15 +14,12 @@ import {useAndroidChatBackHandler} from '@/hooks/useAndroidChatBackHandler';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useTheme} from '@/theme/ThemeProvider';
-import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
+import {MainTabBarStyle} from '@/navigation/main-tab-bar-style';
 import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
-import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
-import {remapTokenRanges} from '@/components/chat/native-composer/token-ranges';
-import {isValidTokenRangeText} from '@/components/chat/composer-highlight';
-import {
-  readChatComposerDraftState,
-  writeChatComposerDraft,
-} from '@/storage/chat-composer-draft';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
+import {TokenRanges} from '@/components/chat/native-composer/token-ranges';
+import {ComposerHighlight} from '@/components/chat/composer-highlight';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
 import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
@@ -33,10 +27,7 @@ import {ChatTabNavigationProvider} from './chat-tab/ChatTabNavigationProvider';
 import {useChatTabNavigation} from '@/navigation/ChatTabNavContext';
 import {useChatTabController} from './chat-tab/useChatTabController';
 
-type Nav = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'Chat'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
+type Nav = CompositeNavigationProp<BottomTabNavigationProp<MainTabParamList, 'Chat'>, NativeStackNavigationProp<RootStackParamList>>;
 
 function ChatTabScreenInner() {
   const sessionBatch = useBatchSelection();
@@ -53,21 +44,13 @@ function ChatTabScreenInner() {
   }, [ctx.projectId, ctx.sessionId, navigation]);
 
   return (
-    <ChatTabNavigationProvider
-      sessionBatchActive={sessionBatch.active}
-      onExitSessionBatch={sessionBatch.exit}
-      onOpenSessionDetail={onOpenSessionDetail}
-    >
+    <ChatTabNavigationProvider sessionBatchActive={sessionBatch.active} onExitSessionBatch={sessionBatch.exit} onOpenSessionDetail={onOpenSessionDetail}>
       <ChatTabScreenContent sessionBatch={sessionBatch} />
     </ChatTabNavigationProvider>
   );
 }
 
-function ChatTabScreenContent({
-  sessionBatch,
-}: {
-  sessionBatch: ReturnType<typeof useBatchSelection>;
-}) {
+function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof useBatchSelection>}) {
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
   const ctx = useChatTabContext();
@@ -78,48 +61,42 @@ function ChatTabScreenContent({
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      tabBarStyle: resolveChatTabBarStyle(ctx.chatSubview, tokens, insets),
+      tabBarStyle: MainTabBarStyle.resolveChat(ctx.chatSubview, tokens, insets),
     });
     // navigation 在 RN 中引用稳定；勿列入 deps，避免测试 mock 每次新建对象导致死循环
-  }, [
-    ctx.chatSubview,
-    insets.bottom,
-    tokens.borderLight,
-    tokens.tabBarBackground,
-  ]);
+  }, [ctx.chatSubview, insets.bottom, tokens.borderLight, tokens.tabBarBackground]);
 
-  useAndroidChatBackHandler(
-    {
-      chatSubview: ctx.chatSubview,
-      conversationPanel: ctx.conversationPanel,
-      sessionListPanel: ctx.scope.sessionListPanel,
-      sessionDrawerOpen: ctx.sessionDrawerOpen,
-      mermaidViewerOpen: ctx.mermaidViewerOpen,
-      messageMenuOpen: ctx.webMenuOpen,
-      messageEditOpen: ctx.messageEditPrompt != null,
-      modelPickerOpen: ctx.modelPickerOpen,
-      agentPickerOpen: ctx.agentPickerOpen,
-      sessionRenameOpen: ctx.scope.sessionRenamePrompt != null,
-      projectDrawerOpen: ctx.scope.projectDrawerOpen,
-      sessionBatchActive: nav.state.sessionBatchActive,
-      workspaceCanGoUp: nav.state.workspaceCanGoUp,
-      workspaceGoUp: nav.actions.workspaceGoUp,
-    },
-    {
-      backFromConversation: nav.actions.backFromConversation,
-      showChatPanel: nav.actions.showChatPanel,
-      closeSessionDrawer: nav.actions.closeSessionDrawer,
-      closeMermaidViewer: nav.actions.closeMermaidViewer,
-      closeMessageMenu: nav.actions.closeMessageMenu,
-      closeMessageEdit: nav.actions.closeMessageEdit,
-      closeModelPicker: nav.actions.closeModelPicker,
-      closeAgentPicker: nav.actions.closeAgentPicker,
-      closeSessionRename: nav.actions.closeSessionRename,
-      closeProjectDrawer: nav.actions.closeProjectDrawer,
-      exitSessionBatch: nav.actions.exitSessionBatch,
-      showSessionsPanel: nav.actions.showSessionsPanel,
-    },
-  );
+  const backState = {
+    chatSubview: ctx.chatSubview,
+    conversationPanel: ctx.conversationPanel,
+    sessionListPanel: ctx.scope.sessionListPanel,
+    sessionDrawerOpen: ctx.sessionDrawerOpen,
+    mermaidViewerOpen: ctx.mermaidViewerOpen,
+    messageMenuOpen: ctx.webMenuOpen,
+    messageEditOpen: ctx.messageEditPrompt != null,
+    modelPickerOpen: ctx.modelPickerOpen,
+    agentPickerOpen: ctx.agentPickerOpen,
+    sessionRenameOpen: ctx.scope.sessionRenamePrompt != null,
+    projectDrawerOpen: ctx.scope.projectDrawerOpen,
+    sessionBatchActive: nav.state.sessionBatchActive,
+    workspaceCanGoUp: nav.state.workspaceCanGoUp,
+    workspaceGoUp: nav.actions.workspaceGoUp,
+  };
+  const backActions = {
+    backFromConversation: nav.actions.backFromConversation,
+    showChatPanel: nav.actions.showChatPanel,
+    closeSessionDrawer: nav.actions.closeSessionDrawer,
+    closeMermaidViewer: nav.actions.closeMermaidViewer,
+    closeMessageMenu: nav.actions.closeMessageMenu,
+    closeMessageEdit: nav.actions.closeMessageEdit,
+    closeModelPicker: nav.actions.closeModelPicker,
+    closeAgentPicker: nav.actions.closeAgentPicker,
+    closeSessionRename: nav.actions.closeSessionRename,
+    closeProjectDrawer: nav.actions.closeProjectDrawer,
+    exitSessionBatch: nav.actions.exitSessionBatch,
+    showSessionsPanel: nav.actions.showSessionsPanel,
+  };
+  useAndroidChatBackHandler(backState, backActions);
 
   const openConversation = useCallback(
     async (sid: string) => {
@@ -129,10 +106,7 @@ function ChatTabScreenContent({
       await setCurrentSession(sid);
       // 会话切换防闪：view cache 命中即同步采纳进 manager 的 idle 消息面
       // （Step 7 收口：原 hook 的 hydrateFromSessionCache 等价迁移）。
-      ctx.runtime.sessionStreamUnitManager.hydrateSessionMessages(
-        ctx.projectId,
-        sid,
-      );
+      ctx.runtime.sessionStreamUnitManager.hydrateSessionMessages(sid, ctx.projectId);
       ctx.setChatSubview('conversation');
       ctx.setConversationPanel('chat');
     },
@@ -143,9 +117,7 @@ function ChatTabScreenContent({
     controller.confirmBatchDeleteSessions(sessionBatch.selectedCount, () =>
       // 删除错误已在 deleteSelectedSessions 内部处理并 toast，
       // 这里只兜底避免意外的 Promise 拒绝变成未处理告警。
-      ctx.scope
-        .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
-        .catch(() => undefined),
+      ctx.scope.deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit).catch(() => undefined),
     );
   }, [controller, sessionBatch, ctx.scope]);
 
@@ -179,16 +151,9 @@ function ChatTabScreenContent({
       // 区间做一次 remap（全屏内的新 `$x` 不升格，与目标 5 一致）。旧草稿
       // `tokenRanges` 为 undefined → **原样写 undefined**（不传字段、不做扫描
       // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
-      setPromptEditorOnSaved(text => {
-        const previous = readChatComposerDraftState(targetSessionId);
-        writeChatComposerDraft(
-          targetSessionId,
-          text,
-          runtime.sessions,
-          previous.tokenRanges !== undefined
-            ? remapTokenRanges(previous.text, text, previous.tokenRanges)
-            : undefined,
-        );
+      promptEditorOnSavedSlot.set(text => {
+        const previous = ChatComposerDraft.readState(targetSessionId);
+        ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? TokenRanges.remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
         setDraftRestoreToken(token => token + 1);
       });
       // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
@@ -196,18 +161,14 @@ function ChatTabScreenContent({
       // 草稿区间交过去，避免「已有胶囊贴尾 → 再插一颗」在无守卫时被整颗替换。
       // 正常路径下 payload.text 与草稿文本一致（打字/插入都同步落草稿），
       // remap 只是把「万一不一致」的坐标系对齐，相等时是恒等拷贝。
-      const entryDraft = readChatComposerDraftState(targetSessionId);
+      const entryDraft = ChatComposerDraft.readState(targetSessionId);
       // 水化自愈落点③：区间必须以 **remap 后的 payload.text** 为基准逐条校验
       //（entryDraft.text 与 payload.text 可能不同，用错基准会把合法区间判成越界）。
       // 不合法的（旧格式 / 半截 / 越界）就地丢弃，全屏侧无需额外改动。
-      const remappedRanges =
-        entryDraft.tokenRanges !== undefined
-          ? remapTokenRanges(
-              entryDraft.text,
-              payload.text,
-              entryDraft.tokenRanges,
-            ).filter(range => isValidTokenRangeText(payload.text, range))
-          : undefined;
+      let remappedRanges: ReturnType<typeof TokenRanges.remapTokenRanges> | undefined;
+      if (entryDraft.tokenRanges !== undefined) {
+        remappedRanges = TokenRanges.remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
+      }
       navigation.navigate('PromptEditor', {
         title: '编辑消息',
         initialText: payload.text,
@@ -243,13 +204,7 @@ function ChatTabScreenContent({
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="chat" />
-      {ctx.chatSubview === 'conversation' ? (
-        <ChatConversationPanel
-          tokens={tokens}
-          visible
-          onOpenComposerFullscreen={onOpenComposerFullscreen}
-        />
-      ) : null}
+      {ctx.chatSubview === 'conversation' ? <ChatConversationPanel tokens={tokens} visible onOpenComposerFullscreen={onOpenComposerFullscreen} /> : null}
       <ChatSessionListPanel
         tokens={tokens}
         visible={ctx.chatSubview === 'sessions'}
@@ -266,18 +221,14 @@ function ChatTabScreenContent({
         onEnterSessionBatch={sessionBatch.enter}
         onExitSessionBatch={sessionBatch.exit}
         onConfirmBatchDelete={confirmBatchDelete}
-        onCreateSession={() =>
-          ctx.scope.handleCreateSession().catch(() => undefined)
-        }
+        onCreateSession={() => ctx.scope.handleCreateSession().catch(() => undefined)}
         onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
         onToggleSessionSelect={sessionBatch.toggle}
         isSessionSelected={sessionBatch.isSelected}
         menuSessionId={ctx.scope.menuSessionId}
         onMenuSessionIdChange={ctx.scope.setMenuSessionId}
         onOpenSessionRename={ctx.scope.openSessionRenamePrompt}
-        onCopySession={sid =>
-          ctx.scope.handleCopySession(sid).catch(() => undefined)
-        }
+        onCopySession={sid => ctx.scope.handleCopySession(sid).catch(() => undefined)}
         onConfirmDeleteSession={ctx.scope.confirmDeleteSession}
         onOpenFileEditor={ctx.onOpenFileEditor}
       />

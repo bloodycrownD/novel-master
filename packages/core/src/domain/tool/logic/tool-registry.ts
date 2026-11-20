@@ -5,7 +5,7 @@
  */
 
 import type { Tool } from "../model/tool.js";
-import { toolConflict } from "@/errors/tool-errors.js";
+import { AppError } from "@/errors/app-error.js";
 
 /**
  * In-memory registry for tools.
@@ -23,7 +23,7 @@ export class ToolRegistry<Ctx = unknown> {
    */
   register(tool: Tool<any, any, Ctx>): void {
     if (this.tools.has(tool.name)) {
-      throw toolConflict(tool.name);
+      throw new AppError("TOOL_CONFLICT", {toolName: tool.name, detail: `Tool already registered: ${tool.name}`});
     }
     this.tools.set(tool.name, tool);
   }

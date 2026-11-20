@@ -10,16 +10,10 @@
  * 语义（编辑回填）与取值时机都不同。
  */
 
-let onSessionVfsSaved: (() => void) | null = null;
+import {CallbackSlot} from '../../runtime/callback-slot';
 
-/** push 前写入当次回调（每次打开都覆盖新回调）。 */
-export function setFileEditorOnSessionVfsSaved(cb: () => void) {
-  onSessionVfsSaved = cb;
-}
-
-/** 挂载时读取并清空：take 语义避免上一次打开的回调泄漏到下一次。 */
-export function takeFileEditorOnSessionVfsSaved(): (() => void) | null {
-  const cb = onSessionVfsSaved;
-  onSessionVfsSaved = null;
-  return cb;
-}
+/**
+ * 模块级单槽：push 前 `set`（每次打开都覆盖新回调）、挂载时 `take`
+ * （读后即清，避免上一次打开的回调泄漏到下一次）。
+ */
+export const fileEditorOnSessionVfsSavedSlot = CallbackSlot.create<() => void>();

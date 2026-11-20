@@ -7,21 +7,14 @@
  */
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
-import { textBlocks } from "@novel-master/core/chat";
+import {  randomUUID  } from "node:crypto";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen, type TdbcConnection  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
 import type { Row } from "../../src/infra/tdbc/types.js";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import {  SqliteMessageRepository  } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 /**
  * 压缩两列进入合同的 BOOT 版本（v17 bump 引入，见
@@ -33,8 +26,8 @@ import {
 const COMPRESSION_COLUMNS_BOOT_VERSION = 17;
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
-  return await open("tdbc:sqlite:file::memory:", {
+  BetterSqlite3Register.register();
+  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -118,7 +111,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       // SCHEMA_BOOT_VERSION - 1（当前落 16），模拟真实上一版存量库（形态
       // 对齐 A12 先例——锁「加列忘 bump」bug 形态）。fixture 版本用常量
       // 表达式跟随 BOOT 演进：将来 v18 再加列时此处自动落 17。
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_encoding");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_blob");
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION - 1}`);
@@ -135,7 +128,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
          )`
       );
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "chat_message");
       assert.ok(
@@ -164,7 +157,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       const repo = new SqliteMessageRepository(conn);
       const read = await repo.findById(legacyMessageId);
       assert.ok(read);
-      assert.deepEqual(read!.content, textBlocks("legacy-plaintext"));
+      assert.deepEqual(read!.content, TextBlocks.of("legacy-plaintext"));
 
       // 新写入在新列就位后可正常 INSERT/SELECT（压缩形态断言由
       // T-C1 往返用例覆盖，此处只锁 schema 语义）。
@@ -173,7 +166,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
         sessionId,
         seq: 2,
         role: "user" as const,
-        content: textBlocks("compressed-new"),
+        content: TextBlocks.of("compressed-new"),
         provider: null,
         raw: null,
         createdAtMs: now + 1,
@@ -182,7 +175,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       await repo.insert(message);
       const readNew = await repo.findById(message.id);
       assert.ok(readNew);
-      assert.deepEqual(readNew!.content, textBlocks("compressed-new"));
+      assert.deepEqual(readNew!.content, TextBlocks.of("compressed-new"));
 
       // ALIGN 补列必须带 CHECK 值域（防 align SQL 与 canonical DDL 漂移——
       // 值域放宽/收紧测不出就是这里的缺口）：'gzip' 不在值域内被拒，
@@ -220,11 +213,11 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
   it("快路径：连续 bootstrap 幂等，两列就位且第二次 bootstrap 除幂等补建段（pack 两表一索引）外不下发任何 DDL", async () => {
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       // 第二次 bootstrap：user_version 已达 SCHEMA_BOOT_VERSION，走快路径——
       // 用 DDL 探针连接包一层，断言期间未观测到任何 ALTER TABLE / CREATE。
       const probe = new DdlProbeConnection(conn);
-      await bootstrapNovelMaster(probe);
+      await NovelMasterBootstrap.bootstrap(probe);
 
       const columns = await tableColumnNames(conn, "chat_message");
       assert.ok(columns.has("content_encoding"));
@@ -276,13 +269,13 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
     // 唯一正解是 bump SCHEMA_BOOT_VERSION 让它重新走慢路径。
     const conn = await openInMemoryConnection();
     try {
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
       // DROP 两列，把 user_version 顶到 SCHEMA_BOOT_VERSION。
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_encoding");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_blob");
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
 
-      await bootstrapNovelMaster(conn);
+      await NovelMasterBootstrap.bootstrap(conn);
 
       const columns = await tableColumnNames(conn, "chat_message");
       assert.ok(

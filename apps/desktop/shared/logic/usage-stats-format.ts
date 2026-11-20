@@ -1,9 +1,17 @@
 /**
- * 统计页展示层纯函数（desktop 侧）：请求流水时间、耗时/首字延迟、页码条窗口。
- * 结构等价复制自 packages/core/src/common/usage-stats-format.ts
- * ——renderer 禁止 import core（eslint X1 门禁），desktop 侧副本统一放 shared/logic。
- * 双端行为一致契约：修改任一份时同步另一份。
+ * 统计页展示层纯函数（desktop 侧）：请求流水时间、耗时/首字延迟、页码条窗口、
+ * 本地日键。结构等价复制自 core 的对应纯函数——renderer 禁止 import core（eslint
+ * X1 门禁），desktop 侧副本统一放 shared/logic。双端行为一致契约：修改任一份时
+ * 同步另一份（本地日键的 core 单源是 `common/datetime.ts` 的 `DateTime.localDayKey`）。
  */
+
+/** epoch ms → 本地日期键 `YYYY-MM-DD`（年份 4 位补零，天/小时桶都用它定位天边界）。 */
+export function toLocalDayKey(ms: number): string {
+  const d = new Date(ms);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${String(d.getFullYear()).padStart(4, "0")}-${month}-${day}`;
+}
 
 /** 请求流水时间展示：本地时区 `MM-DD HH:mm`。 */
 export function formatRequestTime(ms: number): string {

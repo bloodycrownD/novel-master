@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { checkForUpdates } from "../../src/main/update-check/check-for-updates.js";
+import { UpdateCheck } from "@novel-master/core/common";
 
 // NOVEL_MASTER_DISABLE_UPDATE_CHECK 短路（e2e 专用 hook）：置位时应在编排入口
 // 直接抛错，不触达任何网络 fetch（否则 e2e 环境每轮启动多付一次 GitHub fetch 超时）
@@ -19,7 +19,7 @@ describe("checkForUpdates env 短路", () => {
       throw new Error("短路路径不应触达 fetch");
     };
     await assert.rejects(
-      checkForUpdates("2.0.0", guardFetch),
+      UpdateCheck.check("2.0.0", guardFetch),
       /更新检查已禁用/,
     );
     assert.equal(fetchCalled, false, "短路后不得发起任何网络请求");
@@ -37,8 +37,9 @@ describe("checkForUpdates env 短路", () => {
           body: "Release notes",
         }),
       }) as Response;
-    const data = await checkForUpdates("2.0.0", mockFetch);
-    assert.equal(data.status, "update-available");
-    assert.equal(data.remoteVersion, "2.1.0");
+    const checked = await UpdateCheck.check("2.0.0", mockFetch);
+    assert.ok(checked.ok, "合法版本号比较不应失败");
+    assert.equal(checked.value.status, "update-available");
+    assert.equal(checked.value.remoteVersion, "2.1.0");
   });
 });

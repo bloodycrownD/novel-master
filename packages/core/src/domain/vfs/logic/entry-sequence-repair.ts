@@ -22,46 +22,51 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { IntegrityRepairDetection, IntegrityRepairOperation } from "@/service/integrity-repair.js";
 
-export const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
+const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
 
-async function readSequenceBoundaries(conn: TdbcConnection): Promise<{ seq: number; needed: number }> {
-  // 全新库在首次自增插入前 sqlite_sequence 尚未物化（没有 vfs_entry 行，
-  // 表本身随 AUTOINCREMENT 建表即存在）——查询返回空结果集而非抛错，
-  // 下方 `?? 0` 兜底视为健康。查询异常则直接上抛：detect 抛错由 registry
-  // （integrity-repair.ts）保守地按「需要修复」处理并挂到报告，这里
-  // 绝不吞错伪装健康（吞错会让存量错位库静默漏修）。
-  const entryMax = await conn.query<{ m: number | null }>("SELECT MAX(entry_id) AS m FROM vfs_entry");
-  const revMax = await conn.query<{ m: number | null }>("SELECT MAX(entry_id) AS m FROM vfs_revision");
-  const seqRow = await conn.query<{ seq: number | null }>("SELECT seq FROM sqlite_sequence WHERE name = 'vfs_entry'");
-  const needed = Math.max(Number(entryMax[0]?.m ?? 0), Number(revMax[0]?.m ?? 0));
-  const seq = Number(seqRow[0]?.seq ?? 0);
-  return { seq, needed };
-}
+export const EntrySequenceRepair = {
+  readSequenceBoundaries: async (conn: TdbcConnection): Promise<{ seq: number; needed: number }> => {
+    // 全新库在首次自增插入前 sqlite_sequence 尚未物化（没有 vfs_entry 行，
+    // 表本身随 AUTOINCREMENT 建表即存在）——查询返回空结果集而非抛错，
+    // 下方 `?? 0` 兜底视为健康。查询异常则直接上抛：detect 抛错由 registry
+    // （integrity-repair.ts）保守地按「需要修复」处理并挂到报告，这里
+    // 绝不吞错伪装健康（吞错会让存量错位库静默漏修）。
+    const entryMax = await conn.query<{ m: number | null }>("SELECT MAX(entry_id) AS m FROM vfs_entry");
+    const revMax = await conn.query<{ m: number | null }>("SELECT MAX(entry_id) AS m FROM vfs_revision");
+    const seqRow = await conn.query<{ seq: number | null }>("SELECT seq FROM sqlite_sequence WHERE name = 'vfs_entry'");
+    const needed = Math.max(Number(entryMax[0]?.m ?? 0), Number(revMax[0]?.m ?? 0));
+    const seq = Number(seqRow[0]?.seq ?? 0);
+    return { seq, needed };
+  },
 
-/** 构造发号器修复操作（bootstrap 启动期无条件注册）。 */
-export function createVfsEntrySequenceRepairOperation(conn: TdbcConnection): IntegrityRepairOperation {
-  return {
-    name: VFS_ENTRY_SEQUENCE_REPAIR_NAME,
-    kind: "repair",
-    async detect(): Promise<IntegrityRepairDetection> {
-      const { seq, needed } = await readSequenceBoundaries(conn);
-      return {
-        needsRepair: seq < needed,
-        details: `sqlite_sequence(vfs_entry)=${seq} < needed=${needed}（含孤儿 revision 占号）`,
-      };
-    },
-    async repair(): Promise<void> {
-      const { seq, needed } = await readSequenceBoundaries(conn);
-      if (seq >= needed) {
-        return;
-      }
-      // sqlite_sequence 可直接写入；无行（表从未自发递增过）时补一行
-      const updated = await conn.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'vfs_entry'", [needed]);
-      if (updated.changes === 0) {
-        await conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('vfs_entry', ?)", [needed]);
-      }
-    },
-  };
-}
+  /** 构造发号器修复操作（bootstrap 启动期无条件注册）。 */
+  create: (conn: TdbcConnection): IntegrityRepairOperation => {
+    return {
+      name: VFS_ENTRY_SEQUENCE_REPAIR_NAME,
+      kind: "repair",
+      async detect(): Promise<Result<IntegrityRepairDetection, AppError>> {
+        const { seq, needed } = await EntrySequenceRepair.readSequenceBoundaries(conn);
+        return Result.ok({
+          needsRepair: seq < needed,
+          details: `sqlite_sequence(vfs_entry)=${seq} < needed=${needed}（含孤儿 revision 占号）`,
+        });
+      },
+      async repair(): Promise<Result<void, AppError>> {
+        const { seq, needed } = await EntrySequenceRepair.readSequenceBoundaries(conn);
+        if (seq >= needed) {
+          return Result.ok(undefined);
+        }
+        // sqlite_sequence 可直接写入；无行（表从未自发递增过）时补一行
+        const updated = await conn.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'vfs_entry'", [needed]);
+        if (updated.changes === 0) {
+          await conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('vfs_entry', ?)", [needed]);
+        }
+        return Result.ok(undefined);
+      },
+    };
+  },
+} as const;

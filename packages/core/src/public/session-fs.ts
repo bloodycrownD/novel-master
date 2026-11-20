@@ -1,26 +1,9 @@
 /**
- * Session 文件系统回滚门面与相关错误的公开入口。
+ * Session 文件系统服务的公开入口（回滚守卫与 RollbackOptions 已移至
+ * `@novel-master/core/message-checkpoint`，isSessionFsError 走 `@novel-master/core/errors`）。
  *
  * @module public/session-fs
  */
 
-export {
-  SessionFsError,
-  isSessionFsError,
-  isRollbackVfsDegradableError,
-  isRollbackRevisionBackfillRequiredError,
-  isRollbackConflictError,
-  readRollbackRevisionBackfillMissingPaths,
-  formatRollbackRevisionBackfillAlertMessage,
-  sessionFsRollbackMessageNotFound,
-  sessionFsRollbackMessageSessionMismatch,
-  sessionFsRollbackNoCheckpoint,
-  sessionFsRollbackRevisionBackfillRequired,
-  sessionFsRollbackUndoSendEmptyTarget,
-  sessionFsRollbackVfsRestoreFailed,
-  sessionFsRollbackConflict,
-} from "../errors/session-fs-errors.js";
-export type { SessionFsErrorCode } from "../errors/session-fs-errors.js";
-export type { RollbackOptions } from "../service/message-checkpoint/message-rollback.port.js";
-export { createSessionFsService } from "../service/session-fs/create-session-fs-service.js";
+export { SessionFsServiceFactory } from "../service/session-fs/create-session-fs-service.js";
 export type { SessionFsService } from "../service/session-fs/session-fs.port.js";

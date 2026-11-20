@@ -1,105 +1,44 @@
 /**
- * Mobile agent run — thin wrapper over core {@link runAgentTurn}.
+ * Mobile agent run adapter — thin wrapper over core `AgentTurnRunner.run`.
  */
-import {
-  AgentRunResolveError,
-  AgentTurnError,
-  resolveApplicationModelIdForRun,
-  resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
-  resolveCurrentAgentId as resolveCoreAgentId,
-  runAgentTurn as coreRunAgentTurn,
-  type AgentDefinition,
-  type AgentRunResult,
-  type AgentTurnScope,
-} from '@novel-master/core/agent';
-import type {
-  ComposerDraftTokenRange,
-  MessageAttachment,
-  SendAnnotateDraft,
-} from '@novel-master/core/chat';
+import {AgentTurnRunner, type AgentRunResult, type AgentTurnScope} from '@novel-master/core/agent';
+import type {AppError, Result} from '@novel-master/core/errors';
+import type {ComposerDraftTokenRange, MessageAttachment, SendAnnotateDraft} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export type AgentRunScope = AgentTurnScope;
 
-export {AgentTurnError as AgentRunError};
+export type AgentRunOptions = {
+  readonly stream?: boolean;
+  readonly allowResumeWithoutInput?: boolean;
+  readonly attachments?: readonly MessageAttachment[];
+  readonly annotateDrafts?: readonly SendAnnotateDraft[];
+  /** D9：确认胶囊区间（已换算到 trim 后正文坐标；空/缺失退回全量扫描）。 */
+  readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
+  readonly onUserMessageAppended?: () => void | Promise<void>;
+};
 
-function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
-  return fn().catch(error => {
-    if (error instanceof AgentRunResolveError) {
-      throw new AgentTurnError(error.message);
-    }
-    throw error;
-  });
-}
-
-/** Resolves current agent id from state or registry fallback. */
-export async function resolveCurrentAgentId(
-  runtime: MobileNovelMasterRuntime,
-): Promise<string | undefined> {
-  return resolveCoreAgentId(runtime);
-}
-
-/** Loads agent definition for the current agent pointer. */
-export async function resolveCurrentAgentDefinition(
-  runtime: MobileNovelMasterRuntime,
-): Promise<{agentId: string; definition: AgentDefinition}> {
-  return mapResolveError(() => resolveCoreAgentDefinition(runtime));
-}
-
-/**
- * 解析对话 savedModelId。
- *
- * 优先级链：agent pin → 会话 bind 的 modelId → workspace 当前模型。
- * sessionId 透传给 core 解析链，让其读取会话级绑定配置。
- */
-export async function resolveMobileSavedModelId(
-  runtime: MobileNovelMasterRuntime,
-  definition: AgentDefinition,
-  sessionId: string,
-): Promise<{savedModelId: string; workspaceModelId: string}> {
-  return mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition, sessionId),
-  );
-}
-
-/** Appends a user message and runs the agent loop (streaming via event bus). */
-export async function runAgentTurn(
-  runtime: MobileNovelMasterRuntime,
-  scope: AgentRunScope,
-  userContent: string,
-  options?: {
-    readonly stream?: boolean;
-    readonly allowResumeWithoutInput?: boolean;
-    readonly attachments?: readonly MessageAttachment[];
-    readonly annotateDrafts?: readonly SendAnnotateDraft[];
-    /** D9：确认胶囊区间（已换算到 trim 后正文坐标；空/缺失退回全量扫描）。 */
-    readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
-    readonly signal?: AbortSignal;
-    readonly onUserMessageAppended?: () => void | Promise<void>;
-  },
-): Promise<AgentRunResult> {
-  return coreRunAgentTurn(runtime, scope, userContent, {
-    ...options,
-    onRunFailed: ctx => {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        const err =
-          ctx.error instanceof Error
-            ? {
-                name: ctx.error.name,
-                message: ctx.error.message,
-                stack: ctx.error.stack,
-                cause: String(
-                  (ctx.error as Error & {cause?: unknown}).cause ?? '',
-                ),
-              }
-            : {name: typeof ctx.error, message: String(ctx.error)};
-        console.error('[novel-master/agent-run] failed', {
-          stage: ctx.stage,
-          sessionId: ctx.scope.sessionId,
-          projectId: ctx.scope.projectId,
-          err,
-        });
-      }
-    },
-  });
+export namespace AgentRunService {
+  /** Appends a user message and runs the agent loop (streaming via event bus). */
+  export async function run(runtime: MobileNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
+    return AgentTurnRunner.run(runtime, scope, userContent, {
+      ...options,
+      onRunFailed: ctx => {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          let err: {name: string; message: string; stack?: string; cause?: string};
+          if (ctx.error instanceof Error) {
+            err = {name: ctx.error.name, message: ctx.error.message, stack: ctx.error.stack, cause: String((ctx.error as Error & {cause?: unknown}).cause ?? '')};
+          } else {
+            err = {name: typeof ctx.error, message: String(ctx.error)};
+          }
+          console.error('[novel-master/agent-run] failed', {
+            stage: ctx.stage,
+            sessionId: ctx.scope.sessionId,
+            projectId: ctx.scope.projectId,
+            err,
+          });
+        }
+      },
+    });
+  }
 }

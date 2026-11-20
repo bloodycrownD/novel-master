@@ -1,8 +1,7 @@
-import { describe, it, mock } from "node:test";
+import {  describe, it, mock  } from "node:test";
 import assert from "node:assert/strict";
-import { ProviderError } from "../../src/errors/provider-errors.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
-import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
+import {  OpenAiProtocolAdapter  } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
 
 describe("OpenAiProtocolAdapter HTTP", () => {
   it("listModels uses GET /models with bearer auth", async () => {

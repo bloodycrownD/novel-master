@@ -1,6 +1,9 @@
 /**
  * RN ↔ Web code editor bridge: typed JSON envelopes ({ v, type, payload }).
+ * 四函数编解码单源在 `webview-host/typed-message-bridge.ts`。
  */
+import {TypedMessageBridge} from '@/webview-host/typed-message-bridge';
+
 export const CODE_EDITOR_BRIDGE_VERSION = 1 as const;
 
 export type BridgeEnvelope<T extends string, P> = {
@@ -41,7 +44,7 @@ export type HostToCodeEditorMessage =
   | BridgeEnvelope<'blur', Record<string, never>>;
 
 /** Code editor WebView → host */
-export type CodeEditorToHostMessage =
+type CodeEditorToHostMessage =
   | BridgeEnvelope<'ready', {version: number}>
   | BridgeEnvelope<'change', {text: string}>
   /** 光标/选区上报（typeahead 的活跃查询判定在 RN 侧）。 */
@@ -55,44 +58,4 @@ export type CodeEditorSelection = {
   readonly end: number;
 };
 
-export function encodeHostToCodeEditor(
-  message: HostToCodeEditorMessage,
-): string {
-  return JSON.stringify(message);
-}
-
-export function encodeCodeEditorToHost(
-  message: CodeEditorToHostMessage,
-): string {
-  return JSON.stringify(message);
-}
-
-export function decodeCodeEditorToHost(raw: string): CodeEditorToHostMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  const record = parsed as Record<string, unknown>;
-  if (record.v !== CODE_EDITOR_BRIDGE_VERSION) {
-    throw new Error('Invalid code-editor bridge envelope version');
-  }
-  if (typeof record.type !== 'string' || typeof record.payload !== 'object') {
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  return parsed as CodeEditorToHostMessage;
-}
-
-export function decodeHostToCodeEditor(raw: string): HostToCodeEditorMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  const record = parsed as Record<string, unknown>;
-  if (record.v !== CODE_EDITOR_BRIDGE_VERSION) {
-    throw new Error('Invalid code-editor bridge envelope version');
-  }
-  if (typeof record.type !== 'string') {
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  return parsed as HostToCodeEditorMessage;
-}
+export const codeEditorBridge = TypedMessageBridge.create<HostToCodeEditorMessage, CodeEditorToHostMessage>(CODE_EDITOR_BRIDGE_VERSION, 'code-editor');

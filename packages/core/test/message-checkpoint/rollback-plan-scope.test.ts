@@ -9,45 +9,43 @@
  * - 计数快照改走 countBySession（COUNT(*) 单行）后 A-22 冲突检测仍生效
  *   （既有 rollback-optimistic-lock.test.ts 回归兜底，此处断言 SQL 口径）。
  */
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 describe("rollback plan 拉取收窄（T-R1）", () => {
   it("T-R1a: rewind 锚点 tool_result 前向配对不受收窄影响——锚点前消息保留、配对消息同截", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr1a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr1a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     // 锚点之前的历史（不参与 plan，但必须原样保留）。
-    const user0 = await ctx.messages.append(session.id, "user", textBlocks("旧对话"));
-    const assistant0 = await ctx.messages.append(session.id, "assistant", {
+    const user0 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("旧对话")));
+    const assistant0 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "旧回复" }],
-    });
+    }));
 
     // 触发消息：带 tool_use 的 assistant（锚点应前向配对到其后的 tool_result）。
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "tool_use", id: "tu-1", name: "read", input: {} }],
-    });
-    const toolResults = await ctx.messages.append(session.id, "user", {
+    }));
+    const toolResults = unwrap(await ctx.messages.append(session.id, "user", {
       blocks: [
         { type: "tool_result", toolUseId: "tu-1", content: "ok" },
       ],
-    });
-    await ctx.messages.append(session.id, "assistant", {
+    }));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "总结" }],
-    });
+    }));
 
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, assistant1.id, {
       skipVfsReconcile: true,
     });
@@ -58,7 +56,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     // 之后、本应仍在拉取窗口内），锚点会退回 assistant1 自身 → 截掉
     // toolResult 与总结、只剩 3 条——长度断言即失败，以此证明配对不受
     // 收窄影响。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 4);
     assert.equal(left[0]!.id, user0.id);
     assert.equal(left[1]!.id, assistant0.id);
@@ -68,24 +66,24 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
 
   it("T-R1b: undo_send 中段 user 锚点——锚点前保留、锚点起（含）截断", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr1b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr1b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const user0 = await ctx.messages.append(session.id, "user", textBlocks("保留"));
-    const assistant0 = await ctx.messages.append(session.id, "assistant", {
+    const user0 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("保留")));
+    const assistant0 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
-    });
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("锚点"));
-    await ctx.messages.append(session.id, "assistant", {
+    }));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("锚点")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "被截" }],
-    });
+    }));
 
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
 
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[0]!.id, user0.id);
     assert.equal(left[1]!.id, assistant0.id);
@@ -93,20 +91,20 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
 
   it("T-R1c: SQL 口径——plan 阶段 seq >= 收窄拉取 + COUNT(*) 计数快照，无全量 listBySession", async () => {
     const ctx = await openSqlCountingNovelMasterTestConnection();
-    const project = await ctx.projects.create(`P-tr1c-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr1c-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("a"));
-    const assistant0 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
+    const assistant0 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("c"));
-    await ctx.messages.append(session.id, "assistant", {
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("c")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "d" }],
-    });
+    }));
 
     ctx.counter.clear();
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, assistant0.id, {
       skipVfsReconcile: true,
     });
@@ -130,7 +128,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
       "plan 阶段不应再发出无 seq 限定的全量 listBySession",
     );
     // 回滚语义不受收窄影响：rewind 保留锚点，其后两条截断。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[1]!.id, assistant0.id);
   });

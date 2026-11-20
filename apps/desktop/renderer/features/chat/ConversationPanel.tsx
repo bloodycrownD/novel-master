@@ -1,8 +1,7 @@
 import {
   ChatMessage,
-  parseComposerDraftJson,
+  ComposerDraftSchema,
   rollbackConfirm,
-  serializeComposerDraftJson,
   type RollbackMode,
 } from '@shared/logic/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +16,7 @@ import type {
   AgentStepCommittedPayload,
 } from "@shared/logic/events";
 import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentStream';
-import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
+import { useAgentRunLifecycle, RunLifecycle } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
 import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
 import { createDesktopStreamTokenEstimator } from '@/hooks/stream-token-estimator';
@@ -333,9 +332,7 @@ export function ConversationPanel({
       if (cancelled) {
         return;
       }
-      const draft = parseComposerDraftJson(
-        draftRes.ok ? draftRes.data : null,
-      );
+      const draft = ComposerDraftSchema.parseJson(draftRes.ok ? draftRes.data : null);
       const status = statusRes.ok ? statusRes.data : [];
       // D6：快照连同 tokenRanges 一起存 ref（desktop 无胶囊 UI，读侧渲染语义不变）；
       // 写回时用它判断正文是否被编辑，未编辑才原样透传。
@@ -348,9 +345,7 @@ export function ConversationPanel({
       setComposerText(draft.text);
       // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
       // 投影直接作状态条，再 ∪ annotate（切会话回来 store 未清则 chip 仍在）
-      setComposerAttachments(
-        unionComposerStatusWithAnnotate(status, sessionId),
-      );
+      setComposerAttachments(unionComposerStatusWithAnnotate(status, sessionId));
       composerDraftHydratedRef.current = true;
     })();
 
@@ -369,21 +364,16 @@ export function ConversationPanel({
     }
     // draft attach 恒空；仅持久正文（含 `@路径`）。D6：正文未编辑时原样透传 tokenRanges，
     // 已编辑则省略字段（undefined ≠ []，交给 mobile 侧兜底扫描）。
-    const draftJson = serializeComposerDraftJson(
-      resolveComposerDraftPersistPayload(
-        composerDraftSnapshotRef.current,
-        composerText,
-      ),
-    );
+    const draftSnapshot = composerDraftSnapshotRef.current;
+    const payload = resolveComposerDraftPersistPayload(draftSnapshot, composerText);
+    const draftJson = ComposerDraftSchema.serializeJson(payload);
     void ipcSessionsSetComposerDraft({ sessionId, draftJson });
   }, [sessionId, composerText, composerAttachments, readOnly]);
 
   useEffect(() => {
     ipcAppUiGet('chatRichText')
       .then(res =>
-        setChatRichText(
-          res.ok && res.data != null ? res.data !== 'false' : true,
-        ),
+        setChatRichText(res.ok && res.data != null ? res.data !== 'false' : true),
       )
       .catch(() => undefined);
   }, []);
@@ -433,7 +423,7 @@ export function ConversationPanel({
       // （且安全的）收口方式。
       //
       // 不强制会坏在哪：「发送→立刻停止」——abortUiRun 先行（uiRunning=false、
-      // freezeCount!=null），shouldApplyTranscriptReload 两个判据都不满足 →
+      // freezeCount!=null），RunLifecycle.shouldApply 两个判据都不满足 →
       // shouldReload=false；而本轮既没有 step 也没有 assistant 增量，
       // abort-retain 的 overlay 兜底又是空的（没有半截流式文本）→ 用户消息
       // 已落库却永不刷新，而 composer 正文已被清空 = 消息凭空消失。
@@ -474,10 +464,7 @@ export function ConversationPanel({
 
   const onRunFailed = useCallback(
     (payload: AgentRunFailedPayload) => {
-      const shouldReload = shouldApplyTranscriptReload(
-        getUiRunning(),
-        getTranscriptFreezeCount(),
-      );
+      const shouldReload = RunLifecycle.shouldApply(getUiRunning(), getTranscriptFreezeCount());
       if (!failUiRun(payload)) {
         return;
       }
@@ -505,7 +492,7 @@ export function ConversationPanel({
   // ===== FR8-1：readOnly 子面板放宽守卫（对齐 mobile SubagentSessionScreen）=====
   //
   // readOnly 子会话的典型时序是「面板晚于 run 启动」：mount 时 RUN_STARTED 已是历史。
-  // 主会话的 beginUiRun + shouldAcceptRunEvent 守卫在这个场景断裂（beginUiRun 先把
+  // 主会话的 beginUiRun + RunLifecycle.shouldAccept 守卫在这个场景断裂（beginUiRun 先把
   // activeRunId 置 null，迟到 RUN_FINISHED 被守卫拒绝 → uiRunning 卡死）。
   // 这里另起一套回调：acceptRunEvent 放宽为非空 runId 即接受、不碰 activeRunId、
   // 只翻 uiRunning + 触发 reload。
@@ -733,7 +720,7 @@ export function ConversationPanel({
           : {}),
       });
       if (!result.ok) {
-        if (result.error.code === 'ROLLBACK_REVISION_BACKFILL_REQUIRED') {
+        if (result.error.code === 'SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED') {
           setConfirmState({
             kind: 'rollback-backfill',
             messageId,
@@ -745,8 +732,8 @@ export function ConversationPanel({
           return;
         }
         if (
-          result.error.code === 'ROLLBACK_VFS_RESTORE_FAILED' ||
-          result.error.code === 'ROLLBACK_UNDO_SEND_EMPTY_TARGET'
+          result.error.code === 'SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED' ||
+          result.error.code === 'SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET'
         ) {
           setConfirmState({
             kind: 'rollback-degraded',
@@ -788,9 +775,7 @@ export function ConversationPanel({
         );
         return next.text;
       });
-      showToast(
-        options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
-      );
+      showToast(options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功');
     },
     [projectId, sessionId, reloadMessages, notifyWorkspaceMutated, onStreamReset],
   );
@@ -1113,6 +1098,7 @@ export function ConversationPanel({
 }
 
 /** 手动压缩：成功后派发 session-compacted 事件，让 ConversationPanel 重新拉取消息列表。 */
+// nm-style: keep-local — session-detail-drawer.test 以源码正则锁名（runCompaction…new CustomEvent('context-changed',）与 compaction-handler.test 的注释链都指名本函数；内联/改名会破坏测试锁名。
 export async function runCompaction(
   projectId: string,
   sessionId: string,

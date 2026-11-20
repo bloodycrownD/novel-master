@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { mergeSamplingWithDefaults, type LlmProtocolKind, type ModelSamplingParams } from "@shared/logic/provider";
+import { ProtocolSamplingDefaults, type LlmProtocolKind, type ModelSamplingParams } from "@shared/logic/provider";
 import { SettingsField } from "./settings-ui";
 
 type SamplingFormProps = {
@@ -72,7 +72,7 @@ function NumberField({
 
 export function SamplingForm({ protocol, params, onChange }: SamplingFormProps) {
   const effective = useMemo(
-    () => mergeSamplingWithDefaults(protocol, params),
+    () => ProtocolSamplingDefaults.mergeSamplingWithDefaults(protocol, params),
     [protocol, params],
   );
   const openai = effective.protocol === "openai" ? effective.openai : {};

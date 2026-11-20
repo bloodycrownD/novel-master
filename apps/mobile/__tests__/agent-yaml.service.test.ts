@@ -1,11 +1,9 @@
 import {describe, expect, it, jest} from '@jest/globals';
 
-const mockDecode = jest.fn(() => {
-  throw new Error('decode failed');
-});
-const mockParseText = jest.fn(() => ({}));
-const mockStringifyText = jest.fn(() => 'yaml');
-const mockValidateAgentDefinition = jest.fn(async () => ({ok: true, value: undefined}));
+const mockValidateAgentDefinition = jest.fn(async () => ({
+  ok: true,
+  value: undefined,
+}));
 const mockSaveDocuments = jest.fn(async () => undefined);
 const mockPick = jest.fn(async () => []);
 const mockKeepLocalCopy = jest.fn(async () => []);
@@ -14,28 +12,25 @@ const mockUnlink = jest.fn(async () => undefined);
 const mockReadFile = jest.fn(async () => '');
 
 jest.mock('@novel-master/core', () => ({
-  agentDefinitionSchema: {toWire: (x: any) => x},
-  encode: (value: unknown, schema: {toWire: (v: unknown) => unknown}) =>
-    schema.toWire(value),
-  decode: (...args: any[]) => mockDecode(...args),
-  parseText: (...args: any[]) => mockParseText(...args),
-  registerBuiltinTools: () => undefined,
-  stringifyText: (...args: any[]) => mockStringifyText(...args),
+  BuiltinTools: {register: () => undefined},
   ToolRegistry: class ToolRegistry {
     list() {
       return [];
     }
   },
-  validateAgentDefinition: (...args: any[]) =>
-    mockValidateAgentDefinition(...args),
 }));
 
-// 实现从 @novel-master/core/agent 子路径导入 schema/校验（jest moduleNameMapper 指向真实 dist），
-// 须单独 mock，根入口 mock 拦不住子路径导入。
+// 实现从 @novel-master/core/agent 子路径导入编解码/校验（jest moduleNameMapper
+// 指向真实 dist），须单独 mock，根入口 mock 拦不住子路径导入。requireActual
+// 展开保住 AppError 等真实导出与 AgentYamlCodec 真编解码（错误通道迁移后
+// yaml-document-pick 会构造 AppError）。
 jest.mock('@novel-master/core/agent', () => ({
-  agentDefinitionSchema: {toWire: (x: any) => x},
-  validateAgentDefinition: (...args: any[]) =>
-    mockValidateAgentDefinition(...args),
+  ...jest.requireActual('@novel-master/core/agent'),
+  AgentDefinitionValidator: {
+    ...jest.requireActual('@novel-master/core/agent')
+      .AgentDefinitionValidator,
+    validate: (...args: any[]) => mockValidateAgentDefinition(...args),
+  },
 }));
 
 jest.mock('react-native-blob-util', () => ({
@@ -57,26 +52,28 @@ jest.mock('@react-native-documents/picker', () => ({
   types: {plainText: 'text/plain'},
 }));
 
-import {
-  decodeAgentYamlText,
-  exportAgentYaml,
-  importAgentYaml,
-} from '@/services/agent-yaml.service';
+import {AgentYamlService} from '@/services/agent-yaml.service';
+import {AgentYamlCodec} from '@novel-master/core/agent';
 
 describe('agent-yaml.service', () => {
   it('exports yaml via temp file + picker save flow', async () => {
     const runtime = {
       agentRegistry: {
+        // 四期签名：registry.get 沿 Result 回传——fake 与真实 service 同语义。
         get: jest.fn(async () => ({
-          name: 'A',
-          prompts: {persist: [], dynamic: []},
+          ok: true as const,
+          value: {
+            name: 'A',
+            prompts: {persist: [], dynamic: []},
+          },
         })),
       },
     } as any;
-    await expect(exportAgentYaml(runtime, 'a1')).resolves.toBe('saved');
+    await expect(AgentYamlService.exportYaml(runtime, 'a1')).resolves.toBe('saved');
+    // 编解码单源在 core：写出的是真实 YAML（不再是 mock 的 'yaml' 字面量）。
     expect(mockWriteFile).toHaveBeenCalledWith(
       '/tmp/a1.agent.yaml',
-      'yaml',
+      expect.stringContaining('name: A'),
       'utf8',
     );
     expect(mockSaveDocuments).toHaveBeenCalled();
@@ -88,7 +85,7 @@ describe('agent-yaml.service', () => {
       {uri: 'file:///sdcard/readme.txt', name: 'readme.txt'},
     ]);
     const runtime = {agentRegistry: {upsert: jest.fn()}} as any;
-    await expect(importAgentYaml(runtime, 'a1')).rejects.toThrow(/\.yaml/);
+    await expect(AgentYamlService.importYaml(runtime, 'a1')).rejects.toThrow(/\.yaml/);
     expect(mockKeepLocalCopy).not.toHaveBeenCalled();
   });
 
@@ -99,17 +96,15 @@ describe('agent-yaml.service', () => {
     mockKeepLocalCopy.mockResolvedValueOnce([
       {status: 'success', localUri: 'file:///tmp/local-a1.agent.yaml'},
     ]);
-    mockReadFile.mockResolvedValueOnce('name: imported');
-    mockDecode.mockImplementationOnce(() => ({
-      name: 'imported',
-      prompts: {persist: [], dynamic: []},
-    }));
+    mockReadFile.mockResolvedValueOnce(
+      'schemaVersion: 1\nname: imported\nprompts: {}\n',
+    );
     const runtime = {
       agentRegistry: {
-        upsert: jest.fn(async () => undefined),
+        upsert: jest.fn(async () => ({ok: true as const, value: undefined})),
       },
     } as any;
-    await importAgentYaml(runtime, 'a1');
+    await AgentYamlService.importYaml(runtime, 'a1');
     expect(mockPick).toHaveBeenCalled();
     expect(mockKeepLocalCopy).toHaveBeenCalled();
     expect(mockReadFile).toHaveBeenCalledWith(
@@ -121,10 +116,11 @@ describe('agent-yaml.service', () => {
   });
 
   it('rejects invalid yaml text', () => {
-    mockParseText.mockImplementationOnce(() => {
-      throw new Error('bad yaml');
-    });
-    expect(() => decodeAgentYamlText('name: [oops')).toThrow();
+    // 编解码单源在 core：parseText 失败沿 Result.err 回传（AppError 通道，不再抛错）。
+    const decoded = AgentYamlCodec.decode('name: [oops');
+    expect(decoded.ok).toBe(false);
+    if (decoded.ok) return;
+    expect(decoded.error.key).toBe('CONFIG_DECODE_INVALID_SCHEMA');
   });
 
   it('rejects schema-invalid agent yaml', () => {
@@ -137,6 +133,10 @@ prompts:
       type: text
       role: system
 `;
-    expect(() => decodeAgentYamlText(yaml)).toThrow();
+    const decoded = AgentYamlCodec.decode(yaml);
+    expect(decoded.ok).toBe(false);
+    if (decoded.ok) return;
+    // schema 的 superRefine 把域 AppError 挂在 issue params 上原样带出，key 是 AGENT_INVALID_SCHEMA。
+    expect(decoded.error.key).toBe('AGENT_INVALID_SCHEMA');
   });
 });

@@ -7,10 +7,12 @@ type AppToastSink = (message: string) => void;
 
 let sink: AppToastSink | null = null;
 
-export function registerAppToastSink(next: AppToastSink | null): void {
-  sink = next;
-}
+export namespace AppToast {
+  export function registerSink(next: AppToastSink | null): void {
+    sink = next;
+  }
 
-export function showAppToast(message: string): void {
-  sink?.(message);
+  export function show(message: string): void {
+    sink?.(message);
+  }
 }

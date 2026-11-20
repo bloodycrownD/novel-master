@@ -1,20 +1,22 @@
+import {  AppErrorOps  } from "@/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { TextBlock, ToolResultBlock } from "@/domain/chat/model/content-block.js";
-import { subagentTool, SUBAGENT_STOP_REASON_USER } from "@/domain/tool/builtin/subagent-tool.js";
+import {  TextBlock, ToolResultBlock  } from "@/domain/chat/model/content-block.js";
+import {  Result  } from "@/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  subagentTool, SUBAGENT_STOP_REASON_USER  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
   RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
-import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
-import { ToolError } from "@/errors/tool-errors.js";
+import {  AgentTools  } from "@/domain/agent/logic/resolve-agent-tools.js";
+import {  ToolRegistry  } from "@/domain/tool/logic/tool-registry.js";
+import {  BuiltinTools  } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -61,20 +63,24 @@ function makeMockSubagent(args: {
 
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => defs.map((_, i) => `id-${i}`),
-    list: async () => defs,
+    // 错误通道迁移五期：registry.list 走 Result 通道，fake 与真实 service 同语义。
+    list: async () => Result.ok(defs),
     get: async () => defs[0]!,
     getRawWire: async () => null,
     upsert: async () => undefined,
     delete: async () => undefined,
   };
   const messages: MessageService = {
-    listBySession: async (sid) => childMsgsBySession.get(sid) ?? [],
+    // 错误通道迁移八期：大结果集读口走 Outcome，fake 与真实 service 同语义。
+    listBySession: async (sid) => ({ kind: "completed", value: childMsgsBySession.get(sid) ?? [] }),
     // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条，
     // 口径与 SqliteMessageRepository.listBySessionTailOfRole 一致。
-    listBySessionTailOfRole: async (sid, options) =>
-      (childMsgsBySession.get(sid) ?? [])
+    listBySessionTailOfRole: async (sid, options) => ({
+      kind: "completed",
+      value: (childMsgsBySession.get(sid) ?? [])
         .filter((m) => m.role === options.role)
         .slice(-Math.max(1, Math.floor(options.limit))),
+    }),
   } as unknown as MessageService;
   const sessions: SessionService = {
     createSubSession: async (_parent, _project, title) => {
@@ -97,15 +103,16 @@ function makeMockSubagent(args: {
     parentSignal: new AbortController().signal,
     createChildSession: async (title: string) => {
       const s = await sessions.createSubSession("p", "proj", title);
-      return s.id;
+      return Result.ok(s.id);
     },
     // 续用校验用（spec G4）：本 mock 的「当前父会话」= p，与 createSubSession 一致。
     parentSessionId: "p",
     isSessionRunActive: () => false,
-    resolveChildModelId: (def) => ({
-      savedModelId: def.model ?? "parent-saved-model",
-      workspaceModelId: "workspace-model",
-    }),
+    resolveChildModelId: (def) =>
+      Result.ok({
+        savedModelId: def.model ?? "parent-saved-model",
+        workspaceModelId: "workspace-model",
+      }),
     runChildAgent: async (def, childSessionId, opts) => {
       args.capturedChildSessionIds?.push(childSessionId);
       args.capturedRunOpts?.push(opts);
@@ -113,12 +120,12 @@ function makeMockSubagent(args: {
       if (args.runResult != null) {
         childMsgsBySession.set(childSessionId, args.runResult.childMessages);
       }
-      return args.runResult?.result ?? {
+      return Result.ok(args.runResult?.result ?? {
         stepsExecuted: 1,
         finished: true,
         stopReason: "completed" as const,
         rounds: [],
-      };
+      });
     },
   };
   return { ctx, childSessions };
@@ -147,10 +154,10 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 3, finished: true, stopReason: "completed", rounds: [] },
       },
     });
-    const output = await subagentTool.run(
+    const output = unwrap(await subagentTool.run(
       { description: "生成角色档案", prompt: "请生成主角档案", subagentName: "general" },
       makeToolCtx(ctx),
-    );
+    ));
     assert.equal(output.text, expectedText);
     assert.equal(typeof output.subagentSessionId, "string");
     assert.equal(childSessions.length, 1);
@@ -168,11 +175,11 @@ describe("subagent-tool / task", () => {
     });
     const longPrompt =
       "请帮我把这一段超长任务描述做些处理然后生成结果返回再来一段超出四十字符的填充内容结尾";
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       // description schema 是 min(1)，故测试直接构造 input 不走 schema：用空格 trim 后空
       { description: "   ", prompt: longPrompt, subagentName: "general" },
       makeToolCtx(ctx),
-    );
+    ));
     assert.equal(childSessions[0]!.title, longPrompt.slice(0, 40));
   });
 
@@ -182,23 +189,22 @@ describe("subagent-tool / task", () => {
     // nonCallableDef 在 registry 里存在 → 不抛错（runChildAgent 会走完整流程，
     // 这里 mock 的 runChildAgent 会返回成功）。
     const { ctx } = makeMockSubagent({ defs: [nonCallableDef] });
-    const result = await subagentTool.run(
+    const result = unwrap(await subagentTool.run(
       { description: "task", prompt: "p", subagentName: "writer" },
       makeToolCtx(ctx),
-    );
+    ));
     assert.ok(result, "registry 中存在的 agent 可被调用，不再需要 subagentCallable 校验");
   });
 
   it("T-T3: 不存在的 subagentName 抛 ToolError", async () => {
     const { ctx } = makeMockSubagent({ defs: [generalDef] });
-    await assert.rejects(
-      () =>
+    await rejectsErr(
         subagentTool.run(
           { description: "t", prompt: "p", subagentName: "ghost" },
           makeToolCtx(ctx),
         ),
       (err: unknown) =>
-        err instanceof ToolError && err.message.includes("未找到"),
+        assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_") && err.message.includes("未找到")),
     );
   });
 
@@ -253,10 +259,10 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 10, finished: false, stopReason: "max_steps", rounds: [] },
       },
     });
-    const output = await subagentTool.run(
+    const output = unwrap(await subagentTool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(ctx),
-    );
+    ));
     assert.equal(output.text, "[子代理未完成任务: stopReason=max_steps]");
     assert.ok(typeof output.subagentSessionId === "string");
   });
@@ -271,10 +277,10 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 2, finished: false, stopReason: "cancelled", rounds: [] },
       },
     });
-    const output = await subagentTool.run(
+    const output = unwrap(await subagentTool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(ctx),
-    );
+    ));
     assert.equal(output.stopped, true);
     assert.equal(output.failureReason, SUBAGENT_STOP_REASON_USER);
     assert.equal(output.failureReason, "用户停止");
@@ -295,10 +301,10 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 1, finished: false, stopReason: "cancelled", rounds: [] },
       },
     });
-    const output = await subagentTool.run(
+    const output = unwrap(await subagentTool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(ctx),
-    );
+    ));
     assert.equal(output.stopped, true);
     assert.equal(output.failureReason, SUBAGENT_STOP_REASON_USER);
     assert.equal(output.text, "[用户停止，无已生成文本]");
@@ -312,24 +318,25 @@ describe("subagent-tool / task", () => {
     const wrappedCtx: BuiltinToolSubagentContext = {
       ...ctx,
       resolveChildModelId: (def) => {
-        resolved = ctx.resolveChildModelId(def);
-        return resolved;
+        const r = ctx.resolveChildModelId(def);
+        resolved = unwrap(r);
+        return r;
       },
     };
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(wrappedCtx),
-    );
+    ));
     assert.ok(resolved != null);
     // general 没 pin model，落到父 savedModelId。
     assert.equal(resolved!.savedModelId, "parent-saved-model");
   });
 });
 
-describe("resolveAgentToolRegistry 递归上限", () => {
+describe("AgentTools.resolveRegistry 递归上限", () => {
   function makeBaseRegistry(): ToolRegistry<BuiltinToolContext> {
     const r = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(r);
+    BuiltinTools.register(r);
     return r;
   }
   const def: AgentDefinition = { name: "x", prompts: { persist: [], dynamic: [] } };
@@ -337,11 +344,11 @@ describe("resolveAgentToolRegistry 递归上限", () => {
   it("T-T2: depth=0/1 保留 task；depth>=2（孙）强制 deny task", () => {
     const base = makeBaseRegistry();
     assert.ok(base.list().includes("task"));
-    const r0 = resolveAgentToolRegistry(base, def, { depth: 0 });
+    const r0 = AgentTools.resolveRegistry(base, def, { depth: 0 });
     assert.ok(r0.list().includes("task"));
-    const r1 = resolveAgentToolRegistry(base, def, { depth: 1 });
+    const r1 = AgentTools.resolveRegistry(base, def, { depth: 1 });
     assert.ok(r1.list().includes("task"));
-    const r2 = resolveAgentToolRegistry(base, def, { depth: 2 });
+    const r2 = AgentTools.resolveRegistry(base, def, { depth: 2 });
     assert.ok(!r2.list().includes("task"), "孙 agent 不应有 task");
   });
 });

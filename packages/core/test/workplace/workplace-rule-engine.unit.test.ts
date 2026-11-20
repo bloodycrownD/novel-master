@@ -1,7 +1,8 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { evaluateWorkplaceRuleView } from "@/domain/workplace/logic/workplace-rule-engine.js";
-import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceRuleEngine  } from "@/domain/workplace/logic/workplace-rule-engine.js";
+import {  DEFAULT_WORKPLACE_DIR_RULE  } from "@/domain/workplace/logic/default-dir-rule.js";
 
 describe("worktree rule engine (unit)", () => {
   it("T-WEC15：纯函数 rows 仅含 enum 且 displayByPath 与 file 行一致", () => {
@@ -51,7 +52,7 @@ describe("worktree rule engine (unit)", () => {
       allDirs: new Set(["/", "/batch"]),
     };
 
-    const view = evaluateWorkplaceRuleView({ kind: "global" }, ctx);
+    const view = unwrap(WorkplaceRuleEngine.evaluateView({ kind: "global" }, ctx));
 
     for (const row of view.rows) {
       if (row.kind === "dir") {

@@ -17,8 +17,7 @@
 import type {ComponentChildren} from 'preact';
 import {state} from '../../runtime/state/state';
 import {
-  getRowWindowRange,
-  getRowWindowSpacerHeights,
+  RowWindow,
   ROW_WINDOW_TOP_SPACER_ID,
   ROW_WINDOW_BOTTOM_SPACER_ID,
 } from '../../runtime/render/row-windowing';
@@ -31,9 +30,9 @@ export function RowList() {
   const lastRow = total > 0 ? state.rows[total - 1] : null;
   // 只有当前 streaming 行需要钉住（finished 行内容静态，窗口外可卸载重挂）。
   const pinTail = lastRow != null && lastRow.status === 'streaming';
-  const win = getRowWindowRange(total);
+  const win = RowWindow.getRange(total);
   const tailPinned = pinTail && win.end < total;
-  const spacers = getRowWindowSpacerHeights(total, tailPinned);
+  const spacers = RowWindow.getSpacerHeights(total, tailPinned);
   const children: ComponentChildren[] = [];
 
   if (state.hasMore) {

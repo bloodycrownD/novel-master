@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import {  describe, it  } from "node:test";
+import {  SqlTemplateParser  } from "@/infra/sql-template/index.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import {  TdbcTemplate  } from "@/infra/tdbc/logic/template-helper.js";
 
 describe("template-helper", () => {
   const parser = new SqlTemplateParser();
@@ -25,7 +22,7 @@ describe("template-helper", () => {
       close: async () => {},
     };
 
-    const result = await executeTemplate(
+    const result = await TdbcTemplate.execute(
       connection,
       parser,
       "INSERT INTO t (a) VALUES (#{a})",
@@ -50,7 +47,7 @@ describe("template-helper", () => {
       close: async () => {},
     };
 
-    const rows = await queryTemplate(
+    const rows = await TdbcTemplate.query(
       connection,
       parser,
       "SELECT * FROM t WHERE id = #{id}",

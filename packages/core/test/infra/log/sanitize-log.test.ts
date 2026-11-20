@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
-import { createLogger, describeText, restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  afterEach, describe, it  } from "node:test";
+import {  LogFactory, LogSanitize  } from "@novel-master/core/log";
 import type { LogDetail, LogRecord, LogSink } from "@novel-master/core/log";
 
 /** 捕获 sink（公开 API 范式，无 test-only 导出）。 */
@@ -12,27 +12,27 @@ function captureSink(): { readonly records: LogRecord[]; readonly sink: LogSink 
 /** 发一条 info，返回脱敏后的 detail（脱敏只在 emit 时执行）。 */
 function emitDetail(detail: LogDetail): Record<string, unknown> {
   const { records, sink } = captureSink();
-  setDefaultLogSink(sink);
-  createLogger("sanitize-test").info("probe", detail);
+  LogFactory.setDefaultSink(sink);
+  LogFactory.create("sanitize-test").info("probe", detail);
   assert.equal(records.length, 1);
   return (records[0]!.detail ?? {}) as Record<string, unknown>;
 }
 
 afterEach(() => {
-  restoreDefaultLogSink();
+  LogFactory.restoreDefaultSink();
 });
 
 describe("describeText", () => {
   it("输出长度 + 16 位小写 hex 指纹", () => {
-    const digest = describeText("落霞与孤鹜齐飞");
+    const digest = LogSanitize.describeText("落霞与孤鹜齐飞");
     assert.equal(digest.chars, 7);
     assert.match(digest.hash, /^[0-9a-f]{16}$/);
   });
 
   it("同文本同指纹、异文本异指纹", () => {
-    assert.equal(describeText("abc").hash, describeText("abc").hash);
-    assert.notEqual(describeText("abc").hash, describeText("abd").hash);
-    assert.equal(describeText("").chars, 0);
+    assert.equal(LogSanitize.describeText("abc").hash, LogSanitize.describeText("abc").hash);
+    assert.notEqual(LogSanitize.describeText("abc").hash, LogSanitize.describeText("abd").hash);
+    assert.equal(LogSanitize.describeText("").chars, 0);
   });
 });
 
@@ -195,8 +195,8 @@ describe("脱敏 B5: 不可序列化值不抛", () => {
 describe("message 截断", () => {
   it("message 本身截 500 字符", () => {
     const { records, sink } = captureSink();
-    setDefaultLogSink(sink);
-    createLogger("unit").warn("m".repeat(510));
+    LogFactory.setDefaultSink(sink);
+    LogFactory.create("unit").warn("m".repeat(510));
     assert.equal(records[0]!.message, `${"m".repeat(500)}…(+10)`);
   });
 });

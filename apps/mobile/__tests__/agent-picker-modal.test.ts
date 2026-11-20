@@ -1,17 +1,16 @@
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
-import {
-  AGENT_PICKER_EMPTY_MESSAGE,
-  isAgentPickerRowSelected,
-  loadAgentPickerRows,
-  selectWorkspaceAgent,
-} from '@/services/agent-picker';
+import {AGENT_PICKER_EMPTY_MESSAGE, AgentPicker} from '@/services/agent-picker'
 
 const mockSetCurrentAgentId = jest.fn(async () => undefined);
 const mockGetCurrentAgentId = jest.fn(
-  async () => undefined as string | undefined,
+  async () => ({ok: true as const, value: undefined as string | undefined}),
 );
 const mockListAgentIds = jest.fn(async () => [] as string[]);
-const mockGet = jest.fn(async () => ({name: 'writer', mode: 'all'} as const));
+// 错误通道迁移后 registry.get 走 Result 通道（生产侧 `def.ok` 判定）。
+const mockGet = jest.fn(async () => ({
+  ok: true as const,
+  value: {name: 'writer', mode: 'all'} as const,
+}));
 
 function mockRuntime() {
   return {
@@ -29,7 +28,7 @@ function mockRuntime() {
 describe('AgentPickerModal (picker service)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetCurrentAgentId.mockResolvedValue(undefined);
+    mockGetCurrentAgentId.mockResolvedValue({ok: true as const, value: undefined});
     mockListAgentIds.mockResolvedValue([]);
   });
 
@@ -38,29 +37,31 @@ describe('AgentPickerModal (picker service)', () => {
   });
 
   it('T-P2: loadAgentPickerRows returns no rows when registry empty', async () => {
-    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
-    expect(rows).toEqual([]);
+    const loaded = await AgentPicker.loadRows(mockRuntime() as never);
+    if (!loaded.ok) throw loaded.error;
+    expect(loaded.value.rows).toEqual([]);
   });
 
   it('T-P1: selectWorkspaceAgent calls setCurrentAgentId', async () => {
-    await selectWorkspaceAgent(mockRuntime() as never, 'a2');
+    await AgentPicker.selectWorkspace(mockRuntime() as never, 'a2');
     expect(mockSetCurrentAgentId).toHaveBeenCalledWith('a2');
   });
 
   it('marks first row current when no explicit current agent id', () => {
-    expect(isAgentPickerRowSelected('a1', 0, undefined)).toBe(true);
-    expect(isAgentPickerRowSelected('a2', 1, undefined)).toBe(false);
+    expect(AgentPicker.isRowSelected('a1', 0, undefined)).toBe(true);
+    expect(AgentPicker.isRowSelected('a2', 1, undefined)).toBe(false);
   });
 
   it('loads agent display labels from registry', async () => {
     mockListAgentIds.mockResolvedValue(['a1', 'a2']);
     mockGet.mockImplementation(async (id: string) => ({
-      name: id === 'a1' ? 'Alpha' : 'Beta',
-      mode: 'all',
+      ok: true as const,
+      value: {name: id === 'a1' ? 'Alpha' : 'Beta', mode: 'all'},
     }));
 
-    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
-    expect(rows).toEqual([
+    const labeled = await AgentPicker.loadRows(mockRuntime() as never);
+    if (!labeled.ok) throw labeled.error;
+    expect(labeled.value.rows).toEqual([
       {agentId: 'a1', label: 'Alpha'},
       {agentId: 'a2', label: 'Beta'},
     ]);
@@ -70,16 +71,17 @@ describe('AgentPickerModal (picker service)', () => {
     mockListAgentIds.mockResolvedValue(['primary', 'sub', 'all']);
     mockGet.mockImplementation(async (id: string) => {
       if (id === 'primary') {
-        return {name: 'Primary', mode: 'primary'};
+        return {ok: true as const, value: {name: 'Primary', mode: 'primary'}};
       }
       if (id === 'sub') {
-        return {name: 'Sub', mode: 'subagent'};
+        return {ok: true as const, value: {name: 'Sub', mode: 'subagent'}};
       }
-      return {name: 'All', mode: 'all'};
+      return {ok: true as const, value: {name: 'All', mode: 'all'}};
     });
 
-    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
-    expect(rows).toEqual([
+    const loaded = await AgentPicker.loadRows(mockRuntime() as never);
+    if (!loaded.ok) throw loaded.error;
+    expect(loaded.value.rows).toEqual([
       {agentId: 'primary', label: 'Primary'},
       {agentId: 'all', label: 'All'},
     ]);

@@ -7,6 +7,7 @@
  * 预览走 FileMarkdownPreview（内存草稿，无 VFS），编辑器伪路径 prompt.md。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import {ComposerTokenInsert} from '@/components/chat/composer-token-insert';
 import React from 'react';
 import {Alert, Platform} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
@@ -204,10 +205,7 @@ jest.mock('@/theme/ThemeProvider', () => ({
 }));
 
 import {PromptEditorScreen} from '@/screens/stack/PromptEditorScreen';
-import {
-  setPromptEditorOnSaved,
-  takePromptEditorOnSaved,
-} from '@/components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 
 function renderScreen() {
   let tree: TestRenderer.ReactTestRenderer;
@@ -268,7 +266,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
     mockEditorBlur.mockClear();
     mockRuntimeHolder.runtime = mockRuntime;
     // 清空模块级回调残留，各用例自行决定是否 set。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
   });
 
   afterEach(() => {
@@ -350,7 +348,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
 
   it('保存：以草稿调用回调、toast 提示、停留当前态不 goBack，未保存标记清除', () => {
     const onSaved = jest.fn();
-    setPromptEditorOnSaved(onSaved);
+    promptEditorOnSavedSlot.set(onSaved);
     mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
 
@@ -404,7 +402,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
 
   it('未保存退出被拦截：beforeRemove preventDefault + Alert 确认；保存后放行', () => {
     const onSaved = jest.fn();
-    setPromptEditorOnSaved(onSaved);
+    promptEditorOnSavedSlot.set(onSaved);
     mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
 
@@ -436,7 +434,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
     (Platform as {OS: string}).OS = 'android';
     try {
       const onSaved = jest.fn();
-      setPromptEditorOnSaved(onSaved);
+      promptEditorOnSavedSlot.set(onSaved);
       mockRoute.params = {initialText: '初稿'};
       const tree = renderScreen();
       act(() => {
@@ -466,7 +464,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     mockFilePickerProps.length = 0;
     mockSkillPickerProps.length = 0;
     mockRuntimeHolder.runtime = mockRuntime;
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
   });
 
   afterEach(() => {
@@ -480,7 +478,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
 
   it('无保存按钮、标题不显「未保存」，退出（卸载）以当拍草稿回填', () => {
     const onSaved = jest.fn();
-    setPromptEditorOnSaved(onSaved);
+    promptEditorOnSavedSlot.set(onSaved);
     mockRoute.params = {
       initialText: '初稿',
       title: '编辑消息',
@@ -663,7 +661,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     act(() => {
       mockSkillPickerProps[0]!.onConfirm('写作');
     });
-    // buildTokenInsertion('已有文本', 4, 4, '$写作$')：chip 零分隔空格直插，
+    // ComposerTokenInsert.buildTokenInsertion('已有文本', 4, 4, '$写作$')：chip 零分隔空格直插，
     // 光标落插入段末尾（8 = 4 + 4）——cursor 若停在 0 会插到整篇开头（该回归的本体）。
     expect(mockEditorSetText).toHaveBeenCalledWith('已有文本$写作$', {
       start: 8,
@@ -850,7 +848,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
 
   it('form 变体对照：卸载（未保存退出）不回填——锁死回填 cleanup 的 isComposer 守卫', () => {
     const onSaved = jest.fn();
-    setPromptEditorOnSaved(onSaved);
+    promptEditorOnSavedSlot.set(onSaved);
     mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
     act(() => {

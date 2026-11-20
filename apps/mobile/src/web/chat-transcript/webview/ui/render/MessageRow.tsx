@@ -6,12 +6,12 @@
  */
 import type {MessageRow as MessageRowModel} from '../../runtime/state/state';
 import {state} from '../../runtime/state/state';
-import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
-import {assistantBubbleExtraClasses} from '../../runtime/stream/stream';
+import {Menu} from '../../runtime/menu/menu';
+import {Stream} from '../../runtime/stream/stream';
 import {AttachGroup} from './AttachGroup';
 import {AssistantBubbleInner} from './AssistantBubble';
 import {StreamingMessageRow} from '../stream/StreamingMessageRow';
-import {attachedRefTokensFrom, RefTokenText} from './RefTokenText';
+import {RefTokenSpans, RefTokenText} from './RefTokenText';
 
 type MessageRowProps = {
   row: MessageRowModel;
@@ -43,7 +43,7 @@ export function MessageRow({row}: MessageRowProps) {
           event.stopPropagation();
           const btn = event.currentTarget as HTMLButtonElement | null;
           if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
-          openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
+          Menu.openFromAnchor(row.id, btn.getBoundingClientRect(), btn);
         }}
       >
         ⋯
@@ -57,7 +57,7 @@ export function MessageRow({row}: MessageRowProps) {
     const hasAttach = attachments.length > 0;
     const hasText = !!(row.text && String(row.text).length > 0);
     // 胶囊边界真源 = 附件（skillName/path 与正文精确匹配），RefTokenText 据此切分
-    const attached = attachedRefTokensFrom(attachments);
+    const attached = RefTokenSpans.fromAttachments(attachments);
     if (hasAttach || hasText) {
       if (hasAttach) {
         const attachKey = 'attach:' + row.id;
@@ -93,7 +93,7 @@ export function MessageRow({row}: MessageRowProps) {
     const toolGroupKey = 'msg:' + row.id;
     const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
     bubble = (
-      <div className={'bubble' + assistantBubbleExtraClasses(row)}>
+      <div className={'bubble' + Stream.assistantBubbleExtraClasses(row)}>
         {menuRow}
         <AssistantBubbleInner
           text={row.text}

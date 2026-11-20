@@ -13,14 +13,7 @@
  *   tab hint 注明该全局版仅对无副本的项目生效。
  */
 import React, {useCallback, useMemo, useState} from 'react';
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject} from '@novel-master/core/chat';
@@ -28,17 +21,11 @@ import type {SkillDomain, SkillListItem} from '@novel-master/core/skills';
 import type {VfsScope} from '@novel-master/core/vfs';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {ManageHeader} from '@/components/batch/ManageHeader';
-import {
-  BottomSheetMenu,
-  type SheetMenuItem,
-} from '@/components/sheet/BottomSheetMenu';
+import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
-import {
-  SkillInfoEditModal,
-  type SkillInfoTarget,
-} from '@/components/skills/SkillInfoEditModal';
+import {SkillInfoEditModal, type SkillInfoTarget} from '@/components/skills/SkillInfoEditModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/Buttons';
-import {exportVfsZip} from '@/services/vfs-zip.service';
+import {VfsZipService} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
@@ -48,7 +35,7 @@ import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -77,10 +64,8 @@ const EMPTY_PAYLOAD: SkillsPayload = {
   projectSkills: [],
 };
 
-const GLOBAL_TAB_HINT =
-  '全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。';
-const PROJECT_TAB_HINT =
-  '项目技能仅所属项目生效，同名时覆盖全局版。按所有项目分组展示全部项目技能。';
+const GLOBAL_TAB_HINT = '全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。';
+const PROJECT_TAB_HINT = '项目技能仅所属项目生效，同名时覆盖全局版。按所有项目分组展示全部项目技能。';
 
 export function SkillsSettingsScreen() {
   const {tokens} = useTheme();
@@ -93,12 +78,8 @@ export function SkillsSettingsScreen() {
   const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
-  const [infoEdit, setInfoEdit] = useState<SkillInfoTarget | undefined>(
-    undefined,
-  );
-  const [infoEditDescription, setInfoEditDescription] = useState<
-    string | null
-  >(null);
+  const [infoEdit, setInfoEdit] = useState<SkillInfoTarget | undefined>(undefined);
+  const [infoEditDescription, setInfoEditDescription] = useState<string | null>(null);
 
   // loading/reload + 聚焦重载走共用 hook；本屏要同时维护三份列表，
   // fetcher 返回打包后的 payload；加载失败 toast（保持原语义，rows 不动）。
@@ -108,34 +89,36 @@ export function SkillsSettingsScreen() {
     reload,
   } = useFocusListReload<SkillsPayload>({
     fetcher: useCallback(async () => {
-      const [projectList, globalList] = await Promise.all([
-        runtime.projects.list(),
-        runtime.skills().listSkills('global'),
-      ]);
-      const perProject = await Promise.all(
-        projectList.map(async p => {
-          const list = await runtime.skills().listSkills({projectId: p.id});
-          return list.map(
-            (item): SkillRow => ({
-              domain: 'project',
-              name: item.name,
-              projectId: p.id,
-              projectName: p.name,
-              item,
-            }),
-          );
-        }),
-      );
+      const [projectList, globalList] = await Promise.all([runtime.projects.list(), runtime.skills().listSkills('global')]);
+      if (globalList.kind === 'failed') throw globalList.error;
+      // 未注入 hooks：中断分支不可达；真出现时按空清单收尾，业务失败仍走 throw 通道。
+      if (globalList.kind !== 'completed') return EMPTY_PAYLOAD;
+      const projectSkillRows = projectList.map(async p => {
+        const list = await runtime.skills().listSkills({projectId: p.id});
+        if (list.kind === 'failed') throw list.error;
+        // 同一口径：单项目清单被中断时跳过该项目，不返回半份行。
+        if (list.kind !== 'completed') return [];
+        return list.value.map(
+          (item): SkillRow => ({
+            domain: 'project',
+            name: item.name,
+            projectId: p.id,
+            projectName: p.name,
+            item,
+          }),
+        );
+      });
+      const perProject = await Promise.all(projectSkillRows);
       return {
         projects: projectList,
-        globalSkills: globalList,
+        globalSkills: globalList.value,
         projectSkills: perProject.flat(),
       };
     }, [runtime]),
     fallbackValue: EMPTY_PAYLOAD,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(toastMessage('加载技能失败', cause));
+        showToast(ToastMessage.toast('加载技能失败', cause));
       },
       [showToast],
     ),
@@ -165,18 +148,13 @@ export function SkillsSettingsScreen() {
     batch.exit();
   };
 
-  const rowKey = (row: SkillRow) =>
-    row.domain === 'global'
-      ? `global:${row.name}`
-      : `${row.projectId}:${row.name}`;
+  const rowKey = (row: SkillRow) => (row.domain === 'global' ? `global:${row.name}` : `${row.projectId}:${row.name}`);
 
   const openDetail = (row: SkillRow) => {
     navigation.navigate('SkillDetail', {
       domain: row.domain,
       name: row.name,
-      ...(row.domain === 'project' && row.projectId != null
-        ? {projectId: row.projectId}
-        : {}),
+      ...(row.domain === 'project' && row.projectId != null ? {projectId: row.projectId} : {}),
     });
   };
 
@@ -184,24 +162,16 @@ export function SkillsSettingsScreen() {
     title: '删除技能',
     message: targets => {
       const anyGlobal = targets.some(t => t.domain === 'global');
-      const scopeHint = anyGlobal
-        ? '全局技能删除后影响所有项目'
-        : targets.length === 1 && targets[0]!.projectName
-        ? `该技能仅在该项目（${targets[0]!.projectName}）生效`
-        : '项目技能仅所属项目生效';
+      const scopeHint = anyGlobal ? '全局技能删除后影响所有项目' : targets.length === 1 && targets[0]!.projectName ? `该技能仅在该项目（${targets[0]!.projectName}）生效` : '项目技能仅所属项目生效';
       const names = targets.map(t => t.name).join('、');
-      return `${scopeHint}。确定删除${
-        targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`
-      }？删除会清理整目录与对应禁用记录。`;
+      return `${scopeHint}。确定删除${targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`}？删除会清理整目录与对应禁用记录。`;
     },
     deleteOne: useCallback(
       async (t: SkillRow) => {
-        await runtime.skills().deleteSkill({
+        return runtime.skills().deleteSkill({
           domain: t.domain,
           name: t.name,
-          ...(t.domain === 'project' && t.projectId != null
-            ? {projectId: t.projectId}
-            : {}),
+          ...(t.domain === 'project' && t.projectId != null ? {projectId: t.projectId} : {}),
         });
       },
       [runtime],
@@ -213,10 +183,7 @@ export function SkillsSettingsScreen() {
     },
   });
 
-  const zipScopeFor = (skill: SkillRow): VfsScope =>
-    skill.domain === 'global'
-      ? {kind: 'global-meta'}
-      : {kind: 'project-meta', projectId: skill.projectId!};
+  const zipScopeFor = (skill: SkillRow): VfsScope => (skill.domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: skill.projectId!});
 
   const runSkillZipExport = async (skill: SkillRow) => {
     if (zipBusy) {
@@ -224,15 +191,17 @@ export function SkillsSettingsScreen() {
     }
     setZipBusy(true);
     try {
-      const result = await exportVfsZip(runtime, zipScopeFor(skill), {
-        directoryPath: `/meta/skills/${skill.name}`,
-        fileName: `${skill.name}.zip`,
-      });
-      if (result === 'saved') {
+      const exportOptions = {directoryPath: `/meta/skills/${skill.name}`, fileName: `${skill.name}.zip`};
+      const exported = await VfsZipService.exportZip(runtime, zipScopeFor(skill), exportOptions);
+      if (!exported.ok) {
+        showToast(ToastMessage.toast('导出失败', exported.error));
+        return;
+      }
+      if (exported.value === 'saved') {
         showToast('ZIP 已保存到所选位置');
       }
     } catch (error) {
-      showToast(toastMessage('导出失败', error));
+      showToast(ToastMessage.toast('导出失败', error));
     } finally {
       setZipBusy(false);
     }
@@ -268,9 +237,7 @@ export function SkillsSettingsScreen() {
         setInfoEdit({
           domain: target.domain,
           name: target.name,
-          ...(target.domain === 'project' && target.projectId != null
-            ? {projectId: target.projectId}
-            : {}),
+          ...(target.domain === 'project' && target.projectId != null ? {projectId: target.projectId} : {}),
         });
         break;
       case 'export-zip':
@@ -286,15 +253,11 @@ export function SkillsSettingsScreen() {
 
   const renderRow = (row: SkillRow) => {
     const selected = batch.isSelected(rowKey(row));
-    const overridden =
-      row.domain === 'global' && overriddenGlobalNames.has(row.name);
+    const overridden = row.domain === 'global' && overriddenGlobalNames.has(row.name);
     return (
       <Pressable
         testID={`skills-settings-row-${row.name}`}
-        style={[
-          styles.row,
-          {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
-        ]}
+        style={[styles.row, {backgroundColor: tokens.surface, borderColor: tokens.borderLight}]}
         onPress={() => {
           if (batch.active) {
             batch.toggle(rowKey(row));
@@ -303,53 +266,32 @@ export function SkillsSettingsScreen() {
           }
         }}
       >
-        {batch.active ? (
-          <BatchCheckbox
-            checked={selected}
-            onToggle={() => batch.toggle(rowKey(row))}
-          />
-        ) : null}
+        {batch.active ? <BatchCheckbox checked={selected} onToggle={() => batch.toggle(rowKey(row))} /> : null}
         <View style={styles.rowBody}>
           <View style={styles.titleRow}>
             <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
               {row.name}
             </Text>
             {overridden ? (
-              <Text
-                style={[styles.overrideTag, {color: tokens.textTertiary}]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.overrideTag, {color: tokens.textTertiary}]} numberOfLines={1}>
                 被项目副本覆盖
               </Text>
             ) : null}
             {!row.item.valid ? (
-              <Text
-                style={[styles.invalidTag, {color: tokens.danger}]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.invalidTag, {color: tokens.danger}]} numberOfLines={1}>
                 无效 · {row.item.invalidReason != null ? coreT(row.item.invalidReason) : 'front matter 不合法'}
               </Text>
             ) : null}
           </View>
           {row.item.description ? (
-            <Text
-              style={[styles.description, {color: tokens.textSecondary}]}
-              numberOfLines={1}
-            >
+            <Text style={[styles.description, {color: tokens.textSecondary}]} numberOfLines={1}>
               {row.item.description}
             </Text>
           ) : null}
         </View>
         {batch.active ? null : (
-          <Pressable
-            testID={`skills-settings-menu-${row.name}`}
-            hitSlop={8}
-            onPress={() => setMenuTarget(row)}
-            accessibilityLabel={`技能 ${row.name} 更多操作`}
-          >
-            <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>
-              ⋮
-            </Text>
+          <Pressable testID={`skills-settings-menu-${row.name}`} hitSlop={8} onPress={() => setMenuTarget(row)} accessibilityLabel={`技能 ${row.name} 更多操作`}>
+            <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>⋮</Text>
           </Pressable>
         )}
       </Pressable>
@@ -361,9 +303,7 @@ export function SkillsSettingsScreen() {
     if (tab !== 'project') {
       return rows.map(row => ({kind: 'row' as const, row}));
     }
-    const out: Array<
-      {kind: 'header'; project: ChatProject} | {kind: 'row'; row: SkillRow}
-    > = [];
+    const out: Array<{kind: 'header'; project: ChatProject} | {kind: 'row'; row: SkillRow}> = [];
     for (const project of projects) {
       const projectRows = rows.filter(r => r.projectId === project.id);
       if (projectRows.length === 0) {
@@ -383,17 +323,9 @@ export function SkillsSettingsScreen() {
         selectedCount={batch.selectedCount}
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
-        onDelete={() =>
-          confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))
-        }
+        onDelete={() => confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))}
         hint="选择要删除的技能"
-        normalActions={
-          <PrimaryButton
-            label="新建"
-            tokens={tokens}
-            onPress={() => setCreateOpen(true)}
-          />
-        }
+        normalActions={<PrimaryButton label="新建" tokens={tokens} onPress={() => setCreateOpen(true)} />}
       />
       <SegmentedControl
         options={[
@@ -412,40 +344,23 @@ export function SkillsSettingsScreen() {
         onChange={switchTab}
         tokens={tokens}
       />
-      <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>
-        {tab === 'global' ? GLOBAL_TAB_HINT : PROJECT_TAB_HINT}
-      </Text>
+      <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>{tab === 'global' ? GLOBAL_TAB_HINT : PROJECT_TAB_HINT}</Text>
       <FlatList
         data={groupedData}
-        keyExtractor={(entry, index) =>
-          entry.kind === 'header'
-            ? `header:${entry.project.id}`
-            : rowKey(entry.row) + `:${index}`
-        }
+        keyExtractor={(entry, index) => (entry.kind === 'header' ? `header:${entry.project.id}` : rowKey(entry.row) + `:${index}`)}
         contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={reload} />
-        }
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-              {tab === 'global'
-                ? '暂无全局技能。新建全局技能后所有项目可用。'
-                : '暂无项目技能。项目技能仅所属项目生效，同名时覆盖全局版。'}
+              {tab === 'global' ? '暂无全局技能。新建全局技能后所有项目可用。' : '暂无项目技能。项目技能仅所属项目生效，同名时覆盖全局版。'}
             </Text>
-            <SecondaryButton
-              label="新建技能"
-              tokens={tokens}
-              onPress={() => setCreateOpen(true)}
-            />
+            <SecondaryButton label="新建技能" tokens={tokens} onPress={() => setCreateOpen(true)} />
           </View>
         }
         renderItem={({item}) =>
           item.kind === 'header' ? (
-            <Text
-              style={[styles.groupHeader, {color: tokens.textSecondary}]}
-              testID={`skills-settings-group-${item.project.name}`}
-            >
+            <Text style={[styles.groupHeader, {color: tokens.textSecondary}]} testID={`skills-settings-group-${item.project.name}`}>
               {item.project.name}
             </Text>
           ) : (
@@ -453,13 +368,7 @@ export function SkillsSettingsScreen() {
           )
         }
       />
-      <BottomSheetMenu
-        visible={menuTarget != null}
-        title={menuTarget ? `技能 ${menuTarget.name}` : undefined}
-        items={menuItems}
-        onSelect={handleMenuSelect}
-        onClose={() => setMenuTarget(undefined)}
-      />
+      <BottomSheetMenu visible={menuTarget != null} title={menuTarget ? `技能 ${menuTarget.name}` : undefined} items={menuItems} onSelect={handleMenuSelect} onClose={() => setMenuTarget(undefined)} />
       <NewSkillModal
         visible={createOpen}
         domain={tab === 'global' ? 'global' : 'project'}

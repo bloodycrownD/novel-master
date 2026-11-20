@@ -4,20 +4,19 @@
  * @module service/workplace/assemble-workplace-display
  */
 
-import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
-import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
+import { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, fileCacheKey, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { fillFileCacheFromVfs } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { joinFileBlocks, renderFileBlock, renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
-import { parseRuleSnapshotJson, ruleViewToSnapshotEntries, serializeRuleSnapshot, type RuleSnapshotEntry } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { FileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { RuleSnapshotCodec, type WorkplaceDisplayStatus } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { WorkplaceDisplay } from "@/domain/workplace/logic/workplace-display.js";
+import { type RuleSnapshotEntry } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { Outcome } from "@/errors/outcome.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
-
-export { layoutHasWorkplace };
 
 /** {@link assembleWorkplaceDisplay} 依赖。 */
 // nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
@@ -84,32 +83,9 @@ interface WorkplaceAssembledFile {
   readonly body: string;
 }
 
-/**
- * workplace 组装被中止（2026-09-30「停止要等 14 秒」实锤的治本点）。
- *
- * 背景：组装段曾是**无观察点的原子块**——回滚触发的 chip 组装与发送触发的
- * run 组装在单 SQLite 连接 + JS 线程上互相排队，叠加到 16 秒；期间用户连点
- * 17 次停止，abort 全部真派发了（0~1ms）却要等组装跑完才能兑现。「停止必须
- * 从受理即可停」这条 RULE 在组装内部同样成立：按文件粒度检查
- * {@link AssembleWorkplaceDisplayOptions.shouldStop}，命中即抛本错误。
- *
- * 两个消费族的收口方式：
- * - **run 侧**（agent-runner）：`shouldStop = () => signal.aborted`，错误沿
- *   既有 catch 冒泡——`signal?.aborted` 为真即路由进统一 abort 处理
- *   （`handleAbort("catch_abort")`），无需专门 catch；
- * - **chip 侧**（mobile/desktop 的 build）：`shouldStop` 接 build 的分段弃权
- *   判据，build 里 catch 本错误并转抛各自的 bail 哨兵类（空串/null 语义）。
- */
-export class WorkplaceAssemblyAbortedError extends Error {
-  constructor() {
-    super("workplace assembly aborted (stop requested mid-files)");
-    this.name = "WorkplaceAssemblyAbortedError";
-  }
-}
-
-/** {@link assembleWorkplaceDisplay} 可选参数。 */
+/** {@link assembleWorkplaceDisplay} 可选参数（长任务中断观察点注入 `LongTaskHooks.checkpoint`）。 */
 // nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
-export interface AssembleWorkplaceDisplayOptions {
+export interface AssembleWorkplaceDisplayOptions extends LongTaskHooks {
   /**
    * rule_snapshot / file_cache 的 KKV 归属 session id；缺省用 `scope.sessionId`。
    *
@@ -117,17 +93,12 @@ export interface AssembleWorkplaceDisplayOptions {
    * 进行，但快照与缓存写进子 session 自己的 KKV。
    */
   readonly kkvSessionId?: string;
-  /**
-   * 按文件粒度的中止判据（2026-09-30）：真值即抛
-   * {@link WorkplaceAssemblyAbortedError}。检查点在快照加载后 + 每个文件的
-   * 缓存解析/VFS 回填之前——单个大文件的读取本身仍是原子单元（可接受：
-   * 粒度从「整个组装 16s」细化到「单个文件」）。缺省不检查。
-   */
-  readonly shouldStop?: () => boolean;
 }
 
-/**
- * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
+/** 常驻工作区前缀组装集合（拼装展示文本 + S0/全量 path 集合 + 指纹）。 */
+export const WorkplaceDisplayAssembler = {
+  /**
+   * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
  * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [], visiblePaths: [] }`，
  *    不触 kkv
@@ -138,49 +109,64 @@ export interface AssembleWorkplaceDisplayOptions {
  * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；
  *    `visiblePaths` = 快照全部可见 path（规范化，全量语义）；
  *    `prefixPaths` = 其中 `status === "full"` 的子集（attach 去重 S0 入集口径）
+ * 5. 错误通道迁移二期：`checkpoint` 命中 → `cancelled` / `replaced`（中断不
+ *    伪装成错误）；`LogicalPath.resolve` 失败 → `failed`（决定权交上层）。
+ *    其余失败仍沿 throw 冒泡（平台边界，适配层转码）。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：PathNormalizer.normalize 失败按迁移前形态上抛，由调用链端点 catch 收口。
  */
-export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<AssembleWorkplaceDisplayResult> {
-  if (!layoutHasWorkplace(deps.layout)) {
+  async assemble(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<Outcome<AssembleWorkplaceDisplayResult>> {
+  if (!AgentPromptLayout.hasWorkplace(deps.layout)) {
     return {
-      workplaceDisplay: "",
-      files: [],
-      prefixPaths: [],
-      visiblePaths: [],
-      fingerprint: "",
+      kind: "completed",
+      value: {
+        workplaceDisplay: "",
+        files: [],
+        prefixPaths: [],
+        visiblePaths: [],
+        fingerprint: "",
+      },
     };
   }
 
   const kkvSessionId = options?.kkvSessionId ?? scope.sessionId;
   // 快照读 rule_snapshot/canon；空或损坏 → 规则引擎重算并写回。
   const rawSnapshot = await deps.sessionKkv.get(kkvSessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY);
-  const parsedSnapshot = rawSnapshot != null && rawSnapshot !== "" ? parseRuleSnapshotJson(rawSnapshot) : null;
+  const parsedSnapshot = rawSnapshot != null && rawSnapshot !== "" ? RuleSnapshotCodec.parseJson(rawSnapshot) : null;
   let entries: RuleSnapshotEntry[];
   // 空数组视为未就绪：避免首次空快照粘住后工作区永久消失
   if (parsedSnapshot?.ok === true && parsedSnapshot.value.length > 0) {
     entries = parsedSnapshot.value;
   } else {
-    entries = ruleViewToSnapshotEntries(await deps.workplace.evaluateRuleView());
-    await deps.sessionKkv.set(kkvSessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, serializeRuleSnapshot(entries));
+    const evaluated = await deps.workplace.evaluateRuleView();
+    if (!evaluated.ok) {
+      return { kind: "failed", error: evaluated.error };
+    }
+    entries = RuleSnapshotCodec.ruleViewToEntries(evaluated.value);
+    await deps.sessionKkv.set(kkvSessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, RuleSnapshotCodec.serialize(entries));
   }
   if (entries.length === 0) {
     return {
-      workplaceDisplay: "",
-      files: [],
-      prefixPaths: [],
-      visiblePaths: [],
-      fingerprint: "",
+      kind: "completed",
+      value: {
+        workplaceDisplay: "",
+        files: [],
+        prefixPaths: [],
+        visiblePaths: [],
+        fingerprint: "",
+      },
     };
   }
   // 快照加载是组装的第一段 IO（可能触发规则评估），加载完先看一眼再进
   // 文件循环——批量预取那条 IN 查询之后全是逐文件重活。
-  if (options?.shouldStop?.() === true) {
-    throw new WorkplaceAssemblyAbortedError();
+  const stopped = options?.checkpoint?.();
+  if (stopped != null) {
+    return stopped;
   }
 
   // 批量预取 file_cache：两条 IN 查询（entries + blobs）替代每文件两跳
   // 串行 SQL——大会话几十个规则文件的读链曾是 workplace 组装的主要成本
   // （单连接串行执行下，并发救不了，只能减查询数）。
-  const cacheKeys = entries.map((entry) => fileCacheKey(entry.status, entry.path));
+  const cacheKeys = entries.map((entry) => RuleSnapshotCodec.fileCacheKey(entry.status, entry.path));
   const prefetched = await deps.sessionKkv.getMany(kkvSessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cacheKeys);
 
   const prefixPaths: string[] = [];
@@ -189,14 +175,17 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
   const files: WorkplaceAssembledFile[] = [];
   const fingerprintParts: string[] = [];
   for (const entry of entries) {
-    // 按文件粒度的中止观察点（见 AssembleWorkplaceDisplayOptions.shouldStop）
+    // 按文件粒度的中止观察点（见 LongTaskHooks.checkpoint）
     // ——2026-09-30 实锤：16s 原子组装段里 17 次停止点按全部真派发却无从
     // 兑现。单文件的「缓存解析 + VFS 回填」仍是本轮的最小原子单元。
-    if (options?.shouldStop?.() === true) {
-      throw new WorkplaceAssemblyAbortedError();
+    const stopped = options?.checkpoint?.();
+    if (stopped != null) {
+      return stopped;
     }
-    const resolved = resolveLogicalPath(entry.path);
-    if (!resolved.ok) throw resolved.error;
+    const resolved = LogicalPath.resolve(entry.path);
+    if (!resolved.ok) {
+      return { kind: "failed", error: resolved.error };
+    }
     const normalized = resolved.value;
     // 全量可见集（workplace 省略判定用，= 旧 prefixPaths 语义）。
     visiblePaths.push(normalized);
@@ -205,19 +194,19 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
     if (entry.status === "full") {
       prefixPaths.push(normalized);
     }
-    const raw = prefetched.get(fileCacheKey(entry.status, entry.path));
-    const cached = raw != null ? parseFileCachePayload(raw) : null;
+    const raw = prefetched.get(RuleSnapshotCodec.fileCacheKey(entry.status, entry.path));
+    const cached = raw != null ? RuleSnapshotCodec.parseFileCachePayload(raw) : null;
     // 冷 miss 后先服务于读者：正文已读到即用于组装，压缩+落库交给
     // 后台 fire-and-forget（推迟一个宏任务，不跟同轮读链抢 JS 线程）。
     // file_cache 只是加速层，丢了下次再回填。
     const fillDeps = { sessionId: kkvSessionId, sessionKkv: deps.sessionKkv, vfs: deps.vfs, path: entry.path, status: entry.status };
-    const payload = cached?.ok === true ? cached.value : await fillFileCacheFromVfs(fillDeps, { deferBackfillWrite: true });
-    const fileBody = renderFileBlockBody({
+    const payload = cached?.ok === true ? cached.value : await FileCache.fillFromVfs(fillDeps, { deferBackfillWrite: true });
+    const fileBody = WorkplaceDisplay.renderFileBlockBody({
       logicalPath: entry.path,
       display: entry.status,
       content: payload.body,
     });
-    blocks.push(renderFileBlock({ logicalPath: entry.path, mtimeMs: payload.mtimeMs, display: entry.status, content: payload.body }));
+    blocks.push(WorkplaceDisplay.renderFileBlock({ logicalPath: entry.path, mtimeMs: payload.mtimeMs, display: entry.status, content: payload.body }));
     // 结构化清单（预览侧 workplace 二级卡数据源）：块内正文与展示串同口径，
     // 预览不再从串反解。
     files.push({ path: entry.path, display: entry.status, body: fileBody });
@@ -226,17 +215,21 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
     // 体量是零成本字段（payload 已在手），长度异即指纹异。
     fingerprintParts.push(`${entry.path}|${entry.status}|${payload.mtimeMs}|${payload.body.length}`);
   }
-  const workplaceBody = joinFileBlocks(blocks);
+  const workplaceBody = WorkplaceDisplay.joinFileBlocks(blocks);
   return {
-    // 常驻前缀唯一包裹出口：非空 display 外包一层 `<workplace>`（空串不包）。
-    // 禁止在 renderFileBlock / joinFileBlocks / synthetic 路径再次包裹。
-    workplaceDisplay: workplaceBody === "" ? "" : `<workplace>\n${workplaceBody}\n</workplace>`,
-    files,
-    prefixPaths,
-    visiblePaths,
-    // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度
-    // 来自缓存/回填载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串
-    // 本身。
-    fingerprint: fingerprintParts.join(";"),
+    kind: "completed",
+    value: {
+      // 常驻前缀唯一包裹出口：非空 display 外包一层 `<workplace>`（空串不包）。
+      // 禁止在 renderFileBlock / joinFileBlocks（WorkplaceDisplay） / synthetic 路径再次包裹。
+      workplaceDisplay: workplaceBody === "" ? "" : `<workplace>\n${workplaceBody}\n</workplace>`,
+      files,
+      prefixPaths,
+      visiblePaths,
+      // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度
+      // 来自缓存/回填载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串
+      // 本身。
+      fingerprint: fingerprintParts.join(";"),
+    },
   };
-}
+  },
+} as const;

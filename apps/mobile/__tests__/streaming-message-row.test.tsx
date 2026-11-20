@@ -15,16 +15,18 @@
  * 3. P1-1：`#stream-tail` 单主——只有 checkpoint 指向的 streaming 行挂 id，
  *    旧 step 的 streaming 行不得抢走 delta 落笔点。
  */
-jest.mock(
-  '../src/web/chat-transcript/webview/runtime/render/row-logic',
-  () => ({renderRows: jest.fn()}),
-);
-jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
+jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => {
+  const legacy = {renderRows: jest.fn()};
+  return {...legacy, RowLogic: {render: legacy.renderRows}};
+});
+jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => {
+  const legacy = {
   scheduleMermaidScan: jest.fn(),
-}));
+};
+  return {...legacy, Mermaid: {scheduleScan: legacy.scheduleMermaidScan}};
+});
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  closeContextMenu: jest.fn(),
-  openContextMenuFromAnchor: jest.fn(),
+  Menu: {close: jest.fn(), openFromAnchor: jest.fn()},
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
   post: jest.fn(),

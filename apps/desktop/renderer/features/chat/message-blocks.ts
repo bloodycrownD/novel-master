@@ -1,9 +1,8 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { skillToolRefResolver, resolveVfsToolFilePath } from "@shared/logic/chat";
-import { resolveToolResultOk } from "@shared/logic/root";
-import { summarizeToolInput } from "@shared/logic/chat";
+import { skillToolRefResolver, VfsToolFilePath } from "@shared/logic/chat";
+import { ToolResultBlock } from "@shared/logic/root";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 type ToolCallStatus = "success" | "error" | "pending" | "interrupted";
@@ -100,14 +99,14 @@ function isTurnToolExecutingWith(assistant: ChatMessageDto, context: ToolPairing
 }
 
 /**
- * 工具入参摘要：单源在 core（经 `@shared/logic/chat` 再导出的 `summarizeToolInput`）。
+ * 工具入参摘要：单源在 core（经 `@shared/logic/chat` 再导出的 `ToolSummary`）。
  * 本文件此前持有一份带 `skill` 特判的副本，与 mobile 两面（WebView / RN）行为不一致，
- * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/message/tool-summary.ts`。
+ * 现已全部改为引用 core；新增特判分支请改 core 的 `presentation/chat/tool-summary.ts`。
  */
 
 /** 解析工具卡片对应的 VFS 文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
-  return resolveVfsToolFilePath(tool.name, tool.input);
+  return VfsToolFilePath.resolve(tool.name, tool.input);
 }
 
 /**
@@ -118,24 +117,6 @@ export function vfsToolFilePath(tool: ToolCallView): string | undefined {
 export function skillToolRef(tool: ToolCallView, projectId?: string): ToolCallView["skillRef"] {
   if (tool.skillRef != null) return tool.skillRef;
   return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
-}
-
-export function toolCallSummary(tool: ToolCallView): string {
-  if (tool.status === "error" && tool.summary) {
-    // 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情），
-    // 超长按与成功摘要同档截断，卡片不被整段报错撑开。
-    const firstLine = tool.summary.split("\n")[0]?.trim() ?? "";
-    return firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
-  }
-  const fromInput = summarizeToolInput(tool.name, tool.input);
-  if (fromInput) {
-    return fromInput;
-  }
-  if (tool.resultContent) {
-    const t = tool.resultContent.trim();
-    return t.length > 120 ? `${t.slice(0, 117)}…` : t;
-  }
-  return "";
 }
 
 // nm-style: keep-public — 消息 → 列表项的视图组装入口；MessageList 只负责渲染，解析与工具配对语义不归调用方
@@ -200,7 +181,7 @@ export function buildChatListItems(messages: readonly ChatMessageDto[], options:
         toolUseId: use.id,
         name: use.name,
         input: use.input,
-        status: resolveToolResultOk(result) ? "success" : "error",
+        status: ToolResultBlock.resolveOk(result) ? "success" : "error",
         resultContent: result.content,
         ...(result.summary != null ? { summary: result.summary } : {}),
         ...(result.meta?.subagentSessionId != null ? { subagentSessionId: result.meta.subagentSessionId } : {}),

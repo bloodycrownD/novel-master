@@ -2,10 +2,10 @@
  * `skill` 工具卡片跳转三元组解析：从 tool_use 输入 / 工具输出解析
  * domain + projectId + name。
  *
- * 对称 `resolveVfsToolFilePath`（`domain/tool/logic/vfs-tool-file-path.ts`）
+ * 对称 `VfsToolFilePath.resolve`（`domain/tool/logic/vfs-tool-file-path.ts`）
  * 的输入侧解析：write/edit 的三元组必含于 tool_use 输入，这里直接读；
  * read 缺省域命中生效副本时，实际命中域由工具输出携带，经
- * `buildToolResultBlock` 透传到 `ToolResultBlock.meta.skillRef`（本模块的
+ * `ToolResultBlock.build` 透传到 `ToolResultBlock.meta.skillRef`（本模块的
  * `resolveSkillToolRefFromOutput` 供其自动检测）。
  *
  * @module domain/chat/logic/skill-tool-ref-resolver
@@ -55,15 +55,15 @@ class SkillToolRefResolver {
     }
 
     /**
-     * 从 skill 工具输出解析跳转三元组（供 `buildToolResultBlock` 自动检测
+     * 从 skill 工具输出解析跳转三元组（供 `ToolResultBlock.build` 自动检测
      * 透传进 `meta.skillRef`，照 `subagentSessionId` 的双来源模式）。
      *
      * read/write/edit 成功输出均携带实际 domain/name；list 输出无目标技能。
      * `projectId` 输出里不带，由调用方按会话上下文补（仅 project 域）。
      */
 
-    /** nm-style: keep-local — buildToolResultBlock 单点解析入口，测试直接锁三元组输出；保持纯函数边界。 */
-    /** nm-style: keep-public — buildToolResultBlock 唯一输出侧解析入口；测试锁三元组。 */
+    /** nm-style: keep-local — ToolResultBlock.build 单点解析入口，测试直接锁三元组输出；保持纯函数边界。 */
+    /** nm-style: keep-public — ToolResultBlock.build 唯一输出侧解析入口；测试锁三元组。 */
     fromOutput(toolName: string, output: unknown, projectId?: string): SkillToolRef | undefined {
         if (toolName !== SKILL_TOOL_NAME) return undefined;
         if (output == null || typeof output !== "object" || Array.isArray(output)) {

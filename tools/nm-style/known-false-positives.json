@@ -1,0 +1,437 @@
+{
+  "note": "已知假阳性清单（schema v2）：check 汇总层用它把「报出但不该改」的发现降级为 INFO（不阻断），并按 suppressPrefixes 隐藏停维路径。v2 变更：segment 字段更名 rule，旧值 inline/methods 统一映射为 hygiene，值域收窄为 signatures|hygiene|oop（bare-exports / dup / clusters 不吃 KFP）。Step 7 burn-in 逐条复核（证据 tmp/golden/E-kfp-33-review.md）：33 条旧条目判定 retired 23 / migrated 10；落盘布局 entries=11（10 条 migrated + raceWithCancel 1 条防御性保留）+ 尾部 retired 段=22 条留档（不参与匹配，retiredReason 为退役机制）。新增条目必须写清 reason（为什么不该改）与 basis（判定依据：代码位置 / 检查器分支 / 端口声明）；确认不再触发的条目移入 retired 段并附机制。",
+  "matching": "匹配键 = rule + file + symbol（可选 line）。file 是相对被扫仓根的 posix 路径；symbol 为 null 时命中该文件全部行；hygiene/oop 按行 symbol 精确相等或 \".\"+symbol 后缀匹配；signatures 按 finding 的 detail 包含 entry.symbol 匹配（v2 修正：旧的精确/后缀匹配对 signatures 的 detail 切片从未命中）。line 存在且非 0 时要求行号一致。suppressPrefixes 下的 finding 不进报告。",
+  "entries": [
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts",
+      "symbol": "deleteAfterSeq",
+      "category": "port-impl",
+      "reason": "SqliteMessageRepository 是 MessageRepository port 的实现，deleteAfterSeq 是对外接口方法而非单点私有函数；check-methods 只数实现内的直接调用点，数不到经 port 接口的消费者。十七期删掉 MessageTranscriptEffectsService 的纯委托包装后调用点从 2 变 1，触发 INLINE_METHOD 假阳性。",
+      "basis": "domain/chat/repositories/message.repository.port.ts 声明 deleteAfterSeq；实现处 sqlite-message.repository.ts:375。界面方法不能内联进调用方，否则 port 抽象失效。"
+    },
+    {
+      "rule": "signatures",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "raceWithCancel",
+      "category": "rule-conflict",
+      "reason": "调用 4 个实参里夹着两个跨行箭头回调，普通实参 work / rejectWith 在结构上无法相邻；把回调提取成具名局部又会被 check-inline 判 INLINE_LOCAL（单点私有函数），两条规则互斥。【Step 7 burn-in 防御性保留：当前源面零触发（触发点经签名收敛消失）；若该文件重出多行回调实参拆行的假阳性即自动抑制】",
+      "basis": "create-abort-scope.ts:206-214（ARGS 行，两个回调实参分别跨 :207-208 与 :209-212）；check-signatures.mjs:106-113 只看普通实参是否相邻；check-inline.mjs:118-121 单点私有函数判内联。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts",
+      "symbol": "deliverNativeChunk",
+      "category": "rule-conflict",
+      "reason": "规则互斥：内联回 transport.post 第 3 个实参会让 url / init / postOptions 三个普通实参跨行，触发 check-signatures ARGS；keep-local 已写在 :330，但函数只有 4 行，check-inline 的 keep-local 豁免要求 >20 行，指令不生效。",
+      "basis": "llm-sse-transport.ts:330（keep-local）、:331-334（实现，4 行）、:336（post 调用）；check-inline.mjs:120（>20 行才认 keep-local）；check-signatures.mjs:106-113。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "deadlineOf",
+      "category": "structural-step",
+      "reason": "读取 controls WeakMap 协议（:119-124）与 deadlineAt 回退的唯一读口（:343 调用）；内联会把协议细节复制进 deadline 合并表达式。",
+      "basis": "create-abort-scope.ts:118-125（实现，8 行）、:343（调用）；check-inline.mjs:118-121、:120。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "isDevEnvironment",
+      "category": "structural-step",
+      "reason": "环境探针（__DEV__ / NODE_ENV）的单一出口，只被 warnInconsistentOptions 调用（:48）；内联会把探针埋进 warn 的守卫条件。",
+      "basis": "create-abort-scope.ts:39-45（实现，7 行）、:48（调用）；check-inline.mjs:118-121、:120。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "warnInconsistentOptions",
+      "category": "structural-step",
+      "reason": "dev-only 警告的单一出口（:367 调用），与 isDevEnvironment 成对；函数 6 行，keep-local 的 >20 行门槛不适用。",
+      "basis": "create-abort-scope.ts:47-52（实现，6 行）、:367（调用）；check-inline.mjs:118-121、:120。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "reconcileExistingScope",
+      "category": "structural-step",
+      "reason": "memoize 命中路径的补挂 + warn 步骤（:381 单一调用）；与 buildScope 的分离是 memoize 协议的阶段划分。",
+      "basis": "create-abort-scope.ts:355-368（实现，14 行）、:381（调用）；check-inline.mjs:118-121、:120。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/errors/either.ts",
+      "symbol": null,
+      "category": "runtime-api",
+      "reason": "Ok/Err 跨类同名 DEAD_METHOD 共 12 处：Result 运行时的两侧链式 API（toJSON / mapErr / orElse / unwrapOrElse / mapAsync / andThenAsync 等），按名字全局计数恒为 0；删任一方法都会拆掉 Result 类型与线上序列化形态。",
+      "basis": "either.ts:44（Ok 类级 keep-public）、:113（Err 类级 keep-public）；Result 运行时类；check-methods.mjs:161-167（按名字聚合）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/workplace/impl/workplace.service.ts",
+      "symbol": "materialize",
+      "category": "deprecated-port-api",
+      "reason": "WorkplaceService 端口方法且已标 @deprecated（:130，端口同样标 :77），生产调用 0、只有测试消费；删除要同步改端口声明与测试，属 src 清理，不由本期工具门禁驱动。",
+      "basis": "workplace.service.ts:130-131；workplace.port.ts:77-79；check-methods.mjs:152-155（deprecated 分支优先于端口 / 指令判定）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/handlers/agent-registry.ts",
+      "symbol": "importAgentFromYaml",
+      "category": "rule-conflict",
+      "reason": "具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参重新跨行（check-signatures ARGS/VARDECL），两条规则互斥。keep-local 已写在 :240，但 check-inline 的箭头函数行数口径下不生效。",
+      "basis": "agent-registry.ts:240（keep-local）、:241-263（importAgentFromYaml 定义与单调用点 :264）；check-inline.mjs:130（>20 行才认 keep-local）；check-signatures.mjs VARDECL 判据。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts",
+      "symbol": "importRulesFromYaml",
+      "category": "rule-conflict",
+      "reason": "具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参重新跨行（check-signatures ARGS/VARDECL），两条规则互斥。函数体约 13 行不满足 keep-local 的 >20 行豁免。",
+      "basis": "smart-sort-rule.ts:191（keep-local）、:192-204（importRulesFromYaml 定义与单调用点 :205）；check-inline.mjs:130（>20 行才认 keep-local）；check-signatures.mjs VARDECL 判据。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/handlers/agent.ts",
+      "symbol": "Agent.registerTrackedRunForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：向 agent.ts 的 tracked run 注册表注入假 run，供 agent 状态类测试断言；ForTests 后缀即声明仅测试消费，生产零引用是设计而非死代码。",
+      "basis": "agent.ts:374 成员定义；测试消费 2 处（检测器自报 test 2c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/handlers/app-info.ts",
+      "symbol": "AppInfo.__setSeamsForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：app-info handler 的 seam 替换口（__ 前缀 + ForTests 后缀双重标记），语义就是仅测试消费。",
+      "basis": "app-info.ts:47 成员定义；测试消费 5 处（test 5c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "heuristic.countMessages",
+      "category": "test-seam",
+      "reason": "tokenizer heuristic 口径的对拍基准：保留 heuristic 估数是为了测试里与精确口径对拍回归（切换 stall 修复期的验收锚点），生产链走精确档不消费它。",
+      "basis": "chat-prompt-tokens.service.ts:205；测试消费 9 处（test 9c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.resetDebounceForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：重置 debounce 模块状态，跨用例隔离用；ForTests 后缀声明仅测试消费。",
+      "basis": "chat-prompt-tokens.service.ts:561；测试消费 5 处（test 5c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.debounceExecCountForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：读 debounce 执行计数供断言；ForTests 后缀声明仅测试消费。",
+      "basis": "chat-prompt-tokens.service.ts:572；测试消费 10 处（test 10c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/cloud-sync.service.ts",
+      "symbol": "CloudSyncService.setStorageOverrideForTest",
+      "category": "test-seam",
+      "reason": "测试 seam：注入存储覆盖，隔离云同步测试；ForTests 后缀声明仅测试消费。",
+      "basis": "cloud-sync.service.ts:481；测试消费 3 处（test 3c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/db-backup.service.ts",
+      "symbol": "DbBackupService.setFsOpsForTest",
+      "category": "test-seam",
+      "reason": "测试 seam：替换备份服务的 fs 操作，避免测试写真实磁盘；ForTests 后缀声明仅测试消费。",
+      "basis": "db-backup.service.ts:64；测试消费 7 处（test 7c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/vfs-batch.service.ts",
+      "symbol": "VfsBatchService.stagingTtlCountForTest",
+      "category": "test-seam",
+      "reason": "测试 seam：读 staging TTL 计数供断言；ForTests 后缀声明仅测试消费。",
+      "basis": "vfs-batch.service.ts:116；测试消费 1 处（test 1c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/runtime/connection.ts",
+      "symbol": "get.deflate",
+      "category": "callback-prop",
+      "reason": "ZlibAccelerator.register({...}) 的 deflate 回调属性：内联箭头函数按契约传入加速器注册表，属性本身就是终值而非待内联的单点函数。INLINE_CANDIDATE 判据（成员单点调用）不适用于回调传值属性。",
+      "basis": "connection.ts:40 ZlibAccelerator.register({ deflate: (data, level) => ..., inflate: ... })。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/agent-run.service.ts",
+      "symbol": "run.onAfterResolveModel",
+      "category": "callback-prop",
+      "reason": "AgentTurnRunner.run 选项对象的 onAfterResolveModel 回调属性：core 选项回调按接口传入，非独立函数。检测器把选项回调属性误判为成员函数单点调用。",
+      "basis": "agent-run.service.ts:57 AgentTurnRunner.run(..., { ...options, onAfterResolveModel: async (ctx) => {...} })。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/shell-menu.ts",
+      "symbol": "menu.onAbout",
+      "category": "callback-prop",
+      "reason": "ShellMenu.buildTemplate 的 onAbout 回调属性（关于对话框），传值即目的；对象字面量回调属性不是可内联的独立函数。",
+      "basis": "shell-menu.ts:99 Menu.buildFromTemplate(ShellMenu.buildTemplate({ ..., onAbout: () => {...} }))。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/shell-menu.ts",
+      "symbol": "menu.onOpenLogsDir",
+      "category": "callback-prop",
+      "reason": "buildTemplate 的 onOpenLogsDir 回调属性（打开日志目录），同 onAbout 形态。",
+      "basis": "shell-menu.ts:109。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/shell-menu.ts",
+      "symbol": "menu.onExportDiagnostics",
+      "category": "callback-prop",
+      "reason": "buildTemplate 的 onExportDiagnostics 回调属性（导出诊断），同 onAbout 形态。",
+      "basis": "shell-menu.ts:112。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.isPreciseWarmStillCurrent",
+      "category": "structural-step",
+      "reason": "两阶段暖机协议的判定步骤（读会话 agent 配置 + registry 定义比对 warm 期间模型是否已变）：函数带完整协议注释，内联会把两阶段协议细节埋进投递方；单点调用是协议结构使然（只在投递前判定一次）。",
+      "basis": "chat-prompt-tokens.service.ts:292 实现（20+ 行 + 协议 JSDoc）；pushPreciseStatsIfReady 内单一调用点。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.pushPreciseStatsIfReady",
+      "category": "structural-step",
+      "reason": "两阶段第二相的投递步骤（把暖机手里的精确档推给 renderer，含 estimated 闸与模型漂移补读）：内联会把 50 行协议逻辑埋进暖机主链。",
+      "basis": "chat-prompt-tokens.service.ts:323 实现；暖机链单一调用点。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts",
+      "symbol": "ComposerStatusRefresh.afterSessionKkvCleared",
+      "category": "structural-step",
+      "reason": "语义族成员：与 afterFloorOrCompaction 成对（Undo rewind/reset/undo_send 推空 vs 置位/压缩推实况），事件修饰区分场景；单点生产调用是因为该事件只有一个触发场景，内联会打散语义族（mobile 侧同族对齐）。",
+      "basis": "notify-composer-status-after-kkv-clear.ts:31；namespace 内成对成员。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/prompt-preview.service.ts",
+      "symbol": "PromptPreviewService.buildRealTurnsAdapter",
+      "category": "structural-step",
+      "reason": "desktop preview adapter：runtime→core 组装链的单一出口（resolve agent→build adapter→probe registry→previewTurns，50+ 行）；单点调用是 preview 场景唯一使然，内联把整段组装埋进 handler。",
+      "basis": "prompt-preview.service.ts:36 实现；prompt handler 单一调用点。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/ipc-result.ts",
+      "symbol": "from",
+      "category": "detector-limitation",
+      "reason": "对象简写收集形态：function from 重载声明在模块顶层、经 const IpcResults = { from } 简写收集入 namespace；IpcResults.from 的调用遍布 handlers（数十处），symbol-index 对该形态的成员归因不到顶层声明行，两行重载报 DEAD 均为误报。",
+      "basis": "ipc-result.ts:20-22 重载声明与实现；消费例：cloud-sync.ts:33 / agent-registry.ts:134 / preferences.ts:54 等几十处 IpcResults.from(...)。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/update-check.service.ts",
+      "symbol": "UpdateCheckService",
+      "category": "detector-limitation",
+      "reason": "动态 import 解构消费：app-info.ts 用 await import(...) + 解构取 UpdateCheckService（Electron 主进程按需加载更新检查模块），静态 symbol-index 数不到动态 import 的消费点。",
+      "basis": "update-check.service.ts:10 namespace 定义；消费：app-info.ts:33 const [{app,shell},{UpdateCheckService}] = await Promise.all([import(\"electron\"), import(\"../../services/update-check.service.js\")])。"
+    }
+  ],
+  "suppressPrefixes": [
+    "apps/cli/"
+  ],
+  "retired": [
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/errors/guards.ts",
+      "symbol": "isVfsError",
+      "category": "checker-blind-spot",
+      "reason": "export const 箭头函数不在 check-inline 的导出识别范围，同文件唯一命中是模块注释里的 {@link isVfsError}（JSDocLink 被当成标识符引用），真实消费者在其它文件；本行另有 keep-public 标注。",
+      "basis": "guards.ts:6（模块注释 JSDocLink）、:79（keep-public）、:82（定义）；check-inline.mjs:25-28（isExported 只认 export 声明 / export{} 列表）、:74-79（指令解析）、:103-115（同文件标识符计数）。",
+      "retiredReason": "P1「isExported 对箭头函数失效」修复：export const 箭头识别为 exported face（新 findings 无该符号问题档；旧判单点私有 INLINE_LOCAL 的前提消失）。**预判退役确认**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/errors/guards.ts",
+      "symbol": "isSessionFsError",
+      "category": "checker-blind-spot",
+      "reason": "与 isVfsError 同因：export const 箭头函数 + 同文件唯一命中是模块注释的 JSDocLink（guards.ts:6），实现是跨文件域守卫；删除会拆掉 public 守卫面。",
+      "basis": "guards.ts:6、:85（定义）；check-inline.mjs:25-28 / 103-115。",
+      "retiredReason": "同上。**预判退役确认**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "race",
+      "category": "structural-step",
+      "reason": "AbortSignalView 端口方法 race 的实现；唯一「引用」是 scope 对象字面量的简写属性（:264），不是可内联的局部调用。",
+      "basis": "abort-scope.ts:25（端口声明）；create-abort-scope.ts:202-215（实现，14 行）、:264（简写属性）；check-inline.mjs:118-121、:120。",
+      "retiredReason": "P0 faceOf object 容器成员修复 + 跨类同名收敛 AMBIGUOUS：新 findings 该符号为 AMBIGUOUS（AbortSignalView 端口方法），不再判 INLINE_LOCAL"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "fork",
+      "category": "structural-step",
+      "reason": "AbortScope 端口方法 fork 的实现；唯一「引用」是 scope 对象字面量的简写属性（:269），不是局部调用。",
+      "basis": "abort-scope.ts:36（端口声明）；create-abort-scope.ts:217-225（实现，9 行）、:269；check-inline.mjs:118-121、:120。",
+      "retiredReason": "同上"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "dispose",
+      "category": "structural-step",
+      "reason": "AbortScope 端口方法 dispose 的实现；唯一「引用」是 scope 对象字面量的简写属性（:270），不是局部调用；函数 26 行，补 keep-local 注释虽可豁免，但本期不动 src。",
+      "basis": "abort-scope.ts:38（端口声明）；create-abort-scope.ts:227-252（实现，26 行）、:270；check-inline.mjs:118-121、:120。",
+      "retiredReason": "同上"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
+      "symbol": "buildScope",
+      "category": "structural-step",
+      "reason": "226 行 scope 工厂，createAbortScope 的单一外部调用（:385）；内联会把全部作用域构建塞进入口函数。",
+      "basis": "create-abort-scope.ts:127-352（实现，226 行）、:385（唯一外部调用）；check-inline.mjs:118-121。",
+      "retiredReason": "新工具不再报它：`--all` INFO 10 行精确对齐后无 buildScope 行（第一轮宽匹配是 reason 文本误配），findings 中 buildScope 为 KEEP_PUBLIC（:128 object-method，生产消费正常）——旧「单点私有 INLINE_LOCAL」假阳性前提消失"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/domain/agent/session/impl/in-memory-agent-session.ts",
+      "symbol": "truncateAfterMessage",
+      "category": "interface-impl",
+      "reason": "AgentSession 端口契约方法，三个实现共享同名；静态引用计数看不到「实现端口」这层，生产调用尚未接入（当前只有测试直接调用），删除会破坏端口契约。",
+      "basis": "agent-session.port.ts:75（端口声明）；in-memory-agent-session.ts:63（实现）；chat-agent-session.ts:64 / ephemeral-overlay-agent-session.ts:79 同款；check-methods.mjs:161-167（跨类同名分支）。",
+      "retiredReason": "同上（AMBIGUOUS 化；port 接口方法不再按名判死/判内联）"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/agent/impl/chat-agent-session.ts",
+      "symbol": "truncateAfterMessage",
+      "category": "rule-conflict",
+      "reason": "同上端口契约实现；本行已写 keep-public（:63），但 check-methods 的跨类同名分支在 :161-167 直接 continue，不读指令。",
+      "basis": "chat-agent-session.ts:63-66；agent-session.port.ts:75；check-methods.mjs:161-167。",
+      "retiredReason": "同上"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/agent/impl/ephemeral-overlay-agent-session.ts",
+      "symbol": "truncateAfterMessage",
+      "category": "rule-conflict",
+      "reason": "同上端口契约实现；本行已写 keep-public（:78），跨类同名分支不读指令。",
+      "basis": "ephemeral-overlay-agent-session.ts:78-95；agent-session.port.ts:75；check-methods.mjs:161-167。",
+      "retiredReason": "同上"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/errors/app-error.ts",
+      "symbol": "toJSON",
+      "category": "serialization-hook",
+      "reason": "JSON.stringify 的序列化钩子，静态分析看不到隐式调用；已写 keep-public（:213），跨类同名分支不读指令。",
+      "basis": "app-error.ts:213-214；check-methods.mjs:161-167。",
+      "retiredReason": "跨类同名 DEAD_METHOD 假阳性在新 verdict 体系下不再产生：同名多定义收敛为 AMBIGUOUS 档（非阻断），不再按名计数判 DEAD"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/chat/impl/project.service.ts",
+      "symbol": "getAgentConfig",
+      "category": "deprecated-compat",
+      "reason": "@deprecated 但按注释保留用于 DB 历史数据读取兼容（project.port.ts:32）；数到的 3 ref 里含同名 repository 方法（sqlite-project.repository.ts:53）经 deps.projects.getAgentConfig 的命中（:168 / :215），deprecated 分支又绕过了跨类同名保护，计数不可信。",
+      "basis": "project.service.ts:164-165、:168、:181、:215；project.port.ts:32；check-methods.mjs:152-155 / 161-167。",
+      "retiredReason": "同上（AMBIGUOUS）"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/chat/impl/project.service.ts",
+      "symbol": "updateAgentConfig",
+      "category": "deprecated-compat",
+      "reason": "@deprecated（:177）保留用于 DB 历史兼容；2 ref 同样是 repository 同名方法（:204 / :228），服务方法本身生产 0 调用（仅测试），属已登记的兼容面。",
+      "basis": "project.service.ts:176-178、:204、:228；project.port.ts:35；check-methods.mjs:152-155。",
+      "retiredReason": "同上"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/provider/impl/provider-model.service.ts",
+      "symbol": "create",
+      "category": "public-api",
+      "reason": "ProviderModelService 端口的 create 兼容别名（provider-model.port.ts:25），keep-public 已写在 :113；pass-through 分支（:156-160）不读指令，别名不能内联成 save。",
+      "basis": "provider-model.service.ts:113-115；provider-model.port.ts:25；check-methods.mjs:156-160。",
+      "retiredReason": "同上（AMBIGUOUS；public-api 方法不再按名判死）"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/vfs/impl/vfs.service.ts",
+      "symbol": "hardDelete",
+      "category": "public-api",
+      "reason": "InternalVfsService 端口方法（internal-vfs.port.ts:51），keep-public 已写在 :185；内部委托 delete 是端口语义（无 revision 层时等价），内联等于删端口实现。",
+      "basis": "vfs.service.ts:185-189；internal-vfs.port.ts:51；check-methods.mjs:156-160。",
+      "retiredReason": "同上"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/common/update-check.ts",
+      "symbol": "checkForUpdates",
+      "reason": "object namespace 的成员绑定（UpdateCheck.check = checkForUpdates），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL",
+      "retiredReason": "成员绑定机制修复：`UpdateCheck.check = checkForUpdates` 识别为 object-binding form，不再按「对象字面量 1 ref」判单点私有 INLINE_LOCAL。**预判「成员绑定 6 条退役」之一**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "computeLlmExportZonesFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL",
+      "retiredReason": "同上（PromptBuilder.xxx 绑定）。**预判之一**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "buildPromptLlmInputFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL",
+      "retiredReason": "同上。**预判之一**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "buildPromptPreviewSegmentsFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL",
+      "retiredReason": "同上。**预判之一**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "formatPromptLlmInputForCliFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL",
+      "retiredReason": "同上。**预判之一**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "buildPromptPreviewTurnsFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL",
+      "retiredReason": "同上。**预判之一**"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts",
+      "symbol": "countMessages",
+      "category": "port-impl",
+      "reason": "TokenCounter port 的接口方法实现（legacy compaction 估算路径），implements 契约要求必须存在，删实现即编译失败；check-methods 按名字计数数不到 port 接口层的消费者。同类实现 SentencePieceTokenCounter.countMessages 未被报出仅因测试撞名。",
+      "basis": "packages/core/src/infra/tokenizer/ports/token-counter.port.ts:39 声明 countMessages；实现处 tiktoken-token-counter.ts:40（implements TokenCounter）。",
+      "retiredReason": "单文件 check 实测 KEEP_PUBLIC「公共入口」：class-public face + port 实现识别，不再产出 INLINE_METHOD 假阳性"
+    },
+    {
+      "rule": "hygiene",
+      "file": "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts",
+      "symbol": "countMessages",
+      "category": "port-impl",
+      "reason": "TokenCounter port 的接口方法实现（legacy compaction 估算路径），implements 契约要求必须存在；生产消费走 counter.countSerializedPrompt（web-tokenizer-counter.ts:134），countMessages 是接口方法不是单点私有函数。",
+      "basis": "packages/core/src/infra/tokenizer/ports/token-counter.port.ts:39 声明 countMessages；实现处 web-tokenizer-counter.ts:99（implements TokenCounter）。",
+      "retiredReason": "同上（单文件 KEEP_PUBLIC）"
+    }
+  ]
+}

@@ -12,21 +12,15 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { VfsError } from "@novel-master/core/vfs";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { handleVfsWrite } from "../src/main/ipc/handlers/vfs.js";
-import {
-  handlePhysicalList,
-  handlePhysicalRead,
-} from "../src/main/ipc/handlers/physical.js";
-import {
-  resolveVfsScopeFromRequest,
-  VfsScopeError,
-} from "../src/main/ipc/resolve-vfs-scope.js";
+import { AppError } from "@novel-master/core/errors";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
+import { Physical } from "../src/main/ipc/handlers/physical.js";
+import { ResolveVfsScope } from "../src/main/ipc/resolve-vfs-scope.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -41,7 +35,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-physical-ipc-"));
 
     // 全局普通文件（global 域 → 物理前缀 /template）
-    const globalWrite = await handleVfsWrite({
+    const globalWrite = await Vfs.write({
       workspaceScope: "global",
       path: "/hello.md",
       content: "global-template-content",
@@ -49,7 +43,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
     assert.equal(globalWrite.ok, true);
 
     // 全局技能文件（global-meta 域 → 物理前缀即逻辑路径，需自带 /meta 段）
-    const metaWrite = await handleVfsWrite({
+    const metaWrite = await Vfs.write({
       workspaceScope: "global-meta",
       path: "/meta/skills/demo/skill.md",
       content: "global-meta-skill",
@@ -57,7 +51,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
     assert.equal(metaWrite.ok, true);
 
     // 项目 + 会话（chat 域 → /projects/{pid}/sessions/{sid}）
-    const project = await handleProjectsCreate({ name: "physical-ipc" });
+    const project = await Projects.create({ name: "physical-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -65,13 +59,13 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "physical-session",
     });
@@ -81,14 +75,14 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
     }
     sessionId = session.data.id;
 
-    const chatWrite = await handleVfsWrite({
+    const chatWrite = await Vfs.write({
       workspaceScope: "chat",
       projectId,
       sessionId,
       path: "/draft.md",
       content: "session-file-content",
     });
-    assert.equal(chatWrite.ok, true);
+    assert.equal(chatWrite.ok, true, chatWrite.ok ? "" : JSON.stringify(chatWrite.error));
   });
 
   after(async () => {
@@ -96,7 +90,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("list：物理根三挂载点 + 跨域文件行 + 虚拟目录合成（BFS 收敛）", async () => {
-    const result = await handlePhysicalList({ path: "/" });
+    const result = await Physical.list({ path: "/" });
     assert.equal(result.ok, true);
     if (!result.ok) {
       return;
@@ -143,7 +137,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
 
   it("list：单子树 NOT_FOUND 降级为空行集，不再 ok:false 拖垮请求（B-1）", async () => {
     // 子树不存在（如项目/会话被并发删除）：跳过该子树 → 空行集 + ok:true
-    const missingProject = await handlePhysicalList({
+    const missingProject = await Physical.list({
       path: "/projects/no-such-project",
     });
     assert.equal(missingProject.ok, true);
@@ -151,7 +145,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       assert.deepEqual(missingProject.data, []);
     }
 
-    const missingSession = await handlePhysicalList({
+    const missingSession = await Physical.list({
       path: `/projects/${projectId}/sessions/no-such-session`,
     });
     assert.equal(missingSession.ok, true);
@@ -161,7 +155,9 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("list：某 scope 拉取抛 NOT_FOUND 时跳过该子树，其余域行照常返回（B-1）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // rt.physicalVfs() 每次返回新实例，注入需 wrap 工厂方法：
     // /meta scope 拉取抛 NOT_FOUND（等价于拉取期间子树被删）
     const originalFactory = rt.physicalVfs.bind(rt);
@@ -170,16 +166,21 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       const originalListTree = svc.listTree.bind(svc);
       svc.listTree = async (physicalPath: string) => {
         if (physicalPath === "/meta") {
-          throw new VfsError("NOT_FOUND", `Path not found: ${physicalPath}`, {
-            path: physicalPath,
-          });
+          // 错误通道迁移四期：listTree 已知失败沿 Result.err（不再 throw）。
+          return {
+            ok: false as const,
+            error: new AppError("VFS_NOT_FOUND", {
+              path: physicalPath,
+              detail: `Path not found: ${physicalPath}`,
+            }),
+          };
         }
         return originalListTree(physicalPath);
       };
       return svc;
     };
     try {
-      const result = await handlePhysicalList({ path: "/" });
+      const result = await Physical.list({ path: "/" });
       assert.equal(result.ok, true);
       if (!result.ok) {
         return;
@@ -202,7 +203,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("list：行 DTO 复用 WorkplaceListRowDto，规则字段缺省", async () => {
-    const result = await handlePhysicalList({ path: "/" });
+    const result = await Physical.list({ path: "/" });
     assert.equal(result.ok, true);
     if (!result.ok) {
       return;
@@ -224,13 +225,13 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("read：前缀解析分流到对应域（/template → global；sessions/{sid} → session）", async () => {
-    const globalRead = await handlePhysicalRead({ path: "/template/hello.md" });
+    const globalRead = await Physical.read({ path: "/template/hello.md" });
     assert.equal(globalRead.ok, true);
     if (globalRead.ok) {
       assert.equal(globalRead.data.content, "global-template-content");
     }
 
-    const metaRead = await handlePhysicalRead({
+    const metaRead = await Physical.read({
       path: "/meta/skills/demo/skill.md",
     });
     assert.equal(metaRead.ok, true);
@@ -238,7 +239,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       assert.equal(metaRead.data.content, "global-meta-skill");
     }
 
-    const sessionRead = await handlePhysicalRead({
+    const sessionRead = await Physical.read({
       path: `/projects/${projectId}/sessions/${sessionId}/draft.md`,
     });
     assert.equal(sessionRead.ok, true);
@@ -246,22 +247,22 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       assert.equal(sessionRead.data.content, "session-file-content");
     }
 
-    const missing = await handlePhysicalRead({ path: "/no-such-mount/x.md" });
+    const missing = await Physical.read({ path: "/no-such-mount/x.md" });
     assert.equal(missing.ok, false);
   });
 
   it("无写通道：physical 域不解析为单 scope，写 handler 全部拒绝", async () => {
-    // scope 解析层显式分流：physical 抛 VfsScopeError（而非误落任何域）
-    assert.throws(
-      () =>
-        resolveVfsScopeFromRequest({
-          workspaceScope: "physical",
-        }),
-      VfsScopeError,
-    );
+    // scope 解析层显式分流：physical 走失败返回值（而非误落任何域）
+    const physicalScope = ResolveVfsScope.fromRequest({
+      workspaceScope: "physical",
+    });
+    assert.equal(physicalScope.ok, false);
+    if (!physicalScope.ok) {
+      assert.equal(physicalScope.error.code, "IPC_INVALID_ARGUMENT");
+    }
 
     // 写 handler 经 resolve 后对 physical 返回失败（不落库）
-    const write = await handleVfsWrite({
+    const write = await Vfs.write({
       workspaceScope: "physical",
       path: "/template/hello.md",
       content: "tamper",
@@ -269,7 +270,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
     assert.equal(write.ok, false);
 
     // 未被篡改：内容仍为原值
-    const reread = await handlePhysicalRead({ path: "/template/hello.md" });
+    const reread = await Physical.read({ path: "/template/hello.md" });
     assert.equal(reread.ok, true);
     if (reread.ok) {
       assert.equal(reread.data.content, "global-template-content");
@@ -277,7 +278,9 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("无写通道：PhysicalVfsService 运行时对象无任何写方法", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const svc = rt.physicalVfs() as unknown as Record<string, unknown>;
     for (const method of ["write", "mkdir", "delete", "rename", "move"]) {
       assert.equal(svc[method], undefined, `physicalVfs 不应存在 ${method}`);

@@ -1,29 +1,14 @@
 /**
  * Directory inclusion rule form → {@link WorkplaceService.setDirRule}.
  */
+import {AppError, Result} from '@novel-master/core/errors';
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {
-  DEFAULT_WORKPLACE_DIR_RULE,
-  type FillPolicy,
-  type SetDirRuleInput,
-  type SortField,
-  type SortOrder,
-} from '@novel-master/core/workplace';
+import {DEFAULT_WORKPLACE_DIR_RULE, type FillPolicy, type SetDirRuleInput, type SortField, type SortOrder} from '@novel-master/core/workplace';
 import {ModalShell} from '../ui/ModalShell';
-import {
-  PickerListModal,
-  type PickerListLoadResult,
-} from '../ui/PickerListModal';
-import {normalizeFillPolicyForMobile} from '../../services/fill-policy-mobile';
+import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
+import {FillPolicyMobile} from '../../services/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -56,34 +41,17 @@ const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
   {value: 'hidden', label: '不展示'},
 ];
 
-export function DirectoryRuleSheet({
-  visible,
-  logicalPath,
-  initial,
-  rootRuleLocked = false,
-  onClose,
-  onSave,
-}: Props) {
+export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocked = false, onClose, onSave}: Props) {
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
   // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（translate fraction=1
   // 会把标题顶出屏），由 ModalShell 的 adaptive 策略「上移 + maxHeight 收缩」
   // 处理，面板不超过屏幕剩余空间。
-  const [sortField, setSortField] = useState<SortField>(
-    DEFAULT_WORKPLACE_DIR_RULE.sortField,
-  );
-  const [sortOrder, setSortOrder] = useState<SortOrder>(
-    DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
-  );
-  const [headCount, setHeadCount] = useState(
-    String(DEFAULT_WORKPLACE_DIR_RULE.headCount),
-  );
-  const [tailCount, setTailCount] = useState(
-    String(DEFAULT_WORKPLACE_DIR_RULE.tailCount),
-  );
-  const [fillPolicy, setFillPolicy] = useState<FillPolicy>(
-    DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
-  );
+  const [sortField, setSortField] = useState<SortField>(DEFAULT_WORKPLACE_DIR_RULE.sortField);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
+  const [headCount, setHeadCount] = useState(String(DEFAULT_WORKPLACE_DIR_RULE.headCount));
+  const [tailCount, setTailCount] = useState(String(DEFAULT_WORKPLACE_DIR_RULE.tailCount));
+  const [fillPolicy, setFillPolicy] = useState<FillPolicy>(DEFAULT_WORKPLACE_DIR_RULE.fillPolicy);
   const [ruleEnabled, setRuleEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sortFieldPickerVisible, setSortFieldPickerVisible] = useState(false);
@@ -94,17 +62,9 @@ export function DirectoryRuleSheet({
     }
     setSortField(initial?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField);
     setSortOrder(initial?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
-    setHeadCount(
-      String(initial?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount),
-    );
-    setTailCount(
-      String(initial?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount),
-    );
-    setFillPolicy(
-      normalizeFillPolicyForMobile(
-        initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
-      ),
-    );
+    setHeadCount(String(initial?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount));
+    setTailCount(String(initial?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount));
+    setFillPolicy(FillPolicyMobile.normalize(initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy));
     setRuleEnabled(rootRuleLocked ? true : initial?.ruleEnabled ?? false);
   }, [visible, initial, logicalPath, rootRuleLocked]);
 
@@ -117,7 +77,7 @@ export function DirectoryRuleSheet({
         sortOrder,
         headCount: clampCount(headCount),
         tailCount: clampCount(tailCount),
-        fillPolicy: normalizeFillPolicyForMobile(fillPolicy),
+        fillPolicy: FillPolicyMobile.normalize(fillPolicy),
         ruleEnabled: rootRuleLocked ? true : ruleEnabled,
       });
       onClose();
@@ -127,18 +87,15 @@ export function DirectoryRuleSheet({
   };
 
   // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前 sortField 高亮。
-  const loadSortFields = useCallback(async (): Promise<
-    PickerListLoadResult<{value: SortField; label: string}>
-  > => ({rows: SORT_FIELDS, selectedId: sortField}), [sortField]);
+  const loadSortFields = useCallback(
+    async (): Promise<Result<PickerListLoadResult<{value: SortField; label: string}>, AppError>> => Result.ok({rows: SORT_FIELDS, selectedId: sortField}),
+    [sortField],
+  );
 
   const sheetContent = (
     <>
       <Text style={[styles.heading, {color: tokens.text}]}>目录规则</Text>
-      <ScrollView
-        style={styles.form}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.form} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
               ruleEnabled 沿用打开时的既有状态原样保存。 */}
         <FieldLabel tokens={tokens} text="排序方式" />
@@ -146,33 +103,18 @@ export function DirectoryRuleSheet({
           testID="sort-field-value-row"
           accessibilityLabel="选择排序方式"
           onPress={() => setSortFieldPickerVisible(true)}
-          style={[
-            styles.pickerRow,
-            {borderColor: tokens.border, backgroundColor: tokens.bgSecondary},
-          ]}
+          style={[styles.pickerRow, {borderColor: tokens.border, backgroundColor: tokens.bgSecondary}]}
         >
-          <Text
-            testID="sort-field-value"
-            style={{color: tokens.text}}
-            numberOfLines={1}>
-            {(SORT_FIELDS.find(opt => opt.value === sortField) ?? SORT_FIELDS[0])
-              .label}
+          <Text testID="sort-field-value" style={{color: tokens.text}} numberOfLines={1}>
+            {(SORT_FIELDS.find(opt => opt.value === sortField) ?? SORT_FIELDS[0]).label}
           </Text>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
         </Pressable>
         <FieldLabel tokens={tokens} text="排序方向" />
-        <OptionRow
-          options={SORT_ORDERS}
-          value={sortOrder}
-          onChange={setSortOrder}
-          tokens={tokens}
-        />
+        <OptionRow options={SORT_ORDERS} value={sortOrder} onChange={setSortOrder} tokens={tokens} />
         <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
         <TextInput
-          style={[
-            styles.input,
-            {borderColor: tokens.border, color: tokens.text},
-          ]}
+          style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
           keyboardType="number-pad"
           value={headCount}
           onChangeText={setHeadCount}
@@ -180,35 +122,21 @@ export function DirectoryRuleSheet({
         />
         <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
         <TextInput
-          style={[
-            styles.input,
-            {borderColor: tokens.border, color: tokens.text},
-          ]}
+          style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
           keyboardType="number-pad"
           value={tailCount}
           onChangeText={setTailCount}
           underlineColorAndroid="transparent"
         />
         <FieldLabel tokens={tokens} text="其余文件填充" />
-        <OptionRow
-          options={FILL_POLICIES}
-          value={fillPolicy}
-          onChange={setFillPolicy}
-          tokens={tokens}
-        />
+        <OptionRow options={FILL_POLICIES} value={fillPolicy} onChange={setFillPolicy} tokens={tokens} />
       </ScrollView>
       <View style={[styles.actions, {borderTopColor: tokens.border}]}>
         <Pressable onPress={onClose} style={styles.actionBtn}>
           <Text style={{color: tokens.textSecondary}}>取消</Text>
         </Pressable>
-        <Pressable
-          onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving}
-          style={styles.actionBtn}
-        >
-          <Text style={{color: tokens.primary}}>
-            {saving ? '保存中…' : '保存'}
-          </Text>
+        <Pressable onPress={() => handleSave().catch(() => undefined)} disabled={saving} style={styles.actionBtn}>
+          <Text style={{color: tokens.primary}}>{saving ? '保存中…' : '保存'}</Text>
         </Pressable>
       </View>
     </>
@@ -235,9 +163,7 @@ export function DirectoryRuleSheet({
         renderRow={(item, selected) => (
           <>
             <Text style={{color: tokens.text}}>{item.label}</Text>
-            {selected ? (
-              <Text style={{color: tokens.primary}}>当前</Text>
-            ) : null}
+            {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
           </>
         )}
         getRowProps={item => ({
@@ -263,16 +189,8 @@ function clampCount(raw: string): number {
   return Math.min(1000, Math.max(0, n));
 }
 
-function FieldLabel({
-  text,
-  tokens,
-}: {
-  text: string;
-  tokens: {textSecondary: string};
-}) {
-  return (
-    <Text style={[styles.label, {color: tokens.textSecondary}]}>{text}</Text>
-  );
+function FieldLabel({text, tokens}: {text: string; tokens: {textSecondary: string}}) {
+  return <Text style={[styles.label, {color: tokens.textSecondary}]}>{text}</Text>;
 }
 
 function OptionRow<T extends string>({
@@ -302,9 +220,7 @@ function OptionRow<T extends string>({
               },
             ]}
           >
-            <Text style={{color: active ? tokens.primary : tokens.text}}>
-              {opt.label}
-            </Text>
+            <Text style={{color: active ? tokens.primary : tokens.text}}>{opt.label}</Text>
           </Pressable>
         );
       })}

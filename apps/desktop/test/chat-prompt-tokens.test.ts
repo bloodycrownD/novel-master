@@ -21,40 +21,37 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, describe, it } from "node:test";
 import type { WebContents } from "electron";
-import {
-  formatContextUsageLabel,
-  formatTokenSourceBadge,
-  promptWholeCache,
-  sessionApiPromptTokenCache,
-} from "@novel-master/core/provider";
+import { TokenFormat } from "@novel-master/core/common";
+import { promptWholeCache, sessionApiPromptTokenCache } from "@novel-master/core/tokenizer";
 import {
   IPC_CHANNELS,
   type PromptChatTokenUpdatedPayload,
 } from "../shared/ipc-types.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import {
-  handleAgentRegistryCreateBlank,
-  handleAgentRegistryUpsert,
-} from "../src/main/ipc/handlers/agent-registry.js";
-import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleProvidersCreate } from "../src/main/ipc/handlers/providers.js";
-import {
-  handleSessionsCreate,
-  handleSessionsSetModelOverride,
-} from "../src/main/ipc/handlers/sessions.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
-import {
-  chatPromptTokenDebounceExecCountForTests,
-  loadChatPromptTokenStats,
-  resetChatPromptTokenDebounceForTests,
-  withRealFallbackCounter,
-} from "../src/main/services/chat-prompt-tokens.service.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
+import { ChatPromptTokensService } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
+
+/**
+ * 错误通道迁移四期：读口已知失败沿 `Result` 上行，本套件只走成功路径——
+ * err 直接炸出（红即修复信号），value 的 null 哨兵（抑制/弃权）交由各用例自判。
+ */
+async function loadStatsOrThrow(
+  ...args: Parameters<typeof ChatPromptTokensService.load>
+): Promise<NonNullable<Awaited<ReturnType<typeof ChatPromptTokensService.load>>["value"]>> {
+  const stats = await ChatPromptTokensService.load(...args);
+  if (!stats.ok) throw stats.error;
+  return stats.value;
+}
 
 describe("chat-prompt-tokens.service", () => {
   let tempDir: string;
@@ -84,7 +81,7 @@ describe("chat-prompt-tokens.service", () => {
   }
 
   before(async () => {
-    setPromptChatTokenUpdatedForwardTarget(
+    PromptChatTokenUpdatedForwarder.setTarget(
       () =>
         ({
           send: (channel: string, payload: unknown) => {
@@ -97,7 +94,7 @@ describe("chat-prompt-tokens.service", () => {
 
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-chat-tokens-"));
 
-    const project = await handleProjectsCreate({ name: "token-stats" });
+    const project = await Projects.create({ name: "token-stats" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -106,12 +103,12 @@ describe("chat-prompt-tokens.service", () => {
 
     // 新 core 下会话始终独立持有 agentId + modelId：create 会从 workspace 当前指针复制，
     // 这里先注册空白 agent、保存模型并都设为 workspace 当前，保证 create 能把两者落进 session 配置。
-    const agent = await handleAgentRegistryCreateBlank();
+    const agent = await AgentRegistry.createBlank();
     assert.equal(agent.ok, true);
     if (!agent.ok) {
       return;
     }
-    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
     assert.equal(setAgent.ok, true);
     if (!setAgent.ok) {
       return;
@@ -120,7 +117,7 @@ describe("chat-prompt-tokens.service", () => {
 
     // 新 core 下 providerModels.save 会校验 provider 存在，先注册一个 openai 协议网关，
     // 再拿它返回的 providerId 去保存模型并设为 workspace 当前模型。
-    const provider = await handleProvidersCreate({
+    const provider = await Providers.create({
       protocol: "openai",
       baseUrl: "https://api.openai.com/v1",
       displayName: "openai-test",
@@ -131,15 +128,19 @@ describe("chat-prompt-tokens.service", () => {
       return;
     }
 
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const saved = await rt.providerModels.save(
       provider.data.providerId,
       "gpt-4o",
     );
-    await rt.state.setCurrentModelId(saved.id);
-    savedModelId = saved.id;
+    // 四期签名：save 沿 Result 回传，解包取实体。
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
+    savedModelId = saved.value.id;
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "token-session",
     });
@@ -152,7 +153,7 @@ describe("chat-prompt-tokens.service", () => {
 
   after(async () => {
     sessionApiPromptTokenCache.clearAll();
-    resetChatPromptTokenDebounceForTests();
+    ChatPromptTokensService.resetDebounceForTests();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
@@ -162,8 +163,10 @@ describe("chat-prompt-tokens.service", () => {
       updatedAt: Date.now(),
     });
 
-    const rt = await getDesktopRuntime();
-    const stats = await loadChatPromptTokenStats(rt, {
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    const stats = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
@@ -174,10 +177,10 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(stats.source, "api");
 
     // T-TL3 对拍：main 下发的 label 与 core 单源（badge + 拼装）重算完全一致。
-    const expected = formatContextUsageLabel(
+    const expected = TokenFormat.contextUsageLabel(
       stats.tokenCount,
       stats.contextWindow,
-      formatTokenSourceBadge(stats.source, stats.counterKind, stats.estimated),
+      TokenFormat.sourceBadge(stats.source, stats.counterKind, stats.estimated),
     );
     assert.equal(stats.label, expected);
     // api 真值 → 远程 =（无 ~，无「上次请求」旧后缀）。
@@ -191,10 +194,12 @@ describe("chat-prompt-tokens.service", () => {
     promptWholeCache.clearForTests();
     pushed.length = 0;
 
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 首帧：preferEstimate 且 L1 冷 → 廉价估算即回（gpt ≈），服务侧安排
     // 后台暖机（家族真分词器 + L1 写入）。
-    const first = await loadChatPromptTokenStats(rt, {
+    const first = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
@@ -215,17 +220,17 @@ describe("chat-prompt-tokens.service", () => {
 
     // 且 L1 已暖：renderer 若自己再问一次（消息/step 事件触发的常规刷新）
     // 同样直读精确档，两条路径不打架。
-    const second = await loadChatPromptTokenStats(rt, {
+    const second = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
     assert.equal(second.counterKind, "tiktoken");
     assert.equal(second.estimated, false);
     assert.match(second.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
-    const expected = formatContextUsageLabel(
+    const expected = TokenFormat.contextUsageLabel(
       second.tokenCount,
       second.contextWindow,
-      formatTokenSourceBadge(second.source, second.counterKind, second.estimated),
+      TokenFormat.sourceBadge(second.source, second.counterKind, second.estimated),
     );
     assert.equal(second.label, expected);
   });
@@ -249,12 +254,12 @@ describe("chat-prompt-tokens.service", () => {
       name: string,
       text: string,
     ): Promise<string> {
-      const project = await handleProjectsCreate({ name });
+      const project = await Projects.create({ name });
       assert.equal(project.ok, true);
       if (!project.ok) {
         throw new Error("创建项目失败");
       }
-      const session = await handleSessionsCreate({
+      const session = await Sessions.create({
         projectId: project.data.id,
         title: name,
       });
@@ -262,7 +267,7 @@ describe("chat-prompt-tokens.service", () => {
       if (!session.ok) {
         throw new Error("创建会话失败");
       }
-      await handleMessagesAppend({
+      await Messages.append({
         sessionId: session.data.id,
         role: "user",
         text,
@@ -271,7 +276,7 @@ describe("chat-prompt-tokens.service", () => {
     }
 
     /** 数 build 次数的 runtime 探针（与 T-DA1/T-CW2 同款）。 */
-    function probeBuildCount(rt: Awaited<ReturnType<typeof getDesktopRuntime>>): {
+    function probeBuildCount(rt: Awaited<ReturnType<typeof DesktopRuntimeSingleton.get>>): {
       rt: typeof rt;
       readonly listCalls: () => number;
     } {
@@ -302,12 +307,14 @@ describe("chat-prompt-tokens.service", () => {
 
     beforeEach(() => {
       sessionApiPromptTokenCache.clearAll();
-      resetChatPromptTokenDebounceForTests();
+      ChatPromptTokensService.resetDebounceForTests();
       pushed.length = 0;
     });
 
     it("T-T9b2: 补推送路径不重跑 build（首帧之后 buildSessionPromptInput 调用 0 次）", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await DesktopRuntimeSingleton.get();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const coldSessionId = await createColdSession(
         "cache3-nobuild",
         "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(7),
@@ -316,7 +323,7 @@ describe("chat-prompt-tokens.service", () => {
       const scope = { projectId: projectId, sessionId: coldSessionId };
 
       // 冷会话 ⇒ 首帧走廉价估算档（gpt ≈），并顺带排一次后台暖机。
-      const first = await loadChatPromptTokenStats(probe.rt, scope);
+      const first = await loadStatsOrThrow(probe.rt, scope);
       assert.equal(first.estimated, true, "冷会话首帧应仍是估算档（前提）");
       assert.equal(probe.listCalls(), 1, "首帧恰好跑一次 build（前提）");
 
@@ -335,14 +342,16 @@ describe("chat-prompt-tokens.service", () => {
 
       // 反面对照：后续自己再问一口仍是精确档（说明「少跑的那趟」没把读数搞丢），
       // 而这一次读口自己那一趟 build 照跑 —— 探针确实在数。
-      const second = await loadChatPromptTokenStats(probe.rt, scope);
+      const second = await loadStatsOrThrow(probe.rt, scope);
       assert.equal(second.estimated, false);
       assert.equal(second.counterKind, "tiktoken");
       assert.equal(probe.listCalls(), 2, "后续这次读口应恰好再跑一次 build");
     });
 
     it("T-T9b3: 暖机期间换了模型 ⇒ 补读一次（不让旧模型的精确档闪进 UI）", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await DesktopRuntimeSingleton.get();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const coldSessionId = await createColdSession(
         "cache3-modelswitch",
         "雨还没停。屋里暖气烘着，玻璃上那层水雾被指尖抹开一条缝。".repeat(7),
@@ -392,7 +401,7 @@ describe("chat-prompt-tokens.service", () => {
       }) as typeof rt;
 
       const scope = { projectId: projectId, sessionId: coldSessionId };
-      const first = await loadChatPromptTokenStats(gatedRt, scope);
+      const first = await loadStatsOrThrow(gatedRt, scope);
       assert.equal(first.estimated, true, "冷会话首帧应仍是估算档（前提）");
       assert.ok(
         configReads >= 2,
@@ -409,7 +418,7 @@ describe("chat-prompt-tokens.service", () => {
 
       // 此刻清掉会话级模型覆盖：解析链上 agent 也无 pin ⇒ 当下 savedModelId
       // 变空，与暖机用的那个比对不上 ⇒ 必须走补读，不能直接推旧模型的档。
-      const cleared = await handleSessionsSetModelOverride({
+      const cleared = await Sessions.setModelOverride({
         sessionId: coldSessionId,
         modelId: null,
       });
@@ -440,7 +449,9 @@ describe("chat-prompt-tokens.service", () => {
   it("T-T9c: 无模型早退 ⇒ 真 cl100k 计数，而非 ceil(chars/3.35) 折算", async () => {
     sessionApiPromptTokenCache.clearAll();
 
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 空白 agent 的系统提示词是空的，早退分支会数出 0——那样这条用例就什么也
     // 证不了。先给它塞一段中文正文（也就是最吃亏于字符折算的那类文本）。
     const chinese = "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
@@ -452,7 +463,7 @@ describe("chat-prompt-tokens.service", () => {
     // 两阶段下首次调用是估算档（gpt ≈）并安排后台暖机——参照必须取暖机
     // 完成后的二次读（L1 命中精确档；cr-fix-spec-r2 s2/G-1），否则拿到的是
     // 估算值、「精确档参照」失真。
-    const upserted = await handleAgentRegistryUpsert({
+    const upserted = await AgentRegistry.upsert({
       agentId,
       definition: {
         name: "token-stats-agent",
@@ -461,15 +472,15 @@ describe("chat-prompt-tokens.service", () => {
       },
     });
     assert.equal(upserted.ok, true);
-    await loadChatPromptTokenStats(rt, {
+    await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
-    let precise: Awaited<ReturnType<typeof loadChatPromptTokenStats>> | null =
+    let precise: Awaited<ReturnType<typeof loadStatsOrThrow>> | null =
       null;
     for (let i = 0; i < 20 && precise == null; i++) {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      const next = await loadChatPromptTokenStats(rt, {
+      const next = await loadStatsOrThrow(rt, {
         projectId,
         sessionId,
       });
@@ -481,14 +492,14 @@ describe("chat-prompt-tokens.service", () => {
 
     // 清掉会话级模型覆盖 + agent 无 model pin ⇒ 模型解析返回空
     // ⇒ 走「无模型早退」分支。
-    const cleared = await handleSessionsSetModelOverride({
+    const cleared = await Sessions.setModelOverride({
       sessionId,
       modelId: null,
     });
     assert.equal(cleared.ok, true);
 
     try {
-      const stats = await loadChatPromptTokenStats(rt, {
+      const stats = await loadStatsOrThrow(rt, {
         projectId,
         sessionId,
       });
@@ -513,7 +524,7 @@ describe("chat-prompt-tokens.service", () => {
       // 还原 agent 定义与会话模型覆盖，别把状态泄漏给其它用例。
       // 注意两点：① 不能拿 `get` 返回的 raw wire 直接回灌（那是带元信息的存储
       // 形态，upsert 会拒）；② `prompts.system` 要么不写、要么给非空串。
-      const restoredAgent = await handleAgentRegistryUpsert({
+      const restoredAgent = await AgentRegistry.upsert({
         agentId,
         definition: {
           name: "token-stats-agent",
@@ -526,7 +537,7 @@ describe("chat-prompt-tokens.service", () => {
         true,
         restoredAgent.ok ? "" : restoredAgent.error.message,
       );
-      const restored = await handleSessionsSetModelOverride({
+      const restored = await Sessions.setModelOverride({
         sessionId,
         modelId: savedModelId,
       });
@@ -535,8 +546,10 @@ describe("chat-prompt-tokens.service", () => {
   });
 
   it("T-T9d: 兜底 registry 的 forSavedModel / forVendorModel 可调用（形态护栏）", async () => {
-    const rt = await getDesktopRuntime();
-    const registry = withRealFallbackCounter(rt);
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
+    const registry = ChatPromptTokensService.withRealFallbackCounter(rt);
 
     // 形态护栏：`runtime.tokenCounters` 是 `DefaultTokenCounterRegistry` 的**类实例**，
     // `forSavedModel` / `forVendorModel` 挂在**原型**上、不是自有可枚举属性。曾经这里
@@ -600,21 +613,23 @@ describe("chat-prompt-tokens.service", () => {
 
     beforeEach(() => {
       sessionApiPromptTokenCache.clearAll();
-      resetChatPromptTokenDebounceForTests();
+      ChatPromptTokensService.resetDebounceForTests();
     });
 
     it("rapid 双触发（<300ms 窗口内）合并为一次底层计算", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await DesktopRuntimeSingleton.get();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const scope = { projectId, sessionId };
 
       // 两个请求同帧连发（间隔远小于 300ms）：共享 trailing 窗口的同一次执行。
       const [a, b] = await Promise.all([
-        loadChatPromptTokenStats(rt, scope),
-        loadChatPromptTokenStats(rt, scope),
+        loadStatsOrThrow(rt, scope),
+        loadStatsOrThrow(rt, scope),
       ]);
 
       assert.equal(
-        chatPromptTokenDebounceExecCountForTests(sessionId),
+        ChatPromptTokensService.debounceExecCountForTests(sessionId),
         1,
         "双触发应合并为一次底层计算",
       );
@@ -624,15 +639,17 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("并发 5 触发在途合并为一次底层计算", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await DesktopRuntimeSingleton.get();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const scope = { projectId, sessionId };
 
       const results = await Promise.all(
-        Array.from({ length: 5 }, () => loadChatPromptTokenStats(rt, scope)),
+        Array.from({ length: 5 }, () => loadStatsOrThrow(rt, scope)),
       );
 
       assert.equal(
-        chatPromptTokenDebounceExecCountForTests(sessionId),
+        ChatPromptTokensService.debounceExecCountForTests(sessionId),
         1,
         "并发 5 触发应合并为一次底层计算",
       );
@@ -642,30 +659,32 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("trailing：窗口内不执行，窗口过后必有最终一次计算，且不吞任何一击", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await DesktopRuntimeSingleton.get();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const scope = { projectId, sessionId };
 
       // 单次触发：防抖是 trailing 而非 leading——窗口内（<300ms）不执行。
-      const first = loadChatPromptTokenStats(rt, scope);
+      const first = loadStatsOrThrow(rt, scope);
       await sleep(150);
       assert.equal(
-        chatPromptTokenDebounceExecCountForTests(sessionId),
+        ChatPromptTokensService.debounceExecCountForTests(sessionId),
         0,
         "300ms 窗口内不应有底层计算（非 leading）",
       );
       // 窗口过后必须有最终一次计算（最终一致性：触发不悬挂）。
       const stats = await first;
       assert.equal(
-        chatPromptTokenDebounceExecCountForTests(sessionId),
+        ChatPromptTokensService.debounceExecCountForTests(sessionId),
         1,
         "trailing 到期后必产生一次底层计算",
       );
       assert.equal(stats.source, "local");
 
       // 空闲后的再次触发不被吞：又产生一次计算（每一击最终都有计算）。
-      await loadChatPromptTokenStats(rt, scope);
+      await loadStatsOrThrow(rt, scope);
       assert.equal(
-        chatPromptTokenDebounceExecCountForTests(sessionId),
+        ChatPromptTokensService.debounceExecCountForTests(sessionId),
         2,
         "第二次触发也必须产生一次底层计算",
       );

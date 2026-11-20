@@ -1,19 +1,23 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import {  readdirSync, readFileSync  } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import {  fileURLToPath  } from "node:url";
+import {  describe, it  } from "node:test";
 
 /**
  * C1 守卫：core 的 `src/**` 里不得出现裸 console 调用。
  *
  * 口径与 spec §1.1 一致——**调用形态**正则（带 `\s*\(`），注释里裸写
- * `console.warn` 不算命中。白名单只含内置 console sink 自身
- * （`src/infra/log/logger.ts`）：sink 里再调 logger 会在失败路径无限递归。
+ * `console.warn` 不算命中。白名单两名成员：
+ * - `src/infra/log/logger.ts`：内置 console sink 自身，sink 里再调 logger 会在
+ *   失败路径无限递归；
+ * - `src/domain/abort/logic/create-abort-scope.ts`：spec §二 明确要求的
+ *   「memoize 命中不一致时 dev 下打一条 console.warn」——domain 层不得依赖
+ *   infra/log（分层硬约束），且该调用有 `isDevEnvironment()` 闸门，不进生产日志链。
  */
 const CALL_FORM = /\bconsole\.(log|info|warn|error|debug|trace)\s*\(/;
 const SRC_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "src");
-const ALLOWED = new Set(["infra/log/logger.ts"]);
+const ALLOWED = new Set(["infra/log/logger.ts", "domain/abort/logic/create-abort-scope.ts"]);
 
 function collectTsFiles(dir: string): string[] {
   const out: string[] = [];

@@ -1,13 +1,7 @@
 /**
  * Agent run UI 生命周期：仅管理 uiRunning 与 activeRunId（不触碰 agentActive refcount）。
  */
-import {
-  PENDING_RUN_ID,
-  shouldAcceptRunEvent,
-  shouldApplyTranscriptReload,
-  shouldIgnoreStaleRunStarted,
-  shouldReloadTranscriptOnRunEvent,
-} from "@shared/logic/agent";
+import { PENDING_RUN_ID, RunLifecycle } from "@shared/logic/agent";
 import { useCallback, useRef, useState } from "react";
 import type {
   AgentRunFailedPayload,
@@ -15,13 +9,7 @@ import type {
   AgentRunStartedPayload,
 } from "@shared/logic/events";
 
-export {
-  PENDING_RUN_ID,
-  shouldAcceptRunEvent,
-  shouldApplyTranscriptReload,
-  shouldIgnoreStaleRunStarted,
-  shouldReloadTranscriptOnRunEvent,
-};
+export { PENDING_RUN_ID, RunLifecycle };
 
 export type AgentRunLifecycle = {
   readonly uiRunning: boolean;
@@ -86,7 +74,7 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
     // ConversationPanel 的 metricsRunKey 变化 → 指标条多一次 re-seed，纯浪费。
     // 之所以必须同步置哨兵：core 前奏期可能**一个事件都不发**就直接返回
     // （背压极小、runner 秒起步），那时 activeRunIdRef 若还停在 null，那条
-    // runId='' 的前奏终态会被 shouldAcceptRunEvent 拒掉 → uiRunning 卡死。
+    // runId='' 的前奏终态会被 RunLifecycle.shouldAccept 拒掉 → uiRunning 卡死。
     // 置哨兵后「受理中」这个前提在事件回调里同步可读（bus 回调同步分发，
     // 读 state 会拿到上一帧）。
     activeRunIdRef.current = PENDING_RUN_ID;
@@ -123,13 +111,13 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
   }, []);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
-    return shouldAcceptRunEvent(activeRunIdRef.current, runId);
+    return RunLifecycle.shouldAccept(activeRunIdRef.current, runId);
   }, []);
 
   const onRunStarted = useCallback(
     (payload: AgentRunStartedPayload) => {
       // abort 后迟到 RUN_STARTED 不得复活 uiRunning（与 Mobile 对称）
-      if (shouldIgnoreStaleRunStarted(uiRunningRef.current, activeRunIdRef.current)) {
+      if (RunLifecycle.shouldIgnoreStale(uiRunningRef.current, activeRunIdRef.current)) {
         return;
       }
       syncActiveRunId(payload.runId);
@@ -140,7 +128,7 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
 
   const onRunFinished = useCallback(
     (payload: AgentRunFinishedPayload): boolean => {
-      if (!shouldAcceptRunEvent(activeRunIdRef.current, payload.runId)) {
+      if (!RunLifecycle.shouldAccept(activeRunIdRef.current, payload.runId)) {
         return false;
       }
       syncActiveRunId(null);
@@ -153,7 +141,7 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
 
   const onRunFailed = useCallback(
     (payload: AgentRunFailedPayload): boolean => {
-      if (!shouldAcceptRunEvent(activeRunIdRef.current, payload.runId)) {
+      if (!RunLifecycle.shouldAccept(activeRunIdRef.current, payload.runId)) {
         return false;
       }
       syncActiveRunId(null);

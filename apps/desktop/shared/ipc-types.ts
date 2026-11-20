@@ -7,6 +7,7 @@
  * 不另抄一份以免与 core 校验口径漂移。
  */
 import type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
+import type { ErrorKey } from "@novel-master/core/errors";
 
 export const IPC_CHANNELS = {
   BOOTSTRAP_STATUS: "nm:bootstrap/status",
@@ -100,6 +101,8 @@ export const IPC_CHANNELS = {
 
   AGENT_RUN: "nm:agent/run",
   AGENT_ABORT: "nm:agent/abort",
+  /** 统一取消入口：请求体 `{ kind, id }`，取消对应类别的在途任务。 */
+  NM_RUN_ABORT: "nm:run/abort",
   AGENT_RUN_IS_ACTIVE: "nm:agent/runIsActive",
   AGENT_RESOLVE_CURRENT: "nm:agent/resolveCurrent",
   AGENT_LIST_PICKER: "nm:agent/listPicker",
@@ -121,6 +124,8 @@ export const IPC_CHANNELS = {
   PREFERENCES_SET_SUBAGENT_STREAM: "nm:preferences/setSubagentStream",
   PREFERENCES_GET_THINKING_CONTEXT: "nm:preferences/getThinkingContext",
   PREFERENCES_SET_THINKING_CONTEXT: "nm:preferences/setThinkingContext",
+  PREFERENCES_GET_USER_VFS_UNIFIED_TOOL_TURN: "nm:preferences/getUserVfsUnifiedToolTurn",
+  PREFERENCES_SET_USER_VFS_UNIFIED_TOOL_TURN: "nm:preferences/setUserVfsUnifiedToolTurn",
 
   PROVIDERS_LIST: "nm:providers/list",
   PROVIDERS_GET: "nm:providers/get",
@@ -214,7 +219,8 @@ export const IPC_CHANNELS = {
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
 export type IpcErrorPayload = {
-  readonly code: string;
+  /** 取值空间收敛为 core 码表 key（ErrorKey）；旧 handler 私有短码已全部迁入码表。 */
+  readonly code: ErrorKey;
   readonly message: string;
   /** revision 缺失需回补时，丢失快照的逻辑路径列表。 */
   readonly missingLogicalPaths?: readonly string[];
@@ -222,13 +228,13 @@ export type IpcErrorPayload = {
 
 export type IpcResult<T> = { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: IpcErrorPayload };
 
-export type BootstrapStatusReady = {
+type BootstrapStatusReady = {
   readonly ok: true;
   readonly status: "ready";
   readonly dbPath: string;
 };
 
-export type BootstrapStatusFailed = {
+type BootstrapStatusFailed = {
   readonly ok: false;
   readonly error: IpcErrorPayload;
 };
@@ -372,7 +378,7 @@ export type AppUiSetRequest = {
 
 export type AppUiGetResponse = IpcResult<string | undefined>;
 
-export type AppGetInfoData = {
+type AppGetInfoData = {
   readonly version: string;
   readonly platform: NodeJS.Platform;
   readonly name: string;
@@ -491,7 +497,7 @@ export type VfsFileExportRequest = VfsScopeRequest & {
 /** 与 {@link VfsZipExportResult} 同构，便于 Renderer 共用 toast 分支。 */
 export type VfsFileExportResult = "saved" | "cancelled";
 
-export type VfsBatchConflictDto = {
+type VfsBatchConflictDto = {
   readonly logicalPath: string;
   readonly reason: "exists";
 };
@@ -578,11 +584,11 @@ export type VfsReadResultDto = {
   readonly mtimeMs: number;
 };
 
-export type WorkplaceRuleState = "rule_on" | "rule_off";
+type WorkplaceRuleState = "rule_on" | "rule_off";
 
-export type WorkplaceInclusionMode = "auto" | "show" | "hide";
+type WorkplaceInclusionMode = "auto" | "show" | "hide";
 
-export type WorkplaceDisplayState = "hidden" | "full" | "header" | "filename";
+type WorkplaceDisplayState = "hidden" | "full" | "header" | "filename";
 
 export type WorkplaceListRowDto =
   | {
@@ -687,7 +693,7 @@ export type ContentBlockDto =
     };
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
-export type MessageMetadataDto = {
+type MessageMetadataDto = {
   readonly source?: "user";
   readonly actor?: "user";
   readonly synthetic?: boolean;
@@ -776,13 +782,25 @@ export type AgentRunRequest = {
   readonly allowResumeWithoutInput?: boolean;
   /** Composer 附件；当前仅 `source===attach` 生效（Core 发送时再扫描合并 `@path`）。workplace/user_ops 为历史只读兼容。 */
   readonly attachments?: readonly MessageAttachmentDto[];
-  /** 本轮未发送批注草稿；main 透传至 Core `runAgentTurn`。 */
+  /** 本轮未发送批注草稿；main 透传至 Core `AgentTurnRunner.run`。 */
   readonly annotateDrafts?: readonly AnnotateDraftDto[];
 };
 
 export type AgentAbortRequest = {
   readonly sessionId: string;
 };
+
+/**
+ * `nm:run/abort` 请求体：`kind` 选择取消目标类别，`id` 是 renderer 生成的 runId
+ * （models 用 providerId、sync 固定 "local"、compaction 用 sessionId）。
+ * 未知 kind 由 handler 回 `IPC_INVALID_ABORT_TARGET`；id 不存在时静默 ok。
+ */
+export type RunAbortRequest = {
+  readonly kind: "backup" | "dbmaint" | "stats" | "models" | "sync" | "compaction";
+  readonly id: string;
+};
+
+export type RunAbortResponse = IpcResult<null>;
 
 /**
  * renderer 查询某 session 是否有 in-flight run 的请求体；
@@ -799,7 +817,7 @@ export type AgentResolveCurrentResponse = {
   readonly hasDedicatedModel: boolean;
 };
 
-export type AgentPickerRowDto = {
+type AgentPickerRowDto = {
   readonly agentId: string;
   readonly label: string;
 };
@@ -813,7 +831,7 @@ export type AgentSetCurrentRequest = {
   readonly agentId: string;
 };
 
-export type ModelPickerRowDto = {
+type ModelPickerRowDto = {
   readonly savedModelId: string;
   readonly label: string;
 };
@@ -845,7 +863,7 @@ export type PromptToolGroupStatusDto = "ok" | "error" | "lost";
  *
  * 形状与 core 的 `PromptToolGroupResultData` 逐字段一致。
  */
-export type PromptToolGroupResultDto = {
+type PromptToolGroupResultDto = {
   readonly toolUseId: string;
   readonly ok: boolean;
   /**
@@ -872,7 +890,7 @@ export type PromptToolGroupDto = {
   /** 美化 JSON（`JSON.stringify(input, null, 2)`）；空 input 退化为 `[tool_use name=… id=…]` 单行。 */
   readonly inputJson: string;
   /**
-   * 保结构截大 key 的预览形态（main 侧 `formatToolUsePreviewJson` 算好下发，
+   * 保结构截大 key 的预览形态（main 侧 `PromptPreviewTurns.formatToolUsePreviewJson` 算好下发，
    * renderer 只读不引 core 运行时）。全屏正文仍走 `inputJson` 原文。
    */
   readonly inputPreview: string;
@@ -902,6 +920,7 @@ export type PromptTextCardDto = {
 };
 
 /** workplace 单文件格（形状与 core 的 `PromptWorkplaceFileCardData` 逐字段一致）。 */
+// nm-style: keep-public — prompt.ts 的 CORE_WORKPLACE_FILE_PARITY_CHECK 经 import() 类型查询消费（编译期字段对齐断言）
 export type PromptWorkplaceFileDto = {
   /** VFS 逻辑路径（kkv 规则快照条目原值）。 */
   readonly path: string;
@@ -1008,7 +1027,7 @@ export type PromptChatTokenStatsResponse = {
 };
 
 /** Token 用量统计：时间范围（本地自然日闭区间 `YYYY-MM-DD`，双端含；结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
-export type UsageStatsRangeDto = {
+type UsageStatsRangeDto = {
   readonly fromDay: string;
   readonly toDay: string;
 };
@@ -1017,7 +1036,7 @@ export type UsageStatsRangeDto = {
  * Token 用量统计：筛选条件（model 三态——undefined 全部 / null「其他」桶 / 字符串指定模型）。
  * range 可选：缺省语义按 kind 分级——summary/models/modelBreakdown/requests 不限时间
  * （全历史），daily 必填。range 存在时 handler 先行校验格式（含 02-30 溢出）与
- * fromDay ≤ toDay（validateRangeDto）；daily 缺 range 由 core 抛 chatInvalidArgument
+ * fromDay ≤ toDay（validateRangeDto）；daily 缺 range 由 core 抛 CHAT_INVALID_ARGUMENT
  * （日桶序列需要界）。
  */
 export type UsageStatsFilterDto = {
@@ -1102,7 +1121,7 @@ export type UsageStatsRequestPageDto = {
  * 会话详情 · 最近一次请求（metric-detail-sheet 弹窗；cache 列 nullable——
  * OpenAI/Gemini 等协议无 cache_creation 概念，展示层出「—」）。
  */
-export type SessionUsageLastRequestDto = {
+type SessionUsageLastRequestDto = {
   readonly seq: number;
   readonly modelName: string | null;
   readonly provider: string | null;
@@ -1149,6 +1168,8 @@ export type UsageStatsQueryRequest = {
   readonly limit?: number;
   /** kind='sessionDetail' 的目标会话 id。 */
   readonly sessionId?: string;
+  /** renderer 生成的 runId；缺省时 handler 只建 scope + deadline，不注册进 abort registry。 */
+  readonly runId?: string;
 };
 
 export type CompactionManualRequest = PromptScopeRequest;
@@ -1171,7 +1192,7 @@ export type WorkspaceMutatedPayload = {
 };
 
 /** 与 Core `MessageAttachmentAction` 对齐。 */
-export type MessageAttachmentActionDto = "delete" | "write" | "edit" | "mkdir" | "rename" | "move" | "workplaceChange" | "userAttach" | "annotate" | "skillAttach";
+type MessageAttachmentActionDto = "delete" | "write" | "edit" | "mkdir" | "rename" | "move" | "workplaceChange" | "userAttach" | "annotate" | "skillAttach";
 
 /** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
 export type MessageAttachmentDto = {
@@ -1186,8 +1207,8 @@ export type MessageAttachmentDto = {
   readonly action?: MessageAttachmentActionDto;
 };
 
-/** 与 Core `AnnotateDraft` 对齐（App → main → runAgentTurn）。 */
-export type AnnotateDraftDto = {
+/** 与 Core `AnnotateDraft` 对齐（App → main → AgentTurnRunner.run）。 */
+type AnnotateDraftDto = {
   readonly id: string;
   readonly path: string;
   /** Recogito quote（划词原文）。 */
@@ -1366,7 +1387,7 @@ export type ProviderModelsResetContextWindowRequest = {
 };
 
 /** 存储配置失效摘要（列表/编辑 assess 结果）。 */
-export type StoredConfigInvalidDto = {
+type StoredConfigInvalidDto = {
   readonly code: "outdated_version" | "broken_wire" | "removed_feature";
   readonly message: string;
   readonly storedSchemaVersion?: number;
@@ -1503,7 +1524,7 @@ export type SmartSortRuleReorderRequest = {
 /** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
  *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'；tuple = 提取元组
  *  展示文案，D13，null 显「无序号」）。 */
-export type SmartSortRuleMatchDto = {
+type SmartSortRuleMatchDto = {
   readonly text: string;
   readonly index: number;
   readonly groups: readonly (string | null)[];
@@ -1721,6 +1742,8 @@ export type CloudSyncPullResult = {
 
 export type CloudSyncPushRequest = {
   readonly forceOverwriteRemote?: boolean;
+  /** renderer 生成的 runId；缺省时 handler 只建 scope + deadline，不注册进 abort registry。 */
+  readonly runId?: string;
 };
 
 export type CloudSyncPushResult = {

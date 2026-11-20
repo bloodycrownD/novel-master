@@ -17,18 +17,12 @@ import { describe, it } from "node:test";
 import { encoding_for_model, get_encoding } from "tiktoken";
 
 import {
-  countOpenAiStyleMessages,
-  convertMessagesForWebTokenizer,
-  countWebTokenizerMessages,
-  wrapSerializedPromptAsSystemMessage,
+  OpenAiStyleMessageCount,
   type OpenAiStyleMessage,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 
 import {
-  countOpenAiStyleMessages as countFromNodeReexport,
-  convertMessagesForWebTokenizer as convertFromNodeReexport,
-  countWebTokenizerMessages as countWebFromNodeReexport,
-  wrapSerializedPromptAsSystemMessage as wrapFromNodeReexport,
+  OpenAiStyleMessageCount as OpenAiStyleMessageCountFromNodeReexport,
 } from "../src/logic/count-openai-style-message.js";
 
 /** 独立参考实现：ST `/openai/count` 的 precise 档算法，不经过 core 的 countTokens。 */
@@ -113,8 +107,8 @@ describe("count-openai-style-message 下沉对拍 T-FA2", () => {
 
     for (const c of CASES) {
       const encoding = c.tiktokenModel === "gpt-4o" ? o200k : cl100k;
-      const fromCore = countOpenAiStyleMessages(encoding, c.messages, c.tiktokenModel);
-      const fromNode = countFromNodeReexport(encoding, c.messages, c.tiktokenModel);
+      const fromCore = OpenAiStyleMessageCount.count(encoding, c.messages, c.tiktokenModel);
+      const fromNode = OpenAiStyleMessageCountFromNodeReexport.count(encoding, c.messages, c.tiktokenModel);
       const reference = referenceCount(
         (text) => encoding.encode(text).length,
         c.messages,
@@ -143,8 +137,8 @@ describe("count-openai-style-message 下沉对拍 T-FA2", () => {
       { role: "tool", content: "raw payload" },
     ];
 
-    const fromCore = convertMessagesForWebTokenizer(messages);
-    const fromNode = convertFromNodeReexport(messages);
+    const fromCore = OpenAiStyleMessageCount.convertMessagesForWebTokenizer(messages);
+    const fromNode = OpenAiStyleMessageCountFromNodeReexport.convertMessagesForWebTokenizer(messages);
     assert.equal(fromNode, fromCore);
 
     // 逐段钉死转换格式：system 裸拼、user/human → Human、assistant → Assistant、
@@ -164,13 +158,13 @@ describe("count-openai-style-message 下沉对拍 T-FA2", () => {
       { role: "user", content: "question" },
     ];
     assert.equal(
-      convertMessagesForWebTokenizer(messages),
+      OpenAiStyleMessageCount.convertMessagesForWebTokenizer(messages),
       "only sys\n\nHuman: question\n\nAssistant:",
     );
     // re-export 版同步一致。
     assert.equal(
-      convertFromNodeReexport(messages),
-      convertMessagesForWebTokenizer(messages),
+      OpenAiStyleMessageCountFromNodeReexport.convertMessagesForWebTokenizer(messages),
+      OpenAiStyleMessageCount.convertMessagesForWebTokenizer(messages),
     );
   });
 
@@ -182,9 +176,9 @@ describe("count-openai-style-message 下沉对拍 T-FA2", () => {
     ];
     const encode = (text: string) => o200k.encode(text);
 
-    const fromCore = countWebTokenizerMessages(encode, messages);
-    const fromNode = countWebFromNodeReexport(encode, messages);
-    const manual = encode(convertMessagesForWebTokenizer(messages)).length;
+    const fromCore = OpenAiStyleMessageCount.countWebTokenizerMessages(encode, messages);
+    const fromNode = OpenAiStyleMessageCountFromNodeReexport.countWebTokenizerMessages(encode, messages);
+    const manual = encode(OpenAiStyleMessageCount.convertMessagesForWebTokenizer(messages)).length;
 
     assert.equal(fromNode, fromCore);
     assert.equal(fromCore, manual);
@@ -192,8 +186,8 @@ describe("count-openai-style-message 下沉对拍 T-FA2", () => {
 
   it("wrapSerializedPromptAsSystemMessage：两版一致，包成单条 system 消息", () => {
     const serialized = "\n\nHuman: wrapped prompt\n\nAssistant:";
-    const fromCore = wrapSerializedPromptAsSystemMessage(serialized);
-    const fromNode = wrapFromNodeReexport(serialized);
+    const fromCore = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage(serialized);
+    const fromNode = OpenAiStyleMessageCountFromNodeReexport.wrapSerializedPromptAsSystemMessage(serialized);
 
     assert.deepEqual(fromNode, fromCore);
     assert.deepEqual(fromCore, { role: "system", content: serialized });

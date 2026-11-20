@@ -7,27 +7,21 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
-import {
-  defaultSavedModelSettings,
-  type LlmChatResult,
-  type ModelRequestService,
-  type SavedModel,
-} from "@novel-master/core/provider";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { SimpleEventBus, EVENT_AGENT_STREAM_USAGE } from "@novel-master/core/events";
+import {  describe, it, mock  } from "node:test";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  BuiltinTools, ToolRegistry, type BuiltinToolContext  } from "@novel-master/core";
+import {  DefaultSavedModelSettings, type ModelRequestService, type  SavedModel  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
+import {  SimpleEventBus, EVENT_AGENT_STREAM_USAGE  } from "@novel-master/core/events";
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
-import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  BUILTIN_PROVIDER_UUID_OPENAI  } from "../../src/domain/provider/logic/builtin-providers.js";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
@@ -118,7 +112,8 @@ function createMockModel(responses: LlmChatResult[]): ModelRequestService {
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+
+      return Result.ok(r);
     }),
   };
 }
@@ -128,7 +123,7 @@ function stubSavedModelRepository(saved: SavedModel | null): SavedModelRepositor
   const noop = noopSavedModelRepository();
   return {
     ...noop,
-    findById: async () => saved,
+    findById: async () => Result.ok(saved),
   };
 }
 
@@ -139,7 +134,7 @@ function savedModelFixture(overrides: Partial<SavedModel> = {}): SavedModel {
     providerId: BUILTIN_PROVIDER_UUID_OPENAI,
     vendorModelId: "gpt-5.2",
     modelName: "GPT-5.2",
-    settings: defaultSavedModelSettings("gpt-5.2"),
+    settings: DefaultSavedModelSettings.of("gpt-5.2"),
     createdAtMs: 0,
     updatedAtMs: 0,
     ...overrides,
@@ -149,7 +144,7 @@ function savedModelFixture(overrides: Partial<SavedModel> = {}): SavedModel {
 describe("agent-runner usage passthrough (T-S2)", () => {
   it("LLM 响应带 usage → assistant append 携带 usage", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const usage = { promptTokens: 10, completionTokens: 20, totalTokens: 30 };
     const model = createMockModel([
@@ -162,8 +157,8 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -172,11 +167,11 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -192,7 +187,7 @@ describe("agent-runner usage passthrough (T-S2)", () => {
 
   it("LLM 响应无 usage（undefined）→ assistant usage 仅含耗时字段（兼容）", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model = createMockModel([
       {
@@ -204,8 +199,8 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -214,11 +209,11 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -231,7 +226,7 @@ describe("agent-runner usage passthrough (T-S2)", () => {
 
   it("多 round tool-call 每条 assistant 各自带 usage", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const firstUsage = { promptTokens: 11, completionTokens: 22, totalTokens: 33 };
     const secondUsage = { promptTokens: 44, completionTokens: 55, totalTokens: 99 };
@@ -253,8 +248,8 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -263,11 +258,11 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -304,14 +299,14 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
             usage: { completionTokens },
           });
         }
-        return step.result;
+      return Result.ok(step.result);
       }),
     };
   }
 
   it("多 step：流中 step 口径换算 run 级累计、每 step 请求 done 后补发一条 run 级终值事件", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
     const bus = new SimpleEventBus();
     const usagePayloads: Array<{
       sessionId: string;
@@ -345,8 +340,8 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -356,12 +351,12 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       stream: true,
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     // step1 流中（基线 0）：5、10 → done 补发 12；
@@ -379,7 +374,7 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
 
   it("step done 无 usage（三方网关不给）→ 不并入不补发，全程零 usage 事件", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
     const bus = new SimpleEventBus();
     const usagePayloads: unknown[] = [];
     bus.subscribe(EVENT_AGENT_STREAM_USAGE, (p) => usagePayloads.push(p));
@@ -396,8 +391,8 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -407,12 +402,12 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       stream: true,
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(usagePayloads.length, 0);
@@ -422,7 +417,7 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
 describe("agent-runner provider/modelName 落库（T-S3）", () => {
   it("assistant append 携带 provider=推断协议、modelName=vendorModelId", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model = createMockModel([
       {
@@ -433,8 +428,8 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -445,11 +440,11 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -462,7 +457,7 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
 
   it("saved model 查不到 → modelName 降级不传（null），provider 仍为推断协议", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const model = createMockModel([
       {
@@ -473,9 +468,9 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     // runnerDeps 默认即 noopSavedModelRepository（findById → null）。
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -484,11 +479,11 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();

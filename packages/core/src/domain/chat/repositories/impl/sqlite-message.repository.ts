@@ -5,13 +5,16 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { TdbcTransaction } from "@/infra/tdbc/index.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AppError } from "@/errors/app-error.js";
-import { parseMessageContent } from "../../content/parse-message-content.js";
-import { parseAttachmentsJson } from "../../model/message-attachment.schema.js";
+import type { Interrupt, Outcome } from "@/errors/outcome.js";
+import { MessageContentParse } from "../../content/parse-message-content.js";
+import { MessageAttachmentSchema } from "../../model/message-attachment.schema.js";
 import type { ChatMessageData, ChatMessageHeader } from "../../model/message.js";
 import { ChatMessage } from "../../logic/message/chat-message.js";
 import type { MessageContent } from "../../model/content-block.js";
@@ -71,16 +74,16 @@ function toMessageParams(message: ChatMessageData): unknown[] {
 /** 存储行损坏：把底层解析失败收成可区分的 `CHAT_MESSAGE_CORRUPT`。 */
 function corruptMessageRow(row: Row, field: string, cause: unknown): AppError<"CHAT_MESSAGE_CORRUPT"> {
   const detail = cause instanceof Error ? cause.message : String(cause);
-  return new AppError("CHAT_MESSAGE_CORRUPT", `chat_message ${String(row.id)} ${field} 损坏：${detail}`, { messageId: String(row.id), field });
+  return new AppError("CHAT_MESSAGE_CORRUPT", { detail: `chat_message ${String(row.id)} ${field} 损坏：${detail}`, messageId: String(row.id), field });
 }
 
 function rowToMessage(row: Row): ChatMessage {
   // 正文只有明文一种形态：content_json 直接 parse；解析失败按 repository 边界抛。
-  const content = parseMessageContent(String(row.content_json));
+  const content = MessageContentParse.parse(String(row.content_json));
   if (!content.ok) {
     throw corruptMessageRow(row, "content_json", content.error);
   }
-  const attachments = parseAttachmentsJson(nullableText(row.attachments_json));
+  const attachments = MessageAttachmentSchema.parseJson(Coerce.nullableText(row.attachments_json));
   // usage 列全空时保持「无 usage 属性」形状（条件 spread 保证空对象没有 key）。
   const usageFields: MessageUsage = {
     ...(row.prompt_tokens != null ? { promptTokens: Number(row.prompt_tokens) } : {}),
@@ -106,9 +109,9 @@ function rowToMessage(row: Row): ChatMessage {
     seq: Number(row.seq),
     role: String(row.role),
     content: content.value,
-    provider: nullableText(row.provider),
-    providerId: nullableText(row.provider_id),
-    modelName: nullableText(row.model_name),
+    provider: Coerce.nullableText(row.provider),
+    providerId: Coerce.nullableText(row.provider_id),
+    modelName: Coerce.nullableText(row.model_name),
     raw,
     createdAtMs: Number(row.created_at_ms),
     hidden: Number(row.hidden) === 1,
@@ -171,10 +174,15 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     this.yieldFn = yieldFn;
   }
 
-  /** rows → ChatMessageData 列表转换：无 yieldFn 直通同步 map，有则分片让步。 */
-  private async mapRows(rows: Row[]): Promise<ChatMessageData[]> {
-    if (this.yieldFn == null) {
-      return rows.map(rowToMessage);
+  /** rows → ChatMessageData 列表转换：无让路/判停诉求时直通同步 map，有则分片判停 + 让步。 */
+  private async mapRows(rows: Row[], hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    // 入口判停：必然取消时不再做任何一次 JSON.parse。
+    const entryHit = hooks?.checkpoint?.();
+    if (entryHit != null) return entryHit;
+    // 分片条件：既有让路函数或新注入的同步判停任一存在。桌面/CLI 缺省无
+    // yieldFn，但注入了 hooks 时同样要按片判停，否则中断只能等在入口。
+    if (this.yieldFn == null && hooks?.checkpoint == null) {
+      return { kind: "completed", value: rows.map(rowToMessage) };
     }
     const messages: ChatMessageData[] = [];
     // 注意：分片步长是类静态常量，须以类名引用（this 上取不到 static
@@ -187,46 +195,51 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
         messages.push(rowToMessage(rows[i]!));
       }
       if (end < rows.length) {
-        await this.yieldFn();
+        // 分片边界（紧挨既有 yieldFn 之前）：先同步判停，命中即返回中断、
+        // 不返回半份结果。`hooks?.checkpoint?.()` 未注入时是 undefined，
+        // 判空必须用宽松的 `!= null`——`!== null` 会误判为命中并取 .reason 崩。
+        const hit = hooks?.checkpoint?.();
+        if (hit != null) return hit;
+        await this.yieldFn?.();
       }
     }
-    return messages;
+    return { kind: "completed", value: messages };
   }
 
-  async listBySession(sessionId: string, options?: { includeHidden?: boolean }): Promise<ChatMessageData[]> {
+  async listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     // includeHidden=false 在 SQL 层就滤掉 hidden 行：置位产物不必捞回——
     // 大会话（数千条、hidden 占多数）的 UI 读口（token chip 的 prompt 组装
     // 只消费可见历史）因此不必把不可见行的正文字节取回来，也省掉逐行
     // parse content_json（读路径只有明文一种形态）。
     const hiddenFilter = options?.includeHidden === false ? " AND hidden = 0" : "";
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
-    return this.mapRows(rows);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId });
+    return this.mapRows(rows, hooks);
   }
 
-  async listBySessionFromSeq(sessionId: string, fromSeq: number): Promise<ChatMessageData[]> {
+  async listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq >= #{fromSeq} ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, fromSeq });
-    return this.mapRows(rows);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, fromSeq });
+    return this.mapRows(rows, hooks);
   }
 
   /** nm-style: keep-public — MessageRepository 端口读口；message.service 的 fork 单点消费。 */
-  async listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessageData[]> {
+  async listBySessionUpToSeq(sessionId: string, maxSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
     // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
     // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq <= #{maxSeq} ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, maxSeq });
-    return this.mapRows(rows);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, maxSeq });
+    return this.mapRows(rows, hooks);
   }
 
-  async listBySessionTailOfRole(sessionId: string, role: string, limit: number): Promise<ChatMessageData[]> {
+  async listBySessionTailOfRole(sessionId: string, role: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
     // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
     const clampedLimit = Math.max(1, Math.floor(limit));
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND role = #{role} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, role, limit: clampedLimit });
-    return this.mapRows(rows);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, role, limit: clampedLimit });
+    return this.mapRows(rows, hooks);
   }
 
   /** nm-style: keep-public — MessageRepository 端口读口；message.service 的 truncateAfter 空锚分支消费。 */
@@ -238,7 +251,7 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 收窄为 id 单素材；写事务内被调用的性质不变（message.service.ts 的
     // truncateAfter 空锚分支），仍刻意不走 mapRows 的分片 yieldFn。
     const sql = "SELECT id FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC";
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId });
     return rows.map((row) => String(row.id));
   }
 
@@ -247,45 +260,45 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 正文字节（读路径只有明文一种形态，不选列连 parse 都省；大会话上这曾是
     // 秒级全量 parse 的主源之一）。
     const sql = `SELECT ${MESSAGE_HEADER_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId });
     return rows.map(rowToHeader);
   }
 
   async countBySession(sessionId: string): Promise<number> {
     const sql = "SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId}";
-    const rows = await queryTemplate<{ n: number }>(this.conn, this.parser, sql, { sessionId });
+    const rows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, sql, { sessionId });
     // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
     return Number(rows[0]!.n);
   }
 
-  /** nm-style: keep-public — MessageRepository 端口读口；decideBackfillShortCircuit 单点消费。 */
+  /** nm-style: keep-public — MessageRepository 端口读口；BackfillBaselineCheckpoints.decideShortCircuit 单点消费。 */
   async listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessageHeader[]> {
-    // 头投影：唯一调用方 decideBackfillShortCircuit（backfill 增量段判定）只消费 `id`，
+    // 头投影：唯一调用方 BackfillBaselineCheckpoints.decideShortCircuit（backfill 增量段判定）只消费 `id`，
     // 不取正文字节。原先按 19 列全量取并逐条 JSON.parse——会话导入 / 复制 /
     // 首次回填时 offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
     const clampedOffset = Math.max(0, Math.floor(offset));
     const sql = `SELECT ${MESSAGE_HEADER_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC LIMIT -1 OFFSET #{offset}`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, offset: clampedOffset });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, offset: clampedOffset });
     return rows.map(rowToHeader);
   }
 
-  async listBySessionTail(sessionId: string, limit: number): Promise<ChatMessageData[]> {
+  async listBySessionTail(sessionId: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, limit: clampedLimit });
-    return this.mapRows(rows);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, limit: clampedLimit });
+    return this.mapRows(rows, hooks);
   }
 
-  async listBySessionPage(sessionId: string, limit: number, beforeSeq?: number): Promise<ChatMessageData[]> {
+  async listBySessionPage(sessionId: string, limit: number, beforeSeq?: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq}) ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
-    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit });
-    return this.mapRows(rows);
+    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit });
+    return this.mapRows(rows, hooks);
   }
 
   async nextSeq(sessionId: string): Promise<number> {
     const sql = "SELECT MAX(seq) AS max_seq FROM chat_message WHERE session_id = #{sessionId}";
-    const rows = await queryTemplate<{ max_seq: number | null }>(this.conn, this.parser, sql, { sessionId });
+    const rows = await TdbcTemplate.query<{ max_seq: number | null }>(this.conn, this.parser, sql, { sessionId });
     const maxSeq = rows[0]?.max_seq;
     return maxSeq == null ? 1 : Number(maxSeq) + 1;
   }
@@ -298,16 +311,19 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 把同一行看成双形态。反例由 test/chat/message-plaintext-write.test.ts 的
     // T-MP1 锁死。
     const sql = `UPDATE chat_message SET content_json = #{json}, content_encoding = NULL, content_blob = NULL WHERE id = #{id}`;
-    const result = await executeTemplate(this.conn, this.parser, sql, { id, json: JSON.stringify(content) });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id, json: JSON.stringify(content) });
     return result.changes > 0;
   }
 
-  async batchInsert(messages: readonly ChatMessageData[]): Promise<void> {
+  async batchInsert(messages: readonly ChatMessageData[], hooks?: LongTaskHooks): Promise<Outcome<void>> {
     // 空数组直接返回，避免驱动对空 parametersList 的行为分歧，
     // 也让 fork/copy 在源会话无消息时不用特殊判断。
     if (messages.length === 0) {
-      return;
+      return { kind: "completed", value: undefined };
     }
+    // 入口判停：必然取消时不开启事务、不构造任何参数。
+    const entryHit = hooks?.checkpoint?.();
+    if (entryHit != null) return entryHit;
     // 参数按片构造、按片下发：峰值内存 O(片大小)。
     // this.conn 可能是根连接（测试直调）也可能是事务句柄（生产 fork/copy 在
     // 外层事务内调 batchInsert：session.service 的 copy、message.service 的
@@ -320,44 +336,64 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 让步语义照旧：mobile 注入 createQuantumYield 时真正让出事件循环，
     // desktop/CLI/测试缺省注入时退化为一次 microtask 让步（与构造器注入的
     // mapRows 共用同一个 yieldFn，装配端只注入一处）。
+    //
+    // 中断语义（T-S13）：分片边界命中 checkpoint 时必须**在事务闭包内 throw**
+    // 才能让 better-sqlite3 回滚整个小事务（平台协议例外）——直接 return 会让
+    // 小事务 commit 已下发的分片，留下半批；外层 catch 再把这次 throw 转回
+    // `Outcome.cancelled` / `replaced`。外层事务路径（copy/fork）的回滚由外层
+    // 事务边界负责，本方法只交出中断结果。
     const chunkSize = SqliteMessageRepository.BATCH_PARAM_BUILD_CHUNK;
-    await runInTransactionOrConn(this.conn, async (c) => {
-      for (let start = 0; start < messages.length; start += chunkSize) {
-        const end = Math.min(start + chunkSize, messages.length);
-        const parameters = messages.slice(start, end).map(toMessageParams);
-        await c.batch(MESSAGE_INSERT_SQL, parameters);
-        await this.yieldFn?.();
-      }
-    });
+    let interrupt: Interrupt | null = null;
+    try {
+      await TdbcTransaction.runInTransactionOrConn(this.conn, async (c) => {
+        for (let start = 0; start < messages.length; start += chunkSize) {
+          const end = Math.min(start + chunkSize, messages.length);
+          const parameters = messages.slice(start, end).map(toMessageParams);
+          await c.batch(MESSAGE_INSERT_SQL, parameters);
+          // 分片边界（紧挨既有 yieldFn 之前）：先同步判停，命中即抛出触发回滚。
+          const hit = hooks?.checkpoint?.();
+          if (hit != null) {
+            interrupt = hit;
+            throw AbortError.create();
+          }
+          await this.yieldFn?.();
+        }
+      });
+      return { kind: "completed", value: undefined };
+    } catch (error) {
+      // 取消不是错误：AbortError 只是事务回滚的载体，转回 Outcome 中断分支。
+      if (interrupt != null) return interrupt;
+      throw error;
+    }
   }
 
   async deleteBySession(sessionId: string): Promise<void> {
     const sql = "DELETE FROM chat_message WHERE session_id = #{sessionId}";
-    await executeTemplate(this.conn, this.parser, sql, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, sql, { sessionId });
   }
 
   async deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void> {
     const sql = "DELETE FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}";
-    await executeTemplate(this.conn, this.parser, sql, { sessionId, afterSeq });
+    await TdbcTemplate.execute(this.conn, this.parser, sql, { sessionId, afterSeq });
   }
 
   /** nm-style: keep-public — MessageRepository 端口读口；回滚 tail 截断的 checkpoint 清理消费。 */
   async listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]> {
     const sql = "SELECT id FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}";
-    const rows = await queryTemplate<{ id: string }>(this.conn, this.parser, sql, { sessionId, afterSeq });
+    const rows = await TdbcTemplate.query<{ id: string }>(this.conn, this.parser, sql, { sessionId, afterSeq });
     return rows.map((row) => String(row.id));
   }
 
   async updateHidden(messageId: string, hidden: boolean): Promise<boolean> {
     const sql = "UPDATE chat_message SET hidden = #{hidden} WHERE id = #{id}";
-    const result = await executeTemplate(this.conn, this.parser, sql, { id: messageId, hidden: hidden ? 1 : 0 });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id: messageId, hidden: hidden ? 1 : 0 });
     return result.changes > 0;
   }
 
   async updateHiddenRange(sessionId: string, fromSeq: number, toSeq: number, hidden: boolean): Promise<number> {
     const hiddenFilter = hidden ? "AND hidden = 0" : "AND hidden = 1";
     const sql = `UPDATE chat_message SET hidden = #{hidden} WHERE session_id = #{sessionId} AND seq >= #{fromSeq} AND seq <= #{toSeq} ${hiddenFilter}`;
-    const result = await executeTemplate(this.conn, this.parser, sql, { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 });
     return result.changes;
   }
 }

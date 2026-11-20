@@ -3,9 +3,9 @@
  * 非法序列/大写 HTTP/盘符等边界用例。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { chatLinkResolver } from "../../src/domain/chat/logic/resolve-chat-link-target.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  chatLinkResolver  } from "../../src/domain/chat/logic/resolve-chat-link-target.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("resolveChatLinkTarget (T-L1)", () => {
   it("真机形态①：相对路径 → 补前导 / 归一化", () => {

@@ -12,92 +12,70 @@
  * @module service/prompt/normalize-orphan-tool-results-for-llm
  */
 
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { MessageBodyText } from "@/domain/chat/content/message-body-text.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
-function isToolResultPairedInVisible(
-  toolUseId: string,
-  visibleMessages: readonly ChatMessageData[]
-): boolean {
-  for (const msg of visibleMessages) {
-    for (const block of msg.content.blocks) {
-      if (block.type === "tool_use" && block.id === toolUseId) {
-        return true;
+/** 孤儿 tool_result / tool_use 归一化集合（compaction-safe view-time transform）。 */
+export const OrphanToolResults = {
+  /**
+   * Returns messages with unpaired `tool_result` blocks replaced by `text` blocks.
+   * Does not mutate DB rows — same pattern as regex channel transforms.
+   *
+   * nm-style: keep-local — 导出函数；唯一生产调用方在 service/agent/impl/agent-runner.ts（本片目录外），片内无内联落点。
+   */
+  normalizeForLlm(messages: readonly ChatMessageData[]): ChatMessageData[] {
+    // 第一遍：处理孤立的 tool_result（没有对应 tool_use 的）
+    const orphanResultFixed = messages.map((msg) => {
+      let changed = false;
+      const blocks: ContentBlock[] = [];
+
+      for (const block of msg.content.blocks) {
+        if (block.type === "tool_result" && !messages.some((other) => other.content.blocks.some((candidate) => candidate.type === "tool_use" && candidate.id === block.toolUseId))) {
+          changed = true;
+          const text = MessageBodyText.fromBlocks([block]);
+          blocks.push({
+            type: "text",
+            text: text !== "" ? text : "[tool_result]",
+          });
+          continue;
+        }
+        blocks.push(block);
+      }
+
+      if (!changed) {
+        return msg;
+      }
+      return { ...msg, content: { blocks } };
+    });
+
+    // 第二遍：处理孤立的 tool_use（没有对应 tool_result 的）——
+    // 直接从 blocks 中移除悬挂的 tool_use，避免 API 400。
+    const pairedResultIds = new Set<string>();
+    for (const msg of orphanResultFixed) {
+      for (const block of msg.content.blocks) {
+        if (block.type === "tool_result") {
+          pairedResultIds.add(block.toolUseId);
+        }
       }
     }
-  }
-  return false;
-}
+    return orphanResultFixed.map((msg) => {
+      let changed = false;
+      const blocks: ContentBlock[] = [];
 
-/** 收集 visible 消息里所有 tool_result 引用的 toolUseId */
-function collectToolResultIds(
-  visibleMessages: readonly ChatMessageData[]
-): Set<string> {
-  const ids = new Set<string>();
-  for (const msg of visibleMessages) {
-    for (const block of msg.content.blocks) {
-      if (block.type === "tool_result") {
-        ids.add(block.toolUseId);
+      for (const block of msg.content.blocks) {
+        if (block.type === "tool_use" && !pairedResultIds.has(block.id)) {
+          changed = true;
+          // 跳过这个 block（悬挂的 tool_use）
+          continue;
+        }
+        blocks.push(block);
       }
-    }
-  }
-  return ids;
-}
 
-/**
- * Returns messages with unpaired `tool_result` blocks replaced by `text` blocks.
- * Does not mutate DB rows — same pattern as regex channel transforms.
- */
-export function normalizeOrphanToolResultsForLlm(
-  messages: readonly ChatMessageData[]
-): ChatMessageData[] {
-  // 第一遍：处理孤立的 tool_result（没有对应 tool_use 的）
-  const orphanResultFixed = messages.map((msg) => {
-    let changed = false;
-    const blocks: ContentBlock[] = [];
-
-    for (const block of msg.content.blocks) {
-      if (
-        block.type === "tool_result" &&
-        !isToolResultPairedInVisible(block.toolUseId, messages)
-      ) {
-        changed = true;
-        const text = messageBodyTextFromBlocks([block]);
-        blocks.push({
-          type: "text",
-          text: text !== "" ? text : "[tool_result]",
-        });
-        continue;
+      if (!changed) {
+        return msg;
       }
-      blocks.push(block);
-    }
-
-    if (!changed) {
-      return msg;
-    }
-    return { ...msg, content: { blocks } };
-  });
-
-  // 第二遍：处理孤立的 tool_use（没有对应 tool_result 的）——
-  // 直接从 blocks 中移除悬挂的 tool_use，避免 API 400。
-  const pairedResultIds = collectToolResultIds(orphanResultFixed);
-  return orphanResultFixed.map((msg) => {
-    let changed = false;
-    const blocks: ContentBlock[] = [];
-
-    for (const block of msg.content.blocks) {
-      if (block.type === "tool_use" && !pairedResultIds.has(block.id)) {
-        changed = true;
-        // 跳过这个 block（悬挂的 tool_use）
-        continue;
-      }
-      blocks.push(block);
-    }
-
-    if (!changed) {
-      return msg;
-    }
-    return { ...msg, content: { blocks } };
-  });
-}
+      return { ...msg, content: { blocks } };
+    });
+  },
+} as const;

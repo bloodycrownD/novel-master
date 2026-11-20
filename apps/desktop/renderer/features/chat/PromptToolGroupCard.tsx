@@ -4,7 +4,7 @@
  * （正文预览 / 悬挂时「未返回结果」占位）。整格点开全屏原文（无显式 ⤢，
  * 用户拍板「点击就好进入全屏」）。
  *
- * tool use 预览是 main 侧 `formatToolUsePreviewJson` 算好下发的 DTO 字段
+ * tool use 预览是 main 侧 `PromptPreviewTurns.formatToolUsePreviewJson` 算好下发的 DTO 字段
  * `inputPreview`（保结构截大 key：超长值截断、超长数组截项），不直接腰斩
  * pretty JSON；全屏仍看 `inputJson` 原文。renderer 不引 core 运行时。
  *
@@ -21,14 +21,14 @@ import type {
 } from "@shared/ipc-types";
 
 /** 悬挂 tool_use（`result === null`）的占位文案，槽位保留不隐藏。 */
-export const LOST_RESULT_PLACEHOLDER = "未返回结果";
+const LOST_RESULT_PLACEHOLDER = "未返回结果";
 
 /**
  * 状态点配色走主题 CSS 变量（success/danger/中性，深浅主题自动跟随；
  * 对齐 app 工具卡先例 `.tool-call-card__status` 的语义色体系）。
  * 状态文案用主题正文色（`.prompt-tool-group__status` 的 `var(--text)`），状态点做辅助区分。
  */
-export const TOOL_GROUP_STATUS_COLORS: Record<
+const TOOL_GROUP_STATUS_COLORS: Record<
   PromptToolGroupStatusDto,
   string
 > = {
@@ -38,7 +38,7 @@ export const TOOL_GROUP_STATUS_COLORS: Record<
 };
 
 /** 状态文案（三态可读）。 */
-export const TOOL_GROUP_STATUS_LABELS: Record<
+const TOOL_GROUP_STATUS_LABELS: Record<
   PromptToolGroupStatusDto,
   string
 > = {
@@ -64,27 +64,6 @@ export interface ToolGroupLeaf {
   code: boolean;
 }
 
-export function toolGroupLeaves(card: PromptToolGroupDto): ToolGroupLeaf[] {
-  return [
-    {
-      id: `${card.id}-use`,
-      label: "tool use",
-      body: card.inputJson,
-      preview: card.inputPreview,
-      lost: false,
-      code: true,
-    },
-    {
-      id: `${card.id}-result`,
-      label: "tool result",
-      body: card.result?.body ?? LOST_RESULT_PLACEHOLDER,
-      preview: card.result?.body ?? LOST_RESULT_PLACEHOLDER,
-      lost: card.result == null,
-      code: false,
-    },
-  ];
-}
-
 interface PromptToolGroupCardProps {
   card: PromptToolGroupDto;
   /** 组卡展开态（受控，key = turn.id + card.id）。 */
@@ -102,6 +81,25 @@ export function PromptToolGroupCard({
 }: PromptToolGroupCardProps) {
   const color = TOOL_GROUP_STATUS_COLORS[card.status];
   const statusLabel = TOOL_GROUP_STATUS_LABELS[card.status];
+  // 格子对（原 toolGroupLeaves 内联）：use 格（等宽入参）+ result 格（悬挂时占位）。
+  const leaves: ToolGroupLeaf[] = [
+    {
+      id: `${card.id}-use`,
+      label: "tool use",
+      body: card.inputJson,
+      preview: card.inputPreview,
+      lost: false,
+      code: true,
+    },
+    {
+      id: `${card.id}-result`,
+      label: "tool result",
+      body: card.result?.body ?? LOST_RESULT_PLACEHOLDER,
+      preview: card.result?.body ?? LOST_RESULT_PLACEHOLDER,
+      lost: card.result == null,
+      code: false,
+    },
+  ];
   return (
     <div
       className={`prompt-tool-group${expanded ? " is-expanded" : ""}`}
@@ -137,7 +135,7 @@ export function PromptToolGroupCard({
       </button>
       {expanded ? (
         <div className="prompt-tool-group__cells">
-          {toolGroupLeaves(card).map((leaf) => (
+          {leaves.map((leaf) => (
             <button
               key={leaf.id}
               type="button"

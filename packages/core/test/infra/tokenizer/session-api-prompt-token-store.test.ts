@@ -10,20 +10,11 @@
  * - 失效：Map 与 KKV 行双删（键为 prompt_tokens / lastPromptUsage）。
  */
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import {
-  invalidateSessionApiPromptTokenEntry,
-  parseSessionApiPromptTokenEntry,
-  readSessionApiPromptTokenEntry,
-  serializeSessionApiPromptTokenEntry,
-  writeSessionApiPromptTokenEntry,
-} from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  sessionApiPromptTokenCache  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  SessionApiPromptTokenEntry  } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  createMemorySessionKkv  } from "../../helpers/prompt-layout-test-helpers.js";
 
 const SESSION_ID = "sess-prompt-token-store";
 
@@ -58,12 +49,12 @@ function countingKkv() {
 
 describe("session-api-prompt-token-store 编解码", () => {
   it("全字段往返：promptTokens / atMs / savedModelId", () => {
-    const raw = serializeSessionApiPromptTokenEntry({
+    const raw = SessionApiPromptTokenEntry.serialize({
       promptTokens: 12_729,
       atMs: 1_700_000_000_000,
       savedModelId: "openai/gpt-4o",
     });
-    assert.deepEqual(parseSessionApiPromptTokenEntry(raw), {
+    assert.deepEqual(SessionApiPromptTokenEntry.parse(raw), {
       promptTokens: 12_729,
       atMs: 1_700_000_000_000,
       savedModelId: "openai/gpt-4o",
@@ -71,13 +62,13 @@ describe("session-api-prompt-token-store 编解码", () => {
   });
 
   it("anchorSeq 全链往返：序列化 → 解析 → 热层写/读都带着", async () => {
-    const raw = serializeSessionApiPromptTokenEntry({
+    const raw = SessionApiPromptTokenEntry.serialize({
       promptTokens: 4_242,
       atMs: 1_700_000_000_000,
       savedModelId: "zai/glm-4.6",
       anchorSeq: 37,
     });
-    assert.deepEqual(parseSessionApiPromptTokenEntry(raw), {
+    assert.deepEqual(SessionApiPromptTokenEntry.parse(raw), {
       promptTokens: 4_242,
       atMs: 1_700_000_000_000,
       savedModelId: "zai/glm-4.6",
@@ -87,14 +78,14 @@ describe("session-api-prompt-token-store 编解码", () => {
     // 写 → 热层 → 读：锚点必须穿透热层（读口增量估算靠它）。
     const { kkv } = countingKkv();
     sessionApiPromptTokenCache.clearAll();
-    writeSessionApiPromptTokenEntry(kkv, "sess-anchor", {
+    SessionApiPromptTokenEntry.write(kkv, "sess-anchor", {
       promptTokens: 4_242,
       atMs: 11,
       savedModelId: "zai/glm-4.6",
       anchorSeq: 37,
     });
     assert.equal(sessionApiPromptTokenCache.get("sess-anchor")?.anchorSeq, 37);
-    assert.deepEqual(await readSessionApiPromptTokenEntry(kkv, "sess-anchor"), {
+    assert.deepEqual(await SessionApiPromptTokenEntry.read(kkv, "sess-anchor"), {
       promptTokens: 4_242,
       atMs: 11,
       savedModelId: "zai/glm-4.6",
@@ -119,7 +110,7 @@ describe("session-api-prompt-token-store 编解码", () => {
 
   it("anchorSeq 非法（负数 / 非有限数 / 字符串）→ 序列化与解析都省略该键", () => {
     for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const raw = serializeSessionApiPromptTokenEntry({
+      const raw = SessionApiPromptTokenEntry.serialize({
         promptTokens: 7,
         atMs: 1,
         anchorSeq: bad,
@@ -127,7 +118,7 @@ describe("session-api-prompt-token-store 编解码", () => {
       assert.deepEqual(JSON.parse(raw), { promptTokens: 7, atMs: 1 });
     }
     assert.deepEqual(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({ promptTokens: 7, atMs: 1, anchorSeq: "37" })
       ),
       { promptTokens: 7, atMs: 1 }
@@ -135,7 +126,7 @@ describe("session-api-prompt-token-store 编解码", () => {
   });
 
   it("老行（无 anchorSeq 键）照常解析、不带锚点——读口 delta 按 0 处理", () => {
-    const parsed = parseSessionApiPromptTokenEntry(
+    const parsed = SessionApiPromptTokenEntry.parse(
       JSON.stringify({ promptTokens: 100, atMs: 5, savedModelId: "zai/glm-4.6" })
     );
     assert.deepEqual(parsed, {
@@ -151,7 +142,7 @@ describe("session-api-prompt-token-store 编解码", () => {
     // 已知键，所以老行必须照样解析出来（不报错、不判 miss）——字段移除因此
     // 不需要数据迁移或清库。这里用一个中立未知键表达同一件事。
     assert.deepEqual(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({
           promptTokens: 12_729,
           atMs: 1_700_000_000_000,
@@ -168,7 +159,7 @@ describe("session-api-prompt-token-store 编解码", () => {
   });
 
   it("只有两个必填字段（promptTokens / atMs）照常解析，指纹键省略", () => {
-    const parsed = parseSessionApiPromptTokenEntry(
+    const parsed = SessionApiPromptTokenEntry.parse(
       JSON.stringify({ promptTokens: 100, atMs: 5 })
     );
     assert.deepEqual(parsed, { promptTokens: 100, atMs: 5 });
@@ -176,14 +167,14 @@ describe("session-api-prompt-token-store 编解码", () => {
   });
 
   it("非法可选字段被省略（不写进值，也不污染解析结果）", () => {
-    const raw = serializeSessionApiPromptTokenEntry({
+    const raw = SessionApiPromptTokenEntry.serialize({
       promptTokens: 7,
       atMs: 1,
       savedModelId: "",
     });
     assert.deepEqual(JSON.parse(raw), { promptTokens: 7, atMs: 1 });
     assert.deepEqual(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({
           promptTokens: 7,
           atMs: 1,
@@ -195,56 +186,56 @@ describe("session-api-prompt-token-store 编解码", () => {
   });
 
   it("损坏 / 缺失 / 非法必需字段 → null", () => {
-    assert.equal(parseSessionApiPromptTokenEntry(null), null);
-    assert.equal(parseSessionApiPromptTokenEntry(""), null);
-    assert.equal(parseSessionApiPromptTokenEntry("{not json"), null);
-    assert.equal(parseSessionApiPromptTokenEntry("[]"), null);
-    assert.equal(parseSessionApiPromptTokenEntry("null"), null);
+    assert.equal(SessionApiPromptTokenEntry.parse(null), null);
+    assert.equal(SessionApiPromptTokenEntry.parse(""), null);
+    assert.equal(SessionApiPromptTokenEntry.parse("{not json"), null);
+    assert.equal(SessionApiPromptTokenEntry.parse("[]"), null);
+    assert.equal(SessionApiPromptTokenEntry.parse("null"), null);
     assert.equal(
-      parseSessionApiPromptTokenEntry(JSON.stringify({ atMs: 1 })),
+      SessionApiPromptTokenEntry.parse(JSON.stringify({ atMs: 1 })),
       null
     );
     assert.equal(
-      parseSessionApiPromptTokenEntry(JSON.stringify({ promptTokens: "x" })),
+      SessionApiPromptTokenEntry.parse(JSON.stringify({ promptTokens: "x" })),
       null
     );
     assert.equal(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({ promptTokens: Number.NaN })
       ),
       null
     );
     assert.equal(
-      parseSessionApiPromptTokenEntry(JSON.stringify({ promptTokens: -1 })),
+      SessionApiPromptTokenEntry.parse(JSON.stringify({ promptTokens: -1 })),
       null
     );
     // atMs 与 promptTokens 同为必填：缺失 / 类型不对 / 非有限数一律当 miss
     // （退化 0 会让时效判据把它当「永远过期」，或被 ===0 守卫静默放行）。
     assert.equal(
-      parseSessionApiPromptTokenEntry(JSON.stringify({ promptTokens: 3 })),
+      SessionApiPromptTokenEntry.parse(JSON.stringify({ promptTokens: 3 })),
       null
     );
     assert.equal(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({ promptTokens: 3, atMs: "5" })
       ),
       null
     );
     assert.equal(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({ promptTokens: 3, atMs: null })
       ),
       null
     );
     assert.equal(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({ promptTokens: 3, atMs: Number.NaN })
       ),
       null
     );
     // promptTokens === 0 本身是合法值，仍放行（不被 atMs 校验顺手一起拒）。
     assert.deepEqual(
-      parseSessionApiPromptTokenEntry(
+      SessionApiPromptTokenEntry.parse(
         JSON.stringify({ promptTokens: 0, atMs: 7 })
       ),
       { promptTokens: 0, atMs: 7 }
@@ -259,7 +250,7 @@ describe("session-api-prompt-token-store 读取", () => {
 
   it("KKV miss 且热层 miss → null", async () => {
     const { kkv } = countingKkv();
-    assert.equal(await readSessionApiPromptTokenEntry(kkv, SESSION_ID), null);
+    assert.equal(await SessionApiPromptTokenEntry.read(kkv, SESSION_ID), null);
   });
 
   it("热层命中不查库；KKV 命中回填热层后第二次不再查库", async () => {
@@ -268,14 +259,14 @@ describe("session-api-prompt-token-store 读取", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({ promptTokens: 555, atMs: 9 })
+      SessionApiPromptTokenEntry.serialize({ promptTokens: 555, atMs: 9 })
     );
 
-    const first = await readSessionApiPromptTokenEntry(kkv, SESSION_ID);
+    const first = await SessionApiPromptTokenEntry.read(kkv, SESSION_ID);
     assert.deepEqual(first, { promptTokens: 555, atMs: 9 });
     assert.equal(calls.get, 1);
 
-    const second = await readSessionApiPromptTokenEntry(kkv, SESSION_ID);
+    const second = await SessionApiPromptTokenEntry.read(kkv, SESSION_ID);
     assert.deepEqual(second, { promptTokens: 555, atMs: 9 });
     assert.equal(calls.get, 1, "回填热层后不应再查库");
   });
@@ -288,7 +279,7 @@ describe("session-api-prompt-token-store 读取", () => {
       PROMPT_TOKENS_LAST_USAGE_KEY,
       "{broken"
     );
-    assert.equal(await readSessionApiPromptTokenEntry(kkv, SESSION_ID), null);
+    assert.equal(await SessionApiPromptTokenEntry.read(kkv, SESSION_ID), null);
   });
 
   it("读库抛错 → 按 miss 返回 null，不冒泡", async () => {
@@ -298,7 +289,7 @@ describe("session-api-prompt-token-store 读取", () => {
         throw new Error("db down");
       },
     };
-    assert.equal(await readSessionApiPromptTokenEntry(kkv, SESSION_ID), null);
+    assert.equal(await SessionApiPromptTokenEntry.read(kkv, SESSION_ID), null);
   });
 
   it("sessionKkv 缺省时退化为纯热层读（旧调用方行为不变）", async () => {
@@ -307,11 +298,11 @@ describe("session-api-prompt-token-store 读取", () => {
       updatedAt: 7,
     });
     assert.deepEqual(
-      await readSessionApiPromptTokenEntry(undefined, SESSION_ID),
+      await SessionApiPromptTokenEntry.read(undefined, SESSION_ID),
       { promptTokens: 321, atMs: 7 }
     );
     sessionApiPromptTokenCache.clearAll();
-    assert.equal(await readSessionApiPromptTokenEntry(null, SESSION_ID), null);
+    assert.equal(await SessionApiPromptTokenEntry.read(null, SESSION_ID), null);
   });
 });
 
@@ -322,7 +313,7 @@ describe("session-api-prompt-token-store 写入与失效", () => {
 
   it("写：热层立即可读且 KKV 行带上可选指纹", async () => {
     const { kkv } = countingKkv();
-    writeSessionApiPromptTokenEntry(kkv, SESSION_ID, {
+    SessionApiPromptTokenEntry.write(kkv, SESSION_ID, {
       promptTokens: 1_234,
       atMs: 11,
       savedModelId: "openai/gpt-4o",
@@ -360,7 +351,7 @@ describe("session-api-prompt-token-store 写入与失效", () => {
         throw new Error("disk full");
       },
     };
-    writeSessionApiPromptTokenEntry(kkv, SESSION_ID, {
+    SessionApiPromptTokenEntry.write(kkv, SESSION_ID, {
       promptTokens: 9,
       atMs: 1,
     });
@@ -376,14 +367,14 @@ describe("session-api-prompt-token-store 写入与失效", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({ promptTokens: 888, atMs: 1 })
+      SessionApiPromptTokenEntry.serialize({ promptTokens: 888, atMs: 1 })
     );
     sessionApiPromptTokenCache.set(SESSION_ID, {
       promptTokens: 888,
       updatedAt: 1,
     });
 
-    await invalidateSessionApiPromptTokenEntry(kkv, SESSION_ID);
+    await SessionApiPromptTokenEntry.invalidate(kkv, SESSION_ID);
 
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     assert.equal(calls.delete, 1);
@@ -408,7 +399,7 @@ describe("session-api-prompt-token-store 写入与失效", () => {
       promptTokens: 1,
       updatedAt: 1,
     });
-    await invalidateSessionApiPromptTokenEntry(kkv, SESSION_ID);
+    await SessionApiPromptTokenEntry.invalidate(kkv, SESSION_ID);
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     await Promise.resolve();
     await Promise.resolve();

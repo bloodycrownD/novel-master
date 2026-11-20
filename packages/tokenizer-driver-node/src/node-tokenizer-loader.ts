@@ -15,36 +15,37 @@ export interface TokenizerLoader {
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 
-/** Default assets root: `packages/tokenizer-driver-node/assets/tokenizers`. */
-export function defaultTokenizerAssetsRoot(): string {
-  return join(moduleDir, "../assets/tokenizers");
-}
-
-export function createNodeTokenizerLoader(assetsRoot: string): TokenizerLoader {
-  return {
-    readJson(relativePath: string): ArrayBuffer {
-      const buf = readFileSync(join(assetsRoot, relativePath));
-      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-    },
-    readModel(relativePath: string): string {
-      return join(assetsRoot, relativePath);
-    },
-  };
-}
-
-let activeLoader: TokenizerLoader | null = null;
-
-/** Installs the loader used by web/sentencepiece counters in this package. */
-export function setNodeTokenizerLoader(loader: TokenizerLoader): void {
-  activeLoader = loader;
-}
-
-/** Returns the active loader set by {@link registerTokenizerNodeDriver}. */
-export function getNodeTokenizerLoader(): TokenizerLoader {
-  if (activeLoader == null) {
-    throw new Error(
-      "Node tokenizer loader not installed. Call registerTokenizerNodeDriver() first.",
-    );
+export namespace NodeTokenizerLoader {
+  /** Default assets root: `packages/tokenizer-driver-node/assets/tokenizers`. */
+  export function defaultAssetsRoot(): string {
+    return join(moduleDir, "../assets/tokenizers");
   }
-  return activeLoader;
+
+  export function create(assetsRoot: string): TokenizerLoader {
+    return {
+      readJson(relativePath: string): ArrayBuffer {
+        const buf = readFileSync(join(assetsRoot, relativePath));
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      },
+      readModel(relativePath: string): string {
+        return join(assetsRoot, relativePath);
+      },
+    };
+  }
+
+  let activeLoader: TokenizerLoader | null = null;
+
+  /** Installs the loader used by web/sentencepiece counters in this package. */
+  export function set(loader: TokenizerLoader): void {
+    activeLoader = loader;
+  }
+
+  /** Returns the active loader set by {@link TokenizerNodeRegister.register}. */
+  export function get(): TokenizerLoader {
+    if (activeLoader == null) {
+      // nm-throw: keep — 驱动装配不变量：未注册 loader 即调用属编程错误。
+      throw new Error("Node tokenizer loader not installed. Call TokenizerNodeRegister.register() first.");
+    }
+    return activeLoader;
+  }
 }

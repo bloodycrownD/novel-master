@@ -111,6 +111,7 @@ function Row({
 }
 
 /** 两段面板（纯渲染）：最近请求 / 会话累计 + 口径脚注。导出供组件测试直测。 */
+// nm-style: keep-public — 测试契约：apps/desktop/test/metrics-detail-popover.test.tsx:34 动态 import 解构直测
 export function MetricsDetailPanel({
   detail,
   loading,

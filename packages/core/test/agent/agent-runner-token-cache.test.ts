@@ -5,56 +5,34 @@
  * 既有用例都直接调 helper/driver 或手工构造 context，把 agent-runner 里
  * `tools` / `sessionKkv` 两行删掉也不会变红。
  */
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { z } from "zod";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type BuiltinToolContext,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  resolveCurrentPromptTokens,
-  sessionApiPromptTokenCache,
-  type LlmChatResult,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { type VfsService } from "@novel-master/core/vfs";
+import {  afterEach, beforeEach, describe, it, mock  } from "node:test";
+import {  z  } from "zod";
+import {  AgentServiceFactory, type AgentDefinition, type  BuiltinToolContext, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  CurrentPromptTokens, sessionApiPromptTokenCache  } from "@novel-master/core/tokenizer";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
+import {  type VfsService  } from "@novel-master/core/vfs";
 import type { MessageService } from "../../src/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
-import { createDefaultTokenCounterRegistry } from "../../src/infra/tokenizer/index.js";
-import { invalidateSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  fileCacheKey,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  serializeFileCachePayload,
-  serializeRuleSnapshot,
-} from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import {
-  clearChatTokenEstimateMemo,
-  lookupWorkplaceEstimateByFingerprint,
-} from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
+import {  registerNodeTokenizerDriverForTests  } from "../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  DefaultTokenCounterRegistry  } from "../../src/infra/tokenizer/index.js";
+import {  SessionApiPromptTokenEntry  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_PROMPT_TOKENS, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  ChatTokenEstimateMemo  } from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import {
-  EVENT_AGENT_STEP_COMMITTED,
-  type AgentStepCommittedPayload,
-} from "../../src/domain/events/model/event-types.js";
-import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
-import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
+import {  EVENT_AGENT_STEP_COMMITTED, type AgentStepCommittedPayload  } from "../../src/domain/events/model/event-types.js";
+import {  emptyRegistryDeps  } from "../infra/tokenizer/registry-test-helpers.js";
+import {  TokenRatioConditionTrigger  } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p-token-cache";
@@ -184,7 +162,8 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+
+      return Result.ok(r);
     }),
   };
 }
@@ -195,6 +174,13 @@ const defaultRunScope = {
   savedModelId: RUN_MODEL_ID,
   workspaceModelId: RUN_MODEL_ID,
 };
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（弃权语义在 resolve-current-prompt-tokens.test.ts）。 */
+async function resolveCompleted(...args: Parameters<typeof CurrentPromptTokens.resolve>) {
+  const outcome = await CurrentPromptTokens.resolve(...args);
+  assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
+  return outcome.value;
+}
 
 describe("AgentRunner session API prompt token cache", () => {
   beforeEach(() => {
@@ -209,7 +195,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
   it("T-T4: completed 且 pick 有值 → set 后 trigger 与 resolve 同值", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -221,8 +207,8 @@ describe("AgentRunner session API prompt token cache", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -231,11 +217,11 @@ describe("AgentRunner session API prompt token cache", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID)?.promptTokens, 4242);
 
@@ -246,7 +232,7 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(row?.savedModelId, RUN_MODEL_ID);
     assert.equal(typeof row?.atMs, "number");
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const params = {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
@@ -256,7 +242,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
     // 跨重启语义：清掉进程内热层（≈ 进程重启）、只留 KKV，读口仍报同一 API 值
     sessionApiPromptTokenCache.clearAll();
-    const afterRestart = await resolveCurrentPromptTokens(
+    const afterRestart = await resolveCompleted(
       SESSION_ID,
       params,
       { sessionKkv }
@@ -265,21 +251,21 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(afterRestart.tokenCount, 4242);
     assert.equal(afterRestart.estimated, false);
 
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.source, "api");
     assert.equal(resolved.tokenCount, 4242);
 
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.01,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       tokenRegistry,
     );
     // 4242 > floor(100000*0.01)=1000 → true；且与 resolve 同读 API
     assert.equal(
-      await trigger.shouldTrigger(session, {
+      (await trigger.shouldTrigger(session, {
         sessionId: SESSION_ID,
         modelContext: {
           workspaceModelId: RUN_MODEL_ID,
@@ -288,14 +274,14 @@ describe("AgentRunner session API prompt token cache", () => {
         promptInput: { messages: [] },
         layout: { persist: [], dynamic: [] },
         ctx: { workplaceDisplay: "", messages: [] },
-      }),
+      })).value,
       true,
     );
   });
 
   it("T-T4 (persistMessages=false): overlay completed run 不落热层/KKV", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // 两步 run：step1 tool_use（usage 4000，chokepoint ② 落 tool_results 后）、
     // step2 收尾文本（usage 5000）。观察点用 STEP_COMMITTED 事件而非压缩评估
@@ -343,7 +329,7 @@ describe("AgentRunner session API prompt token cache", () => {
       run: async () => ({}) as never,
     });
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       ...runnerDeps({
         session,
         modelRequests: model,
@@ -353,12 +339,12 @@ describe("AgentRunner session API prompt token cache", () => {
       eventBus: bus,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
       persistMessages: false,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.ok(
       midRunAnchors.length > 0,
@@ -380,7 +366,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -392,8 +378,8 @@ describe("AgentRunner session API prompt token cache", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -404,19 +390,19 @@ describe("AgentRunner session API prompt token cache", () => {
 
     const controller = new AbortController();
     controller.abort();
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
     assert.equal(result.stopReason, "cancelled");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
     assert.equal(await rawPromptTokenRow(), null);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
+    const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
@@ -429,7 +415,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -448,8 +434,8 @@ describe("AgentRunner session API prompt token cache", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -458,18 +444,18 @@ describe("AgentRunner session API prompt token cache", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "max_steps");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
     assert.equal(await rawPromptTokenRow(), null);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
+    const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
@@ -482,7 +468,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(8888);
 
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model: ModelRequestService = {
       request: mock.fn(async () => {
@@ -491,8 +477,8 @@ describe("AgentRunner session API prompt token cache", () => {
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -514,8 +500,8 @@ describe("AgentRunner session API prompt token cache", () => {
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
     assert.equal(await rawPromptTokenRow(), null);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
+    const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
@@ -543,7 +529,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
 
   it("两步 run：step2 的压缩评估命中 step1 回锚的 api 基线（含增量），run 末终值带锚点", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // step1：tool_use（usage 4000）→ step2：收尾文本（usage 5000）
     const model = createMockModel([
@@ -568,7 +554,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
       },
     ]);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const seen: { tokenCount: number; counterKind: string }[] = [];
 
     const registry = new ToolRegistry();
@@ -579,7 +565,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
       run: async () => ({}) as never,
     });
 
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -587,7 +573,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
         toolCtx: mockToolCtx(mockVfs()),
         compactionConditions: {
           async shouldRequestCompaction(s, evaluation) {
-            const resolved = await resolveCurrentPromptTokens(
+            const resolved = await resolveCompleted(
               evaluation.sessionId,
               {
                 layout: evaluation.layout,
@@ -604,29 +590,23 @@ describe("AgentRunner 每 step usage 回锚", () => {
               tokenCount: resolved.tokenCount,
               counterKind: resolved.counterKind,
             });
-            return false;
+            return Result.ok(false);
           },
           async getHideStartDepth() {
-            return 6;
+            return Result.ok(6);
           },
         },
         messages: {
           listBySession: async () => [],
         } as unknown as MessageService,
-        messageTranscriptEffects: {
-          hideMessagesInRange: async () => {},
-          showMessagesInRange: async () => {},
-          truncateMessagesAfter: async () => {},
-          setMessageFloorAtMessage: async () => {},
-        } as unknown as MessageTranscriptEffectsService,
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.equal(seen.length, 2, "两步各评估一次");
 
@@ -679,14 +659,14 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
    */
   const MUST_TRIGGER_OPTIONS = {
     tokenRatio: 0.0001,
-    resolveContextWindow: async () => 1_000_000,
-    resolveTokenizerOverride: async () => "auto",
+    resolveContextWindow: async () => Result.ok(1_000_000),
+    resolveTokenizerOverride: async () => Result.ok("auto"),
   } as const;
 
   it("T-G1a: 重启（clearAll）后第二轮的压缩评估仍用 KKV 里的 api 值", async () => {
     // 第一轮：正常 completed，落下 4242 的 api 值。
     const firstSession = new InMemoryAgentSession();
-    await firstSession.append("user", textBlocks("go"));
+    unwrap(await firstSession.append("user", TextBlocks.of("go")));
     const firstModel = createMockModel([
       {
         assistantText: "done",
@@ -696,8 +676,8 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
       },
     ]);
     const firstRegistry = new ToolRegistry();
-    registerBuiltinTools(firstRegistry);
-    const firstRunner = createAgentRunner(
+    BuiltinTools.register(firstRegistry);
+    const firstRunner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: firstSession,
         modelRequests: firstModel,
@@ -705,11 +685,11 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         toolCtx: mockToolCtx(mockVfs()),
       }),
     );
-    const first = await firstRunner.run({
+    const first = unwrap(await firstRunner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(first.stopReason, "completed");
     assert.equal((await parsedPromptTokenRow())?.promptTokens, 4242);
 
@@ -724,7 +704,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
     // 第二轮：真实链路（runner 填 sessionKkv → trigger → 读口）必须命中 KKV 的
     // api 值 4242，而不是回退本地估算（本地档远小于 4242）。
     const secondSession = new InMemoryAgentSession();
-    await secondSession.append("user", textBlocks("go again"));
+    unwrap(await secondSession.append("user", TextBlocks.of("go again")));
     const secondModel = createMockModel([
       {
         assistantText: "done",
@@ -734,7 +714,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
       },
     ]);
 
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const seen: { tokenCount: number; counterKind: string }[] = [];
     const realTrigger = new TokenRatioConditionTrigger(
       MUST_TRIGGER_OPTIONS,
@@ -744,16 +724,10 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
     const messagesStub = {
       listBySession: async () => [],
     } as unknown as MessageService;
-    const effectsStub = {
-      hideMessagesInRange: async () => {},
-      showMessagesInRange: async () => {},
-      truncateMessagesAfter: async () => {},
-      setMessageFloorAtMessage: async () => {},
-    } as unknown as MessageTranscriptEffectsService;
 
     const secondRegistry = new ToolRegistry();
-    registerBuiltinTools(secondRegistry);
-    const secondRunner = createAgentRunner(
+    BuiltinTools.register(secondRegistry);
+    const secondRunner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: secondSession,
         modelRequests: secondModel,
@@ -763,7 +737,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
           // 代理真实 trigger：先按同一 evaluation 读一次口记录读数，再委托给
           // 真 trigger 走它自己的判定——读数与判定走的是同一条链路。
           async shouldRequestCompaction(session, evaluation) {
-            const resolved = await resolveCurrentPromptTokens(
+            const resolved = await resolveCompleted(
               evaluation.sessionId,
               {
                 layout: evaluation.layout,
@@ -783,19 +757,18 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
             return realTrigger.shouldTrigger(session, evaluation);
           },
           async getHideStartDepth() {
-            return 6;
+            return Result.ok(6);
           },
         },
         messages: messagesStub,
-        messageTranscriptEffects: effectsStub,
       }),
     );
 
-    const second = await secondRunner.run({
+    const second = unwrap(await secondRunner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(second.stopReason, "completed");
 
     assert.ok(seen.length > 0, "压缩评估应至少被调一次");
@@ -810,7 +783,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
   });
 
   it("T-G1b: tool description 变长 → 压缩评估的本地档 tokenCount 明显变大（tools 接上了）", async () => {
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
 
     /**
      * 跑一轮真实链路，返回压缩评估读口读到的本地档 tokenCount。
@@ -828,7 +801,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         tokenRegistry,
       );
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      unwrap(await session.append("user", TextBlocks.of("go")));
       const model = createMockModel([
         {
           assistantText: "done",
@@ -843,7 +816,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         inputSchema: z.object({}),
         run: async () => ({}) as never,
       });
-      const runner = createAgentRunner(
+      const runner = AgentServiceFactory.createRunner(
         runnerDeps({
           session,
           modelRequests: model,
@@ -851,7 +824,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
           toolCtx: mockToolCtx(mockVfs()),
           compactionConditions: {
             async shouldRequestCompaction(s, evaluation) {
-              const resolved = await resolveCurrentPromptTokens(
+              const resolved = await resolveCompleted(
                 evaluation.sessionId,
                 {
                   layout: evaluation.layout,
@@ -871,27 +844,21 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
               return realTrigger.shouldTrigger(s, evaluation);
             },
             async getHideStartDepth() {
-              return 6;
+              return Result.ok(6);
             },
           },
           messages: {
             listBySession: async () => [],
           } as unknown as MessageService,
-          messageTranscriptEffects: {
-            hideMessagesInRange: async () => {},
-            showMessagesInRange: async () => {},
-            truncateMessagesAfter: async () => {},
-            setMessageFloorAtMessage: async () => {},
-          } as unknown as MessageTranscriptEffectsService,
         }),
       );
       // 清掉上一轮可能落下的 api 值：两轮都强制走本地档，比的才是 tools 段。
-      await invalidateSessionApiPromptTokenEntry(sessionKkv, SESSION_ID);
-      const result = await runner.run({
+      await SessionApiPromptTokenEntry.invalidate(sessionKkv, SESSION_ID);
+      const result = unwrap(await runner.run({
         maxSteps: 3,
         definition: minimalDefinition(),
         ...defaultRunScope,
-      });
+      }));
       assert.equal(result.stopReason, "completed");
       assert.ok(readings.length > 0, "压缩评估应至少被调一次");
       return readings[0]!;
@@ -923,19 +890,19 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
     registerNodeTokenizerDriverForTests();
     sessionApiPromptTokenCache.clearAll();
     sessionKkv = createMemorySessionKkv();
-    clearChatTokenEstimateMemo();
+    ChatTokenEstimateMemo.clear();
   });
 
   afterEach(() => {
     sessionApiPromptTokenCache.clearAll();
-    clearChatTokenEstimateMemo();
+    ChatTokenEstimateMemo.clear();
   });
 
   it("评估那次 resolve 收到的 ctx.workplaceFingerprint 非空、等于 assemble 产物、且增量分解的按指纹缓存被填充", async () => {
     // sessionId 三合一（workplaceScope / kkvScope 都指自身）：assemble 的
     // kkvSessionId = session.kkvScopeSessionId，必须与下面预置的 KKV 同键。
     const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     // 预置规则快照 + file_cache：assemble 走「缓存命中」路径，不需要 workplace
     // 评估也不需要读 VFS——本用例锁的是「指纹有没有传下去」，不是组装本身。
@@ -945,13 +912,13 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
       SESSION_ID,
       SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
       RULE_SNAPSHOT_CANON_KEY,
-      serializeRuleSnapshot([{ path: "/a.md", status: "full" }])
+      RuleSnapshotCodec.serialize([{ path: "/a.md", status: "full" }])
     );
     await sessionKkv.set(
       SESSION_ID,
       SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/a.md"),
-      serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME })
+      RuleSnapshotCodec.fileCacheKey("full", "/a.md"),
+      RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME })
     );
 
     const model = createMockModel([
@@ -961,10 +928,10 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         raw: {},
       },
     ]);
-    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const tokenRegistry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluatedFingerprints: Array<string | undefined> = [];
 
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -975,7 +942,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
             evaluatedFingerprints.push(evaluation.ctx.workplaceFingerprint);
             // 与真 trigger 同款消费口径（preferEstimate + tools + sessionKkv）：
             // 指纹若真到了 ctx，这里就会走增量分解并按指纹回填估读缓存。
-            await resolveCurrentPromptTokens(
+            await resolveCompleted(
               evaluation.sessionId,
               {
                 layout: evaluation.layout,
@@ -988,25 +955,19 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
               },
               { sessionKkv: evaluation.sessionKkv, preferEstimate: true },
             );
-            return false;
+            return Result.ok(false);
           },
           async getHideStartDepth() {
-            return 6;
+            return Result.ok(6);
           },
         },
         messages: {
           listBySession: async () => [],
         } as unknown as MessageService,
-        messageTranscriptEffects: {
-          hideMessagesInRange: async () => {},
-          showMessagesInRange: async () => {},
-          truncateMessagesAfter: async () => {},
-          setMessageFloorAtMessage: async () => {},
-        } as unknown as MessageTranscriptEffectsService,
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: {
         name: "test",
@@ -1014,7 +975,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         prompts: { workplace: "【done】", persist: [], dynamic: [] },
       },
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.ok(
       evaluatedFingerprints.length >= 1,
@@ -1038,7 +999,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         "指纹应逐字等于 assemble 产物（path|status|mtimeMs|bodyLength）"
       );
       assert.ok(
-        lookupWorkplaceEstimateByFingerprint(fingerprint!) != null,
+        ChatTokenEstimateMemo.lookupWorkplaceEstimateByFingerprint(fingerprint!) != null,
         "增量分解的按指纹估读缓存应被填充（证明指纹真到了 resolve，而非只到 trigger）"
       );
     }

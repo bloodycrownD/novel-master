@@ -5,11 +5,12 @@
  * with a 4× CI slack multiplier to reduce flaky failures on slow runners.
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { type VfsService } from "@novel-master/core/vfs";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 const FILE_COUNT = 1000;
 const SAMPLE_RUNS = 8;
@@ -45,14 +46,14 @@ novelMasterTestFixture();
 describe("message checkpoint performance", { timeout: 180_000 }, () => {
   it("P1: capture 1000 files P95 within threshold", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`Perf-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`Perf-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await seedFiles(svfs, FILE_COUNT);
 
-    const assistant = await ctx.messages.append(session.id, "assistant", {
+    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "capture" }],
-    });
+    }));
 
     const durations: number[] = [];
     for (let run = 0; run < SAMPLE_RUNS; run++) {
@@ -73,15 +74,15 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
     const durations: number[] = [];
 
     for (let run = 0; run < SAMPLE_RUNS; run++) {
-      const project = await ctx.projects.create(`Perf-${run}`);
-      const session = await ctx.sessions.create(project.id);
+      const project = unwrap(await ctx.projects.create(`Perf-${run}`));
+      const session = unwrap(await ctx.sessions.create(project.id));
       const svfs = ctx.sessionVfs(project.id, session.id);
       const prefix = `file-${run}`;
       await seedFiles(svfs, FILE_COUNT, prefix);
 
-      const anchorAssistant = await ctx.messages.append(session.id, "assistant", {
+      const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
         blocks: [{ type: "text", text: "anchor" }],
-      });
+      }));
       await ctx.messageCheckpoint.capture(
         session.id,
         project.id,
@@ -89,7 +90,7 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
       );
 
       for (let i = 0; i < 50; i++) {
-        await ctx.messages.append(session.id, "user", textBlocks(`msg ${i}`));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`msg ${i}`)));
       }
 
       for (let i = 0; i < FILE_COUNT; i++) {
@@ -97,9 +98,9 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
           versionCheck: false,
         });
       }
-      const tailAssistant = await ctx.messages.append(session.id, "assistant", {
+      const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
         blocks: [{ type: "text", text: "tail" }],
-      });
+      }));
       await ctx.messageCheckpoint.capture(
         session.id,
         project.id,
@@ -107,7 +108,7 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
       );
 
       const start = performance.now();
-      await ctx.sessionFs.rollbackToMessage(
+      await ctx.sessionFs.rollbackFilesToMessage(
         session.id,
         project.id,
         anchorAssistant.id,

@@ -1,15 +1,12 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { runDeferredFileCacheGc } from "../../src/domain/session-kkv/logic/deferred-file-cache-gc.js";
+import {  describe, it  } from "node:test";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  DeferredFileCacheGc  } from "../../src/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import type { TdbcConnection } from "@novel-master/core";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -42,7 +39,7 @@ describe("file_cache 缓存 blob 延期 GC", () => {
   it("T-G1 手工制造孤儿 blob：GC 回收无引用行，被引用 blob 保留", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const sk = createSessionKkvService(conn);
+    const sk = SessionKkvServiceFactory.create(conn);
     const s1 = `g1a-${testIsolationSuffix()}`;
     const s2 = `g1b-${testIsolationSuffix()}`;
     const s3 = `g1c-${testIsolationSuffix()}`;
@@ -54,19 +51,19 @@ describe("file_cache 缓存 blob 延期 GC", () => {
       s1,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: sharedBody, mtimeMs: 1 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: sharedBody, mtimeMs: 1 })
     );
     await sk.set(
       s2,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
     );
     await sk.set(
       s3,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: soloBody, mtimeMs: 3 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: soloBody, mtimeMs: 3 })
     );
     const sharedHash = await currentEntryHash(conn, s1, key);
     const soloHash = await currentEntryHash(conn, s3, key);
@@ -76,7 +73,7 @@ describe("file_cache 缓存 blob 延期 GC", () => {
       "DELETE FROM session_file_cache_entry WHERE session_id = ?",
       [s1]
     );
-    assert.equal(await runDeferredFileCacheGc(conn), 0);
+    assert.equal(await DeferredFileCacheGc.run(conn), 0);
     assert.equal(await blobCountByHash(conn, sharedHash!), 1);
     assert.equal(await blobCountByHash(conn, soloHash!), 1);
 
@@ -85,21 +82,21 @@ describe("file_cache 缓存 blob 延期 GC", () => {
       "DELETE FROM session_file_cache_entry WHERE session_id = ?",
       [s2]
     );
-    assert.equal(await runDeferredFileCacheGc(conn), 1);
+    assert.equal(await DeferredFileCacheGc.run(conn), 1);
     assert.equal(await blobCountByHash(conn, sharedHash!), 0);
     assert.equal(await blobCountByHash(conn, soloHash!), 1);
     // 幂等：重复执行删 0 行
-    assert.equal(await runDeferredFileCacheGc(conn), 0);
+    assert.equal(await DeferredFileCacheGc.run(conn), 0);
   });
 
   it("T-G2 sessions.delete 真删链路调度 GC 且不影响仍引用同 blob 的其他会话", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    const sk = createSessionKkvService(conn);
-    const project = await ctx.projects.create(`P-g2-${testIsolationSuffix()}`);
-    const s1 = await ctx.sessions.create(project.id);
-    const s2 = await ctx.sessions.create(project.id);
-    const s3 = await ctx.sessions.create(project.id);
+    const sk = SessionKkvServiceFactory.create(conn);
+    const project = unwrap(await ctx.projects.create(`P-g2-${testIsolationSuffix()}`));
+    const s1 = unwrap(await ctx.sessions.create(project.id));
+    const s2 = unwrap(await ctx.sessions.create(project.id));
+    const s3 = unwrap(await ctx.sessions.create(project.id));
     const key = "full:/del.md";
     const sharedBody = `g2-shared-${testIsolationSuffix()}`;
     const soloBody = `g2-solo-${testIsolationSuffix()}`;
@@ -108,34 +105,34 @@ describe("file_cache 缓存 blob 延期 GC", () => {
       s1.id,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: sharedBody, mtimeMs: 1 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: sharedBody, mtimeMs: 1 })
     );
     await sk.set(
       s2.id,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
     );
     await sk.set(
       s3.id,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: soloBody, mtimeMs: 3 })
+      RuleSnapshotCodec.serializeFileCachePayload({ body: soloBody, mtimeMs: 3 })
     );
     const sharedHash = await currentEntryHash(conn, s1.id, key);
     const soloHash = await currentEntryHash(conn, s3.id, key);
 
     // 删独占 body 的 s3：删除事务提交后 GC 被调度，独占 blob 应已被回收
-    await ctx.sessions.delete(s3.id);
+    unwrap(await ctx.sessions.delete(s3.id));
     assert.equal(await blobCountByHash(conn, soloHash!), 0);
 
     // 删共享 body 的 s1：s2 仍引用 shared blob，GC 不得误删，s2 命中不受影响
-    await ctx.sessions.delete(s1.id);
+    unwrap(await ctx.sessions.delete(s1.id));
     assert.equal(await currentEntryHash(conn, s1.id, key), null);
     assert.equal(await blobCountByHash(conn, sharedHash!), 1);
     assert.equal(
-      await sk.get(s2.id, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
+      unwrap(await sk.get(s2.id, SESSION_KKV_DOMAIN_FILE_CACHE, key)),
+      RuleSnapshotCodec.serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
     );
   });
 });

@@ -4,8 +4,6 @@
  * @module domain/provider/model/model-sampling-params
  */
 
-import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
-
 /** OpenAI-compatible sampling fields. */
 export interface OpenAiSamplingParams {
   readonly temperature?: number;
@@ -37,8 +35,3 @@ export type ModelSamplingParams =
       readonly anthropic: AnthropicSamplingParams;
     }
   | { readonly protocol: "gemini"; readonly gemini: GeminiSamplingParams };
-
-/** Returns the protocol tag for sampling params, if any. */
-export function samplingProtocol(params: ModelSamplingParams | undefined): LlmProtocolKind | undefined {
-  return params?.protocol;
-}

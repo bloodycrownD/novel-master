@@ -10,9 +10,9 @@
 import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import type {SessionUsageDetail} from '@novel-master/core/chat';
-import {formatTokenCount} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import {ModalShell} from '../ui/ModalShell';
-import {hitRate, formatHitRate} from '@/screens/stack/token-usage/format';
+import {UsageStats} from '@/screens/stack/token-usage/format';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -25,28 +25,7 @@ type Props = {
   onClose: () => void;
 };
 
-/** 单行计费口径输入（与 core BILLED_INPUT_SUM_SQL 的单行版一致）。 */
-function lastRowBilledInput(last: NonNullable<SessionUsageDetail['last']>): number {
-  const hasCacheColumns =
-    last.cacheReadTokens != null || last.cacheCreationTokens != null;
-  if (!hasCacheColumns) {
-    return last.promptTokens;
-  }
-  // anthropic 的 input_tokens 不含 cache，须加回 cache 双列；其余协议
-  // prompt 已含 cached（与统计页口径一致，公式单源随 tl 后续抽 core）。
-  return last.provider === 'anthropic'
-    ? last.promptTokens +
-        (last.cacheReadTokens ?? 0) +
-        (last.cacheCreationTokens ?? 0)
-    : last.promptTokens;
-}
-
-export function MetricDetailSheet({
-  visible,
-  sessionId,
-  contextTokenLabel,
-  onClose,
-}: Props) {
+export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClose}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [detail, setDetail] = useState<SessionUsageDetail | null>(null);
@@ -65,11 +44,13 @@ export function MetricDetailSheet({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    runtime.usageStats
-      .getSessionUsageDetail(sessionId)
+    const detailPromise = runtime.usageStats.getSessionUsageDetail(sessionId);
+    detailPromise
       .then(result => {
         if (!cancelled) {
-          setDetail(result);
+          // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走异常通道。
+          setError(result.ok ? null : result.error instanceof Error ? result.error.message : String(result.error));
+          setDetail(result.ok ? result.value : null);
           setLoading(false);
         }
       })
@@ -85,111 +66,51 @@ export function MetricDetailSheet({
   }, [visible, sessionId]);
 
   const last = detail?.last ?? null;
+  let lastBilledInput = 0;
+  if (last != null) {
+    // 单行计费口径（与 core BILLED_INPUT_SUM_SQL 的单行版一致）。
+    const hasCacheColumns = last.cacheReadTokens != null || last.cacheCreationTokens != null;
+    // anthropic 的 input_tokens 不含 cache，须加回 cache 双列；其余协议
+    // prompt 已含 cached（与统计页口径一致，公式单源随 tl 后续抽 core）。
+    lastBilledInput = hasCacheColumns && last.provider === 'anthropic' ? last.promptTokens + (last.cacheReadTokens ?? 0) + (last.cacheCreationTokens ?? 0) : last.promptTokens;
+  }
 
   return (
-    <ModalShell
-      visible={visible}
-      onClose={onClose}
-      variant="bottom"
-      backdropOpacity={0.55}
-      keyboardAvoid={{kind: 'none'}}
-      panelStyle={styles.sheet}
-    >
+    <ModalShell visible={visible} onClose={onClose} variant="bottom" backdropOpacity={0.55} keyboardAvoid={{kind: 'none'}} panelStyle={styles.sheet}>
       <Text style={[styles.heading, {color: tokens.text}]}>用量详情</Text>
       {loading ? (
-        <Text
-          testID="metric-detail-sheet-loading"
-          style={[styles.hint, {color: tokens.textSecondary}]}
-        >
+        <Text testID="metric-detail-sheet-loading" style={[styles.hint, {color: tokens.textSecondary}]}>
           加载中…
         </Text>
       ) : error != null ? (
-        <Text
-          testID="metric-detail-sheet-error"
-          style={[styles.hint, {color: tokens.danger}]}
-        >
+        <Text testID="metric-detail-sheet-error" style={[styles.hint, {color: tokens.danger}]}>
           {error}
         </Text>
       ) : (
-        <ScrollView
-          testID="metric-detail-sheet-content"
-          style={styles.body}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView testID="metric-detail-sheet-content" style={styles.body} showsVerticalScrollIndicator={false}>
           <SectionLabel text="最近请求" tokens={tokens} />
           {last == null ? (
             <EmptyRow text="暂无请求记录" tokens={tokens} />
           ) : (
             <>
               <Row label="模型" value={last.modelName ?? '—'} tokens={tokens} />
-              <Row
-                label="输入"
-                value={formatTokenCount(last.promptTokens)}
-                tokens={tokens}
-              />
-              <Row
-                label="输出"
-                value={formatTokenCount(last.completionTokens)}
-                tokens={tokens}
-              />
-              <Row
-                label="缓存读取"
-                value={
-                  last.cacheReadTokens == null
-                    ? '—'
-                    : formatTokenCount(last.cacheReadTokens)
-                }
-                tokens={tokens}
-              />
-              <Row
-                label="缓存写入"
-                value={
-                  last.cacheCreationTokens == null
-                    ? '—'
-                    : formatTokenCount(last.cacheCreationTokens)
-                }
-                tokens={tokens}
-              />
-              <Row
-                label="缓存命中率"
-                value={
-                  last.cacheReadTokens == null
-                    ? '—'
-                    : formatHitRate(
-                        hitRate(last.cacheReadTokens, lastRowBilledInput(last)),
-                      )
-                }
-                tokens={tokens}
-              />
+              <Row label="输入" value={TokenFormat.count(last.promptTokens)} tokens={tokens} />
+              <Row label="输出" value={TokenFormat.count(last.completionTokens)} tokens={tokens} />
+              <Row label="缓存读取" value={last.cacheReadTokens == null ? '—' : TokenFormat.count(last.cacheReadTokens)} tokens={tokens} />
+              <Row label="缓存写入" value={last.cacheCreationTokens == null ? '—' : TokenFormat.count(last.cacheCreationTokens)} tokens={tokens} />
+              <Row label="缓存命中率" value={last.cacheReadTokens == null ? '—' : UsageStats.formatHitRate(UsageStats.hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
             </>
           )}
           <SectionLabel text="会话累计" tokens={tokens} />
-          <Row
-            label="消息数（可见）"
-            value={String(detail?.visibleMessageCount ?? 0)}
-            tokens={tokens}
-          />
-          <Row
-            label="工具调用"
-            value={String(detail?.toolUseCount ?? 0)}
-            tokens={tokens}
-          />
-          <Row
-            label="上下文占用"
-            value={contextTokenLabel ?? '—'}
-            tokens={tokens}
-          />
+          <Row label="消息数（可见）" value={String(detail?.visibleMessageCount ?? 0)} tokens={tokens} />
+          <Row label="工具调用" value={String(detail?.toolUseCount ?? 0)} tokens={tokens} />
+          <Row label="上下文占用" value={contextTokenLabel ?? '—'} tokens={tokens} />
           {/* 口径脚注第二行（cr-md-1）：「最近请求」是单步真值，与指标条
               整轮读数不同源——文案与 desktop 侧同文，勿单侧改写。 */}
-          <Text
-            testID="metric-detail-sheet-footnote"
-            style={[styles.footnote, {color: tokens.textTertiary}]}
-          >
+          <Text testID="metric-detail-sheet-footnote" style={[styles.footnote, {color: tokens.textTertiary}]}>
             消息数为可见口径 · 工具调用含已隐藏消息
           </Text>
-          <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>
-            最近请求为单步真值，与指标条整轮读数不同源
-          </Text>
+          <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>最近请求为单步真值，与指标条整轮读数不同源</Text>
         </ScrollView>
       )}
     </ModalShell>
@@ -201,13 +122,7 @@ type ThemeTokensShape = {
   textSecondary: string;
 };
 
-function SectionLabel({
-  text,
-  tokens,
-}: {
-  text: string;
-  tokens: ThemeTokensShape;
-}) {
+function SectionLabel({text, tokens}: {text: string; tokens: ThemeTokensShape}) {
   return (
     <Text
       style={{
@@ -223,37 +138,17 @@ function SectionLabel({
   );
 }
 
-function Row({
-  label,
-  value,
-  tokens,
-}: {
-  label: string;
-  value: string;
-  tokens: ThemeTokensShape;
-}) {
+function Row({label, value, tokens}: {label: string; value: string; tokens: ThemeTokensShape}) {
   return (
     <View style={styles.row}>
       <Text style={{color: tokens.textSecondary, fontSize: 13}}>{label}</Text>
-      <Text style={{color: tokens.text, fontSize: 13, fontWeight: '500'}}>
-        {value}
-      </Text>
+      <Text style={{color: tokens.text, fontSize: 13, fontWeight: '500'}}>{value}</Text>
     </View>
   );
 }
 
-function EmptyRow({
-  text,
-  tokens,
-}: {
-  text: string;
-  tokens: ThemeTokensShape;
-}) {
-  return (
-    <Text style={{color: tokens.textSecondary, fontSize: 13, paddingVertical: 6}}>
-      {text}
-    </Text>
-  );
+function EmptyRow({text, tokens}: {text: string; tokens: ThemeTokensShape}) {
+  return <Text style={{color: tokens.textSecondary, fontSize: 13, paddingVertical: 6}}>{text}</Text>;
 }
 
 const styles = StyleSheet.create({

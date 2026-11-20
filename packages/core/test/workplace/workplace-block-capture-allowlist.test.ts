@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import {  readdir, readFile  } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import {  fileURLToPath  } from "node:url";
+import {  describe, it  } from "node:test";
 
 const CORE_SRC = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -71,13 +71,13 @@ describe("workplace assemble allowlist (retire capture)", () => {
     );
   });
 
-  it("T-MAU-RC2：agent-runner 须调用 assembleWorkplaceDisplay", async () => {
+  it("T-MAU-RC2：agent-runner 须调用 WorkplaceDisplayAssembler.assemble", async () => {
     for (const rel of MUST_ASSEMBLE) {
       const source = await readFile(path.join(CORE_SRC, rel), "utf8");
       assert.match(
         source,
-        /assembleWorkplaceDisplay\s*\(/,
-        `${rel} 须调用 assembleWorkplaceDisplay`,
+        /WorkplaceDisplayAssembler\.assemble\s*\(/,
+        `${rel} 须调用 WorkplaceDisplayAssembler.assemble`,
       );
       assert.doesNotMatch(
         source,

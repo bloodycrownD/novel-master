@@ -1,29 +1,29 @@
-import {prepareStreamTailHtml} from '@/components/chat/prepare-stream-tail-html';
+import {StreamTailHtml} from '@/components/chat/prepare-stream-tail-html'
 import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
 
 describe('prepareStreamTailHtml', () => {
   it('returns undefined when richText is off', () => {
-    expect(prepareStreamTailHtml('**bold**', false)).toBeUndefined();
+    expect(StreamTailHtml.prepare('**bold**', false)).toBeUndefined();
   });
 
   it('returns sanitized HTML when richText is on', () => {
-    const html = prepareStreamTailHtml('**bold** text', true);
+    const html = StreamTailHtml.prepare('**bold** text', true);
     expect(html).toBeDefined();
     expect(html).toContain('<strong>');
     expect(html).toContain('bold');
   });
 
   it('returns undefined for empty or whitespace-only content', () => {
-    expect(prepareStreamTailHtml('   ', true)).toBeUndefined();
+    expect(StreamTailHtml.prepare('   ', true)).toBeUndefined();
   });
 
   it('returns undefined when content exceeds rich limit', () => {
     const over = 'a'.repeat(RICH_CONTENT_MAX_CHARS + 1);
-    expect(prepareStreamTailHtml(over, true)).toBeUndefined();
+    expect(StreamTailHtml.prepare(over, true)).toBeUndefined();
   });
 
   it('T-S5: 定稿 HTML 对空伪标签不挖空', () => {
-    const html = prepareStreamTailHtml('表现为 <xxx></xxx> 之间没有文本', true);
+    const html = StreamTailHtml.prepare('表现为 <xxx></xxx> 之间没有文本', true);
     expect(html).toBeDefined();
     expect(html).toContain('&lt;xxx&gt;');
     expect(html).toContain('&lt;/xxx&gt;');
@@ -31,7 +31,7 @@ describe('prepareStreamTailHtml', () => {
   });
 
   it('T-S5: 定稿 HTML 保留 file 伪标签结构', () => {
-    const html = prepareStreamTailHtml('<file>notes.md</file>', true);
+    const html = StreamTailHtml.prepare('<file>notes.md</file>', true);
     expect(html).toBeDefined();
     expect(html).toContain('&lt;file&gt;');
     expect(html).toContain('notes.md');

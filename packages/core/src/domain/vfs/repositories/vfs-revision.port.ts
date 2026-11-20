@@ -7,6 +7,8 @@
  * @module domain/vfs/repositories/vfs-revision.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { VfsRevision, VfsRevisionStatus } from "../model/vfs-revision.js";
 
 /**
@@ -33,14 +35,14 @@ export type VfsRevisionPointerMeta = {
  */
 export interface VfsRevisionRepository {
   /**
-   * 按 entryId + version 读取完整 revision（解正文）。
+   * 按 entryId + version 读取完整 revision（解正文；正文损坏走 `Result.err`）。
    *
    * @returns `null` when no row exists for the pair.
    */
   findByEntryAndVersion(
     entryId: number,
     version: number
-  ): Promise<VfsRevision | null>;
+  ): Promise<Result<VfsRevision | null, AppError>>;
 
   /** 判断指定 entryId+version 的 revision 行是否存在（不解正文）。 */
   existsByEntryAndVersion(entryId: number, version: number): Promise<boolean>;
@@ -127,7 +129,7 @@ export interface VfsRevisionRepository {
   /**
    * 批量增减 ref_count。
    *
-   * delta = +1 时，对缺失的 (entryId, version) 行抛 `VfsError("NOT_FOUND")`——
+   * delta = +1 时，对缺失的 (entryId, version) 行抛 `AppError("VFS_NOT_FOUND")`——
    * 这跟逐条 {@link adjustRefCount} 的语义保持一致，用来守护 T-RB-REF-MISSING 不变量；
    * delta = -1 时缺失行直接 no-op（UPDATE 命不中即跳过）。
    *

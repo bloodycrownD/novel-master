@@ -1,6 +1,6 @@
 /**
  * SESSIONS_PUSH_TEMPLATE handler（workspace-push spec T-WP6）：
- * - 成功：调 rt.sessions.pushTemplate(sessionId)，随后 notify 项目工作区面板刷新，
+ * - 成功：调 rt.sessions.pushSessionTemplate(sessionId)，随后 notify 项目工作区面板刷新，
  *   payload 必须是 IPC 面板语义 `{workspaceScope:'session', projectId}`——
  *   面板 scope 'session' 就是项目工作区（core project 域），'chat' 才是会话域；
  *   projectId 经会话查询取得（不改 Request 形状）。
@@ -16,13 +16,12 @@ import { after, beforeEach, describe, it, mock } from "node:test";
 
 import { IPC_CHANNELS } from "../../shared/ipc-types.js";
 
-register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));const { handleSessionsPushTemplate } = await import(
+register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));
+const { Sessions } = await import(
   "../../src/main/ipc/handlers/sessions.js"
 );
-const {
-  notifyWorkspaceMutatedToRenderer,
-  setWorkspaceMutatedForwardTarget,
-} = await import("../../src/main/ipc/forward-workspace-mutated.js");
+const { WorkspaceMutatedForwarder } =
+  await import("../../src/main/ipc/forward-workspace-mutated.js");
 
 /** fake webContents：捕获 send 的 channel + payload。 */
 const sentMessages: { channel: string; payload: unknown }[] = [];
@@ -32,19 +31,27 @@ const fakeWebContents = {
   },
 };
 
-setWorkspaceMutatedForwardTarget(() => fakeWebContents);
+WorkspaceMutatedForwarder.setTarget(() => fakeWebContents);
 after(() => {
-  setWorkspaceMutatedForwardTarget(() => undefined);
+  WorkspaceMutatedForwarder.setTarget(() => undefined);
 });
 
-const pushTemplate = mock.fn(async () => {});
+// pushTemplate 同走 Result（handler 侧 `!ok` 即 throw），桩返回 ok wire。
+const pushTemplate = mock.fn(async () => ({
+  ok: true as const,
+  value: undefined,
+}));
+// 错误通道迁移二期后 sessions.get 走 Result（handler 侧 `!ok` 即 throw）。
 const getSession = mock.fn(async (id: string) => ({
-  id,
-  projectId: "p-1",
-  title: null,
-  parentSessionId: null,
-  createdAtMs: 0,
-  updatedAtMs: 0,
+  ok: true as const,
+  value: {
+    id,
+    projectId: "p-1",
+    title: null,
+    parentSessionId: null,
+    createdAtMs: 0,
+    updatedAtMs: 0,
+  },
 }));
 
 beforeEach(() => {
@@ -56,10 +63,10 @@ beforeEach(() => {
 describe("handleSessionsPushTemplate（T-WP6）", () => {
   it("成功：调 pushTemplate 并以 IPC 面板语义 notify 项目工作区", async () => {
     globalThis.__sessionsPushTestRuntime = {
-      sessions: { pushTemplate, get: getSession },
+      sessions: { pushSessionTemplate: pushTemplate, get: getSession },
     };
 
-    const result = await handleSessionsPushTemplate({ sessionId: "s-1" });
+    const result = await Sessions.pushTemplate({ sessionId: "s-1" });
 
     assert.equal(result.ok, true);
     assert.equal(pushTemplate.mock.callCount(), 1);
@@ -80,10 +87,10 @@ describe("handleSessionsPushTemplate（T-WP6）", () => {
       throw new Error("push failed");
     });
     globalThis.__sessionsPushTestRuntime = {
-      sessions: { pushTemplate, get: getSession },
+      sessions: { pushSessionTemplate: pushTemplate, get: getSession },
     };
 
-    const result = await handleSessionsPushTemplate({ sessionId: "s-1" });
+    const result = await Sessions.pushTemplate({ sessionId: "s-1" });
 
     assert.equal(result.ok, false);
     // 失败不 notify：send 零次

@@ -2,7 +2,7 @@
  * T-GC1：删文件后 revision + blob 孤儿泄漏的回归测试（findings 发现 14）。
  *
  * 修复前：vfs.delete 删文件后 entry 行被删，旧版 active revision 的 ref_count 被减到 0
- * 但行还在。revision GC 的 deleteUnreferencedUnderScope 靠 JOIN vfs_entry 圈定范围，
+ * 但行还在。revision GC 的 RevisionRefCount.deleteUnreferencedUnderScope 靠 JOIN vfs_entry 圈定范围，
  * entry 已删的 revision JOIN 不到，成为扫不到的孤儿，其 blob 也无法回收——数据库只增不减。
  *
  * 修复后：sweepSessionRevisions 在 path-scoped 清扫后追加 deleteGlobalOrphans，
@@ -16,31 +16,24 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  RevisionGc  } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
 describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
-  it("删全部文件后，sweepSessionRevisions 清掉孤儿 active revision 与 blob", async () => {
+  it("删全部文件后，RevisionGc.sweepSession 清掉孤儿 active revision 与 blob", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`P-orphan-${suffix}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
 
     // 造 10 文件 × 2 版：每个文件 v1（ref_count=0，有 content_hash）+ v2（live head）。
     // 每条 active revision 内容不同，确保 blob 一对一（不共享），方便断言 blob 全清。
@@ -97,17 +90,10 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     );
 
     // 跑 revision GC：path-scoped 扫不到（entry 已删），靠 deleteGlobalOrphans 兜底。
-    const swept = await sweepSessionRevisions(
-      revRepo,
-      entryRepo,
-      checkpointRepo,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
 
     // 触发器已连带回收归零 blob，再跑一次延期 blob GC 兜底（应无残留可清）。
-    const gcBlobs = await runDeferredBlobGc(ctx.conn);
+    const gcBlobs = await DeferredBlobGc.run(ctx.conn);
 
     const afterActiveRev = await ctx.conn.query<{ cnt: number }>(
       `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
@@ -124,7 +110,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     // swept 应包含全部 20 条 active 孤儿 revision（v1 旧版 + v2 旧 head，ref_count 均归 0）。
     assert.ok(
       swept >= totalFiles * 2,
-      `sweepSessionRevisions 应清掉至少 ${totalFiles * 2} 条 revision（含全局孤儿），实际 ${swept}`,
+      `RevisionGc.sweepSession 应清掉至少 ${totalFiles * 2} 条 revision（含全局孤儿），实际 ${swept}`,
     );
     // 核心断言：有 content_hash 的 active revision 全清（之前的 20 条 JOIN 孤儿不再残留）。
     assert.equal(
@@ -153,8 +139,6 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
 
     // 造 10 个单版本文件（每个只有一个 head revision，ref_count>0，不是 orphan）。
     // 单版本避免双版本里旧版 ref_count=0 被 path-scoped 扫掉，干扰「存活不变」断言。
@@ -170,15 +154,8 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
       await vfs.delete(`/orphan-partial/file-${i}.txt`);
     }
 
-    const swept = await sweepSessionRevisions(
-      revRepo,
-      entryRepo,
-      checkpointRepo,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
-    await runDeferredBlobGc(ctx.conn);
+    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
+    await DeferredBlobGc.run(ctx.conn);
 
     // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
     const orphanActiveRev = await ctx.conn.query<{ cnt: number }>(
@@ -208,7 +185,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
       "应保留 5 个存活文件 entry",
     );
     for (let i = deleteCount; i < totalFiles; i++) {
-      const content = await vfs.read(`/orphan-partial/file-${i}.txt`);
+      const content = unwrap(await vfs.read(`/orphan-partial/file-${i}.txt`));
       assert.equal(
         content.content,
         `body-${i}`,
@@ -224,8 +201,6 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
 
     // 造 10 个单版本文件，都不删 → 没有任何 ref_count<=0 的 revision，也没有孤儿。
     const totalFiles = 10;
@@ -240,14 +215,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     );
     const revisionsBefore = Number(beforeRev[0]!.cnt);
 
-    const swept = await sweepSessionRevisions(
-      revRepo,
-      entryRepo,
-      checkpointRepo,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
 
     assert.equal(
       swept,

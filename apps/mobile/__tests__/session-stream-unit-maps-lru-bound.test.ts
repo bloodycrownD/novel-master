@@ -15,7 +15,7 @@
 import {describe, expect, it, jest, afterEach} from '@jest/globals';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
-import {clearAllSessionViewCaches} from '@/services/chat-session-view-cache';
+import {SessionViewCache} from '@/services/chat-session-view-cache';
 
 /** 与 manager 两张常驻表的 500 LRU 上限同值。 */
 const CAP = 500;
@@ -26,7 +26,7 @@ afterEach(() => {
   while (liveManagers.length > 0) {
     liveManagers.pop()?.dispose();
   }
-  clearAllSessionViewCaches();
+  SessionViewCache.clearAll();
 });
 
 /** 造一条 settled run_state 行（hydrate 的回填源）。 */
@@ -95,7 +95,7 @@ function fillIdleViews(
   start = 0,
 ): void {
   for (let i = start; i < start + count; i++) {
-    manager.hydrateSessionMessages('p1', `idle-${i}`);
+    manager.hydrateSessionMessages(`idle-${i}`, 'p1');
   }
 }
 

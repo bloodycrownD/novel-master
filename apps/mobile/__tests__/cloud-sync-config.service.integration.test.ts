@@ -4,13 +4,9 @@
  * 选取不触网的 service 路径（未配置 / 配置不完整的短路分支），
  * 验证 service 真实消费 store 从 KKV + SKSP 装载的状态。
  */
-import {AppError} from '@novel-master/core/agent';
-import {
-  getCloudSyncStatusView,
-  pullCloudSync,
-  pushCloudSync,
-  setCloudSyncConfig,
-} from '@/services/cloud-sync.service';
+import {AppError, Result} from '@novel-master/core/errors';
+import {CloudSyncConfigStore} from '@/services/cloud-sync-config.store';
+import {setCloudSyncConfig, CloudSyncService} from '@/services/cloud-sync.service'
 import {CLOUD_SYNC_SECRET_REF} from '@/services/cloud-sync-config.store';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -26,18 +22,23 @@ jest.mock('@aws-sdk/client-s3', () => ({
 
 class InMemoryKkv {
   private map = new Map<string, string>();
-  async get(module: string, key: string): Promise<string> {
+  async get(module: string, key: string) {
     const value = this.map.get(`${module}/${key}`);
     if (value === undefined) {
-      throw new AppError('KKV_NOT_FOUND', 'missing');
+      return Result.err(
+        new AppError('KKV_NOT_FOUND', {
+          detail: `KKV key not found: ${module}/${key}`,
+        }),
+      );
     }
-    return value;
+    return Result.ok(value);
   }
   async set(module: string, key: string, value: string): Promise<void> {
     this.map.set(`${module}/${key}`, value);
   }
-  async delete(module: string, key: string): Promise<void> {
+  async delete(module: string, key: string) {
     this.map.delete(`${module}/${key}`);
+    return Result.ok(undefined);
   }
 }
 
@@ -64,10 +65,18 @@ function makeRuntime() {
   return {runtime, secretStore};
 }
 
+
+/** 错误通道迁移四期：status view 已知失败沿 Result 上行；测试只走成功路径。 */
+async function getStatusViewOrThrow(rt: MobileNovelMasterRuntime) {
+  const r = await CloudSyncService.getStatusView(rt);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
 describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
   it('未配置时 getCloudSyncStatusView 短路返回且不触网', async () => {
     const {runtime} = makeRuntime();
-    const view = await getCloudSyncStatusView(runtime);
+    const view = await getStatusViewOrThrow(runtime);
     expect(view.configured).toBe(false);
     expect(view.remoteRev).toBe(0);
     expect(view.suggestPull).toBe(false);
@@ -76,21 +85,21 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
 
   it('未配置时 pullCloudSync / pushCloudSync 抛 NOT_CONFIGURED', async () => {
     const {runtime} = makeRuntime();
-    await expect(
-      pullCloudSync(runtime, async () => runtime),
-    ).rejects.toMatchObject({
-      name: 'CloudSyncError',
-      code: 'NOT_CONFIGURED',
-    });
-    await expect(pushCloudSync(runtime, undefined)).rejects.toMatchObject({
-      name: 'CloudSyncError',
-      code: 'NOT_CONFIGURED',
-    });
+    const pullDenied = await CloudSyncService.pull(runtime, async () => runtime);
+    expect(pullDenied.ok).toBe(false);
+    if (!pullDenied.ok) {
+      expect(pullDenied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
+    }
+    const pushDenied = await CloudSyncService.push(runtime, undefined);
+    expect(pushDenied.ok).toBe(false);
+    if (!pushDenied.ok) {
+      expect(pushDenied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
+    }
   });
 
   it('service 真实消费 store 写入的配置：SK 缺失即视为未配置', async () => {
     const {runtime, secretStore} = makeRuntime();
-    await setCloudSyncConfig(runtime, {
+    await CloudSyncConfigStore.set(runtime, {
       endpoint: 'https://s3.example.com',
       bucket: 'my-bucket',
       region: '',
@@ -100,14 +109,14 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
       forcePathStyle: false,
     });
     // 配置完整 → configured；远端 rev 读取因 S3 拒绝而回退 0（service 的 catch 兕底）
-    const configuredView = await getCloudSyncStatusView(runtime);
+    const configuredView = await getStatusViewOrThrow(runtime);
     expect(configuredView.configured).toBe(true);
     expect(configuredView.remoteRev).toBe(0);
 
     // SK 被清除后（如用户手动清库），store 装载的 configured 回落 false，
     // service 走未配置短路而不触网
     await secretStore.delete(CLOUD_SYNC_SECRET_REF);
-    const view = await getCloudSyncStatusView(runtime);
+    const view = await getStatusViewOrThrow(runtime);
     expect(view.configured).toBe(false);
     expect(view.remoteRev).toBe(0);
   });

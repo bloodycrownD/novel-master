@@ -15,12 +15,7 @@ import {readFileSync} from 'fs';
 import {join} from 'path';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {SimpleEventBus} from '@novel-master/core/events';
-import {
-  clearAllSessionViewCaches,
-  getSessionViewCache,
-  sessionViewCacheKey,
-  setSessionViewCache,
-} from '../src/services/chat-session-view-cache';
+import {SessionViewCache} from '../src/services/chat-session-view-cache';
 import type {MobileNovelMasterRuntime} from '../src/runtime/types';
 import type {ChatMessageData} from '@novel-master/core/chat';
 
@@ -48,8 +43,8 @@ function createHarness(tailImpl: (sid: string) => Promise<ChatMessageData[]>) {
     sessions: {get: jest.fn(async (sid: string) => ({id: sid}))},
     projects: {get: jest.fn(async (pid: string) => ({id: pid}))},
     messages: {
-      listBySessionTail: jest.fn((sid: string) => tailImpl(sid)),
-      listBySessionPage: jest.fn(async () => []),
+      listBySessionTail: jest.fn(async (sid: string) => ({kind: 'completed' as const, value: await tailImpl(sid)})),
+      listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
     },
   } as unknown as MobileNovelMasterRuntime;
   const manager = new SessionStreamUnitManager({
@@ -61,10 +56,10 @@ function createHarness(tailImpl: (sid: string) => Promise<ChatMessageData[]>) {
 
 describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞态）', () => {
   beforeEach(() => {
-    clearAllSessionViewCaches();
+    SessionViewCache.clearAll();
   });
   afterEach(() => {
-    clearAllSessionViewCaches();
+    SessionViewCache.clearAll();
   });
 
   it('在途 tail 加载期间并行查看另一会话：结果只落属主视图，不串进当前会话', async () => {
@@ -105,10 +100,10 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     ).toBe(false);
     // 属主缓存照常刷新（重进 A 水合即最终列表——消息不丢失）。
     expect(
-      getSessionViewCache(sessionViewCacheKey('proj-1', 'sess-A'))?.messages,
+      SessionViewCache.get(SessionViewCache.key('proj-1', 'sess-A'))?.messages,
     ).toEqual(messagesOfA);
     expect(
-      getSessionViewCache(sessionViewCacheKey('proj-1', 'sess-B'))?.messages,
+      SessionViewCache.get(SessionViewCache.key('proj-1', 'sess-B'))?.messages,
     ).toEqual(messagesOfB);
     manager.dispose();
   });
@@ -126,15 +121,16 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     ).runtime.messages.listBySessionPage.mockImplementation(
       () =>
         new Promise(resolve => {
-          releaseOlder = (list: ChatMessageData[]) => resolve(list ?? []);
+          releaseOlder = (list: ChatMessageData[]) =>
+            resolve({kind: 'completed' as const, value: list ?? []});
         }),
     );
     // 预置 B 的 idle 视图（缓存水合路径）
-    setSessionViewCache(sessionViewCacheKey('proj-1', 'sess-B'), {
+    SessionViewCache.set(SessionViewCache.key('proj-1', 'sess-B'), {
       messages: rowsB,
       hasMoreMessages: true,
     });
-    manager.hydrateSessionMessages('proj-1', 'sess-B');
+    manager.hydrateSessionMessages('sess-B', 'proj-1');
     expect(manager.readMessagesSnapshot('sess-B')?.messages).toEqual(rowsB);
 
     // B 的分页发起后挂起；期间 A 完成一轮 tail 加载（模拟切换查看）。
@@ -161,7 +157,7 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     const {manager, runtime} = createHarness(async () => finalRows);
     (
       runtime.messages as {listBySessionPage: jest.Mock}
-    ).listBySessionPage.mockImplementation(async () => []);
+    ).listBySessionPage.mockImplementation(async () => ({kind: 'completed' as const, value: []}));
 
     // 水合 idle（缓存 miss → 回源 tail）。
     await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});

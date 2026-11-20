@@ -2,167 +2,114 @@
  * Mobile VFS ZIP export/import via Core service + system file UI.
  * Export: temp cache file + platform "Save as" (local destination).
  * Import: document picker + keepLocalCopy + confirmed full replace.
+ *
+ * ZIP 基名推导、目录路径规范化与归档完整性校验都在 core（`@novel-master/core/vfs`）；
+ * 本模块只保留 picker / 缓存落盘。
  */
 import {types} from '@react-native-documents/picker';
+import {AppError} from '@novel-master/core/errors';
 import {
-  createVfsZipIoService,
+  VfsServiceFactory,
+  VfsZipArchive,
+  VfsZipPath,
   type VfsScope,
   type VfsZipImportOptions,
-  VfsZipError,
 } from '@novel-master/core/vfs';
-import {exportBytesViaDocumentPicker, pickAndReadBytes} from './document-io';
-import {blobFs, bytesToBase64} from './rn-file-io';
+import {Encoding} from '@novel-master/core/common';
+import {Result} from '@novel-master/core/errors';
+import {DocumentIo, type PickAndReadOptions} from './document-io';
+import {RnFileIo} from './rn-file-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-
-/**
- * 从目标路径推导 ZIP 基名：子目录取末段、文件取文件名；根目录返回 null
- * （由服务层解析项目名，见 resolveWorkspaceZipName）。
- */
-export function zipBaseNameFromPath(targetPath: string): string | null {
-  const normalized = targetPath.replace(/\/+$/, '');
-  if (normalized === '' || normalized === '/') {
-    return null;
-  }
-  const lastSegment = normalized.slice(normalized.lastIndexOf('/') + 1);
-  return lastSegment === '' ? null : lastSegment;
-}
 
 /** 根目录导出的备用名：项目已删除或域无 projectId 时使用。 */
 const WORKSPACE_FALLBACK_ZIP_NAME = 'workspace.zip';
-
-/** 根目录导出时以项目名命名；解析失败回退备用名，不阻断导出。 */
-async function resolveWorkspaceZipName(
-  runtime: MobileNovelMasterRuntime,
-  scope: VfsScope,
-): Promise<string> {
-  const projectId = (scope as {projectId?: string}).projectId;
-  if (projectId == null) {
-    return WORKSPACE_FALLBACK_ZIP_NAME;
-  }
-  try {
-    const project = await runtime.projects.get(projectId);
-    return `${project.name}.zip`;
-  } catch {
-    return WORKSPACE_FALLBACK_ZIP_NAME;
-  }
-}
-
-const EOCD_SIGNATURE = 0x06054b50;
-
-/** 自文件尾向前扫描 EOCD（PK\\x05\\x06），用于发现截断或损坏的归档。 */
-function findZipEocdOffset(bytes: Uint8Array): number {
-  const minEocdSize = 22;
-  const maxCommentLen = 0xffff;
-  const searchStart = Math.max(0, bytes.length - (minEocdSize + maxCommentLen));
-  for (let i = bytes.length - minEocdSize; i >= searchStart; i--) {
-    const sig =
-      (bytes[i]! |
-        (bytes[i + 1]! << 8) |
-        (bytes[i + 2]! << 16) |
-        (bytes[i + 3]! << 24)) >>>
-      0;
-    if (sig === EOCD_SIGNATURE) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-function assertZipArchive(bytes: Uint8Array): void {
-  const hasLocalHeader =
-    bytes.length >= 4 &&
-    bytes[0] === 0x50 &&
-    bytes[1] === 0x4b &&
-    (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
-    (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
-  if (!hasLocalHeader) {
-    throw new VfsZipError(
-      'INVALID_ZIP',
-      `not a ZIP archive (${bytes.length} bytes)`,
-    );
-  }
-  if (findZipEocdOffset(bytes) < 0) {
-    throw new VfsZipError(
-      'INVALID_ZIP',
-      `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)`,
-    );
-  }
-}
 
 /**
  * 导出 VFS 子树为 ZIP：默认名 = 覆盖名（fileName） > 子目录末段 > 根目录项目名
  * > 备用名；仅作保存框默认值，用户可改。
  */
-export async function exportVfsZip(
-  runtime: MobileNovelMasterRuntime,
-  scope: VfsScope,
-  options: {
-    readonly directoryPath?: string;
-    readonly fileName?: string;
-  } = {},
-): Promise<'saved' | 'cancelled'> {
-  const directoryPath =
-    options.directoryPath == null || options.directoryPath.trim() === ''
-      ? '/'
-      : options.directoryPath;
-  const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope, {directoryPath});
-  assertZipArchive(bytes);
+type ExportVfsZipOptions = {
+  readonly directoryPath?: string;
+  readonly fileName?: string;
+};
 
-  const base = zipBaseNameFromPath(directoryPath);
-  const zipName =
-    options.fileName ??
-    (base != null
-      ? `${base}.zip`
-      : await resolveWorkspaceZipName(runtime, scope));
+type ImportVfsZipOptions = Pick<VfsZipImportOptions, 'confirmed'> & {
+  readonly directoryPath?: string;
+};
 
-  return exportBytesViaDocumentPicker({
-    fileName: zipName,
-    mimeType: 'application/zip',
-    write: tmpPath =>
-      blobFs().writeFile(tmpPath, bytesToBase64(bytes), 'base64'),
-  });
-}
-
-/** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
-export async function pickZipFileBytes(): Promise<Uint8Array | null> {
-  const bytes = await pickAndReadBytes({
-    mimeTypes: [types.zip],
-    localFileName: 'import.zip',
-    buildCopyError: copyError =>
-      new VfsZipError(
-        'INVALID_ZIP',
-        copyError ?? 'failed to copy picked ZIP into app cache',
-      ),
-    buildMissingError: fsPath =>
-      new VfsZipError('INVALID_ZIP', `ZIP file not found at ${fsPath}`),
-  });
-  if (bytes == null) {
-    return null;
-  }
-  assertZipArchive(bytes);
-  return bytes;
-}
-
-export async function importVfsZip(
-  runtime: MobileNovelMasterRuntime,
-  scope: VfsScope,
-  options: Pick<VfsZipImportOptions, 'confirmed'> & {
-    readonly directoryPath?: string;
-  },
-): Promise<void> {
-  const zipBytes = await pickZipFileBytes();
-  if (zipBytes == null) {
-    return;
+export namespace VfsZipService {
+  // nm-style: keep-local — 独立 IO 管线（项目名解析 → `.zip` 命名）；Result/catch 双层回退到备用名是不变量，内联进条件 await 会打散兜底语义。
+  /** 根目录导出时以项目名命名；解析失败回退备用名，不阻断导出。 */
+  async function resolveWorkspaceZipName(runtime: MobileNovelMasterRuntime, scope: VfsScope): Promise<string> {
+    const projectId = (scope as {projectId?: string}).projectId;
+    if (projectId == null) {
+      return WORKSPACE_FALLBACK_ZIP_NAME;
+    }
+    try {
+      const project = await runtime.projects.get(projectId);
+      // 解析失败回退备用名，不阻断导出（错误通道迁移四期：Result 失败同款兜底）。
+      if (!project.ok) {
+        return WORKSPACE_FALLBACK_ZIP_NAME;
+      }
+      return `${project.value.name}.zip`;
+    } catch {
+      return WORKSPACE_FALLBACK_ZIP_NAME;
+    }
   }
 
-  const directoryPath =
-    options.directoryPath == null || options.directoryPath.trim() === ''
-      ? '/'
-      : options.directoryPath;
-  const zipSvc = createVfsZipIoService(runtime.conn);
-  await zipSvc.import(scope, zipBytes, {
-    confirmed: options.confirmed,
-    directoryPath,
-  });
+  export async function exportZip(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: ExportVfsZipOptions = {}): Promise<Result<'saved' | 'cancelled', AppError>> {
+    const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+    const directoryPath = directoryPathResult.value;
+    const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
+    const exported = await zipSvc.export(scope, {directoryPath});
+    if (!exported.ok) return Result.err(exported.error);
+    const bytes = exported.value;
+    const archiveCheck = VfsZipArchive.assert(bytes, 'complete');
+    if (!archiveCheck.ok) return Result.err(archiveCheck.error);
+
+    const base = VfsZipPath.baseNameFromPath(directoryPath);
+    const zipName = options.fileName ?? (base != null ? `${base}.zip` : await resolveWorkspaceZipName(runtime, scope));
+
+    return Result.ok(await DocumentIo.exportBytes({
+      fileName: zipName,
+      mimeType: 'application/zip',
+      write: tmpPath => RnFileIo.blobFs().writeFile(tmpPath, Encoding.bytesToBase64(bytes), 'base64'),
+    }));
+  }
+
+  /** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null（`Result.ok(null)`）。 */
+  export async function pickBytes(): Promise<Result<Uint8Array | null, AppError>> {
+    const pickOptions: PickAndReadOptions = {
+      mimeTypes: [types.zip],
+      localFileName: 'import.zip',
+      buildCopyError: copyError => new AppError('VFS_ZIP_INVALID_ARCHIVE', {detail: copyError ?? 'failed to copy picked ZIP into app cache'}),
+      buildMissingError: fsPath => new AppError('VFS_ZIP_INVALID_ARCHIVE', {detail: `ZIP file not found at ${fsPath}`}),
+    };
+    const bytes = await DocumentIo.pickAndReadBytes(pickOptions);
+    if (bytes == null) {
+      return Result.ok(null);
+    }
+    const archiveCheck = VfsZipArchive.assert(bytes, 'complete');
+    if (!archiveCheck.ok) return Result.err(archiveCheck.error);
+    return Result.ok(bytes);
+  }
+
+  // nm-style: keep-public — vfs-zip.service.test.ts 多用例直接 import 断言；4 个 file-manager 集成测试 mock 模块接缝，测试锁名（锁名随成员迁移为 VfsZipService.importZip，消费点波次同步）
+  export async function importZip(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: ImportVfsZipOptions): Promise<Result<void, AppError>> {
+    const picked = await pickBytes();
+    if (!picked.ok) return Result.err(picked.error);
+    if (picked.value == null) {
+      return Result.ok(undefined);
+    }
+    const zipBytes = picked.value;
+
+    const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+    const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
+    return zipSvc.import(scope, zipBytes, {
+      confirmed: options.confirmed,
+      directoryPath: directoryPathResult.value,
+    });
+  }
 }

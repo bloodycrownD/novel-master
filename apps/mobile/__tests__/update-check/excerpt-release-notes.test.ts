@@ -1,4 +1,4 @@
-import {excerptReleaseNotes} from '@novel-master/core/common';
+import {Release} from '@novel-master/core/common';
 
 const WORKFLOW_BODY = `# Novel Master v1.0.3
 
@@ -17,7 +17,7 @@ const WORKFLOW_BODY = `# Novel Master v1.0.3
 
 describe('excerptReleaseNotes', () => {
   it('prefers 更新说明 over platform tables', () => {
-    const text = excerptReleaseNotes(WORKFLOW_BODY, 'mobile');
+    const text = Release.excerptNotes(WORKFLOW_BODY, 'mobile');
     expect(text).not.toMatch(/\|/);
     expect(text).toMatch(/保留已生成内容/);
     expect(text).not.toMatch(/universal\.apk/);
@@ -31,7 +31,7 @@ describe('excerptReleaseNotes', () => {
 | NovelMaster-1.0.3-universal.apk | all (fat) |
 
 Install tip: use universal.`;
-    const text = excerptReleaseNotes(body, 'mobile');
+    const text = Release.excerptNotes(body, 'mobile');
     expect(text).not.toMatch(/\|/);
     expect(text).toMatch(/universal/i);
   });

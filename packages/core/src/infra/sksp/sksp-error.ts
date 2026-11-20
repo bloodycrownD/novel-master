@@ -5,12 +5,7 @@
  */
 
 /** Discriminant codes for {@link SkspError}. */
-export type SkspErrorCode =
-  | "NOT_REGISTERED"
-  | "ENCRYPT_FAILED"
-  | "DECRYPT_FAILED"
-  | "DB_ERROR"
-  | "INVALID_REF";
+export type SkspErrorCode = "NOT_REGISTERED" | "ENCRYPT_FAILED" | "DECRYPT_FAILED" | "DB_ERROR" | "INVALID_REF";
 
 /**
  * Unified error for SKSP driver and composite operations.
@@ -20,11 +15,7 @@ export class SkspError extends Error {
   readonly ref?: string;
   readonly cause?: unknown;
 
-  constructor(
-    code: SkspErrorCode,
-    message: string,
-    options?: { ref?: string; cause?: unknown }
-  ) {
+  constructor(code: SkspErrorCode, message: string, options?: { ref?: string; cause?: unknown }) {
     super(message);
     this.name = "SkspError";
     this.code = code;
@@ -35,9 +26,14 @@ export class SkspError extends Error {
 
 const MAX_REF_LENGTH = 512;
 
-/** Validates opaque secret ref before DB / crypto operations. */
-export function assertValidRef(ref: string): void {
-  if (ref.length === 0 || ref.length > MAX_REF_LENGTH || ref.includes("\0")) {
-    throw new SkspError("INVALID_REF", `Invalid secret ref: ${ref}`, { ref });
-  }
-}
+/**
+ * SKSP secret ref 校验（与 {@link SkspError} 同文件的轻量断言面）。
+ */
+export const SkspRefAssert = {
+  /** Validates opaque secret ref before DB / crypto operations. */
+  validRef(ref: string): void {
+    if (ref.length === 0 || ref.length > MAX_REF_LENGTH || ref.includes("\0")) {
+      throw new SkspError("INVALID_REF", `Invalid secret ref: ${ref}`, { ref });
+    }
+  },
+} as const;

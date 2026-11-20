@@ -4,12 +4,12 @@
  * T-IPC1R（原 T-IPC1 反转）：runCompaction 以 `trigger:"manual"` 成功后**清掉**
  * 预置的 session kkv（file_cache / rule_snapshot 都空——手动压缩是用户主动的
  * 重整意图，下一次拼提示词时 workplace 块按当前工作区重评估；自动压缩才不清），
- * 保留 user_vfs_pending，并调 notifyComposerStatusAfterFloorOrCompaction。
- * 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
- * COMPOSER_ATTACHMENTS_SUGGEST，用 setComposerAttachmentsSuggestForwardTarget 注入假 webContents
+ * 保留 user_vfs_pending，并调 refreshComposerStatusAfterFloorOrCompaction。
+ * 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
+ * COMPOSER_ATTACHMENTS_SUGGEST，用 ComposerAttachmentsSuggestForwarder.setTarget 注入假 webContents
  * 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
  *
- * T-CR6：run 在途时手动压缩被拦。注入方式是向 `rt.abortRegistry` 真注册一个
+ * T-CR6：run 在途时手动压缩被拦。注入方式是向 `rt.agentAbortRegistry` 真注册一个
  * controller（`isDesktopSessionRunInFlight` 的判定源；desktop 测试运行器未开
  * `--experimental-test-module-mocks`，**不能用 mock.module**，先例见
  * chat-prompt-tokens-run-suppression.test.ts 的 registerRunInFlight）。
@@ -34,22 +34,22 @@ import { after, before, describe, it } from "node:test";
 import {
   promptWholeCache,
   sessionApiPromptTokenCache,
-} from "@novel-master/core/provider";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleCompactionManual } from "../src/main/ipc/handlers/compaction.js";
-import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleProvidersCreate } from "../src/main/ipc/handlers/providers.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
+} from "@novel-master/core/tokenizer";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { CompactionIpc } from "../src/main/ipc/handlers/compaction.js";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
 import {
   IPC_CHANNELS,
   type PromptChatTokenUpdatedPayload,
 } from "../shared/ipc-types.js";
-import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
-import { loadChatPromptTokenStats } from "../src/main/services/chat-prompt-tokens.service.js";
+import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
+import { ChatPromptTokensService } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -63,7 +63,7 @@ describe("handleCompactionManual", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-compaction-"));
 
-    const project = await handleProjectsCreate({ name: "compaction-ipc" });
+    const project = await Projects.create({ name: "compaction-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -71,13 +71,13 @@ describe("handleCompactionManual", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "compaction-session",
     });
@@ -87,9 +87,9 @@ describe("handleCompactionManual", () => {
     }
     sessionId = session.data.id;
 
-    await handleMessagesAppend({ sessionId, role: "user", text: "u1" });
-    await handleMessagesAppend({ sessionId, role: "assistant", text: "a1" });
-    await handleMessagesAppend({ sessionId, role: "user", text: "u2" });
+    await Messages.append({ sessionId, role: "user", text: "u1" });
+    await Messages.append({ sessionId, role: "assistant", text: "a1" });
+    await Messages.append({ sessionId, role: "user", text: "u2" });
   });
 
   after(async () => {
@@ -97,7 +97,9 @@ describe("handleCompactionManual", () => {
   });
 
   it("T-IPC1R: manual 压缩（trigger:manual）成功后清 file_cache / rule_snapshot，保留 pending", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const pendingJson = JSON.stringify([
       {
         actionXml: '<action name="mkdir"><path>/keep</path></action>',
@@ -127,12 +129,12 @@ describe("handleCompactionManual", () => {
       "canon",
     ]);
 
-    // SPEC L274：runCompaction 成功后调 notifyComposerStatusAfterFloorOrCompaction，
-    // 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
+    // SPEC L274：runCompaction 成功后调 refreshComposerStatusAfterFloorOrCompaction，
+    // 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
     // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
     // notify-composer-status-after-kkv-clear.test.ts 同范式）。
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -140,7 +142,7 @@ describe("handleCompactionManual", () => {
       } as never;
     });
 
-    const result = await handleCompactionManual({ projectId, sessionId });
+    const result = await CompactionIpc.handleManual({ projectId, sessionId });
     assert.equal(result.ok, true);
     // 手动压缩是用户主动的「重整 + 刷新」意图：按内容寻址的 file_cache 与
     // workplace 规则快照一并作废，下一次拼提示词（发送或预览）时 workplace
@@ -162,7 +164,7 @@ describe("handleCompactionManual", () => {
       pendingJson,
     );
 
-    // notifyComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
+    // refreshComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
     // payload 携带本次 sessionId。
     const composerBroadcasts = sent.filter(
       (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
@@ -170,22 +172,22 @@ describe("handleCompactionManual", () => {
     assert.equal(
       composerBroadcasts.length,
       1,
-      "notifyComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
+      "refreshComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
     );
     assert.deepEqual(composerBroadcasts[0]?.payload, {
       sessionId,
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   /**
    * T-CR6：run 在途时手动压缩被 main 侧门禁拦下。
    *
-   * 为什么注入 abortRegistry 真态而不是 mock 掉 runCompaction：desktop 测试
+   * 为什么注入 agent 门面真态而不是 mock 掉 runCompaction：desktop 测试
    * 运行器没开 `--experimental-test-module-mocks`，`mock.module` 不可用；判活源
-   * 写死 `rt.abortRegistry.has(sessionId)`，而 abortRegistry 是 core 受理 run 时
+   * 写死 `rt.agentAbortRegistry.has(sessionId)`，而门面记录是 core 受理 run 时
    * 自己登记的，desktop 侧没有可写的影子——只能按 `runAgentTurn` 入口同款真
    * 注册一个 controller（先例：chat-prompt-tokens-run-suppression.test.ts 的
    * registerRunInFlight）。
@@ -196,10 +198,12 @@ describe("handleCompactionManual", () => {
    * 防「空对空恒真」。
    */
   it("T-CR6: run 在途时手动压缩被拦（AGENT_RUN_IN_FLIGHT），不广播不清理", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
 
     // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "compaction-run-in-flight",
     });
@@ -224,7 +228,7 @@ describe("handleCompactionManual", () => {
     );
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -232,12 +236,12 @@ describe("handleCompactionManual", () => {
       } as never;
     });
 
-    // 伪造成「run 在途」：向 core abortRegistry 注册一个 controller。
+    // 伪造成「run 在途」：向 core agent 门面注册一个 controller。
     const controller = new AbortController();
-    rt.abortRegistry.register(cr6SessionId, controller);
+    rt.agentAbortRegistry.register(cr6SessionId, controller);
 
     try {
-      const result = await handleCompactionManual({
+      const result = await CompactionIpc.handleManual({
         projectId,
         sessionId: cr6SessionId,
       });
@@ -271,8 +275,8 @@ describe("handleCompactionManual", () => {
         "被拦下时不得清 rule_snapshot",
       );
     } finally {
-      rt.abortRegistry.unregister(cr6SessionId, controller);
-      setComposerAttachmentsSuggestForwardTarget(() => undefined);
+      rt.agentAbortRegistry.unregister(cr6SessionId, controller);
+      ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
     }
   });
 
@@ -285,7 +289,7 @@ describe("handleCompactionManual", () => {
   // 本用例聚焦 IPC 层 handleCompactionManual → runCompaction → notify 的链路。
   it("T-CR5: 无预置 kkv 时 runCompaction 仍返回 ok 并触发 composer 广播", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -293,7 +297,7 @@ describe("handleCompactionManual", () => {
       } as never;
     });
 
-    const result = await handleCompactionManual({ projectId, sessionId });
+    const result = await CompactionIpc.handleManual({ projectId, sessionId });
     assert.equal(result.ok, true);
     assert.equal(
       result.data?.ok,
@@ -311,7 +315,7 @@ describe("handleCompactionManual", () => {
       "runCompaction 成功时应广播一次 COMPOSER_ATTACHMENTS_SUGGEST",
     );
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   /**
@@ -329,11 +333,13 @@ describe("handleCompactionManual", () => {
    * 后台暖机推送精确档——这正是「交给常规刷新自然跟进」的形态。
    */
   it("T-IPC2: 压缩 IPC 成功返回不依赖也不触发显式暖机（读数交给常规刷新）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
 
     // 与旧用例同款前提：现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」
     // 的场景——没有可用模型时压根没有精确档，「没有推送」的断言会失去牙齿。
-    const provider = await handleProvidersCreate({
+    const provider = await Providers.create({
       protocol: "openai",
       baseUrl: "https://api.openai.com/v1",
       displayName: "openai-compaction-nowarm",
@@ -347,16 +353,18 @@ describe("handleCompactionManual", () => {
       provider.data.providerId,
       "gpt-4o",
     );
-    await rt.state.setCurrentModelId(saved.id);
+    // 四期签名：save 沿 Result 回传，解包取实体。
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
 
-    const project = await handleProjectsCreate({
+    const project = await Projects.create({
       name: "compaction-nowarm-ipc",
     });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "compaction-nowarm",
     });
@@ -365,7 +373,7 @@ describe("handleCompactionManual", () => {
       return;
     }
     const scope = { projectId: project.data.id, sessionId: session.data.id };
-    await handleMessagesAppend({
+    await Messages.append({
       sessionId: scope.sessionId,
       role: "user",
       text: "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
@@ -378,7 +386,7 @@ describe("handleCompactionManual", () => {
     promptWholeCache.clearForTests();
 
     const pushed: PromptChatTokenUpdatedPayload[] = [];
-    setPromptChatTokenUpdatedForwardTarget(
+    PromptChatTokenUpdatedForwarder.setTarget(
       () =>
         ({
           send: (channel: string, payload: unknown) => {
@@ -390,7 +398,7 @@ describe("handleCompactionManual", () => {
     );
 
     try {
-      const result = await handleCompactionManual(scope);
+      const result = await CompactionIpc.handleManual(scope);
       assert.equal(result.ok, true);
       assert.equal(result.data?.ok, true);
 
@@ -410,9 +418,10 @@ describe("handleCompactionManual", () => {
       );
 
       // 判据③：常规读口首帧如实回落估算档（L1 没被压缩路径写热）。
-      const firstFrame = await loadChatPromptTokenStats(rt, scope);
+      const firstFrame = await ChatPromptTokensService.load(rt, scope);
+      if (!firstFrame.ok) throw firstFrame.error;
       assert.equal(
-        firstFrame?.estimated,
+        firstFrame.value?.estimated,
         true,
         "压缩后常规读口首帧应回落估算档（压缩路径不该预写 L1）",
       );
@@ -433,7 +442,7 @@ describe("handleCompactionManual", () => {
       assert.equal(upgraded.stats.estimated, false);
       assert.equal(upgraded.stats.counterKind, "tiktoken");
     } finally {
-      setPromptChatTokenUpdatedForwardTarget(() => undefined);
+      PromptChatTokenUpdatedForwarder.setTarget(() => undefined);
     }
   });
 

@@ -6,10 +6,7 @@ import {Alert} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 
 /** Confirm before leaving a screen with dirty editor state. */
-export function useUnsavedGuard(
-  isDirty: boolean,
-  message = '有未保存的更改，确定离开？',
-): {allowLeaveWithoutPrompt: () => void} {
+export function useUnsavedGuard(isDirty: boolean, message = '有未保存的更改，确定离开？'): {allowLeaveWithoutPrompt: () => void} {
   const navigation = useNavigation();
   const allowLeaveRef = useRef(false);
 

@@ -3,21 +3,7 @@ import {
   userVfsTurnStorage,
   type ChatMessageData,
 } from '@novel-master/core/chat';
-import {
-  buildChatListItems,
-  buildToolResultByUseId,
-  isDisplayableAttachment,
-  isTurnToolExecuting,
-  messageHasToolUse,
-  resolveToolResultsMessageId,
-  skillToolRef,
-  toolCallViewFromUse,
-  toolUseIdsFromMessage,
-  turnToolResultsComplete,
-  vfsToolFilePath,
-  type BuildChatListItemsOptions,
-  type ChatListItem,
-} from '@/components/chat/message-blocks';
+import {type BuildChatListItemsOptions, type ChatListItem, MessageBlocks} from '@/components/chat/message-blocks';
 
 function msg(
   id: string,
@@ -75,7 +61,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('success');
     }
@@ -116,7 +102,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('success');
     }
@@ -144,7 +130,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('success');
     }
@@ -176,7 +162,7 @@ describe('message-blocks', () => {
         4,
       ),
     ];
-    const errorItems = buildChatListItems(errorMessages);
+    const errorItems = MessageBlocks.buildChatListItems(errorMessages);
     if (errorItems[0]?.kind === 'message') {
       expect(errorItems[0].tools[0]?.status).toBe('error');
     }
@@ -210,7 +196,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('error');
     }
@@ -231,8 +217,8 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const map = buildToolResultByUseId(messages);
-    const view = toolCallViewFromUse(
+    const map = MessageBlocks.buildToolResultByUseId(messages);
+    const view = MessageBlocks.toolCallViewFromUse(
       {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
       map,
     );
@@ -249,7 +235,7 @@ describe('message-blocks', () => {
         1,
       ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: false});
+    const items = MessageBlocks.buildChatListItems(messages, {agentRunning: false});
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
@@ -280,7 +266,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages, {runUiStopped: true});
+    const items = MessageBlocks.buildChatListItems(messages, {runUiStopped: true});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(2);
       expect(items[0].tools[0]?.status).toBe('success');
@@ -297,7 +283,7 @@ describe('message-blocks', () => {
         1,
       ),
     ];
-    const items = buildChatListItems(messages, {
+    const items = MessageBlocks.buildChatListItems(messages, {
       agentRunning: true,
       runUiStopped: true,
     });
@@ -315,7 +301,7 @@ describe('message-blocks', () => {
         1,
       ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: true});
+    const items = MessageBlocks.buildChatListItems(messages, {agentRunning: true});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('pending');
@@ -337,7 +323,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: true});
+    const items = MessageBlocks.buildChatListItems(messages, {agentRunning: true});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('success');
@@ -359,7 +345,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: true});
+    const items = MessageBlocks.buildChatListItems(messages, {agentRunning: true});
     const byId = new Map(
       items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
     );
@@ -376,7 +362,7 @@ describe('message-blocks', () => {
         1,
       ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: false});
+    const items = MessageBlocks.buildChatListItems(messages, {agentRunning: false});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('error');
       expect(items[0].tools[0]?.status).not.toBe('pending');
@@ -400,8 +386,8 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    expect(turnToolResultsComplete(assistant, incomplete)).toBe(false);
-    expect(turnToolResultsComplete(assistant, complete)).toBe(true);
+    expect(MessageBlocks.turnToolResultsComplete(assistant, incomplete)).toBe(false);
+    expect(MessageBlocks.turnToolResultsComplete(assistant, complete)).toBe(true);
   });
 
   it('isTurnToolExecuting requires agentRunning', () => {
@@ -411,8 +397,8 @@ describe('message-blocks', () => {
       [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
       1,
     );
-    expect(isTurnToolExecuting(assistant, [assistant], false)).toBe(false);
-    expect(isTurnToolExecuting(assistant, [assistant], true)).toBe(true);
+    expect(MessageBlocks.isTurnToolExecuting(assistant, [assistant], false)).toBe(false);
+    expect(MessageBlocks.isTurnToolExecuting(assistant, [assistant], true)).toBe(true);
   });
 
   it('merges 3 tool_use into one assistant message item when complete', () => {
@@ -448,7 +434,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(3);
@@ -474,7 +460,7 @@ describe('message-blocks', () => {
         3,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items.map(i => i.kind)).toEqual(['message', 'message']);
     if (items[1]?.kind === 'message') {
       expect(items[1].tools).toHaveLength(1);
@@ -486,7 +472,7 @@ describe('message-blocks', () => {
       msg('u1', 'user', [{type: 'text', text: 'visible'}], 1),
       msg('u2', 'user', [{type: 'text', text: 'hidden row'}], 2, true),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items).toHaveLength(2);
     expect(items.every(i => i.kind === 'message')).toBe(true);
     if (items[1]?.kind === 'message') {
@@ -510,8 +496,8 @@ describe('message-blocks', () => {
         true,
       ),
     ];
-    const map = buildToolResultByUseId(messages);
-    const items = buildChatListItems(messages);
+    const map = MessageBlocks.buildToolResultByUseId(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(map.get('tu1')?.content).toBe('ok');
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('success');
@@ -528,7 +514,7 @@ describe('message-blocks', () => {
         true,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].message.hidden).toBe(true);
@@ -556,7 +542,7 @@ describe('message-blocks', () => {
         },
       ],
     };
-    const items = buildChatListItems([emptyBodyWithAttach]);
+    const items = MessageBlocks.buildChatListItems([emptyBodyWithAttach]);
     expect(items).toHaveLength(1);
     expect(items[0]?.kind).toBe('message');
     if (items[0]?.kind === 'message') {
@@ -577,7 +563,7 @@ describe('message-blocks', () => {
         },
       ],
     };
-    expect(buildChatListItems([opsOnly])).toHaveLength(0);
+    expect(MessageBlocks.buildChatListItems([opsOnly])).toHaveLength(0);
   });
 
   it('omits tool_results-only user messages from list', () => {
@@ -595,7 +581,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items).toHaveLength(1);
     expect(items[0]?.message.id).toBe('a1');
   });
@@ -622,9 +608,9 @@ describe('message-blocks', () => {
       ),
     ];
     const assistant = messages[0]!;
-    expect(toolUseIdsFromMessage(assistant)).toEqual(['tu1', 'tu2']);
-    expect(messageHasToolUse(assistant)).toBe(true);
-    expect(resolveToolResultsMessageId(messages, assistant)).toBe('u1');
+    expect(MessageBlocks.toolUseIdsFromMessage(assistant)).toEqual(['tu1', 'tu2']);
+    expect(MessageBlocks.hasToolUse(assistant)).toBe(true);
+    expect(MessageBlocks.resolveToolResultsMessageId(messages, assistant)).toBe('u1');
   });
 
   it('resolveToolResultsMessageId skips non-matching later user messages', () => {
@@ -643,7 +629,7 @@ describe('message-blocks', () => {
         3,
       ),
     ];
-    expect(resolveToolResultsMessageId(messages, messages[0]!)).toBe('u2');
+    expect(MessageBlocks.resolveToolResultsMessageId(messages, messages[0]!)).toBe('u2');
   });
 
   it('buildChatListItems keeps thinking, text, then tools block order', () => {
@@ -665,7 +651,7 @@ describe('message-blocks', () => {
         2,
       ),
     ];
-    const item = buildChatListItems(messages)[0];
+    const item = MessageBlocks.buildChatListItems(messages)[0];
     expect(item?.kind).toBe('message');
     if (item?.kind === 'message') {
       expect(item.thinkingParts).toEqual(['hmm']);
@@ -676,7 +662,7 @@ describe('message-blocks', () => {
 
   it('vfsToolFilePath returns path for vfs read/write/edit only', () => {
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't1',
         name: 'edit',
         input: {path: '/续写/a.md'},
@@ -684,7 +670,7 @@ describe('message-blocks', () => {
       }),
     ).toBe('/续写/a.md');
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't2',
         name: 'fs',
         input: {action: 'ls', path: '/'},
@@ -695,7 +681,7 @@ describe('message-blocks', () => {
 
   it('vfsToolFilePath normalizes relative paths', () => {
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't3',
         name: 'write',
         input: {path: 'chapter.md'},
@@ -703,7 +689,7 @@ describe('message-blocks', () => {
       }),
     ).toBe('/chapter.md');
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't4',
         name: 'read',
         input: {path: 'notes/a.md'},
@@ -713,9 +699,9 @@ describe('message-blocks', () => {
   });
 
   it('Bug1: vfsToolFilePath 兼容 file_path 字段名（透传到 core 兑底）', () => {
-    // 某些 LLM 会用 file_path 而非标准的 path，core resolveVfsToolFilePath 已加兼容。
+    // 某些 LLM 会用 file_path 而非标准的 path，core VfsToolFilePath.resolve 已加兼容。
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't5',
         name: 'write',
         input: {file_path: 'chapter.md'},
@@ -723,7 +709,7 @@ describe('message-blocks', () => {
       }),
     ).toBe('/chapter.md');
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't6',
         name: 'edit',
         input: {file_path: '/续写/a.md'},
@@ -732,7 +718,7 @@ describe('message-blocks', () => {
     ).toBe('/续写/a.md');
     // path 优先于 file_path
     expect(
-      vfsToolFilePath({
+      MessageBlocks.vfsToolFilePath({
         toolUseId: 't7',
         name: 'write',
         input: {path: 'a.md', file_path: 'b.md'},
@@ -772,22 +758,22 @@ describe('message-blocks', () => {
         true,
       ),
     ];
-    const results = buildToolResultByUseId(messages);
+    const results = MessageBlocks.buildToolResultByUseId(messages);
     const use = messages[0]!.content.blocks[0] as never as {
       type: 'tool_use';
       id: string;
       name: string;
       input: Record<string, unknown>;
     };
-    const view = toolCallViewFromUse(use, results);
+    const view = MessageBlocks.toolCallViewFromUse(use, results);
     expect(view.skillRef).toEqual({domain: 'global', name: 'demo'});
     // meta 透传优先；输入侧（read 缺省域）解析不出也不影响
-    expect(skillToolRef(view)).toEqual({domain: 'global', name: 'demo'});
+    expect(MessageBlocks.skillToolRef(view)).toEqual({domain: 'global', name: 'demo'});
   });
 
   it('T-SK8: skillToolRef 输入侧解析 write 缺省 project 域并携带 projectId', () => {
     expect(
-      skillToolRef(
+      MessageBlocks.skillToolRef(
         {
           toolUseId: 't-w',
           name: 'skill',
@@ -799,7 +785,7 @@ describe('message-blocks', () => {
     ).toEqual({domain: 'project', projectId: 'proj-1', name: 'demo'});
     // read 缺省域 pending：解析不出（等 tool_result meta）
     expect(
-      skillToolRef({
+      MessageBlocks.skillToolRef({
         toolUseId: 't-r',
         name: 'skill',
         input: {action: 'read', name: 'demo'},
@@ -834,7 +820,7 @@ describe('message-blocks', () => {
         {metadata: {kind: 'user_vfs_ack', synthetic: true}},
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items).toHaveLength(2);
     expect(items.every(i => i.kind === 'message')).toBe(true);
     expect(items[0]?.kind === 'message' && items[0].message.id).toBe('u1');
@@ -867,7 +853,7 @@ describe('message-blocks', () => {
         {metadata: {kind: 'user_vfs_ack', synthetic: true}},
       ),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items).toHaveLength(2);
     expect(items.every(i => i.kind === 'message')).toBe(true);
     expect(items[0]?.kind === 'message' && items[0].message.hidden).toBe(true);
@@ -920,7 +906,7 @@ describe('message-blocks', () => {
         metadata: {kind: 'tool_turn_bridge', synthetic: true},
       }),
     ];
-    const items = buildChatListItems(messages);
+    const items = MessageBlocks.buildChatListItems(messages);
     expect(items.every(i => i.kind === 'message')).toBe(true);
     expect(items.length).toBeGreaterThan(1);
   });
@@ -940,12 +926,12 @@ function legacyTurnToolResultsComplete(
   assistant: ChatMessageData,
   messages: readonly ChatMessageData[],
 ): boolean {
-  const required = toolUseIdsFromMessage(assistant);
+  const required = MessageBlocks.toolUseIdsFromMessage(assistant);
   if (required.length === 0) {
     return true;
   }
   // 旧实现：每次现场重建全量 map（O(n)）。
-  const results = buildToolResultByUseId(messages);
+  const results = MessageBlocks.buildToolResultByUseId(messages);
   return required.every(id => results.has(id));
 }
 
@@ -956,7 +942,7 @@ function legacyLastIncompleteToolAssistant(
   for (const message of messages) {
     if (
       message.role === 'assistant' &&
-      messageHasToolUse(message) &&
+      MessageBlocks.hasToolUse(message) &&
       !legacyTurnToolResultsComplete(message, messages)
     ) {
       last = message;
@@ -970,7 +956,7 @@ function legacyIsTurnToolExecuting(
   messages: readonly ChatMessageData[],
   agentRunning: boolean,
 ): boolean {
-  if (!agentRunning || !messageHasToolUse(assistant)) {
+  if (!agentRunning || !MessageBlocks.hasToolUse(assistant)) {
     return false;
   }
   if (legacyTurnToolResultsComplete(assistant, messages)) {
@@ -986,7 +972,7 @@ function legacyBuildChatListItems(
 ): ChatListItem[] {
   const agentRunning = options.agentRunning ?? false;
   const runUiStopped = options.runUiStopped ?? false;
-  const results = buildToolResultByUseId(messages);
+  const results = MessageBlocks.buildToolResultByUseId(messages);
   const items: ChatListItem[] = [];
   for (const message of messages) {
     const blocks = message.content.blocks ?? [];
@@ -1024,7 +1010,7 @@ function legacyBuildChatListItems(
     }
     const hasToolUse = toolUses.length > 0;
     const displayAttachments = (message.attachments ?? []).filter(
-      isDisplayableAttachment,
+      MessageBlocks.isDisplayableAttachment,
     );
     const hasAttachments = displayAttachments.length > 0;
     const unpairedStatus = hasToolUse
@@ -1035,7 +1021,7 @@ function legacyBuildChatListItems(
         : 'error'
       : undefined;
     const tools = toolUses.map(use => {
-      const view = toolCallViewFromUse(use, results, options);
+      const view = MessageBlocks.toolCallViewFromUse(use, results, options);
       if (view.status === 'pending' && unpairedStatus != null) {
         return {...view, status: unpairedStatus};
       }
@@ -1156,7 +1142,7 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
         dropLastResults: true,
       });
       expect(messages).toHaveLength(539);
-      expect(buildChatListItems(messages, options)).toEqual(
+      expect(MessageBlocks.buildChatListItems(messages, options)).toEqual(
         legacyBuildChatListItems(messages, options),
       );
     },
@@ -1173,7 +1159,7 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
         partialRounds: new Set(Array.from({length: 20}, (_, i) => 4 + i * 9)),
       });
       expect(messages).toHaveLength(540);
-      expect(buildChatListItems(messages, options)).toEqual(
+      expect(MessageBlocks.buildChatListItems(messages, options)).toEqual(
         legacyBuildChatListItems(messages, options),
       );
     },
@@ -1190,14 +1176,14 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
       partialRounds,
       dropLastResults: true,
     });
-    const running = buildChatListItems(withDroppedLast, {agentRunning: true});
+    const running = MessageBlocks.buildChatListItems(withDroppedLast, {agentRunning: true});
     const lastAssistant = running.find(item => item.message.id === 'a-179');
     expect(lastAssistant?.tools.map(t => t.status)).toEqual([
       'pending',
       'pending',
     ]);
     // agentRunning=false 时同一轮直接 error。
-    const stopped = buildChatListItems(withDroppedLast, {agentRunning: false});
+    const stopped = MessageBlocks.buildChatListItems(withDroppedLast, {agentRunning: false});
     expect(
       stopped
         .find(item => item.message.id === 'a-179')
@@ -1216,7 +1202,7 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
       rounds: 180,
       partialRounds,
     });
-    const midRunning = buildChatListItems(midIncomplete, {agentRunning: true});
+    const midRunning = MessageBlocks.buildChatListItems(midIncomplete, {agentRunning: true});
     const lastPartial = midRunning.find(item => item.message.id === 'a-175');
     // 4 + i*9 的最后一个 ≤ 179 是 4 + 19*9 = 175。partial 轮 read 已配对
     //（success）、list 悬空且该轮正是 lastIncomplete + agentRunning → pending。
@@ -1250,18 +1236,18 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
     const lastIncomplete = messages.find(m => m.id === 'a-179')!;
     const earlierPartial = messages.find(m => m.id === 'a-175')!;
     const completeRound = messages.find(m => m.id === 'a-2')!;
-    expect(isTurnToolExecuting(lastIncomplete, messages, true)).toBe(true);
-    expect(isTurnToolExecuting(earlierPartial, messages, true)).toBe(false);
-    expect(isTurnToolExecuting(completeRound, messages, true)).toBe(false);
-    expect(isTurnToolExecuting(lastIncomplete, messages, false)).toBe(false);
-    expect(turnToolResultsComplete(lastIncomplete, messages)).toBe(false);
-    expect(turnToolResultsComplete(completeRound, messages)).toBe(true);
+    expect(MessageBlocks.isTurnToolExecuting(lastIncomplete, messages, true)).toBe(true);
+    expect(MessageBlocks.isTurnToolExecuting(earlierPartial, messages, true)).toBe(false);
+    expect(MessageBlocks.isTurnToolExecuting(completeRound, messages, true)).toBe(false);
+    expect(MessageBlocks.isTurnToolExecuting(lastIncomplete, messages, false)).toBe(false);
+    expect(MessageBlocks.turnToolResultsComplete(lastIncomplete, messages)).toBe(false);
+    expect(MessageBlocks.turnToolResultsComplete(completeRound, messages)).toBe(true);
   });
 });
 
 describe('pending task 卡片可点（复用子会话）', () => {
   const pendingTask = (input: Record<string, unknown>) =>
-    toolCallViewFromUse(
+    MessageBlocks.toolCallViewFromUse(
       {type: 'tool_use', id: 'tu-task', name: 'task', input},
       new Map(),
     );
@@ -1273,7 +1259,7 @@ describe('pending task 卡片可点（复用子会话）', () => {
   });
 
   it('F-B2: 无 sessionId 时回退 title 映射（新建路径的 pending 卡仍可点）', () => {
-    const view = toolCallViewFromUse(
+    const view = MessageBlocks.toolCallViewFromUse(
       {
         type: 'tool_use',
         id: 'tu-task',

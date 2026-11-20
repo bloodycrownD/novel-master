@@ -20,14 +20,20 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('@/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => {
+  const legacy = {
   refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
   refreshComposerStatusAfterSessionKkvCleared: jest.fn(async () => undefined),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {refreshAfterFloorOrCompaction: legacy.refreshComposerStatusAfterFloorOrCompaction, refreshAfterSessionKkvCleared: legacy.refreshComposerStatusAfterSessionKkvCleared}};
+});
 
-jest.mock('@/services/message-rollback.service', () => ({
+jest.mock('@/services/message-rollback.service', () => {
+  const legacy = {
   rollbackToMessage: jest.fn(),
-}));
+};
+  return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
+});
 
 jest.mock('react-native', () => ({
   Alert: {
@@ -93,9 +99,10 @@ const sampleMessage = (): ChatMessageData => ({
 describe('useChatTabMessageActions set-floor', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 错误通道迁移二期后走 Result（hook 侧 `!ok` 即 throw）。
     mockSetMessageFloorAtMessage.mockResolvedValue({
-      hiddenCount: 1,
-      shownCount: 1,
+      ok: true,
+      value: {hiddenCount: 1, shownCount: 1},
     });
     mockReloadMessages.mockResolvedValue(undefined);
     mockRefreshChatTokenLabel.mockResolvedValue(undefined);

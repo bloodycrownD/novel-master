@@ -9,6 +9,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 
 const mockGetRawWire = jest.fn();
 const mockGoBack = jest.fn();
@@ -28,7 +29,7 @@ const mockRuntime = {
     delete: jest.fn(),
     upsert: jest.fn().mockResolvedValue(undefined),
   },
-  providers: {list: jest.fn().mockResolvedValue([])},
+  providers: {list: jest.fn().mockResolvedValue(Result.ok([]))},
   providerModels: {
     savedList: jest.fn().mockResolvedValue([]),
     getSavedById: jest.fn().mockResolvedValue(null),
@@ -37,7 +38,7 @@ const mockRuntime = {
 };
 
 jest.mock('@novel-master/core', () => ({
-  registerBuiltinTools: jest.fn(),
+  BuiltinTools: {register: jest.fn()},
   ToolRegistry: class {
     list() {
       return ['read'];
@@ -63,9 +64,12 @@ jest.mock('@/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
@@ -148,10 +152,13 @@ jest.mock('@/components/agent/ToolPolicyPicker', () => ({
   ToolPolicyPicker: () => null,
 }));
 
-jest.mock('@/services/agent-yaml.service', () => ({
+jest.mock('@/services/agent-yaml.service', () => {
+  const legacy = {
   exportAgentYaml: jest.fn(),
   importAgentYaml: jest.fn(),
-}));
+};
+  return {...legacy, AgentYamlService: {exportYaml: legacy.exportAgentYaml, importYaml: legacy.importAgentYaml}};
+});
 
 // PromptEditor 的编辑器 stub：记录 onChange 供测试驱动（forwardRef：真组件接 codeEditorRef）。
 const mockEditorProps: {
@@ -195,7 +202,7 @@ jest.mock('@/navigation/HeaderContext', () => ({
 import {AgentEditorScreen} from '@/screens/stack/AgentEditorScreen';
 import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
 import {PromptEditorScreen} from '@/screens/stack/PromptEditorScreen';
-import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 
@@ -237,7 +244,7 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     mockRouteParams.title = undefined;
     mockRouteParams.initialText = undefined;
     // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
   });
 
   it('初始无标记；全屏保存回填后标记出现；表单保存后标记消失', async () => {
@@ -352,7 +359,7 @@ describe('AgentEditor general sentinel 只读表单（内置智能体详情）',
     jest.clearAllMocks();
     mockRouteParams.agentId = 'general';
     // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
   });
 
   it('以出厂定义直填全禁用编辑器：只读横幅在、无保存栏、不拉 registry、不误报未保存', async () => {

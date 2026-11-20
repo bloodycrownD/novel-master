@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  applyAnthropicThinkingToBody,
-} from "../../../src/infra/llm-protocol/logic/apply-thinking-to-body.js";
-import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import {  describe, it, mock  } from "node:test";
+import {  ThinkingBody  } from "../../../src/infra/llm-protocol/logic/apply-thinking-to-body.js";
+import {  AnthropicProtocolAdapter  } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 
 describe("Anthropic thinking body", () => {
-  it("applyAnthropicThinkingToBody 写入 thinking 字段", () => {
+  it("ThinkingBody.apply('anthropic') 写入 thinking 字段", () => {
     const body: Record<string, unknown> = { model: "claude" };
-    applyAnthropicThinkingToBody(body, {
+    ThinkingBody.apply("anthropic", body, {
       protocol: "anthropic",
       anthropic: { type: "enabled", budget_tokens: 8000 },
     });
@@ -17,13 +15,13 @@ describe("Anthropic thinking body", () => {
 
   it("未传 thinking 时不写入字段", () => {
     const body: Record<string, unknown> = { model: "claude" };
-    applyAnthropicThinkingToBody(body, undefined);
+    ThinkingBody.apply("anthropic", body, undefined);
     assert.equal(body.thinking, undefined);
   });
 
   it("协议不匹配时不写入字段", () => {
     const body: Record<string, unknown> = { model: "claude" };
-    applyAnthropicThinkingToBody(body, {
+    ThinkingBody.apply("anthropic", body, {
       protocol: "openai",
       openai: { reasoning_effort: "medium" },
     });

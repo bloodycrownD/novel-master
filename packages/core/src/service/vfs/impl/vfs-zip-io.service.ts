@@ -4,36 +4,38 @@
  * @module service/vfs/impl/vfs-zip-io.service
  */
 
+import { assert } from "@/common/assert.js";
+import { Concurrency } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { throwLegacyVfs, throwLegacyVfsZip } from "./legacy-vfs-error.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import { AppError } from "@/errors/app-error.js";
-import { vfsZipError } from "@/errors/vfs-zip-errors.js";
-import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
-import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
-import { type VfsScope, scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { resolveZipDirectoryPath, zipDirectoryEntryNameRelativeToDirectory, zipEntryNameRelativeToDirectory } from "@/domain/vfs/logic/vfs-zip-path.js";
-import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
-import { vfsNotADirectory } from "@/errors/vfs-errors.js";
-import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
-import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { Result } from "@/errors/either.js";
+import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import { VfsZipBuild } from "@/domain/vfs/logic/vfs-zip-build.js";
+import { VfsZipParse } from "@/domain/vfs/logic/vfs-zip-parse.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { VfsZipPath } from "@/domain/vfs/logic/vfs-zip-path.js";
+import { VfsZipValidate } from "@/domain/vfs/logic/vfs-zip-validate.js";
+import { LiveHeadRevisionSeeder } from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsZipImportOptions, VfsZipIoService, ZipPathOptions } from "@/domain/vfs/ports/vfs-zip-io.port.js";
-import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
-import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from "@/domain/vfs/logic/vfs-import-chunk.js";
-import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import { SessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import { VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { ImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { ImportFailure } from "./import-failure.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("vfs.zip-io");
+const log = LogFactory.create("vfs.zip-io");
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -46,69 +48,36 @@ export type VfsZipImportTestHook = {
   readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
-function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
-  const base = prefix === "/" ? prefix : prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
-  if (fullPath === base) {
-    return "";
-  }
-  // 根目录前缀 / 的特殊处理：fullPath 必定以 / 开头
-  if (base === "/") {
-    return fullPath.slice(1);
-  }
-  const withSlash = `${base}/`;
-  if (!fullPath.startsWith(withSlash)) {
-    throw new AppError("VFS_INVARIANT_VIOLATION", `[invariant] Path ${fullPath} is not under prefix ${prefix}`);
-  }
-  return fullPath.slice(withSlash.length);
-}
-
+/**
+ * 事务回调内解包走 unwrapOrRollback（总纲 §五例外 2）：本函数只在 `import` 段 B0 的
+ * `conn.transaction` 回调内调用，失败靠抛错回滚。
+ */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
-  const sk = scopeKey(scope);
+  const sk = LogicalPath.scopeKey(scope);
   if (logical === "/") {
     return;
   }
-  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
-  if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
-  const existing = await repo.findByPath(sk, logical);
+  TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repo, sk, `${logical}/__vfs_zip_placeholder`));
+  const existing = TdbcTransaction.unwrapOrRollback(await repo.findByPath(sk, logical));
   if (existing == null) {
-    await repo.insertDirectory(sk, logical);
+    TdbcTransaction.unwrapOrRollback(await repo.insertDirectory(sk, logical));
     return;
   }
   if (existing.entryKind !== "directory") {
-    throw vfsNotADirectory(logical);
+    throw new AppError("VFS_NOT_A_DIRECTORY", { path: logical, detail: `Not a directory: ${logical}` });
   }
 }
 
-/**
- * 导入失败的错误包装：保留测试钩子直抛与 VfsZipError 原形，其余包成
- * `IMPORT_FAILED`，并在消息里带上分片进度（已提交 N 片 / 失败在第 K 片）。
- *
- * 分片后**已提交片不再回滚** ⇒ 这是本条唯一的真实行为损失：旧内容在段 B0
- * 就已删除，补偿只把半棵新树清掉、不恢复旧内容。
- */
-function wrapImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
-  if (error instanceof Error && error.message === "test import failure") {
-    return error;
+async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<Result<void, AppError>> {
+  const existing = await repo.findByPath(LogicalPath.scopeKey(scope), directoryPath);
+  if (!existing.ok) return Result.err(existing.error);
+  if (existing.value != null && existing.value.entryKind === "file") {
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP target path is a file, not a directory: ${directoryPath}` }));
   }
-  if (error instanceof Error && error.name === "VfsZipError") {
-    return error;
-  }
-  const base = error instanceof Error ? error.message : "import transaction failed";
-  // 进度段拆独立 key（同 character-card wrap 口径）：无进度时维持英文 message 直传
-  if (committedShards != null && failedShard != null) {
-    return vfsZipError("IMPORT_FAILED", {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}});
-  }
-  return vfsZipError("IMPORT_FAILED", base);
+  return Result.ok(undefined);
 }
 
-async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
-  const existing = await repo.findByPath(scopeKey(scope), directoryPath);
-  if (existing != null && existing.entryKind === "file") {
-    throw vfsZipError("INVALID_PATH", `ZIP target path is a file, not a directory: ${directoryPath}`);
-  }
-}
-
-export type DefaultVfsZipIoServiceOptions = {
+type DefaultVfsZipIoServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: VfsZipImportTestHook;
   /**
@@ -134,17 +103,22 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     this.sessionKkv = options.sessionKkv;
   }
 
-  async export(scope: VfsScope, options?: ZipPathOptions): Promise<Uint8Array> {
-    const directoryPath = resolveZipDirectoryPath(options?.directoryPath);
-    await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
-    const sk = scopeKey(scope);
-    const rows = await this.repo.scanContents(sk, directoryPath);
+  async export(scope: VfsScope, options?: ZipPathOptions): Promise<Result<Uint8Array, AppError>> {
+    const directoryPathResult = VfsZipPath.resolveDirectoryPath(options?.directoryPath);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+    const directoryPath = directoryPathResult.value;
+    const dirCheck = await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    if (!dirCheck.ok) return Result.err(dirCheck.error);
+    const sk = LogicalPath.scopeKey(scope);
+    const rowsResult = await this.repo.scanContents(sk, directoryPath);
+    if (!rowsResult.ok) return Result.err(rowsResult.error);
+    const rows = rowsResult.value;
     const zipFiles = new Map<string, string>();
 
     for (const row of rows) {
       // entry_id 化后 storageKind 已下线，所有文件均为 inline blob
-      const entryNameResult = zipEntryNameRelativeToDirectory(row.path, directoryPath);
-      if (!entryNameResult.ok) throwLegacyVfsZip(entryNameResult.error);
+      const entryNameResult = VfsZipPath.entryNameRelativeToDirectory(row.path, directoryPath);
+      if (!entryNameResult.ok) return Result.err(entryNameResult.error);
       const entryName = entryNameResult.value;
       if (entryName.length === 0) {
         continue;
@@ -154,52 +128,43 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     const directoryZipNames: string[] = [];
     const entriesUnderScope = await this.repo.listEntriesUnderPrefix(sk, directoryPath);
+    // 目标目录自身跳过；越出目标前缀即不变量破坏。
+    const basePrefix = directoryPath === "/" ? directoryPath : directoryPath.endsWith("/") ? directoryPath.slice(0, -1) : directoryPath;
     for (const entry of entriesUnderScope) {
-      if (entry.kind !== "directory") {
+      if (entry.kind !== "directory" || entry.path === basePrefix) {
         continue;
       }
-      if (relativeUnderPhysicalPrefix(entry.path, directoryPath).length === 0) {
-        continue;
-      }
-      const directoryNameResult = zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath);
-      if (!directoryNameResult.ok) throwLegacyVfsZip(directoryNameResult.error);
+      assert(basePrefix === "/" || entry.path.startsWith(`${basePrefix}/`), `[invariant] Path ${entry.path} is not under prefix ${directoryPath}`);
+      const directoryNameResult = VfsZipPath.directoryEntryNameRelativeToDirectory(entry.path, directoryPath);
+      if (!directoryNameResult.ok) return Result.err(directoryNameResult.error);
       directoryZipNames.push(directoryNameResult.value);
     }
 
-    return buildVfsZip(zipFiles, directoryZipNames);
+    return Result.ok(VfsZipBuild.build(zipFiles, directoryZipNames));
   }
 
-  async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<void> {
+  async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<Result<void, AppError>> {
+    // 五期业务抛点收编：confirmed 门闸在首个写之前、零副作用，走返回值通道
+    //（本方法自四期起已是 Result 签名，段 B0 之前的路径全部 Result.err）。
+    // 导入事务链（段 B0 起）仍按边界抛出，由 importFailure 收口。
     if (options.confirmed !== true) {
-      throw vfsZipError("NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or mobile confirm dialog)");
+      return Result.err(new AppError("VFS_ZIP_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)" }));
     }
 
-    const directoryPath = resolveZipDirectoryPath(options.directoryPath);
-    await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+    const directoryPath = directoryPathResult.value;
+    const dirCheck = await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    if (!dirCheck.ok) return Result.err(dirCheck.error);
 
-    const rawEntriesResult = parseVfsZip(zipBytes);
-    if (!rawEntriesResult.ok) throwLegacyVfsZip(rawEntriesResult.error);
+    const rawEntriesResult = VfsZipParse.parse(zipBytes);
+    if (!rawEntriesResult.ok) return Result.err(rawEntriesResult.error);
     // Phase A：路径/UTF-8/带域根前缀判定 — 任何 delete 之前
-    const validated = validateVfsZipEntries(scope, rawEntriesResult.value, directoryPath);
-    if (!validated.ok) throwLegacyVfsZip(validated.error);
+    const validated = VfsZipValidate.validateEntries(scope, rawEntriesResult.value, directoryPath);
+    if (!validated.ok) return Result.err(validated.error);
     const { files, directories } = validated.value;
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const fileEntries = [...files];
-
-    // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。
-    // 跑在**独立事务**里，整体吞错只记 warn——补偿失败不掩盖主错误。
-    // 口径写死用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC
-    // 无引用 revision），**不得**用裸 `deleteVfsPrefix`（不减 ref、也不 GC
-    // ⇒ 会留下一批 ref_count=1 的孤儿 revision 与永不回收的 blob）。
-    const compensate = async (): Promise<void> => {
-      try {
-        await this.conn.transaction(async (tx) => {
-          await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
-        });
-      } catch (error) {
-        log.warn("import compensation failed", { error });
-      }
-    };
 
     // 段 B0（独立短事务）：删旧子树 + 目标目录行 + 全部显式目录行。
     try {
@@ -207,7 +172,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         const repoTx = new SqliteVfsEntryRepository(tx);
         const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
-        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
+        await VfsTreeCopy.releaseAndDeletePrefix(repoTx, revisionTx, sk, directoryPath);
         // WHY: 删前缀会删掉目标目录行；即使 ZIP 为空也要保证目录仍存在
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
         for (const logical of directories) {
@@ -215,7 +180,12 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         }
       });
     } catch (error) {
-      throw wrapImportError(error);
+      // 测试钩子直抛原形；其余（含事务内业务 AppError 与驱动层裸 Error）一律包成
+      // VFS_IMPORT_FAILED——zip 侧业务错不透传，parentCheck 失败历来也落本码。
+      if (error instanceof Error && error.message === "test import failure") {
+        throw error;
+      }
+      throw ImportFailure.create(error);
     }
 
     // 段 B0 提交后立刻收被替换掉的旧内容：sweep 把旧 blob 的 ref_count 递减到 0
@@ -223,14 +193,14 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     // 上零触发器 ⇒ 紧跟其后的 delete 不会回头收这些行。残留只能靠全库 gc 兜底，
     // 口径对齐另外 5 处删除链（project / session / message / user-vfs-turn /
     // template-pull）的既有约定：事务提交后调一次。
-    await runDeferredBlobGc(this.conn);
+    await DeferredBlobGc.run(this.conn);
 
     // 段 B1..Bk：每片 ≤200 个文件的独立短事务。补偿挂在**片失败的内层**
     // ——测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被
     // 那条分支整个绕过，补偿永不执行。
     let committedShards = 0;
     let shardIndex = 0;
-    for (const shard of chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
+    for (const shard of VfsImportChunk.chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
       try {
         await this.conn.transaction(async (tx) => {
           const repoTx = new SqliteVfsEntryRepository(tx);
@@ -238,21 +208,35 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           for (const [logical, content] of shard) {
             if (this.testHook?.throwOnInsertLogical === logical) {
               // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
+              // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
               throw new Error("test import failure");
             }
-            const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
-            if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
-            await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
+            // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+            TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
+            await LiveHeadRevisionSeeder.insertFileSeeding(repoTx, revisionTx, sk, logical, content);
           }
         });
         committedShards += 1;
         shardIndex += 1;
       } catch (error) {
-        await compensate();
-        throw wrapImportError(error, committedShards, shardIndex + 1);
+        // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。跑在**独立事务**里，
+        // 整体吞错只记 warn——补偿失败不掩盖主错误。口径写死用 `releaseAndDeleteVfsPrefix`
+        // （减 live ref + 删 entry + GC 无引用 revision），**不得**用裸 `deleteVfsPrefix`
+        // （不减 ref、也不 GC ⇒ 会留下一批 ref_count=1 的孤儿 revision 与永不回收的 blob）。
+        try {
+          await this.conn.transaction(async (tx) => {
+            await VfsTreeCopy.releaseAndDeletePrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
+          });
+        } catch (compensateError) {
+          log.warn("import compensation failed", { error: compensateError });
+        }
+        if (error instanceof Error && error.message === "test import failure") {
+          throw error;
+        }
+        throw ImportFailure.create(error, committedShards, shardIndex + 1);
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。
-      await yieldToEventLoop();
+      await Concurrency.yieldToEventLoop();
     }
 
     // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**。
@@ -261,7 +245,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     // 未提交行 ⇒ 放进某一片会漏补后续片造出的目录。
     try {
       await this.conn.transaction(async (tx) => {
-        await ensureImportDirRules({
+        await ImportDirRules.ensure({
           vfsRepo: new SqliteVfsEntryRepository(tx),
           // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会
           // 撞驱动层 AsyncMutex 不可重入——那是死锁不是报错。
@@ -282,13 +266,19 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints(new SqliteVfsEntryRepository(tx), new SqliteMessageRepository(tx), new SqliteMessageCheckpointRepository(tx), scope.projectId, scope.sessionId);
+          await BackfillBaselineCheckpoints.backfill({
+            entryRepo: new SqliteVfsEntryRepository(tx),
+            messageRepo: new SqliteMessageRepository(tx),
+            checkpointRepo: new SqliteMessageCheckpointRepository(tx),
+            projectId: scope.projectId,
+            sessionId: scope.sessionId,
+          });
         });
       } catch (error) {
         // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，且不得
         // 被包进 IMPORT_FAILED。语义等价：原实现在同一事务内读到的是
         // 「自己刚插入、尚未提交的 head」，与现在的「导入已提交的 live
-        // head」内容相同（insertFileSeedingRevision 已把 head 与 revision
+        // head」内容相同（LiveHeadRevisionSeeder.insertFileSeeding 已把 head 与 revision
         // 同步落库）。
         log.warn("baseline checkpoint backfill failed", { error });
       }
@@ -296,7 +286,8 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
     if (this.sessionKkv && scope.kind === "session") {
-      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
+      await SessionPromptCaches.clear(scope.sessionId, this.sessionKkv);
     }
+    return Result.ok(undefined);
   }
 }

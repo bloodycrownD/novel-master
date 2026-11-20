@@ -11,8 +11,8 @@ import { strFromU8 } from "fflate";
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
-import { parseSkillFrontMatter } from "./parse-skill-front-matter.js";
+import { VfsZipParse } from "@/domain/vfs/logic/vfs-zip-parse.js";
+import { SkillFrontMatter } from "./parse-skill-front-matter.js";
 
 /** 本模块的失败载荷：zip 不可读 / 非法 UTF-8 条目名 / 超出解压限制。 */
 type SkillZipPreviewError = AppError<"VFS_ZIP_INVALID_ARCHIVE" | "VFS_ZIP_INVALID_UTF8" | "VFS_ZIP_PAYLOAD_TOO_LARGE">;
@@ -31,40 +31,42 @@ export interface SkillZipPreview {
   readonly valid: boolean;
 }
 
-/**
- * 解析技能 zip 字节，产出新建弹窗预填所需的元数据。
- *
- * @returns 归档不可读 / 超出解压限制时为 `Err`（key `VFS_ZIP_*`），本函数不抛。
- */
-export function previewSkillZip(zipBytes: Uint8Array): Result<SkillZipPreview, SkillZipPreviewError> {
-  const parsedZip = parseVfsZip(zipBytes);
-  if (!parsedZip.ok) {
-    return Result.err(parsedZip.error);
-  }
-  const entries = parsedZip.value;
-  let fileCount = 0;
-  for (const name of entries.keys()) {
-    if (!name.endsWith("/")) {
-      fileCount += 1;
+export const SkillZip = {
+  /**
+   * 解析技能 zip 字节，产出新建弹窗预填所需的元数据。
+   *
+   * @returns 归档不可读 / 超出解压限制时为 `Err`（key `VFS_ZIP_*`），本函数不抛。
+   */
+  preview(zipBytes: Uint8Array): Result<SkillZipPreview, SkillZipPreviewError> {
+    const parsedZip = VfsZipParse.parse(zipBytes);
+    if (!parsedZip.ok) {
+      return Result.err(parsedZip.error);
     }
-  }
-  const skillMdBytes = entries.get("SKILL.md");
-  if (skillMdBytes == null) {
+    const entries = parsedZip.value;
+    let fileCount = 0;
+    for (const name of entries.keys()) {
+      if (!name.endsWith("/")) {
+        fileCount += 1;
+      }
+    }
+    const skillMdBytes = entries.get("SKILL.md");
+    if (skillMdBytes == null) {
+      return Result.ok({
+        name: null,
+        description: null,
+        skillMd: null,
+        fileCount,
+        valid: false,
+      });
+    }
+    const skillMd = strFromU8(skillMdBytes);
+    const parsed = SkillFrontMatter.parse(skillMd);
     return Result.ok({
-      name: null,
-      description: null,
-      skillMd: null,
+      name: parsed.name,
+      description: parsed.description,
+      skillMd,
       fileCount,
-      valid: false,
+      valid: parsed.valid,
     });
-  }
-  const skillMd = strFromU8(skillMdBytes);
-  const parsed = parseSkillFrontMatter(skillMd);
-  return Result.ok({
-    name: parsed.name,
-    description: parsed.description,
-    skillMd,
-    fileCount,
-    valid: parsed.valid,
-  });
-}
+  },
+} as const;

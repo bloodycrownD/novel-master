@@ -18,10 +18,14 @@ interface SkspNativeModule {
 
 const native = NativeModules as { SkspModule?: SkspNativeModule };
 
+// nm-style 注记：文件名 native 太泛，按内容主体起名（SkspNative）。
 /** Returns the native SKSP module or throws when unavailable. */
-export function getSkspNativeModule(): SkspNativeModule {
-  if (!native.SkspModule) {
-    throw new Error("SkspModule is not linked (Android only)");
+export namespace SkspNative {
+  export function get(): SkspNativeModule {
+    if (!native.SkspModule) {
+      // nm-throw: keep — native bridge 边界：SkspModule 未链接（Android 原生侧装配缺失）。
+      throw new Error("SkspModule is not linked (Android only)");
+    }
+    return native.SkspModule;
   }
-  return native.SkspModule;
 }

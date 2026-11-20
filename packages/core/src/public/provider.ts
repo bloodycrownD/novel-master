@@ -2,67 +2,40 @@
  * LLM Provider 与模型配置的公开入口（CRUD、采样参数、协议推断）。
  *
  * tokenizer 驱动注册请使用 `@novel-master/core/nmtp`；
+ * token 计数/编码符号走 `@novel-master/core/tokenizer`，协议层符号
+ * （adapter、registry、SSE transport、isAbortLikeError）走
+ * `@novel-master/core/llm-protocol`；
  * feature flags 请使用 `@novel-master/core/feature-flags`。
  *
  * @module public/provider
  */
 
-export { ProviderError } from "../errors/provider-errors.js";
-export type { ProviderErrorCode } from "../errors/provider-errors.js";
-export type { SecretStore } from "../infra/sksp/index.js";
-export {
-  parseApplicationModelId,
-  formatApplicationModelId,
-  normalizeVendorModelId,
-} from "../domain/provider/logic/application-model-id.js";
-export {
-  assertSavedModelUuid,
-  isSavedModelUuidFormat,
-} from "../domain/provider/logic/assert-saved-model-uuid.js";
-export { formatSavedModelDisplayName } from "../domain/provider/logic/format-saved-model-display-name.js";
-export {
-  inferLlmProtocolFromSavedModelId,
-  inferLlmProtocolFromApplicationModelId,
-} from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
+export { ApplicationModelId } from "../domain/provider/logic/application-model-id.js";
+export { SavedModelUuid } from "../domain/provider/logic/assert-saved-model-uuid.js";
+export { SavedModelDisplayName } from "../domain/provider/logic/format-saved-model-display-name.js";
+export { LlmProtocol } from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
 export type { LlmProvider } from "../domain/provider/model/provider.js";
-export { providerApiKeyRef } from "../domain/provider/model/provider.js";
+export { ProviderModel } from "../domain/provider/model/provider.js";
 export type {
   ModelSamplingParams,
   OpenAiSamplingParams,
   AnthropicSamplingParams,
   GeminiSamplingParams,
 } from "../domain/provider/model/model-sampling-params.js";
-export { samplingProtocol } from "../domain/provider/model/model-sampling-params.js";
 export {
-  mergeSamplingWithDefaults,
-  maxOutputTokensFromSampling,
+  ProtocolSamplingDefaults,
   OPENAI_SAMPLING_DEFAULTS,
   ANTHROPIC_SAMPLING_DEFAULTS,
   GEMINI_SAMPLING_DEFAULTS,
 } from "../domain/provider/model/protocol-sampling-defaults.js";
-export type { SavedModel } from "../domain/provider/model/saved-model.js";
-export {
-  savedModelDisplayName,
-  toSavedModelView,
-  type SavedModelView,
-} from "../domain/provider/model/saved-model.js";
+export { SavedModel } from "../domain/provider/model/saved-model.js";
 export type {
-  SavedModelSettings,
   SavedModelSamplingSettings,
   ThinkingLevel,
-  SavedModelInternalSettings,
-  SavedModelGenerationSettings,
   SavedModelSettingsPatch,
 } from "../domain/provider/model/saved-model-settings.js";
+export { SavedModelSettings } from "../domain/provider/model/saved-model-settings.js";
 export {
-  savedModelContextWindowTokens,
-  savedModelTokenCounterMode,
-  savedModelSampling,
-  savedModelThinkingLevel,
-  applySavedModelSettingsPatch,
-} from "../domain/provider/model/saved-model-settings.js";
-export {
-  THINKING_LEVEL_OPTIONS,
   THINKING_LEVEL_SELECT_OPTIONS,
 } from "../domain/provider/model/thinking-level-options.js";
 export type {
@@ -72,29 +45,20 @@ export type {
   GeminiThinkingParams,
   GeminiThinkingConfig,
 } from "../domain/provider/model/model-thinking-params.js";
-export { thinkingProtocol } from "../domain/provider/model/model-thinking-params.js";
+export { ThinkingWire } from "../domain/provider/logic/resolve-thinking-wire.js";
+export { ThinkingLevelPresets } from "../domain/provider/logic/thinking-level-presets.js";
+export { DefaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
+export { SavedModelSettingsJson } from "../domain/provider/model/saved-model-settings-from-json.js";
 export {
-  resolveEffectiveMaxTokens,
-  resolveThinkingParamsForLevel,
-} from "../domain/provider/logic/resolve-thinking-wire.js";
-export { thinkingLevelToModelThinkingParams } from "../domain/provider/logic/thinking-level-presets.js";
-export { defaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
-export {
-  savedModelSettingsFromJson,
-  savedModelSettingsToJson,
-} from "../domain/provider/model/saved-model-settings-from-json.js";
-export {
-  TOKEN_COUNTER_MODE_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
 } from "../domain/provider/model/token-counter-mode-options.js";
-export { resolveTokenCounterModeForModel } from "../service/provider/logic/resolve-token-counter-mode-for-model.js";
+export { TokenCounterMode } from "../service/provider/logic/resolve-token-counter-mode-for-model.js";
 export type {
   ModelRetryPolicy,
   ModelRetryPolicyService,
 } from "../service/provider/model-retry-policy.port.js";
-export { createModelRetryPolicyService } from "../service/provider/create-model-retry-policy-service.js";
-export { createProviderServices } from "../service/provider/create-provider-services.js";
-export type { ProviderServiceBundle } from "../service/provider/create-provider-services.js";
+export { ProviderServiceFactory } from "../service/provider/provider-service-factory.js";
+export type { ProviderServiceBundle } from "../service/provider/provider-service-factory.js";
 export type {
   ProviderService,
   ProviderListItem,
@@ -106,87 +70,4 @@ export type {
   ModelRequestService,
   ModelRequestOptions,
 } from "../service/provider/model-request.port.js";
-export { formatLocalDateTime } from "../infra/date-format.js";
-export type {
-  LlmProtocolKind,
-  LlmToolDefinition,
-  LlmStreamEvent,
-  LlmTokenUsage,
-  LlmChatResult,
-} from "../infra/llm-protocol/ports/adapter.port.js";
-export { toolsFromRegistry } from "../infra/llm-protocol/logic/tool-definitions.js";
-export { zodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";
-export {
-  clearProtocolAdapters,
-  configureLlmFetch,
-  getProtocolAdapter,
-} from "../infra/llm-protocol/logic/registry.js";
-export {
-  createLoggingFetch,
-  isLlmFetchDebugEnabled,
-} from "../infra/llm-protocol/logic/debug-fetch.js";
-export { LlmStreamTimeoutError } from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
-export {
-  type LlmStreamTimeoutPhase,
-  LLM_STREAM_TIMEOUT_ERROR_NAME,
-} from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
-export { STREAM_IDLE_TIMEOUT_MS } from "../infra/llm-protocol/logic/stream-watchdog.js";
-export { SSE_WHOLE_CALL_TIMEOUT_MS } from "../infra/llm-protocol/logic/llm-sse-transport.js";
-export type { SseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
-export { registerSseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
-export {
-  createDefaultTokenCounterRegistry,
-  HeuristicTokenCounter,
-  CHARACTERS_PER_TOKEN_RATIO,
-  serializePromptLlmInput,
-  countPromptLlmInput,
-  countPromptLlmInputHeuristicOnly,
-  resolveCurrentPromptTokens,
-  resolvePromptTokensWithBackfill,
-  promptWholeCache,
-  tokenChunkCache,
-  buildCounterScope,
-  chunkHash16,
-  splitTextIntoChunks,
-  sessionApiPromptTokenCache,
-  serializeToolsForTokenCount,
-  resolveTokenizerFamily,
-  mapVendorModelIdToTiktokenModel,
-  isGpt0301TiktokenModel,
-  countTokens,
-  countTextWithIncrementalTokenizer,
-  resolveContextWindowTokens,
-  getEncoding,
-  clearForTests,
-  setFactoryForTests,
-  countOpenAiStyleMessages,
-  wrapSerializedPromptAsSystemMessage,
-  convertMessagesForWebTokenizer,
-  countWebTokenizerMessages,
-  // r3-chip-1：resolve 段弃权错误类必须经 public/provider 出到 app 层（core
-  // 引不到 app 层的 ChatPromptBuildBailedError，两类错误由读口同款 catch）。
-  PromptTokenResolveBailedError,
-  type TokenCounter,
-  type TokenCounterRegistry,
-  type TokenCounterKind,
-  type TokenizerFamily,
-  type TokenizerOverride,
-  type CountPromptLlmInputParams,
-  type PromptTokenCountResult,
-  type ResolvedPromptTokens,
-  type PromptWholeCacheEntry,
-  type ChatTokenEncoder,
-  type ChatTokenMessage,
-  type ChatTokenCountKind,
-  type CountTokensOptions,
-  type OpenAiStyleMessage,
-  type EncodingHandle,
-} from "../infra/tokenizer/index.js";
-// token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
-// 这里直接转出（不经 infra 中转）。
-export {
-  formatTokenSourceBadge,
-  formatContextUsageLabel,
-  type TokenSourceBadge,
-} from "../common/format-token-count.js";
-export { isValidTokenCounterModePref } from "../infra/tokenizer/index.js";
+export { SerializationZodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";

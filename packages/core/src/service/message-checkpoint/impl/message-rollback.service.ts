@@ -7,45 +7,41 @@
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { RollbackMode } from "@/presentation/chat/rollback-confirm.js";
-import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
-import { findMissingRevisionPointers } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
-import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
-import { resolvePriorRollbackTargetTree, resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
-import { resolvePathsNeedDeleteInTransaction, resolveReconcilePathSets } from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
-import { restorePathToRevision, restorePathToRevisionWithBackfill } from "@/domain/message-checkpoint/logic/restore-path.js";
-import { scheduleDeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
-import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/truncate-tail-wiring.js";
-import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { MissingRevisions } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
+import { RollbackAnchor } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
+import { RollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
+import { ReconcilePaths } from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
+import { RestorePath } from "@/domain/message-checkpoint/logic/restore-path.js";
+import { DeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
+import { assert } from "@/common/assert.js";
+import { TruncateTail } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
+import type { CheckpointRepoDeps } from "@/domain/message-checkpoint/model/checkpoint-repo-deps.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { AppError } from "@/errors/app-error.js";
-import { sessionFsRollbackMessageNotFound, sessionFsRollbackMessageSessionMismatch, sessionFsRollbackRevisionBackfillRequired, sessionFsRollbackVfsRestoreFailed, sessionFsRollbackUndoSendEmptyTarget, sessionFsRollbackConflict, sessionFsRollbackTailDrift, isSessionFsError } from "@/errors/session-fs-errors.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
-import { userMessageOf } from "@/i18n/error-message.js";
+import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import { isSessionFsError, isVfsError } from "@/errors/guards.js";
+import { ErrorMessage } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { TdbcError } from "@/infra/tdbc/index.js";
+import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { createLogger } from "@/infra/log/logger.js";
-import type { VfsService } from "@/service/vfs/vfs.port.js";
+import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
+import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";
+import { LogFactory } from "@/infra/log/logger.js";
 import type { MessageRollbackService, RollbackOptions, RollbackProbe } from "../message-rollback.port.js";
 
-const log = createLogger("message-checkpoint.rollback");
+const log = LogFactory.create("message-checkpoint.rollback");
 
-/** Dependencies for {@link DefaultMessageRollbackService}. */
-export interface MessageRollbackServiceDeps {
+/** Dependencies for {@link DefaultMessageRollbackService}（共享仓储底座 + 消息仓储 + 连接）。 */
+interface MessageRollbackServiceDeps extends CheckpointRepoDeps {
   readonly conn: TdbcConnection;
-  readonly messages: MessageRepository;
-  readonly entries: VfsEntryRepository;
-  readonly revisions: VfsRevisionRepository;
-  readonly checkpoints: MessageCheckpointRepository;
+  readonly messageRepo: MessageRepository;
   /**
    * 回滚链分段打点探针（rollback-large-jank Step 1）：未注入（默认）时
    * 所有探针点零开销；注入方负责 __DEV__ 门控（见 RollbackProbe 注释）。
@@ -95,12 +91,6 @@ type RollbackPlan = {
   fileTreeFingerprint: ReadonlyArray<readonly [string, number]>;
 };
 
-function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
-  if (options?.skipVfsReconcile && options?.revisionHeadBackfill) {
-    throw new AppError("SESSION_FS_INVALID_ROLLBACK_OPTIONS", {key: "error.session_fs.invalid_rollback_options"});
-  }
-}
-
 /**
  * A-22 乐观锁最大重试次数。
  *
@@ -110,31 +100,13 @@ function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
  */
 const ROLLBACK_OPTIMISTIC_RETRY_LIMIT = 3;
 
-/** 逐项比对两份文件维度指纹（有序对列表，长度不同即不等）。 */
-function sameFileTreeFingerprint(a: ReadonlyArray<readonly [string, number]>, b: ReadonlyArray<readonly [string, number]>): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (a[i]![0] !== b[i]![0] || a[i]![1] !== b[i]![1]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/** 逐项比对两份消息 id 有序列表（长度不同即不等）。 */
-function sameIdList(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
+/** 事务内 VFS reconcile 的统计结果（探针与返回值共用）。 */
+type VfsReconcileStats = {
+  skippedSameVersion: number;
+  skippedSameContentHash: number;
+  restored: number;
+  deleted: number;
+};
 
 /**
  * Forward-restores the workspace to an anchor checkpoint tree and truncates tail state.
@@ -142,15 +114,20 @@ function sameIdList(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean
 export class DefaultMessageRollbackService implements MessageRollbackService {
   constructor(private readonly deps: MessageRollbackServiceDeps) {}
 
-  async rollbackToMessage(sessionId: string, projectId: string, anchorMessageId: string, options?: RollbackOptions): Promise<void> {
-    assertRollbackOptionsCompatible(options);
+  async rollbackToMessage(sessionId: string, projectId: string, anchorMessageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
+    // 回滚选项互斥（跳过 VFS reconcile 与缺失回补同开没有合法语义）：入参校验失败走返回值（错误通道迁移五期）。
+    if (options?.skipVfsReconcile && options?.revisionHeadBackfill) {
+      return Result.err(new AppError("SESSION_FS_INVALID_ROLLBACK_OPTIONS", { descriptor: { key: "error.session_fs.invalid_rollback_options" } }));
+    }
     this.probeIfEnabled("rollback.begin", { sessionId });
 
     // A-22 乐观锁重试循环：plan 解析（多次 await 读）与事务开始之间有 TOCTOU 间隙，
     // 事务内重读会话消息计数与快照对比，不一致代表间隙期间有 agent 写入，重试整个 plan+事务。
     // 冲突持续超过上限才向上报 ROLLBACK_CONFLICT，避免在高频写入会话上死循环。
     for (let attempt = 1; ; attempt++) {
-      const plan = await this.resolveRollbackPlan(sessionId, projectId, anchorMessageId);
+      const planResult = await this.resolveRollbackPlan(sessionId, projectId, anchorMessageId);
+      if (!planResult.ok) return Result.err(planResult.error);
+      const plan = planResult.value;
 
       // S-13 护栏（CD-01 第 1 步放宽）：targetTree 为空意味着没有 baseline 快照
       // 可对齐，一旦进入 reconcileVfsPaths 会把 live 树里所有路径都当「需删除」
@@ -162,19 +139,27 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // 仅 live 树非空时才有破坏力：会话本身无文件时删无可删，正常放行，
       // 回滚表现为纯截断。skipVfsReconcile 只截断消息、不碰文件，放行。
       if (!options?.skipVfsReconcile && plan.targetTree.size === 0) {
-        const liveHeads = await listSessionFileHeads(this.deps.entries, projectId, sessionId);
+        const liveHeads = await SessionFiles.listHeads(this.deps.entryRepo, projectId, sessionId);
         if (liveHeads.length > 0) {
-          throw sessionFsRollbackUndoSendEmptyTarget(sessionId, anchorMessageId, plan.mode);
+          // undo_send 无 baseline：双 messageKey（rewind / undo_send）走 descriptor 通道（translator 无 select）。
+          let descriptor: { key: "error.session_fs.rollback_undo_send_empty_target.rewind" | "error.session_fs.rollback_undo_send_empty_target.undo_send" };
+          if (plan.mode === "rewind") {
+            descriptor = { key: "error.session_fs.rollback_undo_send_empty_target.rewind" };
+          } else {
+            descriptor = { key: "error.session_fs.rollback_undo_send_empty_target.undo_send" };
+          }
+          return Result.err(new AppError("SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET", { descriptor, sessionId, messageId: anchorMessageId }));
         }
       }
 
       if (!options?.skipVfsReconcile) {
-        const missing = await findMissingRevisionPointers(this.deps.revisions, this.deps.entries, plan.scope, plan.targetTree, plan.pathsNeedWrite, plan.checkpointEntryIdByPath);
+        const detected = await MissingRevisions.findPointers({ revisionRepo: this.deps.revisionRepo, entryRepo: this.deps.entryRepo }, { scope: plan.scope, targetTree: plan.targetTree, pathsToReconcile: plan.pathsNeedWrite, checkpointEntryIdByPath: plan.checkpointEntryIdByPath });
+        if (!detected.ok) return Result.err(detected.error);
+        const missing = detected.value;
         if (missing.length > 0 && !options?.revisionHeadBackfill) {
-          throw sessionFsRollbackRevisionBackfillRequired(missing, {
-            sessionId,
-            messageId: anchorMessageId,
-          });
+          // details 保留 camelCase 数组（RollbackErrorGuards.readRevisionBackfillMissingPaths / IPC 提取消费），模板参数才 join 成串。
+          const descriptor = { key: "error.session_fs.rollback_revision_backfill_required", params: { missing_logical_paths: missing.join(", ") } } as const;
+          return Result.err(new AppError("SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED", { descriptor, missingLogicalPaths: missing, sessionId, messageId: anchorMessageId }));
         }
       }
 
@@ -184,7 +169,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           // A-22 乐观锁：事务刚开始，未写任何东西之前重读会话消息计数，
           // 与 plan 阶段记录的快照不一致代表间隙期间 agent 有写入。
           // 这里用 tx 作用域的 SqliteMessageRepository——驱动事务持锁期间，
-          // 只有 tx 面能安全查询（不能走 this.deps.messages，那会重入驱动的 mutex 死锁）。
+          // 只有 tx 面能安全查询（不能走 this.deps.messageRepo，那会重入驱动的 mutex 死锁）。
           // 乐观锁只需要计数对比，用 countBySession（COUNT(*) 返回 1 行）代替
           // listBySession（拉全量行），避免大会话上拉回几百上千行只为取 length。
           const txMessages = new SqliteMessageRepository(tx);
@@ -194,14 +179,31 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             current: currentCount,
           });
           if (currentCount !== plan.messageCountSnapshot) {
-            throw sessionFsRollbackConflict(sessionId, anchorMessageId, plan.messageCountSnapshot, currentCount);
+            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", {
+              descriptor: { key: "error.session_fs.rollback_conflict", params: { expected_message_count: plan.messageCountSnapshot, actual_message_count: currentCount } },
+              expectedMessageCount: plan.messageCountSnapshot,
+              actualMessageCount: currentCount,
+              sessionId,
+              messageId: anchorMessageId,
+            });
           }
 
           // CD-01 第 2 步 · 文件维度指纹乐观锁：消息数不变不代表文件面没变。
           // 必须用 **tx 面** repo 重算——事务内用外层 conn 会重入驱动 mutex 死锁。
           const currentFingerprint = await this.computeFileTreeFingerprint(tx, projectId, sessionId);
-          if (!sameFileTreeFingerprint(currentFingerprint, plan.fileTreeFingerprint)) {
-            throw sessionFsRollbackConflict(sessionId, anchorMessageId, plan.fileTreeFingerprint.length, currentFingerprint.length);
+          const expectedFingerprint = plan.fileTreeFingerprint;
+          let sameFingerprint = currentFingerprint.length === expectedFingerprint.length;
+          for (let i = 0; sameFingerprint && i < currentFingerprint.length; i++) {
+            sameFingerprint = currentFingerprint[i]![0] === expectedFingerprint[i]![0] && currentFingerprint[i]![1] === expectedFingerprint[i]![1];
+          }
+          if (!sameFingerprint) {
+            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", {
+              descriptor: { key: "error.session_fs.rollback_conflict", params: { expected_message_count: plan.fileTreeFingerprint.length, actual_message_count: currentFingerprint.length } },
+              expectedMessageCount: plan.fileTreeFingerprint.length,
+              actualMessageCount: currentFingerprint.length,
+              sessionId,
+              messageId: anchorMessageId,
+            });
           }
 
           if (!options?.skipVfsReconcile) {
@@ -213,21 +215,32 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 skipped: reconcileStats.skippedSameVersion + reconcileStats.skippedSameContentHash,
               });
             } catch (cause) {
-              // {detail} 取嵌套 descriptor（userMessageOf 命中时），否则退回 message 文本（spec G2 组合站点）
-              const detail = userMessageOf(cause) ?? (isSessionFsError(cause) || isVfsError(cause) || cause instanceof Error ? cause.message : String(cause));
-              throw sessionFsRollbackVfsRestoreFailed({key: "error.session_fs.vfs_restore_failed", params: {detail}}, { sessionId, messageId: anchorMessageId });
+              // {detail} 取嵌套 descriptor（ErrorMessage.userOf 命中时），否则退回 message 文本（spec G2 组合站点）
+              const detail = ErrorMessage.userOf(cause) ?? (isSessionFsError(cause) || isVfsError(cause) || cause instanceof Error ? cause.message : String(cause));
+              // {detail} 可能是嵌套 descriptor（ErrorMessage.userOf 命中时），translator 递归渲染——走 descriptor 参数通道。
+              throw new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", { descriptor: { key: "error.session_fs.vfs_restore_failed", params: { detail } }, sessionId, messageId: anchorMessageId });
             }
           }
-          // CD-01 第 4 步 · tailIds 断言：truncateTailInTransaction 只吃 afterSeq、
+          // CD-01 第 4 步 · tailIds 断言：TruncateTail.truncate 只吃 afterSeq、
           // 按 seq 截断却**不核对**「要删的 tail 还是不是这批 id」。间隙里插进
           // seq 更大的新消息 ⇒ 连带截断，而用户从没回滚过它。
           // 必须在第 2 步之后：文件面指纹挡不住「只多了消息、没动文件」的间隙。
           // 与 skipVfsReconcile **无关**（那条只跳 VFS reconcile，消息截断照跑）。
           const actualTailIds = await txMessages.listIdsAfterSeq(sessionId, plan.truncateAfterSeq);
-          if (!sameIdList(actualTailIds, plan.tailMessageIds)) {
-            throw sessionFsRollbackTailDrift(sessionId, anchorMessageId, plan.tailMessageIds.length, actualTailIds.length);
+          let sameTail = actualTailIds.length === plan.tailMessageIds.length;
+          for (let i = 0; sameTail && i < actualTailIds.length; i++) {
+            sameTail = actualTailIds[i] === plan.tailMessageIds[i];
           }
-          await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+          if (!sameTail) {
+            throw new AppError("SESSION_FS_ROLLBACK_TAIL_DRIFT", {
+              descriptor: { key: "error.session_fs.rollback_tail_drift", params: { expected_message_count: plan.tailMessageIds.length, actual_message_count: actualTailIds.length } },
+              expectedMessageCount: plan.tailMessageIds.length,
+              actualMessageCount: actualTailIds.length,
+              sessionId,
+              messageId: anchorMessageId,
+            });
+          }
+          await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
             projectId: plan.projectId,
             sessionId: plan.sessionId,
             afterSeq: plan.truncateAfterSeq,
@@ -246,9 +259,22 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         break;
       } catch (error) {
         // 仅乐观锁冲突才重试；其他错误（护栏、backfill required、vfs restore failed）直接向上。
-        const isConflict = isSessionFsError(error, "ROLLBACK_CONFLICT");
-        if (!isConflict || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
-          throw error;
+        // 判定走 cause 链：驱动会把事务体内抛出的非 TdbcError 包一层，裸 AppErrorOps.is
+        // 判不中 ⇒ 重试从未生效（T-SC11b / T-RB-FP-R3 / T-RB-FP-R4 暴露）。深度上限 8 防环。
+        let conflict = false;
+        for (let cur: unknown = error, depth = 0; cur != null && typeof cur === "object" && depth < 8; depth += 1, cur = (cur as { cause?: unknown }).cause) {
+          if (AppErrorOps.is(cur, "SESSION_FS_ROLLBACK_CONFLICT")) {
+            conflict = true;
+            break;
+          }
+        }
+        if (!conflict || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
+          // 事务抛出物解包后回返回值通道：驱动把非 TdbcError（含 AppError）包成
+          // TdbcError（cause 指向原错误），先解包还原业务错误码；余下未知抛出物
+          // 收进 INFRA_UNEXPECTED_ERROR（事务已整体回滚，无半写状态）。
+          if (error instanceof TdbcError && AppErrorOps.is(error.cause)) return Result.err(error.cause);
+          if (AppErrorOps.is(error)) return Result.err(error);
+          return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
         // 冲突重试前不再做其他事——重新 resolveRollbackPlan 会拉到最新的消息列表。
       }
@@ -257,12 +283,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // 回滚成功后可见 prompt 变了：API 占用双删（进程内热层 + session KKV
     // 行）。本类只持有 conn，就地建一个无状态的 SessionKkvService（删除在
     // `conn.transaction` 块外，已 await，失败只吞 warn）。
-    await invalidateSessionApiPromptTokenEntry(createSessionKkvService(this.deps.conn), sessionId);
+    await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), sessionId);
     // 回滚物理删尾：工具调用数缓存一并失效（含 hidden 口径下被删的 assistant
     // 行不再计入）。写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：与读口
     // 「现算回填前复核原值」配合防陈旧回写），best-effort 同上。
     try {
-      await createSessionKkvService(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
+      await SessionKkvServiceFactory.create(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
     } catch (error) {
       log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -271,8 +297,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // rollbackToMessage resolve；清扫中不重入（in-flight 去重），并发安全
     // 由驱动层 AsyncMutex 串行化保证。放在失效 await 之后排队，避免全表
     // DELETE 先占连接把失效挂点挡在后面。
-    scheduleDeferredRevisionOrphanGc(this.deps.conn);
+    DeferredRevisionOrphanGc.schedule(this.deps.conn);
     this.probeIfEnabled("rollback.done", { sessionId });
+    return Result.ok(undefined);
   }
 
   /**
@@ -287,26 +314,34 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     probe(label, detail);
   }
 
-  private async resolveRollbackPlan(sessionId: string, projectId: string, anchorMessageId: string): Promise<RollbackPlan> {
-    const clicked = await this.deps.messages.findById(anchorMessageId);
+  /**
+   * nm-style: keep-local — plan 解析是独立只读阶段：多次 await 读装配出事务乐观锁依据的
+   * 不可变 RollbackPlan 快照（anchor/tail/指纹），内联会把 plan 装配与重试/事务编排混层。
+   */
+  private async resolveRollbackPlan(sessionId: string, projectId: string, anchorMessageId: string): Promise<Result<RollbackPlan, AppError>> {
+    const clicked = await this.deps.messageRepo.findById(anchorMessageId);
     if (clicked == null) {
-      throw sessionFsRollbackMessageNotFound(anchorMessageId);
+      const descriptor = { key: "error.session_fs.rollback_message_not_found", params: { message_id: anchorMessageId } } as const;
+      return Result.err(new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", { descriptor, messageId: anchorMessageId }));
     }
     if (clicked.sessionId !== sessionId) {
-      throw sessionFsRollbackMessageSessionMismatch(anchorMessageId, sessionId);
+      const descriptor = { key: "error.session_fs.rollback_message_session_mismatch", params: { message_id: anchorMessageId } } as const;
+      return Result.err(new AppError("SESSION_FS_ROLLBACK_MESSAGE_SESSION_MISMATCH", { descriptor, messageId: anchorMessageId, sessionId }));
     }
 
     // plan 拉取收窄（rollback-large-jank Step 2）：锚点解析只做 tool_result
     // 前向配对（seq 更大方向）、tail 过滤只取锚点之后，锚点之前的消息对 plan
     // 无用——拉取下界 = 触发消息（clicked）的 seq（含），大会话不再把锚点
     // 之前的几百行 content_json 拉回来白 parse 一遍。
-    const [messagesFromClicked, messageCountSnapshot] = await Promise.all([
-      this.deps.messages.listBySessionFromSeq(sessionId, clicked.seq),
-      // A-22 计数快照：全量口径（会话消息总行数）。收窄后消息列表不再覆盖
-      // 全量，改用 countBySession（COUNT(*) 单行）取同一口径，事务内对比
-      // 逻辑零变化。
-      this.deps.messages.countBySession(sessionId),
-    ]);
+    // A-22 计数快照：全量口径（会话消息总行数）。收窄后消息列表不再覆盖
+    // 全量，改用 countBySession（COUNT(*) 单行）取同一口径，事务内对比
+    // 逻辑零变化。
+    const messagesRepo = this.deps.messageRepo;
+    const [messagesRead, messageCountSnapshot] = await Promise.all([messagesRepo.listBySessionFromSeq(sessionId, clicked.seq), messagesRepo.countBySession(sessionId)]);
+    if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
+    // plan 装配阶段未注入 hooks：中断分支不可达，命中即不变量破坏（断言而非取消语义）。
+    assert(messagesRead.kind === "completed", "resolveRollbackPlan 未注入 hooks，listBySessionFromSeq 不应产生中断");
+    const messagesFromClicked = messagesRead.value;
     if (this.deps.probe != null) {
       // 字节量（源消息 content JSON 尺寸）只在探针注入时统计——量测本身
       // 是 O(总字节) 的 stringify，生产路径不付这笔账。
@@ -320,7 +355,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         fromSeq: clicked.seq,
       });
     }
-    const anchor = resolveRollbackAnchorMessage(messagesFromClicked, anchorMessageId) ?? clicked;
+    const anchor = RollbackAnchor.resolve(messagesFromClicked, anchorMessageId) ?? clicked;
 
     const undoSendEligible = ChatMessage.from(anchor).isUndoSendEligible();
     const mode: RollbackMode = undoSendEligible ? "undo_send" : "rewind";
@@ -334,7 +369,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     let hasDirectTargetTree: boolean;
 
     if (mode === "undo_send") {
-      const priorResolution = await resolvePriorRollbackTargetTree(this.deps.checkpoints, sessionId, anchor.seq - 1);
+      const priorResolution = await RollbackTargetTree.resolvePrior(this.deps.checkpointRepo, sessionId, anchor.seq - 1);
       targetTree = priorResolution.tree;
       checkpointEntryIdByPath = priorResolution.entryIdByPath;
       // prior 为空时回退到 anchor 自身的 checkpoint。
@@ -342,7 +377,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // 这样「导入后聊一轮再回滚首条 user」时，虽然 prior（seq<anchor.seq）为空，
       // 但 anchor 自身有 baseline checkpoint 可用，回滚到导入后的状态而非空树。
       if (targetTree.size === 0) {
-        const anchorPointers = await this.deps.checkpoints.loadFilePointerTree(sessionId, anchor.id);
+        const anchorPointers = await this.deps.checkpointRepo.loadFilePointerTree(sessionId, anchor.id);
         if (anchorPointers != null) {
           targetTree = new Map([...anchorPointers].map(([path, p]) => [path, p.revisionVersion]));
           checkpointEntryIdByPath = new Map([...anchorPointers].map(([path, p]) => [path, p.entryId]));
@@ -353,8 +388,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // reconcile 调用，避免误删；这里保持 hasDirectTargetTree 语义不变。
       hasDirectTargetTree = true;
     } else {
-      const directTargetPointers = await this.deps.checkpoints.loadFilePointerTree(sessionId, anchor.id);
-      const resolution = await resolveRollbackTargetTree(this.deps.checkpoints, sessionId, anchor.id, anchor.seq);
+      const directTargetPointers = await this.deps.checkpointRepo.loadFilePointerTree(sessionId, anchor.id);
+      const resolution = await RollbackTargetTree.resolve(this.deps.checkpointRepo, sessionId, anchor.id, anchor.seq);
       targetTree = resolution.tree;
       checkpointEntryIdByPath = resolution.entryIdByPath;
       hasDirectTargetTree = directTargetPointers != null;
@@ -362,17 +397,19 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
     const scope: VfsScope = { kind: "session", projectId, sessionId };
 
-    const reconcileSets = await resolveReconcilePathSets(this.deps.entries, this.deps.revisions, scope, targetTree, hasDirectTargetTree, checkpointEntryIdByPath);
+    const reconciled = await ReconcilePaths.resolve({ entryRepo: this.deps.entryRepo, revisionRepo: this.deps.revisionRepo }, { scope, targetTree, checkpointEntryIdByPath });
+    if (!reconciled.ok) return Result.err(reconciled.error);
+    const reconcileSets = reconciled.value;
 
     // CD-01 第 3 步：plan 段只产出 **tail 指针反解出的删候选**，真正的删集合
-    // 在事务内用 live 快照重算（见 reconcileVfsPaths / resolvePathsNeedDeleteInTransaction）。
+    // 在事务内用 live 快照重算（见 reconcileVfsPaths / ReconcilePaths.resolveNeedDelete）。
     const tailDerivedDeletePaths = new Set<string>();
     if (tailMessageIds.length > 0) {
-      const tailPointers = await this.deps.checkpoints.listFilePointersForMessages(sessionId, tailMessageIds);
+      const tailPointers = await this.deps.checkpointRepo.listFilePointersForMessages(sessionId, tailMessageIds);
       // entry_id 化后 tail pointer 只有 entryId；用 live heads 把 entryId 反解成当前逻辑路径，
       // 再判是否落在 targetTree 外（需删除）。已不在 live 树里的 entry 跳过（无物可删）。
       if (tailPointers.length > 0) {
-        const liveHeads = await listSessionFileHeads(this.deps.entries, projectId, sessionId);
+        const liveHeads = await SessionFiles.listHeads(this.deps.entryRepo, projectId, sessionId);
         const pathByEntryId = new Map(liveHeads.map((h) => [h.entryId, h.logicalPath]));
         for (const pointer of tailPointers) {
           const logicalPath = pathByEntryId.get(pointer.entryId);
@@ -387,7 +424,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // 与下面 plan 的其余部分同批读；事务内用 tx 面 repo 重算同一指纹逐项比。
     const fileTreeFingerprint = await this.computeFileTreeFingerprint(this.deps.conn, projectId, sessionId);
 
-    return {
+    return Result.ok({
       mode,
       truncateAfterSeq,
       anchor,
@@ -404,7 +441,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // 同一口径（会话消息总行数）对比，不一致即判冲突。
       messageCountSnapshot,
       fileTreeFingerprint,
-    };
+    });
   }
 
   /**
@@ -414,30 +451,26 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
    * hash 会因碰撞把好回滚打成 409（内存换正确性）。
    */
   private async computeFileTreeFingerprint(conn: TdbcConnection, projectId: string, sessionId: string): Promise<ReadonlyArray<readonly [string, number]>> {
-    const heads = await listSessionFileHeads(new SqliteVfsEntryRepository(conn), projectId, sessionId);
+    const { entryRepo } = MessageCheckpointFactory.createRepoDeps(conn);
+    const heads = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
     return heads.map((head): readonly [string, number] => [head.logicalPath, head.headVersion]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }
 
-  private async reconcileVfsPaths(
-    tx: TdbcConnection,
-    plan: RollbackPlan,
-    useRevisionHeadBackfill: boolean
-  ): Promise<{
-    skippedSameVersion: number;
-    skippedSameContentHash: number;
-    restored: number;
-    deleted: number;
-  }> {
+  /**
+   * nm-style: keep-local — 事务内 VFS restore / delete 是独立 IO 管线：删除集合按事务内 live
+   * 快照重算，「先删 targetTree 外路径、再按旧路径复活 entry」是顺序不变量；内联会把这段
+   * 状态机拆进 rollbackToMessage 的重试/事务编排。
+   */
+  private async reconcileVfsPaths(tx: TdbcConnection, plan: RollbackPlan, useRevisionHeadBackfill: boolean): Promise<VfsReconcileStats> {
     const { scope, pathsNeedWrite, targetTree, checkpointEntryIdByPath, tailDerivedDeletePaths, projectId, sessionId, hasDirectTargetTree } = plan;
-    const scopeKeyStr = scopeKey(scope);
-    const vfs = this.scopedVfs(projectId, sessionId, tx);
-    const revisions = new SqliteVfsRevisionRepository(tx);
-    const entries = new SqliteVfsEntryRepository(tx);
-    const liveHeadRows = await listSessionFileHeads(entries, projectId, sessionId);
+    const scopeKeyStr = LogicalPath.scopeKey(scope);
+    const vfs = VfsServiceFactory.createScoped(tx, { kind: "session", projectId, sessionId });
+    const { entryRepo, revisionRepo } = MessageCheckpointFactory.createRepoDeps(tx);
+    const liveHeadRows = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
     // CD-01 第 3 步：删集合在**事务内**用上面这份 live 快照重算——不新增第二次
     // live 扫描，也不复用 plan 段那次（两个 live 头来自两个不同时刻的扫描，
     // 短路的依据可能在事务里早已不成立）。
-    const pathsNeedDelete = resolvePathsNeedDeleteInTransaction({
+    const pathsNeedDelete = ReconcilePaths.resolveNeedDelete({
       liveHeads: liveHeadRows,
       targetTree,
       hasDirectTargetTree,
@@ -457,37 +490,24 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       if (version != null) {
         let entryId = entryIdByPath.get(logicalPath);
         if (entryId == null) {
-          const entry = await entries.findByPath(scopeKeyStr, logicalPath);
-          entryId = entry?.entryId ?? -1;
+          // 事务回调内已知失败升级为 throw 保回滚（总纲 §五例外 2）：解包字收口在 unwrapOrRollback（门⑦）。
+          const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
+          entryId = TdbcTransaction.unwrapOrRollback(entry)?.entryId ?? -1;
         }
         reconcilePairs.push({ logicalPath, entryId, version });
       }
     }
 
     const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
-    const revisionMetaByKey = await revisions.findMetasByEntryVersions(
-      queryable.map((pair) => ({
-        entryId: pair.entryId,
-        version: pair.version,
-      }))
-    );
-    const liveHashByPath = await entries.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
-    const prefetch = {
-      entryIdByPath,
-      revisionMetaByKey,
-      liveHashByPath,
-      checkpointEntryIdByPath,
-    };
+    const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
+    const liveHashes = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
+    const liveHashByPath = TdbcTransaction.unwrapOrRollback(liveHashes);
+    const restorePrefetch = { entryIdByPath, liveHashByPath, checkpointEntryIdByPath };
+    const prefetch = { ...restorePrefetch, revisionMetaByKey };
     // backfill 会 append 新 revision 使 meta 变化，沿用 prefetch 的 revisionMetaByKey
-    // 会有 stale prefetch——此处有意不放 revisionMetaByKey，由 restorePathToRevision
+    // 会有 stale prefetch——此处有意不放 revisionMetaByKey，由 RestorePath.restoreToRevision
     // 逐条 findMetaByEntryAndVersion 查最新 meta，不并入 prefetch。
-    const prefetchForRestore = useRevisionHeadBackfill
-      ? {
-          liveHashByPath: prefetch.liveHashByPath,
-          entryIdByPath: prefetch.entryIdByPath,
-          checkpointEntryIdByPath: prefetch.checkpointEntryIdByPath,
-        }
-      : prefetch;
+    const prefetchForRestore = useRevisionHeadBackfill ? restorePrefetch : prefetch;
     // 复活已删 entry 分支需要 contentStore：put 幂等确保目标 blob 在位并回取
     // 权威 content_hash（对齐 resetHeadToVersion 的做法）。
     const contentStore = new SqliteVfsContentStore(tx);
@@ -502,16 +522,27 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // 现路径在 pathsNeedDelete（墓碑 entry）——先删现路径才能按旧路径复活，
     // 反序会撞 entry 主键。普通场景两个集合不相交，顺序无影响。
     for (const logicalPath of pathsNeedDelete) {
-      await this.deletePathIfExists(vfs, logicalPath);
+      const removed = await vfs.delete(logicalPath);
+      // NOT_FOUND 等于已删（幂等）；其它已知失败升级为 throw 保回滚（总纲 §五例外 2），
+      // 解包字收口在 unwrapOrRollback（门⑦）。
+      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
+        TdbcTransaction.unwrapOrRollback(removed);
+      }
       deleted++;
     }
 
     for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
-        const restoreResult = useRevisionHeadBackfill ? (await restorePathToRevisionWithBackfill(vfs, revisions, entries, tx, scope, logicalPath, version, liveHeadByPath, prefetchForRestore)).map((r) => r.outcome) : await restorePathToRevision(vfs, revisions, scope, logicalPath, version, liveHeadByPath, entries, prefetchForRestore, checkpointEntryIdByPath.get(logicalPath) ?? null, contentStore);
-        if (!restoreResult.ok) throw restoreResult.error;
-        const outcome = restoreResult.value;
+        const checkpointEntryId = checkpointEntryIdByPath.get(logicalPath) ?? null;
+        let restoreResult: Awaited<ReturnType<typeof RestorePath.restoreToRevision>>;
+        if (useRevisionHeadBackfill) {
+          const backfilled = await RestorePath.restoreToRevisionWithBackfill({ vfs, revisionRepo, entryRepo, tx }, { scope, logicalPath, version, liveHeadByPath, prefetch: prefetchForRestore });
+          restoreResult = backfilled.map((r) => r.outcome);
+        } else {
+          restoreResult = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo, contentStore }, { scope, logicalPath, version, liveHeadByPath, prefetch: prefetchForRestore, checkpointEntryId });
+        }
+        const outcome = TdbcTransaction.unwrapOrRollback(restoreResult);
         if (outcome === "skipped_same_version") {
           skippedSameVersion++;
         } else if (outcome === "skipped_same_content_hash") {
@@ -530,23 +561,5 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       restored,
       deleted,
     };
-  }
-
-  private scopedVfs(projectId: string, sessionId: string, conn: TdbcConnection): VfsService {
-    return createScopedVfsService(conn, {
-      kind: "session",
-      projectId,
-      sessionId,
-    });
-  }
-
-  private async deletePathIfExists(vfs: VfsService, logicalPath: string): Promise<void> {
-    try {
-      await vfs.delete(logicalPath);
-    } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
-        throw error;
-      }
-    }
   }
 }

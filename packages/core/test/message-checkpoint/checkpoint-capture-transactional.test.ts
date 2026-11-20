@@ -5,23 +5,20 @@
  * @module test/message-checkpoint/checkpoint-capture-transactional
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { listSessionFileHeads } from "../../src/domain/message-checkpoint/logic/list-session-files.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SessionFiles  } from "../../src/domain/message-checkpoint/logic/list-session-files.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 describe("checkpoint capture transactional (T-C2 / V8)", () => {
   it("V8: capture 事务内的扫描隔离——不包含事务外写入", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-V8-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-V8-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 写初始文件 fileA
@@ -32,14 +29,14 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
     // 开启一个事务 tx1，在 tx1 内扫描 heads
     const tx1Heads = await ctx.conn.transaction(async (tx) => {
       const txEntries = new SqliteVfsEntryRepository(tx);
-      return listSessionFileHeads(txEntries, project.id, session.id);
+      return SessionFiles.listHeads(txEntries, project.id, session.id);
     });
 
     // 在 tx1 提交后，写一个额外文件 fileB，再开启 tx2 扫描
     await svfs.write("/b.md", "bravo", { versionCheck: false });
     const tx2Heads = await ctx.conn.transaction(async (tx) => {
       const txEntries = new SqliteVfsEntryRepository(tx);
-      return listSessionFileHeads(txEntries, project.id, session.id);
+      return SessionFiles.listHeads(txEntries, project.id, session.id);
     });
 
     // tx1 扫描在 fileB 写入前完成，不应包含 fileB
@@ -59,8 +56,8 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
 
   it("V8: capture 通过 service 调用时 scan + insert 在同一事务边界内", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-V8b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-V8b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 写两个文件
@@ -68,10 +65,10 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
     await svfs.write("/y.md", "yankee", { versionCheck: false });
 
     // 创建消息并 capture
-    const msg = await ctx.messages.append(session.id, "assistant", {
+    const msg = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "capture-test" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, msg.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, msg.id));
 
     // 验证 checkpoint 只包含 capture 时的两个文件
     const repo = new (await import("../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js")).SqliteMessageCheckpointRepository(
@@ -91,8 +88,8 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
 
   it("V8: 并发扫描验证——Promise.all 模拟两 capture 同时启动", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-V8c-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-V8c-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 写 5 个初始文件
@@ -102,12 +99,12 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
     }
 
     // 创建两个消息，各自需要 capture
-    const msgA = await ctx.messages.append(session.id, "assistant", {
+    const msgA = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "msgA" }],
-    });
-    const msgB = await ctx.messages.append(session.id, "assistant", {
+    }));
+    const msgB = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "msgB" }],
-    });
+    }));
 
     // 用 Promise.all 模拟并发 capture
     // 由于 node:test 是单线程，Promise.all 不会真正并行，
@@ -138,8 +135,8 @@ describe("checkpoint capture transactional (T-C2 / V8)", () => {
 describe("checkpoint capture transactional performance (T-C2 / 性能基线)", () => {
   it("capture 1000 文件 P95 不超过基线（800ms，CI 宽松倍率）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`Perf-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`Perf-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 写 1000 个文件
@@ -149,16 +146,16 @@ describe("checkpoint capture transactional performance (T-C2 / 性能基线)", (
       });
     }
 
-    const msg = await ctx.messages.append(session.id, "assistant", {
+    const msg = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "perf-capture" }],
-    });
+    }));
 
     // 跑 3 次取 P95 或直接断言单次耗时
     const SAMPLE_RUNS = 3;
     const durations: number[] = [];
     for (let run = 0; run < SAMPLE_RUNS; run++) {
       const start = performance.now();
-      await ctx.messageCheckpoint.capture(session.id, project.id, msg.id);
+      unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, msg.id));
       durations.push(performance.now() - start);
     }
 

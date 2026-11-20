@@ -9,17 +9,15 @@
  * @module test/session-run-state/session-run-state.fork-copy-guard.test
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createSessionRunStateService } from "../../src/service/session-run-state/create-session-run-state-service.js";
-import { createMessageTranscriptEffectsService } from "../../src/service/chat/create-message-transcript-effects.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  createSessionRunStateService  } from "../../src/service/session-run-state/create-session-run-state-service.js";
+import {  ChatServiceFactory  } from "../../src/service/chat/chat-service-factory.js";
 import type { SessionRunState } from "../../src/domain/session-run-state/model/session-run-state.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -51,22 +49,22 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
   it("fork：新会话无 run_state 行，源会话行原样保留", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
-      textBlocks("2")
-    );
+      TextBlocks.of("2")
+    ));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);
 
-    const forked = await ctx.messages.fork(session.id, m2.id);
+    const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
 
-    assert.equal(await svc.get(forked.id), null);
-    assert.deepEqual(await svc.get(session.id), row);
+    assert.equal(unwrap(await svc.get(forked.id)), null);
+    assert.deepEqual(unwrap(await svc.get(session.id)), row);
     // 语义补充：m1 之后 fork 与全量 fork 一致——本守护只关心 run_state，
     // 不重复覆盖 fork 内容语义。
     assert.notEqual(forked.id, session.id);
@@ -76,49 +74,49 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
   it("copy：新会话无 run_state 行，源会话行原样保留", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    await ctx.messages.append(session.id, "user", textBlocks("u"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u")));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);
 
-    const copied = await ctx.sessions.copy(session.id);
+    const copied = unwrap(await ctx.sessions.copy(session.id));
 
-    assert.equal(await svc.get(copied.id), null);
-    assert.deepEqual(await svc.get(session.id), row);
+    assert.equal(unwrap(await svc.get(copied.id)), null);
+    assert.deepEqual(unwrap(await svc.get(session.id)), row);
   });
 
   it("置位（setMessageFloorAtMessage）后既有 run_state 行不变", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const anchor = await ctx.messages.append(
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const anchor = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("锚点")
-    );
-    await ctx.messages.append(session.id, "assistant", textBlocks("a"));
+      TextBlocks.of("锚点")
+    ));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("a")));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);
 
-    await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
+    unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id));
 
-    assert.deepEqual(await svc.get(session.id), row);
+    assert.deepEqual(unwrap(await svc.get(session.id)), row);
   });
 
   it("压缩（truncateMessagesAfter）后既有 run_state 行不变", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("2")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     const row = makeRunningRow(session.id, project.id);
     await svc.upsert(row);
@@ -126,8 +124,8 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
     // 消息 tail 已删，但 run 态不是消息面数据——行原样。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 1);
-    assert.deepEqual(await svc.get(session.id), row);
+    assert.deepEqual(unwrap(await svc.get(session.id)), row);
   });
 });

@@ -1,5 +1,5 @@
 import {saveDocuments} from '@react-native-documents/picker';
-import {exportMobileLogs} from '@/services/log-export';
+import {LogExport} from '@/services/log-export'
 import {fs as mockFs, MOCK_DIRS} from '../test-utils/react-native-blob-util-mock';
 
 const LOG_DIR = `${MOCK_DIRS.DocumentDir}/logs`;
@@ -39,7 +39,7 @@ describe('exportMobileLogs', () => {
       {name: 'nm-20261107.log', text: 'day-7\n', bytes: 6, mtimeMs: 7},
     ]);
 
-    await expect(exportMobileLogs()).resolves.toBe('saved');
+    await expect(LogExport.export()).resolves.toBe('saved');
 
     const [tmpPath, body] = (mockFs.writeFile as jest.Mock).mock.calls[0];
     expect(tmpPath).toMatch(/^\/cache\/nm-logs-\d{8}-\d{6}\.txt$/);
@@ -56,7 +56,7 @@ describe('exportMobileLogs', () => {
       {name: 'nm-20261106.log', text: 'new-small', bytes: 9, mtimeMs: 6},
     ]);
 
-    await expect(exportMobileLogs()).resolves.toBe('saved');
+    await expect(LogExport.export()).resolves.toBe('saved');
 
     const text = String((mockFs.writeFile as jest.Mock).mock.calls[0][1]);
     expect(text.startsWith('[truncated: dropped 1 file(s)]\n')).toBe(true);
@@ -67,7 +67,7 @@ describe('exportMobileLogs', () => {
   it('没有日志文件时导出一个空内容（仍走保存框）', async () => {
     stubLogFiles([]);
 
-    await expect(exportMobileLogs()).resolves.toBe('saved');
+    await expect(LogExport.export()).resolves.toBe('saved');
 
     expect((mockFs.writeFile as jest.Mock).mock.calls[0][1]).toBe('');
   });

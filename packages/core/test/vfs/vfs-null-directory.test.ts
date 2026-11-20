@@ -1,19 +1,17 @@
 /**
  * T-NULL-DIR：insertDirectory 双 NULL；读路径不解 ContentStore、不泄漏 `"null"`。
  */
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import {  describe, it  } from "node:test";
+import {  readFileSync  } from "node:fs";
+import {  fileURLToPath  } from "node:url";
 import path from "node:path";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { createVfsService } from "@novel-master/core/vfs";
-import { isVfsError } from "@/errors/vfs-errors.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
+
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -24,7 +22,7 @@ describe("directory NULL content contract", () => {
     const { conn } = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(conn);
     const dir = `/null-dir-${testIsolationSuffix()}/d`;
-    await repo.insertDirectory(GLOBAL_SCOPE, dir);
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, dir));
 
     const raw = await conn.query<{
       content: string | null;
@@ -40,20 +38,16 @@ describe("directory NULL content contract", () => {
     // 提醒：JS 的 String(null)==="null"，所以 repo 绝不能对 SQL NULL 做 String(...)
     assert.equal(String(raw[0]!.content), "null");
 
-    const entry = await repo.findByPath(GLOBAL_SCOPE, dir);
+    const entry = unwrap(await repo.findByPath(GLOBAL_SCOPE, dir));
     assert.ok(entry);
-    assert.equal(entry.entryKind, "directory");
-    assert.equal(entry.content, "");
-    assert.notEqual(entry.content, "null");
+    assert.equal(entry!.entryKind, "directory");
+    assert.equal(entry!.content, "");
+    assert.notEqual(entry!.content, "null");
 
-    const vfs = createVfsService(conn);
-    await assert.rejects(
-      () => vfs.read(GLOBAL_SCOPE, dir),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "IS_DIRECTORY"));
-        return true;
-      },
-    );
+    const vfs = VfsServiceFactory.create(conn);
+    await rejectsErr(() => vfs.read(GLOBAL_SCOPE, dir), (e: unknown) => {
+      assert.ok(AppErrorOps.is(e, "VFS_IS_DIRECTORY"));
+    });
   });
 
   it("T-NULL-DIR 负向：repo 源码禁止 String(row.content) / String(null) 伪串路径", () => {

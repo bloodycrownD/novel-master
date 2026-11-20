@@ -16,7 +16,7 @@
  * - 串行执行：从链首起依次请求，单引擎失败（任何错误类型）→ 尝试链中
  *   下一个；显式 input.engine 时钉死链首、失败不降级直接报错。链总预算
  *   120s（每引擎尝试前检查剩余额度，耗尽带已收集错误返回）；全链失败
- *   抛聚合错误（每引擎一行摘要，不泄漏 key）。
+ *   返回聚合错误（Result.err，每引擎一行摘要，不泄漏 key）。
  * - `params` 是自由 JSON 对象，原样透传给模板执行器（引擎方言参数，
  *   未知字段由引擎忽略）；DuckDuckGo 忽略 params。
  * - 成功输出携带 `attempts` 尝试轨迹（首发成功省略该字段）。
@@ -32,19 +32,20 @@
  * @module domain/tool/builtin/search/search-tool
  */
 
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 import { z } from "zod";
 
-import { toolFailed } from "@/errors/tool-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
 import type { Tool } from "../../model/tool.js";
 import type { BuiltinToolContext } from "../builtin-tool-context.js";
-import { sinkOversizedOutput } from "../overflow-sink.js";
-import { normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
-import { dispatchSearch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { OverflowSink } from "../overflow-sink.js";
+import { SearchEngine, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
+import { SearchDispatch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.search");
+const log = LogFactory.create("tool.search");
 
 /** 工具名（注册表 / catalog / policy 共用；测试直引）。 */
 export const SEARCH_TOOL_NAME = "search";
@@ -102,13 +103,13 @@ function buildChainErrorMessage(failureLines: readonly string[], untried: number
  * description 是静态 lambda：通用段就地拼装，逐引擎段消费装配期
  * `engineSnapshot`（`ctx.search` 注入，回合内改配置下回合生效）；
  * 链解析与凭证明文读取仍在 run 内进行。是否对 LLM 可见由
- * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
+ * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制。
  */
 export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolContext> = {
   name: SEARCH_TOOL_NAME,
   description: (ctx) => {
     // 空快照三路径语义：未注入闭包（CLI/旧 mock）→ 中性「未装配」文案
-    //（run 必抛，不承诺任何 run 行为）；已注入但快照为空 → 保留配置指引
+    //（run 返回 TOOL_FAILED err）；已注入但快照为空 → 保留配置指引
     //（软化为不承诺 run 返回——实际行为以 run 内链解析为准）。逐引擎段
     // 来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
     const engineList = ctx.search?.engineSnapshot;
@@ -151,14 +152,16 @@ ${engineSection}
     if (search == null) {
       // 未装配闭包（CLI 无 kkv / 旧测试 mock）：可读错误而非崩溃。
       log.warn("search run：ctx.search 未注入（工具未装配搜索上下文）");
-      throw toolFailed(SEARCH_TOOL_NAME, new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"));
+      return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     }
 
     // 引擎链解析：engineOrderV2 优先级序（显式 input.engine 时先钉该引擎，
     // 不可用则沿序顺位回落）；链空是合法常态（全关）→ 中性配置指引提示
-    //（成功输出、非错误）。
-    const chain = await search.resolveEngineChain(input.engine);
-    if (chain.length === 0) return SEARCH_NOT_CONFIGURED_MESSAGE;
+    //（成功输出、非错误）。无效引擎名沿 Result.err 接力（四期门⑦）。
+    const chainResult = await search.resolveEngineChain(input.engine);
+    if (!chainResult.ok) return Result.err(chainResult.error);
+    const chain = chainResult.value;
+    if (chain.length === 0) return Result.ok(SEARCH_NOT_CONFIGURED_MESSAGE);
 
     // 搜索词在 params 里（各家字段名不同：q / query / search_query）；模板占位符
     // 替换与 DuckDuckGo 兜底共用该值。条数同理：count / max_results 归一后只喂
@@ -172,9 +175,9 @@ ${engineSection}
         break;
       }
     }
-    if (query.length === 0) throw toolFailed(SEARCH_TOOL_NAME, new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"));
+    if (query.length === 0) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     const rawCount = params.count ?? params.max_results ?? params.maxResults;
-    const maxResults = normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
+    const maxResults = SearchEngine.normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
 
     // 显式 engine 钉死：只尝试链首（含顺位回落后的链首），失败不降级
     // 直接报错；缺省调用才沿链降级。
@@ -188,37 +191,50 @@ ${engineSection}
     // attempts 轨迹分段（「bocha 失败(401)」…，成功引擎由返回处拼接）。
     const attemptParts: string[] = [];
     let success: SearchChainOutput | null = null;
+    // 单引擎失败摘要收编（已知 Err 与未知异常同口；脱敏 + 截断口径不变）。
+    const recordEngineFailure = (entry: ResolvedEngineConfig, e: unknown): void => {
+      const msg = e instanceof Error ? e.message : String(e);
+      const safe = SearchEngine.redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
+      const code = msg.match(/error (\d{3})/i)?.[1];
+      const timeout = msg.match(/timed out after (\d+)ms/);
+      const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
+      failureLines.push(`${entry.engine}: ${safe}`);
+      attemptParts.push(`${entry.engine} 失败(${brief})`);
+    };
 
     for (const [i, entry] of candidates.entries()) {
       // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
-      // 拦一道，避免取消后仍去尝试链上剩余引擎。
-      if (signal?.aborted === true) throw toolFailed(SEARCH_TOOL_NAME, new Error("搜索已取消"));
+      // 拦一道，避免取消后仍去尝试链上剩余引擎。取消走返回值通道（七期），
+      // 不再 throw——runner 收成取消 outcome。
+      if (signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
       // 链总预算：每引擎尝试前检查剩余额度，耗尽即带已收集错误返回
       //（首引擎前 elapsed 为 0，不会误拦）。
-      if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) throw toolFailed(SEARCH_TOOL_NAME, new Error(buildChainErrorMessage(failureLines, candidates.length - i)));
+      if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
       try {
-        const response = await dispatchSearch(entry, query, { maxResults }, params, fetchFn, signal);
+        const response = await SearchDispatch.dispatch(entry, query, { maxResults }, params, fetchFn, signal);
+        if (!response.ok) {
+          // 引擎已知失败（四期门⑦沿 Result 回来）：取消重判后记降级行，
+          // 尝试链中下一个引擎（钉死时仅一员，自然止）；取消沿 Result.err 返回。
+          if (ctx.signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
+          recordEngineFailure(entry, response.error);
+          continue;
+        }
         // 降级后成功：输出携带 attempts 轨迹；链首首发成功省略该字段。
-        const attempts = attemptParts.length === 0 ? undefined : `${attemptParts.join(" → ")} → ${response.engine} 成功`;
-        success = attempts == null ? response : { ...response, attempts };
+        const attempts = attemptParts.length === 0 ? undefined : `${attemptParts.join(" → ")} → ${response.value.engine} 成功`;
+        success = attempts == null ? response.value : { ...response.value, attempts };
         break;
       } catch (e) {
-        // 用户取消：不是引擎失败，立即终止、不走降级链（重读 ctx.signal：局部 signal 已被上面的检查收窄）。
-        if (ctx.signal?.aborted === true) throw toolFailed(SEARCH_TOOL_NAME, new Error("搜索已取消"));
-        const msg = e instanceof Error ? e.message : String(e);
-        const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
-        const code = msg.match(/error (\d{3})/i)?.[1];
-        const timeout = msg.match(/timed out after (\d+)ms/);
-        const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
-        failureLines.push(`${entry.engine}: ${safe}`);
-        attemptParts.push(`${entry.engine} 失败(${brief})`);
+        // 未知异常（非 abort 的 fetch 错误 / 编程错误）：取消重判 + 同口收编为降级行；
+        // 取消沿 Result.err 返回，不再 throw。
+        if (ctx.signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
+        recordEngineFailure(entry, e);
         // 循环继续：尝试链中下一个引擎（钉死时仅一员，自然止）。
       }
     }
 
     if (success == null) {
       // 全链失败：聚合错误（每引擎一行摘要，不泄漏 key）。
-      throw toolFailed(SEARCH_TOOL_NAME, new Error(buildChainErrorMessage(failureLines, 0)));
+      return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, 0)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     }
 
     // —— 超 50KB 落盘保险丝（overflow-sink，curl 同机制）——
@@ -227,18 +243,18 @@ ${engineSection}
     // message}；落盘失败（如 vfs 不可用）回落完整结果，不因落盘
     // 故障丢搜索所得。
     const serialized = JSON.stringify(success);
-    if (utf8ByteLength(serialized) > TOOL_OUTPUT_MAX_BYTES) {
+    if (Encoding.utf8ByteLength(serialized) > TOOL_OUTPUT_MAX_BYTES) {
       try {
-        const sink = await sinkOversizedOutput(ctx, { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" });
-        return {
+        const sink = await OverflowSink.sink(ctx, { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" });
+        return Result.ok({
           engine: success.engine,
           savedPath: sink.savedPath,
           message: sink.message,
-        };
+        });
       } catch (error) {
         log.debug("超预算落盘失败，回落完整输出", { error });
       }
     }
-    return success;
+    return Result.ok(success);
   },
 };

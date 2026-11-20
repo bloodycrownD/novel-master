@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "../../../src/infra/tokenizer/impl/heuristic-token-counter.js";
+import {  describe, it  } from "node:test";
+import {  HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO  } from "../../../src/infra/tokenizer/impl/heuristic-token-counter.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 function msg(role: ChatMessageData["role"], text: string): ChatMessageData {

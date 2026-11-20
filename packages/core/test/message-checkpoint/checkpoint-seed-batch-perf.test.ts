@@ -10,17 +10,14 @@
  * 锚点行 + 文件行，ref_count 用 batchAdjustRefCountWithDelta 一次加 msgCount。
  * 200×500 场景从 ~1.8s 降到 ~170ms。
  */
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { performance } from "node:perf_hooks";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  performance  } from "node:perf_hooks";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -40,11 +37,11 @@ const SEED_BUDGET_MS = 1500;
 describe("checkpoint seed 批量化性能（200 文件 × 500 消息）", () => {
   it("T-PERF-BATCH：500 条消息各 insertCheckpoint（200 文件指针）应在预算内完成", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -55,8 +52,8 @@ describe("checkpoint seed 批量化性能（200 文件 × 500 消息）", () => 
     for (let i = 0; i < FILE_COUNT; i++) {
       const p = `/perf-${i}.md`;
       await svfs.write(p, `body-${i}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = unwrap(await svfs.read(p)).version;
       pointers.push({ entryId: entry!.entryId, revisionVersion: version });
     }
 

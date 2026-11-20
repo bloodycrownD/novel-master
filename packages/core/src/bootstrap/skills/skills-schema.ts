@@ -7,7 +7,7 @@
 /** Canonical table: 技能禁用负清单（默认启用，关闭才落行）。 */
 export const SKILL_DISABLED_RULE_TABLE = "skill_disabled_rule";
 /** Canonical index: 按域查禁用行。 */
-export const SKILL_DISABLED_SCOPE_INDEX = "idx_skill_disabled_scope";
+const SKILL_DISABLED_SCOPE_INDEX = "idx_skill_disabled_scope";
 
 /**
  * skill_disabled_rule 幂等 DDL（照 workplace_dir_rule 模式）。

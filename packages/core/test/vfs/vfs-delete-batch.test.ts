@@ -2,7 +2,7 @@
  * T-DEL1：vfs.delete 递归删大目录的 SQL 次数回归（→ Step 4 / 发现 8）。
  *
  * 改造前 `appendDeletedRevisionsForSubtree` 对每个子文件走 `scanContents` +
- * 逐条 `findByPath` + `adjustRef` + `append` + `adjustRef`，删 100 文件要发
+ * 逐条 `findByPath` + `RevisionRefCount.adjust` + `append` + `RevisionRefCount.adjust`，删 100 文件要发
  * ~302 条业务 SQL。改成 `listFileHeadsUnderPrefix` + `batchAdjustRefCount` +
  * `batchAppendWithRefCount` 后应压到个位数。这里给一个 ≤ 20 的保守上限断言，
  * 同时校验墓碑数量、ref_count、可见性这些正确性不变量。
@@ -11,11 +11,13 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
 
 type CountingCtx = NovelMasterTestContext & {
   readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
@@ -120,7 +122,11 @@ describe("T-DEL1 vfs.delete 递归删除批量化", () => {
     await vfs.write("/tree3/b.md", "B");
     await vfs.delete("/tree3", { recursive: true });
 
-    await assert.rejects(() => vfs.read("/tree3/a.md"));
-    await assert.rejects(() => vfs.read("/tree3/b.md"));
+    await rejectsErr(() => vfs.read("/tree3/a.md"), (e: unknown) => {
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
+    });
+    await rejectsErr(() => vfs.read("/tree3/b.md"), (e: unknown) => {
+      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
+    });
   });
 });

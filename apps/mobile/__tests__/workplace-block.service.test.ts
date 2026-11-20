@@ -5,12 +5,15 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 
 const mockRefresh = jest.fn(async () => undefined);
 
-jest.mock('@/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => {
+  const legacy = {
   refreshComposerStatusAfterSessionKkvCleared: (...args: unknown[]) =>
     mockRefresh(...args),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {refreshAfterSessionKkvCleared: legacy.refreshComposerStatusAfterSessionKkvCleared}};
+});
 
-import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
+import {WorkplaceBlockService} from '@/services/workplace-block.service'
 
 describe('workplace-block.service', () => {
   beforeEach(() => {
@@ -21,12 +24,13 @@ describe('workplace-block.service', () => {
     const clearSession = jest.fn(async () => undefined);
     const runtime = {sessionKkv: {clearSession}} as any;
 
-    const block = await clearSessionWorkplaceKkv(runtime, {
+    const block = await WorkplaceBlockService.clearSessionKkv(runtime, {
       projectId: 'p',
       sessionId: 's',
     });
     expect(clearSession).toHaveBeenCalledWith('s');
-    expect(mockRefresh).toHaveBeenCalledWith(runtime, {
+    // 十七期第2轮签名审计：refresh 的 runtime 首参是死参已删，scope 形状不变。
+    expect(mockRefresh).toHaveBeenCalledWith({
       projectId: 'p',
       sessionId: 's',
     });

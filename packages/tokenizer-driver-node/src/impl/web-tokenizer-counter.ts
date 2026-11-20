@@ -7,16 +7,16 @@
 import { Tokenizer } from "@agnai/web-tokenizers";
 import { type ChatMessage } from "@novel-master/core/chat";
 
-import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/provider";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/tokenizer";
+import { MessageBodyText } from "@novel-master/core/prompt";
 
-import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/provider";
-import { countWebTokenizerMessages, wrapSerializedPromptAsSystemMessage, type OpenAiStyleMessage } from "../logic/count-openai-style-message.js";
-import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
-import { countTextWithDefaultEncoding } from "./encoding-cache.js";
-import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
+import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/tokenizer";
+import { OpenAiStyleMessageCount } from "../logic/count-openai-style-message.js";
+import { TokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
+import { EncodingCache } from "./encoding-cache.js";
+import { NodeTokenizerLoader } from "../node-tokenizer-loader.js";
 
-/** Web tokenizer 家族（`constructor` 与 `countWebFamilyPrompt` 的 cast 共用）。 */
+/** Web tokenizer 家族（`constructor` 与 `WebFamilyCount.countPrompt` 的 cast 共用）。 */
 type WebTokenizerFamily = Exclude<TokenizerFamily, "heuristic" | "tiktoken">;
 
 /** 家族 prompt 计数结果（真计数或加载失败后的兜底估算）。 */
@@ -24,22 +24,38 @@ type TokenCountEstimate = { readonly count: number; readonly estimated: boolean 
 
 const heuristic = new HeuristicTokenCounter();
 
-/**
- * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
- *
- * 为什么不直接 `heuristic.countText`（即 `ceil(字符数 / 3.35)`）：3.35 是**英文**
- * 口径，cl100k 实际约 1.64 token/字符（≈0.61 字符/token），折算对中文正文系统性
- * 低估 82%~84%。这里的调用方（`countWebFamilyPrompt`）会在加载失败时把
- * `estimated` 置 true、`counterKind` 置 `heuristic`，也就是说**上层已经知道这是
- * 估算**——在已知是估算的前提下，没理由
- * 再用误差八成的折算，用默认 cl100k 近似（误差 0.5% 量级）明显更划算。
- *
- * 只有「连 cl100k 表都建不起来」才退回字符折算：那是环境级故障（ranks 资源缺失），
- * 别无选择，且失败被缓存、本进程不再重试。
- */
-function fallbackCount(text: string): number {
-  const real = countTextWithDefaultEncoding(text);
-  return real ?? heuristic.countText(text);
+// nm-style 注记：文件名 PascalCase（WebTokenizerCounter）撞同文件 export 类 WebTokenizerCounter，按「WEB 家族计数入口」主体起名（WebFamilyCount）。
+export namespace WebFamilyCount {
+  /**
+   * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
+   *
+   * 为什么不直接 `heuristic.countText`（即 `ceil(字符数 / 3.35)`）：3.35 是**英文**
+   * 口径，cl100k 实际约 1.64 token/字符（≈0.61 字符/token），折算对中文正文系统性
+   * 低估 82%~84%。这里的调用方（`WebFamilyCount.countPrompt`）会在加载失败时把
+   * `estimated` 置 true、`counterKind` 置 `heuristic`，也就是说**上层已经知道这是
+   * 估算**——在已知是估算的前提下，没理由
+   * 再用误差八成的折算，用默认 cl100k 近似（误差 0.5% 量级）明显更划算。
+   *
+   * 只有「连 cl100k 表都建不起来」才退回字符折算：那是环境级故障（ranks 资源缺失），
+   * 别无选择，且失败被缓存、本进程不再重试。
+   */
+  // nm-style 注记：本应保持 namespace 私有，但顶层 export 类 WebTokenizerCounter（不收口）的兜底路径依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
+  export function fallbackCount(text: string): number {
+    const real = EncodingCache.countText(text);
+    return real ?? heuristic.countText(text);
+  }
+
+  /**
+   * nm-style: keep-public — WEB 家族计数入口，与 `SentencePieceFamilyCount.countPrompt`（SP）构成同形
+   * 家族工厂对（`family, serialized → {count, estimated}`，fallback-caliber 契约）：把 counter 生命
+   * 周期（构造一次、`failedLoad` 读一次）封装成结果快照，fallback-count.test 的 F1/F2 成对锁名。
+   * 内联单个会把 counter 构造细节漏进调用方、与 SP 分支形成深浅不一的两层。
+   */
+  export async function countPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
+    const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
+    const count = await counter.countSerializedPrompt(serialized);
+    return { count, estimated: counter.failedLoad };
+  }
 }
 
 /** Loads JSON assets and counts via ST web-tokenizer message conversion. */
@@ -60,12 +76,12 @@ export class WebTokenizerCounter implements TokenCounter {
     if (this.loadError) {
       return null;
     }
-    const paths = tokenizerAssetPaths(this.family);
+    const paths = TokenizerAssetPaths.forFamily(this.family);
     if (paths == null || paths.kind !== "json") {
       this.loadError = true;
       return null;
     }
-    const loader = getNodeTokenizerLoader();
+    const loader = NodeTokenizerLoader.get();
     try {
       const primary = loader.readJson(paths.primary);
       this.instance = await Tokenizer.fromJSON(primary);
@@ -95,10 +111,11 @@ export class WebTokenizerCounter implements TokenCounter {
     return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
 
+  /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {
-      chars += messageBodyTextFromBlocks(m.content.blocks).length;
+      chars += MessageBodyText.fromBlocks(m.content.blocks).length;
     }
     return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }
@@ -110,32 +127,14 @@ export class WebTokenizerCounter implements TokenCounter {
   async countSerializedPrompt(serialized: string): Promise<number> {
     const instance = await this.getInstance();
     if (instance == null) {
-      return fallbackCount(serialized);
+      return WebFamilyCount.fallbackCount(serialized);
     }
-    const wrapped = wrapSerializedPromptAsSystemMessage(serialized);
-    return countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
+    const wrapped = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage(serialized);
+    return OpenAiStyleMessageCount.countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
   }
 
   /** Whether the last load attempt failed (for `estimated` flag). */
   get failedLoad(): boolean {
     return this.loadError;
   }
-}
-
-/** Claude family alias — same web tokenizer path as ST `/openai/count?model=claude`. */
-export class ClaudeWebTokenCounter extends WebTokenizerCounter {
-  constructor() {
-    super("claude");
-  }
-}
-
-export async function countWebFamilyPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
-  const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
-  const count = await counter.countSerializedPrompt(serialized);
-  return { count, estimated: counter.failedLoad };
-}
-
-/** @internal test helper */
-export function messagesToOpenAiStyle(messages: readonly { role: string; content: string }[]): OpenAiStyleMessage[] {
-  return messages.map((m) => ({ role: m.role, content: m.content }));
 }

@@ -17,13 +17,13 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { handleMessagesList } from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { TextBlocks } from "@novel-master/core/chat";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import type { ChatMessageDto, ContentBlockDto } from "../shared/ipc-types.js";
 import {
   setupDesktopDbTestEnv,
@@ -68,18 +68,18 @@ describe("messages 列表 DTO 恒为明文（T-MP-P0b）", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-ipc-plaintext-"));
-    const project = await handleProjectsCreate({ name: "ipc-plaintext" });
+    const project = await Projects.create({ name: "ipc-plaintext" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
     projectId = project.data.id;
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "ipc-plaintext",
     });
@@ -95,15 +95,17 @@ describe("messages 列表 DTO 恒为明文（T-MP-P0b）", () => {
   });
 
   it("明文行经 IPC 后 bodyText / contentBlocks 逐字节等于原文", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const firstBody = `明文化正文 · 压缩形态只存在于存储层：${"中文与标点、emoji 🎯 混排。".repeat(30)}`;
     const secondBody = `第二条正文 · ${"逐字节等值校验。".repeat(40)}`;
 
     // 两条明文行：走生产写路径（append）。
-    await rt.messages.append(sessionId, "user", textBlocks(firstBody));
-    await rt.messages.append(sessionId, "assistant", textBlocks(secondBody));
+    await rt.messages.append(sessionId, "user", TextBlocks.of(firstBody));
+    await rt.messages.append(sessionId, "assistant", TextBlocks.of(secondBody));
 
-    const res = await handleMessagesList({ sessionId });
+    const res = await Messages.list({ sessionId });
     assert.equal(
       res.ok,
       true,

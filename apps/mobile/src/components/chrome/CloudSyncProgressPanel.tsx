@@ -2,14 +2,7 @@
  * 云同步进度展示（全屏页内居中卡片）。
  */
 import React, {useEffect, useRef} from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  Easing,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 import type {CloudSyncProgressUiState} from '@/services/cloud-sync-progress-ui';
 
@@ -27,22 +20,21 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
       pulse.setValue(0.35);
       return;
     }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.95,
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0.35,
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
+    const pulseSequence = Animated.sequence([
+      Animated.timing(pulse, {
+        toValue: 0.95,
+        duration: 900,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(pulse, {
+        toValue: 0.35,
+        duration: 900,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]);
+    const loop = Animated.loop(pulseSequence);
     loop.start();
     return () => loop.stop();
   }, [state?.indeterminate, pulse]);
@@ -64,9 +56,7 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
       >
         <ActivityIndicator color={tokens.primary} size="large" />
         <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
-        <Text style={[styles.phase, {color: tokens.textSecondary}]}>
-          {phaseLabel}
-        </Text>
+        <Text style={[styles.phase, {color: tokens.textSecondary}]}>{phaseLabel}</Text>
         <View
           style={[styles.track, {backgroundColor: tokens.bgSecondary}]}
           accessibilityRole="progressbar"
@@ -98,12 +88,8 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
             />
           )}
         </View>
-        <Text style={[styles.percent, {color: tokens.textSecondary}]}>
-          {state?.indeterminate === true ? '传输中…' : `${percent}%`}
-        </Text>
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          请勿关闭应用，大文件可能需要数分钟
-        </Text>
+        <Text style={[styles.percent, {color: tokens.textSecondary}]}>{state?.indeterminate === true ? '传输中…' : `${percent}%`}</Text>
+        <Text style={[styles.hint, {color: tokens.textSecondary}]}>请勿关闭应用，大文件可能需要数分钟</Text>
       </View>
     </View>
   );

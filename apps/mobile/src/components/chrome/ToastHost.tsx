@@ -14,9 +14,9 @@ import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {APP_HEADER_CONTENT_HEIGHT} from './AppHeader';
 import {useTheme} from '@/theme/ThemeProvider';
-import {registerAppToastSink} from '@/services/app-toast';
+import {AppToast} from '@/services/app-toast';
 
-export type ToastOptions = {
+type ToastOptions = {
   actionLabel?: string;
   onAction?: () => void;
 };
@@ -74,9 +74,9 @@ export function ToastHost({children}: {children: ReactNode}) {
 
   // 挂载期间把 showToast 注册给模块级桥，供 service 层使用。
   useEffect(() => {
-    registerAppToastSink(showToast);
+    AppToast.registerSink(showToast);
     return () => {
-      registerAppToastSink(null);
+      AppToast.registerSink(null);
     };
   }, [showToast]);
 

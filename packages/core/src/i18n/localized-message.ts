@@ -18,19 +18,25 @@ interface LocalizedMessage {
   readonly messageParams?: MessageParams;
 }
 
-export function resolveLocalizedMessage(input: string | CoreMessageDescriptor): LocalizedMessage {
-  if (typeof input === "string") {
-    return {text: input};
-  }
-  return {text: input.key, messageKey: input.key, ...(input.params == null ? {} : {messageParams: input.params})};
-}
+/**
+ * 解包操作族（与类型 {@link LocalizedMessage} 同名双声明）。
+ */
+export const LocalizedMessage = {
+  /** string | descriptor → 解包结果：字符串只带 text，descriptor 带 key/params。 */
+  resolve(input: string | CoreMessageDescriptor): LocalizedMessage {
+    if (typeof input === "string") {
+      return {text: input};
+    }
+    return {text: input.key, messageKey: input.key, ...(input.params == null ? {} : {messageParams: input.params})};
+  },
+
+  /**
+   * 字符串 → 可翻译参数值：文本恰为已知 key（如 zod message 填 key 的通道）时包
+   * 成 descriptor 供 translator 递归渲染，否则原样透传（诊断串不吞）。
+   */
+  paramOf(text: string): MessageLike {
+    return KNOWN_KEYS.has(text) ? {key: text as CoreMessageKey} : text;
+  },
+} as const;
 
 const KNOWN_KEYS: ReadonlySet<string> = new Set<string>(CORE_MESSAGE_KEYS);
-
-/**
- * 字符串 → 可翻译参数值：文本恰为已知 key（如 zod message 填 key 的通道）时包
- * 成 descriptor 供 translator 递归渲染，否则原样透传（诊断串不吞）。
- */
-export function messageParamOf(text: string): MessageLike {
-  return KNOWN_KEYS.has(text) ? {key: text as CoreMessageKey} : text;
-}

@@ -1,7 +1,7 @@
 /**
- * T-RP1：repairRefCounts 批量化验证。
+ * T-RP1：RevisionRefCount.repair 批量化验证。
  *
- * 之前 {@link repairRefCounts} 内部对每条 revision 走一次 SELECT + 一次 UPDATE，
+ * 之前 {@link RevisionRefCount.repair} 内部对每条 revision 走一次 SELECT + 一次 UPDATE，
  * 200 条 revision 就要发 400 次 SQL。改成 {@link batchRepairRefCountFloor} 之后，
  * SELECT 和 UPDATE 各自按 500 分块，200 条只需 1 + 1 = 2 次。这里就守护这个上限。
  *
@@ -9,15 +9,15 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import {  after, before, describe, it  } from "node:test";
 
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
 
-import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 
 type Ctx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
 
@@ -41,12 +41,12 @@ function getCtx(): Ctx {
   return ctx;
 }
 
-describe("T-RP1 repairRefCounts 批量化", () => {
+describe("T-RP1 RevisionRefCount.repair 批量化", () => {
   it("200 revision 只发 ≤ 2 条 SELECT + ≤ 2 条 UPDATE", async () => {
     const c = getCtx();
     const project = await c.projects.create("p-rp1");
     const vfs = c.projectVfs(project.id);
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
 
     // 写 200 个文件，每个产生一条 revision，ref_count 由 live head +1 维护成 1。
     const N = 200;
@@ -63,14 +63,14 @@ describe("T-RP1 repairRefCounts 批量化", () => {
       [sk],
     );
 
-    // 清空计数，下面的 repairRefCounts 才是真正被断言的部分。
+    // 清空计数，下面的 RevisionRefCount.repair 才是真正被断言的部分。
     c.counter.clear();
 
     const revisionRepo = new SqliteVfsRevisionRepository(c.conn);
     const entryRepo = new SqliteVfsEntryRepository(c.conn);
     const checkpoints = new SqliteMessageCheckpointRepository(c.conn);
 
-    const report = await repairRefCounts(
+    const report = await RevisionRefCount.repair(
       revisionRepo,
       entryRepo,
       checkpoints,
@@ -129,7 +129,7 @@ describe("T-RP1 repairRefCounts 批量化", () => {
     const c = getCtx();
     const project = await c.projects.create("p-rp1-noop");
     const vfs = c.projectVfs(project.id);
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
 
     // 写 50 个文件，ref_count 已经正确（=1）。
     const N = 50;
@@ -143,7 +143,7 @@ describe("T-RP1 repairRefCounts 批量化", () => {
     const entryRepo = new SqliteVfsEntryRepository(c.conn);
     const checkpoints = new SqliteMessageCheckpointRepository(c.conn);
 
-    const report = await repairRefCounts(
+    const report = await RevisionRefCount.repair(
       revisionRepo,
       entryRepo,
       checkpoints,

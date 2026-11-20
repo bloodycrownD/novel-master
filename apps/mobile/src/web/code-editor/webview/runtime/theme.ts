@@ -1,59 +1,55 @@
 import {HighlightStyle, syntaxHighlighting} from '@codemirror/language';
 import {tags as t} from '@lezer/highlight';
 import {EditorView} from '@codemirror/view';
-import {applyHostTheme, type HostTheme} from '@web/shared/host-theme';
+import {HostTheme} from '@web/shared/host-theme';
 
 /** Theme via CSS variables set from RN tokens. */
-export const editorTheme = EditorView.theme(
-  {
-    '&': {
-      height: '100%',
-      backgroundColor: 'var(--editor-bg, var(--bg, #fff))',
-      color: 'var(--text, #111)',
-      fontSize: '14px',
-    },
-    '.cm-scroller': {
-      overflow: 'auto',
-      fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace',
-      lineHeight: '1.6',
-    },
-    '.cm-content': {
-      padding: '8px 0',
-      caretColor: 'var(--primary, #007aff)',
-    },
-    '.cm-line': {
-      padding: '0 4px 0 8px',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeftWidth: '2px',
-      borderLeftColor: 'var(--primary, #007aff)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'var(--editor-gutter-bg, var(--surface, #f2f2f7))',
-      color: 'var(--text-secondary, #666)',
-      border: 'none',
-      borderRight:
-        '1px solid var(--editor-gutter-border, var(--border, #e5e5ea))',
-    },
-    '.cm-gutter.cm-lineNumbers .cm-gutterElement': {
-      padding: '0 12px 0 8px',
-      minWidth: '3em',
-      textAlign: 'right',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-      color: 'var(--text-secondary, #666)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'var(--editor-active-line, rgba(0, 0, 0, 0.04))',
-    },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor:
-        'var(--editor-selection, rgba(0, 122, 255, 0.25)) !important',
-    },
+const editorThemeSpec = {
+  '&': {
+    height: '100%',
+    backgroundColor: 'var(--editor-bg, var(--bg, #fff))',
+    color: 'var(--text, #111)',
+    fontSize: '14px',
   },
-  {dark: false},
-);
+  '.cm-scroller': {
+    overflow: 'auto',
+    fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace',
+    lineHeight: '1.6',
+  },
+  '.cm-content': {
+    padding: '8px 0',
+    caretColor: 'var(--primary, #007aff)',
+  },
+  '.cm-line': {
+    padding: '0 4px 0 8px',
+  },
+  '.cm-cursor, .cm-dropCursor': {
+    borderLeftWidth: '2px',
+    borderLeftColor: 'var(--primary, #007aff)',
+  },
+  '.cm-gutters': {
+    backgroundColor: 'var(--editor-gutter-bg, var(--surface, #f2f2f7))',
+    color: 'var(--text-secondary, #666)',
+    border: 'none',
+    borderRight: '1px solid var(--editor-gutter-border, var(--border, #e5e5ea))',
+  },
+  '.cm-gutter.cm-lineNumbers .cm-gutterElement': {
+    padding: '0 12px 0 8px',
+    minWidth: '3em',
+    textAlign: 'right',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'transparent',
+    color: 'var(--text-secondary, #666)',
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'var(--editor-active-line, rgba(0, 0, 0, 0.04))',
+  },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+    backgroundColor: 'var(--editor-selection, rgba(0, 122, 255, 0.25)) !important',
+  },
+};
+export const editorTheme = EditorView.theme(editorThemeSpec, {dark: false});
 
 const highlightStyle = HighlightStyle.define([
   {tag: t.heading, color: 'var(--primary, #007aff)', fontWeight: '600'},
@@ -82,12 +78,14 @@ export const editorSyntaxHighlighting = syntaxHighlighting(highlightStyle, {
  * 的 primaryMuted 字段条件式写入，本文件不再自拼 `primary + '22'`——自算会让
  * code-editor 与 composer-input 两条链的派生口径分裂（一边宿主拼、一边 web 拼）。
  */
-export function applyTheme(theme: HostTheme | null | undefined): void {
-  applyHostTheme(theme, {
-    extraVars: {
-      background: ['--editor-bg'],
-      surface: ['--editor-gutter-bg'],
-      borderLight: ['--editor-gutter-border'],
-    },
-  });
+export namespace Theme {
+  export function apply(theme: HostTheme | null | undefined): void {
+    HostTheme.apply(theme, {
+      extraVars: {
+        background: ['--editor-bg'],
+        surface: ['--editor-gutter-bg'],
+        borderLight: ['--editor-gutter-border'],
+      },
+    });
+  }
 }

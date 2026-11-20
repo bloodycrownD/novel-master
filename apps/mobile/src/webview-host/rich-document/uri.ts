@@ -1,17 +1,9 @@
 /**
- * RichDocument WebView 本地加载 URI helper。
+ * RichDocument WebView 包 id。
+ *
+ * 只导出包 id，平台 URI 换算法在 `webview-host/webview-asset-uri.ts`
+ * （Android android_asset / iOS MainBundle WebViewDist，同步返回、不做 exists 探测）。
  */
-import {
-  getWebViewPackageDirUri,
-  getWebViewPackageIndexUri,
-} from '@/webview-host/webview-asset-uri';
+import type {WebViewAssetPackageId} from '@/webview-host/webview-asset-uri';
 
-/** 返回 rich-document 包 `index.html` 的平台 URI（同步；不做 exists 探测）。 */
-export function getRichDocumentUri(): string {
-  return getWebViewPackageIndexUri('rich-document');
-}
-
-/** 包目录 URI，供 iOS `allowingReadAccessToURL`。 */
-export function getRichDocumentPackageDirUri(): string {
-  return getWebViewPackageDirUri('rich-document');
-}
+export const RICH_DOCUMENT_WEBVIEW_PACKAGE_ID = 'rich-document' satisfies WebViewAssetPackageId;

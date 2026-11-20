@@ -6,47 +6,46 @@
  * 对象型 raw 直通（宿主直接 postMessage 对象时不丢消息）。
  */
 
-export type HostMessage = {
+type HostMessage = {
   v?: number;
   type?: string;
   payload?: Record<string, unknown>;
 };
 
-/** 解析宿主消息：字符串按 JSON、对象直通；坏输入返回 null（消息丢弃）。 */
-export function parseHostMessage(raw: unknown): HostMessage | null {
-  let msg: HostMessage;
-  try {
-    msg = typeof raw === 'string' ? JSON.parse(raw) : (raw as HostMessage);
-  } catch {
-    return null;
-  }
-  if (!msg || typeof msg !== 'object') {
-    return null;
-  }
-  return msg;
-}
+type HostMessageHandler = (raw: unknown) => void;
 
-/** 解析 + 版本与 type 校验：任一不满足返回 null（消息丢弃）。 */
-export function matchHostMessage(
-  raw: unknown,
-  bridgeV: number,
-): HostMessage | null {
-  const msg = parseHostMessage(raw);
-  if (!msg || msg.v !== bridgeV || !msg.type) {
-    return null;
+export namespace HostMessageChannel {
+  /** 解析宿主消息：字符串按 JSON、对象直通；坏输入返回 null（消息丢弃）。 */
+  export function parse(raw: unknown): HostMessage | null {
+    let msg: HostMessage;
+    try {
+      msg = typeof raw === 'string' ? JSON.parse(raw) : (raw as HostMessage);
+    } catch {
+      return null;
+    }
+    if (!msg || typeof msg !== 'object') {
+      return null;
+    }
+    return msg;
   }
-  return msg;
-}
 
-export type HostMessageHandler = (raw: unknown) => void;
+  /** 解析 + 版本与 type 校验：任一不满足返回 null（消息丢弃）。 */
+  export function match(raw: unknown, bridgeV: number): HostMessage | null {
+    const msg = parse(raw);
+    if (!msg || msg.v !== bridgeV || !msg.type) {
+      return null;
+    }
+    return msg;
+  }
 
-/** 统一 document + window 双注册（每 webview 入口调用一次）。 */
-export function bindHostMessageChannel(handler: HostMessageHandler): void {
-  const onMessage = (event: MessageEvent | {data?: unknown}) => {
-    const data = event && event.data;
-    if (data == null) return;
-    handler(data);
-  };
-  document.addEventListener('message', onMessage as EventListener);
-  window.addEventListener('message', onMessage as EventListener);
+  /** 统一 document + window 双注册（每 webview 入口调用一次）。 */
+  export function bind(handler: HostMessageHandler): void {
+    const onMessage = (event: MessageEvent | {data?: unknown}) => {
+      const data = event && event.data;
+      if (data == null) return;
+      handler(data);
+    };
+    document.addEventListener('message', onMessage as EventListener);
+    window.addEventListener('message', onMessage as EventListener);
+  }
 }

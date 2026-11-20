@@ -7,14 +7,7 @@ import React from 'react';
 import {Text, View} from 'react-native';
 
 import {DEFAULT_SKILLS_INDEX_PREFIX} from '@novel-master/core/prompt';
-import {
-  PROMPT_REGION_LABELS,
-  WORKPLACE_ASSISTANT_TEXT_LABEL,
-  WORKPLACE_BLOCK_HINT,
-  WORKPLACE_BLOCK_LABEL,
-  WORKPLACE_DISABLED_HINT,
-  withWorkplaceToggle,
-} from '@/config-forms/agent';
+import {AgentEditorState, PROMPT_REGION_LABELS, WORKPLACE_ASSISTANT_TEXT_LABEL, WORKPLACE_BLOCK_HINT, WORKPLACE_BLOCK_LABEL, WORKPLACE_DISABLED_HINT} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormSectionCard} from '../../form/FormSectionCard';
@@ -35,27 +28,15 @@ type Props = {
   tokens: AgentEditorTokens;
   form: AgentEditorFormState;
   patch: (partial: AgentEditorFormPatch) => void;
-  setPersist: (
-    apply: (
-      prev: AgentEditorFormState['persist'],
-    ) => AgentEditorFormState['persist'],
-  ) => void;
-  setDynamic: (
-    apply: (
-      prev: AgentEditorFormState['dynamic'],
-    ) => AgentEditorFormState['dynamic'],
-  ) => void;
+  setPersist: (apply: (prev: AgentEditorFormState['persist']) => AgentEditorFormState['persist']) => void;
+  setDynamic: (apply: (prev: AgentEditorFormState['dynamic']) => AgentEditorFormState['dynamic']) => void;
   onMovePersist: (index: number, dir: -1 | 1) => void;
   onDeletePersist: (index: number) => void;
   onAddPersistTextBlock: () => void;
   onMoveDynamic: (index: number, dir: -1 | 1) => void;
   onDeleteDynamic: (index: number) => void;
   onAddDynamicBlock: () => void;
-  openPromptEditor: (
-    title: string,
-    text: string,
-    onSaved: (text: string) => void,
-  ) => void;
+  openPromptEditor: (title: string, text: string, onSaved: (text: string) => void) => void;
   /** 只读态（内置智能体详情）：全部区头开关、输入与块操作禁用灰显。 */
   readOnly?: boolean;
 };
@@ -96,13 +77,7 @@ export function PromptLayoutSection({
 
   return (
     <FormSectionCard title={PROMPT_REGION_LABELS.layoutTitle} tokens={tokens}>
-      <PromptSectionHead
-        label={promptSectionLabels.system}
-        tokens={tokens}
-        switchValue={form.systemEnabled}
-        onSwitchChange={value => patch({systemEnabled: value})}
-        disabled={readOnly}
-      />
+      <PromptSectionHead label={promptSectionLabels.system} tokens={tokens} switchValue={form.systemEnabled} onSwitchChange={value => patch({systemEnabled: value})} disabled={readOnly} />
       <View style={blockCardStyle}>
         {form.systemEnabled ? (
           <ExpandablePromptInput
@@ -110,11 +85,7 @@ export function PromptLayoutSection({
             disabled={readOnly}
             openEditor={() =>
               // nm-style: keep-local — 三参（文案/正文/回填）在 JSX 箭头里单行化超 80 列
-              openPromptEditor(
-                PROMPT_REGION_LABELS.systemContent,
-                form.systemContent,
-                value => patch({systemContent: value}),
-              )
+              openPromptEditor(PROMPT_REGION_LABELS.systemContent, form.systemContent, value => patch({systemContent: value}))
             }
             renderInline={ctx => (
               <FormTextInput
@@ -131,34 +102,20 @@ export function PromptLayoutSection({
             )}
           />
         ) : (
-          <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-            {PROMPT_REGION_LABELS.systemDisabledHint}
-          </Text>
+          <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>{PROMPT_REGION_LABELS.systemDisabledHint}</Text>
         )}
       </View>
 
       {/* 技能索引占位卡：运行时自动注入，不可配置 */}
-      <PromptSectionHead
-        label={promptSectionLabels.skills}
-        tokens={tokens}
-        switchValue={form.skillsEnabled}
-        onSwitchChange={value => patch({skillsEnabled: value})}
-        disabled={readOnly}
-      />
+      <PromptSectionHead label={promptSectionLabels.skills} tokens={tokens} switchValue={form.skillsEnabled} onSwitchChange={value => patch({skillsEnabled: value})} disabled={readOnly} />
       <View style={blockCardStyle}>
         {form.skillsEnabled ? (
           <>
-            <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>
-              {PROMPT_REGION_LABELS.skillsReadonlyHint}
-            </Text>
+            <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>{PROMPT_REGION_LABELS.skillsReadonlyHint}</Text>
             <ExpandablePromptInput
               label="索引前缀语"
               disabled={readOnly}
-              openEditor={() =>
-                openPromptEditor('索引前缀语', form.skillsPrefixText, value =>
-                  patch({skillsPrefixText: value}),
-                )
-              }
+              openEditor={() => openPromptEditor('索引前缀语', form.skillsPrefixText, value => patch({skillsPrefixText: value}))}
               renderInline={ctx => (
                 <FormTextInput
                   tokens={tokens}
@@ -175,9 +132,7 @@ export function PromptLayoutSection({
             />
           </>
         ) : (
-          <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>
-            {PROMPT_REGION_LABELS.skillsDisabledHint}
-          </Text>
+          <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>{PROMPT_REGION_LABELS.skillsDisabledHint}</Text>
         )}
       </View>
 
@@ -188,7 +143,7 @@ export function PromptLayoutSection({
         disabled={readOnly}
         onSwitchChange={next => {
           // nm-style: keep-local — 调用在事件回调里，单行化超 80 列
-          const wp = withWorkplaceToggle(next, form.workplaceAssistantText);
+          const wp = AgentEditorState.withWorkplaceToggle(next, form.workplaceAssistantText);
           patch({
             workplaceEnabled: wp.workplaceEnabled,
             workplaceAssistantText: wp.workplaceAssistantText,
@@ -207,11 +162,7 @@ export function PromptLayoutSection({
               disabled={readOnly}
               openEditor={() =>
                 // nm-style: keep-local — 三参（文案/正文/回填）在 JSX 箭头里单行化超 80 列
-                openPromptEditor(
-                  WORKPLACE_ASSISTANT_TEXT_LABEL,
-                  form.workplaceAssistantText,
-                  value => patch({workplaceAssistantText: value}),
-                )
+                openPromptEditor(WORKPLACE_ASSISTANT_TEXT_LABEL, form.workplaceAssistantText, value => patch({workplaceAssistantText: value}))
               }
               renderInline={ctx => (
                 <FormTextInput
@@ -229,9 +180,7 @@ export function PromptLayoutSection({
             />
           </>
         ) : (
-          <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-            {WORKPLACE_DISABLED_HINT}
-          </Text>
+          <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>{WORKPLACE_DISABLED_HINT}</Text>
         )}
       </View>
 
@@ -249,28 +198,16 @@ export function PromptLayoutSection({
         readOnly={readOnly}
       />
 
-      <PromptSectionHead
-        label={promptSectionLabels.chat}
-        tokens={tokens}
-        switchValue={form.customAttachEnabled}
-        onSwitchChange={value => patch({customAttachEnabled: value})}
-        disabled={readOnly}
-      />
+      <PromptSectionHead label={promptSectionLabels.chat} tokens={tokens} switchValue={form.customAttachEnabled} onSwitchChange={value => patch({customAttachEnabled: value})} disabled={readOnly} />
       <View style={blockCardStyle}>
-        <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>
-          用户聊天历史，开启后可给每次输入附加额外内容
-        </Text>
+        <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>用户聊天历史，开启后可给每次输入附加额外内容</Text>
         {form.customAttachEnabled ? (
           <ExpandablePromptInput
             label={CUSTOM_ATTACH_TEXT_LABEL}
             disabled={readOnly}
             openEditor={() =>
               // nm-style: keep-local — 三参（文案/正文/回填）在 JSX 箭头里单行化超 80 列
-              openPromptEditor(
-                CUSTOM_ATTACH_TEXT_LABEL,
-                form.customAttachText,
-                value => patch({customAttachText: value}),
-              )
+              openPromptEditor(CUSTOM_ATTACH_TEXT_LABEL, form.customAttachText, value => patch({customAttachText: value}))
             }
             renderInline={ctx => (
               <PromptMacroTextInput

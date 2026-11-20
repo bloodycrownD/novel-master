@@ -7,7 +7,7 @@
  * @module public/skills
  */
 
-export { createSkillsService } from "../service/skills/create-skills-service.js";
+export { SkillsServiceFactory } from "../service/skills/create-skills-service.js";
 export type {
   SkillService,
   SkillListScope,
@@ -16,43 +16,24 @@ export type {
   SkillEditMatch,
   SkillLocation,
 } from "../service/skills/skills.port.js";
-export { computeEffectiveSkills } from "../domain/skills/logic/effective-skills.js";
+export { EffectiveSkills } from "../domain/skills/logic/effective-skills.js";
 export type {
   EffectiveSkill,
   EffectiveSkillsInput,
 } from "../domain/skills/logic/effective-skills.js";
-export { parseSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
-export type { ParsedSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
-export { withSkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
-export type { SkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
-export { buildNewSkillDoc } from "../domain/skills/logic/build-new-skill-doc.js";
-export type { SkillDocBodyVariant } from "../domain/skills/logic/build-new-skill-doc.js";
-export { previewSkillZip } from "../domain/skills/logic/preview-skill-zip.js";
+export { SkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
+export { SkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
+export { NewSkillDoc } from "../domain/skills/logic/build-new-skill-doc.js";
+export { SkillZip } from "../domain/skills/logic/preview-skill-zip.js";
 export type { SkillZipPreview } from "../domain/skills/logic/preview-skill-zip.js";
 export type {
   SkillDomain,
-  SkillFrontMatter,
-  SkillRef,
   SkillSummary,
 } from "../domain/skills/model/skill.schema.js";
 export { skillFrontMatterSchema } from "../domain/skills/model/skill.schema.js";
+// 归属例外（check-public-ownership）：skills 域概念，bootstrap 只是定义处。
 export { BUILTIN_SKILL_NAMES } from "../bootstrap/skills/seed-builtin-skills.js";
 export {
   SKILL_NAME_PATTERN,
-  SKILL_NAME_PATTERN_SOURCE,
-  SKILL_RESERVED_NAME,
-  validateSkillName,
-  isValidSkillName,
+  SkillName,
 } from "../domain/skills/model/skill-name.js";
-export {
-  skillAlreadyExists,
-  skillBuiltin,
-  skillBuiltinNameReserved,
-  skillBuiltinRename,
-  skillInvalidName,
-  skillInvalidPath,
-  skillMissingDomain,
-  skillMissingProjectId,
-  skillNotFound,
-  skillNotFoundInDomain,
-} from "../errors/skill-errors.js";

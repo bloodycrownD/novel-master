@@ -4,7 +4,7 @@
  */
 import type {MenuItem} from '../../runtime/state/state';
 
-export type ContextMenuProps = {
+type ContextMenuProps = {
   messageId: string;
   items: MenuItem[];
 };

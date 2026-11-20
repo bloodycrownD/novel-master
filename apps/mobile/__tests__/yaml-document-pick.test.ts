@@ -9,14 +9,11 @@ jest.mock('@react-native-documents/picker', () => ({
 }));
 
 import {isKnownType} from '@react-native-documents/picker';
-import {
-  assertYamlFileName,
-  yamlImportPickTypes,
-} from '@/services/yaml-document-pick';
+import {YamlDocumentPick} from '@/services/yaml-document-pick';
 
 describe('yaml-document-pick', () => {
   it('includes common YAML MIME types and isKnownType results', () => {
-    const types = yamlImportPickTypes();
+    const types = YamlDocumentPick.importPickTypes();
     expect(types).toContain('text/plain');
     expect(types).toContain('application/x-yaml');
     expect(types).toContain('application/octet-stream');
@@ -24,11 +21,16 @@ describe('yaml-document-pick', () => {
   });
 
   it('assertYamlFileName accepts .yaml and .yml', () => {
-    expect(() => assertYamlFileName('a.agent.yaml')).not.toThrow();
-    expect(() => assertYamlFileName('events.config.yml')).not.toThrow();
+    expect(YamlDocumentPick.assertFileName('a.agent.yaml').ok).toBe(true);
+    expect(YamlDocumentPick.assertFileName('events.config.yml').ok).toBe(true);
   });
 
   it('assertYamlFileName rejects non-yaml names', () => {
-    expect(() => assertYamlFileName('notes.txt')).toThrow(/\.yaml/);
+    const rejected = YamlDocumentPick.assertFileName('notes.txt');
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) {
+      expect(rejected.error.key).toBe('INFRA_VALIDATION_FAILED');
+      expect(rejected.error.message).toMatch(/\.yaml/);
+    }
   });
 });

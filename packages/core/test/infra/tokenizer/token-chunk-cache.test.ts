@@ -13,18 +13,11 @@
  * encode（字符数当 token 数），不假设单块对应恰好 1 次 encode。
  */
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import {
-  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-  TOKEN_CHUNKS_CACHE_KEY,
-} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { splitTextIntoChunks } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
-import {
-  chunkHash16,
-  parseTokenChunkCachePayload,
-  tokenChunkCache,
-} from "../../../src/infra/tokenizer/logic/token-chunk-cache.js";
-import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY  } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  ChunkSplitter  } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
+import {  TokenChunkCache, tokenChunkCache  } from "../../../src/infra/tokenizer/logic/token-chunk-cache.js";
+import {  createMemorySessionKkv  } from "../../helpers/prompt-layout-test-helpers.js";
 
 const SESSION_ID = "sess-tc2";
 const SCOPE = "vendor/m:tk:auto:node";
@@ -37,8 +30,8 @@ const ALT_SCOPE = "vendor/m2:tk:glm:rn";
  */
 function countRound(text: string, scope: string): string[] {
   const missed: string[] = [];
-  for (const chunk of splitTextIntoChunks(text)) {
-    const h = chunkHash16(chunk);
+  for (const chunk of ChunkSplitter.splitText(text)) {
+    const h = TokenChunkCache.chunkHash16(chunk);
     if (tokenChunkCache.lookup(h, scope) === undefined) {
       missed.push(chunk);
       tokenChunkCache.record(h, scope, chunk.length);
@@ -72,7 +65,7 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
   it("append：已有块集合后新增消息，仅新块 miss（旧块全命中不再 encode）", () => {
     const base = "第一段正文内容。第二段正文内容。第三段正文内容。";
     const firstRound = countRound(base, SCOPE);
-    assert.equal(firstRound.length, splitTextIntoChunks(base).length, "首轮全 miss");
+    assert.equal(firstRound.length, ChunkSplitter.splitText(base).length, "首轮全 miss");
 
     tokenChunkCache.advanceGeneration(SESSION_ID);
 
@@ -100,12 +93,12 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
     const textA = `${"甲".repeat(30)}、${"乙".repeat(39)}`;
     const textB = `${"甲".repeat(30)}${"乙".repeat(40)}`;
     assert.deepEqual(
-      splitTextIntoChunks(textA).map((c) => c.length),
+      ChunkSplitter.splitText(textA).map((c) => c.length),
       [31, 39],
       "夹具前提：软边界切分"
     );
     assert.deepEqual(
-      splitTextIntoChunks(textB).map((c) => c.length),
+      ChunkSplitter.splitText(textB).map((c) => c.length),
       [64, 6],
       "夹具前提：软边界消失后硬切"
     );
@@ -126,9 +119,9 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
     const missed = countRound(suffix, SCOPE);
     assert.equal(missed.length, 0, "剩余块全部命中（压缩后无需任何重算）");
     // 且命中值正确（假 encode：块字符数）
-    for (const chunk of splitTextIntoChunks(suffix)) {
+    for (const chunk of ChunkSplitter.splitText(suffix)) {
       assert.equal(
-        tokenChunkCache.lookup(chunkHash16(chunk), SCOPE),
+        tokenChunkCache.lookup(TokenChunkCache.chunkHash16(chunk), SCOPE),
         chunk.length
       );
     }
@@ -140,7 +133,7 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
     tokenChunkCache.advanceGeneration(SESSION_ID);
 
     const missed = countRound(text, ALT_SCOPE);
-    assert.equal(missed.length, splitTextIntoChunks(text).length, "跨 scope 无串味");
+    assert.equal(missed.length, ChunkSplitter.splitText(text).length, "跨 scope 无串味");
   });
 
   it("三代内回滚：隔一代 / 隔两代回旧块集合仍 100% 命中", () => {
@@ -167,7 +160,7 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
     const missed = countRound(setA, SCOPE);
     assert.equal(
       missed.length,
-      splitTextIntoChunks(setA).length,
+      ChunkSplitter.splitText(setA).length,
       "第四代起旧块淘汰，自然重算"
     );
   });
@@ -207,12 +200,12 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
     );
     // 超限淘汰先清最旧代：第一轮的块已不可见
     assert.equal(
-      tokenChunkCache.lookup(chunkHash16("一一。"), SCOPE),
+      tokenChunkCache.lookup(TokenChunkCache.chunkHash16("一一。"), SCOPE),
       undefined,
       "最旧代已被上限淘汰"
     );
     assert.equal(
-      tokenChunkCache.lookup(chunkHash16("五五。"), SCOPE),
+      tokenChunkCache.lookup(TokenChunkCache.chunkHash16("五五。"), SCOPE),
       3,
       "当前代条目保留"
     );
@@ -222,8 +215,8 @@ describe("token-chunk-cache 行为（T-TC2）", () => {
     tokenChunkCache.setMaxTotalEntriesForTests(2);
     countRound("一。二。三。", SCOPE); // 3 块 > 2：最早插入的「一。」被裁
     assert.ok(tokenChunkCache.stats().total <= 2);
-    assert.equal(tokenChunkCache.lookup(chunkHash16("一。"), SCOPE), undefined);
-    assert.equal(tokenChunkCache.lookup(chunkHash16("三。"), SCOPE), 2);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("一。"), SCOPE), undefined);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("三。"), SCOPE), 2);
   });
 });
 
@@ -251,8 +244,8 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
     assert.equal(parsed.v, 2);
     // 只写推进前的当前代（record 顺序），三元组 [hash16, scope, count]
     assert.deepEqual(parsed.items, [
-      [chunkHash16("甲句正文。"), SCOPE, 5],
-      [chunkHash16("乙句正文。"), SCOPE, 5],
+      [TokenChunkCache.chunkHash16("甲句正文。"), SCOPE, 5],
+      [TokenChunkCache.chunkHash16("乙句正文。"), SCOPE, 5],
     ]);
   });
 
@@ -306,7 +299,7 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
     // 种子作最旧可用代：当前代仍为空
     assert.deepEqual(tokenChunkCache.stats().genCounts, [0, 0, 2]);
     assert.equal(
-      tokenChunkCache.lookup(chunkHash16("甲句正文。"), SCOPE),
+      tokenChunkCache.lookup(TokenChunkCache.chunkHash16("甲句正文。"), SCOPE),
       5,
       "种子条目可命中"
     );
@@ -319,7 +312,7 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
       TOKEN_CHUNKS_CACHE_KEY,
       JSON.stringify({
         v: 2,
-        items: [[chunkHash16("种子句。"), SCOPE, 4]],
+        items: [[TokenChunkCache.chunkHash16("种子句。"), SCOPE, 4]],
       })
     );
     countRound("当前代新鲜块。", SCOPE);
@@ -373,20 +366,20 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
       assert.equal(tokenChunkCache.stats().total, 0, "坏载荷不得载入任何条目");
     }
     // 坏载荷后续 lookup 按 miss 处理（不抛、不造数）
-    assert.equal(tokenChunkCache.lookup(chunkHash16("任意块。"), SCOPE), undefined);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("任意块。"), SCOPE), undefined);
   });
 
   it("parse 防御（纯函数）：合法载荷往返、未知键忽略、null 容错", () => {
-    assert.equal(parseTokenChunkCachePayload(null), null);
-    assert.equal(parseTokenChunkCachePayload(""), null);
-    const items = parseTokenChunkCachePayload(
+    assert.equal(TokenChunkCache.parsePayload(null), null);
+    assert.equal(TokenChunkCache.parsePayload(""), null);
+    const items = TokenChunkCache.parsePayload(
       JSON.stringify({
         v: 2,
-        items: [[chunkHash16("块一。"), SCOPE, 3]],
+        items: [[TokenChunkCache.chunkHash16("块一。"), SCOPE, 3]],
         someFutureKey: true, // 未知键忽略（未来加字段不破老解析）
       })
     );
-    assert.deepEqual(items, [[chunkHash16("块一。"), SCOPE, 3]]);
+    assert.deepEqual(items, [[TokenChunkCache.chunkHash16("块一。"), SCOPE, 3]]);
   });
 
   it("KKV 写失败只 warn 不抛，代际照常推进", async () => {
@@ -490,7 +483,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
 
   it("seed-once：同会话连续两次 seedFromKkv 只发一次 KKV 读（第二次连读都不发）", async () => {
     const { kkv, gets } = instrumentChunkRowKkv();
-    await seedRow(kkv, SESSION_ID, [[chunkHash16("种子块。"), SCOPE, 7]]);
+    await seedRow(kkv, SESSION_ID, [[TokenChunkCache.chunkHash16("种子块。"), SCOPE, 7]]);
 
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1, "首轮载入种子");
     assert.equal(gets(), 1, "首轮应发一次 KKV 读");
@@ -502,7 +495,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
     );
     assert.equal(gets(), 1, "第二轮不得再读 KKV（整表 JSON.parse + Map 重建是纯浪费）");
     assert.equal(
-      tokenChunkCache.lookup(chunkHash16("种子块。"), SCOPE),
+      tokenChunkCache.lookup(TokenChunkCache.chunkHash16("种子块。"), SCOPE),
       7,
       "首次载入的种子条目仍在（重复 seed 没有副作用）"
     );
@@ -510,27 +503,27 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
 
   it("seed-once 按会话隔离：另一个会话仍各自 seed 一次", async () => {
     const { kkv, gets } = instrumentChunkRowKkv();
-    await seedRow(kkv, SESSION_ID, [[chunkHash16("甲块。"), SCOPE, 3]]);
-    await seedRow(kkv, "sess-other", [[chunkHash16("乙块。"), SCOPE, 4]]);
+    await seedRow(kkv, SESSION_ID, [[TokenChunkCache.chunkHash16("甲块。"), SCOPE, 3]]);
+    await seedRow(kkv, "sess-other", [[TokenChunkCache.chunkHash16("乙块。"), SCOPE, 4]]);
 
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1);
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, "sess-other"), 1);
     assert.equal(gets(), 2, "两个会话各读一次");
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, "sess-other"), 0);
     assert.equal(gets(), 2, "已 seed 的会话不再重复读");
-    assert.equal(tokenChunkCache.lookup(chunkHash16("甲块。"), SCOPE), 3);
-    assert.equal(tokenChunkCache.lookup(chunkHash16("乙块。"), SCOPE), 4);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("甲块。"), SCOPE), 3);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("乙块。"), SCOPE), 4);
   });
 
   it("clearForTests 复位 seed-once：模拟进程重启后可重新 seed", async () => {
     const { kkv, gets } = instrumentChunkRowKkv();
-    await seedRow(kkv, SESSION_ID, [[chunkHash16("重启块。"), SCOPE, 6]]);
+    await seedRow(kkv, SESSION_ID, [[TokenChunkCache.chunkHash16("重启块。"), SCOPE, 6]]);
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1);
 
     tokenChunkCache.clearForTests(); // 模拟进程重启
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1, "重启后重新 seed");
     assert.equal(gets(), 2);
-    assert.equal(tokenChunkCache.lookup(chunkHash16("重启块。"), SCOPE), 6);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("重启块。"), SCOPE), 6);
   });
 
   it("脏标记：有新 record 的轮次照常落库，随后无新记录的轮次跳过整表写", async () => {
@@ -604,7 +597,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
 
     // 触碰同一块（命中并提升回当前代，零 record）后推进：内容没变，不该再写
     assert.ok(
-      tokenChunkCache.lookup(chunkHash16(chunk), SCOPE) !== undefined,
+      tokenChunkCache.lookup(TokenChunkCache.chunkHash16(chunk), SCOPE) !== undefined,
       "夹具前提：块可命中（提升路径）"
     );
     tokenChunkCache.advanceGeneration(SESSION_ID, {
@@ -624,7 +617,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
     assert.equal(sets(), 0, "未装配持久化通道不落库");
 
     // 触碰提升（零 record）后走一条真实刷新轮次：脏标记仍在 → 照常落库
-    assert.ok(tokenChunkCache.lookup(chunkHash16(chunk), SCOPE) !== undefined);
+    assert.ok(tokenChunkCache.lookup(TokenChunkCache.chunkHash16(chunk), SCOPE) !== undefined);
     tokenChunkCache.advanceGeneration(SESSION_ID, {
       persist: { sessionKkv: kkv },
       realRefresh: true,
@@ -637,7 +630,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
       TOKEN_CHUNKS_CACHE_KEY
     );
     assert.deepEqual(JSON.parse(raw as string).items, [
-      [chunkHash16(chunk), SCOPE, chunk.length],
+      [TokenChunkCache.chunkHash16(chunk), SCOPE, chunk.length],
     ]);
   });
 
@@ -649,7 +642,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
    */
   it("seed 读抛错会撤销登记：第二轮仍发 KKV 读（gets===2）并能正常载入种子", async () => {
     const base = createMemorySessionKkv();
-    await seedRow(base, SESSION_ID, [[chunkHash16("重试种子块。"), SCOPE, 9]]);
+    await seedRow(base, SESSION_ID, [[TokenChunkCache.chunkHash16("重试种子块。"), SCOPE, 9]]);
     let gets = 0;
     let failNext = true;
     const flakyKkv = {
@@ -676,7 +669,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
     assert.equal(seeded, 0, "首轮读抛错：按无种子处理");
     assert.equal(gets, 1, "首轮发了 KKV 读");
     assert.equal(
-      tokenChunkCache.lookup(chunkHash16("重试种子块。"), SCOPE),
+      tokenChunkCache.lookup(TokenChunkCache.chunkHash16("重试种子块。"), SCOPE),
       undefined,
       "读失败不得造数"
     );
@@ -688,7 +681,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
       "读失败后第二轮应重试并载入种子"
     );
     assert.equal(gets, 2, "读失败不得把会话永久登记成已 seed（r3-l2-1）");
-    assert.equal(tokenChunkCache.lookup(chunkHash16("重试种子块。"), SCOPE), 9);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("重试种子块。"), SCOPE), 9);
 
     // 第三轮：读成功了才轮到节流生效
     assert.equal(await tokenChunkCache.seedFromKkv(flakyKkv, SESSION_ID), 0);
@@ -699,7 +692,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
     const base = createMemorySessionKkv();
     // 库里的行本身是好的（模拟「瞬时被写坏、随后被写侧修好」）：只有读到的
     // 那一次返回坏载荷，底层存储不被本次用例改动。
-    await seedRow(base, SESSION_ID, [[chunkHash16("修好后块。"), SCOPE, 8]]);
+    await seedRow(base, SESSION_ID, [[TokenChunkCache.chunkHash16("修好后块。"), SCOPE, 8]]);
     let gets = 0;
     let badNext = true;
     const flakyKkv = {
@@ -730,7 +723,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
       "坏行后下一轮应重试"
     );
     assert.equal(gets, 2, "坏行不得把会话永久登记成已 seed（r3-l2-1）");
-    assert.equal(tokenChunkCache.lookup(chunkHash16("修好后块。"), SCOPE), 8);
+    assert.equal(tokenChunkCache.lookup(TokenChunkCache.chunkHash16("修好后块。"), SCOPE), 8);
   });
 });
 
@@ -759,13 +752,13 @@ describe("T-H: chunkHash16 轻量哈希（token-count-perf-r2）", () => {
       ["emoji 🎉 mixed 中英 123", "0f076be72cbe9204"],
     ];
     for (const [input, expected] of golden) {
-      const actual = chunkHash16(input);
+      const actual = TokenChunkCache.chunkHash16(input);
       assert.match(actual, /^[0-9a-f]{16}$/, "输出形态恒 16 位小写 hex（public 契约）");
       assert.equal(actual, expected, `输入 ${JSON.stringify(input)} 的哈希被改变`);
     }
     // 尾部差异必须传播到前向遍历（h1）——防两遍退化成同向同参数。
-    assert.notEqual(chunkHash16("块A。") , chunkHash16("块B。"));
-    assert.notEqual(chunkHash16("同一前缀很长很长很长很长很长很长X"), chunkHash16("同一前缀很长很长很长很长很长很长Y"));
+    assert.notEqual(TokenChunkCache.chunkHash16("块A。") , TokenChunkCache.chunkHash16("块B。"));
+    assert.notEqual(TokenChunkCache.chunkHash16("同一前缀很长很长很长很长很长很长X"), TokenChunkCache.chunkHash16("同一前缀很长很长很长很长很长很长Y"));
   });
 
   it("T-H2 分布与碰撞：10 万条 CJK 伪随机短串零坍缩（Set 尺寸=条数）", () => {
@@ -784,7 +777,7 @@ describe("T-H: chunkHash16 轻量哈希（token-count-perf-r2）", () => {
       for (let j = 0; j < len; j++) {
         text += String.fromCharCode(0x4e00 + (next() % 20000));
       }
-      seen.add(chunkHash16(text));
+      seen.add(TokenChunkCache.chunkHash16(text));
     }
     assert.equal(seen.size, total, "10 万短串哈希不得坍缩（出现碰撞即分布缺陷）");
   });
@@ -806,18 +799,18 @@ describe("T-H: chunkHash16 轻量哈希（token-count-perf-r2）", () => {
     assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 0, "v1 行按版本不符丢弃");
     assert.equal(tokenChunkCache.stats().total, 0, "不得载入任何旧键域条目");
     // 同键在新哈希域下的正常读写不受影响
-    const h = chunkHash16("新域块。");
+    const h = TokenChunkCache.chunkHash16("新域块。");
     tokenChunkCache.record(h, SCOPE, 5);
     assert.equal(tokenChunkCache.lookup(h, SCOPE), 5);
   });
 
   it("T-H4 确定性与幂等：同输入恒同值，进程内重复调用无状态", () => {
-    const a = chunkHash16("重复输入。重复输入。");
-    const b = chunkHash16("重复输入。重复输入。");
+    const a = TokenChunkCache.chunkHash16("重复输入。重复输入。");
+    const b = TokenChunkCache.chunkHash16("重复输入。重复输入。");
     assert.equal(a, b, "纯函数确定性");
     // 大输入冒烟（整串 L1 键用同一函数，百 KB 级必须能跑且形态不变）
     const big = "长文本。".repeat(20_000); // 100K 字符
-    assert.match(chunkHash16(big), /^[0-9a-f]{16}$/, "大输入输出形态不变");
+    assert.match(TokenChunkCache.chunkHash16(big), /^[0-9a-f]{16}$/, "大输入输出形态不变");
     // spec 原定的「N 块恰 N 次哈希调用」计数护栏未落（ESM 纯函数无法 spy，
     // 行为式断言测不出内部 memoization——若 memoize 键=输入串，行为完全不变，
     // 危害只有内存无界）。该风险由代码评审约束：fastHash16 禁止加记忆化，

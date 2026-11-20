@@ -4,7 +4,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
-import {skillToolRef, toolCallSummary, vfsToolFilePath, type ToolCallView} from './message-blocks';
+import {MessageBlocks, ToolSummary, type ToolCallView} from './message-blocks';
 import type {SkillToolRef} from '@novel-master/core/chat';
 
 type Props = {
@@ -30,11 +30,11 @@ const STATUS_META: Record<ToolCallView['status'], {label: string; tone: 'primary
 
 export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFile, onOpenSubagentSession, onOpenSkillDetail}: Props) {
   const {tokens} = useTheme();
-  const filePath = vfsToolFilePath(tool);
+  const filePath = MessageBlocks.vfsToolFilePath(tool);
   const subagentSessionId = tool.subagentSessionId;
   // skill 跳转三元组：meta 透传优先，否则从 input 解析（write/edit）。
   // projectId 由最终导航方按会话上下文补齐，这里不传。
-  const skillRef = onOpenSkillDetail != null ? skillToolRef(tool) : undefined;
+  const skillRef = onOpenSkillDetail != null ? MessageBlocks.skillToolRef(tool) : undefined;
   // canOpen 对称 vfs 文件路径：任一可跳转目标存在即视为可点。
   const canOpenFile = filePath != null && onOpenFile != null;
   // prettier-ignore
@@ -42,7 +42,7 @@ export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFil
   const canOpenSkill = skillRef != null && onOpenSkillDetail != null;
   const canOpen = canOpenFile || canOpenSubagent || canOpenSkill;
   // prettier-ignore
-  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : toolCallSummary(tool);
+  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : ToolSummary.callSummary(tool);
   const statusMeta = STATUS_META[tool.status];
   // prettier-ignore
   const openHint = canOpenSubagent ? '点击查看 · 子会话' : canOpenSkill ? '点击查看 · 技能' : '点击查看 · 聊天工作区';

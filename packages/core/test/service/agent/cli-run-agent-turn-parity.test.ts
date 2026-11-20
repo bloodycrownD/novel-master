@@ -1,30 +1,23 @@
 /**
  * CLI ↔ runAgentTurn 行为 parity（T-R2 / T-R2-CLI / T-R2-cont）。
  */
+import {  outcomeValue  } from "../../helpers/outcome-value.js";
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import {
-  describe,
-  it } from "node:test";
-import { decode } from "@novel-master/core";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-  runAgentTurn,
-  type AgentDefinition,
-  type AgentTurnRuntimePort,
-  } from "@novel-master/core/agent";
-import {
-  createUserVfsTurnServiceBundle,
-  readMessageMetadata,
-  textBlocks,
-  } from "@novel-master/core/chat";
-import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { createSessionKkvService } from "../../../src/service/session-kkv/create-session-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
+import type { ZodType } from "zod";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(SerializationDecode.decode(raw, schema));
+}
+import {  AgentServiceFactory, agentDefinitionSchema, AgentTurnRunner, type AgentDefinition, type AgentTurnRuntimePort  } from "@novel-master/core/agent";
+import {  ChatServiceFactory, MessageMetadata, TextBlocks  } from "@novel-master/core/chat";
+import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  SessionKkvServiceFactory  } from "../../../src/service/session-kkv/create-session-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -62,19 +55,20 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
 
 function makeRuntime(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
-  registry: ReturnType<typeof createAgentRegistryService>,
+  registry: ReturnType<typeof AgentServiceFactory.createRegistry>,
 ): AgentTurnRuntimePort {
-  const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+  const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
     },
     agentRegistry: registry,
     projects: ctx.projects,
     messages: ctx.messages,
     savedModelRepo: {
-      getById: async () => null,
+      // 错误通道迁移四期：findById 走 Result 通道（查不到 → Ok(null)，调用方降级）
+      findById: async () => Result.ok(null),
     } as AgentTurnRuntimePort["savedModelRepo"],
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
@@ -83,7 +77,7 @@ function makeRuntime(
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator: {} as AgentTurnRuntimePort["eventOrchestrator"],
     userVfsTurn,
-    sessionKkv: createSessionKkvService(ctx.conn),
+    sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
     sessionVfs: (projectId, sessionId) => ctx.sessionVfs(projectId, sessionId),
     workplace: (_scope) =>
       ({
@@ -103,17 +97,17 @@ async function runUntilRunner(
   runtime: AgentTurnRuntimePort,
   scope: { projectId: string; sessionId: string },
   content: string,
-  options?: Parameters<typeof runAgentTurn>[3],
+  options?: Parameters<typeof AgentTurnRunner.run>[3],
 ): Promise<AgentDefinition | undefined> {
   let capturedDefinition: AgentDefinition | undefined;
   try {
-    await runAgentTurn(runtime, scope, content, {
+    unwrap(await AgentTurnRunner.run(runtime, scope, content, {
       ...options,
       onAfterResolveModel: async (resolveCtx) => {
         capturedDefinition = resolveCtx.definition;
         await options?.onAfterResolveModel?.(resolveCtx);
       },
-    });
+    }));
   } catch {
     // runner deps stubbed；definition / flush 已在 runner 之前完成
   }
@@ -123,7 +117,7 @@ async function runUntilRunner(
 describe("cli-run-agent-turn parity", () => {
   it("T-R2：项目智能体已下线，agent 解析走 resolveAgentForProject（session 级）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -144,16 +138,16 @@ describe("cli-run-agent-turn parity", () => {
     await ctx.state.setCurrentAgentId("global-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 旧库残留 custom 配置——resolve 应忽略，走 session.agentId。
-    await ctx.projects.updateAgentConfig(project.id, {
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition,
-    });
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    }));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "global-agent",
-    });
+    }));
     const runtime = makeRuntime(ctx, registry);
 
     const captured = await runUntilRunner(
@@ -173,18 +167,18 @@ describe("cli-run-agent-turn parity", () => {
     userVfsUnifiedToolTurnFlag.refresh(true);
 
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const runtime = makeRuntime(ctx, registry);
 
-    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
-    const originalUser = await ctx.messages.append(
+    unwrap(await ctx.messages.append(session.id, "assistant", TextBlocks.of("模型回复")));
+    const originalUser = unwrap(await ctx.messages.append(
       session.id,
       "user",
-      textBlocks("用户续跑"),
-    );
+      TextBlocks.of("用户续跑"),
+    ));
     await runtime.userVfsTurn!.executeOp(
       session.id,
       writeOp("/parity.md", "content"),
@@ -197,13 +191,13 @@ describe("cli-run-agent-turn parity", () => {
       { allowResumeWithoutInput: true },
     );
 
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(listed.length, 2);
     assert.equal(listed[0]!.role, "assistant");
     assert.equal(listed[1]!.role, "user");
     assert.equal(
       listed.some(
-        (m) => readMessageMetadata(m.raw)?.kind === "user_vfs_action",
+        (m) => MessageMetadata.read(m.raw)?.kind === "user_vfs_action",
       ),
       false,
     );
@@ -219,13 +213,13 @@ describe("cli-run-agent-turn parity", () => {
 
   it("T-R2-cont：visible 末条 user 空续跑不 append 新 user", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("已有 user"));
-    const before = await ctx.messages.listBySession(session.id);
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("已有 user")));
+    const before = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(before.length, 1);
 
     const runtime = makeRuntime(ctx, registry);
@@ -236,7 +230,7 @@ describe("cli-run-agent-turn parity", () => {
       { allowResumeWithoutInput: true },
     );
 
-    const after = await ctx.messages.listBySession(session.id);
+    const after = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(after.length, 1);
     const tailText = after[0]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "已有 user");

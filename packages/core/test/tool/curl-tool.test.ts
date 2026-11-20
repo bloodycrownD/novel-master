@@ -1,16 +1,17 @@
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { afterEach, describe, it, mock } from "node:test";
+import {  afterEach, describe, it, mock  } from "node:test";
 
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import { curlTool } from "../../src/domain/tool/builtin/curl-tool.js";
-import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
+import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
+import {  BuiltinTools  } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import {  curlTool  } from "../../src/domain/tool/builtin/curl-tool.js";
+import {  TOOL_OUTPUT_MAX_BYTES  } from "../../src/domain/tool/logic/tool-output-limits.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
-import { formatToolErrorForLlm, formatToolOutputForLlm, isCurlOutput, isGlobOutput, isGrepOutput, isReadOutput } from "../../src/domain/tool/logic/format-tool-output.js";
-import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import {  ToolOutput  } from "../../src/domain/tool/logic/format-tool-output.js";
+import {  ToolResultBlock  } from "../../src/domain/tool/logic/build-tool-result-block.js";
+import {  AgentTools  } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 afterEach(() => {
@@ -102,7 +103,7 @@ function makeRunner(): {
   readonly registry: ToolRegistry<BuiltinToolContext>;
 } {
   const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
+  BuiltinTools.register(registry);
   return { runner: new ToolRunner(registry), registry };
 }
 
@@ -112,23 +113,23 @@ describe("curl 工具", () => {
     const fetchFn = mock.fn(async () => fakeResponse({ body: "ok" }));
 
     for (const url of ["file:///etc/passwd", "ftp://x", "data:text/plain,x"]) {
-      await assert.rejects(runner.call("curl", { url }, makeCtx(fetchFn as unknown as typeof fetch)), (err: unknown) => {
-        assert.ok(err instanceof ToolError);
-        assert.equal(err.code, "INVALID_ARGUMENT");
+      await rejectsErr(runner.call("curl", { url }, makeCtx(fetchFn as unknown as typeof fetch)), (err: unknown) => {
+        assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
+        assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
       });
     }
     assert.equal(fetchFn.mock.callCount(), 0);
 
-    const out = await runner.call("curl", { url: "http://example.com/a" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "http://example.com/a" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch)));
     assert.equal((out as { status: number }).status, 200);
-    const outHttps = await runner.call("curl", { url: "https://example.com/b" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch));
+    const outHttps = unwrap(await runner.call("curl", { url: "https://example.com/b" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch)));
     assert.equal((outHttps as { status: number }).status, 200);
   });
 
   it("T-CT2: 成功响应各字段回填（url/finalUrl/method/status/contentType/body/truncated/originalBytes），method 默认 GET", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/docs" },
       makeCtx(
@@ -140,7 +141,7 @@ describe("curl 工具", () => {
           })
         ) as unknown as typeof fetch
       )
-    );
+    ));
     const rec = out as {
       url: string;
       finalUrl: string;
@@ -166,7 +167,7 @@ describe("curl 工具", () => {
     const { runner } = makeRunner();
     const body = "a".repeat(30 * 1024);
     const { writes, vfs } = makeRecordingVfs();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/mid" },
       makeCtx(
@@ -178,7 +179,7 @@ describe("curl 工具", () => {
         ) as unknown as typeof fetch,
         { vfs }
       )
-    );
+    ));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -196,7 +197,7 @@ describe("curl 工具", () => {
     // 300KB ASCII 正文 > 50KB 预算（curl 预算从 256KB 收回到四工具统一的 50KB）。
     const ascii = "a".repeat(300_000);
     const { files, writes, vfs } = makeRecordingVfs();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/big" },
       makeCtx(
@@ -209,7 +210,7 @@ describe("curl 工具", () => {
         ) as unknown as typeof fetch,
         { vfs }
       )
-    );
+    ));
     const rec = out as {
       url: string;
       finalUrl: string;
@@ -247,7 +248,7 @@ describe("curl 工具", () => {
     // 不存在切半个字符问题（截断只发生在降级路径）；text/plain → txt。
     const cjk = "你".repeat(90_000);
     const { files: cjkFiles, vfs: cjkVfs } = makeRecordingVfs();
-    const out2 = await runner.call(
+    const out2 = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/cjk" },
       makeCtx(
@@ -259,7 +260,7 @@ describe("curl 工具", () => {
         ) as unknown as typeof fetch,
         { vfs: cjkVfs }
       )
-    );
+    ));
     const rec2 = out2 as typeof rec;
     assert.equal(rec2.truncated, true);
     assert.equal(rec2.originalBytes, 270_000);
@@ -271,7 +272,7 @@ describe("curl 工具", () => {
     const { runner } = makeRunner();
     // makeCtx 缺省 vfs 是空对象 → sink 的 vfs.write 抛错 → 降级回字节截断。
     const cjk = "你".repeat(90_000);
-    const out = await runner.call("curl", { url: "https://example.com/cjk-fallback" }, makeCtx(mock.fn(async () => fakeResponse({ body: cjk })) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/cjk-fallback" }, makeCtx(mock.fn(async () => fakeResponse({ body: cjk })) as unknown as typeof fetch)));
     const rec = out as { body: string; truncated: boolean; originalBytes: number };
     assert.equal(rec.truncated, true);
     assert.equal(rec.originalBytes, 270_000);
@@ -284,7 +285,7 @@ describe("curl 工具", () => {
     assert.ok(kept.length > 0);
   });
 
-  it("T-CT4: 超时（默认 30s）→ ToolError FAILED，文案含 timed out 与 URL", async () => {
+  it("T-CT4: 超时（默认 30s）→ Result.err TOOL_FAILED，文案含 timed out 与 URL", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const { runner } = makeRunner();
     const fetchFn = mock.fn(
@@ -297,20 +298,18 @@ describe("curl 工具", () => {
         })
     ) as unknown as typeof fetch;
 
-    const pending = runner.call("curl", { url: "https://example.com/slow" }, makeCtx(fetchFn)).then(
-      () => assert.fail("超时应抛 ToolError"),
-      (err: unknown) => err
-    );
+    const pending = runner.call("curl", { url: "https://example.com/slow" }, makeCtx(fetchFn));
     // flush 微任务：让 run 进入 fetch、abort listener 已挂好。
     await new Promise((resolve) => setImmediate(resolve));
     mock.timers.tick(30_000);
 
-    const err = await pending;
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
-    const message = formatToolErrorForLlm(err);
-    assert.match(message, /timed out/);
-    assert.match(message, /https:\/\/example\.com\/slow/);
+    await rejectsErr(pending, (err) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
+      const message = ToolOutput.formatErrorForLlm(err);
+      assert.match(message, /timed out/);
+      assert.match(message, /https:\/\/example\.com\/slow/);
+    });
   });
 
   it("T-CT14: body 下载阶段慢滴流挂起 → 超时中断，不无限挂起回合", async () => {
@@ -327,36 +326,39 @@ describe("curl 工具", () => {
       )
     ) as unknown as typeof fetch;
 
-    const pending = runner.call("curl", { url: "https://example.com/slow-body" }, makeCtx(fetchFn)).then(
-      () => assert.fail("慢 body 应超时抛 ToolError"),
-      (err: unknown) => err
-    );
+    const pending = runner.call("curl", { url: "https://example.com/slow-body" }, makeCtx(fetchFn));
     // flush 微任务：让 run 拿到响应头并进入 text()，abort listener 已挂好。
     await new Promise((resolve) => setImmediate(resolve));
     mock.timers.tick(30_000);
 
-    const err = await pending;
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
-    const message = formatToolErrorForLlm(err);
-    assert.match(message, /timed out/);
-    assert.match(message, /https:\/\/example\.com\/slow-body/);
+    await rejectsErr(pending, (err) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
+      const message = ToolOutput.formatErrorForLlm(err);
+      assert.match(message, /timed out/);
+      assert.match(message, /https:\/\/example\.com\/slow-body/);
+    });
   });
 
   it("T-CT5: 网络错误 → ToolError FAILED 且 cause 文案可读", async () => {
     const { runner } = makeRunner();
+    // 双通道捕获：curl 的网络错误可能沿 Result.err 回来，也可能沿 runner 的
+    // 归一化抛出通道（未知异常）——两形态都归一成 AppError 供下方断言。
     const err = await runner.call("curl", { url: "https://example.com/down" }, makeCtx(mock.fn(() => Promise.reject(new TypeError("Network request failed"))) as unknown as typeof fetch)).then(
-      () => assert.fail("网络错误应抛 ToolError"),
+      (r: unknown) =>
+        r !== null && typeof r === "object" && "ok" in r && (r as { ok: unknown }).ok === false
+          ? (r as { error: unknown }).error
+          : assert.fail("网络错误应抛 ToolError"),
       (e: unknown) => e
     );
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
-    assert.match(formatToolErrorForLlm(err), /Network request failed/);
+    assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
+    assert.equal(err.key, "TOOL_FAILED");
+    assert.match(ToolOutput.formatErrorForLlm(err), /Network request failed/);
   });
 
   it("T-CT6: HTTP 404 不是错误：照常返回输出（status=404，body 照常处理）", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/missing" },
       makeCtx(
@@ -368,7 +370,7 @@ describe("curl 工具", () => {
           })
         ) as unknown as typeof fetch
       )
-    );
+    ));
     const rec = out as { status: number; body: string; truncated: boolean };
     assert.equal(rec.status, 404);
     assert.equal(rec.body, "not found page");
@@ -382,7 +384,7 @@ describe("curl 工具", () => {
       headers: { "content-type": "image/png", "content-length": "4" },
       body: "\u0000\u0001\u0002\u0003",
     });
-    const out = await runner.call("curl", { url: "https://example.com/logo.png" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/logo.png" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch)));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -399,7 +401,7 @@ describe("curl 工具", () => {
       headers: { "content-type": "image/png" },
       body: "\u0000\u0001",
     });
-    const out2 = await runner.call("curl", { url: "https://example.com/no-len.png" }, makeCtx(mock.fn(async () => noLength) as unknown as typeof fetch));
+    const out2 = unwrap(await runner.call("curl", { url: "https://example.com/no-len.png" }, makeCtx(mock.fn(async () => noLength) as unknown as typeof fetch)));
     const rec2 = out2 as { body: string; originalBytes: number };
     assert.equal(noLength.textCalls(), 0);
     assert.equal(rec2.body, `[binary content, unknown size, not shown]`);
@@ -408,7 +410,7 @@ describe("curl 工具", () => {
 
   it("T-CT8: 重定向 → finalUrl 回填且 formatter 输出 curl METHOD url → finalUrl", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/old" },
       makeCtx(
@@ -420,11 +422,11 @@ describe("curl 工具", () => {
           })
         ) as unknown as typeof fetch
       )
-    );
+    ));
     const rec = out as { url: string; finalUrl: string };
     assert.equal(rec.url, "https://example.com/old");
     assert.equal(rec.finalUrl, "https://example.com/new");
-    const formatted = formatToolOutputForLlm(out);
+    const formatted = ToolOutput.formatForLlm(out);
     assert.ok(formatted.includes("curl GET https://example.com/old → https://example.com/new"));
     assert.ok(formatted.includes("moved"));
   });
@@ -439,7 +441,7 @@ describe("curl 工具", () => {
       },
       body: "should not be read",
     });
-    const out = await runner.call("curl", { url: "https://example.com/huge" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/huge" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch)));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -455,8 +457,8 @@ describe("curl 工具", () => {
   it("T-CT10: formatter 产出可读文本（非 JSON 串），超预算场景显示已落盘路径", async () => {
     const { runner } = makeRunner();
     const { vfs } = makeRecordingVfs();
-    const out = await runner.call("curl", { url: "https://example.com/big" }, makeCtx(mock.fn(async () => fakeResponse({ body: "b".repeat(300_000) })) as unknown as typeof fetch, { vfs }));
-    const formatted = formatToolOutputForLlm(out);
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/big" }, makeCtx(mock.fn(async () => fakeResponse({ body: "b".repeat(300_000) })) as unknown as typeof fetch, { vfs })));
+    const formatted = ToolOutput.formatForLlm(out);
     assert.ok(!formatted.trimStart().startsWith("{"), "不应回落 JSON.stringify");
     assert.ok(formatted.startsWith("curl GET https://example.com/big"));
     assert.ok(formatted.includes("Status: 200"));
@@ -476,12 +478,12 @@ describe("curl 工具", () => {
       truncated: false,
       originalBytes: 1,
     };
-    assert.equal(isCurlOutput(curlOut), true);
-    assert.equal(isReadOutput(curlOut), false);
-    assert.equal(isGrepOutput(curlOut), false);
-    assert.equal(isGlobOutput(curlOut), false);
+    assert.equal(ToolOutput.isCurl(curlOut), true);
+    assert.equal(ToolOutput.isRead(curlOut), false);
+    assert.equal(ToolOutput.isGrep(curlOut), false);
+    assert.equal(ToolOutput.isGlob(curlOut), false);
 
-    // 反向：read 输出也不会被 isCurlOutput 误撞（无 url+status 字段）。
+    // 反向：read 输出也不会被 ToolOutput.isCurl 误撞（无 url+status 字段）。
     const readOut = {
       path: "/a.md",
       content: "line-1",
@@ -489,11 +491,11 @@ describe("curl 工具", () => {
       returnedLines: 1,
       truncated: false,
     };
-    assert.equal(isCurlOutput(readOut), false);
+    assert.equal(ToolOutput.isCurl(readOut), false);
   });
 
-  it("T-CT11: buildToolResultBlock 摘要——正常 `200 · 12.3KB`、降级截断 `truncated · 50KB/1.2MB`、落盘 `已落盘 …`", () => {
-    const normal = buildToolResultBlock(
+  it("T-CT11: ToolResultBlock.build 摘要——正常 `200 · 12.3KB`、降级截断 `truncated · 50KB/1.2MB`、落盘 `已落盘 …`", () => {
+    const normal = ToolResultBlock.build(
       "tu-normal",
       {
         ok: true,
@@ -513,7 +515,7 @@ describe("curl 工具", () => {
     assert.equal(normal.summary, "200 · 12.3KB");
     assert.ok(normal.content.startsWith("curl GET https://example.com"));
 
-    const truncated = buildToolResultBlock(
+    const truncated = ToolResultBlock.build(
       "tu-trunc",
       {
         ok: true,
@@ -535,7 +537,7 @@ describe("curl 工具", () => {
     assert.equal(truncated.summary, "truncated · 50KB/1.2MB");
 
     // 落盘形态（savedPath）：summary 显示已落盘路径，优先于体积档位。
-    const saved = buildToolResultBlock(
+    const saved = ToolResultBlock.build(
       "tu-saved",
       {
         ok: true,
@@ -558,7 +560,7 @@ describe("curl 工具", () => {
 
     // 字节格式化规则抽查：1024 进位、保留 1 位小数。
     assert.equal(
-      buildToolResultBlock(
+      ToolResultBlock.build(
         "tu-b",
         {
           ok: true,
@@ -581,7 +583,7 @@ describe("curl 工具", () => {
 
   it("T-CT12: 注册与策略——deny 摘除、孙 agent（depth>=2）不摘", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     assert.ok(registry.list().includes("curl"));
     assert.ok(registry.list().includes(curlTool.name));
 
@@ -590,13 +592,13 @@ describe("curl 工具", () => {
       prompts: { persist: [], dynamic: [] },
     };
 
-    const denied = resolveAgentToolRegistry(registry, {
+    const denied = AgentTools.resolveRegistry(registry, {
       ...def,
       tools: { deny: ["curl"] },
     });
     assert.ok(!denied.list().includes("curl"));
 
-    const grandchild = resolveAgentToolRegistry(registry, def, { depth: 2 });
+    const grandchild = AgentTools.resolveRegistry(registry, def, { depth: 2 });
     assert.ok(grandchild.list().includes("curl"));
     // 对照：孙 agent 摘 task / agent。
     assert.ok(!grandchild.list().includes("task"));
@@ -605,7 +607,7 @@ describe("curl 工具", () => {
 
   it("T-CT13: path policy 不误伤——入参顶层字段 url 不在 PATH_FIELDS", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call("curl", { url: "https://example.com" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch, { allowedPaths: ["src/"] }));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch, { allowedPaths: ["src/"] })));
     assert.equal((out as { body: string }).body, "ok");
   });
 
@@ -618,7 +620,7 @@ describe("curl 工具", () => {
     }) as unknown as typeof fetch;
 
     // POST + 自定义鉴权头 + body 未给 content-type → 默认 application/json。
-    await runner.call(
+    unwrap(await runner.call(
       "curl",
       {
         url: "https://api.example.com/items",
@@ -627,7 +629,7 @@ describe("curl 工具", () => {
         body: JSON.stringify({ name: "x" }),
       },
       makeCtx(fetchFn)
-    );
+    ));
     assert.equal(calls.length, 1);
     assert.equal(calls[0]!.init.method, "POST");
     assert.equal(calls[0]!.init.body, JSON.stringify({ name: "x" }));
@@ -636,7 +638,7 @@ describe("curl 工具", () => {
     assert.equal(headers.get("content-type"), "application/json");
 
     // POST + 显式 content-type → 尊重显式值，不覆盖。
-    await runner.call(
+    unwrap(await runner.call(
       "curl",
       {
         url: "https://api.example.com/items",
@@ -645,24 +647,24 @@ describe("curl 工具", () => {
         body: "raw text",
       },
       makeCtx(fetchFn)
-    );
+    ));
     assert.equal((calls[1]!.init.headers as Headers).get("content-type"), "text/plain");
 
     // 默认 GET 无 body → 不带 body、不补 content-type。
-    await runner.call("curl", { url: "https://api.example.com/items" }, makeCtx(fetchFn));
+    unwrap(await runner.call("curl", { url: "https://api.example.com/items" }, makeCtx(fetchFn)));
     assert.equal(calls[2]!.init.method, "GET");
     assert.equal(calls[2]!.init.body, undefined);
     assert.equal((calls[2]!.init.headers as Headers).get("content-type"), null);
 
     // 输出回显实际 method。
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       {
         url: "https://api.example.com/items",
         method: "DELETE",
       },
       makeCtx(fetchFn)
-    );
+    ));
     assert.equal((out as { method: string }).method, "DELETE");
   });
 
@@ -698,9 +700,9 @@ describe("curl 工具", () => {
     ];
 
     for (const input of invalidInputs) {
-      await assert.rejects(runner.call("curl", input, ctx), (err: unknown) => {
-        assert.ok(err instanceof ToolError, `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
-        assert.equal(err.code, "INVALID_ARGUMENT");
+      await rejectsErr(runner.call("curl", input, ctx), (err: unknown) => {
+        assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"), `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
+        assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
       });
     }
@@ -719,40 +721,33 @@ describe("curl 工具", () => {
         })
     ) as unknown as typeof fetch;
 
-    const pending = runner.call("curl", { url: "https://example.com/slow", timeout: 2 }, makeCtx(fetchFn)).then(
-      () => assert.fail("超时应抛 ToolError"),
-      (err: unknown) => err
-    );
+    const pending = runner.call("curl", { url: "https://example.com/slow", timeout: 2 }, makeCtx(fetchFn));
     await new Promise((resolve) => setImmediate(resolve));
     // 推进 2 秒（默认 30 秒未到）：参数驱动的超时应在 2s 到点即中断。
     mock.timers.tick(2_000);
 
-    const err = await pending;
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
-    const message = formatToolErrorForLlm(err);
-    assert.match(message, /timed out after 2000ms/);
-    assert.match(message, /https:\/\/example\.com\/slow/);
+    await rejectsErr(pending, (err) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
+      const message = ToolOutput.formatErrorForLlm(err);
+      assert.match(message, /timed out after 2000ms/);
+      assert.match(message, /https:\/\/example\.com\/slow/);
+    });
   });
 
-  it("T-CT18: ctx.signal 进入时已 aborted → 不发请求直接拒绝，错误文案为取消（B-2，工具直调面）", async () => {
+  it("T-CT18: ctx.signal 进入时已 aborted → 不发请求，Result.err TOOL_CANCELLED（B-2，工具直调面）", async () => {
     const fetchFn = mock.fn(async () => fakeResponse({ body: "unreachable" })) as unknown as typeof fetch;
     const controller = new AbortController();
     controller.abort(); // 预取消：run 应在创建 controller 前早退，fetchFn 零调用。
     // 经 ToolRunner.call 时 B-1 的 runner 层早退先拦（见 tool-runner-abort 套件），
     // 本用例按 fix-spec B-2 口径直调 tool.run，锁 curl 自身的裸暴露面。
-    let thrown: unknown;
-    try {
-      await curlTool.run({ url: "https://example.com/pre-aborted" }, { ...makeCtx(fetchFn), signal: controller.signal });
-      assert.fail("预取消应直接拒绝");
-    } catch (e: unknown) {
-      thrown = e;
-    }
-    assert.ok(thrown instanceof ToolError);
-    assert.equal(thrown.code, "FAILED");
-    const llmMessage = formatToolErrorForLlm(thrown);
-    assert.match(llmMessage, /请求已取消/);
-    assert.match(llmMessage, /https:\/\/example\.com\/pre-aborted/);
+    await rejectsErr(() => curlTool.run({ url: "https://example.com/pre-aborted" }, { ...makeCtx(fetchFn), signal: controller.signal }), (err) => {
+      assert.ok(AppErrorOps.is(err) && err.key.startsWith("TOOL_"));
+      // 取消统一 TOOL_CANCELLED 控制流码；formatter 渲染为中性文案
+      // （不带 Error 前缀、不携带 URL，UI 卡片不弹错误）。
+      assert.equal(err.key, "TOOL_CANCELLED");
+      assert.equal(ToolOutput.formatErrorForLlm(err), "工具调用已取消");
+    });
     assert.equal(fetchFn.mock.callCount(), 0, "预取消不得发起任何请求");
   });
 });

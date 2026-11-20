@@ -18,7 +18,8 @@ interface CreateDefaultTokenCounterRegistryDeps {
   readonly savedModels?: Pick<SavedModelRepository, "findById">;
 }
 
-class DefaultTokenCounterRegistry implements TokenCounterRegistry {
+// nm-style note: 私有实现类原名 DefaultTokenCounterRegistry 与 namespace 撞名，按「heuristic-only」语义改名。
+class HeuristicOnlyTokenCounterRegistry implements TokenCounterRegistry {
   readonly heuristic: TokenCounter = new HeuristicTokenCounter();
   readonly getTokenizerOverride: (() => Promise<TokenizerOverride>) | undefined;
   private readonly savedModels:
@@ -36,8 +37,8 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
   async forSavedModel(savedModelId: string, _options?: ForVendorModelOptions): Promise<TokenCounter> {
     if (this.savedModels != null) {
       const saved = await this.savedModels.findById(savedModelId.trim());
-      if (saved != null) {
-        return this.forVendorModel(saved.vendorModelId, _options);
+      if (saved.ok && saved.value != null) {
+        return this.forVendorModel(saved.value.vendorModelId, _options);
       }
     }
     return this.heuristic;
@@ -48,7 +49,9 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
   }
 }
 
-/** Creates a heuristic-only registry. */
-export function createDefaultTokenCounterRegistry(deps: CreateDefaultTokenCounterRegistryDeps = {}): TokenCounterRegistry {
-  return new DefaultTokenCounterRegistry(deps);
-}
+export const DefaultTokenCounterRegistry = {
+  /** Creates a heuristic-only registry. */
+  create(deps: CreateDefaultTokenCounterRegistryDeps = {}): TokenCounterRegistry {
+    return new HeuristicOnlyTokenCounterRegistry(deps);
+  },
+} as const;

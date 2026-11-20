@@ -2,24 +2,22 @@
  * agent-subagent M1 / Step 4 (C5 + C36) ToolResultBlock.meta 持久化闭环测试。
  *
  * T-S5（P1-A）：写入 tool_result 带 meta.subagentSessionId 后，重读消息
- * （走 parseMessageContent 反序列化）仍能拿到同一个 subagentSessionId。
+ * （走 MessageContentParse.parse 反序列化）仍能拿到同一个 subagentSessionId。
  *
- * 这里同时覆盖纯函数层（parseMessageContent）和集成层（messages service
- * 写 → list 读 → parseMessageContent）。
+ * 这里同时覆盖纯函数层（MessageContentParse.parse）和集成层（messages service
+ * 写 → list 读 → MessageContentParse.parse）。
  *
  * @module test/chat/tool-result-meta.test
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
 import type { ToolResultBlock } from "@/domain/chat/model/content-block.js";
-import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  MessageContentParse  } from "@/domain/chat/content/parse-message-content.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -35,7 +33,7 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
         },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(payload));
+    const parsed = MessageContentParse.parse(JSON.stringify(payload));
     assert.ok(parsed.ok);
     assert.equal(parsed.value.blocks.length, 1);
     const block = parsed.value.blocks[0] as ToolResultBlock;
@@ -54,7 +52,7 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
         },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(payload));
+    const parsed = MessageContentParse.parse(JSON.stringify(payload));
     assert.ok(parsed.ok);
     const block = parsed.value.blocks[0] as ToolResultBlock;
     assert.equal(block.meta, undefined);
@@ -71,7 +69,7 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
         },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(payload));
+    const parsed = MessageContentParse.parse(JSON.stringify(payload));
     assert.ok(parsed.ok);
     const block = parsed.value.blocks[0] as ToolResultBlock;
     // subagentSessionId 缺失 → meta 折叠成 undefined（向前兼容）。
@@ -79,7 +77,7 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
   });
 
   it("tool_result meta.subagentSessionId 非字符串时返回 CHAT_INVALID_ARGUMENT", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({
         blocks: [
           {
@@ -98,7 +96,7 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
   });
 
   it("tool_result meta 非对象时返回 CHAT_INVALID_ARGUMENT", () => {
-    const parsed = parseMessageContent(
+    const parsed = MessageContentParse.parse(
       JSON.stringify({
         blocks: [
           {
@@ -129,7 +127,7 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
         },
       ],
     };
-    const parsed = parseMessageContent(JSON.stringify(payload));
+    const parsed = MessageContentParse.parse(JSON.stringify(payload));
     assert.ok(parsed.ok);
     const block = parsed.value.blocks[0] as ToolResultBlock;
     assert.equal(block.ok, true);
@@ -141,8 +139,8 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
 describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
   it("messages.append 写入带 meta.subagentSessionId 的 tool_result，重读仍拿到同一值", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "main");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "main"));
 
     const block: ToolResultBlock = {
       type: "tool_result",
@@ -151,9 +149,9 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
       meta: { subagentSessionId: "sess-subagent-xyz" },
     };
 
-    await ctx.messages.append(session.id, "user", { blocks: [block] });
+    unwrap(await ctx.messages.append(session.id, "user", { blocks: [block] }));
 
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 1);
     const loaded = list[0]!;
     assert.equal(loaded.role, "user");
@@ -165,16 +163,16 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
 
   it("子 agent 场景：createSubSession + append tool_result meta，闭环一致", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    const child = await ctx.sessions.createSubSession(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    const child = unwrap(await ctx.sessions.createSubSession(
       parent.id,
       project.id,
       "查大纲",
-    );
+    ));
 
     // 子 session 写一条 assistant 消息（模拟子 agent 跑完落库）。
-    await ctx.messages.append(child.id, "assistant", textBlocks("子代理结果"));
+    unwrap(await ctx.messages.append(child.id, "assistant", TextBlocks.of("子代理结果")));
 
     // 父 session 写一条 user 消息带 tool_result，meta.subagentSessionId 指向 child。
     const block: ToolResultBlock = {
@@ -183,9 +181,9 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
       content: "子代理结果",
       meta: { subagentSessionId: child.id },
     };
-    await ctx.messages.append(parent.id, "user", { blocks: [block] });
+    unwrap(await ctx.messages.append(parent.id, "user", { blocks: [block] }));
 
-    const parentMessages = await ctx.messages.listBySession(parent.id);
+    const parentMessages = outcomeValue(await ctx.messages.listBySession(parent.id));
     assert.equal(parentMessages.length, 1);
     const loaded = parentMessages[0]!.content.blocks[0] as ToolResultBlock;
     assert.equal(loaded.meta?.subagentSessionId, child.id);

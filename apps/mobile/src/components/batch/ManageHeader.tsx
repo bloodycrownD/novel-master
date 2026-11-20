@@ -2,19 +2,12 @@
  * Inline manage header: normal actions vs batch cancel / count / delete.
  */
 import React, {type ReactNode} from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle} from 'react-native';
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {useTheme} from '@/theme/ThemeProvider';
 
 /** 批量模式次操作（如 VFS 的「移动」）：主操作（删除）右侧依次渲染。 */
-export type ManageHeaderBatchAction = {
+type ManageHeaderBatchAction = {
   label: string;
   onPress: () => void;
   tone?: 'danger' | 'primary';
@@ -65,8 +58,7 @@ export function ManageHeader({
 }: Props) {
   const {tokens} = useTheme();
   const runPrimary = onPrimaryAction ?? onDelete;
-  const primaryEnabledColor =
-    primaryActionTone === 'danger' ? tokens.danger : tokens.primary;
+  const primaryEnabledColor = primaryActionTone === 'danger' ? tokens.danger : tokens.primary;
   const batchActionsDisabled = selectedCount === 0;
 
   return (
@@ -79,23 +71,16 @@ export function ManageHeader({
           <View style={styles.batchCenter}>
             {onSelectAll ? (
               <Pressable onPress={onSelectAll} hitSlop={8}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  {allSelected ? '全不选' : '全选'}
-                </Text>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>{allSelected ? '全不选' : '全选'}</Text>
               </Pressable>
             ) : null}
-            <Text style={{color: tokens.textSecondary}}>
-              已选 {selectedCount} 项
-            </Text>
+            <Text style={{color: tokens.textSecondary}}>已选 {selectedCount} 项</Text>
           </View>
           <View style={styles.batchActions}>
             <Pressable onPress={runPrimary} disabled={batchActionsDisabled}>
               <Text
                 style={{
-                  color:
-                    selectedCount > 0
-                      ? primaryEnabledColor
-                      : tokens.textTertiary,
+                  color: selectedCount > 0 ? primaryEnabledColor : tokens.textTertiary,
                 }}
               >
                 {primaryActionLabel}
@@ -103,14 +88,9 @@ export function ManageHeader({
             </Pressable>
             {(actions ?? []).map(action => {
               const disabled = action.disabled ?? batchActionsDisabled;
-              const enabledColor =
-                action.tone === 'danger' ? tokens.danger : tokens.primary;
+              const enabledColor = action.tone === 'danger' ? tokens.danger : tokens.primary;
               return (
-                <Pressable
-                  key={action.label}
-                  onPress={action.onPress}
-                  disabled={disabled}
-                >
+                <Pressable key={action.label} onPress={action.onPress} disabled={disabled}>
                   <Text
                     style={[
                       styles.actionLabel,
@@ -130,20 +110,12 @@ export function ManageHeader({
         <View style={styles.normalRow}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
           <View style={styles.actions}>
-            {onEnterBatch ? (
-              <SecondaryButton
-                label="管理"
-                tokens={tokens}
-                onPress={onEnterBatch}
-              />
-            ) : null}
+            {onEnterBatch ? <SecondaryButton label="管理" tokens={tokens} onPress={onEnterBatch} /> : null}
             {normalActions}
           </View>
         </View>
       )}
-      {batchMode && hint ? (
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>{hint}</Text>
-      ) : null}
+      {batchMode && hint ? <Text style={[styles.hint, {color: tokens.textSecondary}]}>{hint}</Text> : null}
     </View>
   );
 }

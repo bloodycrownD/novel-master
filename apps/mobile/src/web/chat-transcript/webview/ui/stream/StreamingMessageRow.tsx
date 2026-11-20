@@ -24,7 +24,7 @@ import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import * as streamRuntime from '../../runtime/stream/stream';
 import {state} from '../../runtime/state/state';
 import type {MessageRow} from '../../runtime/state/state';
-import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
+import {Menu} from '../../runtime/menu/menu';
 import {ToolInvokingBar} from '../render/ToolInvokingBar';
 import {ThinkingSection} from '../render/ThinkingSection';
 import {ToolGroup} from '../render/ToolGroup';
@@ -77,7 +77,7 @@ type StreamingMessageRowProps = {
 export function StreamingMessageRow({row}: StreamingMessageRowProps) {
   const {text, thinking, textHtml, thinkingHtml, tools} = row;
   const streaming = row.status === 'streaming';
-  const phase = streamRuntime.getStreamingPhase(row);
+  const phase = streamRuntime.Stream.getPhase(row);
   const hiddenCls = row.hidden ? 'hidden ' : '';
   const waitCls = phase === 'waiting-first' ? ' stream--waiting-first' : '';
   // `assistant` 行类与普通 assistant 行同面（P2-9）：`.row.assistant .bubble
@@ -147,7 +147,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
   const menuAllowed = !state.flags.menuDisabled;
   const showMenu = !streaming && row.messageId != null && menuAllowed;
 
-  const bubbleExtra = streamRuntime.assistantBubbleExtraClasses(row);
+  const bubbleExtra = streamRuntime.Stream.assistantBubbleExtraClasses(row);
   const bubbleClass = 'bubble assistant' + bubbleExtra;
   // 正文播种：rich 用全量 html，否则用明文（首次 mount 生效）。
   const textRich = !!(state.flags.richText && textHtml);
@@ -181,7 +181,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
                   return;
                 }
                 const anchor = btn.getBoundingClientRect();
-                openContextMenuFromAnchor(row.messageId ?? row.id, anchor, btn);
+                Menu.openFromAnchor(row.messageId ?? row.id, anchor, btn);
               }}
             >
               ⋯

@@ -1,7 +1,7 @@
 import { type RollbackMode } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
-export type ComposerDraftSnapshot = {
+type ComposerDraftSnapshot = {
   readonly text: string;
   readonly attachments: readonly MessageAttachmentDto[];
 };
@@ -29,17 +29,4 @@ export function resolveComposerDraftAfterRollbackSuccess(
     text: current.text,
     attachments: [],
   };
-}
-
-/** @deprecated 使用 {@link resolveComposerDraftAfterRollbackSuccess} */
-export function resolveComposerTextAfterRollbackSuccess(
-  currentComposerText: string,
-  rollbackMode: RollbackMode,
-  restoreText: string | null,
-): string {
-  return resolveComposerDraftAfterRollbackSuccess(
-    { text: currentComposerText, attachments: [] },
-    rollbackMode,
-    { text: restoreText, attachments: null },
-  ).text;
 }

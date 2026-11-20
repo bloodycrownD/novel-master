@@ -1,30 +1,16 @@
 /**
  * IPC error formatting — maps Core domain errors to serializable payloads.
+ * `code` 的取值空间是 core 码表 key（ErrorKey）；分派链 9 条顺序硬写
+ * （VFS_* → PROVIDER_* → CLOUD_SYNC_* → 通配），写反会让某个前缀分支不可达。
  *
  * @module ipc/format-ipc-error
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
-import { isCloudSyncError } from "@novel-master/core";
-import { AgentTurnError } from "@novel-master/core/agent";
-import { ToolError } from "@novel-master/core";
-import { userMessageOf } from "@novel-master/core/i18n";
-import {
-  AppError,
-  VfsError,
-  isVfsError,
-} from "@novel-master/core/vfs";
+import { RequestAbort } from "@novel-master/core/llm-protocol";
+import { AppErrorOps, ErrorGuards } from "@novel-master/core/errors";
+import { Errors } from "@novel-master/core/common";
 import { coreT } from "../../../shared/logic/core-i18n.js";
 import { ZodError } from "zod";
-
-/**
- * 错误 → 用户可见中文文案：i18n 后 AppError/VfsError 在 descriptor 模式下
- * `message` 是英文 desc，中文在 messageKey/catalog 里；IPC 边界统一解析，
- * renderer 拿到的 message 直接可显示。未覆盖的错误回退原 message。
- */
-function visibleMessage(err: unknown, fallback: string): string {
-  const descriptor = userMessageOf(err);
-  return descriptor != null ? coreT(descriptor) : fallback;
-}
 
 const FIELD_LABELS: Record<string, string> = {
   endDepth: "结束深度",
@@ -33,104 +19,74 @@ const FIELD_LABELS: Record<string, string> = {
   name: "名称",
 };
 
-function formatZodIssues(err: ZodError): string {
-  const parts = err.issues.map((issue) => {
-    const pathKey = issue.path.map(String).join(".");
-    const label = FIELD_LABELS[pathKey] ?? pathKey;
-    const msg = issue.message;
-    if (msg.includes("expected number") && msg.includes("null")) {
-      return label ? `${label}须为非负整数或留空` : "须为非负整数或留空";
+export const FormatIpcError = {
+  /**
+   * Maps a thrown value to an {@link IpcErrorPayload} for IPC responses.
+   * `code` 只产 ErrorKey；未知错误统一 INFRA_UNEXPECTED_ERROR（name 不进 code）。
+   */
+  format(err: unknown): IpcErrorPayload {
+    // 0. AbortError：取消是控制流信号不是业务错误（signal-abort-scope §五）。
+    //    边界统一映射为 IPC_ABORTED，renderer 按 code 静默收尾、不弹错误 toast。
+    //    必须排在 AppError 通配之前：AbortError 是 Error 子类（DOMException 或
+    //    RN 的 Error + name），落到第 9 条会被兜成 INFRA_UNEXPECTED_ERROR。
+    if (RequestAbort.isAbortLikeError(err)) {
+      return { code: "IPC_ABORTED", message: "已取消" };
     }
-    return label ? `${label}：${msg}` : msg;
-  });
-  return parts.filter(Boolean).join("；") || err.message;
-}
-
-const TYPED_ERROR_NAMES = new Set([
-  "SessionFsError",
-  "VfsError",
-  "ProviderError",
-]);
-
-/**
- * 旧 VfsError short code ↔ 新 AppError key 的兼容映射（phase 1）。
- *
- * 域逻辑（moveVfsPath 等）迁到 AppError 后，渲染层仍按旧 code 判
- * NOT_FOUND / ALREADY_EXISTS；在 IPC 边界翻回旧 code，避免行为回退。
- */
-const VFS_APP_KEY_TO_CODE: Record<string, string> = {
-  VFS_NOT_FOUND: "NOT_FOUND",
-  VFS_REPLACE_NOT_FOUND: "REPLACE_NOT_FOUND",
-  VFS_DIRECTORY_NOT_EMPTY: "DIRECTORY_NOT_EMPTY",
-  VFS_INVALID_PATH: "INVALID_PATH",
-  VFS_INVALID_NAME: "INVALID_NAME",
-  VFS_IS_DIRECTORY: "IS_DIRECTORY",
-  VFS_ALREADY_EXISTS: "ALREADY_EXISTS",
-  VFS_NOT_A_DIRECTORY: "NOT_A_DIRECTORY",
-  VFS_PARENT_NOT_FOUND: "PARENT_NOT_FOUND",
-};
-
-function typedDomainCode(err: Error): string | undefined {
-  const coded = err as Error & { code?: unknown };
-  if (typeof coded.code !== "string") {
-    return undefined;
-  }
-  if (!TYPED_ERROR_NAMES.has(err.name)) {
-    return undefined;
-  }
-  return coded.code;
-}
-
-function sessionFsMissingPaths(
-  err: Error,
-): readonly string[] | undefined {
-  const paths = (err as Error & { missingLogicalPaths?: readonly string[] })
-    .missingLogicalPaths;
-  return paths != null && paths.length > 0 ? paths : undefined;
-}
-
-/**
- * Maps a thrown value to an {@link IpcErrorPayload} for IPC responses.
- * Typed Core errors use their domain `code`; generic errors fall back to `name`.
- */
-export function formatIpcError(err: unknown): IpcErrorPayload {
-  if (isCloudSyncError(err)) {
-    return { code: err.code, message: visibleMessage(err, err.message) };
-  }
-  if (err instanceof ZodError) {
-    return { code: "VALIDATION", message: formatZodIssues(err) };
-  }
-  if (err instanceof VfsError) {
-    return { code: err.code, message: visibleMessage(err, err.message) };
-  }
-  // 统一错误透出可读 key（AppError.key），不落成 Error.name；VFS 域在 phase 1
-  // 仍对渲染层承诺旧 short code（NOT_FOUND / ALREADY_EXISTS 等）。
-  if (err instanceof AppError) {
-    return { code: VFS_APP_KEY_TO_CODE[err.key] ?? err.key, message: visibleMessage(err, err.message) };
-  }
-  if (err instanceof ToolError) {
-    const cause = err.cause;
-    if (cause instanceof VfsError || isVfsError(cause)) {
-      const vfsCause = cause as VfsError;
-      return { code: vfsCause.code, message: visibleMessage(vfsCause, vfsCause.message) };
+    // 1. ZodError：参数校验（desktop 独有入口；镜像门对本条豁免）。
+    if (err instanceof ZodError) {
+      const parts = err.issues.map((issue) => {
+        const pathKey = issue.path.map(String).join(".");
+        const label = FIELD_LABELS[pathKey] ?? pathKey;
+        const msg = issue.message;
+        if (msg.includes("expected number") && msg.includes("null")) {
+          return label ? `${label}须为非负整数或留空` : "须为非负整数或留空";
+        }
+        return label ? `${label}：${msg}` : msg;
+      });
+      return { code: "INFRA_VALIDATION_FAILED", message: parts.filter(Boolean).join("；") || err.message };
     }
-    const fallback = cause instanceof Error ? cause.message : err.message;
-    return { code: err.code, message: visibleMessage(err, fallback) };
-  }
-  if (err instanceof AgentTurnError) {
-    return { code: "AGENT_RUN_ERROR", message: err.message };
-  }
-  if (err instanceof Error) {
-    const code = typedDomainCode(err);
-    if (code != null) {
-      const missingLogicalPaths = sessionFsMissingPaths(err);
+    // 2. VFS_*：AppError 且 code 落 VFS 域段（102 VFS + 103 VFS_CHARACTER_CARD），
+    //    域判定走 ErrorGuards.domainOf（spec-3 §3.7），不依赖 key 命名约定。core service 已直抛
+    //    AppError（三期 Step 6 删 legacy mapper），不设历史对象兜底。
+    if (AppErrorOps.is(err) && (ErrorGuards.domainOf(err.code) === "VFS" || ErrorGuards.domainOf(err.code) === "VFS_CHARACTER_CARD")) {
+      return { code: err.key, message: Errors.visibleMessage(err, err.message, coreT) };
+    }
+    // 3. PROVIDER_*：文案走码表 messageKey。
+    if (AppErrorOps.is(err) && ErrorGuards.domainOf(err.code) === "PROVIDER") {
+      return { code: err.key, message: Errors.visibleMessage(err, err.message, coreT) };
+    }
+    // 4. CLOUD_SYNC_*：文案走码表 messageKey / 构造点 descriptor。
+    if (AppErrorOps.is(err) && ErrorGuards.domainOf(err.code) === "CLOUD_SYNC") {
+      return { code: err.key, message: Errors.visibleMessage(err, err.message, coreT) };
+    }
+    // 5. 旧 ToolError 的 VFS cause 解包（类已退役，等价判 TOOL_FAILED；cause 双写在
+    //    Error.cause 与 details.cause，一期 spec §2.5 保留）。VFS cause 透传 VFS_ 前缀
+    //    key，renderer PreviewPane 按 VFS_NOT_FOUND 分支命中。
+    if (AppErrorOps.is(err, "TOOL_FAILED")) {
+      const cause = err.cause ?? (err.details as { cause?: unknown } | undefined)?.cause;
+      if (AppErrorOps.is(cause) && (ErrorGuards.domainOf(cause.code) === "VFS" || ErrorGuards.domainOf(cause.code) === "VFS_CHARACTER_CARD")) {
+        return { code: cause.key, message: Errors.visibleMessage(cause, cause.message, coreT) };
+      }
+      const fallback = cause instanceof Error ? cause.message : err.message;
+      return { code: err.key, message: Errors.visibleMessage(err, fallback, coreT) };
+    }
+    // 6. 其余 AppError 通配（SESSION_FS_* 的 missingLogicalPaths 在此透传）。
+    if (AppErrorOps.is(err)) {
+      const details = (err as { details?: unknown }).details as { missingLogicalPaths?: readonly string[] } | undefined;
+      const paths = details?.missingLogicalPaths;
+      const missingLogicalPaths = paths != null && paths.length > 0 ? paths : undefined;
       return {
-        code,
-        message: err.message,
+        code: err.key,
+        message: Errors.visibleMessage(err, err.message, coreT),
         ...(missingLogicalPaths != null ? { missingLogicalPaths } : {}),
       };
     }
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+    // 7. TdbcError：desktop 无此入口，不设分支（镜像门豁免）。
+    // 8. 未知 Error → INFRA_UNEXPECTED_ERROR（name 只留 message，不进 code）。
+    if (err instanceof Error) {
+      return { code: "INFRA_UNEXPECTED_ERROR", message: err.message };
+    }
+    // 9. 非 Error 抛出值。
+    return { code: "INFRA_UNEXPECTED_ERROR", message: String(err) };
+  },
+} as const;

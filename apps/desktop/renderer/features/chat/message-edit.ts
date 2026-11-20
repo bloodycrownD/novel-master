@@ -2,10 +2,10 @@
  * Helpers for message edit and action menu items.
  */
 import { ChatMessage } from '@shared/logic/chat';
-import type { ChatMessageDto, ContentBlockDto } from '@shared/ipc-types';
+import type { ChatMessageDto } from '@shared/ipc-types';
 import { chatMessageFromDto } from './composer-send-state';
 
-export interface MessageActionMenuItem {
+interface MessageActionMenuItem {
   readonly label: string;
   readonly action: string;
   readonly danger?: boolean;
@@ -16,28 +16,6 @@ export function editableTextFromMessage(
   message: ChatMessageDto,
 ): string | null {
   return ChatMessage.from(chatMessageFromDto(message)).editableText();
-}
-
-/** Merges edited text at first text-block position; preserves thinking / tool_use order. */
-export function applyTextEditToContentBlocks(
-  blocks: readonly ContentBlockDto[],
-  newText: string,
-): ContentBlockDto[] {
-  const result: ContentBlockDto[] = [];
-  let textReplaced = false;
-
-  for (const block of blocks) {
-    if (block.type === 'text') {
-      if (!textReplaced) {
-        result.push({ type: 'text', text: newText });
-        textReplaced = true;
-      }
-    } else {
-      result.push(block);
-    }
-  }
-
-  return result;
 }
 
 export function isSetFloorEligibleMessage(message: ChatMessageDto): boolean {

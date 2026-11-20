@@ -7,24 +7,21 @@
  * @module session/workplace
  */
 
+import type { Outcome } from "@novel-master/core/workplace";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { runWorkplace } from "../workplace/run-workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-type SessionWorkplaceDeps = Pick<
-  NovelMasterRuntime,
-  "scope" | "workplace" | "sessionKkv" | "sessionVfs"
->;
+type SessionWorkplaceDeps = Pick<NovelMasterRuntime, "scope" | "workplace" | "sessionKkv" | "sessionVfs">;
 
-export async function runSessionWorkplace(
-  rt: SessionWorkplaceDeps,
-  args: readonly string[],
-): Promise<void> {
+export async function runSessionWorkplace(rt: SessionWorkplaceDeps, args: readonly string[]): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
-  const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
+  const resolvedScope = await rt.scope.resolveProjectSession(flags);
+  if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
+  const { projectId, sessionId } = resolvedScope.value;
   const wt = rt.workplace({ kind: "session", projectId, sessionId });
   const rest = args[0] === "workplace" ? args.slice(1) : args;
-  await runWorkplace(wt, rest, {
+  return runWorkplace(wt, rest, {
     projectId,
     sessionId,
     sessionKkv: rt.sessionKkv,

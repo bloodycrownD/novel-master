@@ -1,15 +1,13 @@
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createSessionFsService } from "@novel-master/core/session-fs";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SessionFsServiceFactory  } from "@novel-master/core/session-fs";
 import type { TdbcConnection } from "@novel-master/core";
-import { isSessionFsError } from "@novel-master/core/session-fs";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  isSessionFsError  } from "../../src/errors/guards.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 // T-SC11（A-22 乐观锁）：resolveRollbackPlan 多次 await 读与 conn.transaction 写之间
 // 存在 TOCTOU 间隙——agent 可在此期间 append 消息，导致 plan 基于过期读。
@@ -54,22 +52,22 @@ function wrapConnWithRaceWrite(
 describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
   it("T-SC11a: 事务开始前持续注入 agent 写入 → 重试耗尽后抛 ROLLBACK_CONFLICT", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tsc11a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tsc11a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 锡点消息：使其有 checkpoint 可回滚，避免被 S-13 护栏拦下。
     await svfs.write("/a.md", "at-anchor", { versionCheck: false });
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("hi"));
-    await ctx.messageCheckpoint.capture(session.id, project.id, user1.id);
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 事务开始前持续注入写入——多于重试上限（3），最后一次重试仍会冲突并向上抛。
-    const messagesBefore = (await ctx.messages.listBySession(session.id)).length;
-    const sessionFs = createSessionFsService(
+    const messagesBefore = (outcomeValue(await ctx.messages.listBySession(session.id))).length;
+    const sessionFs = SessionFsServiceFactory.create(
       wrapConnWithRaceWrite(
         ctx.conn,
         () =>
@@ -81,50 +79,50 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
       ),
     );
 
-    await assert.rejects(
-      () => sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+    await rejectsErr(
+      () => sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
       (error: unknown) => {
         assert.equal(
           isSessionFsError(error, "ROLLBACK_CONFLICT"),
           true,
-          "重试上限耗尽后应抛 ROLLBACK_CONFLICT",
+          "重试上限耗尽后应报 ROLLBACK_CONFLICT",
         );
-        // better-sqlite3 驱动会把事务里抛出的非 TdbcError 用 TdbcError 包起来（cause 链指向原错误），
-        // isSessionFsError 会追 cause 链识别；descriptor 形态下 key/计数挂在 cause 的
-        // messageKey/messageParams 上（包装层不带）。
-        const original = (error as {cause?: {messageKey?: string; messageParams?: {expected_count?: number; actual_count?: number}}}).cause;
-        assert.equal(original?.messageKey, "error.session_fs.rollback_conflict");
-        assert.equal(typeof original?.messageParams?.expected_count, "number");
-        assert.equal(typeof original?.messageParams?.actual_count, "number");
+        // service 边界已把驱动的 TdbcError 包装解包回原 AppError（错误通道迁移五期）：
+        // descriptor 形态下 key/计数直接挂在 error 的 messageKey/messageParams 上，
+        // 不再经 cause 链（cause 解包见 message-rollback.service 的 catch）。
+        const original = error as {messageKey?: string; messageParams?: {expected_message_count?: number; actual_message_count?: number}};
+        assert.equal(original.messageKey, "error.session_fs.rollback_conflict");
+        assert.equal(typeof original.messageParams?.expected_message_count, "number");
+        assert.equal(typeof original.messageParams?.actual_message_count, "number");
         return true;
       },
     );
 
     // 冲突 → 未进行任何截断，锡点消息 + 其后的 assistant + 注入的竞态消息都还在。
-    const messagesAfter = await ctx.messages.listBySession(session.id);
+    const messagesAfter = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.ok(messagesAfter.length > messagesBefore);
     // /a.md 未被恢复到锡点版本——根本没有进入 reconcile。
-    assert.equal((await svfs.read("/a.md")).content, "at-anchor");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "at-anchor");
   });
 
   it("T-SC11b: 仅第一次事务注入写入 → 重试后成功提交（乐观锁重试生效）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tsc11b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tsc11b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("u1"));
-    await ctx.messageCheckpoint.capture(session.id, project.id, user1.id);
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
     await svfs.write("/a.md", "v2", { versionCheck: false });
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 只注入 1 次：第一次事务冲突 → 重试；第二次重试时 resolveRollbackPlan 拿到的是
     // 含竞态写入后的新快照，事务重读计数一致 → 提交成功。
-    const sessionFs = createSessionFsService(
+    const sessionFs = SessionFsServiceFactory.create(
       wrapConnWithRaceWrite(
         ctx.conn,
         () =>
@@ -135,37 +133,37 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
       ),
     );
 
-    await sessionFs.rollbackToMessage(session.id, project.id, user1.id);
+    await sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
 
     // 重试后锡点消息被截断（undo_send 语义含锡点），竞态写入也被一起截掉。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
-    assert.equal((await svfs.read("/a.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
   });
 
   it("T-SC11c: 无并发写入的正常路径不受影响", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tsc11c-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tsc11c-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("u1"));
-    await ctx.messageCheckpoint.capture(session.id, project.id, user1.id);
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
     await svfs.write("/a.md", "v2", { versionCheck: false });
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 走默认的 ctx.sessionFs（未包装 conn，没有任何注入）。
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
 
     // rewind 锡点 assistant1 保留，其后无 tail。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1.id);
-    assert.equal((await svfs.read("/a.md")).content, "v2");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v2");
   });
 });
 

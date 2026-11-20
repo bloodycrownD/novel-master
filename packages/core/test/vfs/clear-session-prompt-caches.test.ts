@@ -7,19 +7,13 @@
  * 不依赖真实 DB（DB 集成路径由 character-card-import / vfs-zip-io 测试覆盖）。
  */
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USAGE_STATS,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USAGE_STATS_TOOL_USE_COUNT_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  afterEach, describe, it  } from "node:test";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USAGE_STATS, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USAGE_STATS_TOOL_USE_COUNT_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  sessionApiPromptTokenCache  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "../../src/service/vfs/logic/clear-session-prompt-caches.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  SessionPromptCaches  } from "../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 afterEach(() => {
@@ -44,7 +38,7 @@ describe("clearSessionPromptCaches", () => {
     });
     assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
 
-    await clearSessionPromptCaches(sessionId, kkv);
+    await SessionPromptCaches.clear(sessionId, kkv);
 
     assert.deepEqual(
       await kkv.listKeys(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
@@ -71,7 +65,7 @@ describe("clearSessionPromptCaches", () => {
       "12",
     );
 
-    await clearSessionPromptCaches(sessionId, kkv);
+    await SessionPromptCaches.clear(sessionId, kkv);
 
     // 哨兵语义（s3/B-1）：键在、值非数字（parseInt("")=NaN 当 miss）——
     // 与 delete 不同，读口靠它复核「原值仍等于 miss 时所见」防陈旧回写。
@@ -98,11 +92,11 @@ describe("clearSessionPromptCaches", () => {
     });
 
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
-      await assert.doesNotReject(clearSessionPromptCaches(sessionId, boom));
+      await assert.doesNotReject(SessionPromptCaches.clear(sessionId, boom));
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     const warns = records.filter((record) => record.level === "warn");

@@ -96,7 +96,7 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     // （preact 自身只做 `u=="dangerouslySetInnerHTML"` 的属性读，不会写出
     //   `{__html:…}` 这个字面量，故不会误命中）
     expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
-    // registerSetDocumentView 标识符被重命名；锁它消费的下行 payload 字段名
+    // documentViewSlot 标识符被重命名；锁它消费的下行 payload 字段名
     // （overLimit 只有 setDocument 视图刷新这条路径会读）
     expect(script).toContain('overLimit');
     // 允许删除：手拼 doc-body 整段（已迁 DocumentApp + TrustedHtml）

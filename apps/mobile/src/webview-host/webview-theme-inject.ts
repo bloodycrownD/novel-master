@@ -21,6 +21,8 @@
  * 宿主 URI `#bg=` 参数，解析期同步执行、零竞态）；本函数是 iOS 主通道 +
  * Android 双保险（B 在 Android 输给首绘，由 C′ 兜确定性）。
  */
-export function buildThemeInjectScript(background: string): string {
-  return `(function(){try{var el=document.documentElement;if(!el){return;}el.style.setProperty('--bg', ${JSON.stringify(background)});}catch(e){}})();`;
-}
+export const WebviewThemeInject = {
+  buildThemeInjectScript: (background: string): string => {
+    return `(function(){try{var el=document.documentElement;if(!el){return;}el.style.setProperty('--bg', ${JSON.stringify(background)});}catch(e){}})();`;
+  },
+} as const;

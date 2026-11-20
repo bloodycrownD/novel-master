@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks, type ChatMessageData  } from "@novel-master/core/chat";
 
-import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
-import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
+import {  PromptBuilder  } from "@novel-master/core/prompt";
+import {  OrphanToolResults  } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("buildPromptLlmInputFromLayout tool pairing", () => {
   it("T6: synthetic template messages do not break tool_result pairing", async () => {
@@ -49,7 +50,7 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
       },
     ];
 
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       {
         persistEnabled: true,
         persist: [{ name: "ctx", type: "text", role: "user", content: "context" }],
@@ -59,8 +60,8 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
         workplaceDisplay: "",
         messages,
       },
-    );
-    const normalized = normalizeOrphanToolResultsForLlm(input.messages);
+    ));
+    const normalized = OrphanToolResults.normalizeForLlm(input.messages);
     assert.equal(normalized.length, 3);
     assert.equal(normalized[0]!.id, "prompt:ctx");
     assert.equal(normalized[2]!.content.blocks[0]?.type, "tool_result");

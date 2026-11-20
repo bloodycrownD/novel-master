@@ -16,7 +16,9 @@
  */
 
 import { z } from "zod";
-import { decode } from "@/infra/serialization/decode.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { SMART_SORT_CAPTURE_KINDS, type SmartSortCaptureKind, type SmartSortRule } from "./smart-sort-rule.js";
 
 /** Current bundle document schema version. */
@@ -28,76 +30,79 @@ const captureKindSchema = z.enum(SMART_SORT_CAPTURE_KINDS as [SmartSortCaptureKi
 /** Bundle 内单条规则（description 缺省 null；captureKind 缺省 smart，D13；sortOrder 即导出时的优先级顺序）。 */
 const bundleRuleSchema = z.object({ ruleId: z.string().min(1), name: z.string().min(1), pattern: z.string().min(1), flags: z.string(), captureKind: captureKindSchema.optional(), description: z.string().nullable().optional(), enabled: z.boolean(), sortOrder: z.number().int().nonnegative() }).strict();
 
-export type SmartSortRuleBundleRule = z.infer<typeof bundleRuleSchema>;
-
 /** Root bundle document（替换式导入导出，spec D10）。 */
 export const smartSortRuleBundleDocumentSchema = z.object({ schemaVersion: z.literal(SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION), rules: z.array(bundleRuleSchema) }).strict();
 
 export type SmartSortRuleBundleDocument = z.infer<typeof smartSortRuleBundleDocumentSchema>;
 
-/** Domain rules → bundle document（全量、按 sortOrder；description null 省略）。 */
-export function encodeSmartSortRuleBundle(rules: readonly SmartSortRule[]): SmartSortRuleBundleDocument {
-  return {
-    schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
-    rules: rules.map((rule) => ({
+export const SmartSortRuleIo = {
+  /** Domain rules → bundle document（全量、按 sortOrder；description null 省略）。 */
+  encodeBundle(rules: readonly SmartSortRule[]): SmartSortRuleBundleDocument {
+    return {
+      schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
+      rules: rules.map((rule) => ({
+        ruleId: rule.ruleId,
+        name: rule.name,
+        pattern: rule.pattern,
+        flags: rule.flags,
+        captureKind: rule.captureKind,
+        ...(rule.description != null ? { description: rule.description } : {}),
+        enabled: rule.enabled,
+        sortOrder: rule.sortOrder,
+      })),
+    };
+  },
+
+  /**
+   * Parses + validates an unknown payload as a bundle document.
+   *
+   * 这里是 bundle 文档的 schema 入口边界：decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
+   * 沿 `Result.err` 回传，由 service / app 的导入通道贴「YAML 无效」标签，保持既有错误契约。
+   */
+  decodeBundle(raw: unknown): Result<SmartSortRuleBundleDocument, AppError> {
+    // v1 兼容映射：旧文档的 `example` 字段挪到 `description`，schemaVersion
+    // 改写为 2。仅识别 schemaVersion===1 且逐条规则只做字段搬运（无 example
+    // 的规则原样通过，description 与 example 同时存在时以 description 为准）。
+    let migrated = raw;
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      const doc = raw as { schemaVersion?: unknown; rules?: unknown; [key: string]: unknown };
+      if (doc.schemaVersion === 1 && Array.isArray(doc.rules)) {
+        migrated = {
+          ...doc,
+          schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
+          rules: doc.rules.map((rule) => {
+            if (typeof rule !== "object" || rule === null || Array.isArray(rule)) {
+              return rule;
+            }
+            const r = rule as Record<string, unknown>;
+            if (r.description !== undefined || r.example === undefined) {
+              return r;
+            }
+            const { example, ...rest } = r;
+            return { ...rest, description: example };
+          }),
+        };
+      }
+    }
+    // decode 已 Result 化（错误通道迁移四期）；decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
+    // 原样接力，由 service / app 的导入通道贴「YAML 无效」标签。
+    const decoded = SerializationDecode.decode(migrated, smartSortRuleBundleDocumentSchema);
+    return decoded;
+  },
+
+  /** Bundle rules → domain entities（时间戳由导入方重新分配；captureKind 缺省 smart，D13）。 */
+  bundleRulesToEntities(doc: SmartSortRuleBundleDocument, nowMs: number): SmartSortRule[] {
+    return doc.rules.map((rule, index) => ({
       ruleId: rule.ruleId,
       name: rule.name,
       pattern: rule.pattern,
       flags: rule.flags,
-      captureKind: rule.captureKind,
-      ...(rule.description != null ? { description: rule.description } : {}),
+      captureKind: rule.captureKind ?? "smart",
+      description: rule.description ?? null,
       enabled: rule.enabled,
-      sortOrder: rule.sortOrder,
-    })),
-  };
-}
-
-/**
- * Parses + validates an unknown payload as a bundle document.
- *
- * 这里是 bundle 文档的 schema 入口边界：`decode()` 的 ConfigDecodeError 由
- * service / app 的导入通道捕获并贴「YAML 无效」标签，保持既有错误契约。
- */
-export function decodeSmartSortRuleBundle(raw: unknown): SmartSortRuleBundleDocument {
-  // v1 兼容映射：旧文档的 `example` 字段挪到 `description`，schemaVersion
-  // 改写为 2。仅识别 schemaVersion===1 且逐条规则只做字段搬运（无 example
-  // 的规则原样通过，description 与 example 同时存在时以 description 为准）。
-  let migrated = raw;
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
-    const doc = raw as { schemaVersion?: unknown; rules?: unknown; [key: string]: unknown };
-    if (doc.schemaVersion === 1 && Array.isArray(doc.rules)) {
-      migrated = {
-        ...doc,
-        schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
-        rules: doc.rules.map((rule) => {
-          if (typeof rule !== "object" || rule === null || Array.isArray(rule)) {
-            return rule;
-          }
-          const r = rule as Record<string, unknown>;
-          if (r.description !== undefined || r.example === undefined) {
-            return r;
-          }
-          const { example, ...rest } = r;
-          return { ...rest, description: example };
-        }),
-      };
-    }
-  }
-  return decode(migrated, smartSortRuleBundleDocumentSchema);
-}
-
-/** Bundle rules → domain entities（时间戳由导入方重新分配；captureKind 缺省 smart，D13）。 */
-export function bundleRulesToEntities(doc: SmartSortRuleBundleDocument, nowMs: number): SmartSortRule[] {
-  return doc.rules.map((rule, index) => ({
-    ruleId: rule.ruleId,
-    name: rule.name,
-    pattern: rule.pattern,
-    flags: rule.flags,
-    captureKind: rule.captureKind ?? "smart",
-    description: rule.description ?? null,
-    enabled: rule.enabled,
-    sortOrder: index + 1,
-    createdAtMs: nowMs,
-    updatedAtMs: nowMs,
-  }));
-}
+      sortOrder: index + 1,
+      createdAtMs: nowMs,
+      updatedAtMs: nowMs,
+    }));
+  },
+} as const;

@@ -7,7 +7,7 @@
  *    只在二级卡，二级整卡点按即进）；
  * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡（无 kind 小标题、无 ⤢，
  *    整卡点开全屏）+ 工具组卡（组头状态点三态，组内 use/result 两格整格点开
- *    全屏；tool use 预览走 core `formatToolUsePreviewJson` 保结构截大 key）；
+ *    全屏；tool use 预览走 core `PromptPreviewTurns.formatToolUsePreviewJson` 保结构截大 key）；
  * 3. **全屏只读原文**——复用 `.text-prompt-overlay` / `.prompt-editor-modal` 壳，
  *    正文容器 `.prompt-fullscreen__body` 内逐块 `<pre>` 纯文本铺开（用户拍板：
  *    只保留原文，无渲染档与切换）。

@@ -8,6 +8,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 export function useRuntime(): MobileNovelMasterRuntime {
   const {runtime, status} = useNovelMaster();
   if (status !== 'ready' || !runtime) {
+    // nm-throw: keep — invariant：hook 契约要求只在 status==='ready' 的 Provider 树内调用
     throw new Error('Runtime is not ready');
   }
   return runtime;

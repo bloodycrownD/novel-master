@@ -1,8 +1,9 @@
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "../../src/errors/app-error.js";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 
@@ -14,17 +15,17 @@ describe("KkvService", () => {
     const kkv = createKkvService(ctx.conn);
     await kkv.set("M1", "k", "v1");
     await kkv.set("M2", "k", "v2");
-    assert.equal(await kkv.get("M1", "k"), "v1");
-    assert.equal(await kkv.get("M2", "k"), "v2");
+    assert.equal(unwrap(await kkv.get("M1", "k")), "v1");
+    assert.equal(unwrap(await kkv.get("M2", "k")), "v2");
   });
 
   it("delete missing key throws NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
-    await assert.rejects(
+    await rejectsErr(
       () => kkv.delete("mod", "missing"),
       (e: unknown) => {
-        assert.ok(isAppError(e, "KKV_NOT_FOUND"));
+        assert.ok(AppErrorOps.is(e, "KKV_NOT_FOUND"));
         return true;
       },
     );

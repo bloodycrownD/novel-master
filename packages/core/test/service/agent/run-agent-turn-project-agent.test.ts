@@ -1,19 +1,17 @@
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-  runAgentTurn,
-  type AgentDefinition,
-  type AgentTurnRuntimePort,
-} from "@novel-master/core/agent";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
+import type { ZodType } from "zod";
+import {  AgentServiceFactory, agentDefinitionSchema, AgentTurnRunner, type AgentDefinition, type AgentTurnRuntimePort  } from "@novel-master/core/agent";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(SerializationDecode.decode(raw, schema));
+}
 
 novelMasterTestFixture();
 
@@ -44,13 +42,13 @@ function mockUserVfsTurn(): UserVfsTurnService {
 
 function makeRuntime(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
-  registry: ReturnType<typeof createAgentRegistryService>,
+  registry: ReturnType<typeof AgentServiceFactory.createRegistry>,
   overrides?: { readonly sessions?: AgentTurnRuntimePort["sessions"] },
 ): AgentTurnRuntimePort {
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
     },
     agentRegistry: registry,
     projects: ctx.projects,
@@ -72,13 +70,14 @@ function makeRuntime(
       ({} as ReturnType<AgentTurnRuntimePort["sessionVfs"]>),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => ({
-          rows: [],
-          displayByPath: new Map(),
-        }),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+        evaluateRuleView: async () =>
+          Result.ok({
+            rows: [],
+            displayByPath: new Map(),
+          }),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
@@ -96,7 +95,7 @@ function makeRuntime(
 describe("runAgentTurn project agent config", () => {
   it("项目智能体已下线：custom 配置被忽略，走 session 级 agent", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -117,22 +116,22 @@ describe("runAgentTurn project agent config", () => {
     await ctx.state.setCurrentAgentId("global-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 旧库残留 custom 配置——runner 应忽略它，走 session 级。
-    await ctx.projects.updateAgentConfig(project.id, {
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition,
-    });
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    }));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "global-agent",
-    });
+    }));
 
     const runtime = makeRuntime(ctx, registry);
     let capturedDefinition: AgentDefinition | undefined;
 
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: project.id, sessionId: session.id },
         "hello",
@@ -141,7 +140,7 @@ describe("runAgentTurn project agent config", () => {
             capturedDefinition = resolveCtx.definition;
           },
         },
-      );
+      ));
     } catch {
       // runner deps stubbed; onAfterResolveModel runs before runner
     }
@@ -157,7 +156,7 @@ describe("runAgentTurn project agent config", () => {
 
   it("T-R4：scope.sessionId 透传到 resolver；session-bind 覆盖 workspace 全局", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     // workspace 全局 agent
     await registry.upsert(
       "global-agent",
@@ -198,17 +197,17 @@ describe("runAgentTurn project agent config", () => {
       ),
     );
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "session-bind-agent",
-    });
+    }));
 
     const runtime = makeRuntime(ctx, registry);
     let capturedDefinition: AgentDefinition | undefined;
     let capturedModel: string | undefined;
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: project.id, sessionId: session.id },
         "hello",
@@ -218,7 +217,7 @@ describe("runAgentTurn project agent config", () => {
             capturedModel = resolveCtx.savedModelId;
           },
         },
-      );
+      ));
     } catch {
       // runner deps stubbed; onAfterResolveModel runs before runner
     }

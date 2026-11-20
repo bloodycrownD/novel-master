@@ -3,9 +3,9 @@
  *
  * ## 为什么需要它
  * 项目里原本散落三套「不一致兜底」逻辑，签名和调用时机各不相同：
- *   1. **repair** —— vfs 的 `repairRefCounts`，重算 checkpoint 指针 + live head，
+ *   1. **repair** —— vfs 的 `RevisionRefCount.repair`，重算 checkpoint 指针 + live head，
  *      把偏低的 `vfs_revision.ref_count` 上调（保守纠偏，只增不减）；
- *   2. **backfill** —— chat-message 的 `backfillBaselineCheckpoints`，给空窗消息
+ *   2. **backfill** —— chat-message 的 `BackfillBaselineCheckpoints.backfill`，给空窗消息
  *      补一条 baseline checkpoint；
  *   3. **rename** —— provider migration 的双身份键重写（id → uuid 时同步搬运
  *      sksp 密钥 ref、kkv 建议 key、current provider 指针）。
@@ -16,12 +16,12 @@
  *
  * ## 双引用计数器裁决（T-SC5）
  * vfs 里有两套 `ref_count`，用途完全不同，**并存不矛盾，绝不强行合一**：
- *   - `vfs_revision.ref_count`：应用层维护（`repairRefCounts` / `adjustRef`），
+ *   - `vfs_revision.ref_count`：应用层维护（`RevisionRefCount.repair` / `RevisionRefCount.adjust`），
  *     表示「有几条 checkpoint 或 live head 指向这条 revision」，用于 revision 可达性 GC。
  *   - `vfs_content_blob.ref_count`：SQLite 触发器维护（revision INSERT/DELETE/UPDATE
  *     OF content_hash 时 ±1），表示「有几条 revision 行引用这个 blob」，用于 blob 回收。
  *
- * 关键不变量：`repairRefCounts` 只走 `batchRepairRefCountFloor`（以及保留的逐条 `repairRefCountFloor`），
+ * 关键不变量：`RevisionRefCount.repair` 只走 `batchRepairRefCountFloor`（以及保留的逐条 `repairRefCountFloor`），
  * 而这两者都只更新 `ref_count` 列、不碰 `content_hash`，所以 `AFTER UPDATE OF content_hash`
  * 触发器**不会 fire**——应用层修复 revision 可达性计数时，绝不会顺带 bump blob 侧的计数器，
  * 两条路径不重复计数。
@@ -29,10 +29,12 @@
  * @module service/integrity-repair
  */
 
+import { assert } from "@/common/assert.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /** 兜底种类：修复 / 重命名引用迁移 / 补缺。 */
-export type IntegrityRepairKind = "repair" | "rename" | "backfill";
+type IntegrityRepairKind = "repair" | "rename" | "backfill";
 
 /** detect 阶段的检测结果。 */
 export interface IntegrityRepairDetection {
@@ -47,6 +49,8 @@ export interface IntegrityRepairDetection {
  *
  * `detect` 只读不写，用于判断是否需要修复；`repair` 执行实际修复，应当尽量幂等
  * （重复执行不产生副作用）。两者都是 `async`，因为底下要读 DB / 文件系统。
+ * 已知失败沿 `Result.err` 上行（p26 R4：接口原「只认报告/异常」契约退役，
+ * runAll 捕异常降级为平台兜网）；repo 失败不再解包转 throw。
  */
 export interface IntegrityRepairOperation {
   /** 操作名，仅用于报告可读性，需在单个 registry 内唯一。 */
@@ -54,19 +58,19 @@ export interface IntegrityRepairOperation {
   /** 兜底种类，用于按种类过滤调度。 */
   readonly kind: IntegrityRepairKind;
   /** 只读检测：当前是否处于不一致状态、需要修复。 */
-  detect(): Promise<IntegrityRepairDetection>;
+  detect(): Promise<Result<IntegrityRepairDetection, AppError>>;
   /** 执行修复；应当幂等。 */
-  repair(): Promise<void>;
+  repair(): Promise<Result<void, AppError>>;
 }
 
 /** 单次操作跑完后的报告条目。 */
-export interface IntegrityRepairReport {
+interface IntegrityRepairReport {
   readonly name: string;
   readonly kind: IntegrityRepairKind;
   readonly detection: IntegrityRepairDetection;
   /** 是否真的执行了 repair（detect 返回 true 时才跑 repair）。 */
   readonly repaired: boolean;
-  /** repair 阶段抛错时挂在 这里，runAll 不会因为单步失败而中断后续操作。 */
+  /** repair 阶段失败（Result.err）或平台异常时挂在这里，runAll 不会因为单步失败而中断后续操作。 */
   readonly error?: unknown;
 }
 
@@ -78,7 +82,7 @@ export interface IntegrityRepairReport {
  * ```ts
  * const registry = new IntegrityRepairRegistry();
  * registry.register(createRevisionRefCountRepairOperation({ ... }));
- * registry.register(createBaselineCheckpointBackfillOperation({ ... }));
+ * registry.register(BackfillBaselineCheckpoints.createOperation({ ... }));
  * const reports = await registry.runAll();
  * for (const r of reports) {
  *   if (r.error) logger.warn({ name: r.name }, "integrity repair failed");
@@ -96,21 +100,10 @@ export class IntegrityRepairRegistry {
 
   /** 登记一个操作；同名重复登记直接抛错，防止悄悄覆盖。 */
   register(op: IntegrityRepairOperation): this {
-    if (
-      !op ||
-      typeof op.detect !== "function" ||
-      typeof op.repair !== "function"
-    ) {
-      throw new TypeError(
-        `IntegrityRepairRegistry.register: 操作 ${
-          op?.name ?? "<匿名>"
-        } 缺少 detect/repair`
-      );
+    if (!op || typeof op.detect !== "function" || typeof op.repair !== "function") {
+      throw new TypeError(`IntegrityRepairRegistry.register: 操作 ${op?.name ?? "<匿名>"} 缺少 detect/repair`);
     }
-      if (this.operations.has(op.name)) {
-        const duplicated = `操作 ${op.name} 已登记，不允许覆盖`;
-        throw new AppError("INFRA_INVARIANT_VIOLATION", duplicated);
-      }
+    assert(!this.operations.has(op.name), `操作 ${op.name} 已登记，不允许覆盖`);
     this.operations.set(op.name, op);
     return this;
   }
@@ -120,17 +113,16 @@ export class IntegrityRepairRegistry {
     return [...this.operations.values()];
   }
 
-  /** 对所有操作跑 detect，返回需要修复的列表。 */
+  /**
+   * 对所有操作跑 detect，返回需要修复的列表。
+   *
+   * nm-style: keep-public — 公共批量检测口；registry 是无端口的具体装配组件，生产暂无调用，测试直接锁 needsRepair 过滤。撤方法需同步清测试（跨分片）。
+   */
   async detectAll(): Promise<ReadonlyArray<IntegrityRepairOperation>> {
     const pending: IntegrityRepairOperation[] = [];
     for (const op of this.operations.values()) {
-      try {
-        const detection = await op.detect();
-        if (detection.needsRepair) {
-          pending.push(op);
-        }
-      } catch {
-        // detect 抛错时保守地加入待修复队列，让 runAll 的 repair 阶段再尝试并记录错误。
+      const read = await IntegrityRepair.safeDetect(op);
+      if (read.needsRepair) {
         pending.push(op);
       }
     }
@@ -141,64 +133,73 @@ export class IntegrityRepairRegistry {
    * 跑全部操作：先 detect，needsRepair=true 的才跑 repair，每步独立 try-catch。
    *
    * 任何操作的 detect / repair 抛错都不会中断其他操作，错误挂在返回报告的 `error` 字段。
+   *
+   * nm-style: keep-public — 公共编排入口；bootstrap 装配链单点调用（runByFilter 保持私有阶段）。
    */
   async runAll(): Promise<IntegrityRepairReport[]> {
     return this.runByFilter(() => true);
   }
 
-  /** 只跑指定种类的操作。 */
+  /**
+   * 只跑指定种类的操作。
+   *
+   * nm-style: keep-public — 按 kind 过滤的公共调度口（类文档承诺的用法），生产暂无调用，测试直接锁 rename 过滤；撤方法需同步清测试（跨分片）。
+   */
   async runOnly(kind: IntegrityRepairKind): Promise<IntegrityRepairReport[]> {
     return this.runByFilter((op) => op.kind === kind);
   }
 
-  private async runByFilter(
-    predicate: (op: IntegrityRepairOperation) => boolean
-  ): Promise<IntegrityRepairReport[]> {
+  private async runByFilter(predicate: (op: IntegrityRepairOperation) => boolean): Promise<IntegrityRepairReport[]> {
     const reports: IntegrityRepairReport[] = [];
     for (const op of this.operations.values()) {
       if (!predicate(op)) continue;
-      reports.push(await runIntegrityRepair(op));
+      reports.push(await IntegrityRepair.run(op));
     }
     return reports;
   }
 }
 
-/**
- * 跑单个操作的 detect → repair 流程，返回报告。
- *
- * detect 抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
- * repair 抛错时挂到报告的 `error` 字段，不向上传播。
- */
-export async function runIntegrityRepair(
-  op: IntegrityRepairOperation
-): Promise<IntegrityRepairReport> {
-  let detection: IntegrityRepairDetection;
-  try {
-    detection = await op.detect();
-  } catch (err) {
-    // detect 本身炸了，保守地尝试 repair，并在报告里挂上 detect 阶段的错误。
-    detection = {
-      needsRepair: true,
-      details: `detect 阶段抛错：${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    };
-  }
+/** 完整性修复单操作执行集合（detect → repair 流程）。 */
+export const IntegrityRepair = {
+  /**
+   * detect 的统一收口（run / detectAll 共用）：`Result.err`（已知失败）与平台异常
+   * （兜网）都保守视为 needsRepair=true（让 repair 阶段再尝试），details 记下
+   * 失败来源。措辞契约：异常沿用「detect 阶段抛错」（测试锁定），失败用「detect 阶段失败」。
+   */
+  async safeDetect(op: IntegrityRepairOperation): Promise<IntegrityRepairDetection> {
+    let read: Result<IntegrityRepairDetection, AppError>;
+    try {
+      read = await op.detect();
+    } catch (err) {
+      // detect 本身炸了（平台异常兜网），保守地尝试 repair。
+      return { needsRepair: true, details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (!read.ok) {
+      return { needsRepair: true, details: `detect 阶段失败：${read.error.message}` };
+    }
+    return read.value;
+  },
 
-  if (!detection.needsRepair) {
-    return { name: op.name, kind: op.kind, detection, repaired: false };
-  }
-
-  try {
-    await op.repair();
+  /**
+   * 跑单个操作的 detect → repair 流程，返回报告。
+   *
+   * detect 失败/抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
+   * repair 的 `Result.err` 与平台异常挂到报告的 `error` 字段，不向上传播。
+   */
+  async run(op: IntegrityRepairOperation): Promise<IntegrityRepairReport> {
+    const detection = await IntegrityRepair.safeDetect(op);
+    if (!detection.needsRepair) {
+      return { name: op.name, kind: op.kind, detection, repaired: false };
+    }
+    let repaired: Result<void, AppError>;
+    try {
+      repaired = await op.repair();
+    } catch (err) {
+      return { name: op.name, kind: op.kind, detection, repaired: false, error: err };
+    }
+    if (!repaired.ok) {
+      return { name: op.name, kind: op.kind, detection, repaired: false, error: repaired.error };
+    }
     return { name: op.name, kind: op.kind, detection, repaired: true };
-  } catch (err) {
-    return {
-      name: op.name,
-      kind: op.kind,
-      detection,
-      repaired: false,
-      error: err,
-    };
-  }
-}
+  },
+} as const;

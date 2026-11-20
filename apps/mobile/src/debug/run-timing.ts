@@ -5,82 +5,82 @@
  * logcat 过滤 `[nm-timing]` 即得「点发送 → 状态条渲染」全链路相对时间轴。
  * 生产/测试环境所有函数为 no-op。
  *
+ * 三条轴（发送 / 回滚 / 冷启动）共用一份 {@link createTimingAxis} 实现，差异
+ * 只在标签、reset 文案、窗口上限与 t0 起点：回滚轴带窗口自愈，冷启动轴的
+ * t0 固定在模块求值时刻，发送轴两者都不要。
+ *
  * @module debug/run-timing
  */
 
-let t0 = 0;
+/** 一条打点轴：`reset()` 定 t0，`log(label)` 打相对 t0 的耗时。 */
+type TimingAxis = {
+  readonly reset: () => void;
+  readonly log: (message: string) => void;
+};
 
-/** 重置计时起点（每轮发送入口调用一次）。 */
-export function resetRunTiming(): void {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+type TimingAxisOptions = {
+  /** reset 时输出 `[<label>] t0 <resetMessage>`。 */
+  readonly resetMessage?: string;
+  /**
+   * 窗口上限（毫秒）：超窗后首个站点把 t0 复位为 0（自愈关窗），后续站点
+   * 保持 no-op。不设上限时 reset 后窗口永久打开。
+   */
+  readonly windowMs?: number;
+  /** t0 取模块求值时刻（冷启动轴），不等待 reset。 */
+  readonly startAtModuleEval?: boolean;
+};
+
+/** 造一条打点轴；t0 与窗口状态收在闭包里，不散成模块级 let。 */
+function createTimingAxis(label: string, options: TimingAxisOptions = {}): TimingAxis {
+  let t0 = options.startAtModuleEval === true ? Date.now() : 0;
+  const enabled = (): boolean => typeof __DEV__ !== 'undefined' && __DEV__;
+  const reset = (): void => {
+    if (!enabled()) {
+      return;
+    }
     t0 = Date.now();
-    console.log('[nm-timing] t0 send');
-  }
+    console.log(`[${label}] t0 ${options.resetMessage ?? ''}`);
+  };
+  const log = (message: string): void => {
+    if (!enabled() || t0 === 0) {
+      return;
+    }
+    if (options.windowMs != null && Date.now() - t0 > options.windowMs) {
+      t0 = 0;
+      return;
+    }
+    console.log(`[${label}] ${message} +${Date.now() - t0}ms`);
+  };
+  return {reset, log};
 }
-
-/** 打一站相对 t0 的耗时；未 reset 时 no-op。 */
-export function timingLog(label: string): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) {
-    return;
-  }
-  if (t0 === 0) {
-    return;
-  }
-  console.log(`[nm-timing] ${label} +${Date.now() - t0}ms`);
-}
-
-// 回滚轴（rollback-large-jank Step 1）：用户确认回滚时 resetRollbackTiming()
-// 定 t0，回滚链各段（core 事务子步 / tail reload / 快照分片 / web 渲染回执 /
-// token 刷新）rollbackTimingLog('站名')，logcat 过滤 `[nm-rollback]` 即得
-// 「点回滚 → 界面刷新完成」全链时间轴。窗口外（t0=0 或距 t0 超过
-// ROLLBACK_TIMING_WINDOW_MS）所有站 no-op，因此快照构建等共享代码路径
-// 可直接埋点、不影响非回滚场景。真机基线采集与修复前后对比共用这条轴。
 
 /**
- * 回滚计时窗口上限（毫秒）：rollbackT0 只在回滚入口赋值、全仓无显式关闭
- * 点，若不设上限则首次回滚后窗口永久打开，日常滚动与快照分片会持续往同
- * 一条 t0 上打点，logcat 被淹没、回滚轴失去可判读性。取值依据：回滚链
- * AC-1 目标为秒级（toast → 界面刷新 <1s），10s 为充裕余量；超时后首个站点
- * 即自动把 rollbackT0 复位为 0，窗口自愈。
+ * 回滚计时窗口上限（毫秒）：回滚轴 t0 只在回滚入口赋值、全仓无显式关闭点，
+ * 若不设上限则首次回滚后窗口永久打开，日常滚动与快照分片会持续往同一条
+ * t0 上打点，logcat 被淹没、回滚轴失去可判读性。取值依据：回滚链 AC-1
+ * 目标为秒级（toast → 界面刷新 <1s），10s 为充裕余量；超时后首个站点即
+ * 自动把 t0 复位为 0，窗口自愈。
  */
 const ROLLBACK_TIMING_WINDOW_MS = 10000;
 
-let rollbackT0 = 0;
+const runAxis = createTimingAxis('nm-timing', {resetMessage: 'send'});
+const rollbackAxis = createTimingAxis('nm-rollback', {resetMessage: 'rollback', windowMs: ROLLBACK_TIMING_WINDOW_MS});
+/** 启动基准：t0 是模块求值时刻（dev bundle 加载即计时）。冷启动初始化链
+ * （水合/快照分片/webview ready）没有发送 t0，统一挂这条轴，logcat 过滤
+ * `[nm-boot]` 即得冷启动全链时间轴。 */
+const bootAxis = createTimingAxis('nm-boot', {startAtModuleEval: true});
+
+/** 重置计时起点（每轮发送入口调用一次）。 */
+export const resetRunTiming = runAxis.reset;
+
+/** 打一站相对 t0 的耗时；未 reset 时 no-op。 */
+export const timingLog = runAxis.log;
 
 /** 重置回滚链计时起点（每轮回滚入口调用一次）。 */
-export function resetRollbackTiming(): void {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    rollbackT0 = Date.now();
-    console.log('[nm-rollback] t0 rollback');
-  }
-}
+export const resetRollbackTiming = rollbackAxis.reset;
 
 /** 打一回滚链站点相对 t0 的耗时；不在回滚窗口时 no-op。 */
-export function rollbackTimingLog(label: string): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) {
-    return;
-  }
-  if (rollbackT0 === 0) {
-    return;
-  }
-  // 窗口上限自动失效：距 t0 超过 ROLLBACK_TIMING_WINDOW_MS 即自愈关窗
-  // （顺带覆盖 t0=0 的入口守卫——Date.now() 是 epoch 量级，必然远超窗口）。
-  if (Date.now() - rollbackT0 > ROLLBACK_TIMING_WINDOW_MS) {
-    rollbackT0 = 0;
-    return;
-  }
-  console.log(`[nm-rollback] ${label} +${Date.now() - rollbackT0}ms`);
-}
-
-// 启动基准：模块求值时刻（dev bundle 加载即计时）。冷启动初始化链
-// （水合/快照分片/webview ready）没有发送 t0，统一挂这条轴，logcat 过滤
-// `[nm-boot]` 即得冷启动全链时间轴。
-const bootT0 = Date.now();
+export const rollbackTimingLog = rollbackAxis.log;
 
 /** 打一站相对 JS bundle 求值时刻的耗时（冷启动链专用）。 */
-export function bootTimingLog(label: string): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) {
-    return;
-  }
-  console.log(`[nm-boot] ${label} +${Date.now() - bootT0}ms`);
-}
+export const bootTimingLog = bootAxis.log;

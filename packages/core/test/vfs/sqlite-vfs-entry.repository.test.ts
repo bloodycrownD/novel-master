@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { isAppError } from "@/errors/app-error.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  PathNormalizer  } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -18,11 +15,11 @@ function isolatedRoot(): string {
 
 /** 解包 Result 成功分支；失败直接让测试失败。 */
 function normalized(path: string): string {
-  const result = normalizePath(path);
+  const result = PathNormalizer.normalize(path);
   return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
 }
 
-describe("normalizePath", () => {
+describe("PathNormalizer.normalize", () => {
   it("normalizes POSIX paths", () => {
     assert.equal(normalized("/a/b"), "/a/b");
     assert.equal(normalized("/a//b"), "/a/b");
@@ -30,10 +27,10 @@ describe("normalizePath", () => {
   });
 
   it("rejects invalid paths", () => {
-    const result = normalizePath("relative");
+    const result = PathNormalizer.normalize("relative");
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.ok(isAppError(result.error, "VFS_INVALID_PATH"));
+      assert.ok(AppErrorOps.is(result.error, "VFS_INVALID_PATH"));
     }
   });
 });
@@ -45,12 +42,12 @@ describe("SqliteVfsEntryRepository", () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const path = `${isolatedRoot()}/hello.txt`;
-    await repo.insert(GLOBAL_SCOPE, path, "hi");
-    const entry = await repo.findByPath(GLOBAL_SCOPE, path);
+    unwrap(await repo.insert(GLOBAL_SCOPE, path, "hi"));
+    const entry = unwrap(await repo.findByPath(GLOBAL_SCOPE, path));
     assert.ok(entry);
-    assert.equal(entry.content, "hi");
-    assert.equal(entry.version, 1);
-    assert.equal(entry.entryKind, "file");
+    assert.equal(entry!.content, "hi");
+    assert.equal(entry!.version, 1);
+    assert.equal(entry!.entryKind, "file");
   });
 
   it("lists direct children only by default", async () => {
@@ -58,24 +55,24 @@ describe("SqliteVfsEntryRepository", () => {
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const root = isolatedRoot();
     const a = `${root}/a`;
-    await repo.insertDirectory(GLOBAL_SCOPE, a);
-    await repo.insertDirectory(GLOBAL_SCOPE, `${a}/b`);
-    await repo.insert(GLOBAL_SCOPE, `${a}/b/c`, "c");
-    const shallow = await repo.list(GLOBAL_SCOPE, a);
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, a));
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, `${a}/b`));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${a}/b/c`, "c"));
+    const shallow = unwrap(await repo.list(GLOBAL_SCOPE, a));
     assert.deepEqual(shallow, [
       { path: `${a}/b`, kind: "directory", version: 1 },
     ]);
-    const recursive = await repo.list(GLOBAL_SCOPE, a, { recursive: true });
+    const recursive = unwrap(await repo.list(GLOBAL_SCOPE, a, { recursive: true }));
     assert.deepEqual(recursive, [
       { path: `${a}/b`, kind: "directory", version: 1 },
       { path: `${a}/b/c`, kind: "file", version: 1 },
     ]);
-    const depth2 = await repo.list(GLOBAL_SCOPE, a, { recursive: true, maxDepth: 2 });
+    const depth2 = unwrap(await repo.list(GLOBAL_SCOPE, a, { recursive: true, maxDepth: 2 }));
     assert.deepEqual(depth2, [
       { path: `${a}/b`, kind: "directory", version: 1 },
       { path: `${a}/b/c`, kind: "file", version: 1 },
     ]);
-    const depth1 = await repo.list(GLOBAL_SCOPE, a, { recursive: true, maxDepth: 1 });
+    const depth1 = unwrap(await repo.list(GLOBAL_SCOPE, a, { recursive: true, maxDepth: 1 }));
     assert.deepEqual(depth1, [
       { path: `${a}/b`, kind: "directory", version: 1 },
     ]);
@@ -87,12 +84,12 @@ describe("SqliteVfsEntryRepository", () => {
     const root = isolatedRoot();
     const draftDir = `${root}/x/v1%draft`;
     const wrongDir = `${root}/x/v1Xdraft`;
-    await repo.insertDirectory(GLOBAL_SCOPE, draftDir);
-    await repo.insert(GLOBAL_SCOPE, `${draftDir}/keep.txt`, "keep");
-    await repo.insertDirectory(GLOBAL_SCOPE, wrongDir);
-    await repo.insert(GLOBAL_SCOPE, `${wrongDir}/wrong.txt`, "wrong");
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, draftDir));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${draftDir}/keep.txt`, "keep"));
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, wrongDir));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${wrongDir}/wrong.txt`, "wrong"));
 
-    const shallow = await repo.list(GLOBAL_SCOPE, draftDir);
+    const shallow = unwrap(await repo.list(GLOBAL_SCOPE, draftDir));
     assert.deepEqual(shallow, [
       { path: `${draftDir}/keep.txt`, kind: "file", version: 1 },
     ]);
@@ -104,14 +101,14 @@ describe("SqliteVfsEntryRepository", () => {
     const root = isolatedRoot();
     const draftDir = `${root}/x/v1%draft`;
     const wrongDir = `${root}/x/v1Xdraft`;
-    await repo.insertDirectory(GLOBAL_SCOPE, draftDir);
-    await repo.insert(GLOBAL_SCOPE, `${draftDir}/keep.txt`, "keep");
-    await repo.insertDirectory(GLOBAL_SCOPE, `${draftDir}/nested`);
-    await repo.insert(GLOBAL_SCOPE, `${draftDir}/nested/deep.txt`, "deep");
-    await repo.insertDirectory(GLOBAL_SCOPE, wrongDir);
-    await repo.insert(GLOBAL_SCOPE, `${wrongDir}/wrong.txt`, "wrong");
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, draftDir));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${draftDir}/keep.txt`, "keep"));
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, `${draftDir}/nested`));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${draftDir}/nested/deep.txt`, "deep"));
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, wrongDir));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${wrongDir}/wrong.txt`, "wrong"));
 
-    const recursive = await repo.list(GLOBAL_SCOPE, draftDir, { recursive: true });
+    const recursive = unwrap(await repo.list(GLOBAL_SCOPE, draftDir, { recursive: true }));
     assert.deepEqual(
       recursive.map((e) => e.path).sort(),
       [
@@ -128,12 +125,12 @@ describe("SqliteVfsEntryRepository", () => {
     const root = isolatedRoot();
     const barDir = `${root}/x/foo_bar`;
     const wrongPath = `${root}/x/fooXbar/wrong.txt`;
-    await repo.insertDirectory(GLOBAL_SCOPE, barDir);
-    await repo.insert(GLOBAL_SCOPE, `${barDir}/ok.txt`, "ok");
-    await repo.insertDirectory(GLOBAL_SCOPE, `${root}/x/fooXbar`);
-    await repo.insert(GLOBAL_SCOPE, wrongPath, "wrong");
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, barDir));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${barDir}/ok.txt`, "ok"));
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, `${root}/x/fooXbar`));
+    unwrap(await repo.insert(GLOBAL_SCOPE, wrongPath, "wrong"));
 
-    const shallow = await repo.list(GLOBAL_SCOPE, barDir);
+    const shallow = unwrap(await repo.list(GLOBAL_SCOPE, barDir));
     assert.deepEqual(shallow, [
       { path: `${barDir}/ok.txt`, kind: "file", version: 1 },
     ]);
@@ -143,12 +140,12 @@ describe("SqliteVfsEntryRepository", () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const path = `${isolatedRoot()}/v.txt`;
-    await repo.insert(GLOBAL_SCOPE, path, "one");
-    const second = await repo.update(GLOBAL_SCOPE, path, "two", 2);
+    unwrap(await repo.insert(GLOBAL_SCOPE, path, "one"));
+    const second = unwrap(await repo.update(GLOBAL_SCOPE, path, "two", 2));
     assert.equal(second.version, 2);
-    const third = await repo.update(GLOBAL_SCOPE, path, "three", 3);
+    const third = unwrap(await repo.update(GLOBAL_SCOPE, path, "three", 3));
     assert.equal(third.version, 3);
-    const read = await repo.findByPath(GLOBAL_SCOPE, path);
+    const read = unwrap(await repo.findByPath(GLOBAL_SCOPE, path));
     assert.equal(read?.version, 3);
   });
 
@@ -156,26 +153,22 @@ describe("SqliteVfsEntryRepository", () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const tree = `${isolatedRoot()}/tree`;
-    await repo.insertDirectory(GLOBAL_SCOPE, tree);
-    await repo.insert(GLOBAL_SCOPE, `${tree}/leaf`, "leaf");
-    await assert.rejects(
-      () => repo.delete(GLOBAL_SCOPE, tree, { recursive: false }),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
-        return true;
-      },
-    );
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, tree));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${tree}/leaf`, "leaf"));
+    await rejectsErr(() => repo.delete(GLOBAL_SCOPE, tree, { recursive: false }), (e: unknown) => {
+      assert.ok(AppErrorOps.is(e, "VFS_DIRECTORY_NOT_EMPTY"));
+    });
   });
 
   it("deletes recursively", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const tree = `${isolatedRoot()}/tree`;
-    await repo.insertDirectory(GLOBAL_SCOPE, tree);
-    await repo.insert(GLOBAL_SCOPE, `${tree}/leaf`, "leaf");
-    await repo.delete(GLOBAL_SCOPE, tree, { recursive: true });
-    assert.equal(await repo.findByPath(GLOBAL_SCOPE, tree), null);
-    assert.equal(await repo.findByPath(GLOBAL_SCOPE, `${tree}/leaf`), null);
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, tree));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${tree}/leaf`, "leaf"));
+    unwrap(await repo.delete(GLOBAL_SCOPE, tree, { recursive: true }));
+    assert.equal(unwrap(await repo.findByPath(GLOBAL_SCOPE, tree)), null);
+    assert.equal(unwrap(await repo.findByPath(GLOBAL_SCOPE, `${tree}/leaf`)), null);
   });
 
   it("non-recursive delete of an explicit root row does not self-match", async () => {
@@ -184,24 +177,20 @@ describe("SqliteVfsEntryRepository", () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const sk = `session:regression:root-row`;
-    await repo.insertDirectory(sk, "/");
-    await repo.delete(sk, "/", { recursive: false });
-    assert.equal(await repo.findByPath(sk, "/"), null);
+    unwrap(await repo.insertDirectory(sk, "/"));
+    unwrap(await repo.delete(sk, "/", { recursive: false }));
+    assert.equal(unwrap(await repo.findByPath(sk, "/")), null);
   });
 
   it("non-recursive delete of root still reports not empty when children exist", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const sk = `session:regression:root-with-child`;
-    await repo.insertDirectory(sk, "/");
-    await repo.insert(sk, `/leaf.md`, "leaf");
-    await assert.rejects(
-      () => repo.delete(sk, "/", { recursive: false }),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
-        return true;
-      },
-    );
+    unwrap(await repo.insertDirectory(sk, "/"));
+    unwrap(await repo.insert(sk, `/leaf.md`, "leaf"));
+    await rejectsErr(() => repo.delete(sk, "/", { recursive: false }), (e: unknown) => {
+      assert.ok(AppErrorOps.is(e, "VFS_DIRECTORY_NOT_EMPTY"));
+    });
   });
 
   it("跨 scope 隔离：同 path 在不同 scope 各自独立读写删", async () => {
@@ -213,12 +202,12 @@ describe("SqliteVfsEntryRepository", () => {
     const path = `${root}/foo.md`;
 
     // 两个 scope 各 insert 同 path、不同内容。
-    await repo.insert(scopeA, path, "content-A");
-    await repo.insert(scopeB, path, "content-B");
+    unwrap(await repo.insert(scopeA, path, "content-A"));
+    unwrap(await repo.insert(scopeB, path, "content-B"));
 
     // findByPath 按 scope 取各自的版本。
-    const a = await repo.findByPath(scopeA, path);
-    const b = await repo.findByPath(scopeB, path);
+    const a = unwrap(await repo.findByPath(scopeA, path));
+    const b = unwrap(await repo.findByPath(scopeB, path));
     assert.ok(a);
     assert.ok(b);
     assert.equal(a!.content, "content-A");
@@ -227,13 +216,13 @@ describe("SqliteVfsEntryRepository", () => {
     assert.notEqual(a!.entryId, b!.entryId);
 
     // 对 scopeA 做 update 不影响 scopeB。
-    await repo.update(scopeA, path, "content-A2", 2, { versionCheck: false });
-    assert.equal((await repo.findByPath(scopeA, path))!.content, "content-A2");
-    assert.equal((await repo.findByPath(scopeB, path))!.content, "content-B");
+    unwrap(await repo.update(scopeA, path, "content-A2", 2));
+    assert.equal(unwrap(await repo.findByPath(scopeA, path))!.content, "content-A2");
+    assert.equal(unwrap(await repo.findByPath(scopeB, path))!.content, "content-B");
 
     // listAllPaths / listFileHeadsUnderPrefix / listFileMetaUnderPrefix 的 scope 隔离。
     assert.deepEqual(await repo.listAllPaths(scopeA), [path]);
-    await repo.insertDirectory(scopeA, `${root}/otherA`);
+    unwrap(await repo.insertDirectory(scopeA, `${root}/otherA`));
     const headsA = await repo.listFileHeadsUnderPrefix(scopeA, root);
     assert.ok(headsA.some((h) => h.path === path));
     const headsB = await repo.listFileHeadsUnderPrefix(scopeB, root);
@@ -248,9 +237,9 @@ describe("SqliteVfsEntryRepository", () => {
     );
 
     // 删除 scopeA 不影响 scopeB。
-    await repo.delete(scopeA, path, { recursive: false });
-    assert.equal(await repo.findByPath(scopeA, path), null);
-    assert.equal((await repo.findByPath(scopeB, path))!.content, "content-B");
+    unwrap(await repo.delete(scopeA, path, { recursive: false }));
+    assert.equal(unwrap(await repo.findByPath(scopeA, path)), null);
+    assert.equal(unwrap(await repo.findByPath(scopeB, path))!.content, "content-B");
   });
 
   it("listFileMetaUnderPrefix returns path and mtime without content", async () => {
@@ -259,9 +248,9 @@ describe("SqliteVfsEntryRepository", () => {
     const root = isolatedRoot();
     const aTxt = `${root}/a.txt`;
     const dir = `${root}/dir`;
-    await repo.insert(GLOBAL_SCOPE, aTxt, "alpha");
-    await repo.insert(GLOBAL_SCOPE, `${dir}/b.txt`, "beta");
-    await repo.insertDirectory(GLOBAL_SCOPE, dir);
+    unwrap(await repo.insert(GLOBAL_SCOPE, aTxt, "alpha"));
+    unwrap(await repo.insert(GLOBAL_SCOPE, `${dir}/b.txt`, "beta"));
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, dir));
 
     const meta = await repo.listFileMetaUnderPrefix(GLOBAL_SCOPE, root);
     assert.equal(meta.length, 2);
@@ -281,22 +270,22 @@ describe("SqliteVfsEntryRepository", () => {
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const root = isolatedRoot();
     const filePath = `${root}/size-probe.txt`;
-    await repo.insert(GLOBAL_SCOPE, filePath, "探测正文");
+    unwrap(await repo.insert(GLOBAL_SCOPE, filePath, "探测正文"));
 
     // 新写入路径正文存 content store：返回压缩侧字节数
-    const blobSize = await repo.findContentSizeByPath(GLOBAL_SCOPE, filePath);
+    const blobSize = unwrap(await repo.findContentSizeByPath(GLOBAL_SCOPE, filePath));
     assert.ok(blobSize != null);
-    assert.equal(blobSize.kind, "blobCompressedBytes");
-    assert.ok(blobSize.size > 0);
+    assert.equal(blobSize!.kind, "blobCompressedBytes");
+    assert.ok(blobSize!.size > 0);
 
     // 目录行 → null
     const dirPath = `${root}/size-dir`;
-    await repo.insertDirectory(GLOBAL_SCOPE, dirPath);
-    assert.equal(await repo.findContentSizeByPath(GLOBAL_SCOPE, dirPath), null);
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, dirPath));
+    assert.equal(unwrap(await repo.findContentSizeByPath(GLOBAL_SCOPE, dirPath)), null);
 
     // 不存在路径 → null
     assert.equal(
-      await repo.findContentSizeByPath(GLOBAL_SCOPE, `${root}/no-such.txt`),
+      unwrap(await repo.findContentSizeByPath(GLOBAL_SCOPE, `${root}/no-such.txt`)),
       null
     );
   });
@@ -306,7 +295,7 @@ describe("SqliteVfsEntryRepository", () => {
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const root = isolatedRoot();
     const legacyPath = `${root}/legacy-inline.txt`;
-    await repo.insert(GLOBAL_SCOPE, legacyPath, "placeholder");
+    unwrap(await repo.insert(GLOBAL_SCOPE, legacyPath, "placeholder"));
     // 裸 SQL 造遗留内联行：正文内联、无 content_hash（迁移窗口形态）
     await ctx.conn.execute(
       `UPDATE vfs_entry SET content = '遗留内联正文', content_hash = NULL
@@ -314,10 +303,10 @@ describe("SqliteVfsEntryRepository", () => {
       [GLOBAL_SCOPE, legacyPath]
     );
 
-    const size = await repo.findContentSizeByPath(GLOBAL_SCOPE, legacyPath);
+    const size = unwrap(await repo.findContentSizeByPath(GLOBAL_SCOPE, legacyPath));
     assert.ok(size != null);
-    assert.equal(size.kind, "inlineChars");
-    assert.equal(size.size, "遗留内联正文".length);
+    assert.equal(size!.kind, "inlineChars");
+    assert.equal(size!.size, "遗留内联正文".length);
   });
 
   it("computeEntrySignature：增/删/改/rename/mkdir 空目录五种写各自改变签名；同数据重复查询稳定", async () => {
@@ -329,7 +318,7 @@ describe("SqliteVfsEntryRepository", () => {
     const s0 = await repo.computeEntrySignature(GLOBAL_SCOPE);
 
     // 增
-    await repo.insert(GLOBAL_SCOPE, file, "v1");
+    unwrap(await repo.insert(GLOBAL_SCOPE, file, "v1"));
     const s1 = await repo.computeEntrySignature(GLOBAL_SCOPE);
     assert.notEqual(s1, s0, "insert 改变签名");
     assert.equal(
@@ -339,25 +328,25 @@ describe("SqliteVfsEntryRepository", () => {
     );
 
     // 改（head_version 参与拼接，断言不依赖 mtime 毫秒粒度）
-    await repo.update(GLOBAL_SCOPE, file, "v2", 2);
+    unwrap(await repo.update(GLOBAL_SCOPE, file, "v2", 2));
     const s2 = await repo.computeEntrySignature(GLOBAL_SCOPE);
     assert.notEqual(s2, s1, "update 改变签名");
 
     // rename（只改 path，count/version 集合语义不变——path 敏感签名的核心反例）
     const renamed = `${root}/sig-renamed.txt`;
-    await ctx.conn.transaction((tx) =>
-      repo.renamePathInScope(tx, GLOBAL_SCOPE, file, renamed)
-    );
+    await ctx.conn.transaction(async (tx) => {
+      unwrap(await repo.renamePathInScope(tx, GLOBAL_SCOPE, file, renamed));
+    });
     const s3 = await repo.computeEntrySignature(GLOBAL_SCOPE);
     assert.notEqual(s3, s2, "rename 改变签名");
 
     // mkdir 空目录（签名不过滤 entry_kind）
-    await repo.insertDirectory(GLOBAL_SCOPE, `${root}/empty-dir`);
+    unwrap(await repo.insertDirectory(GLOBAL_SCOPE, `${root}/empty-dir`));
     const s4 = await repo.computeEntrySignature(GLOBAL_SCOPE);
     assert.notEqual(s4, s3, "mkdir 空目录改变签名");
 
     // 删（递归删掉 rename 后的文件行，目录行保留）
-    await repo.delete(GLOBAL_SCOPE, renamed, { recursive: true });
+    unwrap(await repo.delete(GLOBAL_SCOPE, renamed, { recursive: true }));
     const s5 = await repo.computeEntrySignature(GLOBAL_SCOPE);
     assert.notEqual(s5, s4, "delete 改变签名");
     assert.equal(

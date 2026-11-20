@@ -12,125 +12,111 @@
  *   RN 拦截 BackHandler 后下发 closeMermaidViewer（各管线 bridge 分支）→
  *   closeMermaidViewer() → post('mermaidViewerClosed')。
  * - 覆盖层视图由 mountMermaidViewerPortal(portalId) 统一注册（各管线 main.ts
- *   一行调用，照 registerRenderContextMenu 先例）；post 函数由管线注入（两桥 post 实现不同）。
+ *   一行调用，照 contextMenuViewSlot 先例）；post 函数由管线注入（两桥 post 实现不同）。
  */
 
 import {h, render} from 'preact';
 
+import {ViewSlot} from '@web/shared/view-slot';
 import {MermaidViewerOverlay} from './MermaidViewerOverlay';
 
-export type MermaidViewerViewProps = {
+type MermaidViewerViewProps = {
   /** 原图 SVG 的深克隆（cloneNode(true)），由覆盖层 effect 挂入视口容器。 */
   svgClone: Element;
 };
 
 /** null = 卸载（render(null, portal)）；非 null = 渲染全屏覆盖层。 */
-export type RenderMermaidViewerView = (
-  props: MermaidViewerViewProps | null,
-) => void;
+type RenderMermaidViewerView = (props: MermaidViewerViewProps | null) => void;
 
-export type MermaidViewerPost = (
-  type: string,
-  payload?: Record<string, unknown>,
-) => void;
+type MermaidViewerPost = (type: string, payload?: Record<string, unknown>) => void;
 
-let _renderView: RenderMermaidViewerView | null = null;
+const viewerSlot = ViewSlot.create<MermaidViewerViewProps | null>();
 let _post: MermaidViewerPost | null = null;
 let _open = false;
 let _delegationAttached = false;
 
-/** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
-export function registerMermaidViewerView(fn: RenderMermaidViewerView): void {
-  _renderView = fn;
-}
+export const MermaidFullscreen = {
+  /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
+  // nm-style: keep-public — 槽实例保持模块私有；两管线 main/factory 装配点按名引用
+  registerView: (fn: RenderMermaidViewerView): void => {
+    viewerSlot.register(fn);
+  },
 
-export function isMermaidViewerOpen(): boolean {
-  return _open;
-}
-
-/** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
-export function openMermaidViewer(chart: Element): void {
-  if (_open) {
-    return;
-  }
-  // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
-  if (!_renderView || !_post) {
-    return;
-  }
-  const svg = chart.querySelector('svg');
-  if (!svg) {
-    return;
-  }
-  const svgClone = svg.cloneNode(true) as Element;
-  _open = true;
-  document.body.classList.add('mermaid-viewer-open');
-  if (_renderView) {
-    _renderView({svgClone});
-  }
-  if (_post) {
-    _post('mermaidViewerOpened', {});
-  }
-}
-
-/** 关闭全屏：卸载覆盖层 → 解除禁滚 → 通知 RN（notifyHost=false 供测试/内部路径）。 */
-export function closeMermaidViewer(notifyHost: boolean = true): void {
-  if (!_open) {
-    return;
-  }
-  _open = false;
-  document.body.classList.remove('mermaid-viewer-open');
-  if (_renderView) {
-    _renderView(null);
-  }
-  if (notifyHost && _post) {
-    _post('mermaidViewerClosed', {});
-  }
-}
-
-/**
- * 挂接 document 级 click 委托 + 注入本管线 post。
- * 每管线 main.ts 模块初始化处调用一次（不进 setDocument/renderRows 链路）。
- */
-export function attachMermaidViewerDelegation(post: MermaidViewerPost): void {
-  _post = post;
-  // 幂等守卫：重复调用只更新 post，不叠加 document 监听器
-  if (_delegationAttached) {
-    return;
-  }
-  _delegationAttached = true;
-  document.addEventListener('click', event => {
+  /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
+  open: (chart: Element): void => {
     if (_open) {
-      return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
-    }
-    const target = event.target as Element | null;
-    if (!target || typeof target.closest !== 'function') {
       return;
     }
-    const chart = target.closest('.mermaid-block__chart');
-    if (chart) {
-      openMermaidViewer(chart);
+    // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
+    if (!viewerSlot.has() || !_post) {
+      return;
     }
-  });
-}
+    const svg = chart.querySelector('svg');
+    if (!svg) {
+      return;
+    }
+    const svgClone = svg.cloneNode(true) as Element;
+    _open = true;
+    document.body.classList.add('mermaid-viewer-open');
+    viewerSlot.invoke({svgClone});
+    if (_post) {
+      _post('mermaidViewerOpened', {});
+    }
+  },
 
-/**
- * portal 挂接一行化（web/C-orch-5）：注册覆盖层渲染到指定 portal 容器。
- * 各管线 main.ts 模块初始化处调用一次，替代原先逐行重复的注册块。
- */
-export function mountMermaidViewerPortal(portalId: string): void {
-  const portal = document.getElementById(portalId);
-  registerMermaidViewerView(props => {
-    if (!portal) return;
-    if (!props) {
-      render(null, portal);
+  /** 关闭全屏：卸载覆盖层 → 解除禁滚 → 通知 RN（notifyHost=false 供测试/内部路径）。 */
+  close: (notifyHost: boolean = true): void => {
+    if (!_open) {
       return;
     }
-    render(
-      h(MermaidViewerOverlay, {
-        svgClone: props.svgClone,
-        onClose: () => closeMermaidViewer(true),
-      }),
-      portal,
-    );
-  });
-}
+    _open = false;
+    document.body.classList.remove('mermaid-viewer-open');
+    viewerSlot.invoke(null);
+    if (notifyHost && _post) {
+      _post('mermaidViewerClosed', {});
+    }
+  },
+
+  /**
+   * 挂接 document 级 click 委托 + 注入本管线 post。
+   * 每管线 main.ts 模块初始化处调用一次（不进 setDocument/renderRows 链路）。
+   */
+  attachDelegation: (post: MermaidViewerPost): void => {
+    _post = post;
+    // 幂等守卫：重复调用只更新 post，不叠加 document 监听器
+    if (_delegationAttached) {
+      return;
+    }
+    _delegationAttached = true;
+    document.addEventListener('click', event => {
+      if (_open) {
+        return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
+      }
+      const target = event.target as Element | null;
+      if (!target || typeof target.closest !== 'function') {
+        return;
+      }
+      const chart = target.closest('.mermaid-block__chart');
+      if (chart) {
+        MermaidFullscreen.open(chart);
+      }
+    });
+  },
+
+  /**
+   * portal 挂接一行化（web/C-orch-5）：注册覆盖层渲染到指定 portal 容器。
+   * 各管线 main.ts 模块初始化处调用一次，替代原先逐行重复的注册块。
+   */
+  mountPortal: (portalId: string): void => {
+    const portal = document.getElementById(portalId);
+    MermaidFullscreen.registerView(props => {
+      if (!portal) return;
+      if (!props) {
+        render(null, portal);
+        return;
+      }
+      const overlay = h(MermaidViewerOverlay, {svgClone: props.svgClone, onClose: () => MermaidFullscreen.close(true)});
+      render(overlay, portal);
+    });
+  },
+} as const;

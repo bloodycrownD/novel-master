@@ -17,6 +17,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {type ChatSession} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 
 import {type VfsScope, type VfsService} from '@novel-master/core/vfs';
 
@@ -32,11 +33,11 @@ import {
 } from '@/components/vfs/VfsFileManager';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {ThemeTokens} from '@/theme/tokens';
-import {formatRelativeTimeMs} from '@/utils/format-relative-time';
+import {FormatRelativeTime} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 
-export type ChatSessionListPanelProps = {
+type ChatSessionListPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
   sessionListPanel: SessionListPanel;
@@ -137,7 +138,7 @@ function ChatSessionListPanelInner({
     (sid: string) => {
       // 走单元的 abort 语义（retain/freeze 时序由 core 负责）；后续
       // FINISHED 照常经事件路径收尾（投影回落、集合更新、按钮消失）。
-      manager.stopRun(sid);
+      manager.stop(ABORT_KEY.agent(sid));
     },
     [manager],
   );
@@ -287,7 +288,7 @@ function ChatSessionListPanelInner({
                         {color: tokens.textSecondary},
                       ]}
                     >
-                      {formatRelativeTimeMs(item.updatedAtMs)}
+                      {FormatRelativeTime.formatMs(item.updatedAtMs)}
                       {showsActiveMeta ? ' · 活跃中' : ''}
                     </Text>
                   </View>

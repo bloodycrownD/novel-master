@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
+import {AllocateAgentDisplayName} from '@/config-forms/agent/allocate-agent-display-name';
 import { describe, it } from "@jest/globals";
 import { allocateAgentDisplayName } from "@/config-forms/agent/allocate-agent-display-name";
 
 describe("allocateAgentDisplayName", () => {
   it("空列表时返回 agent1", () => {
-    assert.equal(allocateAgentDisplayName([]), "agent1");
+    assert.equal(AllocateAgentDisplayName.allocate([]), "agent1");
   });
 
   it("跳过已占用的序号", () => {
     assert.equal(
-      allocateAgentDisplayName([
+      AllocateAgentDisplayName.allocate([
         { id: "a", name: "agent1" },
         { id: "b", name: "agent3" },
       ]),
@@ -19,14 +20,14 @@ describe("allocateAgentDisplayName", () => {
 
   it("比较显示名时 trim 空白", () => {
     assert.equal(
-      allocateAgentDisplayName([{ id: "a", name: "  agent1  " }]),
+      AllocateAgentDisplayName.allocate([{ id: "a", name: "  agent1  " }]),
       "agent2",
     );
   });
 
   it("忽略空白显示名", () => {
     assert.equal(
-      allocateAgentDisplayName([{ id: "a", name: "   " }]),
+      AllocateAgentDisplayName.allocate([{ id: "a", name: "   " }]),
       "agent1",
     );
   });

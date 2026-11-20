@@ -33,6 +33,7 @@ type LocaleCatalogs<K extends string> = Readonly<Record<string, MessageCatalog<K
 
 type Translator<K extends string> = (message: MessageLike<K>, locale?: string) => string;
 
+// nm-style: keep-bare: 工厂+类型族(skill 5.3 例外)
 export function createTranslator<K extends string>(catalogs: LocaleCatalogs<K>, defaultLocale: string): Translator<K> {
     return function translateMessage(message: MessageLike<K>, locale = defaultLocale): string {
         if (typeof message === "string") {

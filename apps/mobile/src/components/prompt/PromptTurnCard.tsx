@@ -29,7 +29,7 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {PromptPreviewTurn} from '@novel-master/core/prompt';
 import type {RootStackParamList} from '@/navigation/types';
-import {setPromptTurnDetail} from './prompt-turn-callback';
+import {promptTurnDetailSlot} from './prompt-turn-callback';
 import {useTheme} from '@/theme/ThemeProvider';
 import {coreT} from '@/i18n/core';
 
@@ -66,9 +66,9 @@ export function useOpenPromptDetail() {
         title = `${title.slice(0, DETAIL_TITLE_LIMIT - 1)}…`;
       }
       if (payload.leafId === undefined) {
-        setPromptTurnDetail({title, body: payload.body});
+        promptTurnDetailSlot.set({title, body: payload.body});
       } else {
-        setPromptTurnDetail({title, body: payload.body, leafId: payload.leafId});
+        promptTurnDetailSlot.set({title, body: payload.body, leafId: payload.leafId});
       }
       navigation.navigate('PromptTurnDetail', {title, turnId: payload.turnId});
     },

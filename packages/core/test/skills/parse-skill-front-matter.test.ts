@@ -5,11 +5,11 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  SkillFrontMatter  } from "@/domain/skills/logic/parse-skill-front-matter.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
-describe("parseSkillFrontMatter（T-SK4）", () => {
+describe("SkillFrontMatter.parse（T-SK4）", () => {
   it("合法 front matter：name 与 description 齐全时有效", () => {
     const source = `---
 name: my-skill
@@ -19,7 +19,7 @@ description: 一个写作辅助技能
 # 正文
 
 技能指令……`;
-    const parsed = parseSkillFrontMatter(source);
+    const parsed = SkillFrontMatter.parse(source);
     assert.equal(parsed.valid, true);
     assert.equal(parsed.name, "my-skill");
     assert.equal(parsed.description, "一个写作辅助技能");
@@ -27,7 +27,7 @@ description: 一个写作辅助技能
   });
 
   it("缺 name 时无效并给出原因", () => {
-    const parsed = parseSkillFrontMatter(
+    const parsed = SkillFrontMatter.parse(
       ["---", "description: 只有描述", "---", "", "正文"].join("\n"),
     );
     assert.equal(parsed.valid, false);
@@ -36,7 +36,7 @@ description: 一个写作辅助技能
   });
 
   it("缺 description 时无效并给出原因（name 仍尽力提取）", () => {
-    const parsed = parseSkillFrontMatter(
+    const parsed = SkillFrontMatter.parse(
       ["---", "name: my-skill", "---", "", "正文"].join("\n"),
     );
     assert.equal(parsed.valid, false);
@@ -53,13 +53,13 @@ description: 一个写作辅助技能
         "description: desc",
         "---",
       ].map((l) => (l.startsWith(`${field}:`) ? `${field}: ""` : l));
-      const parsed = parseSkillFrontMatter(lines.join("\n"));
+      const parsed = SkillFrontMatter.parse(lines.join("\n"));
       assert.equal(parsed.valid, false, `${field} 为空串应无效`);
     }
   });
 
   it("YAML 不可解析时无效", () => {
-    const parsed = parseSkillFrontMatter(
+    const parsed = SkillFrontMatter.parse(
       ["---", "name: [unclosed", "---", "", "正文"].join("\n"),
     );
     assert.equal(parsed.valid, false);
@@ -67,13 +67,13 @@ description: 一个写作辅助技能
   });
 
   it("缺少 front matter 时无效", () => {
-    const parsed = parseSkillFrontMatter("# 只有正文\n没有 front matter");
+    const parsed = SkillFrontMatter.parse("# 只有正文\n没有 front matter");
     assert.equal(parsed.valid, false);
     assert.match(tCore(parsed.invalidReason!), /缺少 front matter/);
   });
 
   it("未知键被 strict schema 拒绝（照 agent-definition 模式）", () => {
-    const parsed = parseSkillFrontMatter(
+    const parsed = SkillFrontMatter.parse(
       ["---", "name: my-skill", "description: d", "unknown: 1", "---"].join("\n"),
     );
     assert.equal(parsed.valid, false);

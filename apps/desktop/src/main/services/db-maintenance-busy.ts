@@ -11,43 +11,11 @@
  * （备份导入 / 云同步 pull）在 rebootstrap 完成之后 release——含「库文件
  * 已替换、连接仍处重建窗口」的完整互斥。计数 >0 即 busy，多个调用方嵌套
  * 不会互相提前清位（旧的纯布尔置位会被嵌套调用的外层复位提前解锁）。
- */
-
-let maintenanceBusyCount = 0;
-
-/** 数据清理是否进行中（供 getLocalStatus 回报与 UI 禁用判断）。 */
-export function isDesktopDbMaintenanceBusy(): boolean {
-  return maintenanceBusyCount > 0;
-}
-
-/** 计数 acquire：忙碌令牌 +1（与 release 严格配对使用）。 */
-export function acquireDesktopDbMaintenanceBusy(): void {
-  maintenanceBusyCount += 1;
-}
-
-/**
- * 计数 release：忙碌令牌 -1，与 {@link acquireDesktopDbMaintenanceBusy}
- * 配对；下限 0 防御（多释放不产生负计数把后续 acquire 提前抵消）。
- */
-export function releaseDesktopDbMaintenanceBusy(): void {
-  maintenanceBusyCount = Math.max(0, maintenanceBusyCount - 1);
-}
-
-/**
- * 置位入口（兼容旧调用形态）：true = acquire、false = release。
  *
- * 旧布尔语义的既有消费方（手动清理 runDbMaintenance、归一/压缩的维护段
- * 回调）都是「进 true / finally false」的对称写法，在计数语义下等价保持。
+ * 计数实现收在 `@novel-master/core/common` 的 Concurrency.createBusyFlag（mobile
+ * 同名模块共用同一份）；本模块只负责桌面端实例化。
  */
-export function setDesktopDbMaintenanceBusy(busy: boolean): void {
-  if (busy) {
-    acquireDesktopDbMaintenanceBusy();
-  } else {
-    releaseDesktopDbMaintenanceBusy();
-  }
-}
 
-/** 测试用：复位忙碌计数。 */
-export function resetDesktopDbMaintenanceBusyForTest(): void {
-  maintenanceBusyCount = 0;
-}
+import { Concurrency } from "@novel-master/core/common";
+
+export const maintenanceBusy: ReturnType<typeof Concurrency.createBusyFlag> = Concurrency.createBusyFlag();

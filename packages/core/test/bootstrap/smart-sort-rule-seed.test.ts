@@ -15,24 +15,18 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open } from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
-import {
-  BUILTIN_SMART_SORT_RULE_ROWS,
-  seedBuiltinSmartSortRules,
-} from "../../src/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen  } from "@novel-master/core";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
+import {  BUILTIN_SMART_SORT_RULE_ROWS, BuiltinSmartSortRules  } from "../../src/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
 
 async function openBootstrappedConn() {
-  registerBetterSqlite3Driver();
-  const conn = await open("tdbc:sqlite:file::memory:", {
+  BetterSqlite3Register.register();
+  const conn = await TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
-  await bootstrapNovelMaster(conn);
+  await NovelMasterBootstrap.bootstrap(conn);
   return conn;
 }
 
@@ -105,7 +99,7 @@ describe("内置智能排序规则 seed", () => {
          WHERE rule_id = 'builtin-zh-chapter'`
       );
 
-      await seedBuiltinSmartSortRules(conn);
+      await BuiltinSmartSortRules.seed(conn);
 
       const row = await conn.query<RuleRow>(
         `SELECT rule_id, name, enabled FROM smart_sort_rule WHERE rule_id = 'builtin-zh-chapter'`
@@ -133,7 +127,7 @@ describe("内置智能排序规则 seed", () => {
          ) VALUES ('user-mine', '我的规则', '^番外([0-9]+)', '', '番外说明', 1, 9, 1, 1)`
       );
 
-      await seedBuiltinSmartSortRules(conn);
+      await BuiltinSmartSortRules.seed(conn);
 
       const row = await conn.query<RuleRow>(
         `SELECT rule_id, name, enabled, sort_order FROM smart_sort_rule WHERE rule_id = 'user-mine'`

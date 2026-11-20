@@ -5,7 +5,7 @@ import type {RootStackParamList} from './types';
 
 export type HeaderPageKey = keyof RootStackParamList | 'chat' | 'profile';
 
-export interface PageHeaderConfig {
+interface PageHeaderConfig {
   title: string;
   showBack: boolean;
   showNav: boolean;

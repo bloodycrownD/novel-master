@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@jest/globals";
-import { buildAgentDefinitionFromForm, countEffectiveFormPromptSources, countFormPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistTextBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, withWorkplaceToggle } from "@/config-forms/agent/agent-editor-state";
-import { buildToolsPolicyFromSelection, toolsSelectionFromDefinition } from "@/config-forms/agent/agent-tool-catalog";
-import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, validateAgentPromptLayout } from "@novel-master/core/prompt";
+import {PROMPT_REGION_LABELS, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, AgentEditorState} from '@/config-forms/agent/agent-editor-state';
+import {AgentToolCatalog} from '@/config-forms/agent/agent-tool-catalog';
+import { AgentPromptLayoutValidate, DEFAULT_WORKPLACE_ASSISTANT_TEXT } from "@novel-master/core/prompt";
 
 it("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
   assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
@@ -47,21 +47,21 @@ it("WORKPLACE_BLOCK_HINT 新文案", () => {
 });
 
 it("buildToolsPolicyFromSelection returns undefined for default mode", () => {
-  assert.equal(buildToolsPolicyFromSelection("default", ["read"]), undefined);
+  assert.equal(AgentToolCatalog.buildToolsPolicyFromSelection("default", ["read"]), undefined);
 });
 
 it("T8: buildToolsPolicyFromSelection builds allow/deny lists", () => {
-  assert.deepEqual(buildToolsPolicyFromSelection("allow", ["read", "grep"]), {
+  assert.deepEqual(AgentToolCatalog.buildToolsPolicyFromSelection("allow", ["read", "grep"]), {
     allow: ["read", "grep"],
   });
-  assert.deepEqual(buildToolsPolicyFromSelection("deny", ["write"]), {
+  assert.deepEqual(AgentToolCatalog.buildToolsPolicyFromSelection("deny", ["write"]), {
     deny: ["write"],
   });
 });
 
 it("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
   assert.deepEqual(
-    toolsSelectionFromDefinition({
+    AgentToolCatalog.toolsSelectionFromDefinition({
       name: "a",
       prompts: { persist: [], dynamic: [] },
       tools: { allow: ["read"] },
@@ -69,7 +69,7 @@ it("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
     { mode: "allow", selected: ["read"] }
   );
   assert.deepEqual(
-    toolsSelectionFromDefinition({
+    AgentToolCatalog.toolsSelectionFromDefinition({
       name: "a",
       prompts: { persist: [], dynamic: [] },
     }),
@@ -81,7 +81,7 @@ it("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
 });
 
 it("definitionToForm maps system toggle and three regions", () => {
-  const form = definitionToForm({
+  const form = AgentEditorState.definitionToForm({
     name: "writer",
     prompts: {
       system: "sys",
@@ -116,7 +116,7 @@ it("definitionToForm maps system toggle and three regions", () => {
 });
 
 it("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
-  const form = definitionToForm({
+  const form = AgentEditorState.definitionToForm({
     name: "writer",
     prompts: {
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
@@ -129,7 +129,7 @@ it("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
 });
 
 it("layoutFromFormInput omits system when switch off", () => {
-  const layout = layoutFromFormInput({
+  const layout = AgentEditorState.layoutFromFormInput({
     systemEnabled: false,
     systemContent: "ignored",
     persistEnabled: false,
@@ -145,7 +145,7 @@ it("layoutFromFormInput omits system when switch off", () => {
 });
 
 it("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
-  const layout = layoutFromFormInput({
+  const layout = AgentEditorState.layoutFromFormInput({
     systemEnabled: false,
     systemContent: "",
     persistEnabled: true,
@@ -163,7 +163,7 @@ it("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
 });
 
 it("splitPersistBlocksForEditor strips legacy worktree blocks", () => {
-  const split = splitPersistBlocksForEditor([
+  const split = AgentEditorState.splitPersistBlocksForEditor([
     { name: "persona", type: "text", role: "user", content: "x" },
     { name: "custom", type: "worktree" },
   ]);
@@ -172,7 +172,7 @@ it("splitPersistBlocksForEditor strips legacy worktree blocks", () => {
 });
 
 it("layoutFromFormInput maps workplace boolean and strips legacy worktree", () => {
-  const layout = layoutFromFormInput({
+  const layout = AgentEditorState.layoutFromFormInput({
     systemEnabled: false,
     systemContent: "",
     persistEnabled: false,
@@ -199,7 +199,7 @@ it("movePersistTextBlock swaps text blocks", () => {
       content: "b",
     },
   ];
-  const movedDown = movePersistTextBlock(blocks, 0, 1);
+  const movedDown = AgentEditorState.movePersistTextBlock(blocks, 0, 1);
   assert.deepEqual(
     movedDown.map((block) => block.name),
     ["p2", "p1"]
@@ -207,7 +207,7 @@ it("movePersistTextBlock swaps text blocks", () => {
 });
 
 it("buildAgentDefinitionFromForm maps workplace boolean", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -237,7 +237,7 @@ it("buildAgentDefinitionFromForm maps workplace boolean", () => {
 });
 
 it("T-W7: definitionToForm ↔ layoutFromFormInput round-trip workplace", () => {
-  const formOn = definitionToForm({
+  const formOn = AgentEditorState.definitionToForm({
     name: "writer",
     prompts: {
       workplace: "【done】",
@@ -247,31 +247,31 @@ it("T-W7: definitionToForm ↔ layoutFromFormInput round-trip workplace", () => 
   });
   assert.equal(formOn.workplaceEnabled, true);
   assert.equal(formOn.workplaceAssistantText, "【done】");
-  assert.equal(layoutFromFormInput(formOn).workplace, "【done】");
+  assert.equal(AgentEditorState.layoutFromFormInput(formOn).workplace, "【done】");
 
   const formOff = {
     ...formOn,
     workplaceEnabled: false,
   };
-  assert.equal(layoutFromFormInput(formOff).workplace, undefined);
+  assert.equal(AgentEditorState.layoutFromFormInput(formOff).workplace, undefined);
 
-  const roundTrip = definitionToForm({
+  const roundTrip = AgentEditorState.definitionToForm({
     name: "writer",
-    prompts: layoutFromFormInput(formOn),
+    prompts: AgentEditorState.layoutFromFormInput(formOn),
   });
   assert.equal(roundTrip.workplaceEnabled, true);
   assert.equal(roundTrip.workplaceAssistantText, "【done】");
 });
 
 it("createDefaultAgentEditorPrompts persist 无 worktree", () => {
-  const defaults = createDefaultAgentEditorPrompts();
+  const defaults = AgentEditorState.createDefaultAgentEditorPrompts();
   assert.equal(defaults.persist.length, 0);
   assert.equal(defaults.workplaceEnabled, false);
   assert.ok(defaults.persist.every((block) => block.type !== "worktree"));
 });
 
 it("definitionToForm workplace 非空 string 可 derive Switch 开", () => {
-  const form = definitionToForm({
+  const form = AgentEditorState.definitionToForm({
     name: "writer",
     prompts: {
       workplace: "【done】",
@@ -284,7 +284,7 @@ it("definitionToForm workplace 非空 string 可 derive Switch 开", () => {
 });
 
 it("createDefaultAgentEditorPrompts starts with empty persist", () => {
-  const defaults = createDefaultAgentEditorPrompts();
+  const defaults = AgentEditorState.createDefaultAgentEditorPrompts();
   assert.equal(defaults.systemEnabled, false);
   assert.equal(defaults.persistEnabled, false);
   assert.equal(defaults.dynamicEnabled, false);
@@ -293,7 +293,7 @@ it("createDefaultAgentEditorPrompts starts with empty persist", () => {
 });
 
 it("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", () => {
-  const json = formSnapshotJson({
+  const json = AgentEditorState.formSnapshotJson({
     name: "agent",
     mode: "all",
     maxSteps: "20",
@@ -302,7 +302,7 @@ it("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", () =
     savedModelId: "m",
     toolsMode: "default",
     toolsSelected: [],
-    ...createDefaultAgentEditorPrompts(),
+    ...AgentEditorState.createDefaultAgentEditorPrompts(),
     persistEnabled: true,
     dynamicEnabled: false,
     workplaceEnabled: true,
@@ -316,7 +316,7 @@ it("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", () =
 });
 
 it("formSnapshotJson omits model fields when disabled", () => {
-  const json = formSnapshotJson({
+  const json = AgentEditorState.formSnapshotJson({
     name: "agent",
     mode: "all",
     maxSteps: "20",
@@ -325,7 +325,7 @@ it("formSnapshotJson omits model fields when disabled", () => {
     savedModelId: "m",
     toolsMode: "default",
     toolsSelected: [],
-    ...createDefaultAgentEditorPrompts(),
+    ...AgentEditorState.createDefaultAgentEditorPrompts(),
   });
   const parsed = JSON.parse(json) as Record<string, unknown>;
   assert.equal(parsed.providerId, undefined);
@@ -333,7 +333,7 @@ it("formSnapshotJson omits model fields when disabled", () => {
 });
 
 it("T-CA2a: definitionToForm 从 prompts.customAttach 非空反推 enabled=true", () => {
-  const form = definitionToForm({
+  const form = AgentEditorState.definitionToForm({
     name: "writer",
     prompts: {
       customAttach: "附加笔记",
@@ -346,30 +346,30 @@ it("T-CA2a: definitionToForm 从 prompts.customAttach 非空反推 enabled=true"
 });
 
 it("T-CA2b: layoutFromFormInput 在 trim 空时不 emit customAttach", () => {
-  const base = createDefaultAgentEditorPrompts();
+  const base = AgentEditorState.createDefaultAgentEditorPrompts();
   // 开关开但文本为空 → 不 emit
-  const layoutEmpty = layoutFromFormInput({
+  const layoutEmpty = AgentEditorState.layoutFromFormInput({
     ...base,
     customAttachEnabled: true,
     customAttachText: "",
   });
   assert.equal(layoutEmpty.customAttach, undefined);
   // 开关开但仅空白 → trim 后为空，同样不 emit
-  const layoutBlank = layoutFromFormInput({
+  const layoutBlank = AgentEditorState.layoutFromFormInput({
     ...base,
     customAttachEnabled: true,
     customAttachText: "   \n  ",
   });
   assert.equal(layoutBlank.customAttach, undefined);
   // 关时即便有文本也不 emit
-  const layoutOff = layoutFromFormInput({
+  const layoutOff = AgentEditorState.layoutFromFormInput({
     ...base,
     customAttachEnabled: false,
     customAttachText: "附加笔记",
   });
   assert.equal(layoutOff.customAttach, undefined);
   // 正常开 + 非空才 emit
-  const layoutOn = layoutFromFormInput({
+  const layoutOn = AgentEditorState.layoutFromFormInput({
     ...base,
     customAttachEnabled: true,
     customAttachText: "附加笔记",
@@ -378,8 +378,8 @@ it("T-CA2b: layoutFromFormInput 在 trim 空时不 emit customAttach", () => {
 });
 
 it("T-CA2c: formSnapshotJson 将 customAttach 两字段纳入 dirty 比对", () => {
-  const base = createDefaultAgentEditorPrompts();
-  const json = formSnapshotJson({
+  const base = AgentEditorState.createDefaultAgentEditorPrompts();
+  const json = AgentEditorState.formSnapshotJson({
     name: "agent",
     mode: "all",
     maxSteps: "20",
@@ -398,8 +398,8 @@ it("T-CA2c: formSnapshotJson 将 customAttach 两字段纳入 dirty 比对", () 
 });
 
 it("T-CA2e: formSnapshotJson 将 mode 纳入 dirty 比对", () => {
-  const base = createDefaultAgentEditorPrompts();
-  const a = formSnapshotJson({
+  const base = AgentEditorState.createDefaultAgentEditorPrompts();
+  const a = AgentEditorState.formSnapshotJson({
     name: "agent",
     mode: "primary",
     maxSteps: "20",
@@ -410,7 +410,7 @@ it("T-CA2e: formSnapshotJson 将 mode 纳入 dirty 比对", () => {
     toolsSelected: [],
     ...base,
   });
-  const b = formSnapshotJson({
+  const b = AgentEditorState.formSnapshotJson({
     name: "agent",
     mode: "subagent",
     maxSteps: "20",
@@ -429,8 +429,8 @@ it("T-CA2f: formSnapshotJson 的 mode 缺省显式为 all（不得被 JSON.strin
   // 这条直接锁住「基线侧一旦漏传 mode」的失败形态：undefined 会被 stringify 丢掉，
   // 于是基线 JSON 缺 `mode` 键、实时快照有 `mode:"all"` ⇒ 两个 JSON 永不相等 ⇒
   // 打开任意智能体即显示「· 未保存」。
-  const base = createDefaultAgentEditorPrompts();
-  const json = formSnapshotJson({
+  const base = AgentEditorState.createDefaultAgentEditorPrompts();
+  const json = AgentEditorState.formSnapshotJson({
     name: "agent",
     mode: undefined as never,
     maxSteps: "20",
@@ -446,12 +446,12 @@ it("T-CA2f: formSnapshotJson 的 mode 缺省显式为 all（不得被 JSON.strin
 });
 
 it("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门闩", () => {
-  const base = createDefaultAgentEditorPrompts();
+  const base = AgentEditorState.createDefaultAgentEditorPrompts();
   // 三区全关，仅 customAttach 开 → 门闩仍为 false（customAttach 不是区域）
-  assert.equal(hasAnyPromptRegionEnabled({ ...base, customAttachEnabled: true }), false);
+  assert.equal(AgentEditorState.hasAnyPromptRegionEnabled({ ...base, customAttachEnabled: true }), false);
   // 同时打开 system 才变 true
   assert.equal(
-    hasAnyPromptRegionEnabled({
+    AgentEditorState.hasAnyPromptRegionEnabled({
       ...base,
       systemEnabled: true,
       customAttachEnabled: true,
@@ -462,7 +462,7 @@ it("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门�
 
 it("buildAgentDefinitionFromForm validates required fields", () => {
   assert.equal(
-    buildAgentDefinitionFromForm({
+    AgentEditorState.buildAgentDefinitionFromForm({
       name: "",
       mode: "all",
       maxSteps: "20",
@@ -471,12 +471,12 @@ it("buildAgentDefinitionFromForm validates required fields", () => {
       savedModelId: "",
       toolsMode: "default",
       toolsSelected: [],
-      ...createDefaultAgentEditorPrompts(),
+      ...AgentEditorState.createDefaultAgentEditorPrompts(),
     }).ok,
     false
   );
   assert.equal(
-    buildAgentDefinitionFromForm({
+    AgentEditorState.buildAgentDefinitionFromForm({
       name: "writer",
       mode: "all",
       maxSteps: "20",
@@ -485,14 +485,14 @@ it("buildAgentDefinitionFromForm validates required fields", () => {
       savedModelId: "",
       toolsMode: "default",
       toolsSelected: [],
-      ...createDefaultAgentEditorPrompts(),
+      ...AgentEditorState.createDefaultAgentEditorPrompts(),
     }).ok,
     true
   );
 });
 
 it("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -501,7 +501,7 @@ it("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
     savedModelId: "",
     toolsMode: "default",
     toolsSelected: [],
-    ...createDefaultAgentEditorPrompts(),
+    ...AgentEditorState.createDefaultAgentEditorPrompts(),
   });
   assert.equal(result.ok, true);
   if (result.ok) {
@@ -512,7 +512,7 @@ it("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
 });
 
 it("buildAgentDefinitionFromForm system 开但内容空时失败", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -538,7 +538,7 @@ it("buildAgentDefinitionFromForm system 开但内容空时失败", () => {
 
 it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
   assert.equal(
-    countEffectiveFormPromptSources({
+    AgentEditorState.countEffectiveFormPromptSources({
       systemEnabled: false,
       systemContent: "",
       persistEnabled: false,
@@ -551,7 +551,7 @@ it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
     0
   );
   assert.equal(
-    countEffectiveFormPromptSources({
+    AgentEditorState.countEffectiveFormPromptSources({
       systemEnabled: true,
       systemContent: "sys",
       persistEnabled: true,
@@ -564,7 +564,7 @@ it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
     3
   );
   assert.equal(
-    countEffectiveFormPromptSources({
+    AgentEditorState.countEffectiveFormPromptSources({
       systemEnabled: true,
       systemContent: "   ",
       persistEnabled: true,
@@ -577,7 +577,7 @@ it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
     0
   );
   assert.equal(
-    countEffectiveFormPromptSources({
+    AgentEditorState.countEffectiveFormPromptSources({
       systemEnabled: false,
       systemContent: "ignored",
       persistEnabled: true,
@@ -590,7 +590,7 @@ it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
     1
   );
   assert.equal(
-    countEffectiveFormPromptSources({
+    AgentEditorState.countEffectiveFormPromptSources({
       systemEnabled: false,
       systemContent: "",
       persistEnabled: false,
@@ -605,7 +605,7 @@ it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
 });
 
 it("buildAgentDefinitionFromForm allows empty persist with system content", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -631,7 +631,7 @@ it("buildAgentDefinitionFromForm allows empty persist with system content", () =
 });
 
 it("buildAgentDefinitionFromForm allows empty persist with dynamic block", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -653,7 +653,7 @@ it("buildAgentDefinitionFromForm allows empty persist with dynamic block", () =>
 });
 
 it("T-W8: buildAgentDefinitionFromForm workplace:true 且区域开关全关可保存", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -676,7 +676,7 @@ it("T-W8: buildAgentDefinitionFromForm workplace:true 且区域开关全关可�
 
 it("countFormPromptSources ignores enabled system without content", () => {
   assert.equal(
-    countFormPromptSources({
+    AgentEditorState.countFormPromptSources({
       systemEnabled: true,
       systemContent: "   ",
       workplaceEnabled: false,
@@ -687,7 +687,7 @@ it("countFormPromptSources ignores enabled system without content", () => {
     1
   );
   assert.equal(
-    countFormPromptSources(
+    AgentEditorState.countFormPromptSources(
       {
         systemEnabled: true,
         systemContent: "sys",
@@ -724,10 +724,10 @@ it("countFormPromptSources counts all regions and respects exclusions", () => {
       },
     ],
   };
-  assert.equal(countFormPromptSources(input), 5);
-  assert.equal(countFormPromptSources(input, { excludeDynamicIndex: 1 }), 4);
+  assert.equal(AgentEditorState.countFormPromptSources(input), 5);
+  assert.equal(AgentEditorState.countFormPromptSources(input, { excludeDynamicIndex: 1 }), 4);
   assert.equal(
-    countFormPromptSources({
+    AgentEditorState.countFormPromptSources({
       ...input,
       workplaceEnabled: false,
       workplaceAssistantText: "",
@@ -735,7 +735,7 @@ it("countFormPromptSources counts all regions and respects exclusions", () => {
     4
   );
   assert.equal(
-    countFormPromptSources(input, {
+    AgentEditorState.countFormPromptSources(input, {
       excludePersistTextIndex: 0,
       excludeDynamicIndex: 0,
     }),
@@ -782,13 +782,13 @@ it("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", () 
       },
     ],
   };
-  const result = buildAgentDefinitionFromForm(input);
+  const result = AgentEditorState.buildAgentDefinitionFromForm(input);
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.definition.mode, "all");
     assert.equal(result.definition.prompts.persistEnabled, true);
     assert.equal(result.definition.prompts.dynamicEnabled, true);
-    const form = definitionToForm(result.definition);
+    const form = AgentEditorState.definitionToForm(result.definition);
     assert.equal(form.mode, "all");
     assert.equal(form.persistEnabled, true);
     assert.equal(form.dynamicEnabled, true);
@@ -796,7 +796,7 @@ it("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", () 
 });
 
 it("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -822,7 +822,7 @@ it("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
 });
 
 it("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -842,13 +842,13 @@ it("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败",
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    // 边界经 userMessageOf + coreT 解析回中文（agent-editor-state 的 toast 边界）。
+    // 边界经 ErrorMessage.userOf + coreT 解析回中文（agent-editor-state 的 toast 边界）。
     assert.equal(result.message, "启用持久区时最后一个块须为助手角色");
   }
 });
 
 it("buildAgentDefinitionFromForm persistEnabled 开且 workplace + 文本末块 assistant 可保存", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -873,7 +873,7 @@ it("buildAgentDefinitionFromForm persistEnabled 开且 workplace + 文本末块 
 });
 
 it("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -898,7 +898,7 @@ it("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", ()
 });
 
 it("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -920,7 +920,7 @@ it("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
 });
 
 it("buildAgentDefinitionFromForm rejects persist macros", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -952,7 +952,7 @@ it("buildAgentDefinitionFromForm rejects persist macros", () => {
 });
 
 it("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -981,12 +981,12 @@ it("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
 });
 
 it("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
-  const defaults = createDefaultAgentEditorPrompts();
-  const toggled = withWorkplaceToggle(true, defaults.workplaceAssistantText);
+  const defaults = AgentEditorState.createDefaultAgentEditorPrompts();
+  const toggled = AgentEditorState.withWorkplaceToggle(true, defaults.workplaceAssistantText);
   assert.equal(toggled.workplaceEnabled, true);
   assert.equal(toggled.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 
-  const ok = buildAgentDefinitionFromForm({
+  const ok = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -1003,7 +1003,7 @@ it("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
     assert.equal(ok.definition.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
   }
 
-  const empty = buildAgentDefinitionFromForm({
+  const empty = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -1023,17 +1023,17 @@ it("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
 });
 
 it("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
-  const on = withWorkplaceToggle(true, "");
+  const on = AgentEditorState.withWorkplaceToggle(true, "");
   assert.equal(on.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 
-  const custom = withWorkplaceToggle(true, "custom-done");
+  const custom = AgentEditorState.withWorkplaceToggle(true, "custom-done");
   assert.equal(custom.workplaceAssistantText, "custom-done");
 
-  const off = withWorkplaceToggle(false, custom.workplaceAssistantText);
+  const off = AgentEditorState.withWorkplaceToggle(false, custom.workplaceAssistantText);
   assert.equal(off.workplaceEnabled, false);
   assert.equal(off.workplaceAssistantText, "custom-done");
   assert.equal(
-    layoutFromFormInput({
+    AgentEditorState.layoutFromFormInput({
       systemEnabled: false,
       systemContent: "",
       persistEnabled: false,
@@ -1045,12 +1045,12 @@ it("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
     undefined
   );
 
-  const clearedThenOn = withWorkplaceToggle(true, "");
+  const clearedThenOn = AgentEditorState.withWorkplaceToggle(true, "");
   assert.equal(clearedThenOn.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 });
 
-it("layoutFromFormInput output passes validateAgentPromptLayout", () => {
-  const layout = layoutFromFormInput({
+it("layoutFromFormInput output passes AgentPromptLayoutValidate.validate", () => {
+  const layout = AgentEditorState.layoutFromFormInput({
     systemEnabled: true,
     systemContent: "sys",
     persistEnabled: true,
@@ -1063,12 +1063,12 @@ it("layoutFromFormInput output passes validateAgentPromptLayout", () => {
       { name: "d2", type: "text", role: "user", content: "b" },
     ],
   });
-  const validated = validateAgentPromptLayout(layout);
+  const validated = AgentPromptLayoutValidate.validate(layout);
   assert.ok(validated.ok, validated.ok ? "" : validated.error.message);
 });
 
 it("T-DESC1: definitionToForm 将非空 description 透传到表单", () => {
-  const form = definitionToForm({
+  const form = AgentEditorState.definitionToForm({
     name: "x",
     prompts: { persist: [], dynamic: [] },
     description: "擅长检索代码库。",
@@ -1077,7 +1077,7 @@ it("T-DESC1: definitionToForm 将非空 description 透传到表单", () => {
 });
 
 it("T-DESC2: definitionToForm 对缺省 description 返回空串", () => {
-  const form = definitionToForm({
+  const form = AgentEditorState.definitionToForm({
     name: "x",
     prompts: { persist: [], dynamic: [] },
   });
@@ -1085,7 +1085,7 @@ it("T-DESC2: definitionToForm 对缺省 description 返回空串", () => {
 });
 
 it("T-DESC3: buildAgentDefinitionFromForm 在 description 非空时透传", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -1112,7 +1112,7 @@ it("T-DESC3: buildAgentDefinitionFromForm 在 description 非空时透传", () =
 });
 
 it("T-DESC4: buildAgentDefinitionFromForm 在 description trim 空时省略字段", () => {
-  const result = buildAgentDefinitionFromForm({
+  const result = AgentEditorState.buildAgentDefinitionFromForm({
     name: "writer",
     mode: "all",
     maxSteps: "20",
@@ -1138,8 +1138,8 @@ it("T-DESC4: buildAgentDefinitionFromForm 在 description trim 空时省略字�
 });
 
 it("T-DESC5: formSnapshotJson 将 description 纳入 dirty 比对", () => {
-  const base = createDefaultAgentEditorPrompts();
-  const json = formSnapshotJson({
+  const base = AgentEditorState.createDefaultAgentEditorPrompts();
+  const json = AgentEditorState.formSnapshotJson({
     name: "a",
     mode: "all",
     maxSteps: "20",
@@ -1153,7 +1153,7 @@ it("T-DESC5: formSnapshotJson 将 description 纳入 dirty 比对", () => {
   });
   assert.equal(JSON.parse(json).description, "desc-a");
   // 缺省时序列化为空串，与显式空串等价。
-  const jsonEmpty = formSnapshotJson({
+  const jsonEmpty = AgentEditorState.formSnapshotJson({
     name: "a",
     mode: "all",
     maxSteps: "20",

@@ -1,10 +1,11 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { DefaultWorkplaceService } from "@/service/workplace/impl/workplace.service.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  DefaultWorkplaceService  } from "@/service/workplace/impl/workplace.service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function createSpyingWorkplaceService(
   conn: import("@novel-master/core").TdbcConnection,
@@ -68,7 +69,7 @@ novelMasterTestFixture();
 describe("worktree materialize", () => {
   it("buildListRows and materialize list path never call scanContents", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/hidden/a.md", "A");
     await pvfs.write("/hidden/b.md", "B");
@@ -82,7 +83,7 @@ describe("worktree materialize", () => {
 
     calls.scanContents = 0;
     calls.findByPath = 0;
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     assert.ok(rows.length >= 4);
     assert.equal(calls.scanContents, 0);
     assert.equal(calls.findByPath, 0);
@@ -94,7 +95,7 @@ describe("worktree materialize", () => {
     // materialize 组合的 live + persist 并发评估经 conn 级 inFlight 去重，
     // 合并为单次 metadata 加载（旧断言的“各一次”是实例级无共享时的行为）
     await pvfs.write("/visible/d.md", "D");
-    const materialized = await wt.materialize();
+    const materialized = unwrap(await wt.materialize());
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
     assert.equal(
@@ -106,7 +107,7 @@ describe("worktree materialize", () => {
 
   it("filename fill display never calls findByPath", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/fn/a.md", "BODY-A");
     await pvfs.write("/fn/b.md", "BODY-B");
@@ -121,7 +122,7 @@ describe("worktree materialize", () => {
     });
 
     calls.findByPath = 0;
-    const materialized = await wt.materialize();
+    const materialized = unwrap(await wt.materialize());
     assert.equal(calls.findByPath, 0);
     assert.match(materialized.workplaceDisplay, /a\.md/);
     assert.match(materialized.workplaceDisplay, /b\.md/);
@@ -130,7 +131,7 @@ describe("worktree materialize", () => {
 
   it("lazy findByPath only for visible full/header files", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     for (let i = 0; i < 10; i += 1) {
       await pvfs.write(`/batch/f${i}.md`, `body-${i}`);
@@ -155,7 +156,7 @@ describe("worktree materialize", () => {
     });
 
     calls.findByPath = 0;
-    const materialized = await wt.materialize();
+    const materialized = unwrap(await wt.materialize());
     assert.equal(
       calls.findByPath,
       2,
@@ -167,7 +168,7 @@ describe("worktree materialize", () => {
 
   it("materialize listRows match buildListRows order", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/parent/a.md", "A");
     await pvfs.write("/parent/sub/b.md", "B");
@@ -183,8 +184,8 @@ describe("worktree materialize", () => {
     });
 
     const [rows, materialized] = await Promise.all([
-      wt.buildListRows(),
-      wt.materialize(),
+      wt.buildListRows().then(unwrap),
+      wt.materialize().then(unwrap),
     ]);
     assert.deepEqual(
       rows.map((r) => r.path),
@@ -194,7 +195,7 @@ describe("worktree materialize", () => {
 
   it("materialize filetreeDisplay 与 renderFileTree 一致且含加载后缀", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     await pvfs.write("/b.md", "B");
@@ -205,29 +206,29 @@ describe("worktree materialize", () => {
       inclusionMode: "show",
     });
 
-    const materialized = await wt.materialize();
-    const fileTree = await wt.renderFileTree();
+    const materialized = unwrap(await wt.materialize());
+    const fileTree = unwrap(await wt.renderFileTree());
     assert.equal(materialized.filetreeDisplay, fileTree);
     assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
   });
 
   it("T-WEC11: materializePersistBlock 与 renderDisplay 一致", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "hello");
 
-    const { createWorkplaceService } = await import("@novel-master/core/workplace");
-    const wt = createWorkplaceService(ctx.conn, {
+    const { WorkplaceServiceFactory } = await import("@novel-master/core/workplace");
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
 
-    const { workplaceDisplay } = await wt.materializePersistBlock();
+    const { workplaceDisplay } = unwrap(await wt.materializePersistBlock());
     assert.ok(workplaceDisplay.length > 0);
-    const display = await wt.renderDisplay();
+    const display = unwrap(await wt.renderDisplay());
     assert.equal(workplaceDisplay, display);
   });
 });

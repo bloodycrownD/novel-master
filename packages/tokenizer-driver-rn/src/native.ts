@@ -4,10 +4,9 @@
  * @module tokenizer-driver-rn/native
  */
 
-export { registerTokenizerRnDriver, RN_DRIVER_NAME } from "./register.js";
+export { TokenizerRnRegister } from "./register.js";
 export {
-  countPromptViaNative,
-  isNativeTokenizerAvailable,
+  AndroidNativeBridge,
   type NativeCountRequest,
   type NativeCountResponse,
 } from "./android-native-bridge.js";

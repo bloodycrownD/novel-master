@@ -16,4 +16,5 @@ export type {
   SessionRunState,
   SessionRunStatus,
   SessionRunStateTokenSource,
+  StreamTokenSource,
 } from "../domain/session-run-state/model/session-run-state.js";

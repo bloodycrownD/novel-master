@@ -5,7 +5,7 @@
  */
 import type {JSX} from 'preact';
 
-export type TrustedHtmlProps = {
+type TrustedHtmlProps = {
   html: string;
   className?: string;
 } & Omit<
@@ -28,7 +28,12 @@ export function TrustedHtml({html, className, ...rest}: TrustedHtmlProps) {
 
 /**
  * runtime 命令式写入：等价于组件路径的信任边界。
+ *
+ * namespace 名偏离文件名（TrustedHtml）：文件名与组件名冲突，按内容主体
+ * （信任 HTML 的 DOM 写入面）起名。
  */
-export function applyTrustedHtml(el: Element, html: string): void {
-  el.innerHTML = html;
+export namespace TrustedHtmlWriter {
+  export function apply(el: Element, html: string): void {
+    el.innerHTML = html;
+  }
 }

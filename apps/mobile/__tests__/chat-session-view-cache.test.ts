@@ -10,12 +10,8 @@
 import {describe, expect, it, beforeEach} from '@jest/globals';
 import {type ChatMessageData} from '@novel-master/core/chat';
 import {
-  clearAllSessionViewCaches,
-  getSessionViewCache,
-  hydrateWindowFromCache,
   SESSION_VIEW_HYDRATE_WINDOW,
-  sessionViewCacheKey,
-  setSessionViewCache,
+  SessionViewCache,
 } from '@/services/chat-session-view-cache';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 
@@ -35,14 +31,14 @@ function sampleMessage(id: string): ChatMessageData {
 
 describe('chat-session-view-cache', () => {
   beforeEach(() => {
-    clearAllSessionViewCaches();
+    SessionViewCache.clearAll();
   });
 
   it('stores and retrieves messages per session key', () => {
-    const key = sessionViewCacheKey('p1', 's1');
+    const key = SessionViewCache.key('p1', 's1');
     const messages = [sampleMessage('m1')];
-    setSessionViewCache(key, {messages, hasMoreMessages: true});
-    const cached = getSessionViewCache(key);
+    SessionViewCache.set(key, {messages, hasMoreMessages: true});
+    const cached = SessionViewCache.get(key);
     expect(cached?.messages).toHaveLength(1);
     expect(cached?.hasMoreMessages).toBe(true);
   });
@@ -60,11 +56,11 @@ describe('chat-session-view-cache', () => {
         messages: seqMessages(SESSION_VIEW_HYDRATE_WINDOW),
         hasMoreMessages: false,
       };
-      expect(hydrateWindowFromCache(entry)).toBe(entry);
+      expect(SessionViewCache.hydrateWindowFromCache(entry)).toBe(entry);
     });
 
     it('浏览史超窗：只取尾部一页，hasMore 置真（窗口外还有，向上翻照常补）', () => {
-      const windowed = hydrateWindowFromCache({
+      const windowed = SessionViewCache.hydrateWindowFromCache({
         messages: seqMessages(SESSION_VIEW_HYDRATE_WINDOW * 3),
         hasMoreMessages: false,
       });
@@ -95,14 +91,14 @@ describe('chat-session-view-cache', () => {
         messageStore: {
           listBySessionTail: async (_sid, options) => {
             tailCalls += 1;
-            return db.slice(-options.limit);
+            return {kind: 'completed' as const, value: db.slice(-options.limit)};
           },
           listBySessionPage: async (_sid, options) => {
             const filtered =
               options.beforeSeq == null
                 ? db
                 : db.filter(row => row.seq < options.beforeSeq);
-            return filtered.slice(-options.limit);
+            return {kind: 'completed' as const, value: filtered.slice(-options.limit)};
           },
         },
       });
@@ -117,13 +113,13 @@ describe('chat-session-view-cache', () => {
     }
 
     it('冷启动（消息面空）+ 缓存 3 页：只采纳尾部一屏，hasMore 置真', async () => {
-      setSessionViewCache(sessionViewCacheKey('p1', 's1'), {
+      SessionViewCache.set(SessionViewCache.key('p1', 's1'), {
         messages: seqMessages(SESSION_VIEW_HYDRATE_WINDOW * 3),
         hasMoreMessages: false,
       });
       const {unit, tailCalls} = makeUnit(seqMessages(0));
 
-      const rows = await unit.loadTailMessages();
+      const rows = (await unit.loadTailMessages()).value;
 
       // 采纳 40 条（尾部一屏），不是整面 120 条；缓存命中不回源 DB
       expect(rows).toHaveLength(SESSION_VIEW_HYDRATE_WINDOW);
@@ -137,7 +133,7 @@ describe('chat-session-view-cache', () => {
     it('消息面非空：缓存水合整面采纳，不再裁回一屏（cr2-E-1）', async () => {
       const {unit, tailCalls} = makeUnit(seqMessages(0));
       // 先水合一次铺出非空消息面
-      setSessionViewCache(sessionViewCacheKey('p1', 's1'), {
+      SessionViewCache.set(SessionViewCache.key('p1', 's1'), {
         messages: seqMessages(SESSION_VIEW_HYDRATE_WINDOW),
         hasMoreMessages: false,
       });
@@ -148,11 +144,11 @@ describe('chat-session-view-cache', () => {
 
       // 缓存里是一整面浏览史（loadOlder 的写回形态）：面已非空 → 整面收下
       const full = seqMessages(SESSION_VIEW_HYDRATE_WINDOW * 3);
-      setSessionViewCache(sessionViewCacheKey('p1', 's1'), {
+      SessionViewCache.set(SessionViewCache.key('p1', 's1'), {
         messages: full,
         hasMoreMessages: false,
       });
-      const rows = await unit.loadTailMessages();
+      const rows = (await unit.loadTailMessages()).value;
 
       expect(rows).toHaveLength(full.length);
       const snap = unit.snapshot();

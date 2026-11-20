@@ -1,14 +1,7 @@
 /**
  * Dynamic header overrides (chat subviews, stack dynamic titles).
  */
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import React, {createContext, useCallback, useContext, useMemo, useState, type ReactNode} from 'react';
 import type {ChatHeaderContext} from './types';
 import {useRoute} from '@react-navigation/native';
 
@@ -49,10 +42,7 @@ export function HeaderProvider({children}: {children: ReactNode}) {
     setChatState(prev => ({...prev, ...patch}));
   }, []);
 
-  const value = useMemo(
-    () => ({chat, setChat, stackOverride, setStackOverride}),
-    [chat, setChat, stackOverride],
-  );
+  const value = useMemo(() => ({chat, setChat, stackOverride, setStackOverride}), [chat, setChat, stackOverride]);
 
   return <HeaderCtx.Provider value={value}>{children}</HeaderCtx.Provider>;
 }
@@ -74,9 +64,7 @@ export function useStackOverrideSetter() {
   const route = useRoute();
   return useCallback(
     (override: HeaderOverride | undefined) => {
-      setStackOverride(
-        override == null ? undefined : {...override, ownerRouteKey: route.key},
-      );
+      setStackOverride(override == null ? undefined : {...override, ownerRouteKey: route.key});
     },
     [setStackOverride, route.key],
   );

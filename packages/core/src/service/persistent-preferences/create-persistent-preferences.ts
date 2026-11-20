@@ -12,11 +12,11 @@ import type { PersistentPreferences } from "./persistent-preferences.port.js";
 /**
  * Creates preference storage on `nm-preferences`.
  *
- * @param conn - Open connection after {@link bootstrapNovelMaster}
+ * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
+ *
+ * nm-style: keep-bare — 三端 runtime 装配线共用的偏好存储工厂（单文件单函数），p23 重复组与 p24 主体桶均不在收口范围。
  */
-export function createPersistentPreferences(
-  conn: TdbcConnection
-): PersistentPreferences {
+export function createPersistentPreferences(conn: TdbcConnection): PersistentPreferences {
   const kkv = createKkvService(conn);
   return new DefaultPersistentPreferences(kkv);
 }

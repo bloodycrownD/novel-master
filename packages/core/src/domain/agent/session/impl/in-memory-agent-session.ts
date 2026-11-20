@@ -4,10 +4,12 @@
  * @module domain/agent/session/impl/in-memory-agent-session
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { ChatMessageData, MessageContent } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { AgentSession } from "../agent-session.port.js";
 
 /**
@@ -23,11 +25,11 @@ export class InMemoryAgentSession implements AgentSession {
     return this.messages.filter((m) => !m.hidden);
   }
 
-  /** 追加一条内存消息；`options.attachments` 供测试断言落库形态。 */
-  async append(role: string, content: MessageContent, options?: {provider?: string | null; modelName?: string | null; raw?: Record<string, unknown> | null; usage?: MessageUsage; attachments?: readonly MessageAttachment[]}): Promise<ChatMessageData> {
+  /** 追加一条内存消息；`options.attachments` 供测试断言落库形态。内存实现永不失败，恒 Ok。 */
+  async append(role: string, content: MessageContent, options?: {provider?: string | null; modelName?: string | null; raw?: Record<string, unknown> | null; usage?: MessageUsage; attachments?: readonly MessageAttachment[]}): Promise<Result<ChatMessageData, AppError>> {
     this.seq += 1;
     const message: ChatMessageData = {
-      id: randomUUID(),
+      id: Random.uuid(),
       sessionId: this.sessionId,
       seq: this.seq,
       role,
@@ -43,10 +45,10 @@ export class InMemoryAgentSession implements AgentSession {
         : {}),
     };
     this.messages.push(message);
-    return message;
+    return Result.ok(message);
   }
 
-  async hideRange(fromSeq: number, toSeq: number): Promise<number> {
+  async hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
     let count = 0;
     for (let i = 0; i < this.messages.length; i++) {
       const m = this.messages[i]!;
@@ -55,20 +57,21 @@ export class InMemoryAgentSession implements AgentSession {
         count += 1;
       }
     }
-    return count;
+    return Result.ok(count);
   }
 
-  async truncateAfterMessage(afterMessageId: string | null): Promise<void> {
+  async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
     if (afterMessageId == null) {
       this.messages.length = 0;
       this.seq = 0;
-      return;
+      return Result.ok(undefined);
     }
     const idx = this.messages.findIndex((m) => m.id === afterMessageId);
     if (idx < 0) {
-      return;
+      return Result.ok(undefined);
     }
     this.messages.splice(idx + 1);
+    return Result.ok(undefined);
   }
 
   /** All messages including hidden (tests). */

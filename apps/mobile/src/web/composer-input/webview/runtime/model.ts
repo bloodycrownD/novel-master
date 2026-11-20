@@ -39,7 +39,7 @@ export type ComposerTheme = {
   readonly selection: string;
 };
 
-export type ComposerSelectionPayload = {
+type ComposerSelectionPayload = {
   readonly start: number;
   readonly end: number;
 };
@@ -53,7 +53,7 @@ export type InitPayload = {
   readonly placeholder: string;
 };
 
-export type SetTextPayload = {
+type SetTextPayload = {
   readonly text: string;
   /** 缺省时保持内核写值后的光标位置（textarea.value 赋值后落末位）。 */
   readonly selectionStart?: number;
@@ -89,6 +89,3 @@ export type ComposerInputToHostMessage =
       readonly type: 'heightChange';
       readonly payload: {readonly height: number};
     };
-
-export type HostToComposerInputType = HostToComposerInputMessage['type'];
-export type ComposerInputToHostType = ComposerInputToHostMessage['type'];

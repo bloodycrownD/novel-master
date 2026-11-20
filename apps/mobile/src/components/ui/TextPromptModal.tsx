@@ -5,18 +5,11 @@
  * onConfirm 正常返回（不 throw）后自动关闭。
  */
 import React, {useEffect, useState} from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type TextInputProps,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View, type TextInputProps} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
 import {ModalShell} from './ModalShell';
 
-export type PromptField = {
+type PromptField = {
   label?: string;
   placeholder?: string;
   initialValue?: string;
@@ -43,33 +36,15 @@ type Props = {
   onConfirm: (values: string[]) => void | Promise<void>;
 };
 
-export function TextPromptModal({
-  visible,
-  title,
-  variant = 'center',
-  label,
-  placeholder,
-  initialValue = '',
-  autoCapitalize,
-  fields,
-  confirmLabel = '确定',
-  onClose,
-  onConfirm,
-}: Props) {
+export function TextPromptModal({visible, title, variant = 'center', label, placeholder, initialValue = '', autoCapitalize, fields, confirmLabel = '确定', onClose, onConfirm}: Props) {
   const {tokens} = useTheme();
-  const effectiveFields: PromptField[] = fields ?? [
-    {label, placeholder, initialValue, autoCapitalize},
-  ];
-  const [values, setValues] = useState<string[]>(() =>
-    effectiveFields.map(field => field.initialValue ?? ''),
-  );
+  const effectiveFields: PromptField[] = fields ?? [{label, placeholder, initialValue, autoCapitalize}];
+  const [values, setValues] = useState<string[]>(() => effectiveFields.map(field => field.initialValue ?? ''));
   const [saving, setSaving] = useState(false);
 
   // 重置只随可见性与初始值变化；effectiveFields 是每次渲染的新数组，
   // 不能直接进依赖（否则每次渲染都把输入冲掉）。
-  const initialKey = effectiveFields
-    .map(field => field.initialValue ?? '')
-    .join('\0');
+  const initialKey = effectiveFields.map(field => field.initialValue ?? '').join('\0');
   useEffect(() => {
     if (visible) {
       setValues(effectiveFields.map(field => field.initialValue ?? ''));
@@ -78,11 +53,7 @@ export function TextPromptModal({
   }, [visible, initialKey]);
 
   const trimmed = values.map(value => value.trim());
-  const canSubmit =
-    !saving &&
-    effectiveFields.every(
-      (field, index) => field.optional || trimmed[index].length > 0,
-    );
+  const canSubmit = !saving && effectiveFields.every((field, index) => field.optional || trimmed[index].length > 0);
 
   const handleConfirm = async () => {
     if (!canSubmit) {
@@ -113,21 +84,10 @@ export function TextPromptModal({
       keyboardVerticalOffset={isBottom ? 0 : 24}
       panelStyle={isBottom ? styles.panelBottom : styles.panelCenter}
     >
-      <Text
-        style={[
-          isBottom ? styles.title : styles.titleCenter,
-          {color: tokens.text},
-        ]}
-      >
-        {title}
-      </Text>
+      <Text style={[isBottom ? styles.title : styles.titleCenter, {color: tokens.text}]}>{title}</Text>
       {effectiveFields.map((field, index) => (
         <View key={index}>
-          {field.label ? (
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              {field.label}
-            </Text>
-          ) : null}
+          {field.label ? <Text style={[styles.label, {color: tokens.textSecondary}]}>{field.label}</Text> : null}
           <TextInput
             testID={index === 0 ? 'text-prompt-input' : undefined}
             style={[
@@ -157,12 +117,7 @@ export function TextPromptModal({
         <Pressable onPress={onClose} style={styles.btn}>
           <Text style={{color: tokens.textSecondary}}>取消</Text>
         </Pressable>
-        <Pressable
-          testID="text-prompt-submit"
-          onPress={() => handleConfirm().catch(() => undefined)}
-          style={styles.btn}
-          disabled={!canSubmit}
-        >
+        <Pressable testID="text-prompt-submit" onPress={() => handleConfirm().catch(() => undefined)} style={styles.btn} disabled={!canSubmit}>
           <Text
             style={{
               color: canSubmit ? tokens.primary : tokens.textTertiary,

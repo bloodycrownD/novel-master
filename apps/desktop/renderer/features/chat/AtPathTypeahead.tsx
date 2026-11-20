@@ -3,7 +3,7 @@
  */
 import { composerAtPath, type AtPathRef } from "./composer-at-path";
 
-export type AtPathTypeaheadProps = {
+type AtPathTypeaheadProps = {
   open: boolean;
   candidates: readonly AtPathRef[];
   onSelect: (token: string) => void;
@@ -25,6 +25,9 @@ export function AtPathTypeahead({
     >
       {candidates.map((ref) => {
         const token = composerAtPath.formatToken(ref.path, ref.kind === "dir");
+        if (!token.ok) {
+          return null;
+        }
         const label = ref.kind === "dir" ? `📁${ref.path}/` : `📄${ref.path}`;
         return (
           <li key={`${ref.kind}:${ref.path}`} role="option">
@@ -34,7 +37,7 @@ export function AtPathTypeahead({
               onMouseDown={(e) => {
                 // 避免抢 textarea blur 导致点选失败
                 e.preventDefault();
-                onSelect(token);
+                onSelect(token.value);
               }}
             >
               {label}

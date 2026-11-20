@@ -1,7 +1,8 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { renderWorkplaceFileTreeForMacro } from "../../src/domain/workplace/logic/workplace-file-tree.js";
-import { filetreeMacroLoadStateLabel } from "../../src/domain/workplace/logic/workplace-labels.js";
+import {  describe, it  } from "node:test";
+import {  WorkplaceFileTree  } from "../../src/domain/workplace/logic/workplace-file-tree.js";
+import {  WorkplaceLabels  } from "../../src/domain/workplace/logic/workplace-labels.js";
 import type { DisplayState } from "../../src/domain/workplace/model/workplace-types.js";
 
 const sessionScope = {
@@ -20,7 +21,7 @@ describe("filetreeMacroLoadStateLabel", () => {
 
   for (const [state, label] of cases) {
     it(`${state} → ${label}`, () => {
-      assert.equal(filetreeMacroLoadStateLabel(state), label);
+      assert.equal(WorkplaceLabels.filetreeMacroLoadStateLabel(state), label);
     });
   }
 });
@@ -32,14 +33,14 @@ describe("renderWorkplaceFileTreeForMacro", () => {
     const displayByPath = new Map<string, DisplayState>(
       [...fileSet].map((p) => [p, "full" as const]),
     );
-    const tree = renderWorkplaceFileTreeForMacro({
+    const tree = unwrap(WorkplaceFileTree.renderForMacro({
       scope: sessionScope,
       allDirs,
       fileSet,
       dirRuleMap: new Map(),
       mtimeByPath: new Map(),
       displayByPath,
-    });
+    }));
     assert.match(tree, /^\/\n/);
     const lines = tree.split("\n");
     const aDirIdx = lines.findIndex((l) => l.includes("a-dir/"));
@@ -59,14 +60,14 @@ describe("renderWorkplaceFileTreeForMacro", () => {
       ["/notes/draft.md", "full"],
       ["/refs/index.md", "filename"],
     ]);
-    const tree = renderWorkplaceFileTreeForMacro({
+    const tree = unwrap(WorkplaceFileTree.renderForMacro({
       scope: sessionScope,
       allDirs,
       fileSet,
       dirRuleMap: new Map(),
       mtimeByPath: new Map(),
       displayByPath,
-    });
+    }));
     assert.match(tree, /draft\.md 全部加载/);
     assert.match(tree, /index\.md 未加载/);
     assert.match(tree, /notes\//);
@@ -80,14 +81,14 @@ describe("renderWorkplaceFileTreeForMacro", () => {
     const displayByPath = new Map<string, DisplayState>([
       ["/hidden.md", "hidden"],
     ]);
-    const tree = renderWorkplaceFileTreeForMacro({
+    const tree = unwrap(WorkplaceFileTree.renderForMacro({
       scope: sessionScope,
       allDirs,
       fileSet,
       dirRuleMap: new Map(),
       mtimeByPath: new Map(),
       displayByPath,
-    });
+    }));
     assert.match(tree, /hidden\.md 未加载/);
   });
 });

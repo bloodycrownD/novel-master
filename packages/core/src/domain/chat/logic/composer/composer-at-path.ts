@@ -6,6 +6,8 @@
  */
 
 import {promptPathSeen} from "../attachment/prompt-path-seen.js";
+import {AppError} from "@/errors/app-error.js";
+import {Result} from "@/errors/either.js";
 
 export type AtPathRef = {
     readonly path: string;
@@ -15,18 +17,32 @@ export type AtPathRef = {
 /** Composer 文本/光标操作命名空间（无实例状态）。 */
 export const composerAtPath = {
     /** 插入正文的 `@path`（目录带尾 `/`，落库扫描后带前导 `/`）。 */
-    formatToken(path: string, isDir: boolean): string {
+    formatToken(path: string, isDir: boolean): Result<string, AppError> {
         if (isDir) {
             const withSlash = path.endsWith("/") || path === "/" ? path : `${path}/`;
             const store = promptPathSeen.normalizeStore(withSlash, {keepDirTrailingSlash: true});
-            return `@${store}`;
+            if (!store.ok) return store;
+            return Result.ok(`@${store.value}`);
         }
-        return `@${promptPathSeen.normalizeStore(path)}`;
+        const store = promptPathSeen.normalizeStore(path);
+        if (!store.ok) return store;
+        return Result.ok(`@${store.value}`);
     },
 
     /** 选择器多选 → 正文 token 列表（先 dir 后 file）。 */
-    tokensFromPickerSelection(selectedDirs: Iterable<string>, selectedFiles: Iterable<string>): string[] {
-        return [...[...selectedDirs].map((p) => this.formatToken(p, true)), ...[...selectedFiles].map((p) => this.formatToken(p, false))];
+    tokensFromPickerSelection(selectedDirs: Iterable<string>, selectedFiles: Iterable<string>): Result<string[], AppError> {
+        const tokens: string[] = [];
+        for (const dir of selectedDirs) {
+            const token = this.formatToken(dir, true);
+            if (!token.ok) return Result.err(token.error);
+            tokens.push(token.value);
+        }
+        for (const file of selectedFiles) {
+            const token = this.formatToken(file, false);
+            if (!token.ok) return Result.err(token.error);
+            tokens.push(token.value);
+        }
+        return Result.ok(tokens);
     },
 
     /** 光标处未完成的 `@…` / `$…` 查询；无活跃 token 时返回 null。 */

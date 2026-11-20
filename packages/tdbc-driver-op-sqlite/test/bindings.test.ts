@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeOpSqliteBindings } from "../src/bindings.js";
+import { OpSqliteBindings } from "../src/bindings.js";
 
-describe("normalizeOpSqliteBindings", () => {
+describe("OpSqliteBindings.normalize", () => {
   it("maps undefined to null and Uint8Array to ArrayBuffer", () => {
     const bytes = new Uint8Array([1, 2, 3]);
-    const normalized = normalizeOpSqliteBindings(["ref", bytes, undefined, 42])!;
+    const normalized = OpSqliteBindings.normalize(["ref", bytes, undefined, 42])!;
 
     assert.equal(normalized[0], "ref");
     assert.ok(normalized[1] instanceof ArrayBuffer);
@@ -17,7 +17,7 @@ describe("normalizeOpSqliteBindings", () => {
   it("copies subarray views so bound buffer length matches blob bytes", () => {
     const backing = new Uint8Array([9, 9, 1, 2, 3, 9, 9]);
     const view = backing.subarray(2, 5);
-    const normalized = normalizeOpSqliteBindings([view])!;
+    const normalized = OpSqliteBindings.normalize([view])!;
 
     const bound = normalized[0] as ArrayBuffer;
     assert.equal(bound.byteLength, 3);

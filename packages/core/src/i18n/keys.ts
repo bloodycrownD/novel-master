@@ -12,7 +12,7 @@
 
 import type { MessageDescriptor } from "@/common/i18n.js";
 
-/** keyRule 的可执行形态；parseCoreCatalog 与 catalog 测试共用。 */
+/** keyRule 的可执行形态；Catalog.parseCore 与 catalog 测试共用。 */
 export const CORE_MESSAGE_KEY_PATTERN = /^(error|label)\.[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$/;
 
 /** error.* 第二段（域）的固定词表（spec §2.2，19 域）。 */
@@ -85,6 +85,7 @@ const ERROR_MESSAGE_KEYS = [
   "error.chat.attachment_name_storage_mismatch",
   "error.chat.project_agent_definition_required",
   "error.chat.session_create_agent_missing",
+  "error.chat.not_found",
   // cloud_sync：方向与原因入子段
   "error.cloud_sync.already_up_to_date",
   "error.cloud_sync.snapshot_missing",
@@ -117,6 +118,10 @@ const ERROR_MESSAGE_KEYS = [
   "error.db_backup.secret_row_version_not_number",
   // infra：启动基线
   "error.infra.baseline_too_old",
+  "error.infra.decode_invalid_schema",
+  "error.infra.encode_not_supported",
+  "error.infra.aborted",
+  "error.infra.invalid_abort_target",
   // prompt：布局校验与动态宏校验（PROMPT_INVALID_LAYOUT / PROMPT_INVALID_MACRO）
   "error.prompt.invalid_layout.workplace_nonempty_string",
   "error.prompt.invalid_layout.workplace_type",
@@ -148,13 +153,31 @@ const ERROR_MESSAGE_KEYS = [
   "error.prompt.invalid_macro.unknown",
   "error.prompt.invalid_macro.persist_forbidden",
   "error.prompt.macro_expand_failed",
+  "error.prompt.invalid_yaml",
+  "error.prompt.invalid_block",
+  "error.prompt.unknown_field",
+  "error.prompt.unsupported_syntax",
   // provider
   "error.provider.display_name_required",
   "error.provider.saved_model_in_use",
+  "error.provider.not_found",
+  "error.provider.conflict",
+  "error.provider.builtin_provider",
+  "error.provider.http_error",
+  "error.provider.api_key_not_set",
+  "error.provider.model_not_saved",
+  "error.provider.unsupported_content",
+  "error.provider.unsupported",
+  "error.provider.malformed_sse",
+  "error.provider.invalid_tool_arguments",
+  "error.provider.migration_orphan_pointer",
+  "error.provider.invalid_model_name",
+  "error.provider.models_in_flight",
   // session_fs：回滚 / 恢复（restore 三处复用 restore_revision_missing）
   "error.session_fs.rollback_message_not_found",
   "error.session_fs.rollback_message_session_mismatch",
   "error.session_fs.restore_revision_missing",
+  "error.session_fs.rollback_no_checkpoint",
   "error.session_fs.rollback_undo_send_empty_target.rewind",
   "error.session_fs.rollback_undo_send_empty_target.undo_send",
   "error.session_fs.rollback_revision_backfill_required",
@@ -174,6 +197,7 @@ const ERROR_MESSAGE_KEYS = [
   "error.skill.builtin_name_reserved",
   "error.skill.builtin_rename_forbidden",
   "error.skill.already_exists",
+  "error.skill.not_found",
   "error.skill.invalid_name.empty",
   "error.skill.invalid_name.skill_md_reserved",
   "error.skill.invalid_name.leading_dot",
@@ -198,6 +222,11 @@ const ERROR_MESSAGE_KEYS = [
   "error.tool.search_engine_not_found",
   "error.tool.search_test_failed",
   "error.tool.search_curl_parse_failed",
+  "error.tool.not_found",
+  "error.tool.conflict",
+  "error.tool.failed",
+  "error.tool.forbidden",
+  "error.tool.cancelled",
   // usage：统计入参校验
   "error.usage.invalid_day_format",
   "error.usage.invalid_day",
@@ -211,6 +240,8 @@ const ERROR_MESSAGE_KEYS = [
   "error.vfs.replace_not_found",
   "error.vfs.already_exists",
   "error.vfs.operation_failed",
+  "error.vfs.zip_not_confirmed",
+  "error.vfs.zip_external_not_supported",
   "error.vfs.invalid_name.dotdot",
   "error.vfs.invalid_name.blank",
   "error.vfs.invalid_name.control_chars",
@@ -223,9 +254,13 @@ const ERROR_MESSAGE_KEYS = [
   "error.vfs.character_card_too_large.total_content",
   "error.vfs.character_card_too_large.file_count",
   "error.vfs.character_card_too_large.input",
-  "error.vfs.character_card_import_failed.with_progress",
-  "error.vfs.zip_import_failed.with_progress",
+  "error.vfs.import_failed",
+  "error.vfs.import_failed.with_progress",
   "error.vfs.batch_ingest_partial",
+  "error.vfs.single_file_too_large",
+  "error.vfs.single_file_read_failed",
+  "error.vfs.single_file_not_found",
+  "error.vfs.single_file_export_target_invalid",
 ] as const;
 
 /** 展示标签 key（B 桶 68 处去重后的全量清单）。 */

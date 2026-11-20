@@ -5,22 +5,20 @@
  *   project 技能落 `project:{pid}:meta` 域（物理 `/projects/{pid}/meta/skills/...`）；
  *   上层（effectiveSkills / readSkillFile / 项目副本覆盖）行为不变。
  * - T-SR3：`ProjectService.delete()` 后 `project:{pid}:meta` 与 `project:{pid}`、
- *   `session:{pid}:{sid}` 同样零 entry 残留；随后的 `runDeferredBlobGc`
+ *   `session:{pid}:{sid}` 同样零 entry 残留；随后的 `DeferredBlobGc.run`
  *   后无 orphan blob。
  *
  * @module test/skills/skill-relocate
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createSkillsService } from "@novel-master/core/skills";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SkillsServiceFactory  } from "@novel-master/core/skills";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -31,11 +29,11 @@ function entry(name: string, description: string): string {
 describe("技能存储重定位（T-SR1）", () => {
   it("global 技能落 global:meta 域，物理路径 /meta/skills/...", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
     const name = `g-relocate-${suffix}`;
 
-    await skills.writeSkillFile("global", name, undefined, entry(name, "全局"));
+    unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局")));
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const rows = await entryRepo.listEntriesUnderPrefix(
@@ -56,27 +54,27 @@ describe("技能存储重定位（T-SR1）", () => {
     );
 
     // 上层行为不变：清单可见且有效
-    const list = await skills.listSkills("global");
+    const list = outcomeValue(await skills.listSkills("global"));
     const item = list.find((s) => s.name === name);
     assert.ok(item != null && item.valid);
-    const read = await skills.readSkillFile("global", name);
+    const read = unwrap(await skills.readSkillFile("global", name));
     assert.match(read.content, /name: g-relocate-/);
   });
 
   it("project 技能落 project:{pid}:meta 域，物理路径 /projects/{pid}/meta/skills/...", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-sr1-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-sr1-${suffix}`));
     const name = `p-relocate-${suffix}`;
 
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "project",
       name,
       undefined,
       entry(name, "项目"),
       project.id,
-    );
+    ));
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const metaRows = await entryRepo.listEntriesUnderPrefix(
@@ -99,47 +97,47 @@ describe("技能存储重定位（T-SR1）", () => {
 
     // 上层行为不变：合并视图可见；域缺省读取项目副本优先、无副本回落 global
     const globalName = `g-fallback-${suffix}`;
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "global",
       globalName,
       undefined,
       entry(globalName, "全局回落"),
-    );
-    const view = await skills.effectiveSkills(project.id);
+    ));
+    const view = unwrap(await skills.effectiveSkills(project.id));
     assert.ok(view.find((s) => s.name === name)?.effective);
-    const fallback = await skills.readSkillFile(
+    const fallback = unwrap(await skills.readSkillFile(
       undefined,
       globalName,
       undefined,
       project.id,
-    );
+    ));
     assert.equal(fallback.domain, "global");
-    const projectCopy = await skills.readSkillFile(
+    const projectCopy = unwrap(await skills.readSkillFile(
       undefined,
       name,
       undefined,
       project.id,
-    );
+    ));
     assert.equal(projectCopy.domain, "project");
   });
 
   it("deleteSkill 清 meta 域 VFS 且负清单行沿用 project:{pid} 语义", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-del2-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-del2-${suffix}`));
     const name = `del-meta-${suffix}`;
 
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "project",
       name,
       undefined,
       entry(name, "待删"),
       project.id,
-    );
-    await skills.setDisabled(project.id, name, true);
+    ));
+    unwrap(await skills.setDisabled(project.id, name, true));
 
-    await skills.deleteSkill({ domain: "project", projectId: project.id, name });
+    unwrap(await skills.deleteSkill({ domain: "project", projectId: project.id, name }));
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const metaRows = await entryRepo.listEntriesUnderPrefix(
@@ -159,14 +157,14 @@ describe("技能存储重定位（T-SR1）", () => {
     assert.equal(rows.length, 0, "删除技能后禁用行应清理");
 
     // 重建同名技能：默认生效
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "project",
       name,
       undefined,
       entry(name, "重建"),
       project.id,
-    );
-    const view = await skills.effectiveSkills(project.id);
+    ));
+    const view = unwrap(await skills.effectiveSkills(project.id));
     const rebuilt = view.find((s) => s.name === name);
     assert.ok(rebuilt != null);
     assert.notEqual(rebuilt.disabled, true, "重建技能不应被残留禁用行误伤");
@@ -176,20 +174,20 @@ describe("技能存储重定位（T-SR1）", () => {
 describe("项目删除无孤儿（T-SR3）", () => {
   it("delete 后 project:{pid}:meta / project:{pid} / session:{pid}:{sid} 零 entry 残留", async () => {
     const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
+    const skills = SkillsServiceFactory.create(ctx.conn);
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-sr3-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-sr3-${suffix}`));
 
     // 三域都种上内容：template 文件、meta 技能、session 文件
     await ctx.projectVfs(project.id).write("/novel.md", "正文");
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "project",
       `sr3-skill-${suffix}`,
       undefined,
       entry(`sr3-skill-${suffix}`, "随项目删除"),
       project.id,
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     await ctx.sessionVfs(project.id, session.id).write("/draft.md", "草稿");
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
@@ -202,7 +200,7 @@ describe("项目删除无孤儿（T-SR3）", () => {
       assert.ok(before.length > 0, `${scopeKey} 删除前应有 entry`);
     }
 
-    await ctx.projects.delete(project.id);
+    unwrap(await ctx.projects.delete(project.id));
 
     for (const scopeKey of [
       `project:${project.id}`,
@@ -218,8 +216,8 @@ describe("项目删除无孤儿（T-SR3）", () => {
     }
 
     // delete() 事务提交后已调度过一次 GC；这里再显式跑一遍幂等的
-    // runDeferredBlobGc，按全库引用集（entry ∪ revision 反查）验证无 orphan blob。
-    await runDeferredBlobGc(ctx.conn);
+    // DeferredBlobGc.run，按全库引用集（entry ∪ revision 反查）验证无 orphan blob。
+    await DeferredBlobGc.run(ctx.conn);
     const orphanRows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_content_blob b
        WHERE NOT EXISTS (
@@ -229,7 +227,7 @@ describe("项目删除无孤儿（T-SR3）", () => {
     assert.equal(
       Number(orphanRows[0]!.n),
       0,
-      "runDeferredBlobGc 后不应有 orphan blob",
+      "DeferredBlobGc.run 后不应有 orphan blob",
     );
   });
 });

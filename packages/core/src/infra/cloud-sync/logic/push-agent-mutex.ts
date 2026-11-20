@@ -19,38 +19,22 @@
  * @module infra/cloud-sync/logic/push-agent-mutex
  */
 
+import { AppError } from "@/errors/app-error.js";
+
 /** 锁句柄；release 时必须传回同一实例（id 匹配）才生效。 */
 export type PushAgentLockHandle = {
   readonly id: number;
   readonly acquiredAt: number;
 };
 
-export type PushAgentMutexAcquireOptions = {
-  /** 排队等待的最长时间；超时抛 {@link PushAgentMutexAcquireError}。 */
+type PushAgentMutexAcquireOptions = {
+  /** 排队等待的最长时间；超时 reject `AGENT_BUSY` 的 AppError（调用方据此降级拒绝）。 */
   timeoutMs: number;
 };
 
-export type PushAgentMutexAcquireErrorCode = "TIMEOUT";
-
-/** acquire 超时时抛出；调用方可据此降级拒绝（如返回 AGENT_BUSY）。 */
-export class PushAgentMutexAcquireError extends Error {
-  readonly code: PushAgentMutexAcquireErrorCode;
-  declare readonly cause?: unknown;
-
-  constructor(
-    code: PushAgentMutexAcquireErrorCode,
-    message: string,
-    options?: { cause?: unknown }
-  ) {
-    super(message, { cause: options?.cause });
-    this.name = "PushAgentMutexAcquireError";
-    this.code = code;
-  }
-}
-
 type Waiter = {
   resolve: (handle: PushAgentLockHandle) => void;
-  reject: (error: PushAgentMutexAcquireError) => void;
+  reject: (error: AppError<"AGENT_BUSY">) => void;
   timer: ReturnType<typeof setTimeout> | null;
 };
 
@@ -66,12 +50,12 @@ export class PushAgentMutex {
   private nextId = 1;
   private readonly waiters: Waiter[] = [];
 
-  /** 当前是否被持有（调试/状态查询用）。 */
+  /** 当前是否被持有（调试/状态查询用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
   isHeld(): boolean {
     return this.heldBy != null;
   }
 
-  /** 当前排队等待者数量（调试/监控用）。 */
+  /** 当前排队等待者数量（调试/监控用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
   waiterCount(): number {
     return this.waiters.length;
   }
@@ -79,10 +63,9 @@ export class PushAgentMutex {
   /**
    * 申请锁。空闲时立即返回；否则进入 FIFO 等待队列，
    * 在 `timeoutMs` 内被唤醒则拿到锁，超时则从队列移除并抛 TIMEOUT。
+   * nm-style: keep-public — 互斥锁的对外申请入口（coordinator 与 core 测试消费）。
    */
-  async acquire(
-    options: PushAgentMutexAcquireOptions
-  ): Promise<PushAgentLockHandle> {
+  async acquire(options: PushAgentMutexAcquireOptions): Promise<PushAgentLockHandle> {
     if (this.heldBy == null) {
       const handle = this.createHandle();
       this.heldBy = handle;
@@ -99,12 +82,7 @@ export class PushAgentMutex {
         const idx = this.waiters.indexOf(waiter);
         if (idx >= 0) {
           this.waiters.splice(idx, 1);
-          reject(
-            new PushAgentMutexAcquireError(
-              "TIMEOUT",
-              "等待 push/agent 互斥锁超时"
-            )
-          );
+          reject(new AppError("AGENT_BUSY", { detail: "等待 push/agent 互斥锁超时" }));
         }
       }, options.timeoutMs);
       this.waiters.push(waiter);

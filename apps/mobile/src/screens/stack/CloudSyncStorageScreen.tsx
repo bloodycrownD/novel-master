@@ -9,11 +9,8 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useRuntime} from '../../hooks/useRuntime';
-import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
-import {
-  isMobileAgentActive,
-  subscribeMobileAgentActivity,
-} from '../../runtime/agent-activity';
+import {CloudSyncService} from '../../services/cloud-sync.service';
+import {agentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -24,34 +21,29 @@ export function CloudSyncStorageScreen() {
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const [cloudRemoteRev, setCloudRemoteRev] = useState<number | null>(null);
-  const [cloudLastSyncedRev, setCloudLastSyncedRev] = useState<number | null>(
-    null,
-  );
+  const [cloudLastSyncedRev, setCloudLastSyncedRev] = useState<number | null>(null);
   const [cloudSuggestPull, setCloudSuggestPull] = useState(false);
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [cloudLastPullAt, setCloudLastPullAt] = useState<string | undefined>();
   const [cloudLastPushAt, setCloudLastPushAt] = useState<string | undefined>();
-  const [cloudLastPullResult, setCloudLastPullResult] = useState<
-    string | undefined
-  >();
-  const [cloudLastPushResult, setCloudLastPushResult] = useState<
-    string | undefined
-  >();
+  const [cloudLastPullResult, setCloudLastPullResult] = useState<string | undefined>();
+  const [cloudLastPushResult, setCloudLastPushResult] = useState<string | undefined>();
   const [agentActive, setAgentActive] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
 
   const refreshCloudSyncStatus = useCallback(async () => {
     setStatusLoading(true);
     try {
-      const status = await getCloudSyncStatusView(runtime);
-      setCloudConfigured(status.configured);
-      setCloudRemoteRev(status.remoteRev);
-      setCloudLastSyncedRev(status.lastSyncedRev);
-      setCloudSuggestPull(status.suggestPull);
-      setCloudLastPullAt(status.lastPullAt);
-      setCloudLastPushAt(status.lastPushAt);
-      setCloudLastPullResult(status.lastPullResult);
-      setCloudLastPushResult(status.lastPushResult);
+      const status = await CloudSyncService.getStatusView(runtime);
+      const view = status.ok ? status.value : {configured: false, deviceId: '', lastSyncedRev: 0, remoteRev: 0, suggestPull: false};
+      setCloudConfigured(view.configured);
+      setCloudRemoteRev(view.remoteRev);
+      setCloudLastSyncedRev(view.lastSyncedRev);
+      setCloudSuggestPull(view.suggestPull);
+      setCloudLastPullAt(view.lastPullAt);
+      setCloudLastPushAt(view.lastPushAt);
+      setCloudLastPullResult(view.lastPullResult);
+      setCloudLastPushResult(view.lastPushResult);
     } catch {
       setCloudConfigured(false);
       setCloudRemoteRev(null);
@@ -144,11 +136,7 @@ export function CloudSyncStorageScreen() {
     if (cloudSuggestPull) {
       return '云端有更新，建议先拉取后再推送。';
     }
-    if (
-      cloudRemoteRev != null &&
-      cloudLastSyncedRev != null &&
-      cloudRemoteRev === cloudLastSyncedRev
-    ) {
+    if (cloudRemoteRev != null && cloudLastSyncedRev != null && cloudRemoteRev === cloudLastSyncedRev) {
       return '本机与云端 rev 已对齐。';
     }
     return undefined;
@@ -158,17 +146,13 @@ export function CloudSyncStorageScreen() {
     if (syncControlsDisabled) {
       return;
     }
-    Alert.alert(
-      '从云端拉取',
-      '将用云端最新快照替换本机数据（项目、会话、消息等）。本机服务商与 API Key 将保留。是否继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '拉取',
-          onPress: () => navigation.navigate('CloudSyncProgress', {op: 'pull'}),
-        },
-      ],
-    );
+    Alert.alert('从云端拉取', '将用云端最新快照替换本机数据（项目、会话、消息等）。本机服务商与 API Key 将保留。是否继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '拉取',
+        onPress: () => navigation.navigate('CloudSyncProgress', {op: 'pull'}),
+      },
+    ]);
   }, [syncControlsDisabled, navigation]);
 
   const runPush = useCallback(() => {
@@ -179,24 +163,19 @@ export function CloudSyncStorageScreen() {
   }, [syncControlsDisabled, navigation]);
 
   useEffect(() => {
-    setAgentActive(isMobileAgentActive());
-    return subscribeMobileAgentActivity(setAgentActive);
+    setAgentActive(agentActivity.isActive());
+    return agentActivity.subscribe(setAgentActive);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshCloudSyncStatus().catch(() => undefined);
-    }, [refreshCloudSyncStatus]),
-  );
+  const onScreenFocus = useCallback(() => {
+    refreshCloudSyncStatus().catch(() => undefined);
+  }, [refreshCloudSyncStatus]);
+  useFocusEffect(onScreenFocus);
 
   const syncStatus = syncStatusContent();
 
   return (
-    <ScrollView
-      style={[styles.scroll, {backgroundColor: tokens.background}]}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <ProfileStatusCard
         title="同步状态"
         hint="显示本机与云端的 rev 对齐情况"
@@ -206,27 +185,9 @@ export function CloudSyncStorageScreen() {
         noticeTone={agentActive || cloudSuggestPull ? 'warning' : 'muted'}
         tokens={tokens}
       />
-      <ProfileMenuItem
-        icon="☁️"
-        label="云存储配置"
-        value={cloudConfigured ? '已配置' : '未配置'}
-        tokens={tokens}
-        onPress={() => navigation.navigate('CloudSyncConfig')}
-      />
-      <ProfileMenuItem
-        icon="⬇️"
-        label="从云端拉取"
-        value={syncControlValue(cloudLastPullAt, cloudLastPullResult)}
-        tokens={tokens}
-        onPress={runPull}
-      />
-      <ProfileMenuItem
-        icon="⬆️"
-        label="推送到云端"
-        value={syncControlValue(cloudLastPushAt, cloudLastPushResult)}
-        tokens={tokens}
-        onPress={runPush}
-      />
+      <ProfileMenuItem icon="☁️" label="云存储配置" value={cloudConfigured ? '已配置' : '未配置'} tokens={tokens} onPress={() => navigation.navigate('CloudSyncConfig')} />
+      <ProfileMenuItem icon="⬇️" label="从云端拉取" value={syncControlValue(cloudLastPullAt, cloudLastPullResult)} tokens={tokens} onPress={runPull} />
+      <ProfileMenuItem icon="⬆️" label="推送到云端" value={syncControlValue(cloudLastPushAt, cloudLastPushResult)} tokens={tokens} onPress={runPush} />
     </ScrollView>
   );
 }

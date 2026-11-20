@@ -24,12 +24,9 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {isVfsError} from '@novel-master/core/vfs';
+import {AppErrorOps} from '@novel-master/core/errors';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
-import {
-  skillDomainBadgeColor,
-  skillDomainBadgeLabel,
-} from '@/components/skills/skill-ui';
+import {SkillUi} from '@/components/skills/skill-ui';
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -37,7 +34,7 @@ import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -62,21 +59,21 @@ export function SkillPanelScreen() {
     setRows: setSkills,
   } = useFocusListReload<EffectiveSkill[]>({
     fetcher: useCallback(async () => {
-      try {
-        return await runtime.skills().effectiveSkills(projectId);
-      } catch (error) {
+      const list = await runtime.skills().effectiveSkills(projectId);
+      if (!list.ok) {
         // 与服务层向 NOT_FOUND 语义对齐：技能根目录不存在 = 空列表
-        if (isVfsError(error, 'NOT_FOUND')) {
+        if (AppErrorOps.is(list.error, 'VFS_NOT_FOUND')) {
           return [];
         }
-        throw error;
+        throw list.error;
       }
+      return list.value;
     }, [runtime, projectId]),
     fallbackValue: EMPTY_SKILLS,
     focusSilent: true,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(toastMessage('加载技能失败', cause));
+        showToast(ToastMessage.toast('加载技能失败', cause));
       },
       [showToast],
     ),
@@ -103,7 +100,7 @@ export function SkillPanelScreen() {
         await runtime.skills().setDisabled(projectId, skill.name, !nextEnabled);
       } catch (error) {
         flip(!nextEnabled);
-        showToast(toastMessage(nextEnabled ? '启用失败' : '关闭失败', error));
+        showToast(ToastMessage.toast(nextEnabled ? '启用失败' : '关闭失败', error));
       } finally {
         togglingRef.current = false;
       }
@@ -174,12 +171,12 @@ export function SkillPanelScreen() {
                     style={[
                       styles.badge,
                       {
-                        color: skillDomainBadgeColor(item.domain, tokens),
+                        color: SkillUi.domainBadgeColor(item.domain, tokens),
                         borderColor: tokens.border,
                       },
                     ]}
                   >
-                    {skillDomainBadgeLabel(item.domain, item.overridden)}
+                    {SkillUi.domainBadgeLabel(item.domain, item.overridden)}
                   </Text>
                   {!item.valid ? (
                     <Text

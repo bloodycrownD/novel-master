@@ -1,15 +1,13 @@
-import {decodeLiteralHtmlEntities} from '@web/shared/decode-entities';
+import {DecodeEntities} from '@web/shared/decode-entities';
 /**
  * HTML 转义工具（供 stream-markdown 与行渲染共用）。
  */
-export function escapeHtml(s: unknown): string {
-  return escapeHtmlRaw(decodeLiteralHtmlEntities(s));
-}
+export const HtmlEscape = {
+  escape: (s: unknown): string => {
+    return HtmlEscape.escapeRaw(DecodeEntities.literal(s));
+  },
 
-export function escapeHtmlRaw(s: unknown): string {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+  escapeRaw: (s: unknown): string => {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  },
+} as const;

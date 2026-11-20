@@ -2,7 +2,7 @@
  * AttachmentDraftChips：状态 chip 文案壳（判定/partition 见 core T-X2-1）。
  */
 import {describe, expect, it, jest} from '@jest/globals';
-import {formatAttachmentChipLabel} from '@/components/chat/AttachmentDraftChips';
+import {AttachmentChipLabel} from '@/components/chat/AttachmentDraftChips';
 import type {MessageAttachment} from '@novel-master/core/chat';
 
 jest.mock('@/theme/ThemeProvider', () => ({
@@ -32,7 +32,7 @@ function attach(
 describe('formatAttachmentChipLabel (T-UI1 / T-CHIP1)', () => {
   it('workplace 为「规则:/path」', () => {
     expect(
-      formatAttachmentChipLabel(
+      AttachmentChipLabel.format(
         attach({
           source: 'workplace',
           type: 'text',
@@ -45,7 +45,7 @@ describe('formatAttachmentChipLabel (T-UI1 / T-CHIP1)', () => {
 
   it('workplace 目录为「规则:/dir」（无 emoji /「规则 ·」）', () => {
     expect(
-      formatAttachmentChipLabel(
+      AttachmentChipLabel.format(
         attach({
           source: 'workplace',
           type: 'dir',
@@ -58,7 +58,7 @@ describe('formatAttachmentChipLabel (T-UI1 / T-CHIP1)', () => {
 
   it('user_ops 有 action 时为中文二字:path', () => {
     expect(
-      formatAttachmentChipLabel(
+      AttachmentChipLabel.format(
         attach({
           source: 'user_ops',
           type: 'text',
@@ -72,7 +72,7 @@ describe('formatAttachmentChipLabel (T-UI1 / T-CHIP1)', () => {
 
   it('annotate 预览为「批注:/path」', () => {
     expect(
-      formatAttachmentChipLabel(
+      AttachmentChipLabel.format(
         attach({
           source: 'user_ops',
           type: 'text',

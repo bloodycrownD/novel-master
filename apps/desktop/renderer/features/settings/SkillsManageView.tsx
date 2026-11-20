@@ -34,11 +34,7 @@ import {
 } from "./settings-ui";
 import { NewSkillModal } from "@/features/skills/NewSkillModal";
 import { SkillInfoEditModal } from "@/features/skills/SkillInfoEditModal";
-import {
-  parseSkillKey,
-  skillDomainLabel,
-  skillKey,
-} from "@/features/skills/skill-ui";
+import { skillDomainLabel } from "@/features/skills/skill-ui";
 
 type SkillTab = "global" | "project";
 
@@ -202,8 +198,18 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
   };
 
   const handleBatchDelete = () => {
+    // 批量 key → SkillRef（原 parseSkillKey 内联）：`global/{name}` 或 `project/{projectId}/{name}`
     const refs = [...batch.selectedIds]
-      .map((key) => parseSkillKey(key))
+      .map((key): SkillRefDto | undefined => {
+        const parts = key.split("/");
+        if (parts[0] === "global" && parts.length === 2 && parts[1]) {
+          return { domain: "global", name: parts[1]! };
+        }
+        if (parts[0] === "project" && parts.length === 3 && parts[1] && parts[2]) {
+          return { domain: "project", projectId: parts[1], name: parts[2]! };
+        }
+        return undefined;
+      })
       .filter((ref): ref is SkillRefDto => ref != null);
     if (refs.length === 0) {
       return;
@@ -219,7 +225,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
   };
 
   const renderRow = (row: SkillListItemDto, ref: SkillRefDto) => {
-    const key = skillKey(ref);
+    // 列表 key（原 skillKey 内联）：`global/{name}` 或 `project/{projectId}/{name}`
+    const key = ref.domain === "global" ? `global/${ref.name}` : `project/${ref.projectId ?? ""}/${ref.name}`;
     return (
       <SettingsListItem
         key={key}

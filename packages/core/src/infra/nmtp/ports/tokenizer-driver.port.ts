@@ -4,6 +4,8 @@
  * @module infra/nmtp/ports/tokenizer-driver.port
  */
 
+import type { AppError } from "../../../errors/app-error.js";
+import type { Result } from "../../../errors/either.js";
 import type {
   CountPromptLlmInputParams,
   PromptTokenCountResult,
@@ -14,5 +16,5 @@ export interface TokenizerDriver {
   readonly name: string;
   countPromptLlmInput(
     params: CountPromptLlmInputParams
-  ): Promise<PromptTokenCountResult>;
+  ): Promise<Result<PromptTokenCountResult, AppError>>;
 }

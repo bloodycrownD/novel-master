@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { collectNamedExports } from "./helpers/export-snapshot.js";
+import {  describe, it  } from "node:test";
+import {  collectNamedExports  } from "./helpers/export-snapshot.js";
 
 const SUBPATHS = [
   "agent",
   "chat",
   "compaction",
+  "errors",
   "events",
   "feature-flags",
   "i18n",
@@ -15,6 +16,7 @@ const SUBPATHS = [
   "provider",
   "session-fs",
   "settings",
+  "skills",
   "smart-sort-rule",
   "vfs",
   "workplace",
@@ -44,7 +46,7 @@ describe("public 子入口 export allowlist 快照", () => {
     for (const name of forbidden) {
       assert.equal(snapshot.includes(name), false, `public/workplace 不应导出 ${name}`);
     }
-    assert.ok(snapshot.includes("assembleWorkplaceDisplay"));
+    assert.ok(snapshot.includes("WorkplaceDisplayAssembler"));
     assert.equal(snapshot.includes("createSessionWorktreeBlockStore"), false, "public/workplace 不应再导出 createSessionWorktreeBlockStore");
     assert.equal(snapshot.includes("captureSessionWorktreeBlock"), false, "public/workplace 不应再导出 captureSessionWorktreeBlock");
     assert.equal(snapshot.includes("getCapturedBlockOrCapture"), false, "public/workplace 不应再导出 getCapturedBlockOrCapture");

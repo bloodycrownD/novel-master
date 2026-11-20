@@ -42,7 +42,9 @@ export const SMART_SORT_CAPTURE_KINDS: readonly SmartSortCaptureKind[] = [
 /** 内置规则固定 rule_id 前缀：仅可禁用不可删除（spec D3）。 */
 export const BUILTIN_SMART_SORT_RULE_ID_PREFIX = "builtin-";
 
-/** True when the rule id belongs to the built-in (undeletable) set. */
-export function isBuiltinSmartSortRuleId(ruleId: string): boolean {
-  return ruleId.startsWith(BUILTIN_SMART_SORT_RULE_ID_PREFIX);
-}
+export const SmartSortRule = {
+  /** True when the rule id belongs to the built-in (undeletable) set. */
+  isBuiltinId(ruleId: string): boolean {
+    return ruleId.startsWith(BUILTIN_SMART_SORT_RULE_ID_PREFIX);
+  },
+} as const;

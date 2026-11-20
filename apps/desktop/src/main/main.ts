@@ -5,56 +5,35 @@ import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatLinkResolver } from "@novel-master/core/chat";
-import { createLogger } from "@novel-master/core/log";
-import { installDesktopLogSink } from "./log/desktop-log-sink.js";
-import { closeDesktopConnection } from "./runtime/connection.js";
-import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
-import {
-  attachAgentRunLifecycleListeners,
-} from "./ipc/handlers/agent.js";
-import {
-  attachEventBusForwarder,
-  setEventBusForwardTarget,
-} from "./ipc/forward-event-bus.js";
-import {
-  attachAgentActivityForwarder,
-  setAgentActivityForwardTarget,
-} from "./ipc/forward-agent-activity.js";
-import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
-import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-composer-attachments-suggest.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "./ipc/forward-prompt-chat-token-updated.js";
-import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-appended.js";
-import { registerIpcHandlers } from "./ipc/register-handlers.js";
-import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
-import {
-  configureWindowChrome,
-  installApplicationMenu,
-  titleBarOverlayOptions,
-} from "./shell-menu.js";
+import { LogFactory } from "@novel-master/core/log";
+import { DesktopLogSink } from "./log/desktop-log-sink.js";
+import { DesktopDb } from "./runtime/connection.js";
+import { AppIcon } from "./runtime/resolve-app-icon.js";
+import { Agent } from "./ipc/handlers/agent.js";
+import { EventBusForwarder } from "./ipc/forward-event-bus.js";
+import { AgentActivityForwarder } from "./ipc/forward-agent-activity.js";
+import { WorkspaceMutatedForwarder } from "./ipc/forward-workspace-mutated.js";
+import { ComposerAttachmentsSuggestForwarder } from "./ipc/forward-composer-attachments-suggest.js";
+import { PromptChatTokenUpdatedForwarder } from "./ipc/forward-prompt-chat-token-updated.js";
+import { UserMessageAppendedForwarder } from "./ipc/forward-user-message-appended.js";
+import { HandlerRegistry } from "./ipc/handler-registry.js";
+import { DesktopRuntimeSingleton } from "./runtime/desktop-runtime-singleton.js";
+import { ShellMenu } from "./shell-menu.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = "http://localhost:5173";
 const isDev = !app.isPackaged;
-const log = createLogger("desktop.main");
+const log = LogFactory.create("desktop.main");
 
 // 文件 sink 必须在 app.whenReady() 之前装好：启动早期的失败也要留痕。
-installDesktopLogSink();
+DesktopLogSink.install();
 
 let detachEventBusForwarder: (() => void) | undefined;
 let detachAgentActivityForwarder: (() => void) | undefined;
 let detachAgentRunLifecycleListeners: (() => void) | undefined;
 
-function resolvePreloadPath(): string {
-  // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
-  return path.join(__dirname, "../preload/preload.cjs");
-}
-
-function resolveRendererIndex(): string {
-  return path.join(app.getAppPath(), "dist/renderer/index.html");
-}
-
 function createMainWindow(): BrowserWindow {
-  const iconPath = resolveAppIconPath();
+  const iconPath = AppIcon.resolvePath();
   const window = new BrowserWindow({
     title: "",
     width: 1280,
@@ -69,19 +48,24 @@ function createMainWindow(): BrowserWindow {
       : process.platform === "win32"
         ? {
             titleBarStyle: "hidden" as const,
-            titleBarOverlay: titleBarOverlayOptions("light"),
+            titleBarOverlay: ShellMenu.titleBarOverlayOptions("light"),
           }
         : {}),
     ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
     webPreferences: {
-      preload: resolvePreloadPath(),
+      // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
+      preload: path.join(__dirname, "../preload/preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   });
 
-  configureWindowChrome(window);
+  // 原 configureWindowChrome 内联：置空标题 + Windows/Linux 隐藏菜单栏。
+  window.setTitle("");
+  if (process.platform === "win32" || process.platform === "linux") {
+    window.setMenuBarVisibility(false);
+  }
 
   window.webContents.on("preload-error", (_event, preloadPath, err) => {
     log.error("preload failed", { preloadPath, error: err });
@@ -112,7 +96,7 @@ function createMainWindow(): BrowserWindow {
     clearTimeout(showFallback);
   });
 
-  setEventBusForwardTarget(() => {
+  EventBusForwarder.setTarget(() => {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   });
@@ -120,11 +104,11 @@ function createMainWindow(): BrowserWindow {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   };
-  setWorkspaceMutatedForwardTarget(resolvePushWebContents);
-  setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
-  setPromptChatTokenUpdatedForwardTarget(resolvePushWebContents);
-  setUserMessageAppendedForwardTarget(resolvePushWebContents);
-  setAgentActivityForwardTarget(resolvePushWebContents);
+  WorkspaceMutatedForwarder.setTarget(resolvePushWebContents);
+  ComposerAttachmentsSuggestForwarder.setTarget(resolvePushWebContents);
+  PromptChatTokenUpdatedForwarder.setTarget(resolvePushWebContents);
+  UserMessageAppendedForwarder.setTarget(resolvePushWebContents);
+  AgentActivityForwarder.setTarget(resolvePushWebContents);
 
   // 链接导航拦截（chat-link-file-nav）：renderer 内链接点击已在组件层拦截
   // 路由（MermaidMarkdown onLinkClick），但 PreviewPane 等未接链路的 <a>
@@ -152,7 +136,7 @@ function createMainWindow(): BrowserWindow {
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);
   } else {
-    void window.loadFile(resolveRendererIndex());
+    void window.loadFile(path.join(app.getAppPath(), "dist/renderer/index.html"));
   }
 
   return window;
@@ -167,22 +151,23 @@ function detachMainEventBusListeners(): void {
   detachAgentActivityForwarder = undefined;
 }
 
-async function bootstrapMainServices(): Promise<void> {
-  registerIpcHandlers();
-  const runtime = await getDesktopRuntime();
-  detachMainEventBusListeners();
-  detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
-  detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(
-    runtime.eventBus,
-  );
-  detachAgentActivityForwarder = attachAgentActivityForwarder();
-}
-
 app.whenReady().then(async () => {
-  installApplicationMenu();
+  ShellMenu.installApplicationMenu();
   createMainWindow();
   try {
-    await bootstrapMainServices();
+    HandlerRegistry.register();
+    const built = await DesktopRuntimeSingleton.get();
+    // 装配的已知失败在进程级边界收口（错误通道迁移七期）：落日志后继续，
+    // 窗口仍在（与旧 catch 的未知异常分支同一终点）；未知异常仍走下方 catch。
+    if (!built.ok) {
+      log.error("bootstrap failed", { error: built.error });
+    } else {
+      const runtime = built.value;
+      detachMainEventBusListeners();
+      detachEventBusForwarder = EventBusForwarder.attach(runtime.eventBus);
+      detachAgentRunLifecycleListeners = Agent.attachRunLifecycleListeners(runtime.eventBus);
+      detachAgentActivityForwarder = AgentActivityForwarder.attach();
+    }
   } catch (error) {
     log.error("bootstrap failed", { error });
   }
@@ -204,5 +189,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   detachMainEventBusListeners();
-  void closeDesktopConnection();
+  void DesktopDb.close();
 });

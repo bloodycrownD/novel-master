@@ -25,23 +25,25 @@ export const DEFAULT_LABELS: TranscriptLabels = {
   loadOlder: '加载更早消息',
 };
 
-/** 单键最小占位：缺键/非字符串一律回退默认。 */
-function labelOr(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.length > 0 ? value : fallback;
-}
+export namespace Labels {
+  /** 单键最小占位：缺键/非字符串一律回退默认。 */
+  function labelOr(value: unknown, fallback: string): string {
+    return typeof value === 'string' && value.length > 0 ? value : fallback;
+  }
 
-// nm-style: keep-public — web 侧 labels 缺省回退唯一入口（旧宿主/init 缺省兼容）；
-// 内联会把四键默认文案回退埋进 bridge 的 init 分支，测试也无法直测回退表。
-/**
- * 下发载荷 → 渲染层文案（C30）：只校验四个键都是非空字符串，非法/缺省回退
- * 默认中文；不认识的字段忽略（旧宿主多下发的键天然兼容）。
- */
-export function resolveLabels(payload: unknown): TranscriptLabels {
-  const p = (payload ?? {}) as Partial<Record<keyof TranscriptLabels, unknown>>;
-  return {
-    generating: labelOr(p.generating, DEFAULT_LABELS.generating),
-    thinking: labelOr(p.thinking, DEFAULT_LABELS.thinking),
-    empty: labelOr(p.empty, DEFAULT_LABELS.empty),
-    loadOlder: labelOr(p.loadOlder, DEFAULT_LABELS.loadOlder),
-  };
+  // nm-style: keep-public — web 侧 labels 缺省回退唯一入口（旧宿主/init 缺省兼容）；
+  // 内联会把四键默认文案回退埋进 bridge 的 init 分支，测试也无法直测回退表。
+  /**
+   * 下发载荷 → 渲染层文案（C30）：只校验四个键都是非空字符串，非法/缺省回退
+   * 默认中文；不认识的字段忽略（旧宿主多下发的键天然兼容）。
+   */
+  export function resolve(payload: unknown): TranscriptLabels {
+    const p = (payload ?? {}) as Partial<Record<keyof TranscriptLabels, unknown>>;
+    return {
+      generating: labelOr(p.generating, DEFAULT_LABELS.generating),
+      thinking: labelOr(p.thinking, DEFAULT_LABELS.thinking),
+      empty: labelOr(p.empty, DEFAULT_LABELS.empty),
+      loadOlder: labelOr(p.loadOlder, DEFAULT_LABELS.loadOlder),
+    };
+  }
 }

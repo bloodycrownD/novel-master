@@ -335,15 +335,3 @@ export function WorkspaceSettingsView() {
     </SettingsPanel>
   );
 }
-
-export function usePickerData() {
-  const openModelPicker = useCallback(async () => {
-    const res = await ipcModelListPicker();
-    return res.ok ? res.data : null;
-  }, []);
-  const openAgentPicker = useCallback(async () => {
-    const res = await ipcAgentListPicker();
-    return res.ok ? res.data : null;
-  }, []);
-  return { openModelPicker, openAgentPicker };
-}

@@ -36,10 +36,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {NativeChatComposer} from '@/components/chat/NativeChatComposer';
-import {
-  mockCalls,
-  resetMockCalls,
-} from '../test-utils/enriched-markdown-mock';
+import {mockCalls, resetMockCalls} from '../test-utils/enriched-markdown-mock';
 
 // —— mock 前缀变量（jest.mock 工厂只能引用 mock* 前缀标识符）——
 
@@ -76,28 +73,36 @@ const mockRunAgentTurn = jest.fn(
   () => new Promise(() => undefined) as Promise<unknown>,
 );
 
+// 错误通道迁移二期后 projects.get / sessions.* 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: Record<string, any> = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-    ]),
-    get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-    getComposerDraftJson: jest.fn(async (id: string) =>
-      mockDraftJsonBySession.has(id) ? mockDraftJsonBySession.get(id)! : null,
-    ),
+    listByProject: jest.fn(async () => ({
+      ok: true,
+      value: [{id: 's1', title: 'S1', updatedAtMs: 1}],
+    })),
+    get: jest.fn(async () => ({
+      ok: true,
+      value: {id: 's1', projectId: 'p1'},
+    })),
+    getComposerDraftJson: jest.fn(async (id: string) => ({
+      ok: true as const,
+      value: mockDraftJsonBySession.has(id)
+        ? mockDraftJsonBySession.get(id)!
+        : null,
+    })),
     setComposerDraftJson: jest.fn(async (id: string, json: string | null) => {
       mockDraftJsonBySession.set(id, json);
-      return true;
+      return {ok: true as const, value: true};
     }),
   },
   messages: {
-    listBySession: jest.fn(async () => []),
-    listBySessionTail: jest.fn(async () => []),
-    listBySessionPage: jest.fn(async () => []),
+    listBySession: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+    listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+    listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
   },
   state: {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
@@ -210,9 +215,10 @@ jest.mock('@/runtime/novel-master-context', () => ({
 }));
 
 jest.mock('@/services/chat-agent-meta', () => {
-  const actual = jest.requireActual(
-    '@/services/chat-agent-meta',
-  ) as Record<string, unknown>;
+  const actual = jest.requireActual('@/services/chat-agent-meta') as Record<
+    string,
+    unknown
+  >;
   return {
     ...actual,
     loadChatAgentMeta: jest.fn(async () => ({
@@ -228,28 +234,40 @@ jest.mock('@/services/chat-agent-meta', () => {
 });
 
 jest.mock('@/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
-  cancelPreciseUpgradeDelay: jest.fn(),
-  cancelPreciseUpgrade: jest.fn(),
+  PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
-jest.mock('@/storage/chat-rich-text-pref', () => ({
-  readChatRichTextEnabled: jest.fn(async () => false),
-}));
+jest.mock('@/storage/app-ui-pref-io', () => {
+  const legacy = {
+  ...jest.requireActual('@/storage/app-ui-pref-io'),
+  readBoolPref: jest.fn(async () => false),
+};
+  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref}};
+});
 
-jest.mock('@/storage/chat-transcript-engine', () => ({
+jest.mock('@/storage/chat-transcript-engine', () => {
+  const legacy = {
   defaultChatTranscriptEngine: () => 'webview',
   readChatTranscriptEngine: jest.fn(async () => 'webview'),
-}));
+};
+  return {...legacy, ChatTranscriptEngine: {read: legacy.readChatTranscriptEngine}};
+});
 
-jest.mock('@/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => {
+  const legacy = {
   projectComposerStatusForSession: jest.fn(async () => []),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {forSession: legacy.projectComposerStatusForSession}};
+});
 
-jest.mock('@/errors/format-error', () => ({
+jest.mock('@/errors/format-error', () => {
+  const legacy = {
   formatError: (err: unknown) => String(err),
-}));
+};
+  return {...legacy, FormatError: {format: legacy.formatError}};
+});
 
 jest.mock('@/components/chrome/AppHeader', () => ({AppHeader: () => null}));
 jest.mock('@/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));
@@ -288,12 +306,8 @@ jest.mock('@/components/skills/SkillPicker', () => ({
 (global as any).__DEV__ = false;
 
 import {ChatTabScreen} from '@/screens/tabs/ChatTabScreen';
-import {
-  readChatComposerDraftState,
-  writeChatComposerDraftState,
-  clearChatComposerDraft,
-} from '@/storage/chat-composer-draft';
-import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {ChatComposerDraft} from '@/storage/chat-composer-draft';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 
 /**
  * 树里的原生 dock 组件实例（props 即面板 → composer 的全量接线面）。
@@ -406,10 +420,10 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     mockGoBack.mockClear();
     mockBeforeRemoveHandlers.length = 0;
     mockDraftJsonBySession.clear();
-    clearChatComposerDraft('s1');
+    ChatComposerDraft.clear('s1');
     resetMockCalls();
     // 模块级回调不留残留（各用例自行 set）。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
     mockHarnessManager?.dispose();
     mockRuntime.eventBus = new SimpleEventBus();
     mockHarnessManager = buildHarnessManager();
@@ -447,7 +461,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
       tokenRanges: [],
     });
     // 回调走模块级存取（不可序列化，不进路由参数），未消费前只有 set 的这一次。
-    expect(typeof takePromptEditorOnSaved()).toBe('function');
+    expect(typeof promptEditorOnSavedSlot.take()).toBe('function');
   });
 
   /**
@@ -460,7 +474,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 否则 remap 会因「编辑区相交」直接摘空，断的就不是这道 filter 了。
     typeComposerText(tree.root, '$技能尾追');
     await flush();
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: '$技能尾追',
       attachments: [],
       tokenRanges: [{start: 0, end: 5}],
@@ -479,7 +493,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     typeComposerText(tree.root, '$技能$');
     await flush();
     // 旧草稿多一个前缀字符 → remap 把 [{1,5}] 平移到 [{0,4}]，在 payload.text 上合法。
-    writeChatComposerDraftState('s1', {
+    ChatComposerDraft.writeState('s1', {
       text: 'x$技能$',
       attachments: [],
       tokenRanges: [{start: 1, end: 5}],
@@ -501,7 +515,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 只看进全屏之后输入组件收到的写入（打字路径不产生 setValue，M6）。
     resetMockCalls();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     // 全屏屏卸载（返回/手势）时把当拍草稿交回：草稿 store 更新 + 令牌 bump。
@@ -510,7 +524,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     });
     await flush();
 
-    expect(readChatComposerDraftState('s1').text).toBe('全屏改完的文本');
+    expect(ChatComposerDraft.readState('s1').text).toBe('全屏改完的文本');
     // controller 从草稿重读（draftRestoreToken bump → 水化链）→ 外部文本真变 →
     // M7 命令式通道 ref.setText → 输入组件 setValue（合成 markdown；无 token 时
     // 与明文同形）。旧「宿主下行 setText」桥消息已随 D4b 退役，断言面换到
@@ -554,14 +568,14 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     );
     const tree = await mountConversation();
     await flush();
-    expect(readChatComposerDraftState('s1').text).toBe('$技能$');
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s1').text).toBe('$技能$');
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([
       {start: 0, end: 4},
     ]);
 
     resetMockCalls();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     // 全屏里在胶囊前插入两个字符：remap 语义=整体右移，区间保真（不丢、不扩）。
@@ -581,7 +595,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     };
     expect(payload.text).toBe('前缀$技能$');
     expect(payload.tokenRanges).toEqual([{start: 2, end: 6}]);
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([
       {start: 2, end: 6},
     ]);
   });
@@ -600,7 +614,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
 
     resetMockCalls();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     // `$技能$尾追`：尾追落在区间右缘之外，remap 必须保持 [{0,4}]
@@ -614,7 +628,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     expect(written.length).toBeGreaterThan(0);
     expect(written[0]!.tokenRanges).toEqual([{start: 0, end: 4}]);
 
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([
       {start: 0, end: 4},
     ]);
     expect(
@@ -627,7 +641,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 空草稿（无缓存、无 DB 行）→ 旧语义的「无 ranges」。
     const tree = await mountConversation();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     await act(async () => {
@@ -642,7 +656,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 回填不预处理：水化链随后兜底扫描一次并写回固化；旧格式明文
     // `$技能`（无尾终止符）在新正则下不再命中，扫描结果为 `[]`（确认无胶囊）。
     await flush();
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([]);
+    expect(ChatComposerDraft.readState('s1').tokenRanges).toEqual([]);
     expect(
       (JSON.parse(mockDraftJsonBySession.get('s1')!) as {tokenRanges?: unknown})
         .tokenRanges,

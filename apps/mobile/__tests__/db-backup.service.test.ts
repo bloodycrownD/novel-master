@@ -1,11 +1,6 @@
-import {
-  exportDatabaseBackup,
-  exportDatabaseBackupToPath,
-  importDatabaseBackup,
-  importDatabaseBackupFromBytes,
-  importDatabaseBackupFromPath,
-} from '@/services/db-backup.service';
-import {isMobileDbMaintenanceBusy} from '@/services/db-maintenance-busy';
+import {DbBackupService} from '@/services/db-backup.service';
+import {AbortRegistryFactory} from '@novel-master/core/abort';
+import {maintenanceBusy} from '@/services/db-maintenance-busy';
 
 const mockCheckpoint = jest.fn();
 const mockClose = jest.fn();
@@ -35,28 +30,53 @@ const liveConn = {tag: 'live'};
 const restoreConn = {close: mockRestoreConnClose};
 
 jest.mock('@novel-master/core', () => ({
-  dumpProviderTableSnapshot: (...args: unknown[]) => mockDumpSnapshot(...args),
-  scrubProviderTablesInDatabase: (...args: unknown[]) =>
-    mockScrubInDatabase(...args),
-  restoreProviderTableSnapshot: (...args: unknown[]) =>
-    mockRestoreSnapshot(...args),
-  open: (...args: unknown[]) => mockOpen(...args),
+  // 头校验是下沉 core 的纯函数：走真实实现，测试覆盖「拒绝非 SQLite 字节」的真实分支。
+  SqliteBackupHeader: jest.requireActual(
+    '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js',
+  ).SqliteBackupHeader,
+  DatabaseReplacedError: jest.requireActual(
+    '../../../packages/core/dist/infra/cloud-sync/model/database-replaced-error.js',
+  ).DatabaseReplacedError,
+  // 导出链路已下沉 core：走真实实现（平台注入点仍由本测试的 mock 接管）。
+  DatabaseBackupExport: jest.requireActual(
+    '../../../packages/core/dist/infra/db-backup/export-database-backup.js',
+  ).DatabaseBackupExport,
+  ProviderTableSnapshotIo: {
+    dump: (...args: unknown[]) => mockDumpSnapshot(...args),
+    scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
+    restore: (...args: unknown[]) => mockRestoreSnapshot(...args),
+  },
+  TdbcOpen: {open: (...args: unknown[]) => mockOpen(...args)},
 }));
 
-jest.mock('@/db/connection', () => ({
+// core 导出实现按相对路径 import 本模块；mock 掉同一 dist 文件，让 scrub
+// 断言仍走本测试的 mock（与上面 barrel mock 指向同一个 jest.fn）。
+jest.mock(
+  '../../../packages/core/dist/infra/db-backup/provider-table-snapshot.js',
+  () => ({
+    ProviderTableSnapshotIo: {
+      scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
+    },
+  }),
+);
+
+jest.mock('@/db/connection', () => {
+  const legacy = {
   checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
   closeMobileConnection: (...args: unknown[]) => mockClose(...args),
   getMobileConnection: (...args: unknown[]) => mockGetConnection(...args),
   registerMobileOpSqliteDriver: (...args: unknown[]) =>
     mockRegisterDriver(...args),
-}));
+};
+  return {...legacy, MobileDb: {checkpointMobileDatabase: legacy.checkpointMobileDatabase, closeMobileConnection: legacy.closeMobileConnection, getMobileConnection: legacy.getMobileConnection, registerMobileOpSqliteDriver: legacy.registerMobileOpSqliteDriver}};
+});
 
 jest.mock('@/db/db-file-path', () => ({
-  resolveMobileDatabaseFilePath: (...args: unknown[]) => mockGetPath(...args),
+  MobileDatabaseFilePath: {resolve: (...args: unknown[]) => mockGetPath(...args)},
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  isMobileAgentActive: () => mockAgentActive(),
+  agentActivity: {isActive: () => mockAgentActive()},
 }));
 
 jest.mock('react-native', () => ({
@@ -95,7 +115,9 @@ const emptySnapshot = {
 };
 
 describe('db-backup.service', () => {
-  const runtime = {conn: liveConn} as never;
+  // signal-abort-scope Step 11：export/import 会建 scope 并登记 backup("local")，
+  // 测试桩必须提供泛化 registry。
+  const runtime = {conn: liveConn, abortRegistry: AbortRegistryFactory.create()} as never;
   const onRebootstrap = jest.fn();
 
   beforeEach(() => {
@@ -129,7 +151,7 @@ describe('db-backup.service', () => {
   });
 
   it('export calls checkpoint, copies db, and scrubs provider tables on copy', async () => {
-    await exportDatabaseBackup(runtime);
+    await DbBackupService.exportViaPicker(runtime);
 
     expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
     expect(mockGetPath).toHaveBeenCalled();
@@ -147,13 +169,23 @@ describe('db-backup.service', () => {
 
   it('rejects export when agent is running', async () => {
     mockAgentActive.mockReturnValue(true);
-    await expect(exportDatabaseBackup(runtime)).rejects.toThrow(/Agent/);
+    // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
+    const exportResult = await DbBackupService.exportViaPicker(runtime);
+    expect(exportResult.ok).toBe(false);
+    if (!exportResult.ok) {
+      expect(exportResult.error.message).toMatch(/Agent/);
+    }
     expect(mockCheckpoint).not.toHaveBeenCalled();
   });
 
   it('rejects import when agent is running (guard fires before picker)', async () => {
     mockAgentActive.mockReturnValue(true);
-    await expect(importDatabaseBackup(onRebootstrap)).rejects.toThrow(/Agent/);
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+    const importGuard = await DbBackupService.importViaPicker(runtime, onRebootstrap);
+    expect(importGuard.ok).toBe(false);
+    if (!importGuard.ok) {
+      expect(importGuard.error.message).toMatch(/Agent/);
+    }
     // 守卫在触发前拦截：文件选择器与后续导入链路均未启动
     expect(mockPick).not.toHaveBeenCalled();
     expect(mockDumpSnapshot).not.toHaveBeenCalled();
@@ -166,7 +198,7 @@ describe('db-backup.service', () => {
       {status: 'success', localUri: 'file:///cache/import.nmbackup'},
     ]);
 
-    await importDatabaseBackup(onRebootstrap);
+    await DbBackupService.importViaPicker(runtime, onRebootstrap);
 
     expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
     expect(mockClose).toHaveBeenCalled();
@@ -189,7 +221,7 @@ describe('db-backup.service', () => {
     // 驱动注册表是 last-wins：恢复用的短连接必须走 db/connection 导出的
     // 单点注册（带 AppState 后台探测），不能自己直接调无参的
     // registerOpSqliteDriver() 把带参版本覆盖掉。
-    await importDatabaseBackupFromPath('/cache/single-point.nmbackup');
+    await DbBackupService.importFromPath('/cache/single-point.nmbackup');
 
     expect(mockRegisterDriver).toHaveBeenCalledTimes(1);
   });
@@ -201,16 +233,19 @@ describe('db-backup.service', () => {
     ]);
     mockStat.mockResolvedValue({size: 8});
 
-    await expect(importDatabaseBackup(onRebootstrap)).rejects.toThrow(
-      /文件过小/,
-    );
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+    const tinyResult = await DbBackupService.importViaPicker(runtime, onRebootstrap);
+    expect(tinyResult.ok).toBe(false);
+    if (!tinyResult.ok) {
+      expect(tinyResult.error.message).toMatch(/文件过小/);
+    }
     expect(mockReadFile).not.toHaveBeenCalled();
     expect(onRebootstrap).not.toHaveBeenCalled();
   });
 
   it('exportDatabaseBackupToPath checkpoints, copies, and scrubs without dialog', async () => {
     const destPath = '/cache/cloud-sync-snapshot.nmbackup';
-    await exportDatabaseBackupToPath(runtime, destPath);
+    await DbBackupService.exportToPath(runtime, destPath);
 
     expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
     expect(mockGetPath).toHaveBeenCalled();
@@ -226,7 +261,7 @@ describe('db-backup.service', () => {
   it('importDatabaseBackupFromBytes chunks to temp then path-imports', async () => {
     const bytes = new Uint8Array(Buffer.from('SQLite format 3\0padding'));
 
-    await importDatabaseBackupFromBytes(bytes);
+    await DbBackupService.importFromBytes(bytes);
 
     expect(mockWriteStream).toHaveBeenCalled();
     expect(mockWriteStreamWrite).toHaveBeenCalled();
@@ -252,7 +287,7 @@ describe('db-backup.service', () => {
     mockExists.mockResolvedValue(true);
     mockStat.mockResolvedValue({size: 64});
 
-    await importDatabaseBackupFromPath(srcPath);
+    await DbBackupService.importFromPath(srcPath);
 
     expect(mockStat).toHaveBeenCalledWith(srcPath);
     expect(mockReadFile).not.toHaveBeenCalled();
@@ -266,71 +301,77 @@ describe('db-backup.service', () => {
   it('importDatabaseBackupFromBytes rejects invalid sqlite bytes', async () => {
     const bytes = new Uint8Array(Buffer.from('not sqlite'));
 
-    await expect(importDatabaseBackupFromBytes(bytes)).rejects.toThrow(
-      /不是有效的/,
-    );
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+    const invalidResult = await DbBackupService.importFromBytes(bytes);
+    expect(invalidResult.ok).toBe(false);
+    if (!invalidResult.ok) {
+      expect(invalidResult.error.message).toMatch(/不是有效的/);
+    }
     expect(mockDumpSnapshot).not.toHaveBeenCalled();
     expect(mockWriteStream).not.toHaveBeenCalled();
   });
 
   it('ic-20: exportDatabaseBackupToPath 期间 busy 为 true，结束后 false（底层覆盖云同步直调）', async () => {
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
     const busySamples: boolean[] = [];
     // 采样点挂在链路中段（scrub）：底层 acquire 之后、release 之前
     mockScrubInDatabase.mockImplementation(async () => {
-      busySamples.push(isMobileDbMaintenanceBusy());
+      busySamples.push(maintenanceBusy.isBusy());
     });
 
-    await exportDatabaseBackupToPath(runtime, '/cache/busy-probe.nmbackup');
+    await DbBackupService.exportToPath(runtime, '/cache/busy-probe.nmbackup');
 
     expect(busySamples).toEqual([true]);
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
   });
 
   it('ic-20: importDatabaseBackupFromPath 期间 busy 恒 true（含「关连接+覆盖库文件」窗口），结束后 false', async () => {
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
     const busySamples: boolean[] = [];
     mockDumpSnapshot.mockImplementation(async () => {
-      busySamples.push(isMobileDbMaintenanceBusy());
+      busySamples.push(maintenanceBusy.isBusy());
       return emptySnapshot;
     });
     mockRestoreSnapshot.mockImplementation(async () => {
-      busySamples.push(isMobileDbMaintenanceBusy());
+      busySamples.push(maintenanceBusy.isBusy());
     });
 
-    await importDatabaseBackupFromPath('/cache/busy-probe.nmbackup');
+    await DbBackupService.importFromPath('/cache/busy-probe.nmbackup');
 
     expect(busySamples).toEqual([true, true]);
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
   });
 
   it('ic-20: 上层 importDatabaseBackup 外层计数兜底——链路期间 true、onRebootstrap 之后 false', async () => {
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
     mockPick.mockResolvedValue([{uri: 'content://backup'}]);
     mockKeepLocalCopy.mockResolvedValue([
       {status: 'success', localUri: 'file:///cache/import.nmbackup'},
     ]);
     const busyAtRestore: boolean[] = [];
     mockRestoreSnapshot.mockImplementation(async () => {
-      busyAtRestore.push(isMobileDbMaintenanceBusy());
+      busyAtRestore.push(maintenanceBusy.isBusy());
     });
 
-    await importDatabaseBackup(onRebootstrap);
+    await DbBackupService.importViaPicker(runtime, onRebootstrap);
 
     // 底层 + 外层嵌套计数期间为 true；结束后（onRebootstrap 已先于 release
     // 执行）归零
     expect(busyAtRestore).toEqual([true]);
     expect(onRebootstrap).toHaveBeenCalled();
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
   });
 
   it('ic-20: 底层导入失败路径同样释放计数（finally 配对，不泄漏）', async () => {
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
     mockStat.mockResolvedValue({size: 8});
 
-    await expect(
-      importDatabaseBackupFromPath('/cache/too-small.nmbackup'),
-    ).rejects.toThrow(/文件过小/);
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject；busy 计数仍由 finally 配对释放。
+    const tooSmall = await DbBackupService.importFromPath('/cache/too-small.nmbackup');
+    expect(tooSmall.ok).toBe(false);
+    if (!tooSmall.ok) {
+      expect(tooSmall.error.message).toMatch(/文件过小/);
+    }
+    expect(maintenanceBusy.isBusy()).toBe(false);
   });
 });

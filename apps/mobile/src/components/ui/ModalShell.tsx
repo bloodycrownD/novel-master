@@ -15,14 +15,7 @@
  * 等于啥也不干，所以 Android 全靠 hook 的 translateY（挂在本组件的 panel 上）。
  */
 import React, {type ReactNode} from 'react';
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import {Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
 import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {AppModal} from './AppModal';
@@ -30,9 +23,9 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useAndroidModalKeyboardAvoid} from '../../hooks/useAndroidModalKeyboardAvoid';
 import {useAdaptiveKeyboardSheetStyle} from '../../hooks/useAdaptiveKeyboardSheetStyle';
 
-export type ModalShellVariant = 'center' | 'bottom' | 'left';
+type ModalShellVariant = 'center' | 'bottom' | 'left';
 
-export type ModalShellKeyboardAvoid =
+type ModalShellKeyboardAvoid =
   | {kind: 'none'}
   | {kind: 'translate'; fraction: 0.5 | 1}
   | {
@@ -82,101 +75,44 @@ export function ModalShell({
   const {tokens} = useTheme();
   // 两个避让 hook 都无条件调用（hooks 规则），按策略选用其一；
   // 未选用的那份样式不挂到 panel 上，无副作用。
-  const translateAvoid = useAndroidModalKeyboardAvoid(
-    keyboardAvoid.kind === 'translate' ? keyboardAvoid.fraction : 0.5,
-  );
-  const adaptiveAvoid = useAdaptiveKeyboardSheetStyle(
-    keyboardAvoid.kind === 'adaptive' ? keyboardAvoid.maxHeightRatio : 0.75,
-    {
-      iosTranslateY:
-        keyboardAvoid.kind === 'adaptive'
-          ? keyboardAvoid.iosTranslateY ?? false
-          : false,
-    },
-  );
-  const avoidStyle =
-    keyboardAvoid.kind === 'translate'
-      ? translateAvoid
-      : keyboardAvoid.kind === 'adaptive'
-      ? adaptiveAvoid
-      : undefined;
+  const translateAvoid = useAndroidModalKeyboardAvoid(keyboardAvoid.kind === 'translate' ? keyboardAvoid.fraction : 0.5);
+  const adaptiveAvoid = useAdaptiveKeyboardSheetStyle(keyboardAvoid.kind === 'adaptive' ? keyboardAvoid.maxHeightRatio : 0.75, {
+    iosTranslateY: keyboardAvoid.kind === 'adaptive' ? keyboardAvoid.iosTranslateY ?? false : false,
+  });
+  const avoidStyle = keyboardAvoid.kind === 'translate' ? translateAvoid : keyboardAvoid.kind === 'adaptive' ? adaptiveAvoid : undefined;
 
   // panel 挂 responder 吞掉落在面板空白处的触摸，避免穿透到遮罩误关闭。
   const panel = (
-    <Animated.View
-      style={[
-        styles.panel,
-        {backgroundColor: tokens.surfaceElevated},
-        avoidStyle,
-        panelStyle,
-      ]}
-      onStartShouldSetResponder={() => true}
-    >
+    <Animated.View style={[styles.panel, {backgroundColor: tokens.surfaceElevated}, avoidStyle, panelStyle]} onStartShouldSetResponder={() => true}>
       {children}
     </Animated.View>
   );
 
-  const containerStyleList = [
-    variant === 'center'
-      ? styles.center
-      : variant === 'left'
-      ? styles.left
-      : styles.bottom,
-    containerStyle,
-  ];
+  const containerStyleList = [variant === 'center' ? styles.center : variant === 'left' ? styles.left : styles.bottom, containerStyle];
 
   // left 抽屉：遮罩是 drawer 右侧的正常流 Pressable（不能用 absoluteFill，
   // 否则会垫在 drawer 下面、点 drawer 空白处穿透关闭）。
   const content = (
     <View style={containerStyleList}>
-      {variant === 'left' ? null : (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onClose}
-          accessibilityLabel="关闭"
-          accessibilityRole="button"
-        />
-      )}
+      {variant === 'left' ? null : <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" accessibilityRole="button" />}
       {panel}
-      {variant === 'left' ? (
-        <Pressable
-          style={styles.leftBackdrop}
-          onPress={onClose}
-          accessibilityLabel="关闭"
-          accessibilityRole="button"
-        />
-      ) : null}
+      {variant === 'left' ? <Pressable style={styles.leftBackdrop} onPress={onClose} accessibilityLabel="关闭" accessibilityRole="button" /> : null}
     </View>
   );
 
   // iOS：有输入且未由 adaptive hook 接管位移时，外层包 KAV padding 分支。
-  const useKav =
-    keyboardAvoid.kind !== 'none' &&
-    !(keyboardAvoid.kind === 'adaptive' && keyboardAvoid.iosTranslateY);
+  const useKav = keyboardAvoid.kind !== 'none' && !(keyboardAvoid.kind === 'adaptive' && keyboardAvoid.iosTranslateY);
 
-  const rootStyle = [
-    styles.root,
-    {backgroundColor: `rgba(0,0,0,${backdropOpacity})`},
-  ];
+  const rootStyle = [styles.root, {backgroundColor: `rgba(0,0,0,${backdropOpacity})`}];
 
   if (standalone) {
     return <View style={rootStyle}>{content}</View>;
   }
 
   return (
-    <AppModal
-      visible={visible}
-      transparent
-      animationType={animationType}
-      statusBarTranslucent={statusBarTranslucent}
-      onRequestClose={onClose}
-    >
+    <AppModal visible={visible} transparent animationType={animationType} statusBarTranslucent={statusBarTranslucent} onRequestClose={onClose}>
       {Platform.OS === 'ios' && useKav ? (
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={rootStyle}
-          keyboardVerticalOffset={keyboardVerticalOffset}
-        >
+        <KeyboardAvoidingView behavior="padding" style={rootStyle} keyboardVerticalOffset={keyboardVerticalOffset}>
           {content}
         </KeyboardAvoidingView>
       ) : (

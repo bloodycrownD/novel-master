@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { modelThinkingParamsSchema } from "../../src/domain/provider/model/model-thinking-params.schema.js";
+import {  modelThinkingParamsSchema  } from "../../src/domain/provider/model/model-thinking-params.schema.js";
 
 describe("modelThinkingParams schema", () => {
   it("解析 Anthropic thinking 参数", () => {

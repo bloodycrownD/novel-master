@@ -8,6 +8,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -45,8 +46,10 @@ jest.mock('@novel-master/core/provider', () => {
   const actual = jest.requireActual('@novel-master/core/provider');
   return {
     ...actual,
-    formatSavedModelDisplayName: (provider: string, model: string) =>
-      `${provider} / ${model}`,
+    SavedModelDisplayName: {
+      ...actual.SavedModelDisplayName,
+      format: (provider: string, model: string) => `${provider} / ${model}`,
+    },
   };
 });
 
@@ -171,10 +174,10 @@ const SAVED = [
 
 describe('ModelPickerModal 错误处理', () => {
   beforeEach(() => {
-    mockList.mockReset().mockResolvedValue(PROVIDERS);
-    mockSavedList.mockReset().mockResolvedValue(SAVED);
-    mockGetCurrentModelId.mockReset().mockResolvedValue('m1');
-    mockSetCurrentModelId.mockReset().mockResolvedValue(undefined);
+    mockList.mockReset().mockResolvedValue(Result.ok(PROVIDERS));
+    mockSavedList.mockReset().mockResolvedValue(Result.ok(SAVED));
+    mockGetCurrentModelId.mockReset().mockResolvedValue(Result.ok('m1'));
+    mockSetCurrentModelId.mockReset().mockResolvedValue(Result.ok(undefined));
     mockShowToast.mockReset();
   });
 
@@ -190,7 +193,7 @@ describe('ModelPickerModal 错误处理', () => {
   it('B-1: 点重试成功后恢复列表', async () => {
     mockList
       .mockRejectedValueOnce(new Error('服务商读取失败'))
-      .mockResolvedValueOnce(PROVIDERS);
+      .mockResolvedValueOnce(Result.ok(PROVIDERS));
     const {renderer} = await renderPicker();
     expect(json(renderer)).toContain('服务商读取失败');
 
@@ -202,7 +205,7 @@ describe('ModelPickerModal 错误处理', () => {
   });
 
   it('B-2: 选中写入失败 toast「设置失败」且不回调不关闭', async () => {
-    mockSetCurrentModelId.mockRejectedValueOnce(new Error('写入炸了'));
+    mockSetCurrentModelId.mockResolvedValueOnce(Result.err(new Error('写入炸了')));
     const {renderer, onClose, onSelected} = await renderPicker();
 
     await act(async () => {

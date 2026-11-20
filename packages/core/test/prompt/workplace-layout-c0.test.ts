@@ -1,23 +1,27 @@
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode, encode } from "@novel-master/core";
-import { agentDefinitionSchema } from "@novel-master/core/agent";
-import {
-  buildPromptAssemblyFromLayout,
-  buildPromptLlmInputFromLayout,
-} from "@novel-master/core/prompt";
-import {
-  assembleWorkplaceDisplay,
-  layoutHasWorkplace,
-} from "@novel-master/core/workplace";
-import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
-import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import {
-  createMemorySessionKkv,
-  mockWorkplaceService,
-} from "../helpers/prompt-layout-test-helpers.js";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode  } from "@novel-master/core";
+import type { ZodType } from "zod";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(SerializationDecode.decode(raw, schema));
+}
+import {  agentDefinitionSchema  } from "@novel-master/core/agent";
+import {  AgentPromptLayout, PromptBuilder  } from "@novel-master/core/prompt";
+import {  WorkplaceDisplayAssembler  } from "@novel-master/core/workplace";
+import {  AgentDefinitionWire  } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
+import {  createMemorySessionKkv, mockWorkplaceService  } from "../helpers/prompt-layout-test-helpers.js";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
+
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
+}
 
 describe("Workplace C0 协议", () => {
   it("T-W1: 无 workplace → false；assemble 空串；不注入双消息", async () => {
@@ -25,11 +29,11 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    assert.equal(layoutHasWorkplace(layout), false);
+    assert.equal(AgentPromptLayout.hasWorkplace(layout), false);
 
     const sk = createMemorySessionKkv();
     const wt = mockWorkplaceService("WT");
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: "p", sessionId: "s" },
       {
         sessionKkv: sk,
@@ -41,11 +45,11 @@ describe("Workplace C0 协议", () => {
     assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
 
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 0);
   });
 
@@ -56,11 +60,11 @@ describe("Workplace C0 协议", () => {
       persist: [{ name: "u", type: "text", role: "user", content: "hidden" }],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 2);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
@@ -109,11 +113,11 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "WT-BODY",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.deepEqual(
       input.messages.map((m) => m.id),
       ["prompt:workplace", "prompt:workplace:done"],
@@ -128,11 +132,11 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    const segments = await buildPromptAssemblyFromLayout(layout, {
+    const segments = unwrap(await PromptBuilder.assemble(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     const wt = segments.find((s) => s.id === "prompt-workplace");
     const done = segments.find((s) => s.id === "prompt-workplace-done");
     assert.equal(wt?.role, "user");
@@ -157,7 +161,8 @@ describe("Workplace C0 协议", () => {
       },
       agentDefinitionSchema,
     );
-    const wire = encode(def, agentDefinitionSchema) as {
+    // encode 已改返回 Result（五期签名）：unwrap 解包后取 wire。
+    const wire = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as {
       prompts: {
         persist: Record<string, { type: string }>;
         workplace?: boolean | string;
@@ -170,7 +175,7 @@ describe("Workplace C0 协议", () => {
     );
   });
 
-  it("T-W9: resolveAgentDefinitionFromStorage 域形态 strip worktree", async () => {
+  it("T-W9: AgentDefinitionWire.resolveFromStorage 域形态 strip worktree", async () => {
     const stored = {
       name: "domain",
       prompts: {
@@ -178,7 +183,7 @@ describe("Workplace C0 协议", () => {
         dynamic: [],
       },
     };
-    const health = resolveAgentDefinitionFromStorage(stored);
+    const health = AgentDefinitionWire.resolveFromStorage(stored);
     assert.equal(health.status, "valid");
     if (health.status !== "valid") {
       return;
@@ -186,18 +191,18 @@ describe("Workplace C0 协议", () => {
     assert.equal(health.value.prompts.workplace, undefined);
     assert.deepEqual(health.value.prompts.persist, []);
 
-    const input = await buildPromptLlmInputFromLayout(health.value.prompts, {
+    const input = unwrap(await PromptBuilder.llmInput(health.value.prompts, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 0);
 
-    const segments = await buildPromptAssemblyFromLayout(health.value.prompts, {
+    const segments = unwrap(await PromptBuilder.assemble(health.value.prompts, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.ok(segments.every((s) => !s.id.startsWith("prompt-workplace")));
   });
 });

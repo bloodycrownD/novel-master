@@ -13,27 +13,19 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  createAgentRunner,
-  createAgentStreamRegistry,
-  InMemoryAgentSession,
-  type AgentDefinition,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  registerBuiltinTools,
-  ToolRegistry,
-  type BuiltinToolContext,
-} from "@novel-master/core";
-import {
-  type LlmChatResult,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
-import { type VfsService } from "@novel-master/core/vfs";
-import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../../helpers/noop-saved-model-repo.js";
+import {  describe, it, mock  } from "node:test";
+import {  Result  } from "../../../src/errors/either.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
+import {  AgentServiceFactory, type AgentDefinition  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  createMemorySessionKkv  } from "../../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../../helpers/noop-saved-model-repo.js";
 
 const PROJECT_ID = "test-project";
 const SESSION_ID = "test-session";
@@ -49,7 +41,7 @@ function minimalDefinition(): AgentDefinition {
 describe("AgentStreamRegistry 单测", () => {
   describe("T-SR1 register/reset/append/get/has 基本语义", () => {
     it("register 返回非空句柄；append 累积；get 返回快照；has 反映注册状态", () => {
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
       const handle = registry.register(SESSION_ID);
       assert.ok(typeof handle === "string" && handle.length > 0, "handle 应是非空字符串");
       assert.equal(registry.has(SESSION_ID), true);
@@ -62,7 +54,7 @@ describe("AgentStreamRegistry 单测", () => {
     });
 
     it("reset 清空累积文本但保留句柄——句柄不变，finally 的 unregister 仍能比对", () => {
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
       const handle = registry.register(SESSION_ID);
       registry.append(SESSION_ID, { text: "step1-text", thinking: "step1-think" });
 
@@ -79,7 +71,7 @@ describe("AgentStreamRegistry 单测", () => {
     });
 
     it("append / reset 未注册的 sessionId 静默 no-op", () => {
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
       // 不应抛错
       registry.append("unknown", { text: "x" });
       registry.reset("unknown");
@@ -90,7 +82,7 @@ describe("AgentStreamRegistry 单测", () => {
 
   describe("T-SR2 unregister 所有权比对", () => {
     it("不同句柄不删；相同句柄删；省略句柄直接删", () => {
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
       const h1 = registry.register(SESSION_ID);
       registry.append(SESSION_ID, { text: "first" });
 
@@ -112,7 +104,7 @@ describe("AgentStreamRegistry 单测", () => {
     });
 
     it("unregister 未注册的 sessionId 静默 no-op（带或不带句柄）", () => {
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
       registry.unregister("unknown");
       registry.unregister("unknown", "any-handle");
       assert.equal(registry.has("unknown"), false);
@@ -121,7 +113,7 @@ describe("AgentStreamRegistry 单测", () => {
 
   describe("T-SR3 并发 run 所有权隔离", () => {
     it("A register → B register 覆盖 → A finally unregister(A) 不删 B → B unregister(B) 删", () => {
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
 
       // run A 启动
       const handleA = registry.register(SESSION_ID);
@@ -145,7 +137,7 @@ describe("AgentStreamRegistry 单测", () => {
 
     it("step reset 后 run 边界的句柄仍所有权有效（CR-2 与 CR-7 协同）", () => {
       // 模拟：run A 内部经历了多次 step reset，但 finally 用的仍是 register 返回的句柄。
-      const registry = createAgentStreamRegistry();
+      const registry = AgentServiceFactory.createStreamRegistry();
       const handleA = registry.register(SESSION_ID);
       registry.append(SESSION_ID, { text: "step1" });
       registry.reset(SESSION_ID);
@@ -236,7 +228,7 @@ function scriptedModel(
           hooks.onStreamDelta(idx, { type: "text-delta", text: ch });
         }
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -244,13 +236,13 @@ function scriptedModel(
 describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
   it("T-SR4：多 step run，step1 commit 后 registry 被重置，step2 delta 不含 step1 文本", async () => {
     const session = new InMemoryAgentSession(SESSION_ID, SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const sessionKkv = createMemorySessionKkv();
     await sessionKkv.set(SESSION_ID, "rule_snapshot", "canon", "[]");
 
     const vfs = mockVfs();
-    const streamRegistry = createAgentStreamRegistry();
+    const streamRegistry = AgentServiceFactory.createStreamRegistry();
     // run 边界 register（同 run-agent-turn 入口）
     const handle = streamRegistry.register(SESSION_ID);
 
@@ -298,8 +290,8 @@ describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
     );
 
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -321,7 +313,7 @@ describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
         }) as never,
     });
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       sessionId: SESSION_ID,
@@ -330,7 +322,7 @@ describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
       workspaceModelId: MODEL_ID,
       stream: true,
       // 默认 publishRunLifecycle=true，step commit 会触发 streamRegistry.reset
-    });
+    }));
 
     // step1 commit 后 registry 被 reset；step2 开始时已断言 registry 为空。
     // step2 也 commit + reset，所以 run 结束后 partial 最终为空（最后一步的 assistant

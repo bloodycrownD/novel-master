@@ -10,7 +10,7 @@
  * 模板表单照 FormField/FormTextInput 骨架（v2 透传口径：响应侧零映射配置，
  * 字段止于 paramHint；请求头不出现在表单里，保存时按「认证方式 + 请求头名称」
  * 重建认证头、出厂非认证头原样保留），保存前统一走 core 的
- * `validateSearchEngineTemplate`。保存/清除/恢复默认的回读
+ * `SearchEngine.validateTemplate`。保存/清除/恢复默认的回读
  * 走静默分支（不闪全屏 loading）。已知 id 判定查 `readConfig()` 动态清单
  * （预置 ∪ DDG ∪ 自定义实例）。凭证安全口径同列表页：只显配置状态标签，
  * 不回显 key 明文。
@@ -19,7 +19,7 @@ import {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {validateSearchEngineTemplate, type SearchConfigPublic, type SearchEngineTemplate} from '@novel-master/core';
+import {SearchEngine, type SearchConfigPublic, type SearchEngineTemplate} from '@novel-master/core';
 import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
@@ -35,12 +35,12 @@ import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
-import {toastMessage} from '@/errors/toast-message';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
+import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
-import {getSearchConfigStore} from '@/services/search-config.store';
-import {PRESET_TEMPLATES, engineTitle} from './search-engine-meta';
+import {SearchConfigStore} from '@/services/search-config.store';
+import {PRESET_TEMPLATES, SearchEngineMeta} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SearchEngineDetail'>;
@@ -94,7 +94,7 @@ export function SearchEngineDetailScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const searchStore = getSearchConfigStore(runtime);
+  const searchStore = SearchConfigStore.get(runtime);
   const navigation = useNavigation<Nav>();
   const route = useRoute<DetailRoute>();
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
@@ -121,7 +121,7 @@ export function SearchEngineDetailScreen() {
   let title = settingsTranslator({key: 'settings.search.list.create_custom'});
   if (engineId != null) {
     // FIX-23：读模型 name 优先（拍板 5），静态表仅未加载 / 未知 id 兜底。
-    title = engineTitle(engineId, entry?.name);
+    title = SearchEngineMeta.engineTitle(engineId, entry?.name);
   }
   // prettier-ignore
   const draftNeedsBaseUrl = draft.url.includes('{{baseUrl}}') || Object.values(draft.headers).some(value => value.includes('{{baseUrl}}'));
@@ -137,7 +137,7 @@ export function SearchEngineDetailScreen() {
   // 参数说明全屏编辑（照智能体配置的 PromptEditor 机制：保存才回填，取消不动）。
   // 必须与其他 hook 同层（在 loading 早退之前），否则 hook 数量变化会报错。
   const openParamHintEditor = useCallback(() => {
-    setPromptEditorOnSaved((text: string) => setDraft(current => ({...current, paramHint: text})));
+    promptEditorOnSavedSlot.set((text: string) => setDraft(current => ({...current, paramHint: text})));
     navigation.push('PromptEditor', {
       title: settingsTranslator({key: 'settings.search.params.title.mobile'}),
       initialText: draft.paramHint,
@@ -157,8 +157,10 @@ export function SearchEngineDetailScreen() {
       }
       try {
         const nextConfig = await searchStore.readConfig();
-        setConfig(nextConfig);
-        const {engines, customEngines} = nextConfig;
+        // 读失败进 catch 的 toast 通道（UI 边界，四期门⑦沿 Result 到这里转码）
+        if (!nextConfig.ok) throw nextConfig.error;
+        setConfig(nextConfig.value);
+        const {engines, customEngines} = nextConfig.value;
         const engine = engines.find(item => item.id === engineId);
         if (engineId != null && engine == null) {
           return;
@@ -203,7 +205,7 @@ export function SearchEngineDetailScreen() {
         setApiKeyDraft('');
       } catch (cause) {
         if (!silent) {
-          showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.load_failed.mobile'}), cause));
+          showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.load_failed.mobile'}), cause));
         }
       } finally {
         setLoading(false);
@@ -245,7 +247,7 @@ export function SearchEngineDetailScreen() {
     } else if (draft.authStyle === 'header' && authName.length > 0) {
       baseHeaders[authName] = '{{apiKey}}';
     }
-    const validated = validateSearchEngineTemplate({
+    const validated = SearchEngine.validateTemplate({
       name: draft.name,
       method: draft.method,
       url: draft.url,
@@ -337,7 +339,7 @@ export function SearchEngineDetailScreen() {
       showToast(settingsTranslator({key: 'settings.search.toast.config_saved.mobile'}));
       await load({silent: true});
     } catch (cause) {
-      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}), cause));
+      showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}), cause));
       // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）；静默回读
       // 不闪全屏 loading（FIX-24），失败时保存失败的 toast 已在，不再叠加。
       await load({silent: true});
@@ -362,7 +364,7 @@ export function SearchEngineDetailScreen() {
         reset: 'settings.search.toast.reset_failed.mobile',
         delete: 'settings.search.toast.delete_failed.mobile',
       };
-      showToast(toastMessage(settingsTranslator({key: failKeys[op]}), cause));
+      showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
     } finally {
       setWriteOp(null);
     }

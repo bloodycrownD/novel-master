@@ -1,33 +1,19 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-  type BuiltinToolContext,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
-import {
-  type LlmChatResult,
-  type ModelRequestOptions,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
-import { SimpleEventBus } from "@novel-master/core/events";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
-import {
-  fileCacheKey,
-  RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  serializeFileCachePayload,
-  serializeRuleSnapshot,
-} from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it, mock  } from "node:test";
+import {  AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps, type  BuiltinToolContext  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageBodyText  } from "@novel-master/core/prompt";
+import {  type ModelRequestOptions, type  ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -73,7 +59,7 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
   };
 }
 
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 
 async function seedWorkplaceKkv(
   sessionKkv: SessionKkvService,
@@ -83,13 +69,13 @@ async function seedWorkplaceKkv(
     SESSION_ID,
     SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
     RULE_SNAPSHOT_CANON_KEY,
-    serializeRuleSnapshot([{ path: "/snap.md", status: "full" }]),
+    RuleSnapshotCodec.serialize([{ path: "/snap.md", status: "full" }]),
   );
   await sessionKkv.set(
     SESSION_ID,
     SESSION_KKV_DOMAIN_FILE_CACHE,
-    fileCacheKey("full", "/snap.md"),
-    serializeFileCachePayload({ body, mtimeMs: 1 }),
+    RuleSnapshotCodec.fileCacheKey("full", "/snap.md"),
+    RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 1 }),
   );
 }
 
@@ -126,7 +112,7 @@ function runnerDeps(
 describe("AgentRunner template blocks", () => {
   it("T-WT16: history 含 worktree 双消息 + 会话 user", async () => {
     const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "ctx-agent",
@@ -145,15 +131,15 @@ describe("AgentRunner template blocks", () => {
     const model: ModelRequestService = {
       request: mock.fn(async (_modelId, _content, options) => {
         captured.options = options;
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -163,27 +149,27 @@ describe("AgentRunner template blocks", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const history = captured.options?.history ?? [];
     assert.equal(history.length, 3);
     assert.equal(history[0]!.id, "prompt:workplace");
-    assert.match(messageBodyTextFromBlocks(history[0]!.content.blocks), new RegExp(SNAPSHOT_BODY));
+    assert.match(MessageBodyText.fromBlocks(history[0]!.content.blocks), new RegExp(SNAPSHOT_BODY));
     assert.equal(history[1]!.id, "prompt:workplace:done");
-    assert.equal(messageBodyTextFromBlocks(history[1]!.content.blocks), "【done】");
+    assert.equal(MessageBodyText.fromBlocks(history[1]!.content.blocks), "【done】");
     assert.equal(history[2]!.role, "user");
   });
 
   it("T-WT16 R3: 多步 history 均含 worktree 双消息", async () => {
     const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "ctx-agent",
@@ -203,7 +189,7 @@ describe("AgentRunner template blocks", () => {
       request: mock.fn(async (_modelId, _content, options) => {
         histories.push(options);
         if (histories.length < 2) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -214,20 +200,20 @@ describe("AgentRunner template blocks", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         }
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const vfs = mockVfs();
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -237,14 +223,14 @@ describe("AgentRunner template blocks", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 3,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(histories.length, 2);
     for (const opts of histories) {
@@ -262,11 +248,11 @@ describe("AgentRunner template blocks", () => {
         (m) => m.id === "prompt:workplace:done",
       );
       assert.match(
-        ctxMsg != null ? messageBodyTextFromBlocks(ctxMsg.content.blocks) : "",
+        ctxMsg != null ? MessageBodyText.fromBlocks(ctxMsg.content.blocks) : "",
         new RegExp(SNAPSHOT_BODY),
       );
       assert.equal(
-        doneMsg != null ? messageBodyTextFromBlocks(doneMsg.content.blocks) : "",
+        doneMsg != null ? MessageBodyText.fromBlocks(doneMsg.content.blocks) : "",
         "【done】",
       );
     }

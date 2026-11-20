@@ -6,7 +6,9 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/desktop",
+    "apps/mobile",
+    "tools/*"
   ],
   "op-sqlite": {
     "sqliteFlags": [
@@ -23,13 +25,13 @@
     "prepare": "node scripts/link-hooks.mjs",
     "check:encoding": "node scripts/check-encoding.mjs",
     "check:ci-gates": "node scripts/check-ci-gates.mjs",
+    "check:public-ownership": "node scripts/check-public-ownership.mjs",
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "node scripts/typecheck-workspaces.mjs",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format:check": "npm run format:check --workspaces --if-present",
     "test:core:fast": "npm run test:fast -w @novel-master/core",
-    "link:cli": "npm run build -w @novel-master/cli && npm link -w @novel-master/cli",
     "mobile:start": "npm run start -w @novel-master/mobile",
     "mobile:android": "npm run android -w @novel-master/mobile",
     "mobile:log": "npm run log-android -w @novel-master/mobile",
@@ -40,7 +42,8 @@
     "mobile:e2e:build-apk": "npm run e2e:build-apk -w @novel-master/mobile",
     "desktop:dev": "npm run dev -w @novel-master/desktop",
     "desktop:build": "npm run build -w @novel-master/desktop",
-    "desktop:dist": "npm run dist -w @novel-master/desktop"
+    "desktop:dist": "npm run dist -w @novel-master/desktop",
+    "check:throw-audit": "nm-style throw-audit --gate"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

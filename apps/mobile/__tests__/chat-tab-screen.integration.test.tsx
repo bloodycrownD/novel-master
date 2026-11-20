@@ -3,14 +3,15 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Alert} from 'react-native';
 import {SimpleEventBus} from '@novel-master/core/events';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
 } from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
-import {clearAllSessionViewCaches} from '../src/services/chat-session-view-cache';
-import {decodeConversationUpstream} from '../src/components/chat/ChatConversationBridge';
+import {SessionViewCache} from '../src/services/chat-session-view-cache';
+import {ChatConversationBridge} from '../src/components/chat/ChatConversationBridge'
 import {makeTranscriptReadyPayload} from '../test-utils/transcript-ready';
 import {
   clearMockWebViewPostMessages,
@@ -88,32 +89,37 @@ const mockRunAgentTurn = jest.fn(
   () => new Promise(() => undefined) as Promise<unknown>,
 );
 
+// 错误通道迁移二期后 projects.get / sessions.* 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
     create: jest.fn(),
     rename: jest.fn(),
     delete: jest.fn(),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-    ]),
+    listByProject: jest.fn(async () => ({
+      ok: true,
+      value: [{id: 's1', title: 'S1', updatedAtMs: 1}],
+    })),
     create: jest.fn(),
     rename: jest.fn(),
     copy: jest.fn(),
     delete: jest.fn(),
     // composer controller 的草稿水化 / 落库窄口（webview 分支会真挂 controller）。
-    get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-    getComposerDraftJson: jest.fn(async () => null),
-    setComposerDraftJson: jest.fn(async () => true),
+    get: jest.fn(async () => ({
+      ok: true,
+      value: {id: 's1', projectId: 'p1'},
+    })),
+    getComposerDraftJson: jest.fn(async () => ({ok: true, value: null})),
+    setComposerDraftJson: jest.fn(async () => ({ok: true, value: true})),
   },
   messages: {
-    listBySession: jest.fn(async () => [{id: 'legacy', seq: 999}]),
+    listBySession: jest.fn(async () => ({kind: 'completed' as const, value: [{id: 'legacy', seq: 999}]})),
     // 单元消息管线的窄口（tail 回源 + hasMore 探针共用分页口）。
-    listBySessionTail: jest.fn(async () => [mockTailMessage]),
-    listBySessionPage: jest.fn(async () => [{id: 'older-probe', seq: 1}]),
+    listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: [mockTailMessage]})),
+    listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: [{id: 'older-probe', seq: 1}]})),
     hide: jest.fn(),
     show: jest.fn(),
     delete: jest.fn(),
@@ -210,7 +216,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@novel-master/core', () => ({
-  textBlocks: (text: string) => ({blocks: [{type: 'text', text}]}),
+  TextBlocks: {of: (text: string) => ({blocks: [{type: 'text', text}]})},
 }));
 
 jest.mock('../src/hooks/useRuntime', () => ({
@@ -256,7 +262,8 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     // 与新类型契约保持一致：枚举统一为 'session'
     source: 'session',
@@ -267,18 +274,23 @@ jest.mock('../src/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
-  cancelPreciseUpgradeDelay: jest.fn(),
-  cancelPreciseUpgrade: jest.fn(),
+  PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
-jest.mock('../src/storage/chat-rich-text-pref', () => ({
-  readChatRichTextEnabled: jest.fn(async () => false),
-}));
+jest.mock('../src/storage/app-ui-pref-io', () => {
+  const legacy = {
+  ...jest.requireActual('../src/storage/app-ui-pref-io'),
+  readBoolPref: jest.fn(async () => false),
+};
+  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref}};
+});
 
 // `{virtual: true}`：`session-messages-loader` 已随「Wave D 死通道删净」退役删除
 // （6594b67c9），但本 mock 一直留着——不带 virtual 时 jest 解析不到模块，
@@ -445,16 +457,17 @@ describe('ChatTabScreen integration', () => {
     mockRuntime.messages.listBySessionTail.mockClear();
     mockRuntime.messages.listBySessionPage.mockClear();
     // tail 默认实现每用例重置（个别用例会覆盖成「多取一条」形态）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(
-      async () => [mockTailMessage],
-    );
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [mockTailMessage],
+    }));
     // 每用例重建 eventBus 与 manager（与 Provider retry 重建同形：先 dispose）。
     mockHarnessManager?.dispose();
     mockRuntime.eventBus = new SimpleEventBus();
     mockHarnessManager = buildHarnessManager();
     mockRuntime.sessionStreamUnitManager = mockHarnessManager;
     // 视图缓存是模块级单例，跨用例残留会干扰「回源 vs 缓存命中」断言。
-    clearAllSessionViewCaches();
+    SessionViewCache.clearAll();
     clearMockWebViewPostMessages();
     mockRuntime.abortRegistry.has.mockImplementation(() => false);
     mockRuntime.streamRegistry.get.mockImplementation(() => undefined);
@@ -477,16 +490,19 @@ describe('ChatTabScreen integration', () => {
     // Step 2 单查询化造数：tail 一次取 41 条（页大小 40 + 1）——最旧一行
     // （seq=1）被裁去，裁剪后首行仍为 mockTailMessage（分页锚点不变），
     // hasMore=true 使「加载更早消息」入口可见。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      mockOlderMessage,
-      mockTailMessage,
-      ...Array.from({length: 39}, (_, i) => ({
-        id: `m-fill-${i}`,
-        seq: 3 + i,
-        role: 'assistant' as const,
-        content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
-      })),
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [
+        mockOlderMessage,
+        mockTailMessage,
+        ...Array.from({length: 39}, (_, i) => ({
+          id: `m-fill-${i}`,
+          seq: 3 + i,
+          role: 'assistant' as const,
+          content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
+        })),
+      ],
+    }));
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();
@@ -513,16 +529,19 @@ describe('ChatTabScreen integration', () => {
   it('有单元时消息面走单元管线：tail 由 listBySessionTail 回源、分页走单元窄口', async () => {
     // Step 2 单查询化造数：同上——tail 一次取 41 条，最旧一行被裁去，
     // hasMore=true 且裁剪后首行为 mockTailMessage（beforeSeq=2 不变）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      mockOlderMessage,
-      mockTailMessage,
-      ...Array.from({length: 39}, (_, i) => ({
-        id: `m-fill-${i}`,
-        seq: 3 + i,
-        role: 'assistant' as const,
-        content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
-      })),
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [
+        mockOlderMessage,
+        mockTailMessage,
+        ...Array.from({length: 39}, (_, i) => ({
+          id: `m-fill-${i}`,
+          seq: 3 + i,
+          role: 'assistant' as const,
+          content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
+        })),
+      ],
+    }));
     // 先建立 s1 的活跃单元（startRun 受理 + RUN_STARTED 回填）。
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
     mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
@@ -546,10 +565,10 @@ describe('ChatTabScreen integration', () => {
 
     await requestLoadOlder(tree!.root);
 
-    expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith(
-      's1',
-      {limit: 40, beforeSeq: 2},
-    );
+    expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith('s1', {
+      limit: 40,
+      beforeSeq: 2,
+    });
     expect(mockLoadPage).not.toHaveBeenCalled();
   });
 
@@ -660,14 +679,16 @@ describe('ChatTabScreen integration', () => {
     // 统一宿主的下行信封是 v:2——用它的宽松 decoder 取 type/payload
     // （旧的 decodeHostToTranscript 对 v !== 1 直接 throw，会把断言变成误判）。
     const decoded = mockWebViewPostMessages
-      .map(raw => decodeConversationUpstream(raw))
+      .map(raw => ChatConversationBridge.decodeConversationUpstream(raw))
       .filter(r => r.ok)
       .map(
         r =>
-          (r as {
-            ok: true;
-            message: {type: string; payload: Record<string, unknown>};
-          }).message,
+          (
+            r as {
+              ok: true;
+              message: {type: string; payload: Record<string, unknown>};
+            }
+          ).message,
       );
     const types = decoded.map(message => message.type);
     expect(types).toContain('sessionSnapshot');
@@ -698,7 +719,7 @@ describe('ChatTabScreen integration', () => {
     });
   });
 
-  it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stopRun', async () => {
+  it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stop(agent key)', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();
@@ -718,16 +739,16 @@ describe('ChatTabScreen integration', () => {
       'delete',
     ]);
 
-    // s1 run 活跃（受理即 starting）：菜单出现停止项，点击走 stopRun。
+    // s1 run 活跃（受理即 starting）：菜单出现停止项，点击走 stop。
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
     await act(async () => {
       await Promise.resolve();
     });
-    const stopSpy = jest.spyOn(mockHarnessManager!, 'stopRun');
+    const stopSpy = jest.spyOn(mockHarnessManager!, 'stop');
     await act(async () => {
       sessionRowMenu().onSelect('stop-generating');
     });
-    expect(stopSpy).toHaveBeenCalledWith('s1');
+    expect(stopSpy).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
     stopSpy.mockRestore();
   });
 
@@ -827,7 +848,9 @@ describe('ChatTabScreen integration', () => {
   it('子视图切换：sessions 视图下 ChatConversationPanel 不渲染，进会话后才渲染', async () => {
     // 回滚 SPA 化后的判据：`chatSubview === 'conversation'` 才挂对话面板，
     // 会话列表面板恒渲染（靠 visible 收起）。
-    const {ChatConversationPanel} = require('../src/screens/tabs/chat-tab/ChatConversationPanel');
+    const {
+      ChatConversationPanel,
+    } = require('../src/screens/tabs/chat-tab/ChatConversationPanel');
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();
@@ -889,10 +912,10 @@ describe('ChatTabScreen integration', () => {
 
     // run 收尾：DB tail 变为「本轮用户消息 + assistant 最终回复」，settle 的
     // force reload 把最终行写进单元消息面与视图缓存（无条件写）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      finalUserMessage,
-      finalAssistantMessage,
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [finalUserMessage, finalAssistantMessage],
+    }));
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
         sessionId: 's1',

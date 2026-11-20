@@ -3,16 +3,9 @@
  * 勾选 + 批量添加，支持过滤后全选。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useRuntime} from '../../hooks/useRuntime';
-import {formatError} from '../../errors/format-error';
+import {FormatError} from '../../errors/format-error';
 import {ModalShell} from '../ui/ModalShell';
 import {FormTextInput} from '../form/FormTextInput';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
@@ -31,12 +24,7 @@ type Props = {
   onSaved: () => void;
 };
 
-export function FetchModelsSheet({
-  visible,
-  providerId,
-  onClose,
-  onSaved,
-}: Props) {
+export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const batch = useBatchSelection();
@@ -58,33 +46,19 @@ export function FetchModelsSheet({
     if (q === '') {
       return rows;
     }
-    return rows.filter(
-      item =>
-        item.displayName?.trim().toLowerCase().includes(q) ||
-        item.vendorModelId.toLowerCase().includes(q),
-    );
+    return rows.filter(item => item.displayName?.trim().toLowerCase().includes(q) || item.vendorModelId.toLowerCase().includes(q));
   }, [rows, query]);
 
   // 当前过滤结果里还能勾选（未添加）的行：全选只作用于这一组。
-  const selectableRows = useMemo(
-    () => filteredRows.filter(item => !addedSet.has(item.vendorModelId)),
-    [filteredRows, addedSet],
-  );
+  const selectableRows = useMemo(() => filteredRows.filter(item => !addedSet.has(item.vendorModelId)), [filteredRows, addedSet]);
   // 全量（未过滤）可选行：计数条展示基准。过滤后无可选行时计数仍需可见
   // （隐藏勾选无处清空），与 desktop FetchModelsModal 口径一致。
-  const allSelectableCount = useMemo(
-    () => rows.filter(item => !addedSet.has(item.vendorModelId)).length,
-    [rows, addedSet],
-  );
+  const allSelectableCount = useMemo(() => rows.filter(item => !addedSet.has(item.vendorModelId)).length, [rows, addedSet]);
 
-  const allSelected =
-    selectableRows.length > 0 &&
-    selectableRows.every(item => batch.isSelected(item.vendorModelId));
+  const allSelected = selectableRows.length > 0 && selectableRows.every(item => batch.isSelected(item.vendorModelId));
 
   const toggleSelectAll = useCallback(() => {
-    batch.selectRange(
-      allSelected ? [] : selectableRows.map(item => item.vendorModelId),
-    );
+    batch.selectRange(allSelected ? [] : selectableRows.map(item => item.vendorModelId));
   }, [batch, allSelected, selectableRows]);
 
   // 键盘避让（上移 + maxHeight 收缩）由 ModalShell 的 adaptive 策略统一处理。
@@ -93,12 +67,14 @@ export function FetchModelsSheet({
     setLoading(true);
     setError(undefined);
     try {
-      await runtime.providerModels.fetch(providerId);
+      const fetched = await runtime.providerModels.fetch(providerId);
+      if (!fetched.ok) throw fetched.error;
       const suggestions = await runtime.providerModels.suggestList(providerId);
-      setRows(suggestions.filter(s => !s.stale));
+      if (!suggestions.ok) throw suggestions.error;
+      setRows(suggestions.value.filter(s => !s.stale));
     } catch (cause) {
       setRows([]);
-      setError(formatError(cause));
+      setError(FormatError.format(cause));
     } finally {
       setLoading(false);
     }
@@ -124,23 +100,16 @@ export function FetchModelsSheet({
     setSaving(true);
     setError(undefined);
     setSaveError(undefined);
-    const selected = rows.filter(
-      item =>
-        batch.isSelected(item.vendorModelId) &&
-        !addedSet.has(item.vendorModelId),
-    );
+    const selected = rows.filter(item => batch.isSelected(item.vendorModelId) && !addedSet.has(item.vendorModelId));
     const savedNow: string[] = [];
     try {
       for (const item of selected) {
         try {
-          await runtime.providerModels.save(
-            providerId,
-            item.vendorModelId,
-            item.displayName ?? undefined,
-          );
+          const savedModel = await runtime.providerModels.save(providerId, item.vendorModelId, item.displayName ?? undefined);
+          if (!savedModel.ok) throw savedModel.error;
           savedNow.push(item.vendorModelId);
         } catch (cause) {
-          setSaveError(formatError(cause));
+          setSaveError(FormatError.format(cause));
           break;
         }
       }
@@ -156,24 +125,17 @@ export function FetchModelsSheet({
         onSaved();
       }
       const savedNowSet = new Set(savedNow);
-      batch.selectRange(
-        selected
-          .filter(item => !savedNowSet.has(item.vendorModelId))
-          .map(item => item.vendorModelId),
-      );
+      batch.selectRange(selected.filter(item => !savedNowSet.has(item.vendorModelId)).map(item => item.vendorModelId));
       setSaving(false);
     }
   };
 
-  const confirmLabel =
-    batch.selectedCount > 0 ? `添加 (${batch.selectedCount})` : '添加';
+  const confirmLabel = batch.selectedCount > 0 ? `添加 (${batch.selectedCount})` : '添加';
 
   const body = (
     <>
       <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
-      <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
-        从服务商获取可用模型，勾选后批量添加
-      </Text>
+      <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>从服务商获取可用模型，勾选后批量添加</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : error ? (
@@ -186,29 +148,16 @@ export function FetchModelsSheet({
       ) : (
         <>
           <View style={styles.searchWrap}>
-            <FormTextInput
-              tokens={tokens}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="过滤模型…"
-            />
+            <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder="过滤模型…" />
           </View>
           {allSelectableCount > 0 ? (
             <View style={styles.selectBar}>
               {selectableRows.length > 0 ? (
-                <Pressable
-                  onPress={toggleSelectAll}
-                  disabled={saving}
-                  hitSlop={8}
-                >
-                  <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                    {allSelected ? '全不选' : '全选'}
-                  </Text>
+                <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
+                  <Text style={{color: tokens.primary, fontWeight: '600'}}>{allSelected ? '全不选' : '全选'}</Text>
                 </Pressable>
               ) : null}
-              <Text style={{color: tokens.textSecondary, fontSize: 13}}>
-                已选 {batch.selectedCount} 项
-              </Text>
+              <Text style={{color: tokens.textSecondary, fontSize: 13}}>已选 {batch.selectedCount} 项</Text>
             </View>
           ) : null}
           {/* key 技巧：过滤词变化时重建 FlatList，滚动位置归零 */}
@@ -219,13 +168,9 @@ export function FetchModelsSheet({
             style={styles.list}
             ListEmptyComponent={
               rows.length === 0 ? (
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                  未拉取到可用模型，请检查 API Key 与 Base URL。
-                </Text>
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>未拉取到可用模型，请检查 API Key 与 Base URL。</Text>
               ) : (
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                  无匹配模型
-                </Text>
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>无匹配模型</Text>
               )
             }
             renderItem={({item}) => {
@@ -234,12 +179,7 @@ export function FetchModelsSheet({
               const label = item.displayName?.trim() || item.vendorModelId;
               return (
                 <Pressable
-                  style={[
-                    styles.row,
-                    {borderBottomColor: tokens.border},
-                    selected && {backgroundColor: tokens.bgSecondary},
-                    saved && {opacity: 0.55},
-                  ]}
+                  style={[styles.row, {borderBottomColor: tokens.border}, selected && {backgroundColor: tokens.bgSecondary}, saved && {opacity: 0.55}]}
                   disabled={saved || saving}
                   onPress={() => batch.toggle(item.vendorModelId)}
                 >
@@ -247,38 +187,20 @@ export function FetchModelsSheet({
                     // 与 BatchCheckbox 等宽占位，保持文本左对齐
                     <View style={styles.checkSpacer} />
                   ) : (
-                    <BatchCheckbox
-                      checked={selected}
-                      onToggle={() => batch.toggle(item.vendorModelId)}
-                    />
+                    <BatchCheckbox checked={selected} onToggle={() => batch.toggle(item.vendorModelId)} />
                   )}
                   <View style={styles.rowText}>
-                    <Text style={{color: tokens.text, fontWeight: '500'}}>
-                      {label}
-                    </Text>
-                    {item.displayName?.trim() &&
-                    item.displayName.trim() !== item.vendorModelId ? (
-                      <Text style={{color: tokens.textSecondary, fontSize: 13}}>
-                        {item.vendorModelId}
-                      </Text>
-                    ) : null}
+                    <Text style={{color: tokens.text, fontWeight: '500'}}>{label}</Text>
+                    {item.displayName?.trim() && item.displayName.trim() !== item.vendorModelId ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>{item.vendorModelId}</Text> : null}
                   </View>
-                  {saving && selected && !saved ? (
-                    <ActivityIndicator size="small" />
-                  ) : saved ? (
-                    <Text style={{color: tokens.textSecondary}}>已添加</Text>
-                  ) : null}
+                  {saving && selected && !saved ? <ActivityIndicator size="small" /> : saved ? <Text style={{color: tokens.textSecondary}}>已添加</Text> : null}
                 </Pressable>
               );
             }}
           />
         </>
       )}
-      {saveError ? (
-        <Text style={[styles.saveError, {color: tokens.danger}]}>
-          {saveError}
-        </Text>
-      ) : null}
+      {saveError ? <Text style={[styles.saveError, {color: tokens.danger}]}>{saveError}</Text> : null}
       <View style={styles.actionRow}>
         <Pressable onPress={onClose} disabled={saving} style={styles.doneBtn}>
           <Text style={{color: tokens.textSecondary}}>完成</Text>
@@ -286,30 +208,16 @@ export function FetchModelsSheet({
         <Pressable
           onPress={() => saveSelected().catch(() => undefined)}
           disabled={batch.selectedCount === 0 || saving}
-          style={({pressed}) => [
-            styles.confirmBtn,
-            {backgroundColor: tokens.primary},
-            (batch.selectedCount === 0 || saving) && {opacity: 0.45},
-            pressed && {opacity: 0.85},
-          ]}
+          style={({pressed}) => [styles.confirmBtn, {backgroundColor: tokens.primary}, (batch.selectedCount === 0 || saving) && {opacity: 0.45}, pressed && {opacity: 0.85}]}
         >
-          <Text style={styles.confirmText}>
-            {saving ? '添加中…' : confirmLabel}
-          </Text>
+          <Text style={styles.confirmText}>{saving ? '添加中…' : confirmLabel}</Text>
         </Pressable>
       </View>
     </>
   );
 
   return (
-    <ModalShell
-      visible={visible}
-      onClose={onClose}
-      variant="bottom"
-      animationType="slide"
-      keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.75}}
-      panelStyle={styles.sheet}
-    >
+    <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.75}} panelStyle={styles.sheet}>
       {body}
     </ModalShell>
   );

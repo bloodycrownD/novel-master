@@ -22,18 +22,13 @@ import {
   SimpleEventBus,
 } from '@novel-master/core/events';
 import type {MessageAttachment} from '@novel-master/core/chat';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {ABORT_KEY} from '@novel-master/core/abort';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {Platform} from 'react-native';
 import notifee, {onForegroundEventUnsubscribe} from '@notifee/react-native';
-import {
-  resetKeepAliveStateForTests,
-  setKeepAliveResidentEnabled,
-} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 
 /** 与实现同值的默认宽限销毁时长（单元模块私有的 30s 默认值）。 */
 const DEFAULT_SETTLED_GRACE_PERIOD_MS = 30_000;
@@ -57,16 +52,17 @@ function createHarness(options?: {readonly skipHydrate?: boolean}) {
     register: jest.fn(),
     unregister: jest.fn(),
   };
+  // 错误通道迁移二期后 sessions/projects 的 get 走 Result（服务侧 `!ok` 即 throw）。
   const sessions = {
     get: jest.fn(async (sessionId: string) => ({
-      id: sessionId,
-      title: `会话-${sessionId}`,
+      ok: true as const,
+      value: {id: sessionId, title: `会话-${sessionId}`},
     })),
   };
   const projects = {
     get: jest.fn(async (projectId: string) => ({
-      id: projectId,
-      name: `项目-${projectId}`,
+      ok: true as const,
+      value: {id: projectId, name: `项目-${projectId}`},
     })),
   };
   const runAgentTurn = jest.fn(
@@ -125,14 +121,14 @@ function publishFailed(
 
 describe('SessionStreamUnitManager', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   afterEach(() => {
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     // 未在用例内 dispose 的 manager 统一收口：清校准轮询 interval 与
     // 复询定时器，防 jest 环境拆除后异步路径再触碰 RN 模块。
     for (const manager of liveManagers.splice(0)) {
@@ -250,7 +246,7 @@ describe('SessionStreamUnitManager', () => {
     // r3-test-1 ②：abortRegistry.has 不再是恒 false 的假模型——按 startRun
     // 调起的 run 生命周期翻真/假（core 的 register 落在 runAgentTurn 函数入口，
     // 受理即在途；run 结束即反注册）。恒值模型下「在途/已收尾」两种 registry
-    // 读数观测不出差别，下面的 stopRun 前后两断与受理即真全都退化成恒假断言。
+    // 读数观测不出差别，下面的 stop 前后两断与受理即真全都退化成恒假断言。
     const eventBus = new SimpleEventBus();
     const registryState = {inFlight: false};
     let releasePrelude!: () => void;
@@ -292,10 +288,17 @@ describe('SessionStreamUnitManager', () => {
         eventBus,
         abortRegistry,
         sessions: {
-          get: jest.fn(async (id: string) => ({id, title: `会话-${id}`})),
+          // 错误通道迁移二期后走 Result（服务侧 `!ok` 即 throw）。
+          get: jest.fn(async (id: string) => ({
+            ok: true as const,
+            value: {id, title: `会话-${id}`},
+          })),
         },
         projects: {
-          get: jest.fn(async (id: string) => ({id, name: `项目-${id}`})),
+          get: jest.fn(async (id: string) => ({
+            ok: true as const,
+            value: {id, name: `项目-${id}`},
+          })),
         },
       } as never,
       runAgentTurn: runAgentTurn as never,
@@ -312,10 +315,10 @@ describe('SessionStreamUnitManager', () => {
     );
     // 受理空窗内 registry 已是真（core register 在 runAgentTurn 入口执行）：
     // 这条正是 r3-doc-1 纠偏的那条时序，恒值模型下观测不到。
-    expect(abortRegistry.has('a')).toBe(true);
-    // 空窗期 stopRun 转发得到（读口真按 registry 判活，非恒假）
-    expect(manager.stopRun('a')).toBe(true);
-    expect(abortRegistry.abort).toHaveBeenCalledWith('a');
+    expect(abortRegistry.has(ABORT_KEY.agent('a'))).toBe(true);
+    // 空窗期 stop 转发得到（读口真按 registry 判活，非恒假）
+    expect(manager.stop(ABORT_KEY.agent('a'))).toBe(true);
+    expect(abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('a'));
 
     // 前奏检查点命中 abort：core 以合成 cancelled 返回
     releasePrelude();
@@ -335,9 +338,9 @@ describe('SessionStreamUnitManager', () => {
     // 数据源侧同步收口：会话列表「 · 活跃中」meta 读的是 activeSessionIds()，
     // 这条沿必须在无终态事件的受理空窗收尾里也出集（否则该 meta 永久残留）。
     expect(manager.activeSessionIds()).toEqual([]);
-    // run 结束后 registry 反注册：读数翻假、stopRun 不再转发、门禁放行下一轮
-    expect(abortRegistry.has('a')).toBe(false);
-    expect(manager.stopRun('a')).toBe(false);
+    // run 结束后 registry 反注册：读数翻假、stop 不再转发、门禁放行下一轮
+    expect(abortRegistry.has(ABORT_KEY.agent('a'))).toBe(false);
+    expect(manager.stop(ABORT_KEY.agent('a'))).toBe(false);
     expect(manager.startRun('a', 'p', '再来一轮').ok).toBe(true);
     await flushAsync();
   });
@@ -361,7 +364,7 @@ describe('SessionStreamUnitManager', () => {
       ok: true,
     });
     publishStarted(h.eventBus, 'b', 'r2');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // A 结束不影响 B
     publishFinished(h.eventBus, 'a', 'r1');
@@ -371,16 +374,16 @@ describe('SessionStreamUnitManager', () => {
     expect(h.manager.hasActiveRun('b')).toBe(true);
     expect(h.manager.snapshot('a')?.status).toBe('finished');
     expect(h.manager.snapshot('b')?.status).toBe('running');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     publishFinished(h.eventBus, 'b', 'r2');
     expect(settledB).toHaveBeenCalledWith('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-P2: abortRegistry.has 为 true 时 startRun 被拒并返回明确错误', () => {
     const h = createHarness();
-    h.abortRegistry.has.mockImplementation(sid => sid === 'a');
+    h.abortRegistry.has.mockImplementation(key => key === ABORT_KEY.agent('a'));
 
     const result = h.manager.startRun('a', 'p', 'hi');
     expect(result.ok).toBe(false);
@@ -388,7 +391,7 @@ describe('SessionStreamUnitManager', () => {
       expect(result.error.length).toBeGreaterThan(0);
     }
     expect(h.runAgentTurn).not.toHaveBeenCalled();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-P2: 单元处 starting（RUN_STARTED 未达、registry 未注册）时二次 startRun 同样被拒', () => {
@@ -407,7 +410,7 @@ describe('SessionStreamUnitManager', () => {
       expect(second.error.length).toBeGreaterThan(0);
     }
     expect(h.runAgentTurn).toHaveBeenCalledTimes(1);
-    expect(isMobileAgentActive()).toBe(true); // 单个受理计数
+    expect(agentActivity.isActive()).toBe(true); // 单个受理计数
   });
 
   it('T-P3: 切走会话后（无 UI 面板消费）FINISHED 仍正确 decrement，全局不卡死', () => {
@@ -417,11 +420,11 @@ describe('SessionStreamUnitManager', () => {
     );
     expect(h.manager.startRun('a', 'p', 'hi').ok).toBe(true);
     publishStarted(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // 无任何 UI 面板订阅过滤——manager 全量事件直接收尾
     publishFinished(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.hasActiveRun('a')).toBe(false);
     // 终态投影在宽限期内保留（新架构语义：服务「上次生成」过渡展示）
     expect(h.manager.snapshot('a')?.status).toBe('finished');
@@ -436,12 +439,12 @@ describe('SessionStreamUnitManager', () => {
     h.manager.startRun('a', 'p', 'hi', {onSettled: settled});
 
     publishStarted(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(true); // increment 只在受理路径
+    expect(agentActivity.isActive()).toBe(true); // increment 只在受理路径
 
     publishFailed(h.eventBus, 'a', 'r1');
     expect(settled).toHaveBeenCalledWith('failed');
     expect(h.manager.snapshot('a')?.status).toBe('failed');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-P9: startRun 后未收到 RUN_STARTED 即抛错 → finally 清单元并 decrement，refcount 回落', async () => {
@@ -449,10 +452,10 @@ describe('SessionStreamUnitManager', () => {
     h.runAgentTurn.mockRejectedValue(new Error('early boom'));
 
     expect(h.manager.startRun('a', 'p', 'hi').ok).toBe(true);
-    expect(isMobileAgentActive()).toBe(true); // 受理路径已同步 increment
+    expect(agentActivity.isActive()).toBe(true); // 受理路径已同步 increment
 
     await flushAsync();
-    expect(isMobileAgentActive()).toBe(false); // finally 兜底回落
+    expect(agentActivity.isActive()).toBe(false); // finally 兜底回落
     expect(h.manager.hasActiveRun('a')).toBe(false);
     expect(h.manager.snapshot('a')).toBe(null); // 非正常终态：直接销毁出表
 
@@ -469,11 +472,11 @@ describe('SessionStreamUnitManager', () => {
     h.manager.startRun('a', 'p', 'hi');
     publishStarted(h.eventBus, 'a', 'r1');
     publishFinished(h.eventBus, 'a', 'r1'); // 事件路径已 decrement + settle
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.snapshot('a')?.status).toBe('finished');
 
     await flushAsync();
-    expect(isMobileAgentActive()).toBe(false); // finally 未把计数减成负
+    expect(agentActivity.isActive()).toBe(false); // finally 未把计数减成负
     expect(h.manager.snapshot('a')?.status).toBe('finished'); // 宽限单元未被 finally 提前销毁
   });
 
@@ -490,7 +493,7 @@ describe('SessionStreamUnitManager', () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith('model error');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('MF-1: 无单元的 FAILED 事件不弹 toast（subagent 子 run / 旧连接残留不误报）', () => {
@@ -518,13 +521,13 @@ describe('SessionStreamUnitManager', () => {
 
     publishFinished(h.eventBus, 'a', 'r1'); // 真正的终态仍正常收尾
     expect(h.manager.snapshot('a')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('r3-run-1: 前奏 FAILED(空串) 事件收口后 throw 路径不双弹 toast', async () => {
     // core 前奏抛错时发的是 FAILED(runId:'')——走的是**同一条** finishRun
     // 收口、同样已 onError 过一次。.catch 的 toast 条件必须补
-    // `!isSessionStreamUnitSettled(...)`，否则这里会弹第二次。
+    // `!SessionStreamUnit.isSettled(...)`，否则这里会弹第二次。
     const h = createHarness();
     h.runAgentTurn.mockRejectedValue(new Error('前奏炸了'));
     const onError = jest.fn();
@@ -539,7 +542,7 @@ describe('SessionStreamUnitManager', () => {
       error: '前奏炸了',
     });
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     await flushAsync(); // throw 路径随后到达
     // 前奏 FAILED(空串) 已弹过一次，throw 路径不得再弹
@@ -564,13 +567,13 @@ describe('SessionStreamUnitManager', () => {
       vfsMutated: false,
     });
     expect(h.manager.snapshot('a')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     await flushAsync();
     // 事件路径已收口，.then 的兜底 finishRun 必须是 no-op：宽限单元不被销毁、
     // 终态投影不被二次改写、refcount 不被减成负。
     expect(h.manager.snapshot('a')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('r3-run-1 步骤 6: 事件+.then 双失时 .finally 仍 invokeOnSettled(failed)', async () => {
@@ -596,7 +599,7 @@ describe('SessionStreamUnitManager', () => {
     await flushAsync();
     // .finally 必须补一个终态出口，否则草稿 / token chip 永久悬着。
     expect(onSettled).toHaveBeenCalledWith('failed');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.hasActiveRun('a')).toBe(false);
   });
 
@@ -654,7 +657,7 @@ describe('SessionStreamUnitManager', () => {
     );
     publishFinished(h.eventBus, 'a', 'r1');
     expect(settled).toHaveBeenCalledWith('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.snapshot('a')?.status).toBe('finished');
   });
 
@@ -716,16 +719,16 @@ describe('SessionStreamUnitManager', () => {
     h.manager.startRun('c', 'p', '3');
     publishStarted(h.eventBus, 'c', 'r3');
     publishFinished(h.eventBus, 'c', 'r3');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     h.manager.dispose();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.unitCount()).toBe(0);
     expect(h.manager.hasActiveRun('a')).toBe(false);
 
     // 旧总线上的后续终态事件不再触发旧 manager 的 decrement（防负）
     publishFinished(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     // dispose 后拒绝新 run
     const rejected = h.manager.startRun('d', 'p', '4');
@@ -733,7 +736,7 @@ describe('SessionStreamUnitManager', () => {
     expect(h2.manager.startRun('d', 'p', '4').ok).toBe(true);
     publishStarted(h2.eventBus, 'd', 'r9');
     publishFinished(h2.eventBus, 'd', 'r9');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('MF-5: 构造→dispose→再构造→再 dispose：onForegroundEvent 注册与退订对齐，不随重建累积', () => {
@@ -746,12 +749,12 @@ describe('SessionStreamUnitManager', () => {
     expect(onForegroundEventUnsubscribe).toHaveBeenCalledTimes(2);
   });
 
-  it('stopRun: 转发 abortRegistry.abort（未注册返回 false）', () => {
+  it('stop: 转发 abortRegistry.abort（未注册返回 false）', () => {
     const h = createHarness();
-    expect(h.manager.stopRun('a')).toBe(false);
+    expect(h.manager.stop(ABORT_KEY.agent('a'))).toBe(false);
     h.abortRegistry.has.mockReturnValue(true);
-    expect(h.manager.stopRun('a')).toBe(true);
-    expect(h.abortRegistry.abort).toHaveBeenCalledWith('a');
+    expect(h.manager.stop(ABORT_KEY.agent('a'))).toBe(true);
+    expect(h.abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('a'));
   });
 
   it('T-X1: interruptedSessionIds 数据源——interrupted 单元入集；替换/删除出集；迁移经 subscribe 通知', () => {
@@ -866,7 +869,7 @@ describe('SessionStreamUnitManager', () => {
       });
 
       // 常驻前置（模拟开关开/启动拉起）：空闲文案先上屏 1 次
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
       const idle = notifee.displayNotification.mock.calls[0][0];
       expect(idle.title).toBe('novel master · 空闲');
@@ -911,8 +914,15 @@ describe('SessionStreamUnitManager', () => {
       });
 
       // 标签两查询挂起（手动 resolve）：制造「查询长时间未完成」窗口
-      let resolveTitle!: (value: {id: string; title: string}) => void;
-      let resolveProject!: (value: {id: string; name: string}) => void;
+      // （错误通道迁移二期后 get 走 Result，resolve 值带 wire 包装）
+      let resolveTitle!: (value: {
+        ok: true;
+        value: {id: string; title: string};
+      }) => void;
+      let resolveProject!: (value: {
+        ok: true;
+        value: {id: string; name: string};
+      }) => void;
       h.sessions.get.mockImplementation(
         () =>
           new Promise(resolve => {
@@ -927,7 +937,7 @@ describe('SessionStreamUnitManager', () => {
       );
 
       // 常驻前置：空闲文案 1 次后清零，聚焦受理窗口内的增量
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       notifee.displayNotification.mockClear();
 
       h.manager.startRun('a', 'p', 'hi');
@@ -938,7 +948,7 @@ describe('SessionStreamUnitManager', () => {
       // 受理第一段（无标签 start）常驻下 no-op——窗口内零新增刷新
       // （原「通知出现先于标签查询完成」锚随常驻化失效，改锚为不阻塞
       // + 查回后立即刷新）
-      expect(isMobileAgentActive()).toBe(true);
+      expect(agentActivity.isActive()).toBe(true);
       expect(h.manager.snapshot('a')).toEqual(
         expect.objectContaining({status: 'starting', runId: null}),
       );
@@ -948,8 +958,8 @@ describe('SessionStreamUnitManager', () => {
       expect(notifee.displayNotification).not.toHaveBeenCalled();
 
       // 查回标签：第二段带标签调用经 labelsVersion 同 id 原位刷新
-      resolveTitle({id: 'a', title: '会话-a'});
-      resolveProject({id: 'p', name: '项目-p'});
+      resolveTitle({ok: true, value: {id: 'a', title: '会话-a'}});
+      resolveProject({ok: true, value: {id: 'p', name: '项目-p'}});
       await flushAsync();
 
       expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
@@ -990,7 +1000,7 @@ describe('SessionStreamUnitManager', () => {
       h1.manager.setPrefBridge({
         isNotificationEnabled: async () => true,
       });
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       h1.manager.startRun('a', 'p', 'hi');
       await flushAsync();
       // 常驻前置空闲 1 次 + 带标签刷新 1 次，最后一条为「正在生成」
@@ -1013,13 +1023,13 @@ describe('SessionStreamUnitManager', () => {
       h2.manager.setPrefBridge({
         isNotificationEnabled: async () => true,
       });
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       h2.manager.startRun('b', 'p', 'hi');
       await flushAsync();
 
       notifee.stopForegroundService.mockClear();
       notifee.displayNotification.mockClear();
-      resetKeepAliveStateForTests();
+      AgentFinishedNotification.resetKeepAliveStateForTests();
       expect(() => h2.manager.dispose()).not.toThrow();
       await flushAsync();
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();

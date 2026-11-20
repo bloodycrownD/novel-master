@@ -5,10 +5,10 @@
  * （`project:{id}` / `project:{id}:meta`）只调了裸 `deleteVfsPrefix`——
  * 它只删 `vfs_entry` 行，既不释放 live-head 引用、也不 GC revision。
  * 而 `ProjectService.copy` 会在这两个 scope 下种下 `ref_count = 1` 的
- * live-head revision（`seedLiveHeadRevisionsUnderPrefix`）。
+ * live-head revision（`LiveHeadRevisionSeeder.seedUnderPrefix`）。
  *
  * ⇒ entry 已删、revision 的 ref_count 永远停在 1，两条 GC 路径都选不中它：
- * - `deleteUnreferencedUnderScope` 靠 `JOIN vfs_entry` 圈范围 → JOIN 命中 0 行；
+ * - `RevisionRefCount.deleteUnreferencedUnderScope` 靠 `JOIN vfs_entry` 圈范围 → JOIN 命中 0 行；
  * - 全局兜底 `deleteGlobalOrphans` 只清 `ref_count <= 0` 的 JOIN 孤儿 → 谓词不选。
  * 每「种下一次 live-head revision 再删除该项目」一轮就永久泄漏一批 revision 行
  * + 其 `vfs_content_blob`，无自愈路径。
@@ -24,15 +24,12 @@
  * @module test/vfs/project-delete-revision-gc
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -85,17 +82,17 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
   it("P-D1: 项目删除后 project scope 无残留 vfs_entry", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-PD1-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-PD1-${suffix}`));
     await ctx.projectVfs(project.id).write("/tpl.md", `T-${suffix}`);
 
-    const copy = await ctx.projects.copy(project.id);
+    const copy = unwrap(await ctx.projects.copy(project.id));
     const copyScope = `project:${copy.id}`;
     assert.ok(
       (await entryRowCount(copyScope)) > 0,
       "前置条件：复制体 project scope 下应有 entry 行",
     );
 
-    await ctx.projects.delete(copy.id);
+    unwrap(await ctx.projects.delete(copy.id));
 
     assert.equal(
       await entryRowCount(copyScope),
@@ -107,14 +104,14 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
   it("P-D2: 项目删除释放 project scope 的 live-head revision（ref_count=1 → 行回收）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-PD2-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-PD2-${suffix}`));
     await ctx.projectVfs(project.id).write("/tpl.md", `T-${suffix}`);
 
-    const copy = await ctx.projects.copy(project.id);
+    const copy = unwrap(await ctx.projects.copy(project.id));
     const copyScope = `project:${copy.id}`;
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const entry = await entryRepo.findByPath(copyScope, "/tpl.md");
+    const entry = unwrap(await entryRepo.findByPath(copyScope, "/tpl.md"));
     assert.ok(entry != null, "复制体 project scope 应有 /tpl.md");
     const version = await revisionRepo.findMaxVersionForEntry(entry.entryId);
     assert.ok(version != null, "复制体应已 seed live-head revision");
@@ -131,11 +128,11 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
     )!;
     assert.equal(refBefore[1], 1, "前置条件：live-head revision ref_count = 1");
 
-    const hash = await entryRepo.findContentHash(copyScope, "/tpl.md");
+    const hash = unwrap(await entryRepo.findContentHash(copyScope, "/tpl.md"));
     assert.ok(hash != null);
     const blobBefore = await blobRefCount(hash);
 
-    await ctx.projects.delete(copy.id);
+    unwrap(await ctx.projects.delete(copy.id));
 
     assert.equal(
       await revisionRowCount(entryId, version),
@@ -159,17 +156,17 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
   it("P-D3: 项目删除释放 project:meta scope 的 live-head revision（技能域同款）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-PD3-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-PD3-${suffix}`));
     await ctx.projectMetaVfs(project.id).write(
       "/skills/skill.md",
       `S-${suffix}`,
     );
 
-    const copy = await ctx.projects.copy(project.id);
+    const copy = unwrap(await ctx.projects.copy(project.id));
     const metaScope = `project:${copy.id}:meta`;
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const entry = await entryRepo.findByPath(metaScope, "/skills/skill.md");
+    const entry = unwrap(await entryRepo.findByPath(metaScope, "/skills/skill.md"));
     assert.ok(entry != null, "复制体 meta scope 应有技能文件");
     const version = await revisionRepo.findMaxVersionForEntry(entry.entryId);
     assert.ok(version != null, "复制体 meta scope 应已 seed live-head revision");
@@ -181,7 +178,7 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
       "前置条件：meta scope 的 live-head revision 行存在",
     );
 
-    await ctx.projects.delete(copy.id);
+    unwrap(await ctx.projects.delete(copy.id));
 
     assert.equal(
       await revisionRowCount(entryId, version),
@@ -198,9 +195,9 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
   it("P-D4: 项目删除不做二次 decrement（delete 不抛错 + 会话 scope revision 计数零变化）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-PD4-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-PD4-${suffix}`));
     await ctx.projectVfs(project.id).write("/tpl.md", `T-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     await ctx
       .sessionVfs(project.id, session.id)
       .write("/in-session.md", `S-${suffix}`);
@@ -208,10 +205,10 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
     // 会话 scope 的一个 entry（project scope 的 sweep 绝不该波及它）
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const sessionScope = `session:${project.id}:${session.id}`;
-    const sessionEntry = await entryRepo.findByPath(
+    const sessionEntry = unwrap(await entryRepo.findByPath(
       sessionScope,
       "/in-session.md",
-    );
+    ));
     assert.ok(sessionEntry != null, "会话 scope 应有 entry 行");
     const sessionEntryId = sessionEntry.entryId;
     const before = await revisionRefCounts(sessionEntryId);
@@ -220,7 +217,7 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
     // ① delete 不抛错：若 `session:{pid}:{sid}` 那行被误改成 sweep，
     // 会话 scope 的 live ref 会被二次 −1，撞 vfs_revision 的
     // CHECK (ref_count >= 0) 抛 SQLITE_CONSTRAINT_CHECK ⇒ 整个事务回滚。
-    await ctx.projects.delete(project.id);
+    unwrap(await ctx.projects.delete(project.id));
 
     // ② 会话 scope 的 revision 必须被**彻底回收**。
     // 注意：spec 里写的「删除前后 revisionRefCounts 深比对完全相等」在项目

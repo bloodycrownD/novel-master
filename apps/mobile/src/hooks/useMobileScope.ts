@@ -9,8 +9,7 @@ export function useMobileScope(): MobileScopeSnapshot & {
   setCurrentSession: (sessionId: string) => Promise<void>;
   refreshScope: () => Promise<void>;
 } {
-  const {scope, setCurrentProject, setCurrentSession, refreshScope} =
-    useNovelMaster();
+  const {scope, setCurrentProject, setCurrentSession, refreshScope} = useNovelMaster();
   return {
     ...scope,
     setCurrentProject,

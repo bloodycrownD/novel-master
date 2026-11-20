@@ -6,11 +6,7 @@
  */
 
 import {
-  armRebootWaiter,
-  claimRebootWaiter,
-  createRebootWaiterSlot,
-  rebindRebootWaiterGeneration,
-  settleRebootWaiter,
+  RebootWaiter,
   type RebootSettler,
   type RebootWaiterSlot,
 } from '@/runtime/reboot-waiter';
@@ -42,15 +38,15 @@ describe('reboot-waiter 代际归属规则', () => {
   let slot: RebootWaiterSlot<FakeRuntime>;
 
   beforeEach(() => {
-    slot = createRebootWaiterSlot<FakeRuntime>();
+    slot = RebootWaiter.createSlot<FakeRuntime>();
   });
 
   it('新代 resolve 正常兑现，并清空槽', () => {
     const waiter = makeSettler();
-    expect(armRebootWaiter(slot, 1, waiter)).toBe('armed');
+    expect(RebootWaiter.arm(slot, 1, waiter)).toBe('armed');
 
     const rt = {id: 'rt-1'};
-    expect(settleRebootWaiter(slot, 1, {kind: 'resolve', runtime: rt})).toBe(
+    expect(RebootWaiter.settle(slot, 1, {kind: 'resolve', runtime: rt})).toBe(
       true,
     );
     expect(waiter.resolved).toEqual([rt]);
@@ -60,11 +56,11 @@ describe('reboot-waiter 代际归属规则', () => {
 
   it('旧代 reject 不影响新代：槽内 waiter 不被兑现、也不被清空', () => {
     const newGen = makeSettler();
-    expect(armRebootWaiter(slot, 2, newGen)).toBe('armed');
+    expect(RebootWaiter.arm(slot, 2, newGen)).toBe('armed');
 
     // 被取代的旧代 effect 收尾/catch 时调用的 reject（cr1-cloudsync P1-2 的形状）
     const stale = new Error('重建 runtime 已取消，请重试');
-    expect(settleRebootWaiter(slot, 1, {kind: 'reject', error: stale})).toBe(
+    expect(RebootWaiter.settle(slot, 1, {kind: 'reject', error: stale})).toBe(
       false,
     );
     expect(newGen.rejected).toEqual([]);
@@ -73,7 +69,7 @@ describe('reboot-waiter 代际归属规则', () => {
 
     // 新代随后 resolve 仍正常兑现（修复前这里已是 no-op）
     const rt = {id: 'rt-2'};
-    expect(settleRebootWaiter(slot, 2, {kind: 'resolve', runtime: rt})).toBe(
+    expect(RebootWaiter.settle(slot, 2, {kind: 'resolve', runtime: rt})).toBe(
       true,
     );
     expect(newGen.resolved).toEqual([rt]);
@@ -82,10 +78,10 @@ describe('reboot-waiter 代际归属规则', () => {
 
   it('旧代 resolve 同样不得兑现新代 waiter（方向对称）', () => {
     const newGen = makeSettler();
-    armRebootWaiter(slot, 5, newGen);
+    RebootWaiter.arm(slot, 5, newGen);
 
     const rt = {id: 'rt-stale'};
-    expect(settleRebootWaiter(slot, 4, {kind: 'resolve', runtime: rt})).toBe(
+    expect(RebootWaiter.settle(slot, 4, {kind: 'resolve', runtime: rt})).toBe(
       false,
     );
     expect(newGen.resolved).toEqual([]);
@@ -94,11 +90,11 @@ describe('reboot-waiter 代际归属规则', () => {
 
   it('入口复用不覆盖：已有 waiter 时 joined，且既不改槽也不换代号', () => {
     const first = makeSettler();
-    expect(armRebootWaiter(slot, 1, first)).toBe('armed');
+    expect(RebootWaiter.arm(slot, 1, first)).toBe('armed');
     const firstWaiter = slot.current;
 
     const second = makeSettler();
-    expect(armRebootWaiter(slot, 2, second)).toBe('joined');
+    expect(RebootWaiter.arm(slot, 2, second)).toBe('joined');
 
     // 槽仍是第一次登记的那个对象（代号 1、settlers 长度 2）——没被覆盖
     expect(slot.current).toBe(firstWaiter);
@@ -107,7 +103,7 @@ describe('reboot-waiter 代际归属规则', () => {
 
     // 复用后由在途那一代兑现，两个调用方都拿到同一个 runtime，谁都不失主
     const rt = {id: 'rt-shared'};
-    expect(settleRebootWaiter(slot, 1, {kind: 'resolve', runtime: rt})).toBe(
+    expect(RebootWaiter.settle(slot, 1, {kind: 'resolve', runtime: rt})).toBe(
       true,
     );
     expect(first.resolved).toEqual([rt]);
@@ -117,12 +113,12 @@ describe('reboot-waiter 代际归属规则', () => {
 
   it('复用方同代 reject 时也一起兑现（不会被单独丢下）', () => {
     const first = makeSettler();
-    armRebootWaiter(slot, 7, first);
+    RebootWaiter.arm(slot, 7, first);
     const second = makeSettler();
-    armRebootWaiter(slot, 8, second);
+    RebootWaiter.arm(slot, 8, second);
 
     const err = new Error('重建 runtime 超时，请重试');
-    expect(settleRebootWaiter(slot, 7, {kind: 'reject', error: err})).toBe(
+    expect(RebootWaiter.settle(slot, 7, {kind: 'reject', error: err})).toBe(
       true,
     );
     expect(first.rejected).toEqual([err]);
@@ -131,22 +127,22 @@ describe('reboot-waiter 代际归属规则', () => {
 
   it('槽为空时代号再对也不兑现（不凭空 resolve）', () => {
     const waiter = makeSettler();
-    expect(settleRebootWaiter(slot, 0, {
+    expect(RebootWaiter.settle(slot, 0, {
       kind: 'resolve',
       runtime: {id: 'rt-x'},
     })).toBe(false);
-    expect(claimRebootWaiter(slot, 0)).toBeNull();
+    expect(RebootWaiter.claim(slot, 0)).toBeNull();
     expect(waiter.resolved).toEqual([]);
   });
 
   it('兑现后槽被清空，同代号不能二次兑现', () => {
     const waiter = makeSettler();
-    armRebootWaiter(slot, 3, waiter);
-    expect(settleRebootWaiter(slot, 3, {
+    RebootWaiter.arm(slot, 3, waiter);
+    expect(RebootWaiter.settle(slot, 3, {
       kind: 'resolve',
       runtime: {id: 'rt-first'},
     })).toBe(true);
-    expect(settleRebootWaiter(slot, 3, {
+    expect(RebootWaiter.settle(slot, 3, {
       kind: 'reject',
       error: new Error('too late'),
     })).toBe(false);
@@ -159,14 +155,14 @@ describe('reboot-waiter 代际归属规则', () => {
   describe('rebindRebootWaiterGeneration', () => {
     it('把等待方改绑到新代号后，新一代能兑现、旧代号不能', () => {
       const waiter = makeSettler();
-      armRebootWaiter(slot, 1, waiter);
+      RebootWaiter.arm(slot, 1, waiter);
 
-      expect(rebindRebootWaiterGeneration(slot, 2)).toBe(true);
+      expect(RebootWaiter.rebindGeneration(slot, 2)).toBe(true);
       expect(slot.current?.generation).toBe(2);
 
       // 旧代号已作废：被取代的那一代碰不到它
       expect(
-        settleRebootWaiter(slot, 1, {
+        RebootWaiter.settle(slot, 1, {
           kind: 'reject',
           error: new Error('stale'),
         }),
@@ -175,7 +171,7 @@ describe('reboot-waiter 代际归属规则', () => {
 
       // 新代号正常兑现
       const rt = {id: 'rt-rebound'};
-      expect(settleRebootWaiter(slot, 2, {kind: 'resolve', runtime: rt})).toBe(
+      expect(RebootWaiter.settle(slot, 2, {kind: 'resolve', runtime: rt})).toBe(
         true,
       );
       expect(waiter.resolved).toEqual([rt]);
@@ -183,17 +179,17 @@ describe('reboot-waiter 代际归属规则', () => {
 
     it('改绑不换等待方：settlers 与槽对象身份都不变', () => {
       const first = makeSettler();
-      armRebootWaiter(slot, 1, first);
+      RebootWaiter.arm(slot, 1, first);
       const before = slot.current;
-      armRebootWaiter(slot, 1, makeSettler());
+      RebootWaiter.arm(slot, 1, makeSettler());
 
-      rebindRebootWaiterGeneration(slot, 9);
+      RebootWaiter.rebindGeneration(slot, 9);
       expect(slot.current).toBe(before);
       expect(slot.current?.settlers).toHaveLength(2);
     });
 
     it('槽为空时改绑返回 false，不凭空造等待方', () => {
-      expect(rebindRebootWaiterGeneration(slot, 4)).toBe(false);
+      expect(RebootWaiter.rebindGeneration(slot, 4)).toBe(false);
       expect(slot.current).toBeNull();
     });
   });

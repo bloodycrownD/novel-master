@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 // 真 cl100k 编解码器。core 自身不依赖 js-tiktoken（分词器是宿主注入的），
 // 但它是 monorepo 里已提升到根 node_modules 的工作区依赖，本用例正是要拿
 // **真**编解码器做基准，故直接按提升后的路径引入；core 的 `src` typecheck
 // （tsconfig.json 只含 src/**）不受影响。
-import { Tiktoken } from "js-tiktoken/lite";
+import {  Tiktoken  } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
-import { countTextWithIncrementalTokenizer } from "../../../src/infra/tokenizer/logic/count-text-with-tokenizer.js";
+import {  TokenizerTextCount  } from "../../../src/infra/tokenizer/logic/count-text-with-tokenizer.js";
 
 /** ranks 命名空间取默认导出兼容形态（ESM default vs CJS 命名导出）。 */
 function unwrapRanks(mod: unknown): unknown {
@@ -60,7 +60,7 @@ function captureWarnings(): { restore(): void } {
 describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）", () => {
   it("空串直接返回 0，且不触碰 encode", () => {
     let calls = 0;
-    const count = countTextWithIncrementalTokenizer(text => {
+    const count = TokenizerTextCount.count(text => {
       calls += 1;
       return cl100kEncode(text);
     }, "");
@@ -70,7 +70,7 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
 
   it("准确性：中文正文相对全量 encode 真值误差 ≤1%", () => {
     const truth = cl100kEncode(ZH_PASSAGE);
-    const count = countTextWithIncrementalTokenizer(cl100kEncode, ZH_PASSAGE);
+    const count = TokenizerTextCount.count(cl100kEncode, ZH_PASSAGE);
     const errorRate = Math.abs(count - truth) / truth;
     // 顺带钉住「折算有多不准」这条改造前提：3.35 是英文口径，对中文低估 ~80%，
     // 若哪天有人把本 helper 悄悄换回 ceil(chars/3.35)，这条对照即报警。
@@ -90,9 +90,9 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
     const longText = "中文无空白连续书写".repeat(400);
 
     const shortRecorder = recordingEncoder(t => t.length);
-    countTextWithIncrementalTokenizer(shortRecorder.encode, shortText);
+    TokenizerTextCount.count(shortRecorder.encode, shortText);
     const longRecorder = recordingEncoder(t => t.length);
-    countTextWithIncrementalTokenizer(longRecorder.encode, longText);
+    TokenizerTextCount.count(longRecorder.encode, longText);
     for (const call of [...shortRecorder.calls, ...longRecorder.calls]) {
       assert.ok(
         call.length <= 64,
@@ -122,7 +122,7 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
     const warnings = captureWarnings();
     try {
       const text = "这是一段无法编码的文本。".repeat(20);
-      const count = countTextWithIncrementalTokenizer(() => {
+      const count = TokenizerTextCount.count(() => {
         throw new Error("special token text");
       }, text);
       assert.equal(count, text.length, "不可编码段按 1 字符 ≈ 1 token 兜底计入");
@@ -138,7 +138,7 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
       const prefix = "正常可编码的文本。".repeat(30);
       const poisoned = "*".repeat(40);
       const suffix = "尾部同样可编码。".repeat(30);
-      const count = countTextWithIncrementalTokenizer(text => {
+      const count = TokenizerTextCount.count(text => {
         if (text.includes("*")) {
           throw new Error("special token text");
         }
@@ -168,7 +168,7 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
       // 6%~12%，把 1.05 的上界顶红——那是用例写坏了，不是实现退化。
       const passage = `${ZH_SENTENCE}\n`.repeat(200);
       const text = `${passage}${poison}`;
-      const count = countTextWithIncrementalTokenizer(cl100kEncode, text);
+      const count = TokenizerTextCount.count(cl100kEncode, text);
       // 基准是「去掉毒串的正文」的全量 encode（禁止硬编码任何数字：ranks 表随
       // js-tiktoken 版本会变，写死必然在升级后变成假红）。
       const truth = cl100kEncode(passage);
@@ -193,12 +193,12 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
   });
 
   it("整段一次计数 ≈ 同文本分块 push 的末值（同一套切分口径）", async () => {
-    const { createIncrementalTokenCounter } = await import(
+    const { IncrementalTokenCounter } = await import(
       "../../../src/infra/tokenizer/logic/incremental-token-counter.js"
     );
     const text = ZH_PASSAGE;
-    const oneShot = countTextWithIncrementalTokenizer(cl100kEncode, text);
-    const counter = createIncrementalTokenCounter({ encode: cl100kEncode });
+    const oneShot = TokenizerTextCount.count(cl100kEncode, text);
+    const counter = IncrementalTokenCounter.create({ encode: cl100kEncode });
     for (let i = 0; i < text.length; i += 7) {
       counter.push(text.slice(i, i + 7));
     }

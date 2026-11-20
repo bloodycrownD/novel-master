@@ -12,29 +12,22 @@
  * @module test/service/agent/run-agent-turn-subagent-stream.test
  */
 
+import {  Result  } from "../../../src/errors/either.js";
+import type { AppError } from "../../../src/errors/app-error.js";
+import {  unwrap  } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import {
-  createAgentRegistryService,
-  runAgentTurn,
-  type AgentDefinition,
-  type AgentTurnRuntimePort,
-} from "@novel-master/core/agent";
-import type { LlmChatResult } from "@novel-master/core/provider";
+import {  AgentServiceFactory, AgentTurnRunner, type AgentDefinition, type  AgentTurnRuntimePort  } from "@novel-master/core/agent";
+import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type {
   ModelRequestService,
   ModelRequestOptions,
 } from "@/service/provider/model-request.port.js";
-import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { createKkvService } from "@/service/kkv/create-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../../helpers/novel-master-fixture.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  createKkvService  } from "@/service/kkv/create-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../../helpers/novel-master-fixture.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 novelMasterTestFixture();
@@ -76,7 +69,7 @@ function taskToolUseResponse(toolUseId: string): LlmChatResult {
   };
 }
 
-/** 构造一轮纯文本完成响应。 */
+/** 构造一轮纯文本完成响应（裸 LlmChatResult；Result 包装由 scriptedModel 统一做）。 */
 function textDoneResponse(text: string): LlmChatResult {
   return {
     assistantText: text,
@@ -100,7 +93,7 @@ function scriptedModel(
       _savedModelId: string,
       _userContent: string,
       options?: ModelRequestOptions,
-    ): Promise<LlmChatResult> => {
+    ): Promise<Result<LlmChatResult, AppError>> => {
       const idx = calls;
       calls += 1;
       streams.push(options?.stream ?? false);
@@ -110,7 +103,7 @@ function scriptedModel(
           `scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`,
         );
       }
-      return r;
+      return Result.ok(r);
     },
   };
 }
@@ -123,22 +116,23 @@ function makeRuntime(
     readonly preferences?: AgentTurnRuntimePort["preferences"];
   },
 ): AgentTurnRuntimePort {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
       getSubagentNames: async () => [],
     },
     agentRegistry: registry,
-    abortRegistry: createAgentAbortRegistry(),
+    abortRegistry: AgentServiceFactory.createAbortRegistry(),
     ...(args.preferences != null ? { preferences: args.preferences } : {}),
     projects: ctx.projects,
     messages: ctx.messages,
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: args.modelRequests,
     savedModelRepo: {
-      findById: async () => ({
+      findById: async () =>
+        Result.ok({
         id: TEST_SAVED_MODEL_ID,
         providerId: "test-provider",
         alias: "test-model",
@@ -173,13 +167,14 @@ function makeRuntime(
       ctx.sessionVfs(projectId, sessionId),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => ({
-          rows: [],
-          displayByPath: new Map(),
-        }),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+        evaluateRuleView: async () =>
+          Result.ok({
+            rows: [],
+            displayByPath: new Map(),
+          }),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     userVfsTurn: mockUserVfsTurn(),
     sessions: ctx.sessions,
@@ -216,7 +211,7 @@ function realEventBus(): AgentTurnRuntimePort["eventBus"] {
 async function ensureDefaultAgentModel(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
 ): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("test-default-agent", {
     name: "测试默认 Agent",
     prompts: { persist: [], dynamic: [] },
@@ -228,7 +223,7 @@ async function ensureDefaultAgentModel(
 async function seedChildAgent(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
 ): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("child-worker", childAgentDef);
 }
 
@@ -251,8 +246,8 @@ async function runTaskTurn(
     textDoneResponse("主代理收到结果"),
   ]);
 
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id, "S-STREAM");
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id, "S-STREAM"));
 
   const runtime = makeRuntime(ctx, { modelRequests, preferences });
   runtime.eventBus = realEventBus();
@@ -260,14 +255,14 @@ async function runTaskTurn(
   await ctx.state.setCurrentAgentId("test-default-agent");
   await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-  const result = await runAgentTurn(
+  const result = unwrap(await AgentTurnRunner.run(
     runtime,
     { projectId: project.id, sessionId: session.id },
     "请派生子代理完成任务",
     // 主会话开关走 options.stream 链路（本测试不动它）：固定 false，
     // 便于把「子 run 的 stream」与「主 run 的 stream」区分开。
     { stream: false, onStream: () => {} },
-  );
+  ));
   assert.equal(result.stopReason, "completed");
 
   assert.equal(
@@ -316,7 +311,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     // 照 MF-3（test/agent/agent-runner.test.ts）先例：捕获 sink 收集日志，
     // finally 恢复默认 console sink，防止污染其它用例的输出。
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       // runTaskTurn 内部已断言 stopReason === completed（run 不抛）
       const streams = await runTaskTurn(ctx.preferences);
@@ -342,7 +337,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
         "回退日志 detail.error 应为 PreferencesError 的脱敏展开（name 保留错误码）",
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
       await ctx.preferences.resetSubagentStreamEnabled();
     }
   });
@@ -359,7 +354,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     // 主 run 继续收尾。因此断言口径不是「runAgentTurn 整体抛出」，而是三件
     // 可观察事实：① 主 run 正常完成；② 子 run 因重抛发生在子 runner.run
     // 之前而从未发起 model 调用；③ boom 经 ToolError.cause 解包出现在第 2
-    // 次主 run 请求的输入里（formatToolErrorForLlm 输出 "Error: boom"）。
+    // 次主 run 请求的输入里（ToolOutput.formatErrorForLlm 输出 "Error: boom"）。
     // 若实现删掉 :869 重抛行（catch 吞一切静默回退），boom 被吞、子 run 会
     // 以 stream=true 启动并消费掉第 2 个响应，主 run 第 3 次调用无预设响应
     // 而抛错——①②③ 全部转红。
@@ -372,7 +367,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
         _savedModelId: string,
         userContent: string,
         options?: ModelRequestOptions,
-      ): Promise<LlmChatResult> => {
+      ): Promise<Result<LlmChatResult, AppError>> => {
         const responses = [
           taskToolUseResponse("tu-s5"),
           textDoneResponse("主代理收到失败结果"),
@@ -388,21 +383,20 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
             `scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`,
           );
         }
-        return r;
+        return Result.ok(r);
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-S5");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-S5"));
 
     // 注入抛普通 Error（非 PreferencesError）的偏好窄切片。
     const runtime = makeRuntime(ctx, {
       modelRequests,
       preferences: {
-        getThinkingContextEnabled: async () => false,
-        getSubagentStreamEnabled: async () => {
-          throw new Error("boom");
-        },
+        getThinkingContextEnabled: async () => Result.ok(false),
+        // 注入「读失败」的偏好窄切片（Result 通道：非 PREFERENCES_INVALID_VALUE 的 Err 重抛）
+        getSubagentStreamEnabled: async () => Result.err(new Error("boom")),
       },
     });
     runtime.eventBus = realEventBus();
@@ -410,12 +404,12 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const result = await runAgentTurn(
+    const result = unwrap(await AgentTurnRunner.run(
       runtime,
       { projectId: project.id, sessionId: session.id },
       "请派生子代理完成任务",
       { stream: false, onStream: () => {} },
-    );
+    ));
 
     // ① task 工具失败回流后主 run 继续收尾，run 本身不炸。
     assert.equal(

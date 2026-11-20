@@ -1,11 +1,11 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {createStreamApplyBuffer} from '@/services/stream-apply-buffer';
+import {StreamApplyBuffer} from '@/services/stream-apply-buffer';
 
 describe('stream-apply-buffer', () => {
   it('64ms 后按 FIFO flush', () => {
     jest.useFakeTimers();
     const flushed: string[][] = [];
-    const buffer = createStreamApplyBuffer(
+    const buffer = StreamApplyBuffer.create(
       segments => {
         flushed.push(segments.map(s => `${s.kind}:${s.delta}`));
       },
@@ -23,7 +23,7 @@ describe('stream-apply-buffer', () => {
   it('溢出强制 flush 且不丢弃 thinking', () => {
     jest.useFakeTimers();
     const flushed: string[][] = [];
-    const buffer = createStreamApplyBuffer(
+    const buffer = StreamApplyBuffer.create(
       segments => {
         flushed.push(segments.map(s => `${s.kind}:${s.delta}`));
       },
@@ -40,7 +40,7 @@ describe('stream-apply-buffer', () => {
   it('reset 丢弃未 flush 队列', () => {
     jest.useFakeTimers();
     const flushed: string[][] = [];
-    const buffer = createStreamApplyBuffer(segments => {
+    const buffer = StreamApplyBuffer.create(segments => {
       flushed.push(segments.map(s => s.delta));
     });
     buffer.push({kind: 'text', delta: 'x'});

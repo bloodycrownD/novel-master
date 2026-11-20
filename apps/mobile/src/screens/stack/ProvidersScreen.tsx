@@ -2,16 +2,7 @@
  * Provider list → detail navigation.
  */
 import React, {useCallback, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {type ProviderListItem} from '@novel-master/core/provider';
@@ -25,12 +16,13 @@ import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useFocusListReload} from '../../hooks/useFocusListReload';
+import {Result, AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -55,13 +47,16 @@ export function ProvidersScreen() {
   // rows/loading/reload + 聚焦重载走共用 hook；fetcher 抛错进 error 态（配重试）。
   const {rows, loading, error, reload} = useFocusListReload({
     fetcher: useCallback(async () => {
-      const providers = await runtime.providers.list();
+      const listed = await runtime.providers.list();
+      if (!listed.ok) throw listed.error;
+      const providers = listed.value;
       const enriched: ProviderRow[] = [];
       for (const provider of providers) {
         const saved = await runtime.providerModels.savedList(provider.id);
+        if (!saved.ok) throw saved.error;
         enriched.push({
           ...provider,
-          savedCount: saved.length,
+          savedCount: saved.value.length,
         });
       }
       return enriched;
@@ -79,36 +74,45 @@ export function ProvidersScreen() {
   // 把 currentModelId 当软指针（不参与 SAVED_MODEL_IN_USE 前置拒绝）的另一半契约，
   // cli / desktop / mobile 三调用方必须一致，改任一方须同步复核另外两方。
   const deleteProviderOne = useCallback(
-    async (providerId: string) => {
-      const currentModelId = await runtime.state.getCurrentModelId();
+    async (providerId: string): Promise<Result<void, AppError>> => {
+      const currentModel = await runtime.state.getCurrentModelId();
+      if (!currentModel.ok) return Result.err(currentModel.error);
+      const currentModelId = currentModel.value;
       let clearCurrentModel = false;
       if (currentModelId) {
         const saved = await runtime.providerModels.getSavedById(currentModelId);
-        clearCurrentModel = saved?.providerId === providerId;
+        if (!saved.ok) return Result.err(saved.error);
+        clearCurrentModel = saved.value?.providerId === providerId;
       }
-      await runtime.providers.delete(providerId);
-      const currentProviderId = await runtime.state.getCurrentProviderId();
-      if (currentProviderId === providerId) {
+      const deleted = await runtime.providers.delete(providerId);
+      if (!deleted.ok) return deleted;
+      const currentProvider = await runtime.state.getCurrentProviderId();
+      if (!currentProvider.ok) return Result.err(currentProvider.error);
+      if (currentProvider.value === providerId) {
         await runtime.state.resetCurrentProviderId();
       }
       if (clearCurrentModel) {
         await runtime.state.resetCurrentModelId();
       }
+      return Result.ok(undefined);
     },
     [runtime],
   );
 
   const deleteProviders = async (providerIds: string[]) => {
     for (const providerId of providerIds) {
-      await deleteProviderOne(providerId);
+      const deleted = await deleteProviderOne(providerId);
+      if (!deleted.ok) {
+        showToast(ToastMessage.toast('删除失败', deleted.error));
+        return;
+      }
     }
     await reload();
   };
 
   const confirmBatchDelete = useBatchDeleteConfirm<string>({
     title: '删除服务商',
-    message: ids =>
-      `将同时移除其下所有已保存模型，确定删除选中的 ${ids.length} 个服务商？`,
+    message: ids => `将同时移除其下所有已保存模型，确定删除选中的 ${ids.length} 个服务商？`,
     deleteOne: deleteProviderOne,
     onDone: async () => {
       await reload();
@@ -117,22 +121,18 @@ export function ProvidersScreen() {
   });
 
   const handleDelete = (providerId: string) => {
-    Alert.alert(
-      '删除服务商',
-      '将同时移除其下所有已保存模型与采样配置，确定继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => {
-            (async () => {
-              await deleteProviders([providerId]);
-            })().catch(err => showToast(toastMessage('删除失败', err)));
-          },
+    Alert.alert('删除服务商', '将同时移除其下所有已保存模型与采样配置，确定继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          (async () => {
+            await deleteProviders([providerId]);
+          })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
@@ -145,13 +145,7 @@ export function ProvidersScreen() {
         onCancelBatch={batch.exit}
         onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
         hint="选择要删除的服务商（将同时移除其下所有已保存模型）"
-        normalActions={
-          <PrimaryButton
-            label="添加"
-            tokens={tokens}
-            onPress={() => navigation.navigate('ProviderCreate')}
-          />
-        }
+        normalActions={<PrimaryButton label="添加" tokens={tokens} onPress={() => navigation.navigate('ProviderCreate')} />}
       />
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={listScreenStyles.loader} />
@@ -167,16 +161,8 @@ export function ProvidersScreen() {
           data={rows}
           keyExtractor={item => item.id}
           contentContainerStyle={listScreenStyles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={reload} />
-          }
-          ListEmptyComponent={
-            <Text
-              style={[listScreenStyles.empty, {color: tokens.textSecondary}]}
-            >
-              暂无服务商，点击右上角「添加」创建。
-            </Text>
-          }
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          ListEmptyComponent={<Text style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>暂无服务商，点击右上角「添加」创建。</Text>}
           renderItem={({item}) => (
             <ConfigListCard
               tokens={tokens}
@@ -188,24 +174,11 @@ export function ProvidersScreen() {
                   navigation.navigate('ProviderDetail', {providerId: item.id});
                 }
               }}
-              leading={
-                batch.active ? (
-                  <BatchCheckbox
-                    checked={batch.isSelected(item.id)}
-                    onToggle={() => batch.toggle(item.id)}
-                  />
-                ) : (
-                  <Text style={styles.icon}>🟢</Text>
-                )
-              }
+              leading={batch.active ? <BatchCheckbox checked={batch.isSelected(item.id)} onToggle={() => batch.toggle(item.id)} /> : <Text style={styles.icon}>🟢</Text>}
               title={item.displayName}
               subtitle={metaLine(item)}
-              trailingMeta={
-                <ApiKeyStatusTag status={item.apiKeyStatus} tokens={tokens} />
-              }
-              onMenuPress={
-                batch.active ? undefined : () => setMenuProviderId(item.id)
-              }
+              trailingMeta={<ApiKeyStatusTag status={item.apiKeyStatus} tokens={tokens} />}
+              onMenuPress={batch.active ? undefined : () => setMenuProviderId(item.id)}
             />
           )}
         />

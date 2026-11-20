@@ -24,15 +24,8 @@ import {
   type NativeChatComposerInstance,
   type NativeChatComposerProps,
 } from '../src/components/chat/NativeChatComposer';
-import {
-  attachmentDraftChipsStyles,
-  composerDockStyles,
-  composerTokenCapsule,
-  composerToolBtnStyle,
-  DOCK_PADDING_BASE,
-  resolveDockBottomPadding,
-} from '../src/components/chat/native-composer/dock-style';
-import {resolveSendButtonState} from '../src/components/chat/native-composer/send-button';
+import {attachmentDraftChipsStyles, composerDockStyles, composerTokenCapsule, composerToolBtnStyle, DOCK_PADDING_BASE, DockStyle} from '../src/components/chat/native-composer/dock-style'
+import {SendButton} from '../src/components/chat/native-composer/send-button'
 import {
   EnrichedMarkdownTextInput,
   mockCalls,
@@ -194,25 +187,25 @@ describe('NativeChatComposer dock（T-NC7 发送钮与 dock 显隐）', () => {
     expect(mixedBtn().props.accessibilityLabel).toBe('终止');
 
     // 状态机纯函数本身：四组合逐一锁定（换分支顺序必红）
-    expect(resolveSendButtonState({canSend: true, running: false})).toEqual({
+    expect(SendButton.resolve({canSend: true, running: false})).toEqual({
       disabled: false,
       running: false,
       variant: 'primary',
       action: 'send',
     });
-    expect(resolveSendButtonState({canSend: true, running: true})).toEqual({
+    expect(SendButton.resolve({canSend: true, running: true})).toEqual({
       disabled: false,
       running: true,
       variant: 'danger',
       action: 'terminate',
     });
-    expect(resolveSendButtonState({canSend: false, running: false})).toEqual({
+    expect(SendButton.resolve({canSend: false, running: false})).toEqual({
       disabled: true,
       running: false,
       variant: 'disabled',
       action: 'send',
     });
-    expect(resolveSendButtonState({canSend: false, running: true})).toEqual({
+    expect(SendButton.resolve({canSend: false, running: true})).toEqual({
       disabled: true,
       running: true,
       variant: 'disabled',
@@ -471,9 +464,9 @@ describe('NativeChatComposer dock（T-NC9 粘贴门控）', () => {
 describe('NativeChatComposer dock（T-NC10 样式 ⇄ dock-style.ts 单源）', () => {
   it('T-NC10 dock 底 padding：DOCK_PADDING_BASE 语义（keyboardUp 归零 / max(8, safeArea)）', () => {
     expect(DOCK_PADDING_BASE).toBe(8);
-    expect(resolveDockBottomPadding(true, 34)).toBe(0);
-    expect(resolveDockBottomPadding(false, 0)).toBe(8);
-    expect(resolveDockBottomPadding(false, 34)).toBe(34);
+    expect(DockStyle.resolveDockBottomPadding(true, 34)).toBe(0);
+    expect(DockStyle.resolveDockBottomPadding(false, 0)).toBe(8);
+    expect(DockStyle.resolveDockBottomPadding(false, 34)).toBe(34);
 
     const rendered = renderDock({safeAreaBottom: 34});
     const dockStyle = byTestId(rendered.tree, 'native-composer-dock').props
@@ -485,7 +478,7 @@ describe('NativeChatComposer dock（T-NC10 样式 ⇄ dock-style.ts 单源）', 
     expect(dockStyle[0].paddingTop).toBe(4);
     expect(dockStyle[1].backgroundColor).toBe(THEME.background);
     expect(dockStyle[1].paddingBottom).toBe(
-      resolveDockBottomPadding(false, 34),
+      DockStyle.resolveDockBottomPadding(false, 34),
     );
     expect(dockStyle[1].paddingBottom).toBe(34);
 

@@ -12,26 +12,22 @@
  * @module test/message-checkpoint/backfill-transaction-scope
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { createScopedVfsService, createVfsZipIoService } from "@novel-master/core/vfs";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {  after, before, describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  SqliteWorkplaceRepository  } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import type { WorkplaceDirRule } from "@/domain/workplace/model/workplace-types.js";
-import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
-import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import {  MessageCheckpointFactory  } from "@novel-master/core/message-checkpoint";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import {
-  openNovelMasterTestConnection,
-  type NovelMasterTestContext,
-} from "../helpers/novel-master.js";
-import {
-  probeTransactions,
-  type TransactionProbe,
-} from "../helpers/transaction-probe.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  openNovelMasterTestConnection, type NovelMasterTestContext  } from "../helpers/novel-master.js";
+import {  probeTransactions, type TransactionProbe  } from "../helpers/transaction-probe.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 function filesMap(count: number, prefix = "f"): Map<string, string> {
@@ -52,9 +48,9 @@ async function seedSession(
   label: string,
   messageCount: number
 ): Promise<{ projectId: string; sessionId: string; lastMessageId: string }> {
-  const project = await ctx.projects.create(`P-${label}-${Date.now()}`);
-  const session = await ctx.sessions.create(project.id);
-  const vfs = createScopedVfsService(conn, {
+  const project = unwrap(await ctx.projects.create(`P-${label}-${Date.now()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
+  const vfs = VfsServiceFactory.createScoped(conn, {
     kind: "session",
     projectId: project.id,
     sessionId: session.id,
@@ -63,9 +59,9 @@ async function seedSession(
   let lastId = "";
   for (let i = 0; i < messageCount; i++) {
     lastId = (
-      await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
+      unwrap(await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
         blocks: [{ type: "text", text: `m${i}` }],
-      })
+      }))
     ).id;
   }
   return { projectId: project.id, sessionId: session.id, lastMessageId: lastId };
@@ -96,7 +92,7 @@ describe("CS-05b backfill 事务边界", () => {
     };
 
     probe.reset();
-    await createVfsZipIoService(conn).import(scope, buildVfsZip(filesMap(450)), {
+    await VfsServiceFactory.createZipIo(conn).import(scope, VfsZipBuild.build(filesMap(450)), {
       confirmed: true,
     });
 
@@ -126,7 +122,7 @@ describe("CS-05b backfill 事务边界", () => {
       "backfill 段必须真的在补 checkpoint 行"
     );
     // ⚠️ 断言口径是「零 vfs_entry **写**」：导入侧段 C 按 spec 的形态就是
-    // `conn.transaction(backfillBaselineCheckpoints)`——判定/扫描读（列表 vfs_entry
+    // `conn.transaction(BackfillBaselineCheckpoints.backfill)`——判定/扫描读（列表 vfs_entry
     // + 头投影 + JOIN 定位）仍在**这条**短事务内。要治的是「它们与 3 万条导入语句
     // 同一条事务」，不是「这段读必须零事务」。
     const entryWrites = inBackfill.filter((s) =>
@@ -167,9 +163,9 @@ describe("CS-05b backfill 事务边界", () => {
 
     let upsertCalls = 0;
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
-      const zipSvc = createVfsZipIoService(conn, {
+      const zipSvc = VfsServiceFactory.createZipIo(conn, {
         testHook: {
           createWorkplaceRepo: (tx) => {
             const real = new SqliteWorkplaceRepository(tx);
@@ -194,10 +190,10 @@ describe("CS-05b backfill 事务边界", () => {
       });
 
       await assert.doesNotReject(() =>
-        zipSvc.import(scope, buildVfsZip(expected), { confirmed: true })
+        zipSvc.import(scope, VfsZipBuild.build(expected), { confirmed: true })
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     // 牙齿判据①：注入必须真的被触发，否则本条全部断言恒真。
@@ -212,15 +208,15 @@ describe("CS-05b backfill 事务边界", () => {
       "补规则行失败必须被吞掉并记 warn（scope=vfs.import-dir-rules）"
     );
 
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     const entries = new SqliteVfsEntryRepository(conn);
     for (const [rel, content] of expected) {
-      assert.equal((await vfs.read(`/${rel}`)).content, content);
+      assert.equal(unwrap(await vfs.read(`/${rel}`)).content, content);
     }
-    const rows = await entries.scanContents(
+    const rows = unwrap(await entries.scanContents(
       `session:${seeded.projectId}:${seeded.sessionId}`,
       "/"
-    );
+    ));
     assert.equal(rows.length, expected.size);
 
     // ⚠️ `WHERE scope_key = session:<sid>` 是 **workplace 键空间**
@@ -264,17 +260,17 @@ describe("CS-05b backfill 事务边界", () => {
        BEGIN SELECT RAISE(ABORT, 'backfill blocked'); END`
     );
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       await assert.doesNotReject(() =>
-        createVfsZipIoService(conn).import(
+        VfsServiceFactory.createZipIo(conn).import(
           scope,
-          buildVfsZip(expected),
+          VfsZipBuild.build(expected),
           { confirmed: true }
         )
       );
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
       await ctx.conn.execute(`DROP TRIGGER IF EXISTS t_block_backfill_insert`);
     }
 
@@ -283,9 +279,9 @@ describe("CS-05b backfill 事务边界", () => {
       "backfill 失败必须被吞掉并记 warn（不得冒泡成 IMPORT_FAILED）"
     );
     // 新内容逐字节完整（导入是全量覆盖语义，但补写失败不影响任何一条导入语句）。
-    const vfs = createScopedVfsService(conn, scope);
+    const vfs = VfsServiceFactory.createScoped(conn, scope);
     for (const [rel, content] of expected) {
-      assert.equal((await vfs.read(`/${rel}`)).content, content);
+      assert.equal(unwrap(await vfs.read(`/${rel}`)).content, content);
     }
     const rows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM message_checkpoint WHERE session_id = ?`,
@@ -296,14 +292,14 @@ describe("CS-05b backfill 事务边界", () => {
 
   it("B3: 无空窗短路路径 —— 段 0/段 1 事务外 ⇒ 事务调用数为 0", async () => {
     const seeded = await seedSession(ctx, conn, "b3short", 2);
-    const checkpoint = createMessageCheckpointService(conn);
+    const checkpoint = MessageCheckpointFactory.create(conn);
 
     // 第一轮：建游标（游标缺失 ⇒ 判定回退全量，会开一条写事务写游标）。
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     probe.reset();
     // 第二轮：count === 游标 ⇒ 短路。段 0 的判定、游标写入都是单条语句，
     // 整条路径**不开事务**。
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     assert.equal(
       probe.transactionCount,
       0,
@@ -316,30 +312,30 @@ describe("CS-05b backfill 事务边界", () => {
   });
 
   it("B3: 有空窗补写路径 —— 只有段 2 一条事务，事务内语句数与消息总数 M 无关", async () => {
-    const checkpoint = createMessageCheckpointService(conn);
+    const checkpoint = MessageCheckpointFactory.create(conn);
 
     // 两条会话：gap 都是最后 3 条，但消息总数分别是 4 与 200。
     const small = await seedSession(ctx, conn, "b3m4", 4);
     const smallAnchor = (
-      await ctx.messages.listBySession(small.sessionId)
+      outcomeValue(await ctx.messages.listBySession(small.sessionId))
     )[0]!;
-    await checkpoint.capture(
+    unwrap(await checkpoint.capture(
       small.sessionId,
       small.projectId,
       smallAnchor.id
-    );
+    ));
 
     const big = await seedSession(ctx, conn, "b3m200", 200);
-    const bigAnchor = (await ctx.messages.listBySession(big.sessionId))[196]!;
-    await checkpoint.capture(big.sessionId, big.projectId, bigAnchor.id);
+    const bigAnchor = (outcomeValue(await ctx.messages.listBySession(big.sessionId)))[196]!;
+    unwrap(await checkpoint.capture(big.sessionId, big.projectId, bigAnchor.id));
 
     probe.reset();
-    await checkpoint.backfillMissingBaselines(small.sessionId, small.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(small.sessionId, small.projectId));
     assert.equal(probe.transactionCount, 1, "补写路径恰好一条短事务（段 2）");
     const smallStmts = probe.statementCountInTransaction(0);
 
     probe.reset();
-    await checkpoint.backfillMissingBaselines(big.sessionId, big.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(big.sessionId, big.projectId));
     assert.equal(probe.transactionCount, 1, "补写路径恰好一条短事务（段 2）");
     const bigStmts = probe.statementCountInTransaction(0);
 
@@ -355,7 +351,7 @@ describe("CS-05b backfill 事务边界", () => {
 
   it("B5: 连跑两轮 backfill —— 第二轮不新增 checkpoint 行（幂等）", async () => {
     const seeded = await seedSession(ctx, conn, "b5", 5);
-    const checkpoint = createMessageCheckpointService(conn);
+    const checkpoint = MessageCheckpointFactory.create(conn);
 
     const countRows = async (): Promise<number> => {
       const rows = await ctx.conn.query<{ n: number }>(
@@ -365,16 +361,16 @@ describe("CS-05b backfill 事务边界", () => {
       return Number(rows[0]!.n);
     };
 
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     const afterFirst = await countRows();
     assert.ok(afterFirst > 0, "第一轮应当补上 checkpoint");
 
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     const afterSecond = await countRows();
     assert.equal(afterSecond, afterFirst, "第二轮不得新增行（insertCheckpoint 是替换语义）");
 
     // 第三轮：游标已前移 ⇒ 走短路，仍不得新增。
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     assert.equal(await countRows(), afterFirst);
   });
 });

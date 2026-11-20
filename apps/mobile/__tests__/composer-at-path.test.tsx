@@ -26,7 +26,9 @@ import { composerAtPath } from '@/components/chat/composer-at-path';
 
 describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
-    const tokens = composerAtPath.tokensFromPickerSelection(['/notes'], ['/a.md']);
+    const tokensResult = composerAtPath.tokensFromPickerSelection(['/notes'], ['/a.md']);
+    if (!tokensResult.ok) throw tokensResult.error;
+    const tokens = tokensResult.value;
     expect(tokens).toEqual(['@/notes/', '@/a.md']);
     const scanned = attachmentScanner.scanAtPaths(tokens.join(' '));
     expect(scanned).toHaveLength(2);
@@ -40,8 +42,9 @@ describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
     const active = composerAtPath.detectQuery('见 @ab', 5);
     expect(active).not.toBeNull();
     expect(active!.query).toBe('ab');
-    const token = composerAtPath.formatToken('/ab.md', false);
-    const next = composerAtPath.replaceToken('见 @ab', 5, active!.start, token);
+    const tokenResult = composerAtPath.formatToken('/ab.md', false);
+    if (!tokenResult.ok) throw tokenResult.error;
+    const next = composerAtPath.replaceToken('见 @ab', 5, active!.start, tokenResult.value);
     expect(next.text).toBe('见 @/ab.md ');
   });
 

@@ -1,27 +1,22 @@
 /**
  * Incremental Gemini streamGenerateContent SSE parser (`?alt=sse`).
  *
+ * State 收在 {@link GeminiSseParser.create} 闭包里，同名动词归位到对象方法。
+ *
  * @module infra/llm-protocol/logic/gemini-sse-parser
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type {
-  DegradedToolCall,
-  LlmStreamEvent,
-} from "../ports/adapter.port.js";
-import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
-import { emitDirectTextDelta } from "./inline-thinking-parser.js";
-import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
-import { feedSseLines } from "./sse-line-buffer.js";
-import { parseSseDataLine } from "./sse-data-line.js";
-import {
-  assertSseParseSucceededOrThrow,
-  recordMalformedSseLine,
-  type SseParseDiagnostics,
-} from "./sse-parse-errors.js";
-import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
-import { parseGeminiUsage } from "./usage-parser.js";
+import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
+import { GeminiMapper } from "./gemini-content-mapper.js";
+import { InlineThinkingParser } from "./inline-thinking-parser.js";
+import { StreamPartialBlocks } from "./stream-partial-blocks.js";
+import { SseJsonEvents } from "./sse-json-events.js";
+import { SseLineBuffer } from "./sse-line-buffer.js";
+import { SseParseErrors, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
+import { ToolArguments } from "./tool-arguments-parse.js";
+import { UsageParser } from "./usage-parser.js";
 
 type FunctionCallAccumulator = {
   name: string;
@@ -30,7 +25,15 @@ type FunctionCallAccumulator = {
   thinkingSignature?: string;
 };
 
-export type GeminiSseParserState = SseParseDiagnostics & {
+type GeminiToolUse = {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  thinkingSignature?: string;
+};
+
+/** 单条流的累加器（工厂闭包持有；诊断字段与白盒测试可见）。 */
+type GeminiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -42,398 +45,247 @@ export type GeminiSseParserState = SseParseDiagnostics & {
   lastEmittedCompletionTokens: number | undefined;
 };
 
-function readThoughtSignature(
-  part: Record<string, unknown>
-): string | undefined {
-  const sig = part.thought_signature ?? part.thoughtSignature;
-  return typeof sig === "string" && sig !== "" ? sig : undefined;
-}
+export type GeminiSseParserOptions = {
+  readonly onStream?: (event: LlmStreamEvent) => void;
+};
 
-export function createGeminiSseParserState(): GeminiSseParserState {
-  return {
-    buffer: "",
-    textParts: [],
-    thinkingParts: [],
-    functionCalls: new Map(),
-    streamRaw: undefined,
-    malformedLineCount: 0,
-    emittedFunctionCallKeys: new Set(),
-    lastEmittedCompletionTokens: undefined,
-  };
-}
+type GeminiSseParserHandle = {
+  readonly state: GeminiSseParserState;
+  readonly feed: (chunk: string) => void;
+  readonly finish: () => SseFinishResult;
+  readonly finishPartial: () => SseFinishResult;
+};
 
-/**
- * 每个候选块到达时同步 emit 流中 usage 事件（usageMetadata.candidatesTokenCount
- * 累计口径）。放在 `streamRaw` 覆盖存储点、candidates 早退之前——无候选内容的
- * 块（如 usage-only 收尾块）也能 emit。累计值与上次 emit 相同（或缺失）时不发；
- * 协议层不节流，每块必变的量由上层合批/节流吸收。
- */
-function emitGeminiUsage(
-  state: GeminiSseParserState,
-  payload: Record<string, unknown>,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  const usage = parseGeminiUsage(payload);
-  const completionTokens = usage?.completionTokens;
-  if (
-    usage == null ||
-    completionTokens == null ||
-    completionTokens === state.lastEmittedCompletionTokens
-  ) {
-    return;
-  }
-  state.lastEmittedCompletionTokens = completionTokens;
-  onStream?.({ type: "usage", usage });
-}
-
-function tryEmitGeminiToolUseIfComplete(
-  state: GeminiSseParserState,
-  key: string,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  if (state.emittedFunctionCallKeys.has(key)) {
-    return;
-  }
-  const acc = state.functionCalls.get(key);
-  if (acc == null || acc.name === "" || acc.argsJson === "") {
-    return;
-  }
-  let input: Record<string, unknown>;
-  try {
-    input = JSON.parse(acc.argsJson) as Record<string, unknown>;
-  } catch {
-    return;
-  }
-  state.emittedFunctionCallKeys.add(key);
-  onStream?.({ type: "tool-use", id: acc.id, name: acc.name, input });
-}
-
-/**
- * `mergeFunctionCallPart` 的归并键。
- *
- * `functionCall.id` 缺席时（Gemini 明确允许省略）用「函数名 + 同一 chunk 内同名出现序」
- * 而不是裸函数名——裸名字会把**并行的两个同名调用压成一个累加器**，而
- * `argsJson` 分支是赋值不是累加 ⇒ 第二个 chunk 的 args 整体覆盖第一个，
- * `blocks` 最终只剩一条 `tool_use`、携带最后一次调用的参数（工具调用静默丢失 + 参数串味）。
- *
- * 为什么「chunk 内序号」是稳定的：SSE 的增量语义是「每个 chunk 携带当前完整的
- * parts 快照」，一个持续增长的调用在后续 chunk 里出现在同一 part 位置、同名序号不变
- * ⇒ key 稳定、argsJson 继续被同一条累加器更新；而并行的第二个同名调用占另一个序号。
- *
- * ⚠️ 已知边界（R1）：若供应商真按「只带新增 part」的增量形态发，且两个同名调用**分处两个
- * chunk**，两者序号都是 0 ⇒ 仍会塌缩。届时需改用全局序号 + part 位置。
- */
-function functionCallMergeKey(
-  fc: Record<string, unknown>,
-  ordinal: number
-): string {
-  return typeof fc.id === "string" && fc.id !== "" ? fc.id : `${fc.name}#${ordinal}`;
-}
-
-function mergeFunctionCallPart(
-  state: GeminiSseParserState,
-  part: Record<string, unknown>,
-  ordinal: number,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  const fc = part.functionCall;
-  if (!isRecord(fc) || typeof fc.name !== "string") {
-    return;
-  }
-  const key = functionCallMergeKey(fc, ordinal);
-  let acc = state.functionCalls.get(key);
-  if (acc == null) {
-    acc = {
-      name: fc.name,
-      argsJson: "",
-      id: key,
-    };
-    state.functionCalls.set(key, acc);
-  }
-  if (isRecord(fc.args)) {
-    const newJson = JSON.stringify(fc.args);
-    if (newJson !== acc.argsJson) {
-      acc.argsJson = newJson;
-    }
-  }
-  const sig = readThoughtSignature(part);
-  if (sig != null) {
-    acc.thinkingSignature = sig;
-  }
-  tryEmitGeminiToolUseIfComplete(state, key, onStream);
-}
-
-function processGeminiResponseChunk(
-  state: GeminiSseParserState,
-  payload: Record<string, unknown>,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  state.streamRaw = payload;
-  emitGeminiUsage(state, payload, onStream);
-  const candidates = payload.candidates;
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    return;
-  }
-  const first = candidates[0];
-  if (!isRecord(first)) {
-    return;
-  }
-  const content = first.content;
-  if (!isRecord(content) || !Array.isArray(content.parts)) {
-    return;
-  }
-
-  // 同名 functionCall 的 0 基出现序号（**逐 chunk 重置**，见 functionCallMergeKey 注释）
-  const perChunkNameSeq = new Map<string, number>();
-  for (const part of content.parts) {
-    if (!isRecord(part)) {
-      continue;
-    }
-    if (typeof part.text === "string" && part.text !== "") {
-      if (part.thought === true) {
-        // 结构化 thought → thinking-delta
-        state.thinkingParts.push(part.text);
-        onStream?.({ type: "thinking-delta", text: part.text });
-        const thoughtSignature = readThoughtSignature(part);
-        if (thoughtSignature != null) {
-          state.thinkingSignature = thoughtSignature;
-        }
-      } else {
-        // 非 thought 正文直通 text-delta，不做内嵌标签拆分
-        emitDirectTextDelta(state, part.text, onStream);
-      }
-    } else if (part.thought === true) {
-      const thoughtSignature = readThoughtSignature(part);
-      if (thoughtSignature != null) {
-        state.thinkingSignature = thoughtSignature;
-      }
-    }
-    if (part.functionCall != null) {
-      const fcName =
-        isRecord(part.functionCall) && typeof part.functionCall.name === "string"
-          ? part.functionCall.name
-          : "";
-      const ordinal = perChunkNameSeq.get(fcName) ?? 0;
-      perChunkNameSeq.set(fcName, ordinal + 1);
-      mergeFunctionCallPart(state, part, ordinal, onStream);
-    }
-  }
-}
-
-function processGeminiSseLine(
-  state: GeminiSseParserState,
-  line: string,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  const payload = parseSseDataLine(line);
-  if (payload == null) {
-    return;
-  }
-  if (payload === "[DONE]") {
-    return;
-  }
-  let event: Record<string, unknown>;
-  try {
-    event = JSON.parse(payload) as Record<string, unknown>;
-  } catch {
-    recordMalformedSseLine(state, payload);
-    return;
-  }
-  processGeminiResponseChunk(state, event, onStream);
-}
-
-export function feedGeminiSseChunk(
-  state: GeminiSseParserState,
-  chunk: string,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  feedSseLines(state, chunk, (line) =>
-    processGeminiSseLine(state, line, onStream)
-  );
-}
-
-function functionCallsToToolUses(
-  state: GeminiSseParserState,
-  strict = false
-): {
-  toolUses: Array<{
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    thinkingSignature?: string;
-  }>;
-  degradedToolCalls: DegradedToolCall[];
-} {
-  const toolUses: Array<{
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    thinkingSignature?: string;
-  }> = [];
-  const degradedToolCalls: DegradedToolCall[] = [];
-  for (const acc of state.functionCalls.values()) {
-    let input: Record<string, unknown> = {};
-    if (acc.argsJson !== "") {
-      if (strict) {
-        const parsed = tryParseToolArgumentsJson(acc.argsJson);
-        if (parsed.ok) {
-          input = parsed.value;
+export const GeminiSseParser = {
+  functionCallsToToolUses(state: GeminiSseParserState, strict = false): { toolUses: GeminiToolUse[]; degradedToolCalls: DegradedToolCall[] } {
+    const toolUses: GeminiToolUse[] = [];
+    const degradedToolCalls: DegradedToolCall[] = [];
+    for (const acc of state.functionCalls.values()) {
+      let input: Record<string, unknown> = {};
+      if (acc.argsJson !== "") {
+        if (strict) {
+          const parsed = ToolArguments.tryParseJson(acc.argsJson);
+          if (parsed.ok) {
+            input = parsed.value;
+          } else {
+            degradedToolCalls.push({
+              id: acc.id,
+              name: acc.name,
+              rawArguments: parsed.raw,
+              reason: "INVALID_TOOL_ARGUMENTS",
+            });
+          }
         } else {
-          degradedToolCalls.push({
-            id: acc.id,
-            name: acc.name,
-            rawArguments: parsed.raw,
-            reason: "INVALID_TOOL_ARGUMENTS",
-          });
-        }
-      } else {
-        try {
-          input = JSON.parse(acc.argsJson) as Record<string, unknown>;
-        } catch {
-          input = {};
+          try {
+            input = JSON.parse(acc.argsJson) as Record<string, unknown>;
+          } catch {
+            input = {};
+          }
         }
       }
-    }
-    toolUses.push({
-      id: acc.id,
-      name: acc.name,
-      input,
-      ...(acc.thinkingSignature != null
-        ? { thinkingSignature: acc.thinkingSignature }
-        : {}),
-    });
-  }
-  return { toolUses, degradedToolCalls };
-}
-
-function emitToolUsesFromAccumulators(
-  toolUses: readonly {
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    thinkingSignature?: string;
-  }[],
-  onStream?: (event: LlmStreamEvent) => void,
-  emittedKeys?: Set<string>
-): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
-  let signatureEmitted = false;
-  for (const tu of toolUses) {
-    const thinkingSignature =
-      !signatureEmitted && tu.thinkingSignature != null
-        ? tu.thinkingSignature
-        : undefined;
-    if (thinkingSignature != null) {
-      signatureEmitted = true;
-    }
-    blocks.push({
-      type: "tool_use",
-      id: tu.id,
-      name: tu.name,
-      input: tu.input,
-      ...(thinkingSignature != null ? { thinkingSignature } : {}),
-    });
-    if (emittedKeys == null || !emittedKeys.has(tu.id)) {
-      if (emittedKeys != null) {
-        emittedKeys.add(tu.id);
-      }
-      onStream?.({
-        type: "tool-use",
-        id: tu.id,
-        name: tu.name,
-        input: tu.input,
+      toolUses.push({
+        id: acc.id,
+        name: acc.name,
+        input,
+        ...(acc.thinkingSignature != null ? { thinkingSignature: acc.thinkingSignature } : {}),
       });
     }
-  }
-  return blocks;
-}
+    return { toolUses, degradedToolCalls };
+  },
 
-/** Finalize parser state (normal stream end). */
-export function finishGeminiSse(
-  state: GeminiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void
-): {
-  blocks: ContentBlock[];
-  streamRaw: unknown;
-  degradedToolCalls: DegradedToolCall[];
-} {
-  if (state.buffer !== "") {
-    feedGeminiSseChunk(state, "\n", onStream);
-  }
-
-  const text = state.textParts.join("");
-  const thinking = state.thinkingParts.join("");
-
-  const blocks: ContentBlock[] = [];
-  if (thinking !== "" || state.thinkingSignature != null) {
-    blocks.push({
-      type: "thinking",
-      text: thinking,
-      ...(state.thinkingSignature != null
-        ? { thinkingSignature: state.thinkingSignature }
-        : {}),
-    });
-  }
-  if (text !== "") {
-    blocks.push({ type: "text", text });
-  }
-  const { toolUses, degradedToolCalls } = functionCallsToToolUses(state, true);
-  blocks.push(
-    ...emitToolUsesFromAccumulators(
-      toolUses,
-      onStream,
-      state.emittedFunctionCallKeys
-    )
-  );
-
-  assertSseParseSucceededOrThrow(state, blocks, "gemini");
-
-  if (blocks.length === 0 && state.streamRaw != null) {
-    const raw = state.streamRaw as {
-      candidates?: Array<{ content?: { parts?: unknown[] } }>;
+  /**
+   * 创建一个单流 Gemini SSE parser；`state` 持有本次流的全部累加器。
+   *
+   * Gemini 每个 chunk 是候选块快照：
+   * - 每个候选块到达时同步 emit 流中 usage 事件（累计口径；同值不重发）。
+   * - 结构化 thought → thinking-delta；非 thought 正文直通 text-delta，不做内嵌标签拆分。
+   * - functionCall 用「call id，缺失时函数名 + 同一 chunk 内同名出现序」归并——裸函数名会把
+   *   并行的两个同名调用压成一个累加器（argsJson 是覆盖不是累加，最终静默丢调用 + 参数串味）。
+   */
+  create(options: GeminiSseParserOptions = {}): GeminiSseParserHandle {
+    const onStream = options.onStream;
+    const state: GeminiSseParserState = {
+      buffer: "",
+      textParts: [],
+      thinkingParts: [],
+      functionCalls: new Map(),
+      streamRaw: undefined,
+      malformedLineCount: 0,
+      emittedFunctionCallKeys: new Set(),
+      lastEmittedCompletionTokens: undefined,
     };
-    const parts = raw.candidates?.[0]?.content?.parts ?? [];
-    return {
-      blocks: geminiPartsToBlocks(parts),
-      streamRaw: state.streamRaw,
-      degradedToolCalls,
+
+    const feed = (chunk: string): void => {
+      SseJsonEvents.feed(state, chunk, (event) => {
+        state.streamRaw = event;
+
+        // usage 在 candidates 早退之前 emit：usage-only 收尾块也能发。
+        const usage = UsageParser.parse("gemini", event);
+        const completionTokens = usage?.completionTokens;
+        if (usage != null && completionTokens != null && completionTokens !== state.lastEmittedCompletionTokens) {
+          state.lastEmittedCompletionTokens = completionTokens;
+          onStream?.({ type: "usage", usage });
+        }
+
+        const candidates = event.candidates;
+        if (!Array.isArray(candidates) || candidates.length === 0) {
+          return;
+        }
+        const first = candidates[0];
+        if (!Guards.isRecord(first)) {
+          return;
+        }
+        const content = first.content;
+        if (!Guards.isRecord(content) || !Array.isArray(content.parts)) {
+          return;
+        }
+
+        // 同名 functionCall 的 0 基出现序号（**逐 chunk 重置**，见工厂注释）。
+        const perChunkNameSeq = new Map<string, number>();
+        for (const part of content.parts) {
+          if (!Guards.isRecord(part)) {
+            continue;
+          }
+          const rawSignature = part.thought_signature ?? part.thoughtSignature;
+          const thoughtSignature = typeof rawSignature === "string" && rawSignature !== "" ? rawSignature : undefined;
+          if (typeof part.text === "string" && part.text !== "") {
+            if (part.thought === true) {
+              // 结构化 thought → thinking-delta
+              state.thinkingParts.push(part.text);
+              onStream?.({ type: "thinking-delta", text: part.text });
+              if (thoughtSignature != null) {
+                state.thinkingSignature = thoughtSignature;
+              }
+            } else {
+              // 非 thought 正文直通 text-delta，不做内嵌标签拆分
+              InlineThinkingParser.emitDirectTextDelta(state, part.text, onStream);
+            }
+          } else if (part.thought === true) {
+            if (thoughtSignature != null) {
+              state.thinkingSignature = thoughtSignature;
+            }
+          }
+          if (part.functionCall != null) {
+            const fcName = Guards.isRecord(part.functionCall) && typeof part.functionCall.name === "string" ? part.functionCall.name : "";
+            const ordinal = perChunkNameSeq.get(fcName) ?? 0;
+            perChunkNameSeq.set(fcName, ordinal + 1);
+
+            const fc = part.functionCall;
+            if (Guards.isRecord(fc) && typeof fc.name === "string") {
+              const key = typeof fc.id === "string" && fc.id !== "" ? fc.id : `${fc.name}#${ordinal}`;
+              let acc = state.functionCalls.get(key);
+              if (acc == null) {
+                acc = { name: fc.name, argsJson: "", id: key };
+                state.functionCalls.set(key, acc);
+              }
+              if (Guards.isRecord(fc.args)) {
+                const newJson = JSON.stringify(fc.args);
+                if (newJson !== acc.argsJson) {
+                  acc.argsJson = newJson;
+                }
+              }
+              if (thoughtSignature != null) {
+                acc.thinkingSignature = thoughtSignature;
+              }
+              // 参数齐了且该 key 未 emit 过 → 发 tool-use 事件。
+              if (!state.emittedFunctionCallKeys.has(key) && acc.name !== "" && acc.argsJson !== "") {
+                let input: Record<string, unknown> | null = null;
+                try {
+                  input = JSON.parse(acc.argsJson) as Record<string, unknown>;
+                } catch {
+                  input = null;
+                }
+                if (input != null) {
+                  state.emittedFunctionCallKeys.add(key);
+                  onStream?.({ type: "tool-use", id: acc.id, name: acc.name, input });
+                }
+              }
+            }
+          }
+        }
+      });
     };
-  }
 
-  return { blocks, streamRaw: state.streamRaw, degradedToolCalls };
-}
+    const finish = (): SseFinishResult => {
+      SseLineBuffer.drain(state, feed);
 
-/** Partial snapshot when the user aborted mid-stream. */
-export function finishGeminiSsePartial(
-  state: GeminiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void
-): {
-  blocks: ContentBlock[];
-  streamRaw: unknown;
-  degradedToolCalls: DegradedToolCall[];
-} {
-  if (state.buffer !== "") {
-    feedGeminiSseChunk(state, "\n", onStream);
-  }
+      const text = state.textParts.join("");
+      const thinking = state.thinkingParts.join("");
 
-  const { toolUses } = functionCallsToToolUses(state);
-  const blocks = buildStreamPartialBlocks(
-    {
-      text: state.textParts.join(""),
-      thinking: state.thinkingParts.join(""),
-      // 与正常收尾路径（finishGeminiSse）同源：同一份 state.thinkingSignature。
-      // 不传它 ⇒ 中断收尾产出的 thinking 块比正常收尾少一个签名，回传时会被 400。
-      thinkingSignature: state.thinkingSignature,
-      toolUses,
-    },
-    onStream
-  );
+      const blocks: ContentBlock[] = [];
+      if (thinking !== "" || state.thinkingSignature != null) {
+        blocks.push({
+          type: "thinking",
+          text: thinking,
+          ...(state.thinkingSignature != null ? { thinkingSignature: state.thinkingSignature } : {}),
+        });
+      }
+      if (text !== "") {
+        blocks.push({ type: "text", text });
+      }
+      const { toolUses, degradedToolCalls } = GeminiSseParser.functionCallsToToolUses(state, true);
+      let signatureEmitted = false;
+      for (const tu of toolUses) {
+        const thinkingSignature = !signatureEmitted && tu.thinkingSignature != null ? tu.thinkingSignature : undefined;
+        if (thinkingSignature != null) {
+          signatureEmitted = true;
+        }
+        blocks.push({
+          type: "tool_use",
+          id: tu.id,
+          name: tu.name,
+          input: tu.input,
+          ...(thinkingSignature != null ? { thinkingSignature } : {}),
+        });
+        if (!state.emittedFunctionCallKeys.has(tu.id)) {
+          state.emittedFunctionCallKeys.add(tu.id);
+          onStream?.({
+            type: "tool-use",
+            id: tu.id,
+            name: tu.name,
+            input: tu.input,
+          });
+        }
+      }
 
-  return {
-    blocks,
-    streamRaw:
-      state.streamRaw ??
-      ({ streamed: true, aborted: true } as Record<string, unknown>),
-    degradedToolCalls: [],
-  };
-}
+      // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+      const asserted = SseParseErrors.assertSucceededOrThrow(state, blocks, "gemini");
+      if (!asserted.ok) throw asserted.error;
+
+      if (blocks.length === 0 && state.streamRaw != null) {
+        const raw = state.streamRaw as { candidates?: Array<{ content?: { parts?: unknown[] } }> };
+        const parts = raw.candidates?.[0]?.content?.parts ?? [];
+        return {
+          blocks: GeminiMapper.partsToBlocks(parts),
+          streamRaw: state.streamRaw,
+          degradedToolCalls,
+        };
+      }
+
+      return { blocks, streamRaw: state.streamRaw, degradedToolCalls };
+    };
+
+    const finishPartial = (): SseFinishResult => {
+      SseLineBuffer.drain(state, feed);
+
+      const { toolUses } = GeminiSseParser.functionCallsToToolUses(state);
+      const partialInput = {
+        text: state.textParts.join(""),
+        thinking: state.thinkingParts.join(""),
+        // 与正常收尾路径（finish）同源：同一份 state.thinkingSignature。
+        // 不传它 ⇒ 中断收尾产出的 thinking 块比正常收尾少一个签名，回传时会被 400。
+        thinkingSignature: state.thinkingSignature,
+        toolUses,
+      };
+      const blocks = StreamPartialBlocks.build(partialInput, onStream);
+
+      return {
+        blocks,
+        streamRaw: state.streamRaw ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+        degradedToolCalls: [],
+      };
+    };
+
+    return { state, feed, finish, finishPartial };
+  },
+} as const;

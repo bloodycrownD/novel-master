@@ -1,14 +1,17 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {userMessageOf} from '@novel-master/core/i18n';
+import {AppErrorOps} from '@novel-master/core/errors';
+import {ErrorMessage} from '@novel-master/core/i18n';
 
 import {coreT} from '@/i18n/core';
-import {runAgentTurn} from '@/services/agent-run.service';
+import {AgentRunService} from '@/services/agent-run.service'
 
 function baseRuntime(overrides: Partial<any> = {}) {
   return {
     state: {
-      getCurrentAgentId: async () => 'a1',
-      getCurrentModelId: async () => 'openai/gpt',
+      // 错误通道迁移后 state 读口走 Result（resolveCurrentAgentId /
+      // resolveApplicationModelIdForRun 均按 `!ok` 解包）。
+      getCurrentAgentId: async () => ({ok: true, value: 'a1'}),
+      getCurrentModelId: async () => ({ok: true, value: 'openai/gpt'}),
     },
     projects: {
       getAgentConfig: async () => ({
@@ -23,14 +26,19 @@ function baseRuntime(overrides: Partial<any> = {}) {
     // chat-session-detail-page 起：项目智能体下线，会话独立持有 agentId，
     // resolveAgentForProject 改从 sessions.getSessionAgentConfig 取 agentId。
     sessions: {
-      getSessionAgentConfig: async () => ({agentId: 'a1'}),
+      // 错误通道迁移二期后走 Result（resolveApplicationModelIdForRun `!ok` 即 throw）。
+      getSessionAgentConfig: async () => ({ok: true, value: {agentId: 'a1'}}),
     },
     agentRegistry: {
       listAgentIds: async () => ['a1'],
+      // 错误通道迁移后 registry.get 走 Result（resolveAgentForProject `!ok` 即归一）。
       get: async () => ({
-        name: 'x',
-        prompts: {persist: [], dynamic: []},
-        model: 'openai/gpt',
+        ok: true,
+        value: {
+          name: 'x',
+          prompts: {persist: [], dynamic: []},
+          model: 'openai/gpt',
+        },
       }),
     },
     messageCheckpoint: {
@@ -38,9 +46,9 @@ function baseRuntime(overrides: Partial<any> = {}) {
       backfillMissingBaselines: jest.fn(async () => undefined),
     },
     messages: {
-      listBySession: async () => [],
+      listBySession: async () => ({kind: 'completed' as const, value: []}),
       // 续跑判定走 tail(1) 单行读（2026-09-30 替换全量 listBySession）。
-      listBySessionTail: async () => [],
+      listBySessionTail: async () => ({kind: 'completed' as const, value: []}),
       append: jest.fn(async () => undefined),
     },
     sessionVfs: () => ({}),
@@ -68,17 +76,17 @@ function baseRuntime(overrides: Partial<any> = {}) {
   };
 }
 
-describe('runAgentTurn integration', () => {
+describe('runAgentTurnAdapter integration', () => {
   it('empty input + last user → allowed, no empty message appended', async () => {
     const runtime = baseRuntime({
       messages: {
-        listBySession: async () => [{role: 'user', content: {blocks: []}}],
-        listBySessionTail: async () => [{role: 'user', content: {blocks: []}}],
+        listBySession: async () => ({kind: 'completed' as const, value: [{role: 'user', content: {blocks: []}}]}),
+        listBySessionTail: async () => ({kind: 'completed' as const, value: [{role: 'user', content: {blocks: []}}]}),
         append: jest.fn(async () => undefined),
       },
     });
     try {
-      await runAgentTurn(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
+      await AgentRunService.run(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
         allowResumeWithoutInput: true,
       });
     } catch {
@@ -90,22 +98,26 @@ describe('runAgentTurn integration', () => {
   it('empty input + last non-user → blocked', async () => {
     const runtime = baseRuntime({
       messages: {
-        listBySession: async () => [{role: 'assistant', content: {blocks: []}}],
-        listBySessionTail: async () => [
-          {role: 'assistant', content: {blocks: []}},
-        ],
+        listBySession: async () => ({kind: 'completed' as const, value: [{role: 'assistant', content: {blocks: []}}]}),
+        listBySessionTail: async () => ({
+          kind: 'completed' as const,
+          value: [{role: 'assistant', content: {blocks: []}}],
+        }),
         append: jest.fn(async () => undefined),
       },
     });
-    // 迁移后抛的是带 messageKey 的 descriptor（Error.message 为 key 原文），
-    // 经 core translator 解析后再断言用户可见中文。
-    const error = await runAgentTurn(
+    // 前奏期空输入拦截是业务失败：沿 Result.err（AppError AGENT_MESSAGE_EMPTY，
+    // 自带 code + messageKey）交回，经 core translator 解析后再断言用户可见中文。
+    const result = await AgentRunService.run(
       runtime as any,
       {projectId: 'p', sessionId: 's'},
       '',
       {allowResumeWithoutInput: true},
-    ).catch((e: unknown) => e);
-    const descriptor = userMessageOf(error);
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('预期 Err（空输入必须被拦截）');
+    expect(AppErrorOps.is(result.error, 'AGENT_MESSAGE_EMPTY')).toBe(true);
+    const descriptor = ErrorMessage.userOf(result.error);
     expect(descriptor).not.toBeNull();
     expect(coreT(descriptor!)).toBe('消息不能为空');
   });

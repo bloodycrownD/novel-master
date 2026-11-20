@@ -13,7 +13,7 @@
 import {type ChatMessageData} from '@novel-master/core/chat';
 import type {TranscriptScrollIntent} from './ChatTranscriptBridge';
 import type {ChatTranscriptTelemetryEvent} from '@/services/chat-transcript-telemetry';
-import {messageHasToolUse, messageIsToolResultsOnly} from './message-blocks';
+import {MessageBlocks} from './message-blocks';
 
 /** planner 只关心位置，不关心 schemaVersion（版本校验已在 parse 阶段做完）。 */
 type ScrollPosition = {readonly offsetY: number; readonly nearBottom: boolean};
@@ -38,58 +38,6 @@ type OpenSnapshotPlan =
       readonly restoreScroll?: ScrollPosition;
       readonly events: readonly ChatTranscriptTelemetryEvent[];
     };
-
-/**
- * nm-style: keep-public — 纯决策面与 React 状态宿主隔离：effect 只读 ref / 派发副作用，
- * 分支判定与遥测载荷在此可表驱动单测（先例 snapshot-chunk-bounds.ts）；内联回 effect
- * 会让每条分支重新绑定 ref 时序，无法在不挂 WebView 的情况下钉死优先级。
- */
-export function planOpenSnapshot(input: OpenSnapshotInput): OpenSnapshotPlan {
-  const {
-    messageCount,
-    hasStreamingMessage,
-    sessionKey,
-    initialScroll,
-    defaultScrollToBottom,
-  } = input;
-  if (messageCount === 0 && !hasStreamingMessage) return {kind: 'wait-empty'};
-  let restoreScroll: ScrollPosition | undefined;
-  if (
-    !defaultScrollToBottom &&
-    initialScroll != null &&
-    !initialScroll.nearBottom
-  ) {
-    restoreScroll = {
-      offsetY: initialScroll.offsetY,
-      nearBottom: initialScroll.nearBottom,
-    };
-  }
-  const intent = restoreScroll != null ? 'restore' : 'stick';
-  let scrollEvent: ChatTranscriptTelemetryEvent;
-  if (restoreScroll != null) {
-    scrollEvent = {
-      name: 'scroll_restore',
-      mode: 'offset',
-      offsetY: restoreScroll.offsetY,
-      nearBottom: restoreScroll.nearBottom,
-    };
-  } else {
-    scrollEvent = {name: 'scroll_restore', mode: 'stick'};
-  }
-  const readyEvent: ChatTranscriptTelemetryEvent = {
-    name: 'transcript_ready',
-    sessionKey,
-    rowCount: messageCount + (hasStreamingMessage ? 1 : 0),
-    hasInitialScroll: initialScroll != null,
-    defaultScrollToBottom,
-  };
-  return {
-    kind: 'open',
-    intent,
-    restoreScroll,
-    events: [scrollEvent, readyEvent],
-  };
-}
 
 type UpdateInput = {
   readonly messages: readonly ChatMessageData[];
@@ -122,93 +70,147 @@ type MessagesUpdatePlan =
     }
   | {readonly kind: 'snapshot'; readonly intent: 'stick' | 'preserve'};
 
-/** nm-style: keep-public — 同上；分支优先级必须有独立纯测试钉死。 */
-export function planMessagesUpdate(input: UpdateInput): MessagesUpdatePlan {
-  const {
-    messages,
-    previousMessages,
-    prevFirstId,
-    prevCount,
-    uiRunning,
-    streamRowIds,
-    lastScroll,
-  } = input;
-  if (previousMessages === messages) return {kind: 'same-reference'};
-  const firstId = messages[0]?.id;
-  const grew = messages.length > prevCount;
-  const sameLength = messages.length === prevCount;
-  if (sameLength && prevFirstId === firstId && prevCount > 0) {
-    let hiddenChanged = false;
-    for (let i = 0; i < messages.length; i += 1) {
-      if (previousMessages[i]!.hidden !== messages[i]!.hidden) {
-        hiddenChanged = true;
-        break;
-      }
+export namespace ChatConversationUpdatePlan {
+  /**
+   * nm-style: keep-public — 纯决策面与 React 状态宿主隔离：effect 只读 ref / 派发副作用，
+   * 分支判定与遥测载荷在此可表驱动单测（先例 snapshot-chunk-bounds.ts）；内联回 effect
+   * 会让每条分支重新绑定 ref 时序，无法在不挂 WebView 的情况下钉死优先级。
+   */
+  export function planOpenSnapshot(input: OpenSnapshotInput): OpenSnapshotPlan {
+    const {
+      messageCount,
+      hasStreamingMessage,
+      sessionKey,
+      initialScroll,
+      defaultScrollToBottom,
+    } = input;
+    if (messageCount === 0 && !hasStreamingMessage) return {kind: 'wait-empty'};
+    let restoreScroll: ScrollPosition | undefined;
+    if (
+      !defaultScrollToBottom &&
+      initialScroll != null &&
+      !initialScroll.nearBottom
+    ) {
+      restoreScroll = {
+        offsetY: initialScroll.offsetY,
+        nearBottom: initialScroll.nearBottom,
+      };
     }
-    if (hiddenChanged) return {kind: 'hidden-changed'};
-  }
-  const bothIdsKnown = prevFirstId != null && firstId != null;
-  const firstChanged = bothIdsKnown && firstId !== prevFirstId;
-  if (grew && firstChanged) {
-    // 前插数量 = 旧首行在新列表中的下标；不能用 messages.length - prevCount
-    // （那是总增长，含尾部新增）。
-    const prevFirstIndex = messages.findIndex(msg => msg.id === prevFirstId);
-    if (prevFirstIndex < 0) {
-      // 旧首行不在新列表：头尾都可能变，无法安全前插 → 全量对账。
-      return {kind: 'force-snapshot'};
+    const intent = restoreScroll != null ? 'restore' : 'stick';
+    let scrollEvent: ChatTranscriptTelemetryEvent;
+    if (restoreScroll != null) {
+      scrollEvent = {
+        name: 'scroll_restore',
+        mode: 'offset',
+        offsetY: restoreScroll.offsetY,
+        nearBottom: restoreScroll.nearBottom,
+      };
+    } else {
+      scrollEvent = {name: 'scroll_restore', mode: 'stick'};
     }
-    const prependedCount = prevFirstIndex;
-    const tailAddedCount = messages.length - prevCount - prependedCount;
-    if (tailAddedCount > 0) {
-      // 前插 + 尾部新增同拍：prepend 页只能发头部，尾部会丢 → 全量对账
-      // （尾部 adopted 只是其中一种；任何尾部新增都走这里）。
-      return {kind: 'force-snapshot'};
-    }
+    const readyEvent: ChatTranscriptTelemetryEvent = {
+      name: 'transcript_ready',
+      sessionKey,
+      rowCount: messageCount + (hasStreamingMessage ? 1 : 0),
+      hasInitialScroll: initialScroll != null,
+      defaultScrollToBottom,
+    };
     return {
-      kind: 'prepend',
-      prependedCount,
-      event: {
-        name: 'prepend_detected',
-        prependedCount,
-        wasNearBottom: lastScroll.nearBottom,
-        offsetYBefore: lastScroll.offsetY,
-      },
+      kind: 'open',
+      intent,
+      restoreScroll,
+      events: [scrollEvent, readyEvent],
     };
   }
-  // 普通追加：added 只在非 prepend 路径按 prevCount 取尾部。
-  const added = grew ? messages.slice(prevCount) : [];
-  const addedStream = added
-    .map(message => ({
-      messageId: message.id,
-      streamId: streamRowIds.get(message.id),
-    }))
-    .filter(
-      (pair): pair is {messageId: string; streamId: string} =>
-        pair.streamId != null,
-    );
-  if (
-    !firstChanged &&
-    grew &&
-    addedStream.length === added.length &&
-    addedStream.length > 0
-  ) {
-    return {kind: 'stream-adopted', adopted: addedStream};
+
+  /** nm-style: keep-public — 同上；分支优先级必须有独立纯测试钉死。 */
+  export function planMessagesUpdate(input: UpdateInput): MessagesUpdatePlan {
+    const {
+      messages,
+      previousMessages,
+      prevFirstId,
+      prevCount,
+      uiRunning,
+      streamRowIds,
+      lastScroll,
+    } = input;
+    if (previousMessages === messages) return {kind: 'same-reference'};
+    const firstId = messages[0]?.id;
+    const grew = messages.length > prevCount;
+    const sameLength = messages.length === prevCount;
+    if (sameLength && prevFirstId === firstId && prevCount > 0) {
+      let hiddenChanged = false;
+      for (let i = 0; i < messages.length; i += 1) {
+        if (previousMessages[i]!.hidden !== messages[i]!.hidden) {
+          hiddenChanged = true;
+          break;
+        }
+      }
+      if (hiddenChanged) return {kind: 'hidden-changed'};
+    }
+    const bothIdsKnown = prevFirstId != null && firstId != null;
+    const firstChanged = bothIdsKnown && firstId !== prevFirstId;
+    if (grew && firstChanged) {
+      // 前插数量 = 旧首行在新列表中的下标；不能用 messages.length - prevCount
+      // （那是总增长，含尾部新增）。
+      const prevFirstIndex = messages.findIndex(msg => msg.id === prevFirstId);
+      if (prevFirstIndex < 0) {
+        // 旧首行不在新列表：头尾都可能变，无法安全前插 → 全量对账。
+        return {kind: 'force-snapshot'};
+      }
+      const prependedCount = prevFirstIndex;
+      const tailAddedCount = messages.length - prevCount - prependedCount;
+      if (tailAddedCount > 0) {
+        // 前插 + 尾部新增同拍：prepend 页只能发头部，尾部会丢 → 全量对账
+        // （尾部 adopted 只是其中一种；任何尾部新增都走这里）。
+        return {kind: 'force-snapshot'};
+      }
+      return {
+        kind: 'prepend',
+        prependedCount,
+        event: {
+          name: 'prepend_detected',
+          prependedCount,
+          wasNearBottom: lastScroll.nearBottom,
+          offsetYBefore: lastScroll.offsetY,
+        },
+      };
+    }
+    // 普通追加：added 只在非 prepend 路径按 prevCount 取尾部。
+    const added = grew ? messages.slice(prevCount) : [];
+    const addedStream = added
+      .map(message => ({
+        messageId: message.id,
+        streamId: streamRowIds.get(message.id),
+      }))
+      .filter(
+        (pair): pair is {messageId: string; streamId: string} =>
+          pair.streamId != null,
+      );
+    if (
+      !firstChanged &&
+      grew &&
+      addedStream.length === added.length &&
+      addedStream.length > 0
+    ) {
+      return {kind: 'stream-adopted', adopted: addedStream};
+    }
+    if (!firstChanged && grew && addedStream.length > 0) {
+      return {kind: 'force-snapshot'};
+    }
+    if (uiRunning && grew) {
+      const hasToolResultsOnly = added.some(MessageBlocks.isToolResultsOnly);
+      const hasAssistantToolUse = added.some(
+        message => message.role === 'assistant' && MessageBlocks.hasToolUse(message),
+      );
+      return hasToolResultsOnly || hasAssistantToolUse
+        ? {kind: 'force-snapshot'}
+        : {kind: 'append', added};
+    }
+    const shrunk = messages.length < prevCount;
+    const tailReplaced = !grew && firstChanged;
+    const stick = shrunk || tailReplaced;
+    const intent: 'stick' | 'preserve' = stick ? 'stick' : 'preserve';
+    return {kind: 'snapshot', intent};
   }
-  if (!firstChanged && grew && addedStream.length > 0) {
-    return {kind: 'force-snapshot'};
-  }
-  if (uiRunning && grew) {
-    const hasToolResultsOnly = added.some(messageIsToolResultsOnly);
-    const hasAssistantToolUse = added.some(
-      message => message.role === 'assistant' && messageHasToolUse(message),
-    );
-    return hasToolResultsOnly || hasAssistantToolUse
-      ? {kind: 'force-snapshot'}
-      : {kind: 'append', added};
-  }
-  const shrunk = messages.length < prevCount;
-  const tailReplaced = !grew && firstChanged;
-  const stick = shrunk || tailReplaced;
-  const intent: 'stick' | 'preserve' = stick ? 'stick' : 'preserve';
-  return {kind: 'snapshot', intent};
 }

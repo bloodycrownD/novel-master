@@ -6,24 +6,17 @@
  * session view cache 均用真实实现。
  */
 import {beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {ToastMessage} from '@/errors/toast-message';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
-import {
-  clearAllSessionViewCaches,
-  getSessionViewCache,
-  sessionViewCacheKey,
-  setSessionViewCache,
-} from '../src/services/chat-session-view-cache';
-import {
-  clearAllTranscriptScrollSnapshots,
-  getTranscriptScrollSnapshot,
-  scrollCacheKey as transcriptScrollCacheKey,
-  setTranscriptScrollSnapshot,
-} from '../src/services/chat-transcript-scroll-cache';
-import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../src/components/chat/ChatTranscriptBridge';
+import {SessionViewCache} from '../src/services/chat-session-view-cache';
+import {ChatTranscriptScrollCache} from '../src/services/chat-transcript-scroll-cache';
+import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../src/components/chat/ChatTranscriptBridge';
+const transcriptScrollCacheKey = ChatTranscriptScrollCache.key;
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -33,34 +26,41 @@ jest.mock('../src/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
   // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
-  cancelPreciseUpgradeDelay: jest.fn(),
-  cancelPreciseUpgrade: jest.fn(),
+  PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
 const deletedSessionIds: string[] = [];
 const deletedProjectIds: string[] = [];
 
+// 错误通道迁移二期后 get/listByProject/delete 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
     delete: jest.fn(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-      {id: 's2', title: 'S2', updatedAtMs: 2},
-      {id: 's3', title: 'S3', updatedAtMs: 3},
-    ]),
+    listByProject: jest.fn(async () => ({
+      ok: true,
+      value: [
+        {id: 's1', title: 'S1', updatedAtMs: 1},
+        {id: 's2', title: 'S2', updatedAtMs: 2},
+        {id: 's3', title: 'S3', updatedAtMs: 3},
+      ],
+    })),
     delete: jest.fn(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   state: {
@@ -107,20 +107,22 @@ describe('useChatTabScope 批量删除中途失败', () => {
     jest.clearAllMocks();
     deletedSessionIds.length = 0;
     deletedProjectIds.length = 0;
-    clearAllSessionViewCaches();
-    clearAllTranscriptScrollSnapshots();
+    SessionViewCache.clearAll();
+    ChatTranscriptScrollCache.clearAll();
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     });
     mockRuntime.projects.delete.mockImplementation(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     });
   });
 
   describe('deleteSelectedSessions', () => {
     it('全部成功：逐个 delete、退出批选、刷新执行', async () => {
-      const s1Key = sessionViewCacheKey('p1', 's1');
-      setSessionViewCache(s1Key, {messages: [], hasMoreMessages: false});
+      const s1Key = SessionViewCache.key('p1', 's1');
+      SessionViewCache.set(s1Key, {messages: [], hasMoreMessages: false});
       const api = mountScope();
       const listCallsBefore = mockRuntime.projects.list.mock.calls.length;
 
@@ -142,16 +144,17 @@ describe('useChatTabScope 批量删除中途失败', () => {
         listCallsBefore,
       );
       // 已删会话的视图缓存被清掉，刷新后不会复用旧消息尾。
-      expect(getSessionViewCache(s1Key)).toBeUndefined();
+      expect(SessionViewCache.get(s1Key)).toBeUndefined();
       expect(mockShowToast).not.toHaveBeenCalled();
     });
 
     it('第二个 delete reject：toast 提示、批选仍退出、第一个已删不复活', async () => {
       mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
         if (id === 's2') {
-          throw new Error('db locked');
+          return {ok: false as const, error: new Error('db locked')};
         }
         deletedSessionIds.push(id);
+        return {ok: true, value: undefined};
       });
       const api = mountScope();
 
@@ -166,7 +169,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
       expect(mockRuntime.sessions.delete.mock.calls).toEqual([['s1'], ['s2']]);
       expect(deletedSessionIds).toEqual(['s1']);
       expect(mockShowToast).toHaveBeenCalledTimes(1);
-      // 真实 toastMessage('删除失败', error) 产出「删除失败：db locked」。
+      // 真实 ToastMessage.toast('删除失败', error) 产出「删除失败：db locked」。
       expect(mockShowToast).toHaveBeenCalledWith(
         expect.stringContaining('删除失败'),
       );
@@ -179,9 +182,10 @@ describe('useChatTabScope 批量删除中途失败', () => {
     it('中途 reject：toast 提示、finally 刷新仍执行', async () => {
       mockRuntime.projects.delete.mockImplementation(async (id: string) => {
         if (id === 'p2') {
-          throw new Error('fs busy');
+          return {ok: false as const, error: new Error('fs busy')};
         }
         deletedProjectIds.push(id);
+        return {ok: true, value: undefined};
       });
       const api = mountScope();
       const listCallsBefore = mockRuntime.projects.list.mock.calls.length;
@@ -205,16 +209,16 @@ describe('useChatTabScope 批量删除中途失败', () => {
 
   describe('handleDeleteProjects 缓存清理（b2/B-6）', () => {
     it('删除成功后按项目前缀清掉会话级缓存，未删项目不受影响', async () => {
-      const p1ViewKey = sessionViewCacheKey('p1', 's1');
+      const p1ViewKey = SessionViewCache.key('p1', 's1');
       const p1TranscriptKey = transcriptScrollCacheKey('p1', 's1');
       const otherTranscriptKey = transcriptScrollCacheKey('p2', 's9');
-      setSessionViewCache(p1ViewKey, {messages: [], hasMoreMessages: false});
-      setTranscriptScrollSnapshot(p1TranscriptKey, {
+      SessionViewCache.set(p1ViewKey, {messages: [], hasMoreMessages: false});
+      ChatTranscriptScrollCache.set(p1TranscriptKey, {
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 10,
         nearBottom: false,
       });
-      setTranscriptScrollSnapshot(otherTranscriptKey, {
+      ChatTranscriptScrollCache.set(otherTranscriptKey, {
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 1,
         nearBottom: false,
@@ -225,9 +229,9 @@ describe('useChatTabScope 批量删除中途失败', () => {
         await api.handleDeleteProjects(['p1']);
       });
 
-      expect(getSessionViewCache(p1ViewKey)).toBeUndefined();
-      expect(getTranscriptScrollSnapshot(p1TranscriptKey)).toBeUndefined();
-      expect(getTranscriptScrollSnapshot(otherTranscriptKey)).toEqual({
+      expect(SessionViewCache.get(p1ViewKey)).toBeUndefined();
+      expect(ChatTranscriptScrollCache.get(p1TranscriptKey)).toBeUndefined();
+      expect(ChatTranscriptScrollCache.get(otherTranscriptKey)).toEqual({
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 1,
         nearBottom: false,
@@ -237,22 +241,23 @@ describe('useChatTabScope 批量删除中途失败', () => {
     it('中途 reject：已删项目缓存已清、未删项目缓存保留', async () => {
       mockRuntime.projects.delete.mockImplementation(async (id: string) => {
         if (id === 'p2') {
-          throw new Error('fs busy');
+          return {ok: false as const, error: new Error('fs busy')};
         }
         deletedProjectIds.push(id);
+        return {ok: true, value: undefined};
       });
-      const p1Key = sessionViewCacheKey('p1', 's1');
-      const p2Key = sessionViewCacheKey('p2', 's2');
-      setSessionViewCache(p1Key, {messages: [], hasMoreMessages: false});
-      setSessionViewCache(p2Key, {messages: [], hasMoreMessages: false});
+      const p1Key = SessionViewCache.key('p1', 's1');
+      const p2Key = SessionViewCache.key('p2', 's2');
+      SessionViewCache.set(p1Key, {messages: [], hasMoreMessages: false});
+      SessionViewCache.set(p2Key, {messages: [], hasMoreMessages: false});
       const api = mountScope();
 
       await act(async () => {
         await api.handleDeleteProjects(['p1', 'p2']);
       });
 
-      expect(getSessionViewCache(p1Key)).toBeUndefined();
-      expect(getSessionViewCache(p2Key)).toBeDefined();
+      expect(SessionViewCache.get(p1Key)).toBeUndefined();
+      expect(SessionViewCache.get(p2Key)).toBeDefined();
     });
   });
 });

@@ -1,11 +1,6 @@
-import {
-  composerTokenRanges,
-} from '@/components/chat/composer-highlight';
-import {tryAtomicRangeDelete} from '@/components/common/atomic-range-delete';
-import {
-  findWhitelistMacroRanges,
-  tryAtomicMacroDelete,
-} from '@/components/agent/prompt-macro-input';
+import {ComposerHighlight} from '@/components/chat/composer-highlight';
+import {AtomicRangeDelete} from '@/components/common/atomic-range-delete';
+import {PromptMacroInput} from '@/components/agent/prompt-macro-input'
 
 /** 模拟退格一次：删掉 cursor 前一字 */
 function backspaceOnce(value: string, cursor: number): string {
@@ -22,7 +17,7 @@ describe('tryAtomicRangeDelete', () => {
     const cursorInside = prev.indexOf('$apm-') + '$apm-'.length;
     const next = backspaceOnce(prev, cursorInside);
 
-    expect(tryAtomicRangeDelete(prev, next, composerTokenRanges(prev))).toBe(
+    expect(AtomicRangeDelete.tryAtomicRangeDelete(prev, next, ComposerHighlight.tokenRanges(prev))).toBe(
       '看  和 @/a.md@ 哦',
     );
   });
@@ -32,15 +27,15 @@ describe('tryAtomicRangeDelete', () => {
     const next = backspaceOnce(prev, 5); // 区间 {start:1,end:9} 内退格
 
     expect(
-      tryAtomicRangeDelete(prev, next, [{start: 1, end: 9}]),
+      AtomicRangeDelete.tryAtomicRangeDelete(prev, next, [{start: 1, end: 9}]),
     ).toBe('xy');
   });
 
   it('T-AD2：非删除（next 不短于 prev）返回 null', () => {
     const ranges = [{start: 0, end: 5}];
 
-    expect(tryAtomicRangeDelete('ab', 'abc', ranges)).toBeNull();
-    expect(tryAtomicRangeDelete('ab', 'ab', ranges)).toBeNull();
+    expect(AtomicRangeDelete.tryAtomicRangeDelete('ab', 'abc', ranges)).toBeNull();
+    expect(AtomicRangeDelete.tryAtomicRangeDelete('ab', 'ab', ranges)).toBeNull();
   });
 
   it('T-AD3：多处不连续删返回 null（尾段对账失败）', () => {
@@ -49,7 +44,7 @@ describe('tryAtomicRangeDelete', () => {
     const next = 'abXYdef';
     const ranges = [{start: 2, end: 6}];
 
-    expect(tryAtomicRangeDelete(prev, next, ranges)).toBeNull();
+    expect(AtomicRangeDelete.tryAtomicRangeDelete(prev, next, ranges)).toBeNull();
   });
 
   it('T-AD4：删除已覆盖整段区间返回 null（默认差分即可）', () => {
@@ -57,14 +52,14 @@ describe('tryAtomicRangeDelete', () => {
     const prev = 'x @/a.md@ y';
     const next = 'x  y';
     expect(
-      tryAtomicRangeDelete(prev, next, composerTokenRanges(prev)),
+      AtomicRangeDelete.tryAtomicRangeDelete(prev, next, ComposerHighlight.tokenRanges(prev)),
     ).toBeNull();
 
     // 删除范围超出区间两端（b + 整 token + c 一次删掉）
     const prev2 = 'a{/r}b';
     const next2 = 'ab';
     expect(
-      tryAtomicRangeDelete(prev2, next2, [{start: 1, end: 5}]),
+      AtomicRangeDelete.tryAtomicRangeDelete(prev2, next2, [{start: 1, end: 5}]),
     ).toBeNull();
   });
 
@@ -72,7 +67,7 @@ describe('tryAtomicRangeDelete', () => {
     const prev = '帮我看 @/a.md@ 谢谢';
     const next = backspaceOnce(prev, prev.length); // 删末尾「谢」
     expect(
-      tryAtomicRangeDelete(prev, next, composerTokenRanges(prev)),
+      AtomicRangeDelete.tryAtomicRangeDelete(prev, next, ComposerHighlight.tokenRanges(prev)),
     ).toBeNull();
   });
 
@@ -94,8 +89,8 @@ describe('tryAtomicRangeDelete', () => {
 
     for (const [prev, next] of macroCases) {
       expect(
-        tryAtomicRangeDelete(prev, next, findWhitelistMacroRanges(prev)),
-      ).toBe(tryAtomicMacroDelete(prev, next));
+        AtomicRangeDelete.tryAtomicRangeDelete(prev, next, PromptMacroInput.findWhitelistMacroRanges(prev)),
+      ).toBe(PromptMacroInput.tryAtomicMacroDelete(prev, next));
     }
   });
 
@@ -107,22 +102,22 @@ describe('tryAtomicRangeDelete', () => {
       prevToken.indexOf('@/a.') + '/a.'.length,
     );
     expect(
-      tryAtomicRangeDelete(prevToken, nextToken, composerTokenRanges(prevToken)),
+      AtomicRangeDelete.tryAtomicRangeDelete(prevToken, nextToken, ComposerHighlight.tokenRanges(prevToken)),
     ).toBe('帮我看  谢谢');
 
     // 非删除 / 不连续删 / 整段覆盖 → null（token 侧）
     expect(
-      tryAtomicRangeDelete(prevToken, prevToken, composerTokenRanges(prevToken)),
+      AtomicRangeDelete.tryAtomicRangeDelete(prevToken, prevToken, ComposerHighlight.tokenRanges(prevToken)),
     ).toBeNull();
     expect(
-      tryAtomicRangeDelete(
+      AtomicRangeDelete.tryAtomicRangeDelete(
         '@a.md@ 和 $apm-recall$',
         'a.md@ 和 $apm-recal$',
-        composerTokenRanges('@a.md@ 和 $apm-recall$'),
+        ComposerHighlight.tokenRanges('@a.md@ 和 $apm-recall$'),
       ),
     ).toBeNull();
     expect(
-      tryAtomicRangeDelete(prevToken, '帮我看  谢谢', composerTokenRanges(prevToken)),
+      AtomicRangeDelete.tryAtomicRangeDelete(prevToken, '帮我看  谢谢', ComposerHighlight.tokenRanges(prevToken)),
     ).toBeNull();
   });
 });

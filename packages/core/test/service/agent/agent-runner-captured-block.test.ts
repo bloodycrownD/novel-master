@@ -1,31 +1,21 @@
 /**
  * Agent run 内 VFS write：不走已退役的 BlockStore.capture；write 可 upsert file_cache。
  */
+import {  unwrap  } from "../../helpers/result-unwrap.js";
+import {  Result  } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  registerBuiltinTools,
-  ToolRegistry,
-  type BuiltinToolContext,
-} from "@novel-master/core";
-import {
-  type LlmChatResult,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "@novel-master/core/session-kkv";
-import { type VfsService } from "@novel-master/core/vfs";
-import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
-import { noopSavedModelRepository } from "../../helpers/noop-saved-model-repo.js";
+import {  describe, it, mock  } from "node:test";
+import {  AgentServiceFactory, type AgentDefinition  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "@novel-master/core/session-kkv";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  createMemorySessionKkv  } from "../../helpers/prompt-layout-test-helpers.js";
+import {  noopSavedModelRepository  } from "../../helpers/noop-saved-model-repo.js";
 
 const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
@@ -43,28 +33,28 @@ function mockVfs(): VfsService {
   return {
     async read(path: string) {
       const content = files.get(path) ?? "";
-      return { path, content, version: 1, mtimeMs: 0 };
+      return Result.ok({ path, content, version: 1, mtimeMs: 0 });
     },
     async write(path: string, content: string) {
       files.set(path, content);
-      return { version: 1 };
+      return Result.ok({ version: 1 });
     },
     async replace(path: string, oldString: string, newString: string) {
       const c = files.get(path) ?? "";
       files.set(path, c.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
+      return Result.ok({ version: 1, replacements: 1 });
     },
     async list() {
-      return [...files.keys()];
+      return Result.ok([...files.keys()]);
     },
     async glob() {
-      return [];
+      return Result.ok([]);
     },
     async grep() {
-      return [];
+      return Result.ok([]);
     },
     async delete() {
-      return { deleted: true };
+      return Result.ok(undefined);
     },
   } as unknown as VfsService;
 }
@@ -93,7 +83,7 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -101,7 +91,7 @@ function createMockModel(
 describe("AgentRunner workplace assemble (retire capture)", () => {
   it("T-WEC9: Agent run 内 VFS write 不调 materialize；可 upsert file_cache", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("write file"));
+    await session.append("user", TextBlocks.of("write file"));
 
     const sessionKkv = createMemorySessionKkv();
     await sessionKkv.set(
@@ -137,8 +127,8 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -159,17 +149,17 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
         }) as never,
     });
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(materializePersistBlock.mock.callCount(), 0);
-    assert.equal((await vfs.read("/out.txt")).content, "mutated");
+    assert.equal(unwrap(await vfs.read("/out.txt")).content, "mutated");
     const cacheKeys = await sessionKkv.listKeys(
       MOCK_SESSION_ID,
       SESSION_KKV_DOMAIN_FILE_CACHE,

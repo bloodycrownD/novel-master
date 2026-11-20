@@ -3,18 +3,18 @@
  * key 正则与域词表、叶子全 string、§2.6 静态书写扫描，外加 tCore 接线冒烟。
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
-import { parseCoreCatalog } from "../../src/i18n/catalog.js";
-import { CORE_MESSAGE_KEYS, CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, type CoreMessageKey } from "../../src/i18n/keys.js";
-import { tCore } from "../helpers/core-i18n.js";
-import { CORE_CATALOGS } from "../../src/i18n/generated-catalog.js";
+import {  readFileSync  } from "node:fs";
+import {  describe, it  } from "node:test";
+import {  Catalog  } from "../../src/i18n/catalog.js";
+import {  CORE_MESSAGE_KEYS, CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, type CoreMessageKey  } from "../../src/i18n/keys.js";
+import {  tCore  } from "../helpers/core-i18n.js";
+import {  CORE_CATALOGS  } from "../../src/i18n/generated-catalog.js";
 
 const CATALOG_DIR = new URL("../../src/i18n/catalog/", import.meta.url);
 const zhCnSource = readFileSync(new URL("zh-CN.yaml", CATALOG_DIR), "utf8");
 const enUsSource = readFileSync(new URL("en-US.yaml", CATALOG_DIR), "utf8");
-const zhCn = parseCoreCatalog(zhCnSource);
-const enUs = parseCoreCatalog(enUsSource);
+const zhCn = Catalog.parseCore(zhCnSource);
+const enUs = Catalog.parseCore(enUsSource);
 
 function paramsOf(template: string): string[] {
   return [...template.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!).sort();

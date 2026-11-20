@@ -3,20 +3,13 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import {
-  handleWorkplaceBuildListRows,
-  handleWorkplaceSetDirRule,
-  handleWorkplaceSetFileRule,
-} from "../src/main/ipc/handlers/workplace.js";
-import {
-  setComposerAttachmentsSuggestForwardTarget,
-  notifyComposerAttachmentsSuggestToRenderer,
-} from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { Workplace } from "../src/main/ipc/handlers/workplace.js";
+import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import {
   setupDesktopDbTestEnv,
@@ -31,7 +24,7 @@ describe("workplace ipc handlers", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-workplace-"));
 
-    const project = await handleProjectsCreate({ name: "workplace-ipc" });
+    const project = await Projects.create({ name: "workplace-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -39,13 +32,13 @@ describe("workplace ipc handlers", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "session-1",
     });
@@ -57,12 +50,12 @@ describe("workplace ipc handlers", () => {
   });
 
   after(async () => {
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
     await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("session buildListRows 成功", async () => {
-    const result = await handleWorkplaceBuildListRows({
+    const result = await Workplace.buildListRows({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -75,7 +68,9 @@ describe("workplace ipc handlers", () => {
   });
 
   it("T-CR2: setDirRule → 写 rule_snapshot canon；file_cache 空；不推差集 suggest", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",
@@ -84,7 +79,7 @@ describe("workplace ipc handlers", () => {
     );
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -92,7 +87,7 @@ describe("workplace ipc handlers", () => {
       } as never;
     });
 
-    const result = await handleWorkplaceSetDirRule({
+    const result = await Workplace.setDirRule({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -110,11 +105,13 @@ describe("workplace ipc handlers", () => {
       0,
       "规则保存不得再推 workplace 差集 suggest",
     );
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   it("T-CR2: setFileRule → 写 rule_snapshot；file_cache 空", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",
@@ -122,7 +119,7 @@ describe("workplace ipc handlers", () => {
       JSON.stringify({ body: "stale", mtimeMs: 1 }),
     );
 
-    const result = await handleWorkplaceSetFileRule({
+    const result = await Workplace.setFileRule({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -138,7 +135,7 @@ describe("workplace ipc handlers", () => {
 
   it("composerAttachmentsSuggest 通道独立；空 attachments 仍 send（整表替换）", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -146,7 +143,7 @@ describe("workplace ipc handlers", () => {
       } as never;
     });
 
-    notifyComposerAttachmentsSuggestToRenderer({
+    ComposerAttachmentsSuggestForwarder.notify({
       sessionId,
       attachments: [
         {
@@ -158,7 +155,7 @@ describe("workplace ipc handlers", () => {
         },
       ],
     });
-    notifyComposerAttachmentsSuggestToRenderer({
+    ComposerAttachmentsSuggestForwarder.notify({
       sessionId,
       attachments: [],
     });
@@ -182,6 +179,6 @@ describe("workplace ipc handlers", () => {
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 });

@@ -5,7 +5,7 @@
 import type { EffectiveSkillDto } from "@shared/ipc-types";
 import { skillDomainLabel } from "@/features/skills/skill-ui";
 
-export type SkillTypeaheadProps = {
+type SkillTypeaheadProps = {
   open: boolean;
   candidates: readonly EffectiveSkillDto[];
   onSelect: (name: string) => void;

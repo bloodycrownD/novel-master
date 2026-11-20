@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { chatMessagesToAnthropic } from "../../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
+import {  describe, it  } from "node:test";
+import {  AnthropicMapper  } from "../../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("anthropic-content-mapper", () => {
@@ -39,7 +39,7 @@ describe("anthropic-content-mapper", () => {
       },
     ];
 
-    const out = chatMessagesToAnthropic(messages);
+    const out = AnthropicMapper.chatMessagesTo(messages);
     assert.equal(out.length, 2);
     assert.equal(out[0]!.role, "assistant");
     assert.equal(out[1]!.role, "user");
@@ -72,7 +72,7 @@ describe("anthropic-content-mapper", () => {
       },
     ];
 
-    const out = chatMessagesToAnthropic(messages);
+    const out = AnthropicMapper.chatMessagesTo(messages);
     assert.equal(out.length, 1);
     assert.equal(out[0]!.role, "user");
     assert.deepEqual(
@@ -97,7 +97,7 @@ describe("anthropic-content-mapper", () => {
       },
     ];
 
-    const out = chatMessagesToAnthropic(messages);
+    const out = AnthropicMapper.chatMessagesTo(messages);
     assert.equal(out.length, 3);
     assert.deepEqual(
       out.map((msg) => msg.role),

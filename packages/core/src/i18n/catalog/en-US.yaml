@@ -5,12 +5,78 @@
 error:
   vfs:
     not_found: File does not exist or has been deleted.
+    zip_not_confirmed: Zip import requires explicit confirmation (CLI --yes or the client confirm dialog).
+    zip_external_not_supported: External directory ingest is not supported; provide a zip archive.
+    # 父 key 本身是叶子，子段只能用带点引号的同级 key 表达（YAML 同一路径不能既是标量又是映射）。
+    import_failed: "Import failed: {detail}"
+    "import_failed.with_progress": "(committed {committed} shards / failed on shard {failed_shard})"
+    single_file_too_large: "File too large: {size_bytes} bytes exceeds the import limit of {max_bytes} bytes (~32MB); import rejected."
+    single_file_read_failed: "Unable to read the selected file: {reason}"
+    single_file_not_found: "Selected file does not exist: {path}"
+    single_file_export_target_invalid: "Export target is not a single file: {logical_path}"
+  chat:
+    not_found: "{kind} not found: {id}"
+  infra:
+    decode_invalid_schema: "Config data does not match its schema: {detail}"
+    encode_not_supported: "Encoding is not supported for this format: {detail}"
+    aborted: Operation cancelled.
+    invalid_abort_target: Unrecognized abort target.
+  prompt:
+    invalid_yaml: Invalid prompt YAML.
+    invalid_block: Invalid prompt block.
+    unknown_field: Unknown prompt field.
+    unsupported_syntax: Unsupported prompt syntax.
+  provider:
+    not_found: "Provider not found: {provider_id}"
+    conflict: Provider conflict.
+    builtin_provider: Builtin provider is protected.
+    http_error: Provider request failed.
+    api_key_not_set: Set your API key in the provider settings first.
+    model_not_saved: Fetch and save the model first.
+    unsupported_content: Unsupported provider content.
+    unsupported: Provider operation unsupported.
+    malformed_sse: Malformed provider SSE stream.
+    invalid_tool_arguments: Invalid provider tool arguments.
+    migration_orphan_pointer: Migration left an orphan pointer.
+    invalid_model_name: Invalid provider model name.
+    models_in_flight: Model list fetch is already in progress; try again later.
   session_fs:
     rollback_message_not_found: "Message not found: {message_id}"
+    rollback_no_checkpoint: No rollback checkpoint for this message.
+  skill:
+    missing_domain: "Writing to skill {skill_name} requires an explicit domain (global / project)."
+    missing_project_id: "Project-domain operations require projectId (skill {skill_name})."
+    not_found: "Skill not found: {skill_name}"
+    builtin_not_deletable: "Builtin skills cannot be deleted: {skill_name}"
+    builtin_name_reserved: "«{skill_name}» is reserved for builtin skills; edit the builtin skill itself in the management page instead."
+    builtin_rename_forbidden: "Builtin skills cannot be renamed: {skill_name}"
+    already_exists: "A skill with the same name already exists: {skill_name}"
+  tool:
+    not_found: "Tool not registered: {tool_name}"
+    conflict: "Tool already registered: {tool_name}"
+    failed: "Tool failed: {tool_name}"
+    forbidden: "Tool path outside allowed scope: {tool_name} -> {path}"
+    cancelled: "Tool execution cancelled: {tool_name}"
   cloud_sync:
     push_mutex_timeout:
       push: Push is busy waiting for the sync mutex lock; please try again later.
       pull: Pull is busy waiting for the sync mutex lock; please try again later.
+  # —— db_backup：provider 三表快照校验 14 条原因（占位符与 zh-CN 逐条对齐）——
+  db_backup:
+    provider_row_id_missing: llm_provider row {row_index} is missing a non-empty id
+    provider_row_protocol_invalid: "llm_provider row {row_index} has an invalid protocol: {protocol}"
+    provider_row_base_url_empty: llm_provider row {row_index} has an empty base_url (id={id})
+    provider_row_display_name_empty: llm_provider row {row_index} has an empty display_name (id={id})
+    provider_row_is_builtin_not_number: llm_provider row {row_index} has a non-numeric is_builtin (id={id})
+    provider_row_timestamp_invalid: llm_provider row {row_index} has a missing or non-numeric timestamp (id={id})
+    saved_model_row_provider_id_empty: llm_saved_model row {row_index} is missing a non-empty provider_id
+    saved_model_row_vendor_model_id_empty: llm_saved_model row {row_index} is missing a non-empty vendor_model_id (provider_id={provider_id})
+    saved_model_row_settings_json_missing: llm_saved_model row {row_index} is missing settings_json (provider_id={provider_id})
+    dangling_saved_model: llm_saved_model row {row_index} references provider_id={provider_id}, which is not present in the snapshot llm_provider table
+    secret_row_ref_missing: sksp_secrets row {row_index} is missing a non-empty ref
+    secret_row_ciphertext_missing: sksp_secrets row {row_index} is missing ciphertext (ref={ref})
+    secret_row_algo_empty: sksp_secrets row {row_index} has an empty algo (ref={ref})
+    secret_row_version_not_number: sksp_secrets row {row_index} has a non-numeric version (ref={ref})
 label:
   agent:
     max_steps: Max steps {n}

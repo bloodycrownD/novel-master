@@ -11,27 +11,34 @@
  * stream / menu / post 等副作用出口全部 mock，document 以最小 fake scroller
  * 提供；requestAnimationFrame 以同步队列 stub 替换（stick 路径含嵌套 RAF）。
  */
-jest.mock(
-  '../src/web/chat-transcript/webview/runtime/render/row-logic',
-  () => ({
+jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => {
+  const legacy = {
     renderRows: jest.fn(),
-  }),
-);
-jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
+  };
+  return {...legacy, RowLogic: {render: legacy.renderRows}};
+});
+jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => {
+  const legacy = {
   scheduleMermaidScan: jest.fn(),
-}));
-jest.mock('../src/web/chat-transcript/webview/runtime/stream/stream', () => ({
+};
+  return {...legacy, Mermaid: {scheduleScan: legacy.scheduleMermaidScan}};
+});
+jest.mock('../src/web/chat-transcript/webview/runtime/stream/stream', () => {
+  const legacy = {
   requestResync: jest.fn(),
   resetStreamBlockRenderState: jest.fn(),
-}));
+};
+  return {...legacy, Stream: {requestResync: legacy.requestResync, resetBlockRenderState: legacy.resetStreamBlockRenderState}};
+});
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  closeContextMenu: jest.fn(),
+  Menu: {close: jest.fn()},
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
   post: jest.fn(),
 }));
 
-import {renderRows} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
+import {RowLogic} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
+import {Snapshot} from '@web/chat-transcript/webview/runtime/render/snapshot';
 import {post} from '../src/web/chat-transcript/webview/runtime/bridge';
 import {
   createFakeDocument,
@@ -54,7 +61,7 @@ function loadFreshModules(): {
   let state: StateModule['state'] | null = null;
   jest.isolateModules(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    snapshot = require('../src/web/chat-transcript/webview/runtime/render/snapshot');
+    snapshot = require('../src/web/chat-transcript/webview/runtime/render/snapshot').Snapshot;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     state =
       require('../src/web/chat-transcript/webview/runtime/state/state').state;
@@ -125,7 +132,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
   it('T-S1: 同代次分片按 chunkIndex 拼装，末片到齐才整体应用且与单包等价', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 0,
       chunkTotal: 3,
@@ -133,7 +140,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       hasMore: true,
       rows: makeRows('a', 2),
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 1,
       chunkTotal: 3,
@@ -143,9 +150,9 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     });
     // 分片期间：不产生中间渲染、rows 基线不动
     expect(state.rows).toHaveLength(0);
-    expect(renderRows).not.toHaveBeenCalled();
+    expect(RowLogic.render).not.toHaveBeenCalled();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 2,
       chunkTotal: 3,
@@ -164,11 +171,11 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       'c-0',
     ]);
     expect(state.hasMore).toBe(true);
-    expect(renderRows).toHaveBeenCalledTimes(1);
+    expect(RowLogic.render).toHaveBeenCalledTimes(1);
 
     // 对照：同数据单包直发（gen2 单片）rows 与分片拼装全等
     const chunkedRows = state.rows.slice();
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 0,
       chunkTotal: 1,
@@ -184,7 +191,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
   it('T-S2: 分片在途时新代次顶替——旧代次收集作废、迟到旧片丢弃不叠加', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 0,
       chunkTotal: 3,
@@ -192,7 +199,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       hasMore: false,
       rows: makeRows('old', 1),
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 1,
       chunkTotal: 3,
@@ -201,7 +208,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       rows: makeRows('old', 1),
     });
     // force 新代次：gen2 首片到达，gen1 收集（已收 2 片）整体作废
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 0,
       chunkTotal: 2,
@@ -210,7 +217,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       rows: makeRows('new', 2),
     });
     // gen1 迟到末片：比在途 gen2 旧，丢弃
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 2,
       chunkTotal: 3,
@@ -220,9 +227,9 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       scrollIntent: 'stick',
     });
     expect(state.rows).toHaveLength(0);
-    expect(renderRows).not.toHaveBeenCalled();
+    expect(RowLogic.render).not.toHaveBeenCalled();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 1,
       chunkTotal: 2,
@@ -239,13 +246,13 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       'new-1',
       'new-tail-0',
     ]);
-    expect(renderRows).toHaveBeenCalledTimes(1);
+    expect(RowLogic.render).toHaveBeenCalledTimes(1);
   });
 
   it('T-S2: 已应用代次的迟到分片（未知代次）丢弃', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 5,
       chunkIndex: 0,
       chunkTotal: 2,
@@ -253,7 +260,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       hasMore: false,
       rows: makeRows('a', 1),
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 5,
       chunkIndex: 1,
       chunkTotal: 2,
@@ -266,7 +273,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     expect(state.rows.map(row => row.id)).toEqual(['a-0', 'b-0']);
 
     // gen5 已应用：其迟到重复片与更旧代次的任何片都丢弃
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 5,
       chunkIndex: 1,
       chunkTotal: 2,
@@ -275,7 +282,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       rows: makeRows('late', 1),
       scrollIntent: 'stick',
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 4,
       chunkIndex: 0,
       chunkTotal: 1,
@@ -289,7 +296,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
   it('乱序分片丢弃：chunkIndex 跳跃后收集缺口不自愈（等 force 新代次兜底）', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 0,
       chunkTotal: 3,
@@ -298,7 +305,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       rows: makeRows('a', 1),
     });
     // 跳过片 1 直达片 2：乱序丢弃
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 2,
       chunkTotal: 3,
@@ -311,7 +318,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     // 片 1 迟到：收集仍期待片 1？——片 2 已被丢，received 仍为 1，片 1 补到
     // 后 received=2，但末片（片 2）已丢，永远拼不齐 → 不应用；随后 force
     // 新代次 gen2 单片直达。
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 1,
       chunkTotal: 3,
@@ -320,9 +327,9 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       rows: makeRows('b', 1),
     });
     expect(state.rows).toHaveLength(0);
-    expect(renderRows).not.toHaveBeenCalled();
+    expect(RowLogic.render).not.toHaveBeenCalled();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 0,
       chunkTotal: 1,
@@ -338,7 +345,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
   it('T-S4 前半: 分片期间不 emitScrollSnapshot，末片应用后恰一次', () => {
     const {snapshot} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 0,
       chunkTotal: 2,
@@ -346,7 +353,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       hasMore: false,
       rows: makeRows('a', 2),
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 1,
       chunkTotal: 2,
@@ -370,7 +377,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       {generation: 1, chunkIndex: 1, chunkTotal: 3, rows: makeRows('b', 2)},
     ];
     for (const chunk of chunkPayloads) {
-      snapshot.handleSnapshotPayload({
+      snapshot.handlePayload({
         ...chunk,
         sessionKey: 'p1:s1',
         hasMore: false,
@@ -378,7 +385,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       expect(scrollSnapshotPostCount()).toBe(0);
       expect(fakeScroller.scrollTop).toBe(0);
     }
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 2,
       chunkTotal: 3,
@@ -396,7 +403,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     )![1];
 
     // 对照：同数据旧单包（gen2 单片）行为全等
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 0,
       chunkTotal: 1,
@@ -425,7 +432,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     const {snapshot, state} = loadFreshModules();
 
     // gen5 收集到 2/3：在途
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 5,
       chunkIndex: 0,
       chunkTotal: 3,
@@ -433,7 +440,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       hasMore: false,
       rows: makeRows('old', 1),
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 5,
       chunkIndex: 1,
       chunkTotal: 3,
@@ -442,7 +449,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       rows: makeRows('old', 1),
     });
     // gen6 以单片形态直接应用：在途 gen5 收集器须同步作废
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 6,
       chunkIndex: 0,
       chunkTotal: 1,
@@ -453,10 +460,10 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     });
     flushRaf();
     expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
-    expect(renderRows).toHaveBeenCalledTimes(1);
+    expect(RowLogic.render).toHaveBeenCalledTimes(1);
 
     // gen5 末片迟到：收集器已作废，不拼装、不产生第二次 applySnapshot
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 5,
       chunkIndex: 2,
       chunkTotal: 3,
@@ -467,14 +474,14 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     });
     flushRaf();
     expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
-    expect(renderRows).toHaveBeenCalledTimes(1);
+    expect(RowLogic.render).toHaveBeenCalledTimes(1);
     expect(scrollSnapshotPostCount()).toBe(1);
   });
 
   it('C-orch-1 web 防御: 分片收集在途 appendTailRows 挂起，末片应用后重放——增量行不丢', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 0,
       chunkTotal: 2,
@@ -486,9 +493,9 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     // 此处钉住 web 侧兜底行为）→ 挂起，不 concat、不渲染。
     snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
     expect(state.rows).toHaveLength(0);
-    expect(renderRows).not.toHaveBeenCalled();
+    expect(RowLogic.render).not.toHaveBeenCalled();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 1,
       chunkTotal: 2,
@@ -506,13 +513,13 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       'b-0',
       'inc-0',
     ]);
-    expect(renderRows).toHaveBeenCalled();
+    expect(RowLogic.render).toHaveBeenCalled();
   });
 
   it('C-orch-1 web 防御: 挂起队列随收集器被新代次顶替而作废——不跨代次重放', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 1,
       chunkIndex: 0,
       chunkTotal: 2,
@@ -522,7 +529,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     });
     snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
     // gen2 新代次首片到达：gen1 收集器连同挂起队列作废（新基线为准）
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 0,
       chunkTotal: 2,
@@ -530,7 +537,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       hasMore: false,
       rows: makeRows('n', 1),
     });
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       generation: 2,
       chunkIndex: 1,
       chunkTotal: 2,
@@ -548,7 +555,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
   it('旧协议载荷（无分片字段）直发 applySnapshot——等价单片行为', () => {
     const {snapshot, state} = loadFreshModules();
 
-    snapshot.handleSnapshotPayload({
+    snapshot.handlePayload({
       sessionKey: 'p1:s1',
       hasMore: false,
       rows: makeRows('legacy', 3),
@@ -560,7 +567,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       'legacy-2',
     ]);
     flushRaf();
-    expect(renderRows).toHaveBeenCalledTimes(1);
+    expect(RowLogic.render).toHaveBeenCalledTimes(1);
   });
 
   it('stream checkpoint：每片 last-wins，末片与流式行同片原子应用；seed 后 reseed body', () => {
@@ -575,7 +582,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     try {
       const {snapshot, state} = loadFreshModules();
       // 首片携带旧 checkpoint（seq 1）：分片期不应用
-      snapshot.handleSnapshotPayload({
+      snapshot.handlePayload({
         generation: 1,
         chunkIndex: 0,
         chunkTotal: 2,
@@ -586,7 +593,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       });
       expect(state.streamCheckpoint).toBeNull();
       // 末片携带新 checkpoint（seq 2）：last-wins + 与流式行同片
-      snapshot.handleSnapshotPayload({
+      snapshot.handlePayload({
         generation: 1,
         chunkIndex: 1,
         chunkTotal: 2,

@@ -1,5 +1,5 @@
-import {importCharacterCard} from '@/services/vfs-character-card.service';
-import {AppError} from '@novel-master/core/vfs';
+import {VfsCharacterCardService} from '@/services/vfs-character-card.service'
+import {AppError} from '@novel-master/core/errors';
 
 const mockImportFromBytes = jest.fn();
 const mockCreateCharacterCardImportService = jest.fn();
@@ -10,8 +10,10 @@ const mockExists = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
   ...jest.requireActual('@novel-master/core/vfs'),
-  createCharacterCardImportService: (...args: unknown[]) =>
-    mockCreateCharacterCardImportService(...args),
+  VfsServiceFactory: {
+    createCharacterCardImport: (...args: unknown[]) =>
+      mockCreateCharacterCardImportService(...args),
+  },
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
@@ -69,11 +71,11 @@ describe('vfs-character-card.service', () => {
     mockReadFile.mockResolvedValue(CARD_BASE64);
   });
 
-  it('uses createCharacterCardImportService(conn) and importFromBytes', async () => {
+  it('uses VfsServiceFactory.createCharacterCardImport(conn) and importFromBytes', async () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.json', name: 'card.json'},
     ]);
-    await importCharacterCard(runtime, scope, {confirmed: true});
+    await VfsCharacterCardService.import(runtime, scope, {confirmed: true});
     expect(mockCreateCharacterCardImportService).toHaveBeenCalledTimes(1);
     expect(mockCreateCharacterCardImportService).toHaveBeenCalledWith(
       runtime.conn,
@@ -89,7 +91,7 @@ describe('vfs-character-card.service', () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.json', name: 'card.json'},
     ]);
-    await importCharacterCard(runtime, scope, {confirmed: true});
+    await VfsCharacterCardService.import(runtime, scope, {confirmed: true});
     expect(mockKeepLocalCopy).toHaveBeenCalledWith(
       expect.objectContaining({
         files: [{uri: 'content://downloads/card.json', fileName: 'card.json'}],
@@ -103,7 +105,7 @@ describe('vfs-character-card.service', () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.png', name: 'card.png'},
     ]);
-    await importCharacterCard(runtime, scope, {
+    await VfsCharacterCardService.import(runtime, scope, {
       confirmed: true,
       directoryPath: '/角色',
     });
@@ -119,7 +121,7 @@ describe('vfs-character-card.service', () => {
       {uri: 'content://downloads/x.zip', name: 'x.zip'},
     ]);
     await expect(
-      importCharacterCard(runtime, scope, {confirmed: true}),
+      VfsCharacterCardService.import(runtime, scope, {confirmed: true}),
     ).rejects.toThrow(/\.png/);
     expect(mockKeepLocalCopy).not.toHaveBeenCalled();
     expect(mockImportFromBytes).not.toHaveBeenCalled();
@@ -129,21 +131,21 @@ describe('vfs-character-card.service', () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.json', name: 'card.json'},
     ]);
-    const cardErr = new AppError(
-      'VFS_CHARACTER_CARD_UNRECOGNIZED',
-      '无法识别为角色卡',
-    );
+    // 旧签名（key, message）已退役：新签名（key, params），文案走 params.detail。
+    const cardErr = new AppError('VFS_CHARACTER_CARD_UNRECOGNIZED', {
+      detail: '无法识别为角色卡',
+    });
     mockImportFromBytes.mockRejectedValue(cardErr);
 
     await expect(
-      importCharacterCard(runtime, scope, {confirmed: true}),
+      VfsCharacterCardService.import(runtime, scope, {confirmed: true}),
     ).rejects.toThrow('无法识别为角色卡');
     expect(mockCreateCharacterCardImportService).toHaveBeenCalledTimes(1);
   });
 
   it('skips import when picker cancelled', async () => {
     mockPick.mockResolvedValue([]);
-    await importCharacterCard(runtime, scope, {confirmed: true});
+    await VfsCharacterCardService.import(runtime, scope, {confirmed: true});
     expect(mockKeepLocalCopy).not.toHaveBeenCalled();
     expect(mockImportFromBytes).not.toHaveBeenCalled();
   });

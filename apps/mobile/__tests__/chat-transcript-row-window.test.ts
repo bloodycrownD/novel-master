@@ -12,17 +12,20 @@
  * 布局按「窗口行实际高 ROW_PX、占位高按渲染时的平均槽高估算」计算，
  * 估算误差场景（fallback avg ≠ 实际行高）由此可行为级验证。
  */
-jest.mock(
-  '../src/web/chat-transcript/webview/runtime/render/row-logic',
-  () => ({
+jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => {
+  const legacy = {
     renderRows: jest.fn(),
-  }),
-);
-jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
+  };
+  return {...legacy, RowLogic: {render: legacy.renderRows}};
+});
+jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => {
+  const legacy = {
   scheduleMermaidScan: jest.fn(),
-}));
+};
+  return {...legacy, Mermaid: {scheduleScan: legacy.scheduleMermaidScan}};
+});
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  closeContextMenu: jest.fn(),
+  Menu: {close: jest.fn()},
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
   post: jest.fn(),
@@ -96,7 +99,7 @@ const CLIENT_H = 600;
  * scrollTop setter 带浏览器 clamp 语义。
  *
  * `pinnedTail`（spec C19）：下占位之后的钉住行真实占高；`streamTailHeight`
- * 放大流式行高度，用于验证 measureRowWindow 把贴底流式行排除出平均槽高。
+ * 放大流式行高度，用于验证 RowWindow.measure 把贴底流式行排除出平均槽高。
  */
 class FakeLayout {
   scrollTop = 0;
@@ -363,7 +366,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
         snapshot,
         scroll,
         stream,
-        renderRows: rowLogic.renderRows,
+        renderRows: rowLogic.RowLogic.render,
         post: bridge.post,
       } as Modules;
     });
@@ -402,7 +405,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     it('长列表贴尾：只渲染尾部窗口行，上占位高度 = 未渲染行数 × 平均槽高', () => {
       mods.state.rows = makeRows('r', 500) as never;
       mods.state.hasMore = true;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
 
       const children = mods.RowList();
       const msgs = children.filter(
@@ -431,7 +434,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
     it('短列表（不足一个窗口）：全量渲染、无占位', () => {
       mods.state.rows = makeRows('r', 50) as never;
-      mods.windowing.resetRowWindowForSnapshot(50, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(50, {kind: 'tail'});
       const children = mods.RowList();
       const msgs = children.filter(
         v => (v.type as {__isMsgRowStub?: boolean})?.__isMsgRowStub,
@@ -455,7 +458,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     it('hasMore=false：无「加载更早」按钮', () => {
       mods.state.rows = makeRows('r', 500) as never;
       mods.state.hasMore = false;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
       const children = mods.RowList();
       expect(children.find(v => v.key === 'load-older')).toBeFalsy();
     });
@@ -465,7 +468,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     it('贴底：流式行在窗口循环内，唯一 vnode 且无独立 stream-tail 兄弟', () => {
       mods.state.rows = makeStreamingRows('r', 500) as never;
       mods.state.hasMore = false;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
 
       const children = mods.RowList();
       const msgs = children.filter(isMsgStub);
@@ -481,7 +484,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
     it('用户上滚到窗口外：流式行钉在下占位之后、同 MessageRow 类型、下占位少算 1 行', () => {
       mods.state.rows = makeStreamingRows('r', 500) as never;
-      mods.windowing.retargetRowWindow(500, 200); // 窗口 (180, 280)
+      mods.windowing.RowWindow.retarget(500, 200); // 窗口 (180, 280)
 
       const children = mods.RowList();
       const bottomIdx = children.findIndex(v => v.key === 'row-win-bottom');
@@ -512,7 +515,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       expect(layout.lastRowIds[layout.lastRowIds.length - 1]).toBe('r-499');
 
       // 窗口跨过流式行前后：vnode key/type 不变（同 id 复用）
-      mods.windowing.retargetRowWindow(500, 260);
+      mods.windowing.RowWindow.retarget(500, 260);
       const nextChildren = mods.RowList();
       const nextBottom = nextChildren.findIndex(
         v => v.key === 'row-win-bottom',
@@ -529,7 +532,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       // 钉住 → 窗口内（真正跨过流式行）：同一 row 对象 + 同 key/type ⇒ Preact
       // 同一 fiber，StreamBodyHost(sCU=false) 的 fake body 节点引用不变；窗口
       // 循环里只出现一次，下占位消失。
-      mods.windowing.retargetRowWindow(500, 460); // 窗口 (440, 500)
+      mods.windowing.RowWindow.retarget(500, 460); // 窗口 (440, 500)
       const acrossChildren = mods.RowList();
       const acrossTail = acrossChildren
         .filter(isMsgStub)
@@ -561,17 +564,17 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       expect(tailIdCount(acrossChildren)).toBe(1);
     });
 
-    it('measureRowWindow：贴底流式行排除出测量区间，平均槽高不被放大的流式行拉偏', () => {
+    it('RowWindow.measure：贴底流式行排除出测量区间，平均槽高不被放大的流式行拉偏', () => {
       mods.state.rows = makeStreamingRows('r', 500) as never;
       mods.state.hasMore = false;
       layout.streamingRowId = 'r-499';
       // 流式行远高于普通行：不排除会把 avg 拉向 119.8（而非收敛到 80）
       layout.streamTailHeight = 4000;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
       mods.renderRows();
 
-      mods.windowing.measureRowWindow();
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+      mods.windowing.RowWindow.measure();
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(110);
     });
   });
 
@@ -864,9 +867,9 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     });
   });
 
-  describe('planRowWindowMove 纯逻辑（扩窗 / 缩窗 / 滞回）', () => {
+  describe('RowWindow.planMove 纯逻辑（扩窗 / 缩窗 / 滞回）', () => {
     function plan(total: number, start: number, end: number, v: number) {
-      return mods.windowing.planRowWindowMove(total, start, end, v);
+      return mods.windowing.RowWindow.planMove(total, start, end, v);
     }
 
     it('视口逼近上边界：上扩到 desired', () => {
@@ -904,19 +907,19 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     });
   });
 
-  describe('handleRowWindowScroll 行为级（扩缩窗 + 行坐标重映射保读位）', () => {
+  describe('RowWindow.handleScroll 行为级（扩缩窗 + 行坐标重映射保读位）', () => {
     it('视口滚进上方占位区：上扩+下缩分步渲染，读位按行坐标保持不动', () => {
       mods.state.rows = makeRows('r', 500) as never;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
       mods.renderRows(); // 建立初始布局（贴尾窗口 (400,500)，topSp=48000）
       mods.renderRows.mock.calls.length = 0;
       // 视口滚到估算行 200（无按钮坐标系：windowTop=48000）
       layout.scrollTop = 400 * FALLBACK_AVG + (200 - 400) * FALLBACK_AVG; // = 24000
 
-      const moved = mods.windowing.handleRowWindowScroll();
+      const moved = mods.windowing.RowWindow.handleScroll();
       expect(moved).toBe(true);
       // desired(200) = (180, 280)：上端一步（渲染+重映射）、下端一步（渲染）
-      expect(mods.windowing.getRowWindowRange(500)).toEqual({
+      expect(mods.windowing.RowWindow.getRange(500)).toEqual({
         start: 180,
         end: 280,
       });
@@ -930,16 +933,16 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
     it('视口在窗口中部缓冲带内：no-op 不渲染', () => {
       mods.state.rows = makeRows('r', 500) as never;
-      mods.windowing.retargetRowWindow(500, 440); // 窗口 (420, 500)
+      mods.windowing.RowWindow.retarget(500, 440); // 窗口 (420, 500)
       mods.renderRows();
       layout.scrollTop = 420 * FALLBACK_AVG + (440 - 420) * FALLBACK_AVG; // 估算行 440
-      expect(mods.windowing.handleRowWindowScroll()).toBe(false);
+      expect(mods.windowing.RowWindow.handleScroll()).toBe(false);
       expect(mods.renderRows).toHaveBeenCalledTimes(1);
     });
 
     it('贴底守卫：视口高度变化的 scrollTop 钳制（打字换行/键盘弹收）不触发上端收缩', () => {
       mods.state.rows = makeRows('r', 500) as never;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'}); // 窗口 (400,500)=贴底
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'}); // 窗口 (400,500)=贴底
       mods.renderRows();
       mods.renderRows.mock.calls.length = 0;
       // webview 变矮 → scrollTop 被钳到底 → 估算行被推高到 445（超出
@@ -947,9 +950,9 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       // 真实行换估算占位、scrollHeight 突变，视口内容跳一格（打字抖动）。
       layout.scrollTop = 400 * FALLBACK_AVG + 45 * FALLBACK_AVG;
 
-      const moved = mods.windowing.handleRowWindowScroll();
+      const moved = mods.windowing.RowWindow.handleScroll();
       expect(moved).toBe(false);
-      expect(mods.windowing.getRowWindowRange(500)).toEqual({
+      expect(mods.windowing.RowWindow.getRange(500)).toEqual({
         start: 400,
         end: 500,
       });
@@ -958,61 +961,61 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
     it('上端收缩（远离超滞回带）：重映射保读位不跳', () => {
       mods.state.rows = makeRows('r', 500) as never;
-      mods.windowing.retargetRowWindow(500, 300); // 窗口 (280, 380)
+      mods.windowing.RowWindow.retarget(500, 300); // 窗口 (280, 380)
       mods.renderRows();
       // 视口在窗口内深处（估算行 340 > start+40）：scrollTop = 280*120 + 60*120
       layout.scrollTop = 280 * FALLBACK_AVG + 60 * FALLBACK_AVG; // = 40800
-      const moved = mods.windowing.handleRowWindowScroll();
+      const moved = mods.windowing.RowWindow.handleScroll();
       expect(moved).toBe(true);
       // 上缩生效（start 前移）
-      const win = mods.windowing.getRowWindowRange(500);
+      const win = mods.windowing.RowWindow.getRange(500);
       expect(win.start).toBeGreaterThan(280);
       // 读位按行坐标保持（±1px 数值容差）
       expect(layout.scrollTop).toBeCloseTo(40800, 0);
     });
   });
 
-  describe('measureRowWindow 平均槽高收敛', () => {
+  describe('RowWindow.measure 平均槽高收敛', () => {
     it('实测向真实槽高收敛（EWMA），窗口未变时跳过重测', () => {
       mods.state.rows = makeRows('r', 500) as never;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
       mods.renderRows();
       // 窗口 20 行真实占高 1600 → measured slot 80：120→110
-      mods.windowing.measureRowWindow();
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+      mods.windowing.RowWindow.measure();
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(110);
       // 窗口未变：重复 measure 跳过
-      mods.windowing.measureRowWindow();
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+      mods.windowing.RowWindow.measure();
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(110);
       // 换窗口再测：110→102.5（继续向 80 收敛）
-      mods.windowing.retargetRowWindow(500, 440); // 窗口 (420, 500)
+      mods.windowing.RowWindow.retarget(500, 440); // 窗口 (420, 500)
       mods.renderRows();
-      mods.windowing.measureRowWindow();
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(102.5, 6);
+      mods.windowing.RowWindow.measure();
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBeCloseTo(102.5, 6);
     });
 
     it('P2-8: 删行后 win.end 超过 total 时按 clamp 后行数做分母（不低估平均槽高）', () => {
       mods.state.rows = makeRows('r', 3) as never;
-      mods.windowing.resetRowWindowForSnapshot(3, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(3, {kind: 'tail'});
       mods.renderRows();
-      mods.windowing.measureRowWindow(); // 3 行 × 80 / 3 = 80：avg 120 → 110
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+      mods.windowing.RowWindow.measure(); // 3 行 × 80 / 3 = 80：avg 120 → 110
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(110);
 
       // 模拟「删一行但窗口未收敛」：win 仍 {0,3}，实际只有 2 行可渲染
       mods.state.rows = makeRows('r', 2) as never;
-      mods.windowing.resetRowWindowForSnapshot(3, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(3, {kind: 'tail'});
       mods.renderRows();
-      expect(mods.windowing.getRowWindowRange(2)).toEqual({start: 0, end: 2});
-      mods.windowing.measureRowWindow();
+      expect(mods.windowing.RowWindow.getRange(2)).toEqual({start: 0, end: 2});
+      mods.windowing.RowWindow.measure();
       // 正确分母 2：110 + (80 − 110) × 0.25 = 102.5；未 clamp（分母 3）得 95.83
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(102.5, 6);
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBeCloseTo(102.5, 6);
     });
 
     it('P2-8: applyStreamReset 删行后窗口按当前 rows 重定位（与渲染行数一致）', () => {
       mods.state.rows = makeStreamingRows('r', 500) as never;
       mods.state.hasMore = false;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
       mods.renderRows();
-      expect(mods.windowing.getRowWindowRange(500)).toEqual({
+      expect(mods.windowing.RowWindow.getRange(500)).toEqual({
         start: 400,
         end: 500,
       });
@@ -1020,11 +1023,11 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       // 贴底用户（距底 0）删行：窗口应继续贴尾
       layout.scrollTop = layout.scrollHeight - CLIENT_H;
       mods.state.streamCheckpoint = {id: 'r-499', seq: 1, status: 'streaming'};
-      mods.stream.applyStreamReset({streamIds: ['r-499']});
+      mods.stream.Stream.applyReset({streamIds: ['r-499']});
       expect(mods.state.rows).toHaveLength(499);
       // 删除后 win 不重定位会停在 {400,500}（clamp 后 99 行）；重定位到
       // 稳态尾部 {399,499}，与 RowList 实际渲染行数一致。
-      expect(mods.windowing.getRowWindowRange(499)).toEqual({
+      expect(mods.windowing.RowWindow.getRange(499)).toEqual({
         start: 399,
         end: 499,
       });
@@ -1033,11 +1036,11 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
     it('prepend 差值样本并入 EWMA（占位估算校正）', () => {
       mods.state.rows = makeRows('r', 500) as never;
-      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
       mods.renderRows();
-      mods.windowing.measureRowWindow(); // avg=110
-      mods.windowing.notePrependHeightDelta(3200, 40); // 新行均值 80
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(
+      mods.windowing.RowWindow.measure(); // avg=110
+      mods.windowing.RowWindow.notePrependHeightDelta(3200, 40); // 新行均值 80
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBeCloseTo(
         110 * 0.75 + 80 * 0.25,
         6,
       );
@@ -1046,18 +1049,18 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     it('web/C-1: prepend 前窗口 start>0——上占位置换差被扣除，avgSlotPx 不被拉偏', () => {
       mods.state.rows = makeRows('r', 500) as never;
       // 视口在中部：窗口 (180, 280)，prepend 前上占位 180 行
-      mods.windowing.retargetRowWindow(500, 200);
+      mods.windowing.RowWindow.retarget(500, 200);
       mods.renderRows();
-      mods.windowing.measureRowWindow(); // avg: 120 → 110（窗口行真实 80）
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+      mods.windowing.RowWindow.measure(); // avg: 120 → 110（窗口行真实 80）
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(110);
 
-      mods.snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
+      mods.snapshot.Snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
 
       // 差值 = 新进窗口行真实高 − 上占位估算高 = 220×80 − 180×110 = −2200；
       // 修复后采样 = (−2200 + 180×110) / (40+180) = 80（真实槽高），
       // EWMA 110 → 102.5。未修复时负差值直接跳过（avg 停留 110）或
       // 不扣分母的错实现会得 440（avg → 192.5），均被此断言拦下。
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(102.5, 6);
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBeCloseTo(102.5, 6);
     });
   });
 
@@ -1065,20 +1068,20 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     it('prepend 新页：新行全进窗口、读位补偿恰为真实增量（与平均槽高估算无关）', () => {
       mods.state.rows = makeRows('r', 500) as never;
       mods.state.hasMore = true;
-      mods.windowing.retargetRowWindow(500, 0); // 视口在顶：窗口 (0, 100)
+      mods.windowing.RowWindow.retarget(500, 0); // 视口在顶：窗口 (0, 100)
       mods.renderRows();
       // fallback avg=120 ≠ 实际 80：构造估算误差场景
-      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(FALLBACK_AVG);
+      expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(FALLBACK_AVG);
       const scrollHeightBefore = layout.scrollHeight; // 56068
       layout.scrollTop = 60; // 视口顶：行 0 顶(48)之下 12px
 
-      mods.snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
+      mods.snapshot.Snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
 
       // 上占位清零（新行全进窗口）、下占位行数不变 → 差值 = 40 行真实高
       expect(layout.scrollHeight - scrollHeightBefore).toBe(40 * ROW_PX);
       // 补偿后视口顶仍显示原内容（旧行 0 = 新行 40 顶 3248 + 12）
       expect(layout.scrollTop).toBe(60 + 40 * ROW_PX);
-      const win = mods.windowing.getRowWindowRange(540);
+      const win = mods.windowing.RowWindow.getRange(540);
       expect(win.start).toBe(0);
       // 新行进窗口 + 原视口缓冲带保留；超稳态部分已被收敛步收缩
       expect(win.end).toBeGreaterThanOrEqual(100);
@@ -1086,7 +1089,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       // 读位偏移在 ±1 平均行高容差内（此处恰为 0：差值=真实增量）
       const anchorTarget = 48 + 40 * ROW_PX + 12;
       expect(Math.abs(layout.scrollTop - anchorTarget)).toBeLessThanOrEqual(
-        mods.windowing.getRowWindowAvgSlotPx(),
+        mods.windowing.RowWindow.getAvgSlotPx(),
       );
       expect(scrollSnapshotPostCount()).toBe(1);
     });
@@ -1096,13 +1099,13 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     it('贴底时追加：窗口含新行、stick 贴底、scrollSnapshot 回发一次', () => {
       mods.state.rows = makeRows('r', 500) as never;
       mods.state.nearBottom = true;
-      mods.windowing.retargetRowWindow(500, 495); // 窗口 (475, 500)
+      mods.windowing.RowWindow.retarget(500, 495); // 窗口 (475, 500)
       mods.renderRows();
       layout.scrollTop = layout.clampScroll(layout.scrollHeight); // 贴底
 
-      mods.snapshot.applyAppendTailRows({rows: makeRows('a', 2) as never});
+      mods.snapshot.Snapshot.applyAppendTailRows({rows: makeRows('a', 2) as never});
 
-      const win = mods.windowing.getRowWindowRange(502);
+      const win = mods.windowing.RowWindow.getRange(502);
       expect(win.end).toBe(502);
       expect(layout.lastRowIds).toContain('a-0');
       expect(layout.lastRowIds).toContain('a-1');
@@ -1113,7 +1116,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
   describe('applySnapshot stick 集成', () => {
     it('stick：窗口贴尾、scrollTop 贴底、scrollSnapshot 恰一次', () => {
-      mods.snapshot.handleSnapshotPayload({
+      mods.snapshot.Snapshot.handlePayload({
         generation: 1,
         chunkIndex: 0,
         chunkTotal: 1,
@@ -1123,7 +1126,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
         scrollIntent: 'stick',
       });
       flushRaf();
-      const win = mods.windowing.getRowWindowRange(500);
+      const win = mods.windowing.RowWindow.getRange(500);
       expect(win.end).toBe(500);
       expect(win.start).toBeGreaterThanOrEqual(400);
       expect(layout.scrollTop).toBe(layout.clampScroll(layout.scrollHeight));
@@ -1140,14 +1143,14 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       try {
         mods.state.rows = makeRows('r', 500) as never;
         mods.state.hasMore = true;
-        mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+        mods.windowing.RowWindow.resetForSnapshot(500, {kind: 'tail'});
         mods.renderRows();
         // hasMore=true → 按钮占 48px：windowTop = 48 + 400*120
         layout.scrollTop = 48 + 400 * FALLBACK_AVG - 200 * FALLBACK_AVG; // 估算行 200
 
-        mods.scroll.onScroll();
+        mods.scroll.Scroll.on();
 
-        expect(mods.windowing.getRowWindowRange(500)).toEqual({
+        expect(mods.windowing.RowWindow.getRange(500)).toEqual({
           start: 180,
           end: 280,
         });

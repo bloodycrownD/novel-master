@@ -15,6 +15,8 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
@@ -50,7 +52,8 @@ export interface BuiltinToolSubagentContext {
   readonly messages: MessageService;
   readonly sessions: SessionService;
   /** 创建子 session（title 由调用方决定）；返回新 sessionId。 */
-  readonly createChildSession: (title: string) => Promise<string>;
+  /** 四期门⑦：子会话创建的已知失败沿 Result 回传给 task 工具闭包。 */
+  readonly createChildSession: (title: string) => Promise<Result<string, AppError>>;
   /**
    * 直接父会话 id（**直接父**口径，spec D2）：主装配点填 `scope.sessionId`、
    * 子装配点填 `childSessionId`。`task` 的 `sessionId` 续用参数据此校验归属
@@ -71,9 +74,10 @@ export interface BuiltinToolSubagentContext {
    * 返回值 {@link AgentRunResult} 不带文本——`task` 工具跑完后自己
    * `messages.listBySession(childSessionId)` 取末条 assistant text。
    */
-  readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<AgentRunResult>;
+  /** 四期门⑦：子 run 的已知失败沿 Result 回传给 task 工具闭包（未知异常仍 reject）。 */
+  readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<Result<AgentRunResult, AppError>>;
   /** 解析子 agent 模型：子 pin → 父 savedModelId → 报错（不走 workspace fallback）。 */
-  readonly resolveChildModelId: (def: AgentDefinition) => ResolveChildModelIdResult;
+  readonly resolveChildModelId: (def: AgentDefinition) => Result<ResolveChildModelIdResult, AppError>;
   /** 当前 agent 的递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
   readonly depth: number;
   /** 父 agent run 的 abort signal；子 agent 内部派生自己的 controller 监听它。 */
@@ -141,7 +145,7 @@ export interface BuiltinToolAgentsContext {
   /** probe 注册表名单（透传给 upsert 的工具策略校验）。 */
   readonly registeredToolNames: readonly string[];
   /** 可选：校验 model pin 指向已保存模型（照 ValidateAgentDefinitionOptions）。 */
-  readonly assertSavedModel?: (savedModelId: string) => void | Promise<void>;
+  readonly assertSavedModel?: (savedModelId: string) => void | Result<void, AppError> | Promise<void | Result<void, AppError>>;
 }
 
 /**
@@ -165,9 +169,10 @@ export interface BuiltinToolSearchContext {
   /**
    * 解析本次调用的串行引擎链（engineOrderV2 优先级序；显式 inputEngine
    * 时钉链首或沿序顺位回落；只含 enabled ∩ 配置完整的引擎；链空返回
-   * 空数组，工具回落中性配置指引文案）。
+   * 空数组，工具回落中性配置指引文案）。无效引擎名返回
+   * `Result.err(TOOL_SEARCH_INVALID_ARGUMENT)`（工具侧解包进 ToolError 通道）。
    */
-  readonly resolveEngineChain: (inputEngine?: string) => Promise<ResolvedEngineConfig[]>;
+  readonly resolveEngineChain: (inputEngine?: string) => Promise<Result<ResolvedEngineConfig[], AppError>>;
   /**
    * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 不限长，装配期
    * 原样透传——v3 起已废除「保存拒绝 + 装配期截断 500」双道限长）。空数组
@@ -201,11 +206,11 @@ export type BuiltinToolContext = {
    *
    * `undefined` 表示不限制（向后兼容）——**当前三端 runtime 全部硬写 `undefined`**
    * （`run-agent-turn.ts` 的两处装配 `allowedPaths: undefined` 与
-   * `create-user-vfs-turn-service.ts` 的一处），故这道闸门在生产中恒放行、
+   * `chat-service-factory.ts` 的一处），故这道闸门在生产中恒放行、
    * 运行时成本为零。
    * ⚠️ 这是**有意分期占位**（A-14，出处 `docs/Iterations/cr-fix-spec/spec.md:172`），
    * 不是缺陷。**接线前必须先修三处已知缺口**，否则闸门形同虚设甚至误杀：
-   * ① `pathStartsWithPrefix()` 是纯字符串前缀比对、不解 `..`（`src/../../x` 可逃逸）；
+   * ① `Path.hasPrefix()` 是纯字符串前缀比对、不解 `..`（`src/../../x` 可逃逸）；
    * ② `PATH_FIELDS` 漏 `glob` 的 `options.cwd` 与 `grep` 的 `options.pathPrefix`
    *   （两者都是 `vfs-tools.ts` 里对应工具 zod schema 的字段）；
    * ③ `filePath` 在 `PATH_FIELDS` 里但**无任何内置工具的 `inputSchema` 声明它**
@@ -226,7 +231,7 @@ export type BuiltinToolContext = {
    * 可选：仅 `task` 工具读取。vfs-tools 完全不感知。
    *
    * 主 agent run 装配 depth=0；子 agent run 装配 depth=parent+1。
-   * depth >= 2 时 `resolveAgentToolRegistry` 已强制 deny `task`，
+   * depth >= 2 时 `AgentTools.resolveRegistry` 已强制 deny `task`，
    * 故孙 agent 的 LLM 看不到 `task` 工具，不会尝试调用。
    */
   readonly subagent?: BuiltinToolSubagentContext;
@@ -235,7 +240,7 @@ export type BuiltinToolContext = {
    *
    * 主 agent run 与子 agent run 两个装配点都会注入（D2）；未注入时
    * skill 的 run 抛 ToolError（FAILED）。是否对 LLM 可见由
-   * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
+   * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制。
    */
   readonly skills?: BuiltinToolSkillsContext;
   /**
@@ -243,7 +248,7 @@ export type BuiltinToolContext = {
    *
    * 主 agent run 与子 agent run 两个装配点都会按「resolve 后注册表含
    * `agent` 才注入」注入（照 skills 的 D4 闭包模式）；子 / 孙 agent 由
-   * `resolveAgentToolRegistry` 在摘 `task` 的同一分支强制摘除（D6），
+   * `AgentTools.resolveRegistry` 在摘 `task` 的同一分支强制摘除（D6），
    * 闭包不注入，run 抛 ToolError（FAILED）。
    */
   readonly agents?: BuiltinToolAgentsContext;
@@ -259,7 +264,7 @@ export type BuiltinToolContext = {
    * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见，
    * description 走中性「未装配搜索能力」文案（不承诺「返回配置指引」）。
    *
-   * 是否对 LLM 可用由 `resolveAgentToolRegistry` 的 tools.allow/deny 控制
+   * 是否对 LLM 可用由 `AgentTools.resolveRegistry` 的 tools.allow/deny 控制
    * （search 不在任何摘除分支内，主/子/孙 agent 全深度可用，照 curl）。
    */
   readonly search?: BuiltinToolSearchContext;

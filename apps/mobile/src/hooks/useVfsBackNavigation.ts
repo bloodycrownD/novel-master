@@ -11,11 +11,7 @@ import type {RootStackParamList} from '@/navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-export function useVfsBackNavigation(
-  fileRef: RefObject<VfsFileManagerHandle | null>,
-  navigation: Nav,
-  options?: {title?: string},
-) {
+export function useVfsBackNavigation(fileRef: RefObject<VfsFileManagerHandle | null>, navigation: Nav, options?: {title?: string}) {
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
 

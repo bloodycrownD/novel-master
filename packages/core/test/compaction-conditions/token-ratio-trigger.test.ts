@@ -1,32 +1,23 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
-import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
-import {
-  clearTokenizerDrivers,
-  registerTokenizerDriver,
-} from "../../src/infra/nmtp/index.js";
-import { countPromptLlmInput as nodeCountPromptLlmInput } from "../../../tokenizer-driver-node/src/count-prompt-llm-input.js";
-import {
-  createNodeTokenizerLoader,
-  defaultTokenizerAssetsRoot,
-  setNodeTokenizerLoader,
-} from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
-import { NODE_DRIVER_NAME } from "../../../tokenizer-driver-node/src/register.js";
-import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
-import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { serializeSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import {
-  PROMPT_TOKENS_LAST_USAGE_KEY,
-  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  beforeEach, describe, it  } from "node:test";
+import {  registerNodeTokenizerDriverForTests  } from "../helpers/register-node-tokenizer-driver-for-tests.js";
+import {  TokenizerRegistry  } from "../../src/infra/nmtp/index.js";
+import {  PromptLlmInputCounter as NodePromptLlmInputCounter  } from "../../../tokenizer-driver-node/src/count-prompt-llm-input.js";
+import {  NodeTokenizerLoader  } from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
+import {  NODE_DRIVER_NAME  } from "../../../tokenizer-driver-node/src/register.js";
+import {  TokenRatioConditionTrigger  } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
+import {  sessionApiPromptTokenCache  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {  SessionApiPromptTokenEntry  } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {  PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { InMemoryAgentSession } from "@novel-master/core/agent";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 
-import { createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
+import {  DefaultTokenCounterRegistry  } from "@novel-master/core/tokenizer";
+import {  Result  } from "../../src/errors/either.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";
-import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
+import {  emptyRegistryDeps  } from "../infra/tokenizer/registry-test-helpers.js";
 
 function systemOnlyEvaluation(
   systemContent: string,
@@ -65,7 +56,7 @@ function seedKkvEntry(
     sessionId,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens,
       atMs: Date.now(),
       savedModelId: "openai/gpt-4o",
@@ -81,35 +72,35 @@ describe("TokenRatioConditionTrigger", () => {
 
   it("does not fire below threshold or when context window is unknown", async () => {
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("sys");
 
     const below = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await below.shouldTrigger(session, evaluation), false);
+    assert.equal((await below.shouldTrigger(session, evaluation)).value, false);
 
     assert.equal(
-      await new TokenRatioConditionTrigger(
+      (await new TokenRatioConditionTrigger(
         {
           tokenRatio: 0.8,
-          resolveContextWindow: async () => null,
-          resolveTokenizerOverride: async () => "auto",
+          resolveContextWindow: async () => Result.ok(null),
+          resolveTokenizerOverride: async () => Result.ok("auto"),
         },
         registry,
-      ).shouldTrigger(session, evaluation),
+      ).shouldTrigger(session, evaluation)).value,
       false,
     );
   });
 
   it("fires when token count exceeds floor(contextWindow × ratio)", async () => {
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("(small)", "sess-above-threshold");
 
     // Prime the API cache so resolveCurrentPromptTokens skips the real tokenizer.
@@ -122,17 +113,17 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), true);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, true);
   });
 
   it("does not fire when token count equals threshold (strict >)", async () => {
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("(small)", "sess-at-threshold");
 
     // threshold = floor(100_000 × 0.8) = 80_000; 80_000 > 80_000 → false (strict >).
@@ -144,37 +135,37 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, false);
   });
 
   it("无统计可用时评估走 heuristic 估算、不调驱动（preferEstimate，T5 改版）", async () => {
     const captured: { driverCalled: number } = { driverCalled: 0 };
-    clearTokenizerDrivers();
-    setNodeTokenizerLoader(
-      createNodeTokenizerLoader(defaultTokenizerAssetsRoot()),
+    TokenizerRegistry.clear();
+    NodeTokenizerLoader.set(
+      NodeTokenizerLoader.create(NodeTokenizerLoader.defaultAssetsRoot()),
     );
-    registerTokenizerDriver({
+    TokenizerRegistry.register({
       name: NODE_DRIVER_NAME,
       countPromptLlmInput: async (params) => {
         captured.driverCalled += 1;
-        return nodeCountPromptLlmInput(params);
+        return NodePromptLlmInputCounter.count(params);
       },
     });
 
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("hello world");
 
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "heuristic",
+        resolveContextWindow: async () => Result.ok(100_000),
+          resolveTokenizerOverride: async () => Result.ok("heuristic"),
       },
       registry,
     );
@@ -187,7 +178,7 @@ describe("TokenRatioConditionTrigger", () => {
 
   it("heuristic 估算走保守阈值，比 api 精确档更早触发压缩", async () => {
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const sessionKkv = createMemorySessionKkv();
     // 注入通道 = 正文本身（2026-09-30 起估算读数改「单趟 CJK 感知字符折算」，
     // 不再经 registry.heuristic.countText —— 往计数器里塞数已无效）。45_122 个
@@ -205,25 +196,25 @@ describe("TokenRatioConditionTrigger", () => {
       new TokenRatioConditionTrigger(
         {
           tokenRatio: 0.8,
-          resolveContextWindow: async () => 100_000,
-          resolveTokenizerOverride: async () => "auto",
+          resolveContextWindow: async () => Result.ok(100_000),
+          resolveTokenizerOverride: async () => Result.ok("auto"),
           heuristicSafetyFactor,
         },
         registry,
       );
 
     assert.equal(
-      await makeTrigger().shouldTrigger(session, evaluation),
+      (await makeTrigger().shouldTrigger(session, evaluation)).value,
       true,
       "heuristic 估算（估算优先路径的必然档位）必须走保守阈值",
     );
     // safetyFactor=1 时退化回精确阈值，不再提前触发。
-    assert.equal(await makeTrigger(1).shouldTrigger(session, evaluation), false);
+    assert.equal((await makeTrigger(1).shouldTrigger(session, evaluation)).value, false);
 
     // 对照：同数值走 api 精确档（counterKind=api）不乘系数 → 不触发。
     await seedKkvEntry(sessionKkv, "sess-heuristic-factor", 75_000);
     assert.equal(
-      await makeTrigger().shouldTrigger(session, evaluation),
+      (await makeTrigger().shouldTrigger(session, evaluation)).value,
       false,
       "api 基线命中时不乘保守系数",
     );
@@ -232,7 +223,7 @@ describe("TokenRatioConditionTrigger", () => {
   it("KKV 命中（跨重启）：进程内热层空时仍按 API 值判定", async () => {
     const sessionKkv = createMemorySessionKkv();
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation(
       "(tiny)",
       "sess-kkv-hit",
@@ -247,18 +238,18 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), true);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, true);
   });
 
   it("API 口径（counterKind=api）不乘 heuristic 安全系数", async () => {
     const sessionKkv = createMemorySessionKkv();
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation(
       "(tiny)",
       "sess-api-no-factor",
@@ -273,18 +264,18 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, false);
   });
 
   it("指纹不符（KKV 值属于别的模型）→ 当 miss 走本地估算", async () => {
     const sessionKkv = createMemorySessionKkv();
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const registry = DefaultTokenCounterRegistry.create(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation(
       "(tiny)",
       "sess-fingerprint-miss",
@@ -295,7 +286,7 @@ describe("TokenRatioConditionTrigger", () => {
       "sess-fingerprint-miss",
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({
+      SessionApiPromptTokenEntry.serialize({
         promptTokens: 99_999,
         atMs: Date.now(),
         savedModelId: "anthropic/claude-other",
@@ -306,12 +297,12 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
     // 不采用 99_999（否则必触发）；本地估算 + heuristic 安全系数下也不会触发。
-    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, false);
   });
 });

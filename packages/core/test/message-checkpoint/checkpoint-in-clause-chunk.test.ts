@@ -22,14 +22,15 @@
  * @module test/message-checkpoint/checkpoint-in-clause-chunk
  */
 
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
-import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  after, before, describe, it  } from "node:test";
+import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {  openSqlCountingNovelMasterTestConnection  } from "../helpers/sql-counting-connection.js";
+import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import type { Row } from "../../src/infra/tdbc/types.js";
 
@@ -134,15 +135,15 @@ async function seedCheckpoints(
   const svfs = ctx.sessionVfs(projectId, sessionId);
   const entries = new SqliteVfsEntryRepository(ctx.conn);
   const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
 
   // 真实 revision（文件指针必须有指向，否则 delete 时的 ref 减一没有对账面）。
   const pointers: RevisionPointer[] = [];
   for (let i = 0; i < pointerCount; i++) {
     const p = `/ck-${i}.md`;
     await svfs.write(p, `body-${i}`, { versionCheck: false });
-    const entry = await entries.findByPath(sk, p);
-    const version = (await svfs.read(p)).version;
+    const entry = unwrap(await entries.findByPath(sk, p));
+    const version = unwrap(await svfs.read(p)).version;
     pointers.push({ entryId: entry!.entryId, version });
   }
 
@@ -226,8 +227,8 @@ async function remainingRows(sessionId: string): Promise<{
 
 describe("C2-9 I3: 1200 个 id ⇒ 至少 2 块且任一块绑定变量 ≤ 900", () => {
   it("T-CHUNK-I3-COUNT: countCheckpointsForMessages 分块且每块 ≤900 变量", async () => {
-    const project = await ctx.projects.create(`P-c2i3a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-c2i3a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const fx = await seedCheckpoints(project.id, session.id, BIG_ID_COUNT, 0);
 
     const probe = bindingProbe(ctx.conn);
@@ -251,8 +252,8 @@ describe("C2-9 I3: 1200 个 id ⇒ 至少 2 块且任一块绑定变量 ≤ 900"
   });
 
   it("T-CHUNK-I3-LIST: listFilePointersForMessages 分块且每块 ≤900 变量", async () => {
-    const project = await ctx.projects.create(`P-c2i3b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-c2i3b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const fx = await seedCheckpoints(project.id, session.id, BIG_ID_COUNT, 300);
 
     const probe = bindingProbe(ctx.conn);
@@ -276,8 +277,8 @@ describe("C2-9 I3: 1200 个 id ⇒ 至少 2 块且任一块绑定变量 ≤ 900"
   });
 
   it("T-CHUNK-I3-DELETE: deleteCheckpointsForMessages 分块且每块 ≤900 变量", async () => {
-    const project = await ctx.projects.create(`P-c2i3c-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-c2i3c-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const fx = await seedCheckpoints(project.id, session.id, BIG_ID_COUNT, 300);
 
     const probe = bindingProbe(ctx.conn);
@@ -306,8 +307,8 @@ describe("C2-9 I3: 1200 个 id ⇒ 至少 2 块且任一块绑定变量 ≤ 900"
 
 describe("C2-9 I2: 分块结果与整段结果等价", () => {
   it("T-CHUNK-I2: 计数 / 指针序列 / 删除后剩余行与 ref_count 三项都对得上", async () => {
-    const project = await ctx.projects.create(`P-c2i2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-c2i2-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const fx = await seedCheckpoints(project.id, session.id, BIG_ID_COUNT, 300);
 
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
@@ -373,8 +374,8 @@ describe("C2-9 I2: 分块结果与整段结果等价", () => {
     // spec C2-9 风险 R1 的缓解措施：求和语义在有重复 id 时会「偏大」，
     // 但调用方的 id 来自 chat_message 主键、无重复 ⇒ 语义**不因分块而变**。
     // 本条钉住这一点：同一个含重复的列表，分块前后结果必须一致。
-    const project = await ctx.projects.create(`P-c2i2d-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-c2i2d-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const fx = await seedCheckpoints(project.id, session.id, 1000, 0);
 
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
@@ -395,8 +396,8 @@ describe("C2-9 I2: 分块结果与整段结果等价", () => {
 
 describe("C2-9 I4: 边界档位 0 / 1 / 899 / 900 / 901", () => {
   it("T-CHUNK-I4: 0 个 id 早退不发 SQL；其余档位切块正确且结果一致", async () => {
-    const project = await ctx.projects.create(`P-c2i4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-c2i4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const fx = await seedCheckpoints(project.id, session.id, 1001, 0);
 
     // 0：三个方法都早退，一条 SQL 都不许发。

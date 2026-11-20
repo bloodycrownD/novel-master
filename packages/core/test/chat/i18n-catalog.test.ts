@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { describe, it } from "node:test";
-import { CHAT_MESSAGE_KEYS } from "../../src/domain/chat/i18n/keys.js";
+import {  describe, it  } from "node:test";
+import {  CHAT_MESSAGE_KEYS  } from "../../src/domain/chat/i18n/keys.js";
 
 for (const locale of ["zh-CN", "en-US"]) {
   describe(`chat locale ${locale}`, () => {

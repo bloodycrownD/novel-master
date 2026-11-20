@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { bootstrapNovelMaster, createPersistentState, open, type TdbcConnection } from "@novel-master/core";
 
 import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
-import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
+import { BetterSqlite3Register } from "@novel-master/tdbc-driver-better-sqlite3";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
@@ -96,10 +96,7 @@ export interface ProviderListRow {
  * @see packages/core/src/domain/provider/logic/builtin-providers.ts
  */
 export const BUILTIN_OPENAI_UUID = "c0ffeeee-0001-4000-8000-000000000001";
-export const BUILTIN_ANTHROPIC_UUID = "c0ffeeee-0001-4000-8000-000000000002";
-export const BUILTIN_GOOGLE_UUID = "c0ffeeee-0001-4000-8000-000000000003";
 export const BUILTIN_OPENROUTER_UUID = "c0ffeeee-0001-4000-8000-000000000004";
-export const BUILTIN_OPENCODE_UUID = "c0ffeeee-0001-4000-8000-000000000005";
 
 /** 解析 `nm provider list` TSV：`uuid\\tdisplayName\\tprotocol\\tbaseUrl\\tapiKey: …`。 */
 export function parseProviderList(stdout: string): ProviderListRow[] {
@@ -276,7 +273,7 @@ export function seedMockProviderModels(
 }
 
 async function openConn(dbPath: string): Promise<TdbcConnection> {
-  registerBetterSqlite3Driver();
+  BetterSqlite3Register.register();
   const conn = await open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
   await bootstrapNovelMaster(conn);
   return conn;
@@ -288,14 +285,18 @@ export async function readCliState(dbPath: string): Promise<CliState> {
   try {
     const state = createPersistentState(conn);
     const currentProjectId = await state.getCurrentProjectId();
+    if (!currentProjectId.ok) throw currentProjectId.error;
     const currentSessionId = await state.getCurrentSessionId();
+    if (!currentSessionId.ok) throw currentSessionId.error;
     const currentProviderId = await state.getCurrentProviderId();
+    if (!currentProviderId.ok) throw currentProviderId.error;
     const currentModelId = await state.getCurrentModelId();
+    if (!currentModelId.ok) throw currentModelId.error;
     return {
-      currentProjectId: currentProjectId || undefined,
-      currentSessionId: currentSessionId || undefined,
-      currentProviderId: currentProviderId || undefined,
-      currentModelId: currentModelId || undefined,
+      currentProjectId: currentProjectId.value || undefined,
+      currentSessionId: currentSessionId.value || undefined,
+      currentProviderId: currentProviderId.value || undefined,
+      currentModelId: currentModelId.value || undefined,
     };
   } finally {
     await conn.close();

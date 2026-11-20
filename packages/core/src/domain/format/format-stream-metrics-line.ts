@@ -11,7 +11,7 @@
  */
 
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { formatCharCount } from "./format-char-count.js";
+import { Number } from "@/common/number.js";
 
 /** 流式 metrics 展示切片。 */
 export type StreamMetricsLineInput = {
@@ -19,7 +19,7 @@ export type StreamMetricsLineInput = {
   readonly elapsedMs: number;
   /** run 级累计输出 token（usage=基线来自事件真源，读值=基线+增量；heuristic=基线为 0 的纯估算）。 */
   readonly completionTokens: number;
-  /** 实时速率（token/秒，slidingTokenRate 产物）；null = 省略速率段。 */
+  /** 实时速率（token/秒，SlidingTokenRate.rate 产物）；null = 省略速率段。 */
   readonly tokensPerSecond: number | null;
 };
 
@@ -30,35 +30,37 @@ export interface StreamMetricsLineParts {
   readonly body: CoreMessageDescriptor;
 }
 
-/**
- * 历经秒数 → 展示文案：60s 内一位小数（`12.3s`）、60s 起取整（`61s`）。
- *
- * core 单点实现，双端 hook（mobile / desktop）直接引用，不再各自维护副本
- * ——口径漂移会让两端文案不一致。
- */
-export function formatStreamElapsed(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  return `${Math.round(seconds)}s`;
-}
+export const StreamMetricsLine = {
+  /**
+   * 历经秒数 → 展示文案：60s 内一位小数（`12.3s`）、60s 起取整（`61s`）。
+   *
+   * core 单点实现，双端 hook（mobile / desktop）直接引用，不再各自维护副本
+   * ——口径漂移会让两端文案不一致。
+   */
+  formatElapsed(seconds: number): string {
+    if (seconds < 60) {
+      return `${seconds.toFixed(1)}s`;
+    }
+    return `${Math.round(seconds)}s`;
+  },
 
-/** 构建 metrics 条文案切片（供 ChatStreamMetricsBar 与单测共用）。 */
-export function buildStreamMetricsLine(metrics: StreamMetricsLineInput): StreamMetricsLineParts {
-  const tokens = formatCharCount(metrics.completionTokens);
-  if (metrics.tokensPerSecond != null) {
-    // tok/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
-    // 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 tok/s」形态一致）。
-    const rate = metrics.tokensPerSecond;
+  /** 构建 metrics 条文案切片（供 ChatStreamMetricsBar 与单测共用）。 */
+  build(metrics: StreamMetricsLineInput): StreamMetricsLineParts {
+    const tokens = Number.charCount(metrics.completionTokens);
+    if (metrics.tokensPerSecond != null) {
+      // tok/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
+      // 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 tok/s」形态一致）。
+      const rate = metrics.tokensPerSecond;
+      return {
+        prefix: { key: metrics.running ? "label.stream_metrics.running" : "label.stream_metrics.last" },
+        elapsed: StreamMetricsLine.formatElapsed(metrics.elapsedMs / 1000),
+        body: { key: "label.stream_metrics.line_with_rate", params: { tokens, rate: rate >= 100 ? Math.round(rate) : parseFloat(rate.toFixed(1)) } },
+      };
+    }
     return {
       prefix: { key: metrics.running ? "label.stream_metrics.running" : "label.stream_metrics.last" },
-      elapsed: formatStreamElapsed(metrics.elapsedMs / 1000),
-      body: { key: "label.stream_metrics.line_with_rate", params: { tokens, rate: rate >= 100 ? Math.round(rate) : Number.parseFloat(rate.toFixed(1)) } },
+      elapsed: StreamMetricsLine.formatElapsed(metrics.elapsedMs / 1000),
+      body: { key: "label.stream_metrics.line", params: { tokens } },
     };
-  }
-  return {
-    prefix: { key: metrics.running ? "label.stream_metrics.running" : "label.stream_metrics.last" },
-    elapsed: formatStreamElapsed(metrics.elapsedMs / 1000),
-    body: { key: "label.stream_metrics.line", params: { tokens } },
-  };
-}
+  },
+} as const;

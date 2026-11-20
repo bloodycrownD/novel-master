@@ -1,25 +1,25 @@
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  ChatAgentSession,
-  createAgentRunner,
-  InMemoryAgentSession,
-  AppError,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
-import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
-import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
-import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  describe, it, mock  } from "node:test";
+import {  AgentServiceFactory, ChatAgentSession, type AgentDefinition, type  CreateAgentRunnerDeps  } from "@novel-master/core/agent";
+import {  AppError  } from "@novel-master/core/errors";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  AbortScopeFactory  } from "@/domain/abort/logic/create-abort-scope.js";
+import {  EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type  AgentRunFinishedPayload, type  AgentRunStartedPayload, type  AgentStreamTextDeltaPayload  } from "@novel-master/core/events";
+import {  Random  } from "../../src/common/random.js";
+import {  BuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext  } from "@novel-master/core";
+import {  type ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 import type { SkillService } from "../../src/service/skills/skills.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 function minimalDefinition(): AgentDefinition {
@@ -64,28 +64,28 @@ function mockVfs(): VfsService {
   return {
     async read(path: string) {
       const content = files.get(path) ?? "";
-      return { path, content, version: 1, mtimeMs: 0 };
+      return Result.ok({ path, content, version: 1, mtimeMs: 0 });
     },
     async write(path: string, content: string) {
       files.set(path, content);
-      return { version: 1 };
+      return Result.ok({ version: 1 });
     },
     async replace(path: string, oldString: string, newString: string) {
       const c = files.get(path) ?? "";
       files.set(path, c.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
+      return Result.ok({ version: 1, replacements: 1 });
     },
     async list() {
-      return [...files.keys()];
+      return Result.ok([...files.keys()]);
     },
     async glob() {
-      return [];
+      return Result.ok([]);
     },
     async grep() {
-      return [];
+      return Result.ok([]);
     },
     async delete() {
-      return { deleted: true };
+      return Result.ok(undefined);
     },
   } as unknown as VfsService;
 }
@@ -110,7 +110,8 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+
+      return Result.ok(r);
     }),
   };
 }
@@ -121,25 +122,29 @@ function createMockModel(
  */
 function fakeSkillService(): SkillService {
   return {
-    effectiveSkills: async () => [
-      {
-        name: "demo",
-        description: null,
+    // 错误通道迁移四期：effectiveSkills 走 Result 通道。
+    effectiveSkills: async () =>
+      Result.ok([
+        {
+          name: "demo",
+          description: null,
+          domain: "project",
+          overridden: false,
+          disabled: false,
+          valid: true,
+          effective: true,
+        },
+      ]) as unknown as ReturnType<SkillService["effectiveSkills"]>,
+    // 错误通道迁移二期：readSkillFile 走 Result 通道。
+    readSkillFile: async () =>
+      Result.ok({
         domain: "project",
-        overridden: false,
-        disabled: false,
-        valid: true,
-        effective: true,
-      },
-    ],
-    readSkillFile: async () => ({
-      domain: "project",
-      name: "demo",
-      path: "SKILL.md",
-      content:
-        "---\nname: demo\ndescription: 演示\n---\n# 演示技能\n正文内容",
-      version: 1,
-    }),
+        name: "demo",
+        path: "SKILL.md",
+        content:
+          "---\nname: demo\ndescription: 演示\n---\n# 演示技能\n正文内容",
+        version: 1,
+      }) as unknown as ReturnType<SkillService["readSkillFile"]> extends Promise<infer R> ? R : never,
   } as unknown as SkillService;
 }
 
@@ -151,7 +156,7 @@ describe("AgentRunner", () => {
   // 在发给 LLM 的 history 中附 SKILL.md 全文（skillAttach 附件不吞不漏）。
   it("skillAttach hydrate：$技能 首次引用在 LLM history 附 SKILL.md 全文", async () => {
     const session = new InMemoryAgentSession();
-    const userMsg = await session.append("user", textBlocks("用 $demo 改一下"));
+    const userMsg = unwrap(await session.append("user", TextBlocks.of("用 $demo 改一下")));
     // InMemoryAgentSession.append 不收 attachments；返回对象与内部存储同
     // 引用，直接补字段（skillAttach 附件：无 path、skillName 为准）。
     Object.assign(userMsg, {
@@ -171,17 +176,17 @@ describe("AgentRunner", () => {
     const model: ModelRequestService = {
       request: async (_savedModelId, _userContent, options) => {
         histories.push(options?.history);
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        };
+        });
       },
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -192,11 +197,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const historyText = JSON.stringify(histories[0]);
@@ -209,7 +214,7 @@ describe("AgentRunner", () => {
 
   it("returns stopReason=cancelled when aborted before run", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -220,8 +225,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -232,12 +237,12 @@ describe("AgentRunner", () => {
 
     const controller = new AbortController();
     controller.abort();
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -248,7 +253,7 @@ describe("AgentRunner", () => {
   // 改落占位 assistant——core/B-2：尾部停在 user 会锁死双端 composer。
   it("T-SR5: 空文本 blocks 不落原始 assistant，改落占位消息", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -262,8 +267,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -272,11 +277,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(model.callCount(), 1);
@@ -293,32 +298,32 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C1: abort + text/thinking blocks 落库 partial assistant，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
       request: async () => {
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "partial",
           blocks: [
             { type: "thinking", text: "hmm" },
             { type: "text", text: "partial" },
           ],
           raw: { partial: true },
-        };
+        });
       },
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const bus = new SimpleEventBus();
     const phases: AgentStepCommittedPayload["phase"][] = [];
     bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
       phases.push(p.phase);
     });
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       ...runnerDeps({
         session,
         modelRequests: model,
@@ -328,12 +333,12 @@ describe("AgentRunner", () => {
       eventBus: bus,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -350,7 +355,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C2: abort + tool_use blocks 落库 assistant，不跑 runParallel，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     let runParallelInvoked = false;
@@ -358,7 +363,7 @@ describe("AgentRunner", () => {
       callCount: () => 1,
       request: async () => {
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "",
           blocks: [
             {
@@ -369,12 +374,12 @@ describe("AgentRunner", () => {
             },
           ],
           raw: {},
-        };
+        });
       },
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const trackingRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -383,7 +388,7 @@ describe("AgentRunner", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -393,12 +398,12 @@ describe("AgentRunner", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -416,7 +421,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C3: abort 后无第二次 model request，stepsExecuted===0", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     let calls = 0;
@@ -425,17 +430,17 @@ describe("AgentRunner", () => {
       request: mock.fn(async () => {
         calls += 1;
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "once",
           blocks: [{ type: "text", text: "once" }],
           raw: {},
-        };
+        });
       }),
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -444,12 +449,12 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -459,7 +464,7 @@ describe("AgentRunner", () => {
 
   it("T-ARP-C4: abort 在 tool 执行完成后 append 前仍无 tool_results", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const controller = new AbortController();
     const model = createMockModel([
@@ -478,7 +483,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const innerRunner = new ToolRunner(registry);
     const abortAfterToolsRunner = {
       runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
@@ -488,7 +493,7 @@ describe("AgentRunner", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -498,12 +503,12 @@ describe("AgentRunner", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = abortAfterToolsRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
-    });
+      scope: AbortScopeFactory.create({ controller }),
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -519,7 +524,7 @@ describe("AgentRunner", () => {
 
   it("生命周期与 stream 事件携带一致 runId", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("hi"));
+    unwrap(await session.append("user", TextBlocks.of("hi")));
     const bus = new SimpleEventBus();
     let started: AgentRunStartedPayload | undefined;
     const runIds: string[] = [];
@@ -545,16 +550,16 @@ describe("AgentRunner", () => {
       callCount: () => 0,
       request: async (_id, _prompt, options) => {
         options.onStream?.({ type: "text-delta", text: "stream" });
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        };
+        });
       },
     };
 
     const registry = new ToolRegistry();
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -571,24 +576,24 @@ describe("AgentRunner", () => {
         }) as never,
     });
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
       stream: true,
-    });
+    }));
 
     await Promise.resolve();
 
     assert.ok(started);
-    assert.ok(isRandomUuidV4(started.runId));
+    assert.ok(Random.isUuidV4(started.runId));
     assert.equal(runIds.length, 4);
     assert.ok(runIds.every((id) => id === started!.runId));
   });
 
   it("maxSteps=1: runs tool once, no second model call", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -606,8 +611,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -616,11 +621,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(model.callCount(), 1);
     assert.equal(result.stepsExecuted, 1);
@@ -638,7 +643,7 @@ describe("AgentRunner", () => {
 
   it("maxSteps=3: two tool rounds then text completion", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("multi"));
+    unwrap(await session.append("user", TextBlocks.of("multi")));
 
     const model = createMockModel([
       {
@@ -673,8 +678,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -683,11 +688,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(model.callCount(), 3);
     assert.equal(result.finished, true);
@@ -696,7 +701,7 @@ describe("AgentRunner", () => {
 
   it("T-AR2: does not emit session.message.received after successful assistant append", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("hi"));
+    unwrap(await session.append("user", TextBlocks.of("hi")));
     const bus = new SimpleEventBus();
     const model = createMockModel([
       {
@@ -706,7 +711,7 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -724,17 +729,17 @@ describe("AgentRunner", () => {
     });
     // agent-runner 不再 publish session.message.received；
     // run 正常完成不报错即说明没有残留对该事件的依赖。
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.finished, true);
   });
 
   it("emits agent.step.committed after each assistant and tool_results append", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const bus = new SimpleEventBus();
     const phases: AgentStepCommittedPayload["phase"][] = [];
     bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
@@ -761,8 +766,8 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -778,17 +783,17 @@ describe("AgentRunner", () => {
           materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
   });
 
   it("tool_results 与 run_finished 携带 vfsMutated", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const bus = new SimpleEventBus();
     const toolResultSteps: AgentStepCommittedPayload[] = [];
     let runFinished: AgentRunFinishedPayload | undefined;
@@ -834,8 +839,8 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -851,11 +856,11 @@ describe("AgentRunner", () => {
           materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(toolResultSteps.length, 2);
     assert.equal(toolResultSteps[0]!.vfsMutated, false);
@@ -865,7 +870,7 @@ describe("AgentRunner", () => {
 
   it("propagates doom_loop from identical tool_use blocks", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("loop"));
+    unwrap(await session.append("user", TextBlocks.of("loop")));
 
     const sameInput = { path: "/x" };
     const model = createMockModel([
@@ -881,8 +886,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -891,25 +896,24 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await assert.rejects(
-      () =>
-        runner.run({
+    await rejectsErr(
+      runner.run({
           maxSteps: 3,
           definition: { ...minimalDefinition(), prompts: { persist: [], dynamic: [] } },
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
+        assert.ok(e instanceof AppError && e.key === "AGENT_DOOM_LOOP"),
     );
   });
 
   it("captures checkpoint once after parallel mutating tools", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("go"));
+    unwrap(await chatSession.append("user", TextBlocks.of("go")));
 
     const model = createMockModel([
       {
@@ -944,8 +948,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -959,16 +963,16 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
-    const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
+    const assistantMsgs = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => m.role === "assistant",
     );
     assert.equal(assistantMsgs.length, 2);
@@ -991,12 +995,12 @@ describe("AgentRunner", () => {
 
   it("does not capture checkpoint after read-only tool round", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/seed.md", "seed");
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("list"));
+    unwrap(await chatSession.append("user", TextBlocks.of("list")));
 
     const model = createMockModel([
       {
@@ -1019,8 +1023,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1034,16 +1038,16 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
-    const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
+    const assistantMsgs = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => m.role === "assistant",
     );
     const firstAssistant = assistantMsgs[0]!;
@@ -1055,12 +1059,12 @@ describe("AgentRunner", () => {
     );
   });
 
-  it("tool_result content includes VfsError path from formatToolErrorForLlm", async () => {
+  it("tool_result content includes VfsError path from ToolOutput.formatErrorForLlm", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("read"));
+    unwrap(await chatSession.append("user", TextBlocks.of("read")));
 
     const model = createMockModel([
       {
@@ -1083,9 +1087,9 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
+    BuiltinTools.register(registry);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1098,16 +1102,16 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     const toolResultMsg = messages.find(
       (m) =>
         m.role === "user" &&
@@ -1130,7 +1134,7 @@ describe("AgentRunner", () => {
   /** 从会话消息中提取首个 tool_result block。 */
   async function firstToolResultBlock(sessionId: string) {
     const ctx = getNovelMasterTestContext();
-    const messages = await ctx.messages.listBySession(sessionId);
+    const messages = outcomeValue(await ctx.messages.listBySession(sessionId));
     const toolResultMsg = messages.find(
       (m) =>
         m.role === "user" &&
@@ -1146,10 +1150,10 @@ describe("AgentRunner", () => {
 
   it("T-AR-01: edit failure tool_result has no physical path prefix", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("edit fail"));
+    unwrap(await chatSession.append("user", TextBlocks.of("edit fail")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write(
@@ -1183,8 +1187,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1197,14 +1201,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     assert.equal(resultBlock.ok, false);
@@ -1216,10 +1220,10 @@ describe("AgentRunner", () => {
 
   it("T-AR-02: write 工具不再有版本冲突：stale options 被 schema 剥离，last-write-wins 成功", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("write conflict"));
+    unwrap(await chatSession.append("user", TextBlocks.of("write conflict")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/conflict.txt", "v1", { versionCheck: false });
@@ -1250,8 +1254,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1264,30 +1268,30 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     // 版本参数已从 write 工具移除：stale options 被忽略，覆盖成功无 [CONFLICT]
     assert.equal(resultBlock.ok, true);
     assert.ok(!resultBlock.content.includes("[CONFLICT]"));
-    assert.equal((await vfs.read("/conflict.txt")).content, "stale");
+    assert.equal(unwrap(await vfs.read("/conflict.txt")).content, "stale");
     assert.ok(!resultBlock.content.includes("/projects/"));
     assert.ok(!resultBlock.content.includes("/sessions/"));
   });
 
   it("T-AR-03: edit failure tool_result includes LCS snippet", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("edit lcs"));
+    unwrap(await chatSession.append("user", TextBlocks.of("edit lcs")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write(
@@ -1321,8 +1325,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1335,14 +1339,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     assert.equal(resultBlock.ok, false);
@@ -1352,10 +1356,10 @@ describe("AgentRunner", () => {
 
   it("T-AR-04: edit failure must not be bare Tool failed: edit", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
-    await chatSession.append("user", textBlocks("edit bare"));
+    unwrap(await chatSession.append("user", TextBlocks.of("edit bare")));
 
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write(
@@ -1389,8 +1393,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1403,14 +1407,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     assert.equal(resultBlock.ok, false);
@@ -1419,7 +1423,7 @@ describe("AgentRunner", () => {
 
   it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("loop"));
+    unwrap(await session.append("user", TextBlocks.of("loop")));
     const model = createMockModel([
       {
         assistantText: "",
@@ -1443,8 +1447,8 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1452,21 +1456,20 @@ describe("AgentRunner", () => {
         toolCtx: mockToolCtx(mockVfs()),
       }),
     );
-    await assert.rejects(
-      () =>
-        runner.run({
+    await rejectsErr(
+      runner.run({
           maxSteps: 6,
           definition: minimalDefinition(),
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
+        assert.ok(e instanceof AppError && e.key === "AGENT_DOOM_LOOP"),
     );
   });
 
   it("T-ITA-03: degraded tool args → no RUN_FAILED, tool_result ok:false, run continues", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const bus = new SimpleEventBus();
     let runFailed = false;
     bus.subscribe(EVENT_AGENT_RUN_FAILED, () => {
@@ -1497,8 +1500,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1508,11 +1511,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(runFailed, false);
     assert.equal(result.stopReason, "completed");
@@ -1528,7 +1531,7 @@ describe("AgentRunner", () => {
 
   it("T-ITA-04: degraded + valid tool mixed, id-aligned, only valid runs", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", TextBlocks.of("go")));
     const vfs = mockVfs();
 
     const model = createMockModel([
@@ -1561,8 +1564,8 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1571,11 +1574,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(model.callCount(), 2);
@@ -1590,22 +1593,22 @@ describe("AgentRunner", () => {
     assert.ok(goodResult);
     assert.equal(badResult.ok, false);
     assert.equal(goodResult.ok, true);
-    const file = await vfs.read("/ok.txt");
+    const file = unwrap(await vfs.read("/ok.txt"));
     assert.equal(file.content, "hi");
   });
 
   // T-CA4：runner 注入 extraInfo（prompts.customAttach）零覆盖补齐。
   it("T-CA4a: definition prompts.customAttach 非空 → 只有最新一条 user 消息含 extra-info", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("第一问"));
+    unwrap(await session.append("user", TextBlocks.of("第一问")));
 
     const model = createMockModel([
       { assistantText: "ok", blocks: [{ type: "text", text: "ok-1" }], raw: {} },
       { assistantText: "ok", blocks: [{ type: "text", text: "ok-2" }], raw: {} },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1620,19 +1623,19 @@ describe("AgentRunner", () => {
     };
 
     // 第一轮：只有一条 user 消息。跑完后 session 里追加 assistant。
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       ...defaultRunScope,
-    });
+    }));
 
     // 第二轮：再追一条 user 消息，此时 history 含两条 user（中间隔 assistant），不会被合并。
-    await session.append("user", textBlocks("第二问"));
-    await runner.run({
+    unwrap(await session.append("user", TextBlocks.of("第二问")));
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(model.callCount(), 2);
     const opts = (model.request as unknown as ReturnType<typeof mock.fn>)
@@ -1653,14 +1656,14 @@ describe("AgentRunner", () => {
 
   it("T-CA4b: definition 无 customAttach → user 消息 body 不出现 extra-info 段", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("第一问"));
+    unwrap(await session.append("user", TextBlocks.of("第一问")));
 
     const model = createMockModel([
       { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} },
     ]);
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1669,11 +1672,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     const opts = (model.request as unknown as ReturnType<typeof mock.fn>)
       .mock.calls[0]!.arguments[2] as { history: Array<{ role: string }> };
@@ -1686,55 +1689,56 @@ describe("AgentRunner", () => {
   // MF-3：KKV 坏值（PreferencesError）不应炸掉整个 run。
   it("thinking 偏好抛 PreferencesError 时回退 false（默认关），run 正常完成并记标签日志", async () => {
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      unwrap(await session.append("user", TextBlocks.of("go")));
       // 历史含一条无 tool_use 的 assistant thinking：回退关态时被剥离。
-      await session.append("assistant", {
+      unwrap(await session.append("assistant", {
         blocks: [
           { type: "thinking", text: "latest-turn-thinking" },
           { type: "text", text: "prev" },
         ],
-      });
+      }));
 
       const histories: unknown[] = [];
       const model: ModelRequestService = {
         request: async (_savedModelId, _userContent, options) => {
           histories.push(options?.history);
-          return {
+          return Result.ok({
             assistantText: "ok",
             blocks: [{ type: "text", text: "ok" }],
             raw: {},
-          };
+          });
         },
       };
 
       const registry = new ToolRegistry();
-      registerBuiltinTools(registry);
-      const runner = createAgentRunner(
+      BuiltinTools.register(registry);
+      const runner = AgentServiceFactory.createRunner(
         runnerDeps({
           session,
           modelRequests: model,
           registry,
           toolCtx: mockToolCtx(mockVfs()),
           preferences: {
-            getThinkingContextEnabled: async () => {
-              throw new AppError(
-                "PREFERENCES_INVALID_VALUE",
-                "not-a-bool",
-                { key: "chat.thinkingContext" },
-              );
-            },
+            getThinkingContextEnabled: async () =>
+              Result.err(
+                new AppError(
+                  "PREFERENCES_INVALID_VALUE",
+                  "not-a-bool",
+                  { key: "chat.thinkingContext" },
+                ),
+              ),
           },
         }),
       );
 
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition: minimalDefinition(),
         ...defaultRunScope,
-      });
+      }));
 
       // run 正常完成，不因坏值炸掉
       assert.equal(result.stopReason, "completed");
@@ -1751,7 +1755,7 @@ describe("AgentRunner", () => {
       assert.equal(payload.code, "PREFERENCES_INVALID_VALUE");
       assert.equal(payload.fallback, false);
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
   });
 });

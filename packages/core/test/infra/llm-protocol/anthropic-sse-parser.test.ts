@@ -1,51 +1,38 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
-import {
-  createAnthropicSseParserState,
-  feedAnthropicSseChunk,
-  finishAnthropicSse,
-  finishAnthropicSsePartial,
-} from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
-import { parseAnthropicUsage } from "../../../src/infra/llm-protocol/logic/usage-parser.js";
+import {  describe, it  } from "node:test";
+import {  AppErrorOps  } from "../../../src/errors/app-error.js";
+import {  AnthropicSseParser  } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
+import {  UsageParser  } from "../../../src/infra/llm-protocol/logic/usage-parser.js";
 
 describe("anthropic-sse-parser", () => {
   it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
     // 牙齿：把 parseSseDataLine 改回 `startsWith("data: ")` 形态，这条必红
     // （blocks 长度为 0，且 malformedLineCount 仍为 0 ⇒ 不抛错）。
-    const state = createAnthropicSseParserState();
     const deltas: string[] = [];
     const onStream = (ev: { type: string; text?: string }) => {
       if (ev.type === "text-delta" && ev.text != null) {
         deltas.push(ev.text);
       }
     };
+    const parser = AnthropicSseParser.create({ onStream });
 
-    feedAnthropicSseChunk(
-      state,
-      'data:{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
-      onStream,
-    );
-    const { blocks } = finishAnthropicSse(state, onStream);
+    parser.feed('data:{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n');
+    const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
     assert.equal((blocks[0] as { text: string }).text, "Hi");
     assert.deepEqual(deltas, ["Hi"]);
-    assert.equal(state.malformedLineCount, 0);
+    assert.equal(parser.state.malformedLineCount, 0);
   });
 
   it("SSE-DATA-NS-02: 有空格形态不回归", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
-      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
-    );
-    const { blocks } = finishAnthropicSse(state);
+    const parser = AnthropicSseParser.create();
+    parser.feed('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n');
+    const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
     assert.equal((blocks[0] as { text: string }).text, "Hi");
   });
 
   it("T3: incremental text, thinking, and tool_use", () => {
-    const state = createAnthropicSseParserState();
     const deltas: string[] = [];
     const toolUses: unknown[] = [];
     const onStream = (ev: {
@@ -61,9 +48,9 @@ describe("anthropic-sse-parser", () => {
         toolUses.push(ev);
       }
     };
+    const parser = AnthropicSseParser.create({ onStream });
 
-    feedAnthropicSseChunk(
-      state,
+    parser.feed(
       [
         'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}',
         "",
@@ -78,10 +65,9 @@ describe("anthropic-sse-parser", () => {
         'data: {"type":"content_block_stop"}',
         "",
       ].join("\n"),
-      onStream,
     );
 
-    const { blocks } = finishAnthropicSse(state, onStream);
+    const { blocks } = parser.finish();
     assert.deepEqual(deltas, ["Hi"]);
     assert.equal(toolUses.length, 1);
     assert.equal(blocks.filter((b) => b.type === "text").length, 1);
@@ -90,9 +76,8 @@ describe("anthropic-sse-parser", () => {
   });
 
   it("accumulates signature_delta fragments into thinkingSignature", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
+    const parser = AnthropicSseParser.create();
+    parser.feed(
       [
         'data: {"type":"content_block_start","content_block":{"type":"thinking","thinking":""}}',
         "",
@@ -106,7 +91,7 @@ describe("anthropic-sse-parser", () => {
         "",
       ].join("\n"),
     );
-    const { blocks } = finishAnthropicSse(state);
+    const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
     if (blocks[0]?.type === "thinking") {
@@ -116,9 +101,8 @@ describe("anthropic-sse-parser", () => {
   });
 
   it("preserves block order: thinking before tool_use", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
+    const parser = AnthropicSseParser.create();
+    parser.feed(
       [
         'data: {"type":"content_block_start","content_block":{"type":"thinking","thinking":""}}',
         "",
@@ -134,16 +118,15 @@ describe("anthropic-sse-parser", () => {
         "",
       ].join("\n"),
     );
-    const { blocks } = finishAnthropicSse(state);
+    const { blocks } = parser.finish();
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]?.type, "thinking");
     assert.equal(blocks[1]?.type, "tool_use");
   });
 
   it("parses redacted_thinking content block", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
+    const parser = AnthropicSseParser.create();
+    parser.feed(
       [
         'data: {"type":"content_block_start","content_block":{"type":"redacted_thinking","data":"blob"}}',
         "",
@@ -151,7 +134,7 @@ describe("anthropic-sse-parser", () => {
         "",
       ].join("\n"),
     );
-    const { blocks } = finishAnthropicSse(state);
+    const { blocks } = parser.finish();
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "redacted_thinking");
     if (blocks[0]?.type === "redacted_thinking") {
@@ -159,34 +142,29 @@ describe("anthropic-sse-parser", () => {
     }
   });
   it("SSE-MAL-01: only malformed lines throw on finish", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(state, "data: {bad\n\n");
+    const parser = AnthropicSseParser.create();
+    parser.feed("data: {bad\n\n");
     assert.throws(
-      () => finishAnthropicSse(state),
+      () => parser.finish(),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "MALFORMED_SSE");
+        assert.ok(AppErrorOps.is(err, "PROVIDER_MALFORMED_SSE"));
         return true;
       },
     );
   });
 
   it("SSE-MAL-02: malformed line with valid text", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(state, "data: oops\n\n");
-    feedAnthropicSseChunk(
-      state,
-      "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n",
-    );
-    const { blocks } = finishAnthropicSse(state);
-    assert.equal(state.malformedLineCount, 1);
+    const parser = AnthropicSseParser.create();
+    parser.feed("data: oops\n\n");
+    parser.feed("data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n");
+    const { blocks } = parser.finish();
+    assert.equal(parser.state.malformedLineCount, 1);
     assert.equal(blocks.length, 1);
   });
 
   it("T-ITA-02 / TU-04: invalid partial_json on block stop degrades, no throw", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
+    const parser = AnthropicSseParser.create();
+    parser.feed(
       [
         "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read\"}}",
         "",
@@ -196,7 +174,7 @@ describe("anthropic-sse-parser", () => {
         "",
       ].join("\n"),
     );
-    const { blocks, degradedToolCalls } = finishAnthropicSse(state);
+    const { blocks, degradedToolCalls } = parser.finish();
     assert.equal(degradedToolCalls.length, 1);
     assert.equal(degradedToolCalls[0]!.id, "t1");
     assert.equal(degradedToolCalls[0]!.reason, "INVALID_TOOL_ARGUMENTS");
@@ -206,9 +184,8 @@ describe("anthropic-sse-parser", () => {
   });
 
   it("T-S2: message_start 输入侧 + message_delta 累计 output 合并后都在", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
+    const parser = AnthropicSseParser.create();
+    parser.feed(
       [
         'data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"cache_read_input_tokens":60,"cache_creation_input_tokens":30,"output_tokens":1}}}',
         "",
@@ -222,8 +199,8 @@ describe("anthropic-sse-parser", () => {
         "",
       ].join("\n"),
     );
-    const { streamRaw } = finishAnthropicSse(state);
-    const usage = parseAnthropicUsage(streamRaw);
+    const { streamRaw } = parser.finish();
+    const usage = UsageParser.parse("anthropic", streamRaw);
     assert.equal(usage?.promptTokens, 100);
     assert.equal(usage?.completionTokens, 42);
     assert.equal(usage?.totalTokens, 142);
@@ -235,35 +212,31 @@ describe("anthropic-sse-parser", () => {
   });
 
   it("T-S2: 只有 message_start 没有 message_delta（中途断流）时输入侧仍在", () => {
-    const state = createAnthropicSseParserState();
-    feedAnthropicSseChunk(
-      state,
-      'data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"cache_read_input_tokens":60}}}\n\n',
-    );
-    const { streamRaw } = finishAnthropicSsePartial(state);
-    const usage = parseAnthropicUsage(streamRaw);
+    const parser = AnthropicSseParser.create();
+    parser.feed('data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"cache_read_input_tokens":60}}}\n\n');
+    const { streamRaw } = parser.finishPartial();
+    const usage = UsageParser.parse("anthropic", streamRaw);
     assert.equal(usage?.promptTokens, 100);
     assert.equal(usage?.cacheReadTokens, 60);
   });
 
   it("T-S2: 双槽皆空时降级 {streamed:true,aborted:true} 且不抛错", () => {
-    const state = createAnthropicSseParserState();
-    const { streamRaw } = finishAnthropicSsePartial(state);
+    const parser = AnthropicSseParser.create();
+    const { streamRaw } = parser.finishPartial();
     assert.deepEqual(streamRaw, { streamed: true, aborted: true });
-    assert.equal(parseAnthropicUsage(streamRaw), undefined);
+    assert.equal(UsageParser.parse("anthropic", streamRaw), undefined);
   });
 
   it("T-M1: message_delta 携带累计 output_tokens 时逐条 emit usage 事件（completionTokens 随 delta 增长）", () => {
-    const state = createAnthropicSseParserState();
     const usageEvents: Array<{ completionTokens?: number }> = [];
     const onStream = (ev: { type: string; usage?: { completionTokens?: number } }) => {
       if (ev.type === "usage") {
         usageEvents.push(ev.usage ?? {});
       }
     };
+    const parser = AnthropicSseParser.create({ onStream });
 
-    feedAnthropicSseChunk(
-      state,
+    parser.feed(
       [
         // message_start 的输出侧（1）不 emit——emit 只挂 message_delta 分支
         'data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":1}}}',
@@ -282,7 +255,6 @@ describe("anthropic-sse-parser", () => {
         'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":42}}',
         "",
       ].join("\n"),
-      onStream,
     );
 
     assert.deepEqual(
@@ -292,21 +264,20 @@ describe("anthropic-sse-parser", () => {
   });
 
   it("T-M1: message_delta 缺 usage 或缺 output_tokens 时不 emit", () => {
-    const state = createAnthropicSseParserState();
     let usageCount = 0;
-    feedAnthropicSseChunk(
-      state,
+    const onStream = (ev: { type: string }) => {
+      if (ev.type === "usage") {
+        usageCount += 1;
+      }
+    };
+    const parser = AnthropicSseParser.create({ onStream });
+    parser.feed(
       [
         'data: {"type":"message_delta","delta":{"stop_reason":null}}',
         "",
         'data: {"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":5}}',
         "",
       ].join("\n"),
-      (ev) => {
-        if (ev.type === "usage") {
-          usageCount += 1;
-        }
-      },
     );
     assert.equal(usageCount, 1);
   });

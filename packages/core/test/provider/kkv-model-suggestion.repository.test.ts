@@ -1,8 +1,9 @@
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
-import { KkvModelSuggestionRepository } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  describe, it  } from "node:test";
+import {  createKkvService  } from "../../src/service/kkv/create-kkv-service.js";
+import {  KkvModelSuggestionRepository  } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 
 novelMasterTestFixture();
@@ -28,14 +29,14 @@ describe("KkvModelSuggestionRepository", () => {
       lastSeenAtMs: 2000,
     });
 
-    const list = await repo.listByProvider("openai");
+    const list = unwrap(await repo.listByProvider("openai"));
     assert.equal(list.length, 2);
 
-    const raw = await kkv.get("nm-model-suggestions", "openai");
+    const raw = unwrap(await kkv.get("nm-model-suggestions", "openai"));
     assert.match(raw, /gpt-4o/);
 
     await repo.markStaleExcept("openai", new Set(["gpt-4o"]));
-    const afterStale = await repo.listByProvider("openai");
+    const afterStale = unwrap(await repo.listByProvider("openai"));
     const mini = afterStale.find((s) => s.vendorModelId === "gpt-4o-mini");
     assert.equal(mini?.stale, true);
 

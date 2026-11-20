@@ -56,8 +56,8 @@ test("desktop runtime factory is wired in main process", () => {
     path.join(desktopRoot, "src/main/runtime/create-desktop-runtime.ts"),
     "utf8",
   );
-  assert.match(runtimeFactory, /export async function createDesktopNovelMasterRuntime/);
-  assert.match(runtimeFactory, /registerPlatformSkspDriver|getPlatformSkspName/);
+  assert.match(runtimeFactory, /export namespace DesktopRuntimeFactory/);
+  assert.match(runtimeFactory, /DesktopSksp\.getName\(\)|DesktopSksp\.registerDriver\(\)/);
 });
 
 test("renderer build output exists after workspace build", () => {

@@ -16,15 +16,15 @@
  */
 
 /** One highlight segment: a slice of the tested text + whether it matched. */
-export interface SmartSortHighlightSegment {
+interface SmartSortHighlightSegment {
   readonly text: string;
   readonly matched: boolean;
 }
 
 /**
- * Minimal match shape consumed by {@link splitSmartSortHighlightSegments}:
+ * Minimal match shape consumed by {@link SmartSortHighlight.splitSegments}:
  * start offset (matchAll native `index`) + full match text. Any superset
- * shape (e.g. `SmartSortPatternMatch` from `matchSmartSortPattern`) satisfies
+ * shape (e.g. `SmartSortPatternMatch` from `SmartSortPattern.match`) satisfies
  * it structurally, so callers can pass match results through directly.
  */
 export interface SmartSortHighlightMatchInput {
@@ -32,26 +32,28 @@ export interface SmartSortHighlightMatchInput {
   readonly text: string;
 }
 
-/**
- * 按 matches 的原生偏移把测试文本切成普通段/匹配段交替（GUI 高亮渲染用）。
- *
- * matches 需按出现顺序排列（matchAll 天然有序）；入参用 `{index, text}`
- * 最小结构，各端携带自有 match 形态也能直接复用本切分逻辑。
- */
-export function splitSmartSortHighlightSegments(text: string, matches: readonly SmartSortHighlightMatchInput[]): SmartSortHighlightSegment[] {
-  const segments: SmartSortHighlightSegment[] = [];
-  let cursor = 0;
-  for (const m of matches) {
-    if (m.index > cursor) {
-      segments.push({ text: text.slice(cursor, m.index), matched: false });
+export const SmartSortHighlight = {
+  /**
+   * 按 matches 的原生偏移把测试文本切成普通段/匹配段交替（GUI 高亮渲染用）。
+   *
+   * matches 需按出现顺序排列（matchAll 天然有序）；入参用 `{index, text}`
+   * 最小结构，各端携带自有 match 形态也能直接复用本切分逻辑。
+   */
+  splitSegments(text: string, matches: readonly SmartSortHighlightMatchInput[]): SmartSortHighlightSegment[] {
+    const segments: SmartSortHighlightSegment[] = [];
+    let cursor = 0;
+    for (const m of matches) {
+      if (m.index > cursor) {
+        segments.push({ text: text.slice(cursor, m.index), matched: false });
+      }
+      if (m.text.length > 0) {
+        segments.push({ text: m.text, matched: true });
+      }
+      cursor = Math.max(cursor, m.index + m.text.length);
     }
-    if (m.text.length > 0) {
-      segments.push({ text: m.text, matched: true });
+    if (cursor < text.length) {
+      segments.push({ text: text.slice(cursor), matched: false });
     }
-    cursor = Math.max(cursor, m.index + m.text.length);
-  }
-  if (cursor < text.length) {
-    segments.push({ text: text.slice(cursor), matched: false });
-  }
-  return segments;
-}
+    return segments;
+  },
+} as const;

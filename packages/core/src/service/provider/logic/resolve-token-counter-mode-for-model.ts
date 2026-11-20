@@ -4,16 +4,25 @@
  * @module service/provider/logic/resolve-token-counter-mode-for-model
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 import type { ProviderModelService } from "../provider-model.port.js";
 
-/** Returns saved model token counter mode, or `"auto"` when model is unknown. */
-export async function resolveTokenCounterModeForModel(
-  providerModels: Pick<ProviderModelService, "getTokenCounterMode">,
-  savedModelId: string | null | undefined
-): Promise<TokenizerOverride> {
-  if (savedModelId == null || savedModelId === "") {
-    return "auto";
-  }
-  return providerModels.getTokenCounterMode(savedModelId);
-}
+/** 读口只需 getTokenCounterMode 这一个能力。 */
+type TokenCounterModeReader = Pick<ProviderModelService, "getTokenCounterMode">;
+type TokenCounterModeResult = Promise<Result<TokenizerOverride, AppError>>;
+
+/** per-model token counter 解析集合。 */
+export const TokenCounterMode = {
+  /**
+   * Returns saved model token counter mode, or `"auto"` when model is unknown;
+   * 读口失败沿 `Result.err` 透传（五期门⑦）。
+   */
+  async resolveForModel(providerModels: TokenCounterModeReader, savedModelId: string | null | undefined): TokenCounterModeResult {
+    if (savedModelId == null || savedModelId === "") {
+      return Result.ok("auto");
+    }
+    return providerModels.getTokenCounterMode(savedModelId);
+  },
+} as const;

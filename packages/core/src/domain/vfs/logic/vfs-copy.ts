@@ -1,77 +1,69 @@
-// legacy-port: VfsService — phase 2 端口实现改抛 AppError 后删除 isVfsError 分支。
 /**
  * VFS path copy via {@link VfsService} composition (files and recursive directory trees).
  *
  * @module domain/vfs/logic/vfs-copy
  */
 
+import { Path } from "@/common/path.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
-import { mkdirIgnoreExists, normalizeDirPath, remapPathUnderDir } from "./vfs-move.js";
-import { vfsPortError, type VfsPortError } from "./vfs-port-error.js";
+import { VfsMove } from "./vfs-move.js";
 
 export type CopyVfsPathOptions = {
   readonly recursive?: boolean;
 };
 
-/** copyVfsPath 的失败载荷。 */
-type VfsCopyError = VfsPortError;
+export const VfsCopy = {
+  /**
+   * Copy a file or directory tree (source is never deleted).
+   *
+   * @remarks
+   * Directory copy requires `options.recursive: true` (default false).
+   * File vs directory detection matches {@link VfsMove.move}.
+   */
+  async copy(vfs: VfsService, from: string, to: string, options?: CopyVfsPathOptions): Promise<Result<void, AppError>> {
+    const recursive = options?.recursive ?? false;
 
-/**
- * Copy a file or directory tree (source is never deleted).
- *
- * @remarks
- * Directory copy requires `options.recursive: true` (default false).
- * File vs directory detection matches {@link moveVfsPath}.
- */
-export async function copyVfsPath(vfs: VfsService, from: string, to: string, options?: CopyVfsPathOptions): Promise<Result<void, VfsCopyError>> {
-  const recursive = options?.recursive ?? false;
-
-  try {
     const existing = await vfs.read(from);
-    await vfs.write(to, existing.content);
-    return Result.ok(undefined);
-  } catch (error) {
-    if (!isVfsError(error)) {
-      throw error;
+    if (existing.ok) {
+      const written = await vfs.write(to, existing.value.content);
+      return written.map(() => undefined);
     }
-    if (error.code !== "NOT_FOUND" && error.code !== "IS_DIRECTORY") {
-      return Result.err(vfsPortError(error));
+    if (existing.error.key !== "VFS_NOT_FOUND" && existing.error.key !== "VFS_IS_DIRECTORY") {
+      return Result.err(existing.error);
     }
-  }
 
-  const oldDir = normalizeDirPath(from);
-  try {
-    const entries = await vfs.list(oldDir, { recursive: true });
+    const oldDir = Path.stripTrailingSlash(from);
+    const listed = await vfs.list(oldDir, { recursive: true });
+    if (!listed.ok) return Result.err(listed.error);
+    const entries = listed.value;
     const hasDirRow = entries.some((e) => e.kind === "directory" && e.path === oldDir);
     if (entries.length === 0 && !hasDirRow) {
-      return Result.err(new AppError("VFS_NOT_FOUND", `Path not found: ${from}`, { path: from }));
+      return Result.err(new AppError("VFS_NOT_FOUND", { detail: `Path not found: ${from}`, path: from }));
     }
 
     if (!recursive) {
-      return Result.err(new AppError("VFS_IS_DIRECTORY", `Directory copy requires recursive: true: ${from}`, { path: from }));
+      return Result.err(new AppError("VFS_IS_DIRECTORY", { detail: `Directory copy requires recursive: true: ${from}`, path: from }));
     }
 
-    const newDir = normalizeDirPath(to);
+    const newDir = Path.stripTrailingSlash(to);
     const dirs = entries.filter((e) => e.kind === "directory").sort((a, b) => a.path.length - b.path.length);
     const files = entries.filter((e) => e.kind === "file");
 
-    await mkdirIgnoreExists(vfs, newDir);
+    const madeRoot = await VfsMove.mkdirIgnoreExists(vfs, newDir);
+    if (!madeRoot.ok) return Result.err(madeRoot.error);
     for (const dir of dirs) {
-      await mkdirIgnoreExists(vfs, remapPathUnderDir(dir.path, oldDir, newDir));
+      const made = await VfsMove.mkdirIgnoreExists(vfs, Path.remapUnderDir(dir.path, oldDir, newDir));
+      if (!made.ok) return Result.err(made.error);
     }
 
     for (const file of files) {
       const content = await vfs.read(file.path);
-      await vfs.write(remapPathUnderDir(file.path, oldDir, newDir), content.content);
+      if (!content.ok) return Result.err(content.error);
+      const written = await vfs.write(Path.remapUnderDir(file.path, oldDir, newDir), content.value.content);
+      if (!written.ok) return Result.err(written.error);
     }
     return Result.ok(undefined);
-  } catch (error) {
-    if (isVfsError(error)) {
-      return Result.err(vfsPortError(error));
-    }
-    throw error;
-  }
-}
+  },
+} as const;

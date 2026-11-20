@@ -8,6 +8,8 @@ import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.
 import type { SmartSortCaptureKind, SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
 import type { SmartSortRuleBundleDocument } from "@/domain/smart-sort-rule/model/smart-sort-rule-io.js";
 import type { CreateSmartSortRuleInput, UpdateSmartSortRuleInput } from "@/domain/smart-sort-rule/model/smart-sort-rule.schema.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 /** moveRule 目标：top/bottom/up/down 或绝对位次 { index }。 */
 export type SmartSortRuleMoveTarget = "top" | "bottom" | "up" | "down" | { readonly index: number };
@@ -35,45 +37,51 @@ export interface SmartSortRulePreviewResult {
   readonly sortedNames: readonly string[];
 }
 
-/** Application service for smart sort rules (flat table, spec D2). */
+/**
+ * Application service for smart sort rules (flat table, spec D2).
+ *
+ * @remarks 已知失败（校验不通过、规则不存在、builtin 保护、撞号）走
+ * `Result.err(AppError)`；未知异常（含事务回滚）仍走 throw。
+ */
 export interface SmartSortRuleService {
   listRules(): Promise<SmartSortRule[]>;
 
-  createRule(input: CreateSmartSortRuleInput): Promise<SmartSortRule>;
+  createRule(input: CreateSmartSortRuleInput): Promise<Result<SmartSortRule, AppError>>;
 
-  updateRule(ruleId: string, patch: UpdateSmartSortRuleInput): Promise<SmartSortRule>;
+  updateRule(ruleId: string, patch: UpdateSmartSortRuleInput): Promise<Result<SmartSortRule, AppError>>;
 
   /** 删除用户规则；`builtin-` 前缀一律拒绝（仅可禁用，spec D3）。 */
-  deleteRule(ruleId: string): Promise<void>;
+  deleteRule(ruleId: string): Promise<Result<void, AppError>>;
 
   /** 批量删除；任一 `builtin-` 前缀则整体拒绝。 */
-  deleteBatch(ruleIds: readonly string[]): Promise<void>;
+  deleteBatch(ruleIds: readonly string[]): Promise<Result<void, AppError>>;
 
-  setEnabled(ruleId: string, enabled: boolean): Promise<SmartSortRule>;
+  setEnabled(ruleId: string, enabled: boolean): Promise<Result<SmartSortRule, AppError>>;
 
   setEnabledBatch(ruleIds: readonly string[], enabled: boolean): Promise<void>;
 
   /** 调序（整表重编号，D2）；返回重排后的全量列表。 */
-  moveRule(ruleId: string, to: SmartSortRuleMoveTarget): Promise<SmartSortRule[]>;
+  moveRule(ruleId: string, to: SmartSortRuleMoveTarget): Promise<Result<SmartSortRule[], AppError>>;
 
   /** 按给定 id 顺序整表重排（须恰好覆盖全部规则）。 */
-  reorderRules(orderedIds: readonly string[]): Promise<SmartSortRule[]>;
+  reorderRules(orderedIds: readonly string[]): Promise<Result<SmartSortRule[], AppError>>;
 
   /** 全量导出（按 sortOrder）为 bundle 文档。 */
   exportRules(): Promise<SmartSortRuleBundleDocument>;
 
   /** 替换式导入（清空全部含内置 → 按文件顺序插入，D10）。 */
-  importRules(raw: unknown): Promise<SmartSortRule[]>;
+  importRules(raw: unknown): Promise<Result<SmartSortRule[], AppError>>;
 
   /** 删除 `builtin-%` 后重灌内置规则，用户规则不动。 */
   resetDefaults(): Promise<void>;
 
   /**
    * 排序测试（纯方法，D11）：给定规则集（缺省用库内启用规则）+ 文件名
-   * 列表，返回逐行命中明细与排序后顺序。
+   * 列表，返回逐行命中明细与排序后顺序。草稿规则与库内存量规则的
+   * 编译失败都走 `Result.err`（四期起存量规则不再 throw）。
    */
-  previewSort(names: readonly string[], draftRules?: readonly SmartSortRulePreviewDraft[]): Promise<SmartSortRulePreviewResult>;
+  previewSort(names: readonly string[], draftRules?: readonly SmartSortRulePreviewDraft[]): Promise<Result<SmartSortRulePreviewResult, AppError>>;
 
-  /** 启用规则按 sortOrder 预编译（workplace 排序输入）。 */
-  listCompiledRules(): Promise<CompiledSmartSortRule[]>;
+  /** 启用规则按 sortOrder 预编译（workplace 排序输入）；编译失败走 `Result.err`。 */
+  listCompiledRules(): Promise<Result<CompiledSmartSortRule[], AppError>>;
 }

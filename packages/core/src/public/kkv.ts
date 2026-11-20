@@ -10,4 +10,3 @@
 
 export { createKkvService } from "../service/kkv/create-kkv-service.js";
 export type { KkvService } from "../service/kkv/kkv.port.js";
-export { kkvNotFound } from "../errors/kkv-errors.js";

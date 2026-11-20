@@ -4,6 +4,8 @@
  * @module service/message-checkpoint/message-checkpoint.port
  */
 
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
+
 /**
  * Captures the session work tree after Agent mutating tools complete.
  */
@@ -27,7 +29,7 @@ export interface MessageCheckpointService {
    *
    * @remarks 幂等：所有消息都有 checkpoint 时直接 short-circuit。
    *
-   * @param signal 可选。r3-run-4 引入的弃权信号——前奏期 backfill 是大会话上
+   * @param scope 取消作用域。r3-run-4 引入的弃权信号——前奏期 backfill 是大会话上
    *   秒级的纯扫描，用户在这段窗口按停止时不该被逼着等它跑完（真机 2026-09-30：
    *   连点停止要等 11s 才兑现）。传入后实现会在扫描循环内检查并提前退出。
    *
@@ -36,12 +38,12 @@ export interface MessageCheckpointService {
    *   下一轮发送会接着补齐剩下的空窗；且中断时不写 backfill 游标，判定下次必然
    *   回退全量，**不会**因游标前移而把「没补完」误判成「已确认无空窗」。
    *
-   *   不传时行为与旧版逐字节一致（对不传 signal 的调用方零影响）。
+   *   无取消诉求的调用方传 `AbortScopeFactory.create()` 显式表达「不可取消」。
    */
   backfillMissingBaselines(
     sessionId: string,
     projectId: string,
-    signal?: AbortSignal
+    scope: AbortScope
   ): Promise<void>;
 
   /**

@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  computeHeadTailIndices,
-  evaluateFileDisplay,
-  sortDirPaths,
-  sortFilesForDir,
-} from "@novel-master/core/workplace";
+import {  describe, it  } from "node:test";
+import {  WorkplaceEval  } from "@novel-master/core/workplace";
+import {  Number  } from "@novel-master/core/common";
 
 describe("worktree eval", () => {
   it("hide and show take priority", () => {
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "hide",
         parentRuleOn: true,
         dirRule: null,
@@ -21,7 +17,7 @@ describe("worktree eval", () => {
       "hidden",
     );
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "show",
         parentRuleOn: false,
         dirRule: null,
@@ -35,7 +31,7 @@ describe("worktree eval", () => {
 
   it("auto with parent rule off is hidden", () => {
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "auto",
         parentRuleOn: false,
         dirRule: null,
@@ -48,14 +44,14 @@ describe("worktree eval", () => {
   });
 
   it("head=2 tail=1 dedupes to three full slots", () => {
-    const priority = computeHeadTailIndices(5, 2, 1);
+    const priority = Number.headTailIndices(5, 2, 1);
     assert.equal(priority.size, 3);
     assert.deepEqual([...priority].sort(), [0, 1, 4]);
   });
 
   it("fill header on non-md is hidden", () => {
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "auto",
         parentRuleOn: true,
         dirRule: {
@@ -78,7 +74,7 @@ describe("worktree eval", () => {
 
   it("fill full shows full content for non-priority auto file", () => {
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "auto",
         parentRuleOn: true,
         dirRule: {
@@ -101,7 +97,7 @@ describe("worktree eval", () => {
 
   it("uses default fill header for non-priority auto file when dirRule is null", () => {
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "auto",
         parentRuleOn: true,
         dirRule: null,
@@ -115,7 +111,7 @@ describe("worktree eval", () => {
 
   it("fill filename for non-priority auto file", () => {
     assert.equal(
-      evaluateFileDisplay({
+      WorkplaceEval.evaluateFileDisplay({
         inclusion: "auto",
         parentRuleOn: true,
         dirRule: {
@@ -159,27 +155,27 @@ describe("T-WE1: sortFilesForDir smart case", () => {
     sorted.map((f) => f.logicalPath.split("/").pop());
 
   it("smart with rules orders by extracted ordinals (第四章 [4] before 第十章 [10])", () => {
-    const sorted = sortFilesForDir(files, dirRule, { smartRules });
+    const sorted = WorkplaceEval.sortFilesForDir(files, dirRule, { smartRules });
     assert.deepEqual(names(sorted), ["第一章.txt", "第四章.txt", "第十章.txt"]);
   });
 
   it("smart desc reverses the ordinal order", () => {
-    const sorted = sortFilesForDir(files, { ...dirRule, sortOrder: "desc" }, { smartRules });
+    const sorted = WorkplaceEval.sortFilesForDir(files, { ...dirRule, sortOrder: "desc" }, { smartRules });
     assert.deepEqual(names(sorted), ["第十章.txt", "第四章.txt", "第一章.txt"]);
   });
 
   it("smart without rules degrades to natural order (码位序：十 U+5341 < 四 U+56DB)", () => {
-    const sorted = sortFilesForDir(files, dirRule);
+    const sorted = WorkplaceEval.sortFilesForDir(files, dirRule);
     assert.deepEqual(names(sorted), ["第一章.txt", "第十章.txt", "第四章.txt"]);
   });
 
   it("smart without rules degrades to natural order even with empty opts", () => {
-    const sorted = sortFilesForDir(files, dirRule, {});
+    const sorted = WorkplaceEval.sortFilesForDir(files, dirRule, {});
     assert.deepEqual(names(sorted), ["第一章.txt", "第十章.txt", "第四章.txt"]);
   });
 
   it("两参旧调用（无 opts）不破坏：name 排序照旧（localeCompare 拼音序）", () => {
-    const sorted = sortFilesForDir(files, { ...dirRule, sortField: "name" });
+    const sorted = WorkplaceEval.sortFilesForDir(files, { ...dirRule, sortField: "name" });
     assert.deepEqual(names(sorted), ["第十章.txt", "第四章.txt", "第一章.txt"]);
   });
 });
@@ -202,7 +198,7 @@ describe("T-WE2: sortDirPaths 按 sortField 分派", () => {
   ];
 
   it("name 零回归：basename 字典序 + path tiebreak", () => {
-    assert.deepEqual(sortDirPaths(paths, rule("name")), ["/a/m10", "/a/m2", "/a/m9"]);
+    assert.deepEqual(WorkplaceEval.sortDirPaths(paths, rule("name")), ["/a/m10", "/a/m2", "/a/m9"]);
   });
 
   it("created/updated 用目录 mtime 数值比（asc/desc 方向）", () => {
@@ -211,12 +207,12 @@ describe("T-WE2: sortDirPaths 按 sortField 分派", () => {
       ["/a/m10", 100],
       ["/a/m2", 200],
     ]);
-    assert.deepEqual(sortDirPaths(paths, rule("created"), { dirMtimeByPath }), [
+    assert.deepEqual(WorkplaceEval.sortDirPaths(paths, rule("created"), { dirMtimeByPath }), [
       "/a/m10",
       "/a/m2",
       "/a/m9",
     ]);
-    assert.deepEqual(sortDirPaths(paths, rule("updated", "desc"), { dirMtimeByPath }), [
+    assert.deepEqual(WorkplaceEval.sortDirPaths(paths, rule("updated", "desc"), { dirMtimeByPath }), [
       "/a/m9",
       "/a/m2",
       "/a/m10",
@@ -224,14 +220,14 @@ describe("T-WE2: sortDirPaths 按 sortField 分派", () => {
   });
 
   it("D7 退化分支：缺省 dirMtimeByPath 时 created/updated 与 name 输出一致", () => {
-    assert.deepEqual(sortDirPaths(paths, rule("created")), sortDirPaths(paths, rule("name")));
-    assert.deepEqual(sortDirPaths(paths, rule("updated")), sortDirPaths(paths, rule("name")));
+    assert.deepEqual(WorkplaceEval.sortDirPaths(paths, rule("created")), WorkplaceEval.sortDirPaths(paths, rule("name")));
+    assert.deepEqual(WorkplaceEval.sortDirPaths(paths, rule("updated")), WorkplaceEval.sortDirPaths(paths, rule("name")));
     // 部分 mtime 缺失（孤儿路径）时，缺失端也走 name 退化
     const partial = new Map([
       ["/a/m9", 300],
       ["/a/m2", 200],
     ]);
-    assert.deepEqual(sortDirPaths(paths, rule("created"), { dirMtimeByPath: partial }), [
+    assert.deepEqual(WorkplaceEval.sortDirPaths(paths, rule("created"), { dirMtimeByPath: partial }), [
       "/a/m10",
       "/a/m2",
       "/a/m9",
@@ -239,13 +235,13 @@ describe("T-WE2: sortDirPaths 按 sortField 分派", () => {
   });
 
   it("smart 用序号排序目录名（第四卷 [4] before 第十卷 [10]，自然序相反）", () => {
-    assert.deepEqual(sortDirPaths(volumePaths, rule("smart"), { smartRules }), [
+    assert.deepEqual(WorkplaceEval.sortDirPaths(volumePaths, rule("smart"), { smartRules }), [
       "/a/第一卷",
       "/a/第四卷",
       "/a/第十卷",
     ]);
     // 缺省规则退化为自然序（码位：一 < 十 < 四）
-    assert.deepEqual(sortDirPaths(volumePaths, rule("smart")), [
+    assert.deepEqual(WorkplaceEval.sortDirPaths(volumePaths, rule("smart")), [
       "/a/第一卷",
       "/a/第十卷",
       "/a/第四卷",

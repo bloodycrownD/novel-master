@@ -17,11 +17,9 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { performance } from "node:perf_hooks";
-import {
-  createAgentStreamRegistry,
-} from "@novel-master/core/agent";
+import {  describe, it  } from "node:test";
+import {  performance  } from "node:perf_hooks";
+import {  AgentServiceFactory  } from "@novel-master/core/agent";
 
 const SESSION_ID = "perf-session";
 
@@ -46,7 +44,7 @@ function makeSegment(index: number): string {
 
 describe("AgentStreamRegistry 累积数组化性能护栏（T-N5）", () => {
   it("T-N5-REG-LINEAR：10 万字符模拟流的 append+物化耗时曲线线性（末桶均摊 ≤ 首桶 × 3）", () => {
-    const registry = createAgentStreamRegistry();
+    const registry = AgentServiceFactory.createStreamRegistry();
     registry.register(SESSION_ID);
 
     // 预生成全部段，生成成本不得混入计时。
@@ -96,7 +94,7 @@ describe("AgentStreamRegistry 累积数组化性能护栏（T-N5）", () => {
   });
 
   it("T-N5-REG-CORRECT：物化结果与逐段 += 参照一致（text 与 thinking 两路）", () => {
-    const registry = createAgentStreamRegistry();
+    const registry = AgentServiceFactory.createStreamRegistry();
     registry.register(SESSION_ID);
 
     const segments: string[] = new Array(TOTAL_SEGMENTS);

@@ -10,20 +10,22 @@ type AgentDisplayNameSlot = {
   readonly name: string;
 };
 
-/**
- * 返回 `agent1`、`agent2`… 中首个未被占用的显示名（trim 后精确匹配）。
- */
-export function allocateAgentDisplayName(slots: readonly AgentDisplayNameSlot[]): string {
-  const used = new Set<string>();
-  for (const slot of slots) {
-    const trimmed = slot.name.trim();
-    if (trimmed.length > 0) {
-      used.add(trimmed);
+export const AllocateAgentDisplayName = {
+  /**
+   * 返回 `agent1`、`agent2`… 中首个未被占用的显示名（trim 后精确匹配）。
+   */
+  allocate: (slots: readonly AgentDisplayNameSlot[]): string => {
+    const used = new Set<string>();
+    for (const slot of slots) {
+      const trimmed = slot.name.trim();
+      if (trimmed.length > 0) {
+        used.add(trimmed);
+      }
     }
-  }
-  let n = 1;
-  while (used.has(`agent${n}`)) {
-    n += 1;
-  }
-  return `agent${n}`;
-}
+    let n = 1;
+    while (used.has(`agent${n}`)) {
+      n += 1;
+    }
+    return `agent${n}`;
+  },
+} as const;

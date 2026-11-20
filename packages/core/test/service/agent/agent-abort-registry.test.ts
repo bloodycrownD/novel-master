@@ -12,13 +12,13 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
+import {  describe, it  } from "node:test";
+import {  AgentServiceFactory  } from "@/service/agent/agent-service-factory.js";
 
 describe("AgentAbortRegistry", () => {
   describe("T-R1 register/abort/unregister/has + 所有权校验", () => {
     it("register 后 has===true；abort 后 controller.signal.aborted===true；unregister 后 has===false", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const controller = new AbortController();
 
       registry.register("sess-1", controller);
@@ -32,7 +32,7 @@ describe("AgentAbortRegistry", () => {
     });
 
     it("unregister 带所有权比对：不同 controller 实例不删", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const first = new AbortController();
       const second = new AbortController();
 
@@ -51,7 +51,7 @@ describe("AgentAbortRegistry", () => {
     });
 
     it("abort / unregister 未注册的 sessionId 静默 no-op", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const controller = new AbortController();
 
       // 不应抛错。
@@ -63,7 +63,7 @@ describe("AgentAbortRegistry", () => {
     });
 
     it("abort 后不删记录，has 仍为 true，直到 unregister 才清", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const controller = new AbortController();
 
       registry.register("sess-1", controller);
@@ -78,7 +78,7 @@ describe("AgentAbortRegistry", () => {
 
   describe("T-R3 中断隔离性", () => {
     it("register 父 + 子两个 sessionId，abort 子不影响父 controller 与父注册状态", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const parentController = new AbortController();
       const childController = new AbortController();
 
@@ -96,7 +96,7 @@ describe("AgentAbortRegistry", () => {
 
   describe("T-TS4 tryRegister claim（已注册不覆盖）", () => {
     it("首次 claim 返回 true；同 id 二次 claim 返回 false 且原 controller 仍在", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const winner = new AbortController();
       const loser = new AbortController();
 
@@ -113,7 +113,7 @@ describe("AgentAbortRegistry", () => {
     });
 
     it("败方 finally 的 unregister 不误删赢家记录（所有权比对）", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const winner = new AbortController();
       const loser = new AbortController();
 
@@ -132,7 +132,7 @@ describe("AgentAbortRegistry", () => {
     });
 
     it("tryRegister 不影响既有 register 覆盖语义（两套语义并行）", () => {
-      const registry = createAgentAbortRegistry();
+      const registry = AgentServiceFactory.createAbortRegistry();
       const first = new AbortController();
       const second = new AbortController();
 

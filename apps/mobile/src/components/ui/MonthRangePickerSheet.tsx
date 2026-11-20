@@ -8,6 +8,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {DateTime} from '@novel-master/core/common';
 import {ModalShell} from './ModalShell';
 import type {ThemeTokens} from '@/theme/tokens';
 
@@ -27,18 +28,6 @@ const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
  * 其余取色仍走 useTheme tokens）。
  */
 const TEXT_ON_PRIMARY = '#FFFFFF';
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
 
 function monthLabel(year: number, month: number): string {
   return `${year} 年 ${month + 1} 月`;
@@ -111,7 +100,7 @@ export function MonthRangePickerSheet({
     if (start == null || end == null) {
       return;
     }
-    onConfirm(startOfDay(start), startOfDay(end));
+    onConfirm(DateTime.startOfDay(start), DateTime.startOfDay(end));
   };
 
   const dayCellState = (day: number): 'idle' | 'edge' | 'inRange' => {
@@ -120,7 +109,7 @@ export function MonthRangePickerSheet({
     }
     const date = new Date(viewYear, viewMonth, day);
     if (end != null) {
-      if (sameDay(date, start) || sameDay(date, end)) {
+      if (DateTime.isSameDay(date, start) || DateTime.isSameDay(date, end)) {
         return 'edge';
       }
       if (date > start && date < end) {
@@ -128,7 +117,7 @@ export function MonthRangePickerSheet({
       }
       return 'idle';
     }
-    return sameDay(date, start) ? 'edge' : 'idle';
+    return DateTime.isSameDay(date, start) ? 'edge' : 'idle';
   };
 
   const cells: Array<null | number> = [

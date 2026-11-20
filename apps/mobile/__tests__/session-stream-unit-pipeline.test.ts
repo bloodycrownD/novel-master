@@ -29,16 +29,12 @@ import {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
-import {HeuristicTokenCounter} from '@novel-master/core/provider';
+import {agentActivity} from '@/runtime/agent-activity';
+import {HeuristicTokenCounter} from '@novel-master/core/tokenizer';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
-import {createIncrementalTokenCounter} from '@novel-master/core/format';
-import type {IncrementalTokenCounter} from '@novel-master/core/format';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 
 /** 与单元实现同值的 ingress 合并窗口（32ms）。 */
 const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
@@ -219,17 +215,17 @@ function createRecordingHandle(handleId: string): {
 
 describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-U2: 无 webview 句柄 attach 时 delta/step 照常累积进 partial/指标，收尾照常', () => {
@@ -277,7 +273,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
     const settled = h.manager.snapshot('a');
     expect(settled?.status).toBe('finished');
     expect(settled?.elapsedMs).not.toBeNull();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-U2: 指标在事件到达即归账（不经缓冲节拍），partial 走 apply 节拍', () => {
@@ -360,17 +356,17 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
 
 describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('attach 不再注入 partial；快照 streamRows 携带完整当前流式行', () => {
@@ -556,17 +552,17 @@ describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', (
 
 describe('指标语义（T-U4 五条 + T-M 平移）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-U4-1: 新 run 重置——同会话再发起，指标/partial/历时全部回到零值', () => {
@@ -715,17 +711,17 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
 
 describe('子会话链接 pendingChildren（T-SUB）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-SUB: child-created 登记进父单元投影（插入序）', () => {
@@ -841,24 +837,24 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
 
 describe('T-U13: 跨项目并行等价', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('两个不同 project 的 session 并行：事件路由/投影/收尾互不串扰', () => {
     const h = createHarness();
     startRunningRun(h, 'sa', 'r1', 'p1');
     startRunningRun(h, 'sb', 'r2', 'p2');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // 交错事件：delta/step/child 各自按 sessionId 路由
     publishTextDelta(h.eventBus, 'sa', 'r1', 'alpha');
@@ -909,7 +905,7 @@ describe('T-U13: 跨项目并行等价', () => {
     expect(h.manager.snapshot('sa')?.pendingChildren).toEqual([]);
     expect(h.manager.snapshot('sb')?.status).toBe('running');
     expect(h.manager.snapshot('sb')?.pendingChildren).toEqual(['cb']);
-    expect(isMobileAgentActive()).toBe(true); // sb 仍在跑
+    expect(agentActivity.isActive()).toBe(true); // sb 仍在跑
 
     // sb 后续 delta 照常进自己单元
     publishTextDelta(h.eventBus, 'sb', 'r2', '!');
@@ -918,7 +914,7 @@ describe('T-U13: 跨项目并行等价', () => {
 
     publishFinished(h.eventBus, 'sb', 'r2');
     expect(h.manager.snapshot('sb')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('并行期间 per-session 门禁只拦自己的会话', () => {
@@ -1038,17 +1034,17 @@ function publishUsage(
 
 describe('token 化指标（T-M5/T-M7）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
-    resetKeepAliveStateForTests();
+    agentActivity.setActive(false);
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-M7: heuristic 按累计字符长度取 ceil——逐 delta 更新与 HeuristicTokenCounter.countText 全量计数严格一致', () => {
@@ -1364,7 +1360,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
     // 足够长的段落让该段跨过固化阈值进入固化路径。
     const h = createHarness({
       tokenEstimatorFactory: () =>
-        createIncrementalTokenCounter({
+        IncrementalTokenCounter.create({
           encode: text => {
             if (text.includes('§')) {
               throw new Error('special token text');
@@ -1402,7 +1398,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
   it('C-1: 构造时不同步建估算器——水合单元零次，真实 run 在 begin() 建两次', () => {
     // 首建 tiktoken 编码表 180–420ms。放在构造函数里的话，「启动水合 / 子
     // 会话懒建」这类**根本不会发起 run** 的路径也要白付一次启动卡顿。
-    const factory = jest.fn(() => createIncrementalTokenCounter({
+    const factory = jest.fn(() => IncrementalTokenCounter.create({
       encode: text => text.length,
     }));
     const h = createHarness({tokenEstimatorFactory: factory});

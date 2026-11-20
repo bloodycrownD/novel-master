@@ -5,6 +5,8 @@
  */
 
 import type { z } from "zod";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 /**
  * A single executable tool definition.
@@ -37,6 +39,11 @@ export interface Tool<Input, Output, Ctx = unknown> {
    */
   readonly outputSchema?: z.ZodType<Output>;
 
-  /** Executes the tool. Implementations should be side-effect safe by default. */
-  run(input: Input, ctx: Ctx): Promise<Output>;
+  /**
+   * Executes the tool. Implementations should be side-effect safe by default.
+   *
+   * @remarks 已知失败走返回值通道（四期门⑦）：实现内 `Result` 失败一律
+   * `return r` 接力，不再解包 throw；未知异常仍可抛，由 runner 统一收口。
+   */
+  run(input: Input, ctx: Ctx): Promise<Result<Output, AppError>>;
 }

@@ -1,18 +1,19 @@
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, fileCacheKey } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
-import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
-import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  describe, it, mock  } from "node:test";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  WorkplaceServiceFactory  } from "../../src/service/workplace/create-workplace-service.js";
+import {  WorkplaceDisplayAssembler  } from "../../src/service/workplace/assemble-workplace-display.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
+import {  FileTools  } from "../../src/domain/tool/builtin/vfs-tools.js";
+import {  TextBlocks  } from "../../src/domain/chat/content/text-blocks.js";
+import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
+import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -24,21 +25,27 @@ function layoutWithoutWorkplace(): Pick<AgentPromptLayout, "workplace"> {
   return {};
 }
 
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
+async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
+  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
+}
+
 describe("assembleWorkplaceDisplay", () => {
   it("T-WP1: 无 worktree 块返回空且不写 kkv", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "hello");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
 
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
@@ -49,28 +56,28 @@ describe("assembleWorkplaceDisplay", () => {
     );
     assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
-    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY), null);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)), null);
   });
 
   it("T-WP2: 空 kkv + 有 worktree 块 → 写快照与 file_cache，display 含 file", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "hello-world");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
@@ -86,23 +93,23 @@ describe("assembleWorkplaceDisplay", () => {
     assert.equal(out.workplaceDisplay.includes("<<workplace>"), false);
     assert.equal(out.workplaceDisplay.includes("<workplace>\n<workplace>"), false);
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
-    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) != null);
+    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
     // file_cache 回填是 fire-and-forget（2026-09-30 冷路径优化：压缩+落库
     // 推迟到宏任务，不挡 assemble 返回），所以「最终被回填」要在 settle
     // 闸门之后断言，而不是 assemble 返回那一刻。
-    await settlePendingFileCacheBackfills();
-    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md"))) != null);
+    await FileCache.settlePendingBackfills();
+    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")))) != null);
   });
 
   // T-SR4：kkv canon=[] 后 assemble 仍能对有规则文件产出非空 display（空 [] 不粘住）
   it("T-SR4: 空 rule_snapshot 数组不粘住：重新 evaluate 后能出工作区", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "revived");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -110,12 +117,12 @@ describe("assembleWorkplaceDisplay", () => {
 
     await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
@@ -129,12 +136,12 @@ describe("assembleWorkplaceDisplay", () => {
   });
   it("T-WP3: 二次 assemble 不重复 vfs.read", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const baseVfs = ctx.sessionVfs(project.id, session.id);
     await baseVfs.write("/once.md", "body");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -150,7 +157,7 @@ describe("assembleWorkplaceDisplay", () => {
       },
     });
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -167,15 +174,15 @@ describe("assembleWorkplaceDisplay", () => {
       sessionId: session.id,
     };
     // 第一次 assemble：冷 miss，读 VFS + 后台回填。
-    await assembleWorkplaceDisplay(scope, deps);
+    await assembleDisplay(scope, deps);
     const firstReads = read.mock.callCount();
     assert.ok(firstReads >= 1);
     // 等回填落定再跑第二次：后台写是 fire-and-forget（推迟一个宏任务），
     // 不等的话第二次仍会 miss 而多读一次 VFS——那是「后台写还在跑时又
     // miss」的已知边界（与现状 miss 行为一致，非回归），不是本用例的考点。
     // 本用例考点是：缓存落定后，命中路径不再读 VFS。
-    await settlePendingFileCacheBackfills();
-    await assembleWorkplaceDisplay(scope, deps);
+    await FileCache.settlePendingBackfills();
+    await assembleDisplay(scope, deps);
     assert.equal(read.mock.callCount(), firstReads);
   });
 
@@ -186,12 +193,12 @@ describe("assembleWorkplaceDisplay", () => {
   // 读次数变化时知道该往哪看，而不是误判成缓存坏了。
   it("T-WP3b 已知边界：后台回填未落定时的紧邻第二次 assemble 仍会重读 VFS", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const baseVfs = ctx.sessionVfs(project.id, session.id);
     await baseVfs.write("/race.md", "body");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -206,7 +213,7 @@ describe("assembleWorkplaceDisplay", () => {
         return Reflect.get(target, prop, receiver);
       },
     });
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -218,22 +225,22 @@ describe("assembleWorkplaceDisplay", () => {
     };
     const deps = { sessionKkv: sk, workplace: wt, vfs: vfs as typeof baseVfs, layout: layoutWithWorkplace() };
 
-    await assembleWorkplaceDisplay(scope, deps);
+    await assembleDisplay(scope, deps);
     const firstReads = read.mock.callCount();
     // 不 settle：后台写还在宏任务队列里，缓存必然 miss
-    const out = await assembleWorkplaceDisplay(scope, deps);
+    const out = await assembleDisplay(scope, deps);
     assert.match(out.workplaceDisplay, /body/, "重读也要出正文，不能空");
     assert.equal(read.mock.callCount(), firstReads + 1, "miss 时重读一次 VFS");
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
   });
 
   it("T-FC1: write 工具成功 upsert full:{path}", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const writeTool = createVfsTools().find((t) => t.name === "write");
+    const writeTool = FileTools.create().find((t) => t.name === "write");
     assert.ok(writeTool != null);
     await writeTool!.run(
       { path: "/w.md", content: "full-content" },
@@ -244,22 +251,22 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
       }
     );
-    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/w.md"));
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/w.md")));
     assert.ok(raw != null);
-    const payload = parseFileCachePayload(raw!);
+    const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
     assert.ok(payload.ok);
     assert.equal(payload.value.body, "full-content");
   });
 
   it("T-FC2: edit 成功不改 file_cache", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/e.md", "alpha");
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
-    const editTool = createVfsTools().find((t) => t.name === "edit");
+    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
+    const editTool = FileTools.create().find((t) => t.name === "edit");
     assert.ok(editTool != null);
     await editTool!.run(
       { path: "/e.md", oldString: "alpha", newString: "beta" },
@@ -270,25 +277,25 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
       }
     );
-    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md"));
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md")));
     assert.equal(raw, JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
-    assert.equal((await vfs.read("/e.md")).content, "beta");
+    assert.equal(unwrap(await vfs.read("/e.md")).content, "beta");
   });
 
   it("T-WP4: clearSession 后再度 assemble 重新跑规则引擎并写快照", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/again.md", "v1");
-    await createWorkplaceService(ctx.conn, {
+    await WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/again.md", inclusionMode: "show" });
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -304,34 +311,34 @@ describe("assembleWorkplaceDisplay", () => {
       vfs,
       layout: layoutWithWorkplace(),
     };
-    await assembleWorkplaceDisplay(scope, deps);
-    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) != null);
+    await assembleDisplay(scope, deps);
+    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
 
     await sk.clearSession(session.id);
-    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY), null);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)), null);
 
     await vfs.replace("/again.md", "v1", "v2-after-clear");
-    const out = await assembleWorkplaceDisplay(scope, deps);
+    const out = await assembleDisplay(scope, deps);
     assert.match(out.workplaceDisplay, /v2-after-clear/);
     assert.deepEqual(out.prefixPaths, ["/again.md"]);
-    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) != null);
+    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
   });
 
   it("T-FC3: delete/rename/move 不碰 file_cache 原 key", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const cachedBody = JSON.stringify({ body: "keep-me", mtimeMs: 42 });
-    const delKey = fileCacheKey("full", "/del.md");
-    const mvKey = fileCacheKey("full", "/old.md");
+    const delKey = RuleSnapshotCodec.fileCacheKey("full", "/del.md");
+    const mvKey = RuleSnapshotCodec.fileCacheKey("full", "/old.md");
     await vfs.write("/del.md", "will-delete");
     await vfs.write("/old.md", "will-move");
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey, cachedBody);
     await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey, cachedBody);
 
-    const fsTool = createVfsTools().find((t) => t.name === "fs");
+    const fsTool = FileTools.create().find((t) => t.name === "fs");
     assert.ok(fsTool != null);
     const toolCtx = {
       vfs,
@@ -342,23 +349,23 @@ describe("assembleWorkplaceDisplay", () => {
     await fsTool!.run({ action: "rm", path: "/del.md" }, toolCtx);
     await fsTool!.run({ action: "mv", from: "/old.md", to: "/new.md" }, toolCtx);
 
-    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey), cachedBody);
-    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey), cachedBody);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey)), cachedBody);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey)), cachedBody);
     // 新 path 不自动拷贝 cache
-    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/new.md")), null);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/new.md"))), null);
   });
 
   // huge-card-import-crash：误导入巨型角色卡的存量用户重启后，workplace
   // 前缀组装不得整读毒数据（原生 OOM 崩溃循环），超大文件降级为占位符
   it("超大文件降级：display 含占位、不含正文、不写 file_cache，正常文件不受影响", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-oversize-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-oversize-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/毒卡/巨型设定.md", "poison-body");
     await vfs.write("/正常.md", "hello-world");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -377,7 +384,7 @@ describe("assembleWorkplaceDisplay", () => {
       [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"]
     );
 
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
@@ -394,28 +401,28 @@ describe("assembleWorkplaceDisplay", () => {
     assert.ok(placeholderBlock, "占位块带 file 头属性");
     assert.equal(placeholderBlock[1]!.startsWith("1970"), false, `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`);
     assert.equal(out.workplaceDisplay.includes("poison-body"), false);
-    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/毒卡/巨型设定.md")), null);
+    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/毒卡/巨型设定.md"))), null);
     // 正常文件不受降级影响：正文照常进 display 并写 cache
     // （回填是 fire-and-forget，落定后再断言缓存）
     assert.equal(out.workplaceDisplay.includes("hello-world"), true);
-    await settlePendingFileCacheBackfills();
-    assert.notEqual(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/正常.md")), null);
+    await FileCache.settlePendingBackfills();
+    assert.notEqual(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/正常.md"))), null);
   });
 
   it("filename 档不得渲染 1970 假时间戳", async () => {
-    // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `formatLocalMtime(0)`
+    // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `DateTime.localDateTime(0)`
     // ⇒ 提示词里出现 createdAt="1970-01-01 08:00:00"。断言写成「不含 1970」而不是
     // 「等于某个具体时间」——后者会锁死夹具 mtime，脆且无额外价值。
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/卷/第一章.md", "正文一");
     await vfs.write("/卷/第二章.md", "正文二");
     await vfs.write("/卷/第三章.md", "正文三");
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -429,7 +436,7 @@ describe("assembleWorkplaceDisplay", () => {
       fillPolicy: "filename",
     });
 
-    const out = await assembleWorkplaceDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
+    const out = await assembleDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
 
     assert.match(out.workplaceDisplay, /<file path="\/卷\//, "应有 filename 档文件块");
     assert.equal(out.workplaceDisplay.includes('createdAt="1970'), false, `filename 档不得渲染 1970 假时间戳：${out.workplaceDisplay}`);
@@ -451,12 +458,12 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
   // （返回类型必填字段）拦下，单测冗余，故此用例只钉早退①。
   it("T-WP-VP1: 早退①：无 workplace 块时补齐 visiblePaths: []", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "hello");
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -467,7 +474,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
       sessionId: session.id,
     };
 
-    const noLayout = await assembleWorkplaceDisplay(scope, {
+    const noLayout = await assembleDisplay(scope, {
       sessionKkv: sk,
       workplace: wt,
       vfs,
@@ -479,9 +486,9 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
   it("T-WP-VP2: full 档进 prefixPaths 与 visiblePaths；header 档只进 visiblePaths", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/full.md", "full-body");
     await vfs.write("/hdr.md", "header-body");
@@ -491,17 +498,17 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
       session.id,
       SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
       RULE_SNAPSHOT_CANON_KEY,
-      serializeRuleSnapshot([
+      RuleSnapshotCodec.serialize([
         { path: "/full.md", status: "full" },
         { path: "/hdr.md", status: "header" },
       ])
     );
 
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
-        workplace: createWorkplaceService(ctx.conn, {
+        workplace: WorkplaceServiceFactory.create(ctx.conn, {
           kind: "session",
           projectId: project.id,
           sessionId: session.id,
@@ -530,13 +537,13 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
    */
   it("T-S01-E2E: 显式 header 目录 → 规则引擎出 header 档 → 只进 visiblePaths → attach 拿全文", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sk = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sk = SessionKkvServiceFactory.create(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/hdr.md", "HEADER-BODY");
 
-    const wt = createWorkplaceService(ctx.conn, {
+    const wt = WorkplaceServiceFactory.create(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -553,7 +560,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
     // 段②：不预置快照，让 assemble 走真 evaluateRuleView（规则引擎段①
     // 的产物就是这里的输入）。
-    const out = await assembleWorkplaceDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
+    const out = await assembleDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
 
     // 牙齿：header 档进 visiblePaths、不进 prefixPaths。
     assert.equal(out.visiblePaths.includes("/hdr.md"), true, `规则引擎应把 /hdr.md 判成 header 档并进 visiblePaths，实际 visiblePaths=${JSON.stringify(out.visiblePaths)}`);
@@ -561,14 +568,14 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
     // 段③：按真实接线（prefixPaths→seenPaths、visiblePaths→workplaceSeenPaths）
     // 喂 prepare，断言同路径 attach 拿到全文而不是 alreadyReferenced 短提示。
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         {
           id: "e2e-attach",
           sessionId: session.id,
           seq: 1,
           role: "user",
-          content: textBlocks("看设定"),
+          content: TextBlocks.of("看设定"),
           provider: null,
           raw: null,
           createdAtMs: 0,
@@ -591,14 +598,14 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
         seenPaths: out.prefixPaths,
         workplaceSeenPaths: out.visiblePaths,
       }
-    );
-    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
+    ));
+    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);
     assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
     assert.equal(body.includes("alreadyReferenced"), false, "header 档不在 prefixPaths 里，不该被 S0 判成已引用");
     // 组装侧的后台回填是 fire-and-forget，落定后再出本用例，别把在途宏
     // 任务带进后面的用例。
-    await settlePendingFileCacheBackfills();
+    await FileCache.settlePendingBackfills();
   });
 });

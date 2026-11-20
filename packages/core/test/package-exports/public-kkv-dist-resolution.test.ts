@@ -35,10 +35,10 @@
  * `public-subpath-allowlist.test.ts` 的 SUBPATHS 契约覆盖（X4.2 约束④）。
  */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import {  execFileSync  } from "node:child_process";
+import {  existsSync  } from "node:fs";
+import {  fileURLToPath  } from "node:url";
+import {  describe, it  } from "node:test";
 
 /** packages/core 根目录（本文件在 test/package-exports/ 下）。 */
 const CORE_ROOT = fileURLToPath(new URL("../../", import.meta.url));

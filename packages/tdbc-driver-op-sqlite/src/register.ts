@@ -9,10 +9,11 @@
  * @internal
  */
 
-import { registerDriver } from "@novel-master/core";
+import { TdbcRegistry } from "@novel-master/core";
 import type { OpSqliteAdapter } from "./adapter.js";
 import { OpSqliteDriver } from "./driver.js";
 
+// nm-style 注记：文件名 register 太泛，按「两个平台入口共享的注册实现」主体起名（OpSqliteSharedRegister）。
 /**
  * 注册 op-sqlite 驱动为 `op-sqlite`（入口转发目标）。
  *
@@ -25,9 +26,8 @@ import { OpSqliteDriver } from "./driver.js";
  *   （desktop/CLI/测试默认）恒按前台口径让步，行为与现状一致。驱动包
  *   保持零依赖、不 import RN API，探测函数由 app 层经此注入。
  */
-export function registerOpSqliteDriverWith(
-  adapter: OpSqliteAdapter,
-  isBackground?: () => boolean,
-): void {
-  registerDriver(new OpSqliteDriver(adapter, isBackground));
+export namespace OpSqliteSharedRegister {
+  export function registerWith(adapter: OpSqliteAdapter, isBackground?: () => boolean,): void {
+    TdbcRegistry.register(new OpSqliteDriver(adapter, isBackground));
+  }
 }

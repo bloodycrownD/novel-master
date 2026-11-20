@@ -92,24 +92,6 @@ export function SettingsListSection({
   );
 }
 
-export function SettingsToolbar({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={
-        className ? `settings-toolbar ${className}` : "settings-toolbar"
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
 export function ApiKeyStatusTag({ status }: { status: string }) {
   const connected = status === "set";
   return (

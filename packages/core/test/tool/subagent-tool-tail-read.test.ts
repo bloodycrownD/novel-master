@@ -7,12 +7,12 @@
  * 口径会整个变样。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import {  subagentTool  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -21,6 +21,8 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
+import {  Result  } from "@/errors/either.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
   name: "general",
@@ -67,7 +69,7 @@ function makeMock(childMessages: readonly ChatMessageData[], counts: Counts): {
 } {
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => ["id-0"],
-    list: async () => [generalDef],
+    list: async () => Result.ok([generalDef]),
     get: async () => generalDef,
     getRawWire: async () => null,
     upsert: async () => undefined,
@@ -76,15 +78,18 @@ function makeMock(childMessages: readonly ChatMessageData[], counts: Counts): {
   const messages: MessageService = {
     listBySession: async () => {
       counts.listBySession += 1;
-      return [...childMessages];
+      return { kind: "completed", value: [...childMessages] };
     },
     listBySessionTailOfRole: async (_sid, options) => {
       counts.listBySessionTailOfRole += 1;
       // 与 SqliteMessageRepository.listBySessionTailOfRole 同款：先按 role 过滤
       // 再取末 limit 条（夹在中间的其它 role 不占配额）。
-      return childMessages
-        .filter((m) => m.role === options.role)
-        .slice(-Math.max(1, Math.floor(options.limit)));
+      return {
+        kind: "completed",
+        value: childMessages
+          .filter((m) => m.role === options.role)
+          .slice(-Math.max(1, Math.floor(options.limit))),
+      };
     },
   } as unknown as MessageService;
   const sessions: SessionService = {
@@ -104,12 +109,13 @@ function makeMock(childMessages: readonly ChatMessageData[], counts: Counts): {
       depth: 0,
       callableAgents: [{ name: "general" }],
       parentSignal: new AbortController().signal,
-      createChildSession: async () => "child-1",
-      resolveChildModelId: () => ({
-        savedModelId: "m",
-        workspaceModelId: "m",
-      }),
-      runChildAgent: async () => result,
+      createChildSession: async () => Result.ok("child-1"),
+      resolveChildModelId: () =>
+        Result.ok({
+          savedModelId: "m",
+          workspaceModelId: "m",
+        }),
+      runChildAgent: async () => Result.ok(result),
     },
   };
 }
@@ -128,10 +134,10 @@ async function runTask(
 ): Promise<{ text: string; counts: Counts }> {
   const counts: Counts = { listBySession: 0, listBySessionTailOfRole: 0 };
   const { ctx } = makeMock(messages, counts);
-  const output = await subagentTool.run(
+  const output = unwrap(await subagentTool.run(
     { description: "d", prompt: "p", subagentName: "general" },
     toolCtx(ctx),
-  );
+  ));
   return { text: output.text, counts };
 }
 

@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  SCHEMA_BOOT_VERSION,
-} from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
 
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";
-import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/novel-master-fixture.js";
+import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 novelMasterTestFixture();
@@ -18,8 +13,8 @@ describe("bootstrapNovelMaster", () => {
   it("is idempotent on empty database", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    await bootstrapNovelMaster(conn);
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     const rows = await conn.query<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`,
     );
@@ -29,13 +24,13 @@ describe("bootstrapNovelMaster", () => {
   it("writes SCHEMA_BOOT_VERSION and second boot stays at that version", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     const afterFirst = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
     assert.equal(Number(afterFirst[0]?.user_version), SCHEMA_BOOT_VERSION);
 
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     const afterSecond = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
@@ -68,11 +63,11 @@ describe("bootstrapNovelMaster", () => {
     });
 
     const records: LogRecord[] = [];
-    setDefaultLogSink({ write: (record) => records.push(record) });
+    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
     try {
-      await bootstrapNovelMaster(brokenConn);
+      await NovelMasterBootstrap.bootstrap(brokenConn);
     } finally {
-      restoreDefaultLogSink();
+      LogFactory.restoreDefaultSink();
     }
 
     const matched = records.some(

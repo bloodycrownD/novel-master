@@ -7,10 +7,10 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentList} from '@/components/agent/AgentList';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
-import {createBlankAgent} from '@/services/agent-create';
+import {AgentCreate} from '@/services/agent-create';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -27,9 +27,13 @@ export function AgentsSettingsScreen() {
       <AgentList
         onCreate={tab => {
           const mode = tab === 'primary' ? 'primary' : 'subagent';
-          void createBlankAgent(runtime, undefined, mode)
-            .then(id => navigation.navigate('AgentEditor', {agentId: id}))
-            .catch(error => showToast(toastMessage('创建失败', error)));
+          void AgentCreate.createBlank(runtime, undefined, mode).then(created => {
+            if (!created.ok) {
+              showToast(ToastMessage.toast('创建失败', created.error));
+              return;
+            }
+            navigation.navigate('AgentEditor', {agentId: created.value});
+          });
         }}
       />
     </View>

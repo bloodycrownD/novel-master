@@ -6,13 +6,11 @@
  * - 已关闭技能可选但标注「已关闭」——显式引用优先于项目负清单；
  * - 骨架（加载/错误重试/空态/列表）由 PickerListModal 承担。
  */
+import {AppError, Result} from '@novel-master/core/errors';
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {
-  skillDomainBadgeColor,
-  skillDomainBadgeLabel,
-} from '@/components/skills/skill-ui';
+import {SkillUi} from '@/components/skills/skill-ui';
 import {
   PickerListModal,
   type PickerListLoadResult,
@@ -20,7 +18,7 @@ import {
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
-export type SkillPickerProps = {
+type SkillPickerProps = {
   visible: boolean;
   projectId: string;
   onClose: () => void;
@@ -38,10 +36,11 @@ export function SkillPicker({
   const runtime = useRuntime();
 
   const load = useCallback(async (): Promise<
-    PickerListLoadResult<EffectiveSkill>
+    Result<PickerListLoadResult<EffectiveSkill>, AppError>
   > => {
     const list = await runtime.skills().effectiveSkills(projectId);
-    return {rows: list.filter(s => s.valid)};
+    if (!list.ok) return Result.err(list.error);
+    return Result.ok({rows: list.value.filter(s => s.valid)});
   }, [runtime, projectId]);
 
   return (
@@ -64,12 +63,12 @@ export function SkillPicker({
               style={[
                 styles.badge,
                 {
-                  color: skillDomainBadgeColor(item.domain, tokens),
+                  color: SkillUi.domainBadgeColor(item.domain, tokens),
                   borderColor: tokens.border,
                 },
               ]}
             >
-              {skillDomainBadgeLabel(item.domain, item.overridden)}
+              {SkillUi.domainBadgeLabel(item.domain, item.overridden)}
             </Text>
             {item.disabled ? (
               <Text

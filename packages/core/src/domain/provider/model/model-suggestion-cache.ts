@@ -5,7 +5,7 @@
  */
 
 /** One fetched model entry in the suggestion cache. */
-export interface ModelSuggestionEntry {
+interface ModelSuggestionEntry {
   readonly vendorModelId: string;
   readonly displayName: string | null;
   readonly stale: boolean;

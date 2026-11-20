@@ -1,14 +1,16 @@
 import React from 'react';
+import {UpdatePrefs} from '@/storage/update-prefs';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 import {UpdateCheckHost} from '@/components/update/UpdateCheckHost';
 
-const {isSnoozed: isSnoozedActual} = jest.requireActual<
+const isSnoozedActual = jest.requireActual<
   typeof import('@/storage/update-prefs')
->('../src/storage/update-prefs');
+>('../src/storage/update-prefs').UpdatePrefs.isSnoozed;
 
 const mockCheckForUpdates = jest.fn();
-const mockReadUpdatesAutoCheck = jest.fn();
 const mockReadSnoozeUntil = jest.fn();
 const mockWriteSnoozeUntil = jest.fn();
 const mockPersistUpdateCheckResult = jest.fn();
@@ -27,7 +29,8 @@ let modalProps: {
 jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     status: 'ready',
-    appUi: {get: jest.fn(), set: jest.fn()},
+    // auto-check 走 AppUiPrefIo.readBoolPref(appUi, key, true)：未写值回退默认开。
+    appUi: {get: jest.fn(async () => ({ok: true, value: undefined})), set: jest.fn()},
   }),
 }));
 
@@ -35,10 +38,9 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/storage/update-prefs', () => ({
-  isSnoozed: jest.requireActual('@/storage/update-prefs').isSnoozed,
-  readUpdatesAutoCheck: (...args: unknown[]) =>
-    mockReadUpdatesAutoCheck(...args),
+jest.mock('@/storage/update-prefs', () => {
+  const legacy = {
+  isSnoozed: jest.requireActual('@/storage/update-prefs').UpdatePrefs.isSnoozed,
   readSnoozeUntil: (...args: unknown[]) => mockReadSnoozeUntil(...args),
   writeSnoozeUntil: (...args: unknown[]) => mockWriteSnoozeUntil(...args),
   persistUpdateCheckResult: (...args: unknown[]) =>
@@ -49,11 +51,16 @@ jest.mock('@/storage/update-prefs', () => ({
     mockReadDismissedVersion(...args),
   writeDismissedVersion: (...args: unknown[]) =>
     mockWriteDismissedVersion(...args),
-}));
+};
+  return {...legacy, UpdatePrefs: {isSnoozed: legacy.isSnoozed, readSnoozeUntil: legacy.readSnoozeUntil, writeSnoozeUntil: legacy.writeSnoozeUntil, persistFailedUpdateCheck: legacy.persistFailedUpdateCheck, persistUpdateCheckResult: legacy.persistUpdateCheckResult, readDismissedVersion: legacy.readDismissedVersion, writeDismissedVersion: legacy.writeDismissedVersion}};
+});
 
-jest.mock('@/update-check/check-for-updates', () => ({
+jest.mock('@/update-check/check-for-updates', () => {
+  const legacy = {
   checkForUpdates: (...args: unknown[]) => mockCheckForUpdates(...args),
-}));
+};
+  return {...legacy, CheckForUpdates: {check: legacy.checkForUpdates}};
+});
 
 jest.mock('@/components/update/UpdateCheckResultModal', () => ({
   UpdateCheckResultModal: (props: typeof modalProps & object) => {
@@ -84,23 +91,24 @@ describe('useAutoUpdateCheck', () => {
     jest.useFakeTimers();
     modalProps = null;
     mockCheckForUpdates.mockClear();
-    mockReadUpdatesAutoCheck.mockClear();
     mockReadSnoozeUntil.mockClear();
     mockWriteSnoozeUntil.mockClear();
     mockPersistUpdateCheckResult.mockClear();
     mockPersistFailedUpdateCheck.mockClear();
     mockReadDismissedVersion.mockClear();
     mockWriteDismissedVersion.mockClear();
-    mockReadUpdatesAutoCheck.mockResolvedValue(true);
-    mockReadSnoozeUntil.mockResolvedValue(undefined);
-    mockReadDismissedVersion.mockResolvedValue(undefined);
+    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: undefined});
+    mockReadDismissedVersion.mockResolvedValue({ok: true, value: undefined});
     mockPersistUpdateCheckResult.mockResolvedValue(undefined);
     mockPersistFailedUpdateCheck.mockResolvedValue(undefined);
     mockWriteSnoozeUntil.mockResolvedValue(undefined);
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'up-to-date',
-      remoteVersion: '1.0.0',
-    });
+    // checkForUpdates 已知失败走 Result（错误通道迁移六期），mock 同步包一层。
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'up-to-date',
+        remoteVersion: '1.0.0',
+      }),
+    );
     mockShowToast.mockClear();
   });
 
@@ -121,7 +129,7 @@ describe('useAutoUpdateCheck', () => {
 
   it('does not show modal while snooze is active but still checks', async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mockReadSnoozeUntil.mockResolvedValue(future);
+    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -184,12 +192,14 @@ describe('useAutoUpdateCheck', () => {
   });
 
   it('update-available keeps toast flow without result modal', async () => {
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'update-available',
-      remoteVersion: '9.9.9',
-      releaseUrl: 'https://example.com',
-      releaseNotesExcerpt: '',
-    });
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'update-available',
+        remoteVersion: '9.9.9',
+        releaseUrl: 'https://example.com',
+        releaseNotesExcerpt: '',
+      }),
+    );
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -205,13 +215,15 @@ describe('useAutoUpdateCheck', () => {
 
   it('update-available still shows toast while snooze is active', async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mockReadSnoozeUntil.mockResolvedValue(future);
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'update-available',
-      remoteVersion: '9.9.9',
-      releaseUrl: 'https://example.com',
-      releaseNotesExcerpt: '',
-    });
+    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'update-available',
+        remoteVersion: '9.9.9',
+        releaseUrl: 'https://example.com',
+        releaseNotesExcerpt: '',
+      }),
+    );
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -227,8 +239,10 @@ describe('useAutoUpdateCheck', () => {
     );
   });
 
-  it('B-5: readUpdatesAutoCheck reject 被兑住，走失败持久化与错误弹窗', async () => {
-    mockReadUpdatesAutoCheck.mockRejectedValue(new Error('pref boom'));
+  it('B-5: 偏好读失败（Result.err）被兑住，走失败持久化与错误弹窗', async () => {
+    // 错误通道迁移四期：auto-check 未写值回退默认开（readBoolPref，继续检查）；
+    // 读 snooze 失败（Result.err）未知静音状态，按「读偏好失败」终端收口（fail 路径）。
+    mockReadSnoozeUntil.mockResolvedValue({ok: false, error: new Error('pref boom')});
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -283,12 +297,14 @@ describe('useAutoUpdateCheck', () => {
   });
 
   it('B-5: 前往下载外跳失败 toast（对齐 AboutScreen openLink）', async () => {
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'update-available',
-      remoteVersion: '9.9.9',
-      releaseUrl: 'https://example.com',
-      releaseNotesExcerpt: '',
-    });
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'update-available',
+        remoteVersion: '9.9.9',
+        releaseUrl: 'https://example.com',
+        releaseNotesExcerpt: '',
+      }),
+    );
 
     act(() => {
       TestRenderer.create(<TestHost />);

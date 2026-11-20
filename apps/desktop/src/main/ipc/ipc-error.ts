@@ -1,1 +1,1 @@
-export { formatIpcError } from "./format-ipc-error.js";
+export { FormatIpcError } from "./format-ipc-error.js";

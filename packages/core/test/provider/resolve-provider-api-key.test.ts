@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import { BUILTIN_PROVIDER_UUID_OPENAI, BUILTIN_PROVIDER_UUID_OPENCODE, builtinDefaultApiKey } from "../../src/domain/provider/logic/builtin-providers.js";
-import { providerApiKeyIsConfigured, resolveProviderApiKey } from "../../src/domain/provider/logic/resolve-provider-api-key.js";
+import {  BUILTIN_PROVIDER_UUID_OPENAI, BUILTIN_PROVIDER_UUID_OPENCODE, BuiltinProviders  } from "../../src/domain/provider/logic/builtin-providers.js";
+import {  ProviderApiKey  } from "../../src/domain/provider/logic/resolve-provider-api-key.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 
 function memorySecretStore(): SecretStore {
@@ -22,8 +22,8 @@ function memorySecretStore(): SecretStore {
   };
 }
 
-async function resolvedKey(provider: Parameters<typeof resolveProviderApiKey>[0], secrets: SecretStore): Promise<string> {
-  const resolved = await resolveProviderApiKey(provider, secrets);
+async function resolvedKey(provider: Parameters<typeof ProviderApiKey.resolve>[0], secrets: SecretStore): Promise<string> {
+  const resolved = await ProviderApiKey.resolve(provider, secrets);
   if (!resolved.ok) {
     assert.fail(resolved.error.message);
   }
@@ -32,8 +32,8 @@ async function resolvedKey(provider: Parameters<typeof resolveProviderApiKey>[0]
 
 describe("builtinDefaultApiKey", () => {
   it("returns public for opencode only", () => {
-    assert.equal(builtinDefaultApiKey("opencode"), "public");
-    assert.equal(builtinDefaultApiKey("openai"), undefined);
+    assert.equal(BuiltinProviders.defaultApiKey("opencode"), "public");
+    assert.equal(BuiltinProviders.defaultApiKey("openai"), undefined);
   });
 });
 
@@ -60,11 +60,11 @@ describe("resolveProviderApiKey", () => {
 
   it("returns PROVIDER_API_KEY_NOT_SET without sksp or builtin default", async () => {
     const secrets = memorySecretStore();
-    const resolved = await resolveProviderApiKey({ id: BUILTIN_PROVIDER_UUID_OPENAI, secretRef: null, builtinKey: "openai" }, secrets);
+    const resolved = await ProviderApiKey.resolve({ id: BUILTIN_PROVIDER_UUID_OPENAI, secretRef: null, builtinKey: "openai" }, secrets);
     assert.equal(resolved.ok, false);
     if (!resolved.ok) {
       assert.equal(resolved.error.key, "PROVIDER_API_KEY_NOT_SET");
-      assert.deepEqual(resolved.error.details, { providerId: BUILTIN_PROVIDER_UUID_OPENAI });
+      assert.deepEqual(resolved.error.details, { providerId: BUILTIN_PROVIDER_UUID_OPENAI, detail: `API key not set for provider ${BUILTIN_PROVIDER_UUID_OPENAI}. Configure it in provider settings.` });
     }
   });
 });
@@ -72,11 +72,11 @@ describe("resolveProviderApiKey", () => {
 describe("providerApiKeyIsConfigured", () => {
   it("is true for opencode without sksp", async () => {
     const secrets = memorySecretStore();
-    assert.equal(await providerApiKeyIsConfigured({ id: BUILTIN_PROVIDER_UUID_OPENCODE, secretRef: null, builtinKey: "opencode" }, secrets), true);
+    assert.equal(await ProviderApiKey.isConfigured({ id: BUILTIN_PROVIDER_UUID_OPENCODE, secretRef: null, builtinKey: "opencode" }, secrets), true);
   });
 
   it("is false for openai without sksp", async () => {
     const secrets = memorySecretStore();
-    assert.equal(await providerApiKeyIsConfigured({ id: BUILTIN_PROVIDER_UUID_OPENAI, secretRef: null, builtinKey: "openai" }, secrets), false);
+    assert.equal(await ProviderApiKey.isConfigured({ id: BUILTIN_PROVIDER_UUID_OPENAI, secretRef: null, builtinKey: "openai" }, secrets), false);
   });
 });

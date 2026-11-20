@@ -19,7 +19,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_USAGE,
 } from '@novel-master/core/events';
-import {setMobileAgentActive} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 const mockRunAgentTurn = jest.fn(
@@ -78,8 +78,8 @@ function buildHarness(): {
       sessions: {get: async () => ({id: 's1', title: '会话'})},
       projects: {get: async () => ({id: 'p1', name: '项目'})},
       messages: {
-        listBySessionTail: jest.fn(async () => []),
-        listBySessionPage: jest.fn(async () => []),
+        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
       },
     } as never,
     runAgentTurn: mockRunAgentTurn as never,
@@ -116,7 +116,7 @@ function renderMetricsLine(
 describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     mockRunAgentTurn.mockClear();
   });
 
@@ -125,7 +125,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     mockManager = undefined;
     mockGetSessionUsageDetail.mockClear();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   it('水合 interrupted 单元：显示恢复的冻结历时与字数（无 settled 投影可退）', () => {
@@ -374,27 +374,31 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       partialThinking: '',
       pendingChildren: [],
     });
+    // 错误通道迁移二期后走 Result（sheet 侧 `!ok` 即 throw）。
     mockGetSessionUsageDetail.mockResolvedValue({
-      last: {
-        seq: 3,
-        modelName: 'claude-x',
-        provider: 'anthropic',
-        promptTokens: 100,
-        completionTokens: 40,
-        cacheReadTokens: 2048,
-        cacheCreationTokens: null,
-        atMs: 1,
+      ok: true,
+      value: {
+        last: {
+          seq: 3,
+          modelName: 'claude-x',
+          provider: 'anthropic',
+          promptTokens: 100,
+          completionTokens: 40,
+          cacheReadTokens: 2048,
+          cacheCreationTokens: null,
+          atMs: 1,
+        },
+        totals: {
+          promptTokens: 300,
+          completionTokens: 80,
+          cacheReadTokens: 2048,
+          cacheCreationTokens: 512,
+          billedInputTokens: 2860,
+          assistantRows: 3,
+        },
+        visibleMessageCount: 5,
+        toolUseCount: 2,
       },
-      totals: {
-        promptTokens: 300,
-        completionTokens: 80,
-        cacheReadTokens: 2048,
-        cacheCreationTokens: 512,
-        billedInputTokens: 2860,
-        assistantRows: 3,
-      },
-      visibleMessageCount: 5,
-      toolUseCount: 2,
     });
 
     let tree!: TestRenderer.ReactTestRenderer;

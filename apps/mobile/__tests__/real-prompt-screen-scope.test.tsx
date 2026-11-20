@@ -11,14 +11,17 @@
  * 另附 T-PR1/T-PR2：focus 重载单通道与 load 竞态守卫（手动压缩后 workplace
  * 重评估，靠聚焦回流取新数据）。
  *
- * 观测面是 `buildRealPromptPreviewTurns` 收到的实参（注入缝，与实现同源）。
+ * 观测面是 `buildRealPromptPreviewTurnsAdapter` 收到的实参（注入缝，与实现同源）。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {RealPromptScreen} from '@/screens/stack/RealPromptScreen';
 
-const mockBuildSegments = jest.fn(async () => [] as unknown[]);
+const mockBuildSegments = jest.fn(async () => ({
+  ok: true as const,
+  value: [] as unknown[],
+}));
 /**
  * 最近一次注册的 useFocusEffect 回调（focus 桩自己登记，供 T-PR1 手动模拟
  * 「聚焦回流」）。只留最新一个：render 期间可能重复登记，模拟回流只需最新。
@@ -57,16 +60,13 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('@/services/prompt-preview.service', () => ({
-  buildRealPromptPreviewTurns: (...args: unknown[]) =>
+jest.mock('@/services/prompt-preview.service', () => {
+  const legacy = {
+  buildRealPromptPreviewTurnsAdapter: (...args: unknown[]) =>
     mockBuildSegments(...(args as [])),
-}));
-
-// AgentRunError 只在 catch 分支做 instanceof；桩掉整条 service 依赖链，
-// 避免把 agent-run 的重依赖树拖进这个纯取值用例。
-jest.mock('@/services/agent-run.service', () => ({
-  AgentRunError: class AgentRunError extends Error {},
-}));
+};
+  return {...legacy, PromptPreviewService: {buildRealTurns: legacy.buildRealPromptPreviewTurnsAdapter}};
+});
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -233,7 +233,7 @@ async function renderScreen(): Promise<TestRenderer.ReactTestRenderer> {
 
 // ⚠️ 每条用例后必须卸载：TestRenderer 造出的根不会随用例结束消失，它留在
 // 后面用例的 act/冲刷里继续 setState 与重渲染，会把「本用例调了几次
-// buildRealPromptPreviewTurns」这类计数断言搅浑（实测会多出等量的陈年调用）。
+// buildRealPromptPreviewTurnsAdapter」这类计数断言搅浑（实测会多出等量的陈年调用）。
 afterEach(() => {
   while (mountedTrees.length > 0) {
     act(() => {
@@ -247,7 +247,7 @@ describe('RealPromptScreen scope 取值（AM-3）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFocus.handler = undefined;
-    mockBuildSegments.mockResolvedValue([]);
+    mockBuildSegments.mockResolvedValue({ok: true, value: []});
     setRouteParams(undefined);
   });
 
@@ -284,13 +284,14 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     jest.clearAllMocks();
     mockFocus.handler = undefined;
     setRouteParams({projectId: 'pA', sessionId: 'sA'});
-    mockBuildSegments.mockResolvedValue([]);
+    mockBuildSegments.mockResolvedValue({ok: true, value: []});
   });
 
   it('T-PR1 挂载只取一次、聚焦回流再取一次（useFocusEffect 单通道不双跑）', async () => {
-    mockBuildSegments.mockResolvedValueOnce([
-      {id: 'turn-old', kind: 'assistant', cards: []},
-    ]);
+    mockBuildSegments.mockResolvedValueOnce({
+      ok: true,
+      value: [{id: 'turn-old', kind: 'assistant', cards: []}],
+    });
     // 第二轮挂住不落定：只有取数在途时才看得见「静默档」——非静默档会在
     // refocus 瞬间把整列表换成全屏 spinner，等取数回来又换回来，事后断言
     // 什么都看不见（这条断言的全部价值就在这个在途窗口里）。
@@ -308,7 +309,7 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     // 否则「每读一张子卡返回一次闪一次转圈」。
     expect(hasPromptList(tree)).toBe(true);
 
-    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    second.resolve({ok: true, value: [{id: 'turn-new', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
     expect(hasPromptList(tree)).toBe(true);
@@ -324,12 +325,12 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     expect(mockBuildSegments).toHaveBeenCalledTimes(2);
 
     // 新一轮先落定 → 屏上先显示新数据。
-    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    second.resolve({ok: true, value: [{id: 'turn-new', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
 
     // 旧请求此刻才回来（无中止点，取数耗时不定）——不能覆盖新一轮结果。
-    first.resolve([{id: 'turn-stale', kind: 'assistant', cards: []}]);
+    first.resolve({ok: true, value: [{id: 'turn-stale', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
   });
@@ -343,7 +344,7 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     await refocus();
     expect(mockBuildSegments).toHaveBeenCalledTimes(2);
 
-    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    second.resolve({ok: true, value: [{id: 'turn-new', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
 

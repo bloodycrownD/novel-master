@@ -1,188 +1,77 @@
 /**
  * VFS mutations for the file manager (create / delete / rename).
+ *
+ * 基础动作（createVfsFile / createVfsDirectory）的实现已下沉 core（`VfsEntryOps`，
+ * 双端同一份）；重命名就是 `VfsMove.move` 的导出别名。本模块保留会话 scope 的
+ * userVfsTurn 包装（边界转换）与工作区删除的规则清理。
  */
-import {
-  type VfsListEntry,
-  type VfsScope,
-  type VfsService,
-} from '@novel-master/core/vfs';
-import {
-  buildUserVfsCreateFileOp,
-  buildUserVfsDeleteOp,
-  buildUserVfsMkdirOp,
-  buildUserVfsRenameOp,
-  buildUserVfsSaveOp,
-  moveVfsPath,
-  readUserVfsSaveBaseline,
-  remapPathUnderDir,
-} from '@novel-master/core/vfs';
+import {type VfsScope, type VfsService, UserVfsSaveBaseline, UserVfsTurnOps, VfsEntryOps, VfsMove} from '@novel-master/core/vfs';
+import {Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {
-  executeSessionUserVfsOp,
-  type ExecuteSessionUserVfsOpOptions,
-} from './user-vfs-turn-execute.service';
+import {UserVfsTurnExecuteService, type ExecuteSessionUserVfsOpOptions} from './user-vfs-turn-execute.service';
 
-/** Create a new file (empty by default). */
-export async function createVfsFile(
-  vfs: VfsService,
-  path: string,
-  content = '',
-): Promise<void> {
-  await vfs.write(path, content);
-}
+const createVfsDirectory = VfsEntryOps.createDirectory;
+const createVfsFile = VfsEntryOps.createFile;
+const renameVfsDirectory = VfsMove.move;
+const renameVfsFile = VfsMove.move;
+export {createVfsDirectory, createVfsFile, renameVfsDirectory, renameVfsFile};
 
-/** 会话 scope：新建文件经 userVfsTurn。 */
-export async function sessionCreateVfsFile(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  path: string,
-  content = '',
-): Promise<void> {
-  await executeSessionUserVfsOp(
-    runtime,
-    sessionId,
-    buildUserVfsCreateFileOp(path, content),
-  );
-}
+type MobileRuntime = MobileNovelMasterRuntime;
 
-/** Create an empty directory node. */
-export async function createVfsDirectory(
-  vfs: VfsService,
-  dirPath: string,
-): Promise<void> {
-  const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-  await vfs.mkdir(normalized);
-}
+type DeleteScopedOptions = {
+  recursive?: boolean;
+  useUserVfsTurn: boolean;
+  sessionId?: string;
+};
 
-/** 会话 scope：新建目录经 userVfsTurn。 */
-export async function sessionCreateVfsDirectory(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  dirPath: string,
-): Promise<void> {
-  const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-  await executeSessionUserVfsOp(
-    runtime,
-    sessionId,
-    buildUserVfsMkdirOp(normalized),
-  );
-}
-
-/** Delete a file or directory tree. */
-export async function deleteVfsEntry(
-  vfs: VfsService,
-  path: string,
-  options?: {recursive?: boolean},
-): Promise<void> {
-  await vfs.delete(path, {recursive: options?.recursive ?? true});
-}
-
-/** 会话 scope：删除经 userVfsTurn。 */
-export async function sessionDeleteVfsEntry(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  path: string,
-  options?: {recursive?: boolean},
-): Promise<void> {
-  await executeSessionUserVfsOp(
-    runtime,
-    sessionId,
-    buildUserVfsDeleteOp(path, options?.recursive ?? true),
-  );
-}
-
-async function cleanupWorktreeAfterVfsDelete(
-  runtime: MobileNovelMasterRuntime,
-  scope: VfsScope,
-  path: string,
-): Promise<void> {
-  const wt = runtime.workplace(scope);
-  await wt.deleteRulesUnderLogicalPrefix(path);
-}
-
-/** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
-export async function deleteScopedVfsEntry(
-  runtime: MobileNovelMasterRuntime,
-  scope: VfsScope,
-  vfs: VfsService,
-  path: string,
-  options: {
-    recursive?: boolean;
-    useUserVfsTurn: boolean;
-    sessionId?: string;
-  },
-): Promise<void> {
-  const recursive = options.recursive ?? true;
-  if (options.useUserVfsTurn && options.sessionId != null) {
-    await sessionDeleteVfsEntry(runtime, options.sessionId, path, {
-      recursive,
-    });
-  } else {
-    await deleteVfsEntry(vfs, path, {recursive});
+export namespace VfsOperationsService {
+  /** 会话 scope：新建文件经 userVfsTurn。 */
+  // nm-style: keep-public — vfs-operations.service.test.ts 直接 import 断言；4 个 file-manager 集成测试以模块接缝 mock，测试锁名
+  export async function sessionCreateFile(runtime: MobileRuntime, sessionId: string, path: string, content = ''): Promise<Result<void, unknown>> {
+    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildCreateFile(path, content));
   }
-  await cleanupWorktreeAfterVfsDelete(runtime, scope, path);
-}
 
-/** Rename a file or directory (delegates to Core move logic). */
-export async function renameVfsFile(
-  vfs: VfsService,
-  oldPath: string,
-  newPath: string,
-): Promise<void> {
-  const moved = await moveVfsPath(vfs, oldPath, newPath);
-  if (!moved.ok) throw moved.error;
-}
-
-/** 会话 scope：重命名文件经 userVfsTurn。 */
-export async function sessionRenameVfsFile(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  oldPath: string,
-  newPath: string,
-  options?: ExecuteSessionUserVfsOpOptions,
-): Promise<void> {
-  await executeSessionUserVfsOp(
-    runtime,
-    sessionId,
-    buildUserVfsRenameOp(oldPath, newPath),
-    options,
-  );
-}
-
-/** Rename a directory tree (delegates to Core move logic; same impl as file rename). */
-export const renameVfsDirectory = renameVfsFile;
-
-/** 会话 scope：重命名目录经 userVfsTurn（与文件重命名同一实现）。 */
-export const sessionRenameVfsDirectory = sessionRenameVfsFile;
-
-/** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */
-export async function sessionSaveVfsFile(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  vfs: VfsService,
-  path: string,
-  content: string,
-  lastKnownContent?: string | null,
-): Promise<void> {
-  const baseline = await readUserVfsSaveBaseline(vfs, path);
-  if (
-    lastKnownContent != null &&
-    baseline != null &&
-    lastKnownContent !== baseline
-  ) {
-    console.info('[user-vfs-turn] external_drift_detected', {path});
+  /** 会话 scope：新建目录经 userVfsTurn。 */
+  // nm-style: keep-public — vfs-operations.service.test.ts 直接 import 断言（去尾斜杠口径）；file-manager 集成测试 mock，测试锁名
+  export async function sessionCreateDirectory(runtime: MobileRuntime, sessionId: string, dirPath: string): Promise<Result<void, unknown>> {
+    const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
+    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildMkdir(normalized));
   }
-  const op = buildUserVfsSaveOp(
-    baseline,
-    content,
-    path,
-    content,
-  );
-  if (op == null) {
-    return;
-  }
-  await executeSessionUserVfsOp(runtime, sessionId, op);
-}
 
-export {remapPathUnderDir};
-export type {VfsListEntry};
+  /** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
+  export async function deleteScopedEntry(runtime: MobileRuntime, scope: VfsScope, vfs: VfsService, path: string, options: DeleteScopedOptions): Promise<Result<void, unknown>> {
+    const recursive = options.recursive ?? true;
+    if (options.useUserVfsTurn && options.sessionId != null) {
+      const deleted = await UserVfsTurnExecuteService.executeSessionOp(runtime, options.sessionId, UserVfsTurnOps.buildDelete(path, recursive));
+      if (!deleted.ok) return deleted;
+    } else {
+      // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉
+      // （core 的 deleteVfsEntry 是 void 包装不检查返回值，这里必须自判）。
+      const deleted = await vfs.delete(path, {recursive});
+      if (!deleted.ok) return Result.err(deleted.error);
+    }
+    await runtime.workplace(scope).deleteRulesUnderLogicalPrefix(path);
+    return Result.ok(undefined);
+  }
+
+  /** 会话 scope：重命名文件经 userVfsTurn。 */
+  export async function sessionRenameFile(runtime: MobileRuntime, sessionId: string, oldPath: string, newPath: string, options?: ExecuteSessionUserVfsOpOptions): Promise<Result<void, unknown>> {
+    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildRename(oldPath, newPath), options);
+  }
+
+  /** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */
+  // nm-style: keep-public — vfs-operations.service.test.ts / file-editor-screen.test.tsx 直接 import 与断言，测试锁名
+  export async function sessionSaveFile(runtime: MobileRuntime, sessionId: string, vfs: VfsService, path: string, content: string, lastKnownContent?: string | null): Promise<Result<void, unknown>> {
+    const baselineResult = await UserVfsSaveBaseline.read(vfs, path);
+    if (!baselineResult.ok) return Result.err(baselineResult.error);
+    const baseline = baselineResult.value;
+    if (lastKnownContent != null && baseline != null && lastKnownContent !== baseline) {
+      console.info('[user-vfs-turn] external_drift_detected', {path});
+    }
+    const op = UserVfsTurnOps.buildSave(baseline, content, path, content);
+    if (op == null) {
+      return Result.ok(undefined);
+    }
+    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, op);
+  }
+}

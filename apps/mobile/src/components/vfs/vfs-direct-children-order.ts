@@ -1,15 +1,12 @@
 /**
  * Order direct children of a VFS directory to match worktree DFS list semantics.
  */
-import type {
-  WorkplaceDirRule,
-  WorkplaceListRow,
-} from '@novel-master/core/workplace';
+import type {WorkplaceDirRule, WorkplaceListRow} from '@novel-master/core/workplace';
 import type {CompiledSmartSortRule} from '@novel-master/core/smart-sort-rule';
-import {sortDirPaths, sortFilesForDir} from '@novel-master/core/workplace';
-import {isDirectChild} from './vfs-row-mapper';
+import {WorkplaceEval} from '@novel-master/core/workplace';
+import {VfsRowMapper} from './vfs-row-mapper';
 
-export type OrderedDirectChildPathsParams = {
+type OrderedDirectChildPathsParams = {
   readonly parentPath: string;
   readonly rows: readonly WorkplaceListRow[];
   /** All candidate child paths (e.g. worktree dirs + vfs.list); orphans sorted at end. */
@@ -22,62 +19,49 @@ export type OrderedDirectChildPathsParams = {
   readonly kindByPath?: ReadonlyMap<string, 'dir' | 'file'>;
 };
 
-function rowKindAtPath(
-  rows: readonly WorkplaceListRow[],
-  path: string,
-): 'dir' | 'file' | undefined {
-  return rows.find(r => r.path === path)?.kind;
-}
+export namespace VfsDirectChildrenOrder {
+  /**
+   * Returns direct child paths under `parentPath` in the same order as
+   * {@link WorkplaceService.buildListRows} DFS (dirs before files at each level).
+   * Paths only in `extraPaths` are appended after row-derived order, sorted with core
+   * `WorkplaceEval.sortDirPaths` / `WorkplaceEval.sortFilesForDir` so directory rule changes affect orphans too.
+   */
+  // nm-style: keep-public — vfs-direct-children-order.test.ts 专文件直接 import 7 用例断言 DFS/orphan 排序契约，测试锁名
+  export function orderedDirectChildPaths(params: OrderedDirectChildPathsParams): string[] {
+    const {parentPath, rows, extraPaths, dirRule, mtimeByPath, smartRules, kindByPath} = params;
 
-/**
- * Returns direct child paths under `parentPath` in the same order as
- * {@link WorkplaceService.buildListRows} DFS (dirs before files at each level).
- * Paths only in `extraPaths` are appended after row-derived order, sorted with core
- * `sortDirPaths` / `sortFilesForDir` so directory rule changes affect orphans too.
- */
-export function orderedDirectChildPaths(
-  params: OrderedDirectChildPathsParams,
-): string[] {
-  const {parentPath, rows, extraPaths, dirRule, mtimeByPath, smartRules, kindByPath} =
-    params;
+    const ordered: string[] = [];
+    const seen = new Set<string>();
 
-  const ordered: string[] = [];
-  const seen = new Set<string>();
-
-  // DFS list order: first occurrence of each direct child while scanning rows.
-  for (const row of rows) {
-    if (!isDirectChild(parentPath, row.path) || seen.has(row.path)) {
-      continue;
+    // DFS list order: first occurrence of each direct child while scanning rows.
+    for (const row of rows) {
+      if (!VfsRowMapper.isDirectChild(parentPath, row.path) || seen.has(row.path)) {
+        continue;
+      }
+      seen.add(row.path);
+      ordered.push(row.path);
     }
-    seen.add(row.path);
-    ordered.push(row.path);
-  }
 
-  const orphans = extraPaths.filter(p => !seen.has(p));
-  if (orphans.length === 0) {
-    return ordered;
-  }
-
-  const orphanDirs: string[] = [];
-  const orphanFiles: string[] = [];
-  for (const path of orphans) {
-    const kind = rowKindAtPath(rows, path) ?? kindByPath?.get(path) ?? 'file';
-    if (kind === 'dir') {
-      orphanDirs.push(path);
-    } else {
-      orphanFiles.push(path);
+    const orphans = extraPaths.filter(p => !seen.has(p));
+    if (orphans.length === 0) {
+      return ordered;
     }
+
+    const orphanDirs: string[] = [];
+    const orphanFiles: string[] = [];
+    for (const path of orphans) {
+      const kind = rows.find(r => r.path === path)?.kind ?? kindByPath?.get(path) ?? 'file';
+      if (kind === 'dir') {
+        orphanDirs.push(path);
+      } else {
+        orphanFiles.push(path);
+      }
+    }
+
+    const sortedDirs = WorkplaceEval.sortDirPaths(orphanDirs, dirRule, {smartRules});
+    const orphanFileEntries = orphanFiles.map(logicalPath => ({logicalPath, mtimeMs: mtimeByPath?.get(logicalPath) ?? 0}));
+    const sortedFiles = WorkplaceEval.sortFilesForDir(orphanFileEntries, dirRule, {smartRules}).map(f => f.logicalPath);
+
+    return [...ordered, ...sortedDirs, ...sortedFiles];
   }
-
-  const sortedDirs = sortDirPaths(orphanDirs, dirRule, {smartRules});
-  const sortedFiles = sortFilesForDir(
-    orphanFiles.map(logicalPath => ({
-      logicalPath,
-      mtimeMs: mtimeByPath?.get(logicalPath) ?? 0,
-    })),
-    dirRule,
-    {smartRules},
-  ).map(f => f.logicalPath);
-
-  return [...ordered, ...sortedDirs, ...sortedFiles];
 }

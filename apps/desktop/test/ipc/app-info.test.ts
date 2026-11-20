@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { after, describe, it, mock } from "node:test";
-import {
-  __setAppInfoSeamsForTests,
-  handleAppCheckForUpdates,
-  handleAppGetInfo,
-  handleAppOpenExternal,
-} from "../../src/main/ipc/handlers/app-info.js";
+import { Result } from "@novel-master/core/errors";
+import { AppInfo } from "../../src/main/ipc/handlers/app-info.js";
 
 const sampleUpdateData = {
   localVersion: "1.2.3",
@@ -20,18 +16,18 @@ const sampleUpdateData = {
 const mockOpenExternal = mock.fn(async () => {});
 
 after(() => {
-  __setAppInfoSeamsForTests(null);
+  AppInfo.__setSeamsForTests(null);
 });
 
 describe("app-info ipc handlers", () => {
   it("handleAppGetInfo returns version, platform, and name", async () => {
-    __setAppInfoSeamsForTests({
+    AppInfo.__setSeamsForTests({
       getVersion: () => "1.2.3",
       getName: () => "Novel Master",
       getPlatform: () => "win32",
     });
 
-    const result = await handleAppGetInfo();
+    const result = await AppInfo.getInfo();
     assert.equal(result.ok, true);
     if (!result.ok) {
       return;
@@ -42,11 +38,12 @@ describe("app-info ipc handlers", () => {
   });
 
   it("handleAppCheckForUpdates returns update-check DTO on success", async () => {
-    __setAppInfoSeamsForTests({
-      runUpdateCheck: async () => sampleUpdateData,
+    AppInfo.__setSeamsForTests({
+      // 错误通道迁移六期：checkForUpdates 已知失败走 Result，seam 同步。
+      runUpdateCheck: async () => Result.ok(sampleUpdateData),
     });
 
-    const result = await handleAppCheckForUpdates();
+    const result = await AppInfo.checkForUpdates();
     assert.equal(result.ok, true);
     if (!result.ok) {
       return;
@@ -60,39 +57,40 @@ describe("app-info ipc handlers", () => {
   });
 
   it("handleAppCheckForUpdates maps service errors to ipc error payload", async () => {
-    __setAppInfoSeamsForTests({
+    AppInfo.__setSeamsForTests({
       runUpdateCheck: async () => {
         throw new Error("Network unavailable");
       },
     });
 
-    const result = await handleAppCheckForUpdates();
+    const result = await AppInfo.checkForUpdates();
     assert.equal(result.ok, false);
     if (result.ok) {
       return;
     }
-    assert.equal(result.error.code, "Error");
+    // 错误通道迁移三期：未知 Error 统一落 INFRA_UNEXPECTED_ERROR（name 不进 code）。
+    assert.equal(result.error.code, "INFRA_UNEXPECTED_ERROR");
     assert.equal(result.error.message, "Network unavailable");
   });
 
   it("handleAppOpenExternal rejects invalid URLs", async () => {
-    const result = await handleAppOpenExternal({ url: "not-a-url" });
+    const result = await AppInfo.openExternal({ url: "not-a-url" });
     assert.equal(result.ok, false);
     if (result.ok) {
       return;
     }
-    assert.equal(result.error.code, "INVALID_URL");
+    assert.equal(result.error.code, "IPC_INVALID_URL");
     assert.equal(result.error.message, "无效的链接");
   });
 
   it("handleAppOpenExternal opens valid https URLs", async () => {
     mockOpenExternal.mock.resetCalls();
-    __setAppInfoSeamsForTests({
+    AppInfo.__setSeamsForTests({
       openExternal: mockOpenExternal,
     });
 
     const url = "https://github.com/bloodycrownD/novel-master/releases";
-    const result = await handleAppOpenExternal({ url });
+    const result = await AppInfo.openExternal({ url });
     assert.equal(result.ok, true);
     assert.equal(mockOpenExternal.mock.callCount(), 1);
     assert.equal(mockOpenExternal.mock.calls[0]?.arguments[0], url);

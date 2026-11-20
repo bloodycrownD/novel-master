@@ -12,7 +12,7 @@ export type NavViewId =
 
 export type WorkspaceScope = "session" | "chat" | "physical";
 
-export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
+const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
   // projects 视图换只读物理树浏览器（跨域拼接视图；原 global 面板不再展示）
   projects: "physical",
   sessions: "session",
@@ -22,7 +22,7 @@ export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
   "subagent-conversation": "chat",
 };
 
-export const WORKSPACE_TITLES: Record<WorkspaceScope, string> = {
+const WORKSPACE_TITLES: Record<WorkspaceScope, string> = {
   session: "会话工作区",
   chat: "聊天工作区",
   physical: "文件浏览器",

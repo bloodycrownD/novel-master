@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { skillToolRefResolver } from "../../src/domain/chat/logic/skill-tool-ref.js";
+import {  skillToolRefResolver  } from "../../src/domain/chat/logic/skill-tool-ref.js";
 
 describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
   it("write 缺省域补 project，携带会话 projectId", () => {

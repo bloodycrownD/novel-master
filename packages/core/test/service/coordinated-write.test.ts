@@ -11,13 +11,19 @@
  * - register 校验 execute/rollback 必填。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  CoordinatedWrite,
-  CoordinatedWriteRollbackError,
-  runCoordinatedWrite,
-} from "@/service/coordinated-write.js";
-import { createFailureInjector } from "../helpers/failure-injection.js";
+import {  describe, it  } from "node:test";
+import {  CoordinatedWrite  } from "@/service/coordinated-write.js";
+import {  Result  } from "../../src/errors/either.js";
+import {  createFailureInjector  } from "../helpers/failure-injection.js";
+
+/** 回滚失败错误的运行期形状（类已收口为模块私有，测试按 name 字段识别）。 */
+type CaughtRollbackError = Error & { readonly rollbackErrors: ReadonlyArray<{ readonly step: string; readonly error: unknown }> };
+
+function assertRollbackError(caught: unknown): CaughtRollbackError {
+  assert.ok(caught instanceof Error);
+  assert.equal(caught.name, "CoordinatedWriteRollbackError");
+  return caught as CaughtRollbackError;
+}
 
 describe("CoordinatedWrite", () => {
   it("所有步骤成功时不调用回滚", async () => {
@@ -168,9 +174,8 @@ describe("CoordinatedWrite", () => {
     } catch (err) {
       caught = err;
     }
-    const error = caught as CoordinatedWriteRollbackError;
+    const error = assertRollbackError(caught);
 
-    assert.ok(error instanceof CoordinatedWriteRollbackError);
     assert.ok(error.cause instanceof Error);
     assert.equal(
       (error.cause as Error).message,
@@ -196,12 +201,18 @@ describe("CoordinatedWrite", () => {
       await new CoordinatedWrite()
         .register({
           name: "a",
-          execute: async () => order.push("execute:a"),
+          execute: async () => {
+            order.push("execute:a");
+            return Result.ok(undefined);
+          },
           rollback: boom("a"),
         })
         .register({
           name: "b",
-          execute: async () => order.push("execute:b"),
+          execute: async () => {
+            order.push("execute:b");
+            return Result.ok(undefined);
+          },
           rollback: boom("b"),
         })
         .register(
@@ -213,7 +224,7 @@ describe("CoordinatedWrite", () => {
     } catch (err) {
       caught = err;
     }
-    const error = caught as CoordinatedWriteRollbackError;
+    const error = assertRollbackError(caught);
 
     // 两步回滚都被触发，c 触发原始失败
     assert.deepEqual(order, [
@@ -222,7 +233,6 @@ describe("CoordinatedWrite", () => {
       "rollback:b",
       "rollback:a",
     ]);
-    assert.ok(error instanceof CoordinatedWriteRollbackError);
     // 聚合顺序按回滚触发顺序：先 b 后 a
     assert.deepEqual(
       error.rollbackErrors.map((e) => e.step),
@@ -258,13 +268,25 @@ describe("CoordinatedWrite", () => {
     const inner = new CoordinatedWrite()
       .register({
         name: "inner-a",
-        execute: async () => order.push("inner-a:execute"),
-        rollback: async () => order.push("inner-a:rollback"),
+        execute: async () => {
+          order.push("inner-a:execute");
+          return Result.ok(undefined);
+        },
+        rollback: async () => {
+          order.push("inner-a:rollback");
+          return Result.ok(undefined);
+        },
       })
       .register({
         name: "inner-b",
-        execute: async () => order.push("inner-b:execute"),
-        rollback: async () => order.push("inner-b:rollback"),
+        execute: async () => {
+          order.push("inner-b:execute");
+          return Result.ok(undefined);
+        },
+        rollback: async () => {
+          order.push("inner-b:rollback");
+          return Result.ok(undefined);
+        },
       });
 
     // 内层正常跑完，外层第二步失败；外层回滚时，内层的步骤不在外层注册表里，
@@ -277,8 +299,12 @@ describe("CoordinatedWrite", () => {
             execute: async () => {
               order.push("outer-a:execute");
               await inner.run();
+              return Result.ok(undefined);
             },
-            rollback: async () => order.push("outer-a:rollback"),
+            rollback: async () => {
+              order.push("outer-a:rollback");
+              return Result.ok(undefined);
+            },
           })
           .register({
             name: "outer-b",
@@ -286,7 +312,10 @@ describe("CoordinatedWrite", () => {
               order.push("outer-b:execute");
               throw new Error("outer-b:boom");
             },
-            rollback: async () => order.push("outer-b:rollback"),
+            rollback: async () => {
+              order.push("outer-b:rollback");
+              return Result.ok(undefined);
+            },
           })
           .run(),
     );
@@ -298,22 +327,5 @@ describe("CoordinatedWrite", () => {
       "outer-b:execute",
       "outer-a:rollback",
     ]);
-  });
-
-  it("runCoordinatedWrite 便捷函数等价于手动 register + run", async () => {
-    const order: string[] = [];
-    await runCoordinatedWrite([
-      {
-        name: "a",
-        execute: async () => order.push("a"),
-        rollback: async () => order.push("a:r"),
-      },
-      {
-        name: "b",
-        execute: async () => order.push("b"),
-        rollback: async () => order.push("b:r"),
-      },
-    ]);
-    assert.deepEqual(order, ["a", "b"]);
   });
 });

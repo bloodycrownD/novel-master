@@ -4,16 +4,15 @@
  * 文案本体在 `packages/core/locales/settings.<locale>.json`；本文件只定义 key 与
  * descriptor 类型，不包含任何用户可见文本。
  *
- * key 形态：`settings.search.<area>.<name>`，area ∈ list / detail / auth / params /
- * help / validation / toast / empty / meta / curl。双端逐字相同的文案共用同一个
- * key；仅一端有的（或两端措辞不同的）在末尾带 `.desktop` / `.mobile` 区分。
+ * key 形态：`settings.search.<area>.<name>`（area ∈ list / detail / auth / params /
+ * help / validation / toast / empty / meta / curl）与 `settings.long_task.*`
+ * （桌面长任务取消入口）。双端逐字相同的文案共用同一个 key；仅一端有的（或两端
+ * 措辞不同的）在末尾带 `.desktop` / `.mobile` 区分。
  *
  * @module domain/settings/i18n/keys
  */
 
-import type { MessageDescriptor, MessageLike } from "@/common/i18n.js";
-
-export const SETTINGS_MESSAGE_KEYS = [
+const SETTINGS_MESSAGE_KEYS = [
   "settings.search.meta.label.bocha",
   "settings.search.meta.label.tavily",
   "settings.search.meta.label.brave",
@@ -162,8 +161,9 @@ export const SETTINGS_MESSAGE_KEYS = [
   "settings.search.curl.command_label.desktop",
   "settings.search.curl.parse_action.desktop",
   "settings.search.curl.key_detected.desktop",
+  "settings.long_task.cancel",
+  "settings.long_task.cancelled",
+  "settings.long_task.maintenance_uninterruptible",
 ] as const;
 
 export type SettingsMessageKey = (typeof SETTINGS_MESSAGE_KEYS)[number];
-export type SettingsMessageDescriptor = MessageDescriptor<SettingsMessageKey>;
-export type SettingsMessageLike = MessageLike<SettingsMessageKey>;

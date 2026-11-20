@@ -17,16 +17,26 @@ import fs from 'fs';
 import path from 'path';
 
 // ── SessionDetailScreen 依赖 mock（jest.mock 会被 babel 提升到 import 之前） ──
-const mockSessionsGet = jest.fn(async () => ({id: 's1', title: '我的会话'}));
+const mockSessionsGet = jest.fn(async () => ({
+  ok: true as const,
+  value: {id: 's1', title: '我的会话'},
+}));
 const mockSessionsRename = jest.fn(async () => undefined);
 const mockSessionsGetSessionAgentConfig = jest.fn(async () => ({
-  agentId: 'workspace-agent',
+  ok: true as const,
+  value: {agentId: 'workspace-agent'},
 }));
 const mockSessionsUpdateSessionAgentConfig = jest.fn(async () => ({
   agentId: 'workspace-agent',
 }));
-const mockStateGetCurrentAgentId = jest.fn(async () => 'workspace-agent');
-const mockStateGetCurrentModelId = jest.fn(async () => 'model-ws');
+const mockStateGetCurrentAgentId = jest.fn(async () => ({
+  ok: true as const,
+  value: 'workspace-agent',
+}));
+const mockStateGetCurrentModelId = jest.fn(async () => ({
+  ok: true as const,
+  value: 'model-ws',
+}));
 const mockStateSetCurrentModelId = jest.fn(async () => undefined);
 const mockStateSetCurrentAgentId = jest.fn(async () => undefined);
 // 技能汇总：两条有效（一条禁用）+ 一条无效，验证 n/m 剔除无效口径
@@ -83,14 +93,18 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 const mockLoadChatAgentMeta = jest.fn();
 // isAgentLocked / isModelLocked / isAgentDeleted 的 mock 跟真实逻辑保持一致：
 // agent 卡仅 meta 未加载时锁（none 态放开为待重选）；model 卡 none 态仍锁。
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
   isAgentLocked: (meta: {source?: string} | undefined) => meta == null,
   isAgentDeleted: (meta: {source?: string} | undefined) =>
@@ -111,7 +125,9 @@ jest.mock('@/services/chat-agent-meta', () => ({
   AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
   AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
   MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta, isLocked: legacy.isAgentLocked, isModelLocked: legacy.isModelLocked, isDeleted: legacy.isAgentDeleted}};
+});
 
 jest.mock('@/components/agent/AgentPickerModal', () => {
   const React = require('react');
@@ -209,10 +225,7 @@ jest.mock('react-native', () => {
 });
 
 import {SessionDetailScreen} from '@/screens/stack/SessionDetailScreen';
-import {
-  selectSessionAgent,
-  selectWorkspaceAgent,
-} from '@/services/agent-picker';
+import {AgentPicker} from '@/services/agent-picker'
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 
 function flushPromises(): Promise<void> {
@@ -236,8 +249,11 @@ describe('T-M2 SessionDetailScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '我的会话'},
+    });
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   it('渲染聊天名 / agent / model 卡片（不再有来源标签）', async () => {
@@ -286,9 +302,10 @@ describe('T-M2 SessionDetailScreen', () => {
   });
 
   it('agent pin（modelSource=agent-pin）时点击大模型卡片不进 picker，弹锁定提示', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue(
-      meta({modelSource: 'agent-pin', hasDedicatedModel: true}),
-    );
+    mockLoadChatAgentMeta.mockResolvedValue({
+      ok: true,
+      value: meta({modelSource: 'agent-pin', hasDedicatedModel: true}),
+    });
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -306,7 +323,7 @@ describe('T-M2 SessionDetailScreen', () => {
   // 智能体卡放开为「待重选」——可点击弹 picker 重选；模型卡保持锁定。
   it("source='none' 时智能体卡待重选可弹 picker，模型卡锁定只弹提示", async () => {
     // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
-    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'none'}));
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'none'})});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -334,13 +351,15 @@ describe('T-M2 SessionDetailScreen', () => {
     ).toBe('false');
     // 仅模型卡弹一次锁定提示：智能体卡点击不再弹「请重新选择」toast
     expect(mockShowToast).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).not.toHaveBeenCalledWith('智能体已被删除，请重新选择');
+    expect(mockShowToast).not.toHaveBeenCalledWith(
+      '智能体已被删除，请重新选择',
+    );
   });
 
   // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
   // 详情页弹错误提示并停留在加载态（卡片不渲染，自然不可点）。
   it('loadChatAgentMeta reject 时弹加载失败提示，卡片不渲染', async () => {
-    mockLoadChatAgentMeta.mockRejectedValue(new Error('boom'));
+    mockLoadChatAgentMeta.mockResolvedValue({ok: false, error: new Error('boom')});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -354,7 +373,7 @@ describe('T-M2 SessionDetailScreen', () => {
   });
 
   it('session 时智能体可切换（不锁、不弹提示）', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'session'}));
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'session'})});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -440,8 +459,11 @@ describe('T-SD1 SessionDetailScreen 改名广播', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '我的会话'},
+    });
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   it('改名成功后 emit session-renamed，payload 含 sessionId 与新标题', async () => {
@@ -514,7 +536,7 @@ describe('T-M5 picker select 分流', () => {
   });
 
   it('会话内 agent 选择：selectSessionAgent 写 session agentId，不碰 workspace 全局', async () => {
-    await selectSessionAgent(mockRuntime as never, 's1', 'agent-a');
+    await AgentPicker.selectSession(mockRuntime as never, 's1', 'agent-a');
     expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
       agentId: 'agent-a',
     });
@@ -522,7 +544,7 @@ describe('T-M5 picker select 分流', () => {
   });
 
   it('全局 agent 选择：selectWorkspaceAgent 调 setCurrentAgentId，不写 session 绑定', async () => {
-    await selectWorkspaceAgent(mockRuntime as never, 'agent-a');
+    await AgentPicker.selectWorkspace(mockRuntime as never, 'agent-a');
     expect(mockStateSetCurrentAgentId).toHaveBeenCalledWith('agent-a');
     expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
   });
@@ -556,8 +578,11 @@ describe('T-MO1 SessionDetailScreen 查看提示词入口', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '我的会话'},
+    });
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   // ── T-AM3-3 提示词入口必须带 scope（AM-3）────────────────────────────────
@@ -589,8 +614,11 @@ describe('T-KB4 SessionDetailScreen Android 键盘避让', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '会话'});
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '会话'},
+    });
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   afterEach(() => {

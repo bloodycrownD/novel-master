@@ -1,4 +1,4 @@
-import {orderedDirectChildPaths} from '@/components/vfs/vfs-direct-children-order';
+import {VfsDirectChildrenOrder} from '@/components/vfs/vfs-direct-children-order'
 import type {CompiledSmartSortRule} from '@novel-master/core/smart-sort-rule';
 import {
   type WorkplaceDirRule,
@@ -34,7 +34,7 @@ describe('orderedDirectChildPaths', () => {
   ];
 
   it('extracts direct children in DFS row order (dirs before sibling files)', () => {
-    const order = orderedDirectChildPaths({
+    const order = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows,
       extraPaths: ['/p/a', '/p/b.md'],
@@ -44,7 +44,7 @@ describe('orderedDirectChildPaths', () => {
   });
 
   it('appends vfs-only orphans after row order, dirs before files', () => {
-    const order = orderedDirectChildPaths({
+    const order = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows,
       extraPaths: ['/p/a', '/p/b.md', '/p/z-only.md', '/p/y-dir'],
@@ -72,14 +72,14 @@ describe('orderedDirectChildPaths', () => {
       ['/p/orphan-b', 'file'] as const,
     ]);
 
-    const asc = orderedDirectChildPaths({
+    const asc = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows: [],
       extraPaths,
       dirRule: ascRule,
       kindByPath,
     });
-    const desc = orderedDirectChildPaths({
+    const desc = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows: [],
       extraPaths,
@@ -104,7 +104,7 @@ describe('orderedDirectChildPaths', () => {
   };
 
   it('passes smart rules through to file orphan sort (ordinals before misses)', () => {
-    const order = orderedDirectChildPaths({
+    const order = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows,
       extraPaths: [
@@ -135,7 +135,7 @@ describe('orderedDirectChildPaths', () => {
   });
 
   it('passes smart rules through to directory orphan sort', () => {
-    const order = orderedDirectChildPaths({
+    const order = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows: [],
       extraPaths: ['/p/第三卷', '/p/第十卷', '/p/第二卷'],
@@ -151,7 +151,7 @@ describe('orderedDirectChildPaths', () => {
   });
 
   it('degrades smart sort to natural order when no rules are provided', () => {
-    const order = orderedDirectChildPaths({
+    const order = VfsDirectChildrenOrder.orderedDirectChildPaths({
       parentPath: parent,
       rows: [],
       extraPaths: ['/p/公告.txt', '/p/第三章.txt', '/p/第二章.txt'],

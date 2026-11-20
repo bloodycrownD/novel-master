@@ -4,78 +4,76 @@
  * @module domain/workplace/workplace-tree
  */
 
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import type { WorkplaceScope } from "../model/workplace-types.js";
-import { workplaceRootLogicalPath } from "./workplace-scope.js";
+import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { ParentDir } from "@/domain/vfs/logic/parent-dir.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import type { WorkplaceScope as WorkplaceScopeType } from "../model/workplace-types.js";
+import { WorkplaceScope } from "./workplace-scope.js";
 
-/** 逻辑路径的父目录；根目录文件返回 `/`。 */
-export function parentDirOf(logicalPath: string): string | null {
-  const resolved = normalizePath(logicalPath);
-  if (!resolved.ok) throw resolved.error;
-  const n = resolved.value;
-  if (n === "/") {
-    return null;
-  }
-  const idx = n.lastIndexOf("/");
-  if (idx <= 0) {
-    return "/";
-  }
-  return n.slice(0, idx);
-}
+export const WorkplaceTree = {
+  /**
+   * 沿 ParentDir.orNull 把 `logicalPath` 的祖先目录逐级加入 `dirs`，止于 `root`。
+   *
+   * 父目录公式单源在 `domain/vfs/logic/parent-dir.ts`（root 在那一层收敛为 null）。
+   * 入参在 {@link WorkplaceTree.buildDirSet} 内已过 PathNormalizer.normalize，而 ParentDir.orNull
+   * 对已规范化路径只在 root 处返回 null——与旧 `parentDirOf(logicalPath)` 的
+   * `Ok(null)` 分支逐字等价，故不再有错误通道。
+   */
+  addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
+    let current = ParentDir.orNull(logicalPath);
+    while (current != null && current !== root) {
+      dirs.add(current);
+      current = ParentDir.orNull(current);
+    }
+    dirs.add(root);
+  },
 
-function addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
-  let current = parentDirOf(logicalPath);
-  while (current != null && current !== root) {
-    dirs.add(current);
-    current = parentDirOf(current);
-  }
-  dirs.add(root);
-}
+  /**
+   * Builds the set of directory logical paths for list/display traversal.
+   *
+   * nm-style: keep-public — workplace 树构造的唯一 domain 入口，由 workplace.service
+   * 跨层单点调用；内联需把 addParentChain/ParentDir.orNull 的目录链逻辑一并搬进 service。
+   */
+  buildDirSet(params: { readonly scope: WorkplaceScopeType; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Result<Set<string>, AppError> {
+    const root = WorkplaceScope.rootLogicalPath(params.scope);
+    const dirs = new Set<string>([root]);
+    for (const p of params.filePaths) {
+      const resolved = PathNormalizer.normalize(p);
+      if (!resolved.ok) return Result.err(resolved.error);
+      WorkplaceTree.addParentChain(dirs, resolved.value, root);
+    }
+    for (const p of params.configuredPaths) {
+      const resolved = PathNormalizer.normalize(p);
+      if (!resolved.ok) return Result.err(resolved.error);
+      const n = resolved.value;
+      if (n === root) {
+        dirs.add(root);
+        continue;
+      }
+      WorkplaceTree.addParentChain(dirs, n, root);
+      const parent = ParentDir.orNull(n);
+      if (parent != null) {
+        dirs.add(parent);
+      }
+    }
+    return Result.ok(dirs);
+  },
 
-/**
- * Builds the set of directory logical paths for list/display traversal.
- *
- * nm-style: keep-public — workplace 树构造的唯一 domain 入口，由 workplace.service
- * 跨层单点调用；内联需把 addParentChain/parentDirOf 的目录链逻辑一并搬进 service。
- */
-export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Set<string> {
-  const root = workplaceRootLogicalPath(params.scope);
-  const dirs = new Set<string>([root]);
-  for (const p of params.filePaths) {
-    const resolved = normalizePath(p);
-    if (!resolved.ok) throw resolved.error;
-    addParentChain(dirs, resolved.value, root);
-  }
-  for (const p of params.configuredPaths) {
-    const resolved = normalizePath(p);
-    if (!resolved.ok) throw resolved.error;
-    const n = resolved.value;
-    if (n === root) {
-      dirs.add(root);
-      continue;
+  /** Direct child directories of `dir` within `allDirs`. */
+  directChildDirs(dir: string, allDirs: ReadonlySet<string>): Result<string[], AppError> {
+    const resolved = PathNormalizer.normalize(dir);
+    if (!resolved.ok) return Result.err(resolved.error);
+    const normalized = resolved.value;
+    const children: string[] = [];
+    for (const d of allDirs) {
+      if (d === normalized) {
+        continue;
+      }
+      if (ParentDir.orNull(d) === normalized) {
+        children.push(d);
+      }
     }
-    addParentChain(dirs, n, root);
-    const parent = parentDirOf(n);
-    if (parent != null) {
-      dirs.add(parent);
-    }
-  }
-  return dirs;
-}
-
-/** Direct child directories of `dir` within `allDirs`. */
-export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): string[] {
-  const resolved = normalizePath(dir);
-  if (!resolved.ok) throw resolved.error;
-  const normalized = resolved.value;
-  const children: string[] = [];
-  for (const d of allDirs) {
-    if (d === normalized) {
-      continue;
-    }
-    if (parentDirOf(d) === normalized) {
-      children.push(d);
-    }
-  }
-  return children;
-}
+    return Result.ok(children);
+  },
+} as const;

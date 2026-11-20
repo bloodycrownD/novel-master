@@ -1,17 +1,17 @@
+import {  rejectsErr, unwrap  } from "../../helpers/result-unwrap.js";
+import {  outcomeValue  } from "../../helpers/outcome-value.js";
+import {  Result  } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import {
-  AgentTurnError,
-  runAgentTurn,
-  type AgentTurnRuntimePort,
-} from "@/service/agent/logic/run-agent-turn.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import {  AppErrorOps  } from "@/errors/app-error.js";
+import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
+import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
 
 /** 发送侧（mobile）区间扫描口径：逐区间 slice 单独扫（D9）。 */
 function scanComposerRanges(
@@ -106,26 +106,34 @@ function makeRuntime(overrides: {
   const definition = overrides.definition ?? sampleDefinition;
   return {
     state: {
-      getCurrentAgentId: async () => "a1",
-      getCurrentModelId: async () => "openai/gpt",
+      getCurrentAgentId: async () => Result.ok("a1"),
+      getCurrentModelId: async () => Result.ok("openai/gpt"),
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
       list: async () => [definition],
-      get: async () => definition,
+      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+      get: async () => Result.ok(definition) as never,
     },
     projects: {
-      getAgentConfig: async () => ({ mode: "follow" }),
+      getAgentConfig: async () => Result.ok({ mode: "follow" }),
     } as AgentTurnRuntimePort["projects"],
     messages: {
-      listBySession:
-        overrides.listBySession ?? (async () => []),
-      listBySessionTail:
-        overrides.listBySessionTail ?? (async () => []),
+      // 错误通道迁移八期：读口走 Outcome——override 仍写裸数组，这里统一包 completed。
+      listBySession: async () => ({ kind: "completed" as const, value: await (overrides.listBySession ?? (async () => []))() }),
+      listBySessionTail: async (sessionId: string, options: { limit: number }) => ({
+        kind: "completed" as const,
+        value: await (overrides.listBySessionTail ?? (async () => []))(sessionId, options),
+      }),
+      // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
       append:
-        overrides.append ??
-        (async () => ({ id: "m1", role: "user", content: { blocks: [] } })),
-      delete: overrides.delete ?? (async () => undefined),
+        overrides.append != null
+          ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
+          : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
+      delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
+        await overrides.delete!(...args);
+        return Result.ok(undefined);
+      }) as AgentTurnRuntimePort["messages"]["delete"],
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
       capture:
@@ -147,11 +155,11 @@ function makeRuntime(overrides: {
       : never),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
         evaluateRuleView:
-          overrides.evaluateRuleView ?? (async () => emptyRuleView()),
+          overrides.evaluateRuleView ?? (async () => Result.ok(emptyRuleView())),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
@@ -165,24 +173,23 @@ function makeRuntime(overrides: {
       ? { userVfsTurn: overrides.userVfsTurn }
       : {}),
     sessions: {
-      getSessionAgentConfig: async () => ({ mode: "follow" }),
+      getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
     },
   };
 }
 
 describe("runAgentTurn", () => {
-  it("rejects empty input when resume is not allowed", async () => {
-    await assert.rejects(
+  it("returns AGENT_MESSAGE_EMPTY when input is empty and resume is not allowed", async () => {
+    await rejectsErr(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           makeRuntime({}),
           { projectId: "p", sessionId: "s" },
           "",
         ),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
   });
@@ -202,12 +209,12 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "",
         { allowResumeWithoutInput: true },
-      );
+      ));
     } catch {
       // Runner deps are stubbed; reaching runner means resume gate passed.
     }
@@ -222,10 +229,10 @@ describe("runAgentTurn", () => {
     );
   });
 
-  it("rejects empty resume when last message is not user", async () => {
-    await assert.rejects(
+  it("returns AGENT_MESSAGE_EMPTY on empty resume when last message is not user", async () => {
+    await rejectsErr(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           makeRuntime({
             listBySessionTail: async () => [
               { role: "assistant", content: { blocks: [] } },
@@ -236,8 +243,7 @@ describe("runAgentTurn", () => {
           { allowResumeWithoutInput: true },
         ),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
-        return true;
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
       },
     );
   });
@@ -256,11 +262,11 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "请看 @notes/a.md",
-      );
+      ));
     } catch {
       // runner deps stubbed
     }
@@ -284,7 +290,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "再提 @notes/a.md",
@@ -299,7 +305,7 @@ describe("runAgentTurn", () => {
             },
           ],
         },
-      );
+      ));
     } catch {
       // runner deps stubbed
     }
@@ -333,10 +339,10 @@ describe("runAgentTurn", () => {
       { start: 13, end: 18 },
     ];
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
         attachments: scanComposerRanges(text, ranges),
         excludedScanRanges: ranges,
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -377,10 +383,10 @@ describe("runAgentTurn", () => {
       { start: 10, end: 13 },
     ];
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
         attachments: scanComposerRanges(text, ranges),
         excludedScanRanges: ranges,
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -410,7 +416,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
         attachments: [
           {
             name: "a.md",
@@ -420,7 +426,7 @@ describe("runAgentTurn", () => {
             path: "/a.md",
           },
         ],
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -452,7 +458,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
         attachments: [
           {
             name: "preview-wp",
@@ -475,7 +481,7 @@ describe("runAgentTurn", () => {
             path: "/chip.md",
           },
         ],
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -499,7 +505,7 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 抛「消息不能为空」且不 append", async () => {
+  it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 返回「消息不能为空」且不 append", async () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
     userVfsUnifiedToolTurnFlag.refresh(false);
     let appendCount = 0;
@@ -516,13 +522,12 @@ describe("runAgentTurn", () => {
         return { id: "m-cr3" };
       },
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
-        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+        AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
     assert.equal(appendCount, 0, "仅规则变更不得 append user");
@@ -534,7 +539,7 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("B-01：空输入且末条 assistant → 抛「消息不能为空」、不 append 空 user", async () => {
+  it("B-01：空输入且末条 assistant → 返回「消息不能为空」、不 append 空 user", async () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
     userVfsUnifiedToolTurnFlag.refresh(false);
     const existing = [
@@ -555,16 +560,15 @@ describe("runAgentTurn", () => {
         return { id: "m-b01-bad" };
       },
     });
-    await assert.rejects(
-      () => runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+    await rejectsErr(
+      () => AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
     assert.equal(appendCount, 0, "末条 assistant 不得误 append");
-    const after = await runtime.messages.listBySession("s");
+    const after = outcomeValue(await runtime.messages.listBySession("s"));
     assert.equal(after.length, existing.length, "listBySession 长度不变");
     assert.equal(
       after.some((m) => m.role === "user"),
@@ -574,7 +578,7 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("A7: workplace=false → 空输入仍抛「消息不能为空」", async () => {
+  it("A7: workplace=false → 空输入仍返回「消息不能为空」", async () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
     userVfsUnifiedToolTurnFlag.refresh(false);
     let appendCount = 0;
@@ -588,13 +592,12 @@ describe("runAgentTurn", () => {
         return { id: "m-a7" };
       },
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
-        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+        AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
     assert.equal(appendCount, 0);
@@ -619,11 +622,11 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "只是一条纯文本消息",
-      );
+      ));
     } catch {
       // runner deps stubbed；走到 capture 即说明 baseline 已写
     }
@@ -649,7 +652,7 @@ describe("runAgentTurn", () => {
     });
     await assert.rejects(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           runtime,
           { projectId: "p", sessionId: "s" },
           "纯文本消息",
@@ -685,7 +688,7 @@ describe("runAgentTurn", () => {
     });
     await assert.rejects(
       () =>
-        runAgentTurn(
+        AgentTurnRunner.run(
           runtime,
           { projectId: "p", sessionId: "s" },
           "会触发 capture 失败的消息",
@@ -715,11 +718,11 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await AgentTurnRunner.run(
         runtime,
         { projectId: "p", sessionId: "s" },
         "继续聊天",
-      );
+      ));
     } catch {
       // runner deps stubbed；走到断言即说明 backfill 已调
     }
@@ -742,11 +745,11 @@ describe("runAgentTurn", () => {
     });
     for (let round = 0; round < 2; round++) {
       try {
-        await runAgentTurn(
+        unwrap(await AgentTurnRunner.run(
           runtime,
           { projectId: "p", sessionId: "s" },
           `第 ${round + 1} 轮消息`,
-        );
+        ));
       } catch {
         // runner deps stubbed；走到调用记录即说明 backfill 已调
       }

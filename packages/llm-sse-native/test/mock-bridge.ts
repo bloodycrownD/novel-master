@@ -55,6 +55,9 @@ export function createMockBridge(): MockBridge {
     request() {
       return Promise.reject(new Error("not used in these tests"));
     },
+    requestAbort() {
+      // 这些用例只覆盖流式路径；非流式取消的 fixture 在 mobile 侧。
+    },
   };
 
   return {

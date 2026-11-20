@@ -1,5 +1,5 @@
 /** Default session title prefix for auto-numbered names (`会话1`, `会话2`, …). */
-export const DEFAULT_SESSION_TITLE_PREFIX = "会话";
+const DEFAULT_SESSION_TITLE_PREFIX = "会话";
 
 const NUMBERED_TITLE_RE = /^会话(\d+)$/;
 

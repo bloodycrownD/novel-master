@@ -7,42 +7,49 @@
 import { SentencePieceProcessor } from "@agnai/sentencepiece-js";
 import { type ChatMessage } from "@novel-master/core/chat";
 
-import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/provider";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/tokenizer";
+import { MessageBodyText } from "@novel-master/core/prompt";
 
-import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/provider";
-import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
-import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
-import { countTextWithDefaultEncoding } from "./encoding-cache.js";
+import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/tokenizer";
+import { TokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
+import { NodeTokenizerLoader } from "../node-tokenizer-loader.js";
+import { EncodingCache } from "./encoding-cache.js";
 
 /** SentencePiece 家族（`constructor` 与 `countSentencePieceFamilyPrompt` 的 cast 共用）。 */
-type SentencePieceFamily = Extract<
-  TokenizerFamily,
-  "llama" | "mistral" | "yi" | "gemma" | "jamba"
->;
+type SentencePieceFamily = Extract<TokenizerFamily, "llama" | "mistral" | "yi" | "gemma" | "jamba">;
 
 /** 家族 prompt 计数结果（真计数或加载失败后的兜底估算）。 */
 type TokenCountEstimate = { readonly count: number; readonly estimated: boolean };
 
 const heuristic = new HeuristicTokenCounter();
 
-/**
- * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
- *
- * 与 web 家族同一条口径：字符折算 `ceil(字符数 / 3.35)` 是英文口径，对中文正文
- * 低估 82%~84%；而 `countSentencePieceFamilyPrompt` 在加载失败时本就会把
- * `estimated` 置 true、`counterKind` 置 `heuristic`（上层已声明这是估算），
- * 所以此时用默认 cl100k 近似（误差 0.5% 量级）严格优于折算。
- *
- * 只有 cl100k 表也建不起来（环境级故障）才退回字符折算。
- */
-function fallbackCount(text: string): number {
-  const real = countTextWithDefaultEncoding(text);
-  return real ?? heuristic.countText(text);
+// nm-style 注记：文件名 PascalCase（SentencepieceTokenCounter）与同文件非导出类 SentencePieceTokenCounter 仅一字母大小写之差，判定撞名，按「SP 家族计数入口」主体起名（SentencePieceFamilyCount）。
+export namespace SentencePieceFamilyCount {
+  /**
+   * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
+   *
+   * 与 web 家族同一条口径：字符折算 `ceil(字符数 / 3.35)` 是英文口径，对中文正文
+   * 低估 82%~84%；而 `SentencePieceFamilyCount.countPrompt` 在加载失败时本就会把
+   * `estimated` 置 true、`counterKind` 置 `heuristic`（上层已声明这是估算），
+   * 所以此时用默认 cl100k 近似（误差 0.5% 量级）严格优于折算。
+   *
+   * 只有 cl100k 表也建不起来（环境级故障）才退回字符折算。
+   */
+  // nm-style 注记：本应保持 namespace 私有，但顶层类 SentencePieceTokenCounter（不收口）的兜底路径依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
+  export function fallbackCount(text: string): number {
+    const real = EncodingCache.countText(text);
+    return real ?? heuristic.countText(text);
+  }
+
+  export async function countPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
+    const counter = new SentencePieceTokenCounter(family as SentencePieceFamily);
+    const count = await counter.countSerializedPrompt(serialized);
+    return { count, estimated: counter.failedLoad };
+  }
 }
 
 /** SentencePiece `.model` counter — encodes plain serialized prompt text (ST body path). */
-export class SentencePieceTokenCounter implements TokenCounter {
+class SentencePieceTokenCounter implements TokenCounter {
   readonly kind: TokenizerFamily;
   private processor: SentencePieceProcessor | null = null;
   private loadError = false;
@@ -59,13 +66,13 @@ export class SentencePieceTokenCounter implements TokenCounter {
     if (this.loadError) {
       return null;
     }
-    const paths = tokenizerAssetPaths(this.family);
+    const paths = TokenizerAssetPaths.forFamily(this.family);
     if (paths == null || paths.kind !== "model") {
       this.loadError = true;
       return null;
     }
     try {
-      const loader = getNodeTokenizerLoader();
+      const loader = NodeTokenizerLoader.get();
       const proc = new SentencePieceProcessor();
       await proc.load(loader.readModel(paths.primary));
       this.processor = proc;
@@ -82,10 +89,11 @@ export class SentencePieceTokenCounter implements TokenCounter {
     return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
 
+  /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {
-      chars += messageBodyTextFromBlocks(m.content.blocks).length;
+      chars += MessageBodyText.fromBlocks(m.content.blocks).length;
     }
     return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }
@@ -97,7 +105,7 @@ export class SentencePieceTokenCounter implements TokenCounter {
   async countSerializedPrompt(serialized: string): Promise<number> {
     const proc = await this.getProcessor();
     if (proc == null) {
-      return fallbackCount(serialized);
+      return SentencePieceFamilyCount.fallbackCount(serialized);
     }
     return proc.encodeIds(serialized).length;
   }
@@ -105,10 +113,4 @@ export class SentencePieceTokenCounter implements TokenCounter {
   get failedLoad(): boolean {
     return this.loadError;
   }
-}
-
-export async function countSentencePieceFamilyPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
-  const counter = new SentencePieceTokenCounter(family as SentencePieceFamily);
-  const count = await counter.countSerializedPrompt(serialized);
-  return { count, estimated: counter.failedLoad };
 }

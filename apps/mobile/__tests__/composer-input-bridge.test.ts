@@ -1,10 +1,4 @@
-import {
-  COMPOSER_INPUT_BRIDGE_VERSION,
-  decodeComposerInputToHost,
-  decodeHostToComposerInput,
-  encodeComposerInputToHost,
-  encodeHostToComposerInput,
-} from '@/components/chat/ComposerInputBridge';
+import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge} from '@/components/chat/ComposerInputBridge';
 // 单源一致性：web 侧模型（webview bundle 打包真源）同文件参与断言
 import {BRIDGE_V} from '@web/composer-input/webview/runtime/model';
 
@@ -44,8 +38,8 @@ describe('composer-input-bridge', () => {
         placeholder: '问点什么…',
       },
     };
-    const parsed = decodeHostToComposerInput(
-      encodeHostToComposerInput(message),
+    const parsed = composerInputBridge.decodeToClient(
+      composerInputBridge.encodeToClient(message),
     );
     expect(parsed).toEqual(message);
     expect(parsed.payload.mode).toBe('composer-token');
@@ -65,8 +59,8 @@ describe('composer-input-bridge', () => {
         placeholder: '',
       },
     };
-    const parsed = decodeHostToComposerInput(
-      encodeHostToComposerInput(message),
+    const parsed = composerInputBridge.decodeToClient(
+      composerInputBridge.encodeToClient(message),
     );
     expect(parsed.payload.metrics.maxHeight).toBeNull();
     expect(parsed.payload.mode).toBe('prompt-macro');
@@ -79,7 +73,7 @@ describe('composer-input-bridge', () => {
       payload: {text: '看 @src/a.ts', selectionStart: 12, selectionEnd: 12},
     };
     expect(
-      decodeHostToComposerInput(encodeHostToComposerInput(withSelection)),
+      composerInputBridge.decodeToClient(composerInputBridge.encodeToClient(withSelection)),
     ).toEqual(withSelection);
 
     const withoutSelection = {
@@ -88,7 +82,7 @@ describe('composer-input-bridge', () => {
       payload: {text: ''},
     };
     expect(
-      decodeHostToComposerInput(encodeHostToComposerInput(withoutSelection)),
+      composerInputBridge.decodeToClient(composerInputBridge.encodeToClient(withoutSelection)),
     ).toEqual(withoutSelection);
   });
 
@@ -117,7 +111,7 @@ describe('composer-input-bridge', () => {
     ];
     for (const message of messages) {
       expect(
-        decodeHostToComposerInput(encodeHostToComposerInput(message)),
+        composerInputBridge.decodeToClient(composerInputBridge.encodeToClient(message)),
       ).toEqual(message);
     }
   });
@@ -157,7 +151,7 @@ describe('composer-input-bridge', () => {
     ];
     for (const message of messages) {
       expect(
-        decodeComposerInputToHost(encodeComposerInputToHost(message)),
+        composerInputBridge.decodeToHost(composerInputBridge.encodeToHost(message)),
       ).toEqual(message);
     }
   });
@@ -165,36 +159,36 @@ describe('composer-input-bridge', () => {
   it('T-CB4：坏信封一律抛错（宿主 try/catch 静默丢弃）', () => {
     // v 不符
     expect(() =>
-      decodeComposerInputToHost(
+      composerInputBridge.decodeToHost(
         JSON.stringify({v: 99, type: 'change', payload: {text: 'x'}}),
       ),
     ).toThrow(/version/i);
     expect(() =>
-      decodeHostToComposerInput(
+      composerInputBridge.decodeToClient(
         JSON.stringify({v: 2, type: 'init', payload: {}}),
       ),
     ).toThrow(/version/i);
     // type 缺失
     expect(() =>
-      decodeComposerInputToHost(
+      composerInputBridge.decodeToHost(
         JSON.stringify({v: COMPOSER_INPUT_BRIDGE_VERSION, payload: {}}),
       ),
     ).toThrow(/shape/i);
     expect(() =>
-      decodeHostToComposerInput(
+      composerInputBridge.decodeToClient(
         JSON.stringify({v: COMPOSER_INPUT_BRIDGE_VERSION, payload: {}}),
       ),
     ).toThrow(/shape/i);
     // payload 非对象
     expect(() =>
-      decodeComposerInputToHost(
+      composerInputBridge.decodeToHost(
         JSON.stringify({v: COMPOSER_INPUT_BRIDGE_VERSION, type: 'change'}),
       ),
     ).toThrow(/shape/i);
     // 数组信封（非 record → v 校验即败）
-    expect(() => decodeComposerInputToHost('[]')).toThrow(/version|shape/i);
+    expect(() => composerInputBridge.decodeToHost('[]')).toThrow(/version|shape/i);
     // JSON 坏
-    expect(() => decodeComposerInputToHost('{oops')).toThrow();
-    expect(() => decodeHostToComposerInput('not-json')).toThrow();
+    expect(() => composerInputBridge.decodeToHost('{oops')).toThrow();
+    expect(() => composerInputBridge.decodeToClient('not-json')).toThrow();
   });
 });

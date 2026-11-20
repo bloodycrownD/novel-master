@@ -1,46 +1,41 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import {
-  decrementDesktopAgentActive,
-  incrementDesktopAgentActive,
-  isDesktopAgentActive,
-  subscribeDesktopAgentActivity,
-} from "../src/main/runtime/agent-activity.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
 
 describe("agent-activity refcount", () => {
   afterEach(() => {
-    while (isDesktopAgentActive()) {
-      decrementDesktopAgentActive();
+    while (agentActivity.isActive()) {
+      agentActivity.decrement();
     }
   });
 
-  it("increment 后 isDesktopAgentActive 为 true", () => {
-    incrementDesktopAgentActive();
-    assert.equal(isDesktopAgentActive(), true);
+  it("increment 后 agentActivity.isActive 为 true", () => {
+    agentActivity.increment();
+    assert.equal(agentActivity.isActive(), true);
   });
 
   it("decrement 归零后幂等", () => {
-    incrementDesktopAgentActive();
-    decrementDesktopAgentActive();
-    assert.equal(isDesktopAgentActive(), false);
-    decrementDesktopAgentActive();
-    assert.equal(isDesktopAgentActive(), false);
+    agentActivity.increment();
+    agentActivity.decrement();
+    assert.equal(agentActivity.isActive(), false);
+    agentActivity.decrement();
+    assert.equal(agentActivity.isActive(), false);
   });
 
   it("多次 decrement 不会下溢", () => {
-    decrementDesktopAgentActive();
-    decrementDesktopAgentActive();
-    assert.equal(isDesktopAgentActive(), false);
+    agentActivity.decrement();
+    agentActivity.decrement();
+    assert.equal(agentActivity.isActive(), false);
   });
 
   it("subscribe 在 0→1 与 1→0 时通知", () => {
     const events: boolean[] = [];
-    const unsubscribe = subscribeDesktopAgentActivity((active) => {
+    const unsubscribe = agentActivity.subscribe((active) => {
       events.push(active);
     });
 
-    incrementDesktopAgentActive();
-    decrementDesktopAgentActive();
+    agentActivity.increment();
+    agentActivity.decrement();
     unsubscribe();
 
     assert.deepEqual(events, [true, false]);
@@ -48,13 +43,13 @@ describe("agent-activity refcount", () => {
 
   it("decrement 幂等时不重复通知 false", () => {
     const events: boolean[] = [];
-    const unsubscribe = subscribeDesktopAgentActivity((active) => {
+    const unsubscribe = agentActivity.subscribe((active) => {
       events.push(active);
     });
 
-    incrementDesktopAgentActive();
-    decrementDesktopAgentActive();
-    decrementDesktopAgentActive();
+    agentActivity.increment();
+    agentActivity.decrement();
+    agentActivity.decrement();
     unsubscribe();
 
     assert.deepEqual(events, [true, false]);

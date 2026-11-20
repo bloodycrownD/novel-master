@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { truncateText } from "@shared/logic/common";
+import { Text } from "@shared/logic/common";
 export { AgentEditorView } from "./AgentEditorView";
 
 export { ModelSamplingView } from "./ModelSamplingView";
@@ -16,9 +16,12 @@ import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { showToast } from "@/components/ui/show-toast";
 import { toastSettingsError } from "@/utils/settings-feedback";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
+// 取消终态判定与调用方同源（invoke-registry）：IPC_ABORTED 不弹错误 toast。
+import { isIpcAborted } from "@/ipc/client";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import { useBatchSelection } from "@/hooks/useBatchSelection";
 import { useNovelMaster } from "@/providers/NovelMasterProvider";
+import { settingsTranslator } from "@/i18n/settings";
 import {
   ipcAgentRegistryCreateBlank,
   ipcAgentRegistryDelete,
@@ -50,6 +53,7 @@ import {
   ipcProvidersEdit,
   ipcProvidersGet,
   ipcProvidersList,
+  ipcRunAbort,
   ipcSmartSortRuleCreate,
   ipcSmartSortRuleDelete,
   ipcSmartSortRuleDeleteBatch,
@@ -64,9 +68,8 @@ import {
   ipcSmartSortRuleYamlExport,
   ipcSmartSortRuleYamlImport,
 } from "@/ipc/client";
-import { formatPatternInput } from "@shared/logic/smart-sort";
-import { parsePatternInput } from "@shared/logic/smart-sort";
-import { splitSmartSortHighlightSegments as splitHighlightSegments } from "@shared/logic/smart-sort";
+import { PatternInput } from "@shared/logic/smart-sort";
+import { SmartSortHighlight } from "@shared/logic/smart-sort";
 import { agentModeMatchesTab } from "@shared/config-forms/agent";
 import type { AgentSettingsTab } from "@shared/config-forms/agent";
 import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
@@ -96,6 +99,8 @@ import type {
 } from "@shared/ipc-types";
 
 type Nav = SettingsNavHandle;
+
+type LongTaskName = "export" | "import" | "pull" | "push" | "maintenance";
 
 type CloudSyncStatusState = {
   configured: boolean;
@@ -158,6 +163,11 @@ export function DataManagementView() {
   const [confirmPushOverwrite, setConfirmPushOverwrite] = useState(false);
   const [dbStats, setDbStats] = useState<DbStatsResult | null>(null);
   const [confirmMaintenance, setConfirmMaintenance] = useState(false);
+  // 长任务取消态：activeLongTask 标记当前流程，activeRunId 是 renderer 生成并随
+  // IPC 下发的 runId；cancelRequested 只用于禁用重复点击，不改变流程终态。
+  const [activeLongTask, setActiveLongTask] = useState<LongTaskName | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
 
   // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reloadStatus = useCallback(async () => {
@@ -239,6 +249,38 @@ export function DataManagementView() {
     deviceLabel: deviceLabel.trim() || undefined,
   });
 
+  // nm-style: keep-local — 四个长任务共用同一取消态机，内联到各流程会重复三份状态写入
+  const beginLongTask = (task: LongTaskName, runId: string) => {
+    setActiveLongTask(task);
+    setActiveRunId(runId);
+    setCancelRequested(false);
+  };
+  const endLongTask = () => {
+    setActiveLongTask(null);
+    setActiveRunId(null);
+    setCancelRequested(false);
+  };
+  // nm-style: keep-local — 取消目标映射含 maintenance 的显式 no-op 分支，内联进 JSX 会漏掉守卫
+  const cancelLongTask = async () => {
+    if (activeLongTask == null || activeLongTask === "maintenance" || cancelRequested) {
+      return;
+    }
+    setCancelRequested(true);
+    // backup 的 key 是 `backup:<runId>`；云同步的 key 在 main 侧固定 `sync:local`
+    // （pull/push 全局互斥，S3 配置无 provider 概念），因此取消 id 用 "local"。
+    const syncTask = activeLongTask === "pull" || activeLongTask === "push";
+    const target = syncTask ? { kind: "sync" as const, id: "local" } : { kind: "backup" as const, id: activeRunId ?? "" };
+    try {
+      await ipcRunAbort(target);
+    } catch {
+      // IPC bridge 不可用时保持既有流程终态：取消不改变业务成功/失败语义。
+    } finally {
+      // 导出对话框期间 key 尚未登记，首次取消会是 main 侧静默 no-op；放开禁用
+      // 让用户可在对话框 resolve 后再次取消真正的拷贝段。
+      setCancelRequested(false);
+    }
+  };
+
   // nm-style: keep-local — 保存流程含状态机（busy/回读双接口），内联会拆散错误分支
   const saveConfig = async () => {
     setBusy(true);
@@ -298,6 +340,8 @@ export function DataManagementView() {
 
   // nm-style: keep-local — 拉取含分支状态回读与 retry，内联进 JSX 会净增 >12 行
   const runPull = async () => {
+    const runId = crypto.randomUUID();
+    beginLongTask("pull", runId);
     setConfirmPull(false);
     setBusy(true);
     try {
@@ -306,60 +350,70 @@ export function DataManagementView() {
         retry({ skipRebootstrap: true });
         toastSettingsSuccess(`已拉取云端数据（rev ${res.data.rev}）`);
         await reloadStatus();
-      } else if (res.error.code === "ALREADY_UP_TO_DATE") {
+      } else if (res.error.code === "CLOUD_SYNC_ALREADY_UP_TO_DATE") {
         showToast(res.error.message);
         await reloadStatus();
-      } else {
+      } else if (!isIpcAborted(res)) {
+        // 取消是用户主动行为：IPC_ABORTED 静默收尾，不弹错误 toast（spec Step 14）。
         toastSettingsError(res.error.message);
         await reloadStatus();
       }
     } finally {
       setBusy(false);
+      endLongTask();
     }
   };
 
   const runPush = async (forceOverwriteRemote = false) => {
+    const runId = crypto.randomUUID();
+    beginLongTask("push", runId);
     setConfirmPushOverwrite(false);
     setBusy(true);
     try {
-      const opts = forceOverwriteRemote ? { forceOverwriteRemote } : undefined;
-      const res = await ipcCloudSyncPush(opts);
+      const res = await ipcCloudSyncPush({ runId, ...(forceOverwriteRemote ? { forceOverwriteRemote } : {}) });
       if (res.ok) {
         toastSettingsSuccess(`已推送到云端（rev ${res.data.rev}）`);
         await reloadStatus();
-      } else if (res.error.code === "NEED_PULL_FIRST") {
+      } else if (res.error.code === "CLOUD_SYNC_NEED_PULL_FIRST") {
         setConfirmPushOverwrite(true);
       } else {
-        toastSettingsError(res.error.message);
+        // 取消是用户主动行为：IPC_ABORTED 静默收尾，不弹错误 toast（spec Step 14）。
+        if (!isIpcAborted(res)) toastSettingsError(res.error.message);
         await reloadStatus();
       }
     } finally {
       setBusy(false);
+      endLongTask();
     }
   };
 
   // nm-style: keep-local — 导出流程含 busy 状态与取消分支，内联进 JSX 会净增 >12 行
   const runExport = async () => {
+    const runId = crypto.randomUUID();
+    beginLongTask("export", runId);
     setBusy(true);
     try {
-      const res = await ipcBackupExport();
+      const res = await ipcBackupExport({ runId });
       if (res.ok) {
         const message = res.data === "saved" ? "已导出数据库" : "已取消";
         toastSettingsSuccess(message);
-      } else {
+      } else if (!isIpcAborted(res)) {
         toastSettingsError(res.error.message);
       }
     } finally {
       setBusy(false);
+      endLongTask();
     }
   };
 
   // nm-style: keep-local — 导入流程含确认态、retry 与双分支提示，内联进 JSX 会净增 >12 行
   const runImport = async () => {
+    const runId = crypto.randomUUID();
+    beginLongTask("import", runId);
     setConfirmImport(false);
     setBusy(true);
     try {
-      const res = await ipcBackupImport();
+      const res = await ipcBackupImport({ runId });
       if (res.ok) {
         if (res.data === "imported") {
           retry({ skipRebootstrap: true });
@@ -367,33 +421,37 @@ export function DataManagementView() {
         } else {
           toastSettingsSuccess("已取消");
         }
-      } else {
+      } else if (!isIpcAborted(res)) {
         toastSettingsError(res.error.message);
       }
     } finally {
       setBusy(false);
+      endLongTask();
     }
   };
 
   // nm-style: keep-local — 清理流程含 busy/回读与长文案拼接，内联进 JSX 会净增 >12 行
   const runMaintenance = async () => {
+    const runId = crypto.randomUUID();
+    beginLongTask("maintenance", runId);
     setConfirmMaintenance(false);
     // better-sqlite3 同步 VACUUM 会冻住 main 事件循环，期间轮询与事件
     // 推送全部挂起——busy 必须在 invoke 发起前置位，不能依赖 main 推送。
     setBusy(true);
     try {
-      const res = await ipcDbMaintenance();
+      const res = await ipcDbMaintenance({ runId });
       if (res.ok) {
         const before = formatStorageBytes(res.data.beforeBytes);
         const after = formatStorageBytes(res.data.afterBytes);
         const summary = `清理完成：库体积 ${before} → ${after}`;
         toastSettingsSuccess(summary);
         await reloadDbStats();
-      } else {
+      } else if (!isIpcAborted(res)) {
         toastSettingsError(res.error.message);
       }
     } finally {
       setBusy(false);
+      endLongTask();
     }
   };
 
@@ -541,6 +599,16 @@ export function DataManagementView() {
                   >
                     从云端拉取
                   </Button>
+                  {activeLongTask === "pull" ? (
+                    <Button
+                      variant="secondary"
+                      className="settings-long-task-cancel"
+                      disabled={cancelRequested}
+                      onClick={() => void cancelLongTask()}
+                    >
+                      {settingsTranslator({ key: "settings.long_task.cancel" })}
+                    </Button>
+                  ) : null}
                   <Button
                     variant="primary"
                     disabled={controlsDisabled || !status?.configured}
@@ -548,6 +616,16 @@ export function DataManagementView() {
                   >
                     推送到云端
                   </Button>
+                  {activeLongTask === "push" ? (
+                    <Button
+                      variant="secondary"
+                      className="settings-long-task-cancel"
+                      disabled={cancelRequested}
+                      onClick={() => void cancelLongTask()}
+                    >
+                      {settingsTranslator({ key: "settings.long_task.cancel" })}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -559,26 +637,50 @@ export function DataManagementView() {
         title="导出"
         desc="将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。"
         action={
-          <Button
-            variant="primary"
-            disabled={controlsDisabled}
-            onClick={() => void runExport()}
-          >
-            导出数据库
-          </Button>
+          <div className="settings-form-actions settings-form-actions--solo">
+            <Button
+              variant="primary"
+              disabled={controlsDisabled}
+              onClick={() => void runExport()}
+            >
+              导出数据库
+            </Button>
+            {activeLongTask === "export" ? (
+              <Button
+                variant="secondary"
+                className="settings-long-task-cancel"
+                disabled={cancelRequested}
+                onClick={() => void cancelLongTask()}
+              >
+                {settingsTranslator({ key: "settings.long_task.cancel" })}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <SettingsActionSection
         title="导入"
         desc="用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。"
         action={
-          <Button
-            variant="primary"
-            disabled={controlsDisabled}
-            onClick={() => setConfirmImport(true)}
-          >
-            导入数据库
-          </Button>
+          <div className="settings-form-actions settings-form-actions--solo">
+            <Button
+              variant="primary"
+              disabled={controlsDisabled}
+              onClick={() => setConfirmImport(true)}
+            >
+              导入数据库
+            </Button>
+            {activeLongTask === "import" ? (
+              <Button
+                variant="secondary"
+                className="settings-long-task-cancel"
+                disabled={cancelRequested}
+                onClick={() => void cancelLongTask()}
+              >
+                {settingsTranslator({ key: "settings.long_task.cancel" })}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <SettingsActionSection
@@ -589,13 +691,29 @@ export function DataManagementView() {
           dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"
         }。`}
         action={
-          <Button
-            variant="primary"
-            disabled={controlsDisabled}
-            onClick={() => setConfirmMaintenance(true)}
-          >
-            清理
-          </Button>
+          <div className="settings-form-actions settings-form-actions--solo">
+            <Button
+              variant="primary"
+              disabled={controlsDisabled}
+              onClick={() => setConfirmMaintenance(true)}
+            >
+              清理
+            </Button>
+            {activeLongTask === "maintenance" ? (
+              <>
+                <Button
+                  variant="secondary"
+                  className="settings-long-task-cancel"
+                  disabled
+                >
+                  {settingsTranslator({ key: "settings.long_task.cancel" })}
+                </Button>
+                <span className="settings-long-task-hint">
+                  {settingsTranslator({ key: "settings.long_task.maintenance_uninterruptible" })}
+                </span>
+              </>
+            ) : null}
+          </div>
         }
       />
 
@@ -898,7 +1016,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                     className="settings-list-item__meta-error"
                     title={row.invalid.message}
                   >
-                    {truncateText(invalidReason(row.invalid.code), 80)}
+                    {Text.truncate(invalidReason(row.invalid.code), 80)}
                   </span>
                 </span>
               ) : row.mode == null || row.mode === "all" ? (
@@ -2131,14 +2249,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   );
 }
 
-/** 正则输入支持 /pattern/flags 字面量风格（core parsePatternInput 单源，
+/** 正则输入支持 /pattern/flags 字面量风格（core PatternInput.parse 单源，
  * 与 mobile 同源）：输入框绑定原始文本 patternInput，解析结果同步进
  * draft.pattern/flags，测试/保存均消费解析值；无独立 flags UI。 */
 type SmartSortRuleDraft = {
   name: string;
   /** 正则输入框原始文本（可能是 /pattern/flags 字面量风格）。 */
   patternInput: string;
-  /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
+  /** PatternInput.parse(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
   /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵最前 / fixed_max 沉底。 */
@@ -2194,7 +2312,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             name: rule.name,
             // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则
             // /pattern/），再解析回同一 pattern/flags（core 单测保障 round-trip）。
-            patternInput: formatPatternInput(rule.pattern, rule.flags),
+            patternInput: PatternInput.format(rule.pattern, rule.flags),
             pattern: rule.pattern,
             flags: rule.flags,
             captureKind: rule.captureKind,
@@ -2249,7 +2367,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
     // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前
     // 捕获数字选择传入（fixed 档 tuple 显哨兵文案，D13）。
-    const parsed = parsePatternInput(draft.patternInput.trim());
+    const parsed = PatternInput.parse(draft.patternInput.trim());
     const payload = {
       pattern: parsed.pattern,
       flags: parsed.flags,
@@ -2279,7 +2397,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
     const description = draft.description.trim() || null;
     // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
-    const parsed = parsePatternInput(draft.patternInput.trim());
+    const parsed = PatternInput.parse(draft.patternInput.trim());
     const payload = {
       name,
       pattern: parsed.pattern,
@@ -2311,7 +2429,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
    *  （匹配段 --primary 变色）+ 底部匹配计数；错误/非法正则照旧文案。 */
   const matchCount = matchResult?.ok ? matchResult.matches.length : 0;
   const matches = matchResult?.ok ? matchResult.matches : null;
-  const segments = matches && splitHighlightSegments(testText, matches);
+  const segments = matches && SmartSortHighlight.splitSegments(testText, matches);
 
   const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
 
@@ -2349,7 +2467,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
                 setDraft({
                   ...draft,
                   patternInput: e.target.value,
-                  ...parsePatternInput(e.target.value),
+                  ...PatternInput.parse(e.target.value),
                 });
                 invalidateMatchResult();
               }}

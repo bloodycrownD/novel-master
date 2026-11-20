@@ -4,7 +4,12 @@
  * @module infra/prompt-template/week-cn
  */
 
-/** Local Chinese weekday (e.g. 「星期一」). */
-export function formatWeekCn(date: Date): string {
-  return date.toLocaleDateString("zh-CN", { weekday: "long" });
-}
+/**
+ * 中文星期标签。
+ */
+export const WeekCn = {
+  /** Local Chinese weekday (e.g. 「星期一」). */
+  format(date: Date): string {
+    return date.toLocaleDateString("zh-CN", { weekday: "long" });
+  },
+} as const;

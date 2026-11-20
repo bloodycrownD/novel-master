@@ -1,5 +1,5 @@
 /**
- * Confirm + run sessions.pullTemplate（§14 M6；project 域 pull 已拆除，仅支持 session 域）。
+ * Confirm + run sessions.pullSessionTemplate（§14 M6；project 域 pull 已拆除，仅支持 session 域）。
  */
 import React, {useState} from 'react';
 import {
@@ -13,7 +13,7 @@ import {SyncPullIcon} from '@/components/icons/TabIcons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 
 type Props = {
   scope: {kind: 'session'; sessionId: string};
@@ -42,11 +42,11 @@ export function TemplatePullButton({
   const runPull = async () => {
     setPulling(true);
     try {
-      await runtime.sessions.pullTemplate(scope.sessionId);
+      await runtime.sessions.pullSessionTemplate(scope.sessionId);
       onPulled?.();
       showToast('同步完成');
     } catch (error) {
-      showToast(toastMessage('同步失败', error));
+      showToast(ToastMessage.toast('同步失败', error));
     } finally {
       setPulling(false);
     }

@@ -4,11 +4,14 @@
  * @module register-for-tests
  */
 
-import { clearTokenizerDrivers } from "@novel-master/core/nmtp";
-import { registerTokenizerNodeDriver } from "./register.js";
+import { TokenizerRegistry } from "@novel-master/core/nmtp";
+import { TokenizerNodeRegister } from "./register.js";
 
+// nm-style 注记：文件名 register-for-tests 太泛，按成员主体起名（TokenizerNodeRegisterForTests）。
 /** Registers the Node driver for tests; clears any prior drivers first. */
-export function registerTokenizerNodeDriverForTests(assetsRoot?: string): void {
-  clearTokenizerDrivers();
-  registerTokenizerNodeDriver(assetsRoot != null ? { assetsRoot } : undefined);
+export namespace TokenizerNodeRegisterForTests {
+  export function registerForTests(assetsRoot?: string): void {
+    TokenizerRegistry.clear();
+    TokenizerNodeRegister.register(assetsRoot != null ? { assetsRoot } : undefined);
+  }
 }

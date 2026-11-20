@@ -185,7 +185,7 @@ CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-
 
 结构在 `ui/*.tsx`；`runtime` 只保留同名门面（如 `renderRows` / `renderContextMenu` / `setDocument`），**不** import `ui/**`（例外：`shared/ui/TrustedHtml`）、**不**在 runtime 内 `preact.render`。
 
-**唯一装配点**是 `main.ts`：注册 Preact 实现后，runtime 门面只 notify / 调已注册函数。例：CT `registerRenderRows` + `registerRenderContextMenu`；RD `registerSetDocumentView`。
+**唯一装配点**是 `main.ts`：注册 Preact 实现后，runtime 门面只 notify / 调已注册函数。例：CT `rowsViewSlot.register` + `contextMenuViewSlot.register`；RD `documentViewSlot.register`。
 
 **壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking「生成中」条亦归 Preact（`StreamingMessageRow` → `ToolInvokingBar`，文案经 `label` prop 传入）；runtime 只改 state 并 `renderRows`，禁止 bubble 内 createElement 插条。
 

@@ -10,6 +10,7 @@
  * spec §7.3 保留清单显式登记，因此不进下方 `CHANGED_FILES`。
  */
 import {readFileSync} from 'node:fs';
+import {ChatConversationBridge} from '@/components/chat/ChatConversationBridge';
 import {join} from 'node:path';
 
 /** 本轮改动文件（相对 apps/mobile）；缺一个都会让扫描面缩水。 */

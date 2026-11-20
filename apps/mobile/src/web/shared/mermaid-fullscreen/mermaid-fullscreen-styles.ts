@@ -5,6 +5,7 @@
  * （两管线 bridge 的 applyTheme 都写这些变量，深色自动协调）。
  * z-index 对齐 menu-backdrop（9998）/ context-menu（9999）量级。
  */
+// nm-style: keep-public — 构建脚本消费：apps/mobile/scripts/build-webview.mjs:642 读取注入 app.css
 export const MERMAID_FULLSCREEN_CSS = `
   /* 全屏态禁滚动（照 body.menu-open 先例；#scroller/#doc 才是滚动容器） */
   body.mermaid-viewer-open { overflow: hidden; }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { excerptReleaseNotes } from "@novel-master/core/common";
+import { Release } from "@novel-master/core/common";
 
 const WORKFLOW_BODY = `# Novel Master v1.0.3
 
@@ -45,14 +45,14 @@ const LEGACY_BODY = `# Novel Master v1.0.3
 
 describe("excerptReleaseNotes", () => {
   it("prefers 更新说明 over platform sections", () => {
-    const text = excerptReleaseNotes(WORKFLOW_BODY, "desktop");
+    const text = Release.excerptNotes(WORKFLOW_BODY, "desktop");
     assert.match(text, /保留已生成内容/);
     assert.doesNotMatch(text, /universal\.apk/);
     assert.doesNotMatch(text, /未签名/);
   });
 
   it("prefers 更新说明 for mobile focus too", () => {
-    const text = excerptReleaseNotes(WORKFLOW_BODY, "mobile");
+    const text = Release.excerptNotes(WORKFLOW_BODY, "mobile");
     assert.match(text, /保留已生成内容/);
     assert.doesNotMatch(text, /windows-setup/);
   });
@@ -67,27 +67,27 @@ describe("excerptReleaseNotes", () => {
 | Windows | setup.exe |
 
 **安装提示：** 安装包未签名。`;
-    const text = excerptReleaseNotes(body, "desktop");
+    const text = Release.excerptNotes(body, "desktop");
     assert.ok(!text.includes("|"));
     assert.match(text, /未签名/);
   });
 
   it("falls back to legacy Desktop section", () => {
-    const text = excerptReleaseNotes(LEGACY_BODY, "desktop");
+    const text = Release.excerptNotes(LEGACY_BODY, "desktop");
     assert.ok(!text.includes("|"));
     assert.match(text, /unsigned/i);
     assert.doesNotMatch(text, /universal\.apk/);
   });
 
   it("falls back to legacy Android section for mobile focus", () => {
-    const text = excerptReleaseNotes(LEGACY_BODY, "mobile");
+    const text = Release.excerptNotes(LEGACY_BODY, "mobile");
     assert.ok(!text.includes("|"));
     assert.match(text, /universal/i);
     assert.doesNotMatch(text, /windows-setup/);
   });
 
   it("returns fallback when body is empty", () => {
-    const text = excerptReleaseNotes("", "desktop");
+    const text = Release.excerptNotes("", "desktop");
     assert.match(text, /GitHub Releases/);
   });
 });

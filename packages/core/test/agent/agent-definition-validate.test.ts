@@ -1,21 +1,30 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode  } from "@novel-master/core";
+import type { ZodType } from "zod";
 
-import { agentDefinitionSchema, isAppError, validateAgentDefinition } from "@novel-master/core/agent";
-import type { AgentDefinition, ErrorKey, ValidateAgentDefinitionOptions } from "@novel-master/core/agent";
-import { tCore } from "../helpers/core-i18n.js";
+import {  AgentDefinitionValidator, agentDefinitionSchema  } from "@novel-master/core/agent";
+import type { AgentDefinition, ValidateAgentDefinitionOptions } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import type { ErrorKey } from "@novel-master/core/errors";
+import {  tCore  } from "../helpers/core-i18n.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(SerializationDecode.decode(raw, schema));
+}
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 const TEST_SAVED_MODEL_GHOST = "22222222-2222-4222-8222-222222222222";
 
 async function expectInvalid(def: AgentDefinition, key: ErrorKey, messageReOrKey: RegExp | string, options?: ValidateAgentDefinitionOptions): Promise<void> {
-  const result = await validateAgentDefinition(def, options);
+  const result = await AgentDefinitionValidator.validate(def, options);
   assert.equal(result.ok, false);
   if (result.ok) {
     return;
   }
-  assert.ok(isAppError(result.error, key));
+  assert.ok(AppErrorOps.is(result.error, key));
   if (typeof messageReOrKey === "string") {
     assert.equal(result.error.messageKey, messageReOrKey);
   } else {
@@ -23,7 +32,7 @@ async function expectInvalid(def: AgentDefinition, key: ErrorKey, messageReOrKey
   }
 }
 
-describe("validateAgentDefinition", () => {
+describe("AgentDefinitionValidator.validate", () => {
   it("D2: assertSavedModel runs for valid model pin", async () => {
     const def = decode(
       {
@@ -35,7 +44,7 @@ describe("validateAgentDefinition", () => {
       agentDefinitionSchema
     );
     let seen = "";
-    const result = await validateAgentDefinition(def, {
+    const result = await AgentDefinitionValidator.validate(def, {
       assertSavedModel: async (savedModelId) => {
         seen = savedModelId;
       },
@@ -71,7 +80,7 @@ describe("validateAgentDefinition", () => {
       agentDefinitionSchema
     );
     let called = false;
-    const result = await validateAgentDefinition(def, {
+    const result = await AgentDefinitionValidator.validate(def, {
       assertSavedModel: async () => {
         called = true;
       },
@@ -81,7 +90,7 @@ describe("validateAgentDefinition", () => {
   });
 });
 
-describe("validateAgentDefinition 写入门禁（毒行拦截）", () => {
+describe("AgentDefinitionValidator.validate 写入门禁（毒行拦截）", () => {
   /** 直接构造宽松收包形态（不经过 schema decode），模拟 agent 工具收到的 LLM 原始 JSON。 */
   function rawDef(extra: Record<string, unknown>): AgentDefinition {
     return {
@@ -132,7 +141,7 @@ describe("validateAgentDefinition 写入门禁（毒行拦截）", () => {
 
   it("未知顶层键（LLM 自创字段）：toWire 投影丢弃，不毒化、不拒绝", async () => {
     // 不报错即通过：definitionToDocument 只投影已知字段，自创键落盘前被洗掉。
-    const result = await validateAgentDefinition(rawDef({ name: "x", persona: "y" }));
+    const result = await AgentDefinitionValidator.validate(rawDef({ name: "x", persona: "y" }));
     assert.equal(result.ok, true);
   });
 
@@ -168,7 +177,7 @@ describe("validateAgentDefinition 写入门禁（毒行拦截）", () => {
         ],
       },
     });
-    const result = await validateAgentDefinition(def);
+    const result = await AgentDefinitionValidator.validate(def);
     assert.equal(result.ok, true);
   });
 });

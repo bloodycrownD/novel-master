@@ -14,8 +14,8 @@
  */
 import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
-import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
-import {createSnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
+import {WorkplaceBlockService} from '@/services/workplace-block.service';
+import {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabMessageActions} from './useChatTabMessageActions';
 
@@ -25,15 +25,14 @@ export function useChatTabController() {
   // 快照完成信号盒（rollback-large-jank Step 5）：webview 组件侧 notify
   // （末片 post + deferred 排空后），回滚链 consumeNext 错峰 token 重算。
   // useRef 持有——跨回滚轮次复用，每次 consumeNext 重置等待态。
-  const snapshotSignalRef = useRef(createSnapshotCompleteSignal());
+  const snapshotSignalRef = useRef(SnapshotCompleteSignal.create());
   const notifySnapshotComplete = useCallback(() => {
     snapshotSignalRef.current.notify();
   }, []);
   const snapshotCompleteSignal = snapshotSignalRef.current;
 
   // 当前会话 run 是否活跃（单元投影派生；水合未完成/无单元为静止态）。
-  const sessionRunActive =
-    ctx.unitView?.status === 'starting' || ctx.unitView?.status === 'running';
+  const sessionRunActive = ctx.unitView?.status === 'starting' || ctx.unitView?.status === 'running';
 
   // 流式显示清理的单元等效：请求单元向全句柄广播 reset-stream（消息面
   // partial 随投影清空——rollback/fork 后消息面以落库行为准）。
@@ -46,13 +45,7 @@ export function useChatTabController() {
   // 消息操作后的 force 回源刷新（Step 7 收口：直连 manager，消息面单一
   // 来源；force 语义与原 hook 的 reloadMessages(true) 等价）。
   const reloadMessages = useCallback(
-    (force = true) =>
-      ctx.sessionId == null
-        ? Promise.resolve(null)
-        : ctx.runtime.sessionStreamUnitManager.loadSessionTailMessages(
-            ctx.sessionId,
-            {force, projectId: ctx.projectId},
-          ),
+    (force = true) => (ctx.sessionId == null ? Promise.resolve(null) : ctx.runtime.sessionStreamUnitManager.loadSessionTailMessages(ctx.sessionId, {force, projectId: ctx.projectId})),
     [ctx.sessionId, ctx.projectId, ctx.runtime],
   );
 
@@ -82,7 +75,7 @@ export function useChatTabController() {
     }
     void (async () => {
       try {
-        await clearSessionWorkplaceKkv(ctx.runtime, {
+        await WorkplaceBlockService.clearSessionKkv(ctx.runtime, {
           projectId: ctx.projectId!,
           sessionId: ctx.sessionId!,
         });
@@ -120,18 +113,15 @@ export function useChatTabController() {
     [ctx, messageActions],
   );
 
-  const confirmBatchDeleteSessions = useCallback(
-    (count: number, onConfirm: () => void) => {
-      if (count === 0) {
-        return;
-      }
-      Alert.alert('确认删除', `确定删除选中的 ${count} 个会话？`, [
-        {text: '取消', style: 'cancel'},
-        {text: '删除', style: 'destructive', onPress: onConfirm},
-      ]);
-    },
-    [],
-  );
+  const confirmBatchDeleteSessions = useCallback((count: number, onConfirm: () => void) => {
+    if (count === 0) {
+      return;
+    }
+    Alert.alert('确认删除', `确定删除选中的 ${count} 个会话？`, [
+      {text: '取消', style: 'cancel'},
+      {text: '删除', style: 'destructive', onPress: onConfirm},
+    ]);
+  }, []);
 
   return {
     ...messageActions,
@@ -144,5 +134,3 @@ export function useChatTabController() {
     notifySnapshotComplete,
   };
 }
-
-export type ChatTabController = ReturnType<typeof useChatTabController>;

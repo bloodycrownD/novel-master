@@ -1,24 +1,18 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-  type BuiltinToolContext,
-} from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
-import {
-  type LlmChatResult,
-  type ModelRequestOptions,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
-import { SimpleEventBus } from "@novel-master/core/events";
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { type VfsService } from "@novel-master/core/vfs";
-import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+import {  describe, it, mock  } from "node:test";
+import {  Result  } from "../../src/errors/either.js";
+import {  AgentServiceFactory, type AgentDefinition, type  CreateAgentRunnerDeps, type  BuiltinToolContext  } from "@novel-master/core/agent";
+import {  InMemoryAgentSession  } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageBodyText  } from "@novel-master/core/prompt";
+import {  type ModelRequestOptions, type  ModelRequestService  } from "@novel-master/core/provider";
+import {  type LlmChatResult  } from "@novel-master/core/llm-protocol";
+import {  SimpleEventBus  } from "@novel-master/core/events";
+import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
+import {  createMemorySessionKkv  } from "../helpers/prompt-layout-test-helpers.js";
+import {  type VfsService  } from "@novel-master/core/vfs";
+import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 import type { WorkplaceService } from "@novel-master/core/workplace";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -69,7 +63,7 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
 describe("AgentRunner macro turn snapshot", () => {
   it("T-SNAP2: renderFileTree 只调一次且 dynamic 块仅 step0 注入（展开值取自回合快照）", async () => {
     const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "snap-agent",
@@ -89,7 +83,7 @@ describe("AgentRunner macro turn snapshot", () => {
 
     // 每次调用返回不同内容：若某 step 走了实时渲染，跨 step 文本必然不一致。
     let renderCount = 0;
-    const renderFileTree = mock.fn(async () => `/tree-call-${++renderCount}`);
+    const renderFileTree = mock.fn(async () => Result.ok(`/tree-call-${++renderCount}`));
     const workplace: WorkplaceService = {
       scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
       renderFileTree,
@@ -107,7 +101,7 @@ describe("AgentRunner macro turn snapshot", () => {
       request: mock.fn(async (_modelId, _content, options) => {
         histories.push(options);
         if (histories.length < 2) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -118,19 +112,19 @@ describe("AgentRunner macro turn snapshot", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         }
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
     const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    BuiltinTools.register(registry);
+    const runner = AgentServiceFactory.createRunner({
       savedModels: noopSavedModelRepository(),
       sessionKkv: createMemorySessionKkv(),
       eventBus: new SimpleEventBus(),
@@ -141,14 +135,14 @@ describe("AgentRunner macro turn snapshot", () => {
       toolCtx: mockToolCtx(mockVfs()),
     } as CreateAgentRunnerDeps);
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 3,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(histories.length, 2);
     // 快照只取一次：customAttach/dynamic/token 计数各链路共享，不重复渲染。
@@ -160,7 +154,7 @@ describe("AgentRunner macro turn snapshot", () => {
       const hit = (opts.history ?? []).find((m) => m.id === "prompt:ctx");
       if (index === 0) {
         assert.notEqual(hit, undefined, "step0 应注入 dynamic 合成消息");
-        dynamicBodies.push(messageBodyTextFromBlocks(hit!.content.blocks));
+        dynamicBodies.push(MessageBodyText.fromBlocks(hit!.content.blocks));
       } else {
         assert.equal(hit, undefined, "step≥1 不应重复注入 dynamic 块");
       }
@@ -171,7 +165,7 @@ describe("AgentRunner macro turn snapshot", () => {
 
   it("T-SNAP3: 文本不含 $filetree 时不预取（renderFileTree 零调用）", async () => {
     const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    await session.append("user", TextBlocks.of("go"));
 
     const definition: AgentDefinition = {
       name: "snap-agent",
@@ -190,7 +184,7 @@ describe("AgentRunner macro turn snapshot", () => {
       },
     };
 
-    const renderFileTree = mock.fn(async () => "/tree");
+    const renderFileTree = mock.fn(async () => Result.ok("/tree"));
     const workplace: WorkplaceService = {
       scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
       renderFileTree,
@@ -207,15 +201,15 @@ describe("AgentRunner macro turn snapshot", () => {
     const model: ModelRequestService = {
       request: mock.fn(async (_modelId, _content, options) => {
         captured.options = options;
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       savedModels: noopSavedModelRepository(),
       sessionKkv: createMemorySessionKkv(),
       eventBus: new SimpleEventBus(),
@@ -226,14 +220,14 @@ describe("AgentRunner macro turn snapshot", () => {
       toolCtx: mockToolCtx(mockVfs()),
     } as CreateAgentRunnerDeps);
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     // 不使用 $filetree 的 agent 不应白付一次全量 metadata 渲染。
     assert.equal(renderFileTree.mock.callCount(), 0);
@@ -242,6 +236,6 @@ describe("AgentRunner macro turn snapshot", () => {
       (m) => m.role === "user" && m.id !== "prompt:ctx",
     );
     assert.notEqual(userInput, undefined);
-    assert.match(messageBodyTextFromBlocks(userInput!.content.blocks), /<extra-info>/);
+    assert.match(MessageBodyText.fromBlocks(userInput!.content.blocks), /<extra-info>/);
   });
 });

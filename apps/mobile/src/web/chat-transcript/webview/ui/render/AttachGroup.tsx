@@ -2,13 +2,10 @@
  * 消息附件组：对齐工具组折叠交互。
  */
 import type {AttachmentChip} from '../../runtime/state/state';
-import {
-  attachmentChipLabel,
-  attachmentSourceLabel,
-} from '../../runtime/render/row-logic';
+import {RowLogic} from '../../runtime/render/row-logic';
 import {CollapsibleSection} from './CollapsibleSection';
 
-export type AttachGroupProps = {
+type AttachGroupProps = {
   attachments: AttachmentChip[];
   groupKey: string;
   expanded: boolean;
@@ -33,11 +30,18 @@ export function AttachGroup({
       dividedClass={showDividerAbove ? ' attach-group-divided-above' : ''}
     >
       {attachments.map((a, i) => {
-        const src = attachmentSourceLabel(a);
+        let src: string;
+        if (a.source === 'workplace') {
+          src = '工作区';
+        } else if (a.source === 'user_ops') {
+          src = '';
+        } else {
+          src = a.type === 'dir' ? '目录' : '文件';
+        }
         return (
           <div key={i} className="tool-group-item tool-card attach-card">
             <div className="tool-header">
-              <span className="tool-name">{attachmentChipLabel(a)}</span>
+              <span className="tool-name">{RowLogic.attachmentChipLabel(a)}</span>
               {src ? <span className="tool-status success">{src}</span> : null}
             </div>
           </div>

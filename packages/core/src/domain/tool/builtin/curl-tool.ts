@@ -30,15 +30,17 @@
 
 import { z } from "zod";
 
-import { utf8ByteLength } from "@/common/encoding.js";
-import { toolFailed } from "@/errors/tool-errors.js";
+import { Encoding } from "@/common/encoding.js";
+import { Text } from "@/common/text.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
-import { sinkOversizedOutput, type OversizedSinkResult } from "./overflow-sink.js";
-import { createLogger } from "@/infra/log/logger.js";
+import { OverflowSink, type OversizedSinkResult } from "./overflow-sink.js";
+import { LogFactory } from "@/infra/log/logger.js";
 
-const log = createLogger("tool.curl");
+const log = LogFactory.create("tool.curl");
 
 /** 支持的 HTTP 方法（对齐 curl 常用子集，method 入参枚举来源）。 */
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
@@ -115,45 +117,10 @@ interface CurlToolOutput {
 const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", "urlencoded"];
 
 /**
- * 按字节预算返回正文前缀：TextEncoder 增量编码并累计字节数，
- * 找到预算内能容纳的最大字符切点后在该处截断。
- *
- * 不能按字符数切：含多字节字符时等量字符可膨胀到远超预算
- * （如中文 3 字节/字符）。代理对成对推进，避免切在半个字符上。
- */
-// nm-style: keep-local — 外层块扫描与块内码位扫描共享 `used` 游标，切点必须落在完整码位边界；内联到 run 会把这条推进不变量拆进 fetch 分支。
-function truncateToByteBudget(text: string, maxBytes: number): string {
-  const encoder = new TextEncoder();
-  const CHUNK = 8192;
-  let used = 0;
-  for (let i = 0; i < text.length; i += CHUNK) {
-    const chunk = text.slice(i, Math.min(i + CHUNK, text.length));
-    const chunkBytes = encoder.encode(chunk).byteLength;
-    if (used + chunkBytes <= maxBytes) {
-      used += chunkBytes;
-      continue;
-    }
-    // 该块超预算：块内逐码位（代理对成对）推进，找到恰好装满预算的切点。
-    for (let j = 0; j < chunk.length; ) {
-      const codePoint = chunk.codePointAt(j)!;
-      const charLength = codePoint > 0xffff ? 2 : 1;
-      const charBytes = encoder.encode(String.fromCodePoint(codePoint)).byteLength;
-      if (used + charBytes > maxBytes) {
-        return text.slice(0, i + j);
-      }
-      used += charBytes;
-      j += charLength;
-    }
-    return text.slice(0, i + chunk.length);
-  }
-  return text;
-}
-
-/**
  * 静态 `curl` 工具实例。
  *
  * description 是静态 lambda（不依赖 ctx 动态内容）；是否对 LLM 可见由
- * `resolveAgentToolRegistry` 的 tools.allow/deny 控制（curl 不在任何
+ * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制（curl 不在任何
  * 摘除分支内，主/子/孙 agent 全深度可用）。
  */
 /** url 入参 schema：协议白名单校验在工具实例处的 superRefine（issue 文案贴使用点）。 */
@@ -212,7 +179,7 @@ const CURL_INPUT_SCHEMA = z.object({
         });
         continue;
       }
-      if (utf8ByteLength(headerValue) > CURL_MAX_HEADER_VALUE_BYTES) {
+      if (Encoding.utf8ByteLength(headerValue) > CURL_MAX_HEADER_VALUE_BYTES) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `请求头 ${name} 的值超过 ${CURL_MAX_HEADER_VALUE_BYTES} 字节上限`,
@@ -221,7 +188,7 @@ const CURL_INPUT_SCHEMA = z.object({
     }
   }).optional(),
   body: CURL_BODY_SCHEMA.superRefine((value, ctx) => {
-    if (utf8ByteLength(value) > CURL_MAX_REQUEST_BODY_BYTES) {
+    if (Encoding.utf8ByteLength(value) > CURL_MAX_REQUEST_BODY_BYTES) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `请求体超过 ${CURL_MAX_REQUEST_BODY_BYTES} 字节上限`,
@@ -294,7 +261,8 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
     // 预取消早退（B-2）：进入时 signal 已 aborted 直接拒绝，不发请求。对已
     // aborted 的 signal 注册 listener 不会补发回调（WHATWG 语义），不走
     // ToolRunner 兜底的直调入口（测试 / 未来装配点）会白占网络资源直到 timeoutMs。
-    if (ctx.signal?.aborted) throw toolFailed("curl", new Error(`请求已取消：${normalizedUrl}`));
+    // 取消走返回值通道（七期）：沿 Result.err 返回，不再 throw。
+    if (ctx.signal?.aborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: "curl"}));
     // 超时须包住 fetch + 正文读取整体：响应头到达不结束计时，
     // `text()` 下载正文阶段同样受 abort 约束，慢滴流不会无限挂起回合。
     const controller = new AbortController();
@@ -305,12 +273,15 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       controller.abort(parentSignal?.reason);
     };
     parentSignal?.addEventListener("abort", onParentAbort, { once: true });
-    // fetch / text() 两阶段的错误统一映射：父级取消与超时分开报（两者都让
-    // controller.signal 为 aborted），其余错误原样透传——formatToolErrorForLlm
-    // 会解 cause 给模型可读文案。
-    const phaseError = (e: unknown): unknown => {
-      if (!controller.signal.aborted) return e;
-      return new Error(parentSignal?.aborted === true ? `请求已取消：${normalizedUrl}` : `Request timed out after ${timeoutMs}ms: ${normalizedUrl}`);
+    // fetch / text() 两阶段的错误统一映射：父级取消走 TOOL_CANCELLED（控制流
+    // 信号，工具结果块呈现为 cancelled、UI 不弹错误文案），超时保留 TOOL_FAILED
+    // 失败语义（两者都让 controller.signal 为 aborted，按父 signal 分流），其余
+    // 错误包 TOOL_FAILED 原样透传——ToolOutput.formatErrorForLlm 会解 cause 给模型可读文案。
+    // 七期起取消/失败都沿 Result.err 返回值传播，不再 throw。
+    const phaseError = (e: unknown): Result<never, AppError> => {
+      if (!controller.signal.aborted) return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: e, detail: `Tool failed: curl`}));
+      if (parentSignal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: "curl"}));
+      return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: new Error(`Request timed out after ${timeoutMs}ms: ${normalizedUrl}`), detail: `Tool failed: curl`}));
     };
     let response: Response;
     let text: string;
@@ -325,7 +296,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         };
         response = await doFetch(normalizedUrl, requestInit);
       } catch (e) {
-        throw toolFailed("curl", phaseError(e));
+        return phaseError(e);
       }
 
       const contentType = response.headers.get("content-type") ?? "";
@@ -336,7 +307,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       const declaredValue = Number(response.headers.get("content-length") ?? NaN);
       const declaredLength = Number.isFinite(declaredValue) && declaredValue >= 0 ? declaredValue : null;
       if (declaredLength != null && declaredLength > CURL_MAX_RESPONSE_BYTES) {
-        return {
+        return Result.ok({
           url: normalizedUrl,
           finalUrl,
           method,
@@ -345,7 +316,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           body: `[response too large, not downloaded]\n\nOutput truncated (original ${declaredLength} bytes).`,
           truncated: true,
           originalBytes: declaredLength,
-        };
+        });
       }
 
       // 非文本 Content-Type：contentType 响应头阶段即已知，无需下载正文——
@@ -355,7 +326,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       const textualSubtype = TEXTUAL_CONTENT_TYPE_HINTS.some((hint) => lowerContentType.includes(hint));
       if (!textualMain && !textualSubtype) {
         const binaryBytes = declaredLength;
-        return {
+        return Result.ok({
           url: normalizedUrl,
           finalUrl,
           method,
@@ -364,18 +335,18 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           body: binaryBytes != null ? `[binary content, ${binaryBytes} bytes, not shown]` : `[binary content, unknown size, not shown]`,
           truncated: false,
           originalBytes: binaryBytes ?? 0,
-        };
+        });
       }
 
       try {
         text = await response.text();
       } catch (e) {
         // 超时 / 取消 abort 后 text() 会 reject（undici 对 body 读取同样响应 signal），
-        // phaseError 给出与 fetch 阶段一致的文案。
-        throw toolFailed("curl", phaseError(e));
+        // phaseError 给出与 fetch 阶段一致的分派（取消 TOOL_CANCELLED / 超时 TOOL_FAILED）。
+        return phaseError(e);
       }
 
-      const originalBytes = utf8ByteLength(text);
+      const originalBytes = Encoding.utf8ByteLength(text);
 
       // 超 50KB 预算（与 read/grep 等四工具同口径）：截断前的全文落盘
       // 会话工作区 /tmp/，body 置空串占位（schema 必填不变，meta 全保留），
@@ -384,12 +355,12 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       if (originalBytes > TOOL_OUTPUT_MAX_BYTES) {
         let sink: OversizedSinkResult | undefined;
         try {
-          sink = await sinkOversizedOutput(ctx, { tool: "curl", content: text, contentType });
+          sink = await OverflowSink.sink(ctx, { tool: "curl", content: text, contentType });
         } catch (error) {
           log.debug("超预算落盘失败，降级字节截断", { error });
         }
         if (sink != null) {
-          return {
+          return Result.ok({
             url: normalizedUrl,
             finalUrl,
             method,
@@ -400,10 +371,12 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
             originalBytes,
             savedPath: sink.savedPath,
             message: sink.message,
-          };
+          });
         }
-        const kept = truncateToByteBudget(text, TOOL_OUTPUT_MAX_BYTES);
-        return {
+        // 与 read/grep 同口径：字节预算内最大的完整码位前缀（不切半个字符），
+        // 截断后缀由本工具的 Output truncated 文案自己拼。
+        const kept = Text.sliceUtf8Bytes(text, TOOL_OUTPUT_MAX_BYTES);
+        return Result.ok({
           url: normalizedUrl,
           finalUrl,
           method,
@@ -412,10 +385,10 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           body: `${kept}\n\nOutput truncated (original ${originalBytes} bytes).`,
           truncated: true,
           originalBytes,
-        };
+        });
       }
 
-      return {
+      return Result.ok({
         url: normalizedUrl,
         finalUrl,
         method,
@@ -424,7 +397,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         body: text,
         truncated: false,
         originalBytes,
-      };
+      });
     } finally {
       // 请求整体结束（成功、失败或提前 return）后清计时器，防悬挂。
       clearTimeout(timer);

@@ -1,50 +1,8 @@
 /**
- * VFS mutations for desktop file manager (ported from mobile).
+ * VFS mutations for desktop file manager.
+ *
+ * 基础动作（create / delete）的实现已下沉 core（`@novel-master/core/vfs` 的
+ * `VfsEntryOps`）；重命名就是 `VfsMove.move`。本模块保留既有 import 面，
+ * 避免 handler 侧多一条 main→main 依赖变更。
  */
-import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
-import { moveVfsPath, remapPathUnderDir } from "@novel-master/core/vfs";
-
-export async function createVfsFile(
-  vfs: VfsService,
-  path: string,
-  content = "",
-): Promise<void> {
-  await vfs.write(path, content);
-}
-
-export async function createVfsDirectory(
-  vfs: VfsService,
-  dirPath: string,
-): Promise<void> {
-  const normalized = dirPath.endsWith("/") ? dirPath.slice(0, -1) : dirPath;
-  await vfs.mkdir(normalized);
-}
-
-export async function deleteVfsEntry(
-  vfs: VfsService,
-  path: string,
-  options?: { recursive?: boolean },
-): Promise<void> {
-  await vfs.delete(path, { recursive: options?.recursive ?? true });
-}
-
-export async function renameVfsFile(
-  vfs: VfsService,
-  oldPath: string,
-  newPath: string,
-): Promise<void> {
-  const moved = await moveVfsPath(vfs, oldPath, newPath);
-  if (!moved.ok) throw moved.error;
-}
-
-export async function renameVfsDirectory(
-  vfs: VfsService,
-  oldPath: string,
-  newPath: string,
-): Promise<void> {
-  const moved = await moveVfsPath(vfs, oldPath, newPath);
-  if (!moved.ok) throw moved.error;
-}
-
-export { remapPathUnderDir };
-export type { VfsListEntry };
+export { VfsEntryOps, VfsMove } from "@novel-master/core/vfs";

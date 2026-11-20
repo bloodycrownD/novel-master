@@ -15,40 +15,31 @@
  * @module test/tool/subagent-tool-session-file
  */
 
+import {  Result  } from "../../src/errors/either.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
-import { AppError } from "@/errors/app-error.js";
+import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import {
-  attachmentStorageName,
-  messageAttachmentsSchema,
-} from "@/domain/chat/model/message-attachment.schema.js";
-import {
-  subagentTool,
-  TASK_SESSION_RESUME_MAX_MESSAGES,
-} from "@/domain/tool/builtin/subagent-tool.js";
+import {  MessageAttachmentSchema, messageAttachmentsSchema  } from "@/domain/chat/model/message-attachment.schema.js";
+import {  subagentTool, TASK_SESSION_RESUME_MAX_MESSAGES  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
   RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { ToolError } from "@/errors/tool-errors.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attachment/attach-budget.js";
-import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
-import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  MessageBodyText  } from "@/domain/chat/content/message-body-text.js";
+import {  ATTACH_PROMPT_CHAR_BUDGET  } from "@/domain/chat/logic/attachment/attach-budget.js";
+import {  promptAssembler  } from "@/domain/chat/logic/prompt/prompt-assembler.js";
+import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -83,8 +74,8 @@ interface MockResult {
   readonly capturedSessionIds: string[];
 }
 
-function chatErrorNotFound(): Error {
-  return new AppError("CHAT_NOT_FOUND", "session not found");
+function chatErrorNotFound(): Result<never, AppError> {
+  return Result.err(new AppError("CHAT_NOT_FOUND", { detail: "session not found" }));
 }
 
 function makeSubagent(opts: MockOpts = {}): MockResult {
@@ -101,7 +92,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
 
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => ["id-1"],
-    list: async () => [generalDef],
+    list: async () => Result.ok([generalDef]),
     get: async () => generalDef,
     getRawWire: async () => null,
     upsert: async () => undefined,
@@ -109,12 +100,16 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
   };
 
   const messages: MessageService = {
+    // 错误通道迁移八期：大结果集读口走 Outcome，fake 与真实 service 同语义。
     listBySession: async (sessionId: string) => {
       const n = counts[sessionId] ?? 0;
-      return Array.from({ length: n }, (_, i) => ({
-        role: "user",
-        content: { blocks: [{ type: "text", text: `m${i}` }] },
-      })) as unknown as ChatMessageData[];
+      return {
+        kind: "completed" as const,
+        value: Array.from({ length: n }, (_, i) => ({
+          role: "user",
+          content: { blocks: [{ type: "text", text: `m${i}` }] },
+        })) as unknown as ChatMessageData[],
+      };
     },
     // repo-mega-cr Wave C 的 subagent 窄读消费口（src 端已切换，mock 缺方法
     // 会 TypeError——「加方法先扫手写假实现」同族坑；实现抄
@@ -125,9 +120,12 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
         role: "user",
         content: { blocks: [{ type: "text", text: `m${i}` }] },
       })) as unknown as ChatMessageData[];
-      return all
-        .filter((m) => m.role === options.role)
-        .slice(-Math.max(1, Math.floor(options.limit)));
+      return {
+        kind: "completed" as const,
+        value: all
+          .filter((m) => m.role === options.role)
+          .slice(-Math.max(1, Math.floor(options.limit))),
+      };
     },
   } as unknown as MessageService;
 
@@ -135,8 +133,8 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     get: async (id: string) => {
       if (opts.getThrows != null) throw opts.getThrows;
       const s = known.get(id);
-      if (s == null) throw chatErrorNotFound();
-      return s;
+      if (s == null) return chatErrorNotFound();
+      return Result.ok(s);
     },
     createSubSession: async (
       parentSessionId: string,
@@ -155,7 +153,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
         updatedAtMs: 0,
       };
       known.set(id, session);
-      return session;
+      return Result.ok(session);
     },
   } as unknown as SessionService;
 
@@ -167,24 +165,25 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     callableAgents: [{ name: "general" }],
     parentSignal: new AbortController().signal,
     createChildSession: async (title: string) => {
-      const s = await sessions.createSubSession(PARENT_ID, PROJECT_ID, title);
-      return s.id;
+      const s = unwrap(await sessions.createSubSession(PARENT_ID, PROJECT_ID, title));
+      return Result.ok(s.id);
     },
     parentSessionId: opts.parentSessionId ?? PARENT_ID,
     isSessionRunActive: (id: string) => active.has(id),
-    resolveChildModelId: (def) => ({
-      savedModelId: def.model ?? "parent-saved",
-      workspaceModelId: "ws-model",
-    }),
+    resolveChildModelId: (def) =>
+      Result.ok({
+        savedModelId: def.model ?? "parent-saved",
+        workspaceModelId: "ws-model",
+      }),
     runChildAgent: async (def, childSessionId, runOpts) => {
       capturedSessionIds.push(childSessionId);
       capturedOpts.push(runOpts);
-      return {
+      return Result.ok({
         stepsExecuted: 1,
         finished: true,
         stopReason: "completed" as const,
         rounds: [],
-      };
+      });
     },
   };
 
@@ -222,7 +221,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx, createdSessions, capturedSessionIds } = makeSubagent({
       sessions: [childSession("kid-1")],
     });
-    const out = await subagentTool.run(
+    const out = unwrap(await subagentTool.run(
       {
         description: "续做",
         prompt: "接着上一步继续",
@@ -230,7 +229,7 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "  kid-1  ",
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(createdSessions.length, 0, "续用不得新建子会话");
     assert.deepEqual(capturedSessionIds, ["kid-1"], "runChildAgent 必须收到同一 id");
     assert.equal(out.subagentSessionId, "kid-1");
@@ -239,10 +238,10 @@ describe("task sessionId 续用（T-TS*）", () => {
   it("T-TS1b: 缺省 / 空串 / 纯空白 sessionId 一律新开（模型显式传空串等价于不传）", async () => {
     for (const sessionId of [undefined, "", "   "]) {
       const { ctx, createdSessions } = makeSubagent();
-      await subagentTool.run(
+      unwrap(await subagentTool.run(
         { description: "新任务", prompt: "p", subagentName: "general", sessionId },
         toolCtx(ctx)
-      );
+      ));
       assert.equal(createdSessions.length, 1, `sessionId=${JSON.stringify(sessionId)} 应新开`);
     }
   });
@@ -251,7 +250,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx, capturedOpts } = makeSubagent({
       sessions: [childSession("kid-1")],
     });
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "续做",
         prompt: "第二轮的任务正文",
@@ -259,21 +258,21 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "kid-1",
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.prompt, "第二轮的任务正文");
   });
 
   it("T-TS2a: 子会话不存在 → ToolError FAILED，文案引导去掉 sessionId 新开", async () => {
     const { ctx, createdSessions } = makeSubagent({ sessions: [] });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           { description: "d", prompt: "p", subagentName: "general", sessionId: "ghost" },
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal(e.code, "FAILED");
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /找不到子会话/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -315,7 +314,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx } = makeSubagent({
       sessions: [childSession("other-kid", { parentSessionId: "别的父会话" })],
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -327,8 +326,8 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal(e.code, "FAILED");
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /不是当前会话派生的子会话/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -350,7 +349,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx: ctx2 } = makeSubagent({
       sessions: [childSession("y-kid", { parentSessionId: "别的父" })],
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -361,10 +360,10 @@ describe("task sessionId 续用（T-TS*）", () => {
           },
           toolCtx(ctx2)
         ),
-      (e: unknown) => e instanceof ToolError && /不是当前会话派生的子会话/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e) && e.key.startsWith("TOOL_") && /不是当前会话派生的子会话/.test(e.message)
     );
     // 反向：项目不同但父相同 → 放行（子代理本就共享父工作区，不按 project 拦）。
-    const out = await subagentTool.run(
+    const out = unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "p",
@@ -372,7 +371,7 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "x-kid",
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(out.subagentSessionId, "x-kid");
   });
 
@@ -381,7 +380,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       sessions: [childSession("busy-kid")],
       activeSessions: ["busy-kid"],
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -393,7 +392,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.match(e.message, /正在运行中/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -409,7 +408,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       ...base,
       isSessionRunActive: () => (undefined as unknown as boolean) ?? true,
     };
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -420,7 +419,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           },
           toolCtx(ctx)
         ),
-      (e: unknown) => e instanceof ToolError && /正在运行中/.test(e.message)
+      (e: unknown) => AppErrorOps.is(e) && e.key.startsWith("TOOL_") && /正在运行中/.test(e.message)
     );
   });
 
@@ -429,7 +428,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       sessions: [childSession("kid-max")],
       messageCounts: { "kid-max": TASK_SESSION_RESUME_MAX_MESSAGES },
     });
-    const okOut = await subagentTool.run(
+    const okOut = unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "p",
@@ -437,16 +436,15 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "kid-max",
       },
       toolCtx(atLimit.ctx)
-    );
+    ));
     assert.equal(okOut.subagentSessionId, "kid-max", "恰好等于上限应放行");
 
     const overLimit = makeSubagent({
       sessions: [childSession("kid-over")],
       messageCounts: { "kid-over": TASK_SESSION_RESUME_MAX_MESSAGES + 1 },
     });
-    await assert.rejects(
-      () =>
-        subagentTool.run(
+    await rejectsErr(
+      subagentTool.run(
           {
             description: "d",
             prompt: "p",
@@ -456,7 +454,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(overLimit.ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
         assert.match(e.message, /已有 \d+ 条消息/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -469,7 +467,7 @@ describe("task sessionId 续用（T-TS*）", () => {
 describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA1: 预算内路径物化为合规新写入附件（name=storageName / userAttach / content:null / attach），且过落库硬 parse", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "读设定",
         prompt: "看这两份",
@@ -477,14 +475,14 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["notes/a.md", "notes/b.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     const atts = capturedOpts[0]!.attachments!;
     assert.equal(atts.length, 2);
     for (const [i, path] of ["/notes/a.md", "/notes/b.md"].entries()) {
       const a = atts[i]!;
       assert.equal(a.path, path);
-      // 牙齿：name 必须等于 attachmentStorageName(path)，写成 basename 会被 zod refine 拒绝
-      assert.equal(a.name, attachmentStorageName(a.path));
+      // 牙齿：name 必须等于 MessageAttachmentSchema.storageName(path)，写成 basename 会被 zod refine 拒绝
+      assert.equal(a.name, MessageAttachmentSchema.storageName(a.path));
       assert.notEqual(a.name, "a.md");
       assert.equal(a.action, "userAttach");
       assert.equal(a.content, null);
@@ -500,7 +498,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
   it("T-TA1b: 重复路径去重（相对写法与带前导 / 同形），去重发生在分配名额之前", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "读设定",
         prompt: "p",
@@ -508,22 +506,22 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["notes/a.md", "/notes/a.md", "notes/a.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.attachments!.length, 1, "同形路径只占一个名额");
   });
 
   it("T-TA1c: 未传 fileAttachment 时不注入 attachments 键（老调用方零变化）", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       { description: "d", prompt: "p", subagentName: "general" },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.attachments, undefined);
   });
 
   it("T-TA2: 附件全量挂载、prompt 原文不加尾注（体积预算由子会话 prepare 链负责，见 T-A 组）", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "原始正文",
@@ -531,7 +529,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["notes/a.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.prompt, "原始正文", "派发侧不再拼尾注");
     assert.equal(capturedOpts[0]!.attachments!.length, 1);
   });
@@ -540,7 +538,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     const { ctx, capturedOpts, capturedSessionIds } = makeSubagent({
       sessions: [childSession("kid-1")],
     });
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
@@ -549,7 +547,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["a.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     assert.deepEqual(capturedSessionIds, ["kid-1"]);
     assert.equal(capturedOpts[0]!.attachments!.length, 1);
   });
@@ -557,9 +555,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA3e: 空串 / 纯空白路径元素 → ToolError FAILED（不静默丢），且不得留下孤儿子会话", async () => {
     for (const bad of ["", "   "]) {
       const { ctx, createdSessions } = makeSubagent({});
-      await assert.rejects(
-        () =>
-          subagentTool.run(
+      await rejectsErr(
+        subagentTool.run(
             {
               description: "d",
               prompt: "p",
@@ -569,8 +566,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
             toolCtx(ctx)
           ),
         (e: unknown) => {
-          assert.ok(e instanceof ToolError, `路径 ${JSON.stringify(bad)} 应抛 ToolError`);
-          assert.equal(e.code, "FAILED");
+          assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"), `路径 ${JSON.stringify(bad)} 应抛 ToolError`);
+          assert.equal(e.key, "TOOL_FAILED");
           assert.match(e.message, /fileAttachment 路径非法/);
           return true;
         }
@@ -587,9 +584,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
   it("T-TA3e2: 路径穿越写法 `/../evil` → ToolError 文案带 fileAttachment 引导（不漏裸 VfsError）", async () => {
     const { ctx, createdSessions } = makeSubagent({});
-    await assert.rejects(
-      () =>
-        subagentTool.run(
+    await rejectsErr(
+      subagentTool.run(
           {
             description: "d",
             prompt: "p",
@@ -599,8 +595,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError, "路径非法必须是 ToolError，不是裸 VfsError");
-        assert.equal(e.code, "FAILED");
+        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"), "路径非法必须是 ToolError，不是裸 VfsError");
+        assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /fileAttachment 路径非法/);
         // 原 message 保留（VfsError 的中文/英文 reason 仍在文案里）
         assert.match(e.message, /Invalid path/);
@@ -613,7 +609,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA3i: 20+ 条附件全量挂载（条数上限退役）且 prompt 无尾注", async () => {
     const paths = Array.from({ length: 25 }, (_, i) => `f${i}.md`);
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
@@ -621,7 +617,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: paths,
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(
       capturedOpts[0]!.attachments!.length,
       25,
@@ -632,14 +628,14 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
   it("T-A6: 超限附件照挂（落库事实不变 → chip 可见），降级只发生在子会话 prepare 侧", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
 
     // 派发侧：照挂，不筛、不加尾注
     const { ctx: subCtx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
@@ -647,7 +643,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["huge.md"],
       },
       toolCtx(subCtx)
-    );
+    ));
     const attached = capturedOpts[0]!.attachments!;
     assert.equal(attached.length, 1, "超预算附件也照挂");
     assert.equal(attached[0]!.path, "/huge.md");
@@ -660,22 +656,22 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       sessionId: session.id,
       seq: 1,
       role: "user",
-      content: textBlocks("正文"),
+      content: TextBlocks.of("正文"),
       provider: null,
       raw: null,
       createdAtMs: 0,
       hidden: false,
       attachments: attached,
     };
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [childMsg],
       {
         sessionId: session.id,
-        sessionKkv: createSessionKkvService(ctx.conn),
+        sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
         vfs,
       },
-    );
-    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
+    ));
+    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
     assert.match(body, /"display": "filename"/);
     assert.equal(body.includes("1|HHHH"), false);

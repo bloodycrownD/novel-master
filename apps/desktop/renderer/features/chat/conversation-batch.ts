@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 
-export interface ConversationBatchSink {
+interface ConversationBatchSink {
   pushTextDelta(delta: string): void;
   pushThinkingDelta(delta: string): void;
   /** 立刻把 buffer 里的剩余 delta 冲到回调（step commit / run 结束前调）。 */
@@ -25,7 +25,7 @@ export interface ConversationBatchSink {
   reset(): void;
 }
 
-export interface UseConversationBatchOptions {
+interface UseConversationBatchOptions {
   readonly enabled: boolean;
   readonly onTextFlush: (delta: string) => void;
   readonly onThinkingFlush: (delta: string) => void;

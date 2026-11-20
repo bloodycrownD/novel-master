@@ -1,16 +1,12 @@
+import {  Result  } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { AppError } from "@/errors/app-error.js";
+import {  describe, it  } from "node:test";
+import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
-import {
-  AgentRunResolveError,
-  resolveApplicationModelIdForRun,
-  resolveCurrentAgentDefinition,
-  resolveCurrentAgentId,
-  type AgentRunRuntimePort,
-} from "@/service/agent/logic/agent-run-shared.js";
-import { tCore } from "../../helpers/core-i18n.js";
+import {  AgentRunShared, type AgentRunRuntimePort  } from "@/service/agent/logic/agent-run-shared.js";
+import {  tCore  } from "../../helpers/core-i18n.js";
+import {  rejectsErr, unwrap  } from "../../helpers/result-unwrap.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -27,21 +23,29 @@ function makeRuntime(overrides: {
 }): AgentRunRuntimePort {
   return {
     state: {
-      getCurrentAgentId: async () => overrides.currentAgentId ?? null,
-      getCurrentModelId: async () => overrides.currentModelId ?? null,
+      getCurrentAgentId: async () => Result.ok(overrides.currentAgentId ?? undefined),
+      getCurrentModelId: async () => Result.ok(overrides.currentModelId ?? undefined),
     },
     agentRegistry: {
       listAgentIds: async () => overrides.agentIds ?? ["fallback-agent"],
+      // 错误通道迁移四期：agentRegistry.get 走 Result 通道（throw 契约仅限 repository 未知异常）。
       get: async (id: string) => {
         if (overrides.getAgent != null) {
-          return overrides.getAgent(id);
+          try {
+            return Result.ok(await overrides.getAgent(id)) as never;
+          } catch (error) {
+            // 已知失败沿 Result.err 回传，让 resolveCurrentAgentDefinition 的归一分支接管。
+            return Result.err(error as AppError) as never;
+          }
         }
-        return sampleDefinition;
+        return Result.ok(sampleDefinition);
       },
     },
     sessions: {
       getSessionAgentConfig: async () =>
-        overrides.sessionConfig ?? { agentId: "a1" },
+        overrides.sessionConfig != null
+          ? Result.ok(overrides.sessionConfig)
+          : Result.ok({ agentId: "a1" }),
     },
   };
 }
@@ -52,41 +56,43 @@ describe("agent-run-shared", () => {
       currentAgentId: "from-state",
       agentIds: ["fallback-agent"],
     });
-    assert.equal(await resolveCurrentAgentId(runtime), "from-state");
+    assert.equal(unwrap(await AgentRunShared.resolveCurrentId(runtime)), "from-state");
   });
 
   it("resolveCurrentAgentId falls back to first registry id", async () => {
     const runtime = makeRuntime({ currentAgentId: "", agentIds: ["a", "b"] });
-    assert.equal(await resolveCurrentAgentId(runtime), "a");
+    assert.equal(unwrap(await AgentRunShared.resolveCurrentId(runtime)), "a");
   });
 
   it("resolveCurrentAgentDefinition throws when no agent configured", async () => {
     const runtime = makeRuntime({ currentAgentId: "", agentIds: [] });
-    await assert.rejects(
-      () => resolveCurrentAgentDefinition(runtime),
-      (error: unknown) => error instanceof AgentRunResolveError,
+    await rejectsErr(
+      AgentRunShared.resolveCurrentDefinition(runtime),
+      (error: unknown) => assert.ok(AppErrorOps.is(error, "AGENT_NOT_CONFIGURED")),
     );
   });
 
-  it("resolveCurrentAgentDefinition maps AGENT_NOT_FOUND to AgentRunResolveError", async () => {
+  it("resolveCurrentAgentDefinition normalizes registry AGENT_NOT_FOUND with agentId params", async () => {
     const runtime = makeRuntime({
       currentAgentId: "missing",
       getAgent: async () => {
-        throw new AppError("AGENT_NOT_FOUND", "missing");
+        throw new AppError("AGENT_NOT_FOUND", { agentId: "missing" });
       },
     });
-    await assert.rejects(
-      () => resolveCurrentAgentDefinition(runtime),
+    await rejectsErr(
+      AgentRunShared.resolveCurrentDefinition(runtime),
       (error: unknown) =>
-        error instanceof AgentRunResolveError &&
-        (error as AgentRunResolveError).messageKey === "error.agent.not_found" &&
-        (error as AgentRunResolveError).messageParams?.agent_id === "missing",
+        assert.ok(
+          AppErrorOps.is(error, "AGENT_NOT_FOUND") &&
+          error.messageKey === "error.agent.not_found" &&
+          error.messageParams?.agent_id === "missing",
+        ),
     );
   });
 
   it("resolveApplicationModelIdForRun uses agent model pin", async () => {
     const runtime = makeRuntime({ currentModelId: "workspace-model" });
-    const result = await resolveApplicationModelIdForRun(runtime, sampleDefinition);
+    const result = unwrap(await AgentRunShared.resolveApplicationModelIdForRun(runtime, sampleDefinition));
     assert.equal(result.savedModelId, "provider:model");
     assert.equal(result.workspaceModelId, "workspace-model");
   });
@@ -94,10 +100,10 @@ describe("agent-run-shared", () => {
   it("resolveApplicationModelIdForRun throws when no model resolved（无 workspace 回退）", async () => {
     const runtime = makeRuntime({ currentModelId: "workspace-model" });
     const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
-    // sessionConfig 默认 { agentId: "a1" } 无 modelId；agent 也无 pin → 抛错
-    await assert.rejects(
-      () => resolveApplicationModelIdForRun(runtime, definition, "sess-1"),
-      (error: unknown) => error instanceof AgentRunResolveError,
+    // sessionConfig 默认 { agentId: "a1" } 无 modelId；agent 也无 pin → Err
+    await rejectsErr(
+      AgentRunShared.resolveApplicationModelIdForRun(runtime, definition, "sess-1"),
+      (error: unknown) => assert.ok(AppErrorOps.is(error, "AGENT_MODEL_NOT_SET")),
     );
   });
 
@@ -107,10 +113,10 @@ describe("agent-run-shared", () => {
       sessionConfig: { agentId: "a1", modelId: "session-model" },
     });
     const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
-    // 无 sessionId → 无 sessionModelId；agent 无 pin → 抛错（不再回退 workspace）
-    await assert.rejects(
-      () => resolveApplicationModelIdForRun(runtime, definition),
-      (error: unknown) => error instanceof AgentRunResolveError,
+    // 无 sessionId → 无 sessionModelId；agent 无 pin → Err（不再回退 workspace）
+    await rejectsErr(
+      AgentRunShared.resolveApplicationModelIdForRun(runtime, definition),
+      (error: unknown) => assert.ok(AppErrorOps.is(error, "AGENT_MODEL_NOT_SET")),
     );
   });
 
@@ -123,11 +129,11 @@ describe("agent-run-shared", () => {
       },
     });
     const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
-    const result = await resolveApplicationModelIdForRun(
+    const result = unwrap(await AgentRunShared.resolveApplicationModelIdForRun(
       runtime,
       definition,
       "sess-1",
-    );
+    ));
     assert.equal(result.savedModelId, "session-model");
     assert.equal(result.workspaceModelId, "workspace-model");
   });
@@ -140,11 +146,11 @@ describe("agent-run-shared", () => {
         modelId: "session-model",
       },
     });
-    const result = await resolveApplicationModelIdForRun(
+    const result = unwrap(await AgentRunShared.resolveApplicationModelIdForRun(
       runtime,
       sampleDefinition, // model = "provider:model"
       "sess-1",
-    );
+    ));
     assert.equal(result.savedModelId, "provider:model");
   });
 
@@ -154,9 +160,9 @@ describe("agent-run-shared", () => {
       sessionConfig: { agentId: "a1" },
     });
     const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
-    await assert.rejects(
-      () => resolveApplicationModelIdForRun(runtime, definition, "sess-1"),
-      (error: unknown) => error instanceof AgentRunResolveError,
+    await rejectsErr(
+      AgentRunShared.resolveApplicationModelIdForRun(runtime, definition, "sess-1"),
+      (error: unknown) => assert.ok(AppErrorOps.is(error, "AGENT_MODEL_NOT_SET")),
     );
   });
 });

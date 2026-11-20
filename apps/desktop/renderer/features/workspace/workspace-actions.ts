@@ -217,24 +217,6 @@ export async function saveDirRule(
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
-export async function setDirRuleEnabled(
-  target: WorkspaceContextTarget,
-  enabled: boolean,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (target.kind !== "row" || target.row.kind !== "dir") {
-    return { ok: false, message: "无效操作" };
-  }
-  const req = scopeRequestFromTarget(target, projectId, sessionId);
-  const result = await ipcWorkplaceSetDirRule({
-    ...req,
-    logicalPath: target.row.path,
-    ruleEnabled: enabled,
-  });
-  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
-}
-
 export function entryLabelForTarget(target: WorkspaceContextTarget): string {
   if (target.kind === "blank") {
     return "条目";
@@ -250,7 +232,7 @@ export function entryLabelForTarget(target: WorkspaceContextTarget): string {
  * （main 侧把非 UTF-8 判掉后不会写库，回不上 VFS）。多带字段对只读
  * `status`/`report` 的消费方无影响，Step 3 的 App 接线直接拿它出 toast。
  */
-export type SingleFileImportApplied = {
+type SingleFileImportApplied = {
   readonly status: "applied";
   readonly report: VfsBatchApplyReportDto;
   readonly skippedBinary: readonly string[];
@@ -280,6 +262,7 @@ export async function startSingleFileImport(
 > {
   const picked = await ipcVfsFilePick();
   if (!picked.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch
     throw new Error(picked.error.message || "选择文件失败");
   }
   const hostPath = picked.data;
@@ -294,6 +277,7 @@ export async function startSingleFileImport(
     overwriteConfirmed: false,
   });
   if (!result.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界
     throw new Error(result.error.message || "导入失败");
   }
   if (result.data.status === "needs_confirm") {
@@ -323,10 +307,12 @@ export async function confirmSingleFileImport(
     overwriteConfirmed: true,
   });
   if (!result.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界
     throw new Error(result.error.message || "导入失败");
   }
   if (result.data.status !== "applied") {
     // 已确认覆盖后 core 仍报 needs_confirm 属协议破损；宁可显式失败也不静默当成功。
+    // nm-throw: keep — 两段式协议不变量破坏（带 overwriteConfirmed 仍回 needs_confirm），属不可达分支。
     throw new Error("导入未完成");
   }
   return {
@@ -357,6 +343,7 @@ export async function exportWorkspaceTarget(
       logicalPath,
     });
     if (!single.ok) {
+      // nm-throw: keep — renderer 侧 IpcResult 解包边界
       throw new Error(single.error.message || "导出失败");
     }
     return single.data;
@@ -365,6 +352,7 @@ export async function exportWorkspaceTarget(
   const directoryPath = zipDirectoryPathForTarget(target) ?? "/";
   const zip = await ipcVfsZipExport({ ...scope, directoryPath });
   if (!zip.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界
     throw new Error(zip.error.message || "导出失败");
   }
   return zip.data;

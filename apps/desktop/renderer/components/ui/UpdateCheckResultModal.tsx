@@ -2,9 +2,9 @@ import { Button } from "./Button";
 
 export type UpdateCheckResultKind = "up-to-date" | "error";
 
-export const UPDATE_CHECK_RESULT_TITLE = "版本检查";
-export const UPDATE_CHECK_UP_TO_DATE_MESSAGE = "当前已是最新版本";
-export const UPDATE_CHECK_FAILED_MESSAGE = "无法检查更新，请检查网络";
+const UPDATE_CHECK_RESULT_TITLE = "版本检查";
+const UPDATE_CHECK_UP_TO_DATE_MESSAGE = "当前已是最新版本";
+const UPDATE_CHECK_FAILED_MESSAGE = "无法检查更新，请检查网络";
 
 type UpdateCheckResultModalProps = {
   open: boolean;

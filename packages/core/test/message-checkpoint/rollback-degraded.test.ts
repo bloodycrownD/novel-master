@@ -1,45 +1,39 @@
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import {
-  isRollbackRevisionBackfillRequiredError,
-  isRollbackVfsDegradableError,
-  isSessionFsError,
-  SessionFsError,
-  sessionFsRollbackMessageNotFound,
-  sessionFsRollbackUndoSendEmptyTarget,
-  sessionFsRollbackVfsRestoreFailed,
-} from "@novel-master/core/session-fs";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  scopeKey,
-} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { toPhysicalPath } from "@novel-master/core/vfs";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import {  describe, it  } from "node:test";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  RollbackErrorGuards  } from "@novel-master/core/message-checkpoint";
+// isSessionFsError 已从公开入口撤下（导出面收口注释：测试走 src 路径）。
+import {  isSessionFsError  } from "../../src/errors/guards.js";
+import {  SqliteVfsEntryRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {  LogicalPath  } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
+import {  tCore  } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
 /** R1 场景：双 checkpoint，回滚到第一个 assistant anchor。 */
 async function setupR1Scenario() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = await ctx.messages.append(session.id, "user", textBlocks("poem"));
-  const assistant1 = await ctx.messages.append(session.id, "assistant", {
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
+  const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "here" }],
-  });
+  }));
   await svfs.write("/poem.md", "roses", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  await ctx.messages.append(session.id, "user", textBlocks("more"));
-  const assistant2 = await ctx.messages.append(session.id, "assistant", {
+  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+  const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
-  });
+  }));
   await svfs.write("/poem.md", "violets", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
   return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
@@ -51,9 +45,9 @@ async function deleteAnchorRevisionForPath(
   sessionId: string,
   logicalPath: string,
 ) {
-  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
   const entries = new SqliteVfsEntryRepository(ctx.conn);
-  const entry = await entries.findByPath(sk, logicalPath);
+  const entry = unwrap(await entries.findByPath(sk, logicalPath));
   if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
   const revisions = await ctx.conn.query<{ version: number }>(
     "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
@@ -73,14 +67,15 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
-        assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
-        assert.equal(isRollbackVfsDegradableError(error), false);
+        assert.equal(RollbackErrorGuards.isRevisionBackfillRequired(error), true);
+        assert.equal(RollbackErrorGuards.isVfsDegradable(error), false);
         assert.equal(
-          isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED"),
+          isSessionFsError(error) &&
+            AppErrorOps.is(error, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"),
           true,
         );
         assert.equal((error as {messageKey?: string}).messageKey, "error.session_fs.rollback_revision_backfill_required");
@@ -88,8 +83,8 @@ describe("MessageRollbackService (degraded fallback)", () => {
       },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 4);
   });
 
@@ -99,15 +94,15 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
       { revisionHeadBackfill: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -119,19 +114,19 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await assert.rejects(() =>
-      ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+    await rejectsErr(() =>
+      ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
     );
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
       { skipVfsReconcile: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -141,14 +136,14 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const { ctx, project, session, svfs, user1, assistant1 } =
       await setupR1Scenario();
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "roses");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -156,128 +151,132 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
   it("DF4: R9 无 checkpoint anchor 完整回滚成功，不抛 degradable", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "mutate" }],
-    });
+    }));
     await svfs.write("/state.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const textOnly = await ctx.messages.append(session.id, "assistant", {
+    const textOnly = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "no tools" }],
-    });
+    }));
     await svfs.write("/state.md", "v2", { versionCheck: false });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, textOnly.id);
 
-    assert.equal((await svfs.read("/state.md")).content, "v1");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, textOnly.id);
   });
 
   it("DF5: ROLLBACK_MESSAGE_NOT_FOUND 不包装为 degradable", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(
+        ctx.sessionFs.rollbackFilesToMessage(
           session.id,
           project.id,
           "missing-message-id",
         ),
       (error: unknown) => {
-        assert.equal(isSessionFsError(error, "ROLLBACK_MESSAGE_NOT_FOUND"), true);
-        assert.equal(isRollbackVfsDegradableError(error), false);
+        assert.equal(
+          isSessionFsError(error) &&
+            AppErrorOps.is(error, "SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND"),
+          true,
+        );
+        assert.equal(RollbackErrorGuards.isVfsDegradable(error), false);
         return true;
       },
     );
   });
 
-  it("DF6: isRollbackVfsDegradableError 边界", () => {
+  it("DF6: RollbackErrorGuards.isVfsDegradable 边界", () => {
     assert.equal(
-      isRollbackVfsDegradableError(
-        sessionFsRollbackVfsRestoreFailed("工作区无法恢复：测试"),
+      RollbackErrorGuards.isVfsDegradable(
+        new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", "工作区无法恢复：测试"),
       ),
       true,
     );
     // undo_send 无 baseline（live 树非空）：同样可降级为仅截断消息
     assert.equal(
-      isRollbackVfsDegradableError(
-        sessionFsRollbackUndoSendEmptyTarget("s-1", "m-1"),
+      RollbackErrorGuards.isVfsDegradable(
+        new AppError("SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET", "undo send empty target"),
       ),
       true,
     );
     assert.equal(
-      isRollbackVfsDegradableError(
-        new SessionFsError("RESTORE_REVISION_MISSING", "revision missing"),
+      RollbackErrorGuards.isVfsDegradable(
+        new AppError("SESSION_FS_RESTORE_REVISION_MISSING", "revision missing"),
       ),
       false,
     );
     assert.equal(
-      isRollbackVfsDegradableError(
-        sessionFsRollbackMessageNotFound("msg-1"),
+      RollbackErrorGuards.isVfsDegradable(
+        new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", "rollback message not found: msg-1"),
       ),
       false,
     );
-    assert.equal(isRollbackVfsDegradableError(new Error("generic")), false);
-    assert.equal(isRollbackVfsDegradableError(null), false);
-    assert.equal(isRollbackVfsDegradableError(undefined), false);
+    assert.equal(RollbackErrorGuards.isVfsDegradable(new Error("generic")), false);
+    assert.equal(RollbackErrorGuards.isVfsDegradable(null), false);
+    assert.equal(RollbackErrorGuards.isVfsDegradable(undefined), false);
   });
 
   it("DF-U1: undo_send + skipVfsReconcile 删除锚点且 VFS 不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/keep.md", "stable", { versionCheck: false });
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("anchor"));
-    await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
-    });
+    }));
     await svfs.write("/keep.md", "mutated", { versionCheck: false });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
 
-    assert.equal((await svfs.read("/keep.md")).content, "mutated");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/keep.md")).content, "mutated");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
   });
 
   it("DF-U2: undo_send + revisionHeadBackfill 成功含锚点删除并对齐 prior VFS", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/state.md", "baseline", { versionCheck: false });
-    const priorAsst = await ctx.messages.append(session.id, "assistant", {
+    const priorAsst = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "setup" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("prompt"));
-    const asst1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("prompt")));
+    const asst1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
-    });
+    }));
     await svfs.write("/state.md", "after-user1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id);
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
       revisionHeadBackfill: true,
     });
 
-    assert.equal((await svfs.read("/state.md")).content, "baseline");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/state.md")).content, "baseline");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, priorAsst.id);
   });
@@ -288,19 +287,19 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await assert.rejects(() =>
-      ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+    await rejectsErr(() =>
+      ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
     );
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
       { skipVfsReconcile: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);

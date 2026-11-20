@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { splitTextIntoChunks } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
+import {  describe, it  } from "node:test";
+import {  ChunkSplitter  } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
 
 /** 规格常量（切分器不再导出，测试按规格值本地锁定）。 */
 const MAX_CHUNK_CHARS = 64;
@@ -16,8 +16,8 @@ const MAX_CHUNK_CHARS = 64;
 
 /** 不变量三连：join 还原原文、全块 ≤ 上限、同输入双调用一致（贪吃段除外，见上）。 */
 function assertInvariants(text: string): string[] {
-  const first = splitTextIntoChunks(text);
-  const second = splitTextIntoChunks(text);
+  const first = ChunkSplitter.splitText(text);
+  const second = ChunkSplitter.splitText(text);
   assert.deepEqual(second, first, `确定性失败: ${text.slice(0, 40)}…`);
   assert.equal(first.join(""), text, `join("") 必须逐字节还原原文`);
   for (const chunk of first) {
@@ -32,7 +32,7 @@ function assertInvariants(text: string): string[] {
 describe("chunk-splitter golden（T-TC1）", () => {
   it("中文正文：按句末符号切分，句号含入块尾", () => {
     const text = "夜色如水，林间小径落满枯叶。风一吹便沙沙作响！她停下了脚步？";
-    assert.deepEqual(splitTextIntoChunks(text), [
+    assert.deepEqual(ChunkSplitter.splitText(text), [
       "夜色如水，林间小径落满枯叶。",
       "风一吹便沙沙作响！",
       "她停下了脚步？",
@@ -40,18 +40,18 @@ describe("chunk-splitter golden（T-TC1）", () => {
   });
 
   it("连续句末贪吃：省略号与连续换行并入前块，不产空块", () => {
-    assert.deepEqual(splitTextIntoChunks("等等……\n\n然后呢？"), [
+    assert.deepEqual(ChunkSplitter.splitText("等等……\n\n然后呢？"), [
       "等等……\n\n",
       "然后呢？",
     ]);
-    assert.deepEqual(splitTextIntoChunks("。。。！！！"), ["。。。！！！"]);
+    assert.deepEqual(ChunkSplitter.splitText("。。。！！！"), ["。。。！！！"]);
   });
 
   it("英文与小数点/URL：句末符号照切，普通句点非句末不切", () => {
     // "." 不在句末集（避免 URL/小数点被当句子边界制造碎块），
     // "?" 与 "!" 在句末集。
     const text = "The value is 3.14 and see https://a.b/c. Got it? Yes!";
-    assert.deepEqual(splitTextIntoChunks(text), [
+    assert.deepEqual(ChunkSplitter.splitText(text), [
       "The value is 3.14 and see https://a.b/c. Got it?",
       " Yes!",
     ]);
@@ -101,8 +101,8 @@ describe("chunk-splitter golden（T-TC1）", () => {
   });
 
   it("边界与空输入：空串返回空数组；单字符句末成块", () => {
-    assert.deepEqual(splitTextIntoChunks(""), []);
-    assert.deepEqual(splitTextIntoChunks("。"), ["。"]);
+    assert.deepEqual(ChunkSplitter.splitText(""), []);
+    assert.deepEqual(ChunkSplitter.splitText("。"), ["。"]);
   });
 });
 
@@ -114,17 +114,17 @@ describe("chunk-splitter 边界：句末符密集输入（wave-e H4 · 现状固
 
   it("T-TC1-E1: 句末符密集输入下贪吃段突破 64 上限（既有设计，注释承诺已订正）", () => {
     const text = "。".repeat(200);
-    const chunks = splitTextIntoChunks(text);
+    const chunks = ChunkSplitter.splitText(text);
     assert.equal(chunks.length, 1);
     assert.equal(chunks[0]!.length, 200);
     // 划分性不变量在超限形态下**依然成立**——这才是真正该守的不变量
     assert.equal(chunks.join(""), text);
-    assert.equal(splitTextIntoChunks(text).length, chunks.length, "确定性");
+    assert.equal(ChunkSplitter.splitText(text).length, chunks.length, "确定性");
   });
 
   it("T-TC1-E2: 句末符 + 换行交替的密集输入同样贪吃成单块", () => {
     const text = "。\n".repeat(200);
-    const chunks = splitTextIntoChunks(text);
+    const chunks = ChunkSplitter.splitText(text);
     assert.equal(chunks.length, 1);
     assert.equal(chunks[0]!.length, 400);
     assert.equal(chunks.join(""), text);
@@ -134,7 +134,7 @@ describe("chunk-splitter 边界：句末符密集输入（wave-e H4 · 现状固
     // 前缀无句末符（走规则③硬切），尾部接 100 个句号（走规则①贪吃）
     const prefix = "汉".repeat(130);
     const greedy = "。".repeat(100);
-    const chunks = splitTextIntoChunks(`${prefix}${greedy}`);
+    const chunks = ChunkSplitter.splitText(`${prefix}${greedy}`);
     const last = chunks[chunks.length - 1]!;
     assert.ok(last.endsWith(greedy), "末块应以贪吃段收尾");
     assert.ok(last.length > MAX_CHUNK_CHARS, `贪吃段应突破上限，实际 ${last.length}`);
@@ -156,9 +156,9 @@ describe("chunk-splitter 不变量（T-TC1 续）", () => {
   });
 
   it("边界口径：句号成块、半角句点不切、顿号作软边界回退", () => {
-    assert.deepEqual(splitTextIntoChunks("甲。乙"), ["甲。", "乙"]);
-    assert.deepEqual(splitTextIntoChunks("甲.乙"), ["甲.乙"]);
+    assert.deepEqual(ChunkSplitter.splitText("甲。乙"), ["甲。", "乙"]);
+    assert.deepEqual(ChunkSplitter.splitText("甲.乙"), ["甲.乙"]);
     const head = "甲".repeat(63);
-    assert.deepEqual(splitTextIntoChunks(`${head}、乙`), [`${head}、`, "乙"]);
+    assert.deepEqual(ChunkSplitter.splitText(`${head}、乙`), [`${head}、`, "乙"]);
   });
 });

@@ -3,13 +3,8 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {DEFAULT_CLOUD_SYNC_PATH_PREFIX} from '@/services/cloud-sync-config.store';
-import {
-  getCloudSyncConfig,
-  setCloudSyncConfig,
-  testCloudSyncConnection,
-  type CloudSyncConfigInput,
-} from '@/services/cloud-sync.service';
+import {CloudSyncConfigStore, DEFAULT_CLOUD_SYNC_PATH_PREFIX} from '@/services/cloud-sync-config.store';
+import {CloudSyncService, type CloudSyncConfigInput} from '@/services/cloud-sync.service';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
 import {FormSwitchRow} from '@/components/form/FormSwitchRow';
@@ -20,7 +15,7 @@ import {SecondaryButton} from '@/components/ui/Buttons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 
 type FormState = {
   endpoint: string;
@@ -56,24 +51,23 @@ export function CloudSyncConfigScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const config = await getCloudSyncConfig(runtime);
-      setSecretKeySet(config.secretKeySet);
+    const config = await CloudSyncConfigStore.get(runtime);
+    if (config.ok) {
+      setSecretKeySet(config.value.secretKeySet);
       setForm({
-        endpoint: config.endpoint,
-        bucket: config.bucket,
-        region: config.region,
-        pathPrefix: config.pathPrefix || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
-        accessKeyId: config.accessKeyId,
+        endpoint: config.value.endpoint,
+        bucket: config.value.bucket,
+        region: config.value.region,
+        pathPrefix: config.value.pathPrefix || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
+        accessKeyId: config.value.accessKeyId,
         secretAccessKey: '',
-        forcePathStyle: config.forcePathStyle,
-        deviceLabel: config.deviceLabel ?? '',
+        forcePathStyle: config.value.forcePathStyle,
+        deviceLabel: config.value.deviceLabel ?? '',
       });
-    } catch (error) {
-      showToast(toastMessage('加载云同步配置失败', error));
-    } finally {
-      setLoading(false);
+    } else {
+      showToast(ToastMessage.toast('加载云同步配置失败', config.error));
     }
+    setLoading(false);
   }, [runtime, showToast]);
 
   useEffect(() => {
@@ -97,10 +91,14 @@ export function CloudSyncConfigScreen() {
     }
     setTesting(true);
     try {
-      await testCloudSyncConnection(runtime, toInput());
+      const tested = await CloudSyncService.testConnection(runtime, toInput());
+      if (!tested.ok) {
+        showToast(ToastMessage.toast('连接失败', tested.error));
+        return;
+      }
       showToast('连接成功');
     } catch (error) {
-      showToast(toastMessage('连接失败', error));
+      showToast(ToastMessage.toast('连接失败', error));
     } finally {
       setTesting(false);
     }
@@ -117,22 +115,24 @@ export function CloudSyncConfigScreen() {
     setSaving(true);
     try {
       const input = toInput();
-      if (!input.secretAccessKey.trim() && secretKeySet) {
-        const existing = await runtime.secretStore.get(
-          'cloud-sync/s3-secret-key',
-        );
+      if (!input.secretAccessKey?.trim() && secretKeySet) {
+        const existing = await runtime.secretStore.get('cloud-sync/s3-secret-key');
         if (!existing) {
           showToast('请填写 Secret Key');
           return;
         }
         input.secretAccessKey = existing;
       }
-      await setCloudSyncConfig(runtime, input);
+      const saved = await CloudSyncConfigStore.set(runtime, input);
+      if (!saved.ok) {
+        showToast(ToastMessage.toast('保存失败', saved.error));
+        return;
+      }
       setSecretKeySet(true);
       setForm(prev => ({...prev, secretAccessKey: ''}));
       showToast('配置已保存');
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -173,72 +173,32 @@ export function CloudSyncConfigScreen() {
           />
         </FormField>
         <FormField label="Bucket" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={form.bucket}
-            onChangeText={bucket => setForm(prev => ({...prev, bucket}))}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <FormTextInput tokens={tokens} value={form.bucket} onChangeText={bucket => setForm(prev => ({...prev, bucket}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
         <FormField label="Region" tokens={tokens} hint="MinIO 可留空">
-          <FormTextInput
-            tokens={tokens}
-            value={form.region}
-            onChangeText={region => setForm(prev => ({...prev, region}))}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <FormTextInput tokens={tokens} value={form.region} onChangeText={region => setForm(prev => ({...prev, region}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
-        <FormField
-          label="路径前缀"
-          tokens={tokens}
-          hint="须以 / 结尾，保存时自动规范化"
-        >
-          <FormTextInput
-            tokens={tokens}
-            value={form.pathPrefix}
-            onChangeText={pathPrefix =>
-              setForm(prev => ({...prev, pathPrefix}))
-            }
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+        <FormField label="路径前缀" tokens={tokens} hint="须以 / 结尾，保存时自动规范化">
+          <FormTextInput tokens={tokens} value={form.pathPrefix} onChangeText={pathPrefix => setForm(prev => ({...prev, pathPrefix}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
         <FormSwitchRow
           label="Path style"
           description="MinIO 需开启；阿里云 OSS 官方 Endpoint 请关闭"
           tokens={tokens}
           value={form.forcePathStyle}
-          onValueChange={forcePathStyle =>
-            setForm(prev => ({...prev, forcePathStyle}))
-          }
+          onValueChange={forcePathStyle => setForm(prev => ({...prev, forcePathStyle}))}
         />
       </FormSectionCard>
 
       <FormSectionCard tokens={tokens} title="凭据">
         <FormField label="Access Key ID" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={form.accessKeyId}
-            onChangeText={accessKeyId =>
-              setForm(prev => ({...prev, accessKeyId}))
-            }
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <FormTextInput tokens={tokens} value={form.accessKeyId} onChangeText={accessKeyId => setForm(prev => ({...prev, accessKeyId}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
-        <FormField
-          label="Secret Access Key"
-          tokens={tokens}
-          hint={secretKeySet ? '已保存；留空则保留原密钥' : '保存时写入 SKSP'}
-        >
+        <FormField label="Secret Access Key" tokens={tokens} hint={secretKeySet ? '已保存；留空则保留原密钥' : '保存时写入 SKSP'}>
           <FormTextInput
             tokens={tokens}
             value={form.secretAccessKey}
-            onChangeText={secretAccessKey =>
-              setForm(prev => ({...prev, secretAccessKey}))
-            }
+            onChangeText={secretAccessKey => setForm(prev => ({...prev, secretAccessKey}))}
             placeholder={secretKeySet ? '留空保留已存密钥' : ''}
             secureTextEntry
             autoCapitalize="none"
@@ -246,14 +206,7 @@ export function CloudSyncConfigScreen() {
           />
         </FormField>
         <FormField label="设备名称（可选）" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={form.deviceLabel}
-            onChangeText={deviceLabel =>
-              setForm(prev => ({...prev, deviceLabel}))
-            }
-            placeholder="便于识别本机"
-          />
+          <FormTextInput tokens={tokens} value={form.deviceLabel} onChangeText={deviceLabel => setForm(prev => ({...prev, deviceLabel}))} placeholder="便于识别本机" />
         </FormField>
         <SecondaryButton
           tokens={tokens}
@@ -264,9 +217,7 @@ export function CloudSyncConfigScreen() {
           }}
           disabled={testing || saving}
         />
-        <Text style={[styles.note, {color: tokens.textTertiary}]}>
-          测试连接仅校验桶访问权限，不会执行拉取或推送。
-        </Text>
+        <Text style={[styles.note, {color: tokens.textTertiary}]}>测试连接仅校验桶访问权限，不会执行拉取或推送。</Text>
       </FormSectionCard>
     </ScreenFormLayout>
   );

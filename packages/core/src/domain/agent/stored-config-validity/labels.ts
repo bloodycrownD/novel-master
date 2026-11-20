@@ -10,17 +10,19 @@
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import type { StoredConfigInvalidCode } from "./types.js";
 
-/** 失效原因 → 用户可读说明。 */
-export function storedConfigInvalidReason(code: StoredConfigInvalidCode): CoreMessageDescriptor {
-  switch (code) {
-    case "outdated_version":
-      return STORED_CONFIG_LABELS.reasonOutdatedVersion;
-    case "removed_feature":
-      return STORED_CONFIG_LABELS.reasonRemovedFeature;
-    case "broken_wire":
-      return STORED_CONFIG_LABELS.reasonBrokenWire;
-  }
-}
+export const StoredConfigLabels = {
+  /** 失效原因 → 用户可读说明。 */
+  invalidReason(code: StoredConfigInvalidCode): CoreMessageDescriptor {
+    switch (code) {
+      case "outdated_version":
+        return STORED_CONFIG_LABELS.reasonOutdatedVersion;
+      case "removed_feature":
+        return STORED_CONFIG_LABELS.reasonRemovedFeature;
+      case "broken_wire":
+        return STORED_CONFIG_LABELS.reasonBrokenWire;
+    }
+  },
+} as const;
 
 /** 存储配置失效面板与操作按钮文案（Mobile / Desktop 共用）。 */
 export const STORED_CONFIG_LABELS = {

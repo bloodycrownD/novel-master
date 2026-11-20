@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  ConfigDecodeError,
-  decode,
-  encode,
-  parseText,
-  stringifyText,
-} from "@novel-master/core";
+import {  describe, it  } from "node:test";
+import {  SerializationDecode, SerializationEncode, SerializationParseText, SerializationStringifyText  } from "@novel-master/core";
+import type { ZodType } from "zod";
 
-import { agentDefinitionSchema, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
+import {  agentDefinitionSchema, promptsDocumentSchema, type AgentDefinition  } from "@novel-master/core/agent";
+import {  AppErrorOps  } from "@novel-master/core/errors";
+import {  unwrap  } from "../helpers/result-unwrap.js";
+
+/** decode / parseText 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（等价 `if (!r.ok) throw r.error`）。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(SerializationDecode.decode(raw, schema));
+}
+
+function parseText(source: string, format: Parameters<typeof SerializationParseText.parse>[1]): unknown {
+  return unwrap(SerializationParseText.parse(source, format));
+}
+
+/** encode 已改返回 Result（五期门⑦ toWire 门禁）：测试内统一解包，同 decode 模式。 */
+function encode<T>(value: T, schema: Parameters<typeof SerializationEncode.encode>[1]): unknown {
+  return unwrap(SerializationEncode.encode(value, schema));
+}
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 
@@ -31,7 +42,7 @@ prompts:
     assert.equal(def.name, "test");
     assert.equal(def.model, TEST_SAVED_MODEL);
     assert.equal(def.prompts.system, "hello");
-    const out = stringifyText(encode(def, agentDefinitionSchema), "yaml");
+    const out = SerializationStringifyText.stringify(encode(def, agentDefinitionSchema), "yaml");
     const again = decode(parseText(out, "yaml"), agentDefinitionSchema);
     assert.equal(again.prompts.persist[0]?.name, "persona");
   });
@@ -65,7 +76,7 @@ prompts:
     };
     assert.equal(doc.prompts?.dynamic?.kick?.lifecycle, undefined);
     assert.equal(doc.prompts?.dynamic?.ctx?.lifecycle, undefined);
-    const yaml = stringifyText(encode(def, agentDefinitionSchema), "yaml");
+    const yaml = SerializationStringifyText.stringify(encode(def, agentDefinitionSchema), "yaml");
     assert.doesNotMatch(yaml, /lifecycle/);
 
     const again = decode(parseText(yaml, "yaml"), agentDefinitionSchema);
@@ -141,8 +152,7 @@ prompts:
           agentDefinitionSchema,
         ),
       (e: unknown) =>
-        e instanceof ConfigDecodeError &&
-        e.code === "INVALID_SCHEMA" &&
+        AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA") &&
         /subagentCallable/.test(e.message),
     );
   });

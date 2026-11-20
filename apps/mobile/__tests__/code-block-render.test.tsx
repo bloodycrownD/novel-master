@@ -21,14 +21,11 @@ jest.mock('sanitize-html', () => {
 import React from 'react';
 import {create, act} from 'react-test-renderer';
 import {Text} from 'react-native';
-import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
+import {TranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 import {RichContentBody} from '@/components/rich-content/RichContentBody';
 import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
-import {buildRichContentCssRules} from '@/web/shared/rich-content-styles';
-import {
-  normalizeFenceLang,
-  LANG_ALIAS,
-} from '@/components/rich-content/highlight-code';
+import {RichContentStyles} from '@/web/shared/rich-content-styles';
+import {LANG_ALIAS, HighlightCode} from '@/components/rich-content/highlight-code';
 
 /** 双端统一验收样例（与 desktop test/code-block-render.test.tsx 保持同文）。 */
 const UNIFIED_SAMPLE = [
@@ -153,7 +150,7 @@ function collectTokenClasses(html: string): string[] {
 
 describe('code block render (mobile)', () => {
   it('T-CB6: ```ts → pre[data-lang=typescript] + code.language-ts hljs + 高亮 span', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```ts\nconst greet = (name: string): string => `hi ${name}`; // comment\n```',
     );
     expect(html).toContain('<pre data-lang="typescript">');
@@ -164,7 +161,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-CB8: ```mermaid → language-mermaid 保留、code 内无 hljs span（扫描链路不回归）', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```mermaid\nflowchart TD\nA-->B\n```',
     );
     expect(html).toContain('language-mermaid');
@@ -174,7 +171,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-L1/T-L2: 无语言 / 未知语言 → pre[data-lang="plain"]（默认 escape 块级，无 hljs 类）', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```\nno language fence\n```\n\n```rust\nfn main() {}\n```',
     );
     // MF-1 修订：表外语言不再「故意无标签」，统一 plain 标
@@ -187,7 +184,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-L3: 4 空格缩进块 → pre[data-lang="plain"] + 复制按钮 span.code-copy', () => {
-    const html = prepareTranscriptRichHtml('正文\n\n    indented line one\n    indented line two');
+    const html = TranscriptRichHtml.prepare('正文\n\n    indented line one\n    indented line two');
     // 默认 renderer 只出裸 <pre><code>，缩进块无 info 串、不走 normalizeFenceLang
     expect(html).toContain('<pre data-lang="plain">');
     expect(html).toContain('<span class="code-copy"></span><code>indented line one');
@@ -195,13 +192,13 @@ describe('code block render (mobile)', () => {
     expect(html).not.toContain('language-');
     // 缩进块与 fence 未高亮分支的转义同源：< / > 不反射成标签
     // （& 经出口 decode 回解为 &，lt/gt 存活——与 fence 未高亮分支同一条 decode 出口）
-    const escaped = prepareTranscriptRichHtml('    a < b && c > d');
+    const escaped = TranscriptRichHtml.prepare('    a < b && c > d');
     expect(escaped).toContain('a &lt; b && c &gt; d');
     expect(escaped).not.toContain('a < b');
   });
 
   it('T-CB9: CSS 含 pre 块级 / pre code 重置 / data-lang::before / 两套 .hljs-*', () => {
-    const css = buildRichContentCssRules(['.bubble.rich']);
+    const css = RichContentStyles.buildCssRules(['.bubble.rich']);
     expect(css).toMatch(/\.bubble\.rich pre \{[^}]*border:/s);
     expect(css).toMatch(/\.bubble\.rich pre \{[^}]*padding:/s);
     expect(css).toMatch(/\.bubble\.rich pre \{[^}]*border-radius:/s);
@@ -222,7 +219,7 @@ describe('code block render (mobile)', () => {
 
   it('T-CB10: 横滚落在内层 code 上，基底 pre 仍折行', () => {
     // 剥掉注释后断言规则本体（注释里提到 overflow-x:auto，全量匹配会误伤）
-    const css = buildRichContentCssRules(['.bubble.rich']).replace(
+    const css = RichContentStyles.buildCssRules(['.bubble.rich']).replace(
       /\/\*[\s\S]*?\*\//g,
       '',
     );
@@ -238,7 +235,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-CB18: 表格被包进 div.table-wrap（横滚外壳），且 sanitize 不剥 div/class', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '| 列一 | 列二 |\n|---|---|\n| 1 | 2 |',
     );
     expect(html).toContain('<div class="table-wrap"><table>');
@@ -246,7 +243,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-CB16: 高亮/纯文本块带复制按钮 span.code-copy，mermaid 块无（零 DOM 文本）', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```ts\nconst a = 1;\n```\n\n```\nplain fence\n```\n\n```mermaid\nflowchart TD\n```',
     );
     expect(html.match(/<span class="code-copy"><\/span>/g)).toHaveLength(2);
@@ -261,7 +258,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-CB17: CSS 含 .code-copy 规则（伪元素 label + copied 态 + pre 定位容器）', () => {
-    const css = buildRichContentCssRules(['.bubble.rich']);
+    const css = RichContentStyles.buildCssRules(['.bubble.rich']);
     expect(css).toMatch(/\.bubble\.rich pre \{[^}]*position: relative;/s);
     expect(css).toMatch(
       /\.bubble\.rich pre > \.code-copy \{[^}]*position: absolute;/s,
@@ -281,24 +278,24 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-CB13: normalizeFenceLang 归一化表（双端同表契约）', () => {
-    expect(normalizeFenceLang('ts')).toBe('typescript');
-    expect(normalizeFenceLang('tsx')).toBe('typescript');
-    expect(normalizeFenceLang('js')).toBe('javascript');
-    expect(normalizeFenceLang('jsx')).toBe('javascript');
-    expect(normalizeFenceLang('py')).toBe('python');
-    expect(normalizeFenceLang('sh')).toBe('bash');
-    expect(normalizeFenceLang('shell')).toBe('bash');
-    expect(normalizeFenceLang('zsh')).toBe('bash');
-    expect(normalizeFenceLang('yml')).toBe('yaml');
-    expect(normalizeFenceLang('html')).toBe('html');
-    expect(normalizeFenceLang('TypeScript')).toBe('typescript');
-    expect(normalizeFenceLang('rust')).toBeNull();
-    expect(normalizeFenceLang('')).toBeNull();
-    expect(normalizeFenceLang(null)).toBeNull();
+    expect(HighlightCode.normalizeFenceLang('ts')).toBe('typescript');
+    expect(HighlightCode.normalizeFenceLang('tsx')).toBe('typescript');
+    expect(HighlightCode.normalizeFenceLang('js')).toBe('javascript');
+    expect(HighlightCode.normalizeFenceLang('jsx')).toBe('javascript');
+    expect(HighlightCode.normalizeFenceLang('py')).toBe('python');
+    expect(HighlightCode.normalizeFenceLang('sh')).toBe('bash');
+    expect(HighlightCode.normalizeFenceLang('shell')).toBe('bash');
+    expect(HighlightCode.normalizeFenceLang('zsh')).toBe('bash');
+    expect(HighlightCode.normalizeFenceLang('yml')).toBe('yaml');
+    expect(HighlightCode.normalizeFenceLang('html')).toBe('html');
+    expect(HighlightCode.normalizeFenceLang('TypeScript')).toBe('typescript');
+    expect(HighlightCode.normalizeFenceLang('rust')).toBeNull();
+    expect(HighlightCode.normalizeFenceLang('')).toBeNull();
+    expect(HighlightCode.normalizeFenceLang(null)).toBeNull();
   });
 
   it('T-CB13: 统一样例 → data-lang 集合与 token 类名并集与 desktop 一致', () => {
-    const html = prepareTranscriptRichHtml(UNIFIED_SAMPLE);
+    const html = TranscriptRichHtml.prepare(UNIFIED_SAMPLE);
     expect(collectDataLangs(html)).toEqual(UNIFIED_DATA_LANGS);
     expect(collectTokenClasses(html)).toEqual(UNIFIED_TOKEN_CLASSES);
     // shell 块经 LANG_ALIAS 归一化高亮为 bash
@@ -308,7 +305,7 @@ describe('code block render (mobile)', () => {
   });
 
   it('T-L2/T-CB13: 表外内置别名 mjs/cjs → 高亮但语言标回落 plain（MF-1 修订，双端一致，与 desktop 同一判定）', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```mjs\nimport { readFile } from "node:fs/promises";\n```\n\n```cjs\nconst { readFile } = require("node:fs");\n```',
     );
     // hljs 语言模块内置别名随注册进入注册表：命中即高亮（与 desktop rehype-highlight 同源）
@@ -328,7 +325,7 @@ describe('code block render (mobile)', () => {
     (LANG_ALIAS as Record<string, string>)['x"y'] = 'typescript';
     (LANG_ALIAS as Record<string, string>)['a<b&c'] = 'typescript';
     try {
-      const html = prepareTranscriptRichHtml(
+      const html = TranscriptRichHtml.prepare(
         '```x"y\nconst a = 1;\n```\n\n```a<b&c\nconst b = 2;\n```',
       );
       // 尖括号/引号经 escapeHtml 后进入 sanitize；出口 decode 只回解 quot/amp，

@@ -16,13 +16,13 @@
  * 原样保留。预置引擎模板字段（method / url / 认证方式 / 参数说明）内置只读，
  * 与 mobile nameLocked 口径一致——UI 改写不到模板键，B-1 的「按出厂基线整键
  * 替换丢既有覆盖」路径随之关闭；改预置先「恢复默认」。
- * 保存前模板统一过 `validateSearchEngineTemplate`（Result 失败直接展示原因，
+ * 保存前模板统一过 `SearchEngine.validateTemplate`（Result 失败直接展示原因，
  * 不发 IPC）。保存 / 清除互斥（在途期间按钮禁用 + 交错点击直接忽略）。
  */
 import { useCallback, useEffect, useState } from "react";
 import type { IpcResult, SearchConfigDto } from "@shared/ipc-types";
 import { coreT } from "@shared/logic/core-i18n";
-import { PRESET_ENGINE_TEMPLATES, parseCurlCommand, validateSearchEngineTemplate, type CustomEngineDef, type SearchEngineTemplate } from "@shared/logic/search-engines";
+import { PRESET_ENGINE_TEMPLATES, CurlImport, SearchEngine, type CustomEngineDef, type SearchEngineTemplate } from "@shared/logic/search-engines";
 import {
   ipcSearchClearEngineKey,
   ipcSearchCreateCustomEngine,
@@ -218,7 +218,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       const authName = form.authHeaderName.trim();
       if (form.authStyle === "bearer") baseHeaders.Authorization = "Bearer {{apiKey}}";
       else if (form.authStyle === "header" && authName.length > 0) baseHeaders[authName] = "{{apiKey}}";
-      const validated = validateSearchEngineTemplate({ name: form.name, method: form.method, url: form.url, headers: baseHeaders, paramHint: form.paramHint });
+      const validated = SearchEngine.validateTemplate({ name: form.name, method: form.method, url: form.url, headers: baseHeaders, paramHint: form.paramHint });
       if (!validated.ok) {
         const { messageKey, message, messageParams } = validated.error;
         setError(coreT(messageKey == null ? { key: "error.tool.search_template_invalid", params: { reason: message } } : { key: messageKey, params: messageParams }));
@@ -480,7 +480,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
               onClick={() => {
                 // curl 导入：解析失败整体拒绝；成功一次回填方法/端点/请求头（认证头反推三态）
                 // 与密钥。v3 表单无请求体字段，-d 原文不再预填 defaultBody。
-                const parsed = parseCurlCommand(curlText);
+                const parsed = CurlImport.parseCommand(curlText);
                 if (!parsed.ok) {
                   toastSettingsError(coreT(parsed.error.message));
                   return;

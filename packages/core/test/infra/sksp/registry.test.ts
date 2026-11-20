@@ -1,16 +1,12 @@
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import assert from "node:assert/strict";
-import {
-  clearSkspDrivers,
-  registerSkspDriver,
-  resolveSkspDriver,
-} from "../../../src/infra/sksp/logic/registry.js";
-import { SkspError } from "../../../src/infra/sksp/sksp-error.js";
+import {  AssertionError  } from "../../../src/common/assert.js";
+import {  SkspRegistry  } from "../../../src/infra/sksp/logic/registry.js";
 
 describe("SKSP registry", () => {
   it("resolves single registered driver", () => {
-    clearSkspDrivers();
-    registerSkspDriver({
+    SkspRegistry.clear();
+    SkspRegistry.register({
       name: "test",
       createStore: () => ({
         async get() {
@@ -25,15 +21,15 @@ describe("SKSP registry", () => {
         },
       }),
     });
-    assert.equal(resolveSkspDriver().name, "test");
-    clearSkspDrivers();
+    assert.equal(SkspRegistry.resolve().name, "test");
+    SkspRegistry.clear();
   });
 
-  it("throws NOT_REGISTERED when empty", () => {
-    clearSkspDrivers();
+  it("throws AssertionError when empty", () => {
+    SkspRegistry.clear();
     assert.throws(
-      () => resolveSkspDriver(),
-      (e) => e instanceof SkspError && e.code === "NOT_REGISTERED",
+      () => SkspRegistry.resolve(),
+      (e) => e instanceof AssertionError && e.message.includes("SKSP: no driver registered"),
     );
   });
 });

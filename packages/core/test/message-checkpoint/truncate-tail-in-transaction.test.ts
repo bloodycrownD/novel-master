@@ -2,24 +2,18 @@
  * truncate-tail-in-transaction 单测。
  */
 
+import {  outcomeValue  } from "../helpers/outcome-value.js";
+import {  unwrap  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USER_VFS_PENDING_QUEUE_KEY,
-  RULE_SNAPSHOT_CANON_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  createTruncateTailDepsFromTx,
-  truncateTailInTransaction,
-} from "../../src/service/message-checkpoint/truncate-tail-wiring.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {  describe, it  } from "node:test";
+import {  TextBlocks  } from "@novel-master/core/chat";
+import {  SqliteMessageCheckpointRepository  } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY, RULE_SNAPSHOT_CANON_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {  TruncateTail  } from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
+import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
+import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -50,23 +44,23 @@ async function insertOrphanRevision(
   );
 }
 
-describe("truncateTailInTransaction", () => {
+describe("TruncateTail.truncate", () => {
   it("截断 seq > afterSeq 的消息并清理 checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", {
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
-    });
+    }));
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -74,21 +68,21 @@ describe("truncateTailInTransaction", () => {
       });
     });
 
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
 
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const cp = await checkpoints.loadFileTree(session.id, m2.id);
     assert.equal(cp, null);
-    assert.equal((await svfs.read("/a.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
   });
 
   it("tail 非空时清空 file_cache / pending；保留 rule_snapshot", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
     await sessionKkv.set(
       session.id,
       SESSION_KKV_DOMAIN_USER_VFS_PENDING,
@@ -114,11 +108,11 @@ describe("truncateTailInTransaction", () => {
       "value",
     );
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -127,33 +121,33 @@ describe("truncateTailInTransaction", () => {
     });
 
     assert.equal(
-      await sessionKkv.get(
+      unwrap(await sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         USER_VFS_PENDING_QUEUE_KEY,
-      ),
+      )),
       null,
     );
     assert.equal(
-      await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"),
+      unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
       null,
     );
     assert.equal(
-      await sessionKkv.get(
+      unwrap(await sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
         RULE_SNAPSHOT_CANON_KEY,
-      ),
+      )),
       "[]",
     );
-    assert.equal(await sessionKkv.get(session.id, "other_domain", "keep"), "value");
+    assert.equal(unwrap(await sessionKkv.get(session.id, "other_domain", "keep")), "value");
   });
 
   it("afterSeq 之后无消息时不改状态条 kkv", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const sessionKkv = createSessionKkvService(ctx.conn);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
     const pendingJson = "[]";
     await sessionKkv.set(
       session.id,
@@ -168,10 +162,10 @@ describe("truncateTailInTransaction", () => {
       '{"body":"x","mtimeMs":1}',
     );
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("only"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("only")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -180,15 +174,15 @@ describe("truncateTailInTransaction", () => {
     });
 
     assert.equal(
-      await sessionKkv.get(
+      unwrap(await sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         USER_VFS_PENDING_QUEUE_KEY,
-      ),
+      )),
       pendingJson,
     );
     assert.equal(
-      await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"),
+      unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
       '{"body":"x","mtimeMs":1}',
     );
   });
@@ -199,11 +193,11 @@ describe("truncateTailInTransaction", () => {
   // 这步清扫、且那条路径没有 deferred 补做，孤儿行永久残留。
   it("sweepRevisions 缺省不 defer 时，事务内仍做全局孤儿清扫", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-gs-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-gs-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
     // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
     await insertOrphanRevision(ctx.conn, 999101);
@@ -214,7 +208,7 @@ describe("truncateTailInTransaction", () => {
     );
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -232,16 +226,16 @@ describe("truncateTailInTransaction", () => {
 
   it("显式 deferGlobalOrphanGc 时事务内跳过全局孤儿清扫", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-gd-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-gd-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
     await insertOrphanRevision(ctx.conn, 999102);
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,

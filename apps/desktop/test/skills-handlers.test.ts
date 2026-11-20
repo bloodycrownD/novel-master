@@ -4,16 +4,8 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import {
-  handleSkillsDelete,
-  handleSkillsEffective,
-  handleSkillsList,
-  handleSkillsRead,
-  handleSkillsToggle,
-  handleSkillsUpdateInfo,
-  handleSkillsWrite,
-} from "../src/main/ipc/handlers/skills.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Skills } from "../src/main/ipc/handlers/skills.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -31,21 +23,21 @@ describe("skills IPC handlers", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-skills-"));
 
-    const project = await handleProjectsCreate({ name: "skills-ipc" });
+    const project = await Projects.create({ name: "skills-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
     projectId = project.data.id;
 
-    const other = await handleProjectsCreate({ name: "skills-ipc-other" });
+    const other = await Projects.create({ name: "skills-ipc-other" });
     assert.equal(other.ok, true);
     if (other.ok) {
       otherProjectId = other.data.id;
     }
 
     // 项目技能 foo（后置全局同名副本，验证覆盖合并）
-    const writeProject = await handleSkillsWrite({
+    const writeProject = await Skills.write({
       domain: "project",
       projectId,
       name: "foo",
@@ -57,7 +49,7 @@ describe("skills IPC handlers", () => {
       ["bar", "全局技能"],
       ["foo", "全局同名技能"],
     ] as const) {
-      const res = await handleSkillsWrite({
+      const res = await Skills.write({
         domain: "global",
         name,
         content: skillDoc(name, desc),
@@ -71,7 +63,7 @@ describe("skills IPC handlers", () => {
   });
 
   it("list 按域返回清单（含 files 与有效性）", async () => {
-    const globalList = await handleSkillsList({ domain: "global" });
+    const globalList = await Skills.list({ domain: "global" });
     assert.equal(globalList.ok, true);
     if (!globalList.ok) {
       return;
@@ -86,7 +78,7 @@ describe("skills IPC handlers", () => {
     assert.equal(foo!.valid, true);
     assert.deepEqual(foo!.files, ["SKILL.md"]);
 
-    const projectList = await handleSkillsList({
+    const projectList = await Skills.list({
       domain: "project",
       projectId,
     });
@@ -100,7 +92,7 @@ describe("skills IPC handlers", () => {
   });
 
   it("effective 合并视图：同名项目副本覆盖并标 overridden", async () => {
-    const res = await handleSkillsEffective({ projectId });
+    const res = await Skills.effective({ projectId });
     assert.equal(res.ok, true);
     if (!res.ok) {
       return;
@@ -120,7 +112,7 @@ describe("skills IPC handlers", () => {
   });
 
   it("read 缺省域解析生效副本，显式 domain 读原件", async () => {
-    const effectiveRead = await handleSkillsRead({
+    const effectiveRead = await Skills.read({
       name: "foo",
       projectId,
     });
@@ -130,7 +122,7 @@ describe("skills IPC handlers", () => {
       assert.match(effectiveRead.data.content, /项目域技能/);
     }
 
-    const globalRead = await handleSkillsRead({
+    const globalRead = await Skills.read({
       domain: "global",
       name: "foo",
     });
@@ -142,14 +134,14 @@ describe("skills IPC handlers", () => {
   });
 
   it("toggle 写当前项目负清单：禁用后 effective=false，启用恢复", async () => {
-    const off = await handleSkillsToggle({
+    const off = await Skills.toggle({
       projectId,
       name: "bar",
       disabled: true,
     });
     assert.equal(off.ok, true);
 
-    const disabledView = await handleSkillsEffective({ projectId });
+    const disabledView = await Skills.effective({ projectId });
     assert.equal(disabledView.ok, true);
     if (disabledView.ok) {
       const bar = disabledView.data.find((s) => s.name === "bar")!;
@@ -159,7 +151,7 @@ describe("skills IPC handlers", () => {
 
     // 其他项目不受负清单影响
     if (otherProjectId != null) {
-      const otherView = await handleSkillsEffective({
+      const otherView = await Skills.effective({
         projectId: otherProjectId,
       });
       assert.equal(otherView.ok, true);
@@ -169,13 +161,13 @@ describe("skills IPC handlers", () => {
       }
     }
 
-    const on = await handleSkillsToggle({
+    const on = await Skills.toggle({
       projectId,
       name: "bar",
       disabled: false,
     });
     assert.equal(on.ok, true);
-    const restored = await handleSkillsEffective({ projectId });
+    const restored = await Skills.effective({ projectId });
     assert.equal(restored.ok, true);
     if (restored.ok) {
       const bar = restored.data.find((s) => s.name === "bar")!;
@@ -185,7 +177,7 @@ describe("skills IPC handlers", () => {
   });
 
   it("write 缺域返回 MISSING_DOMAIN；非法技能名返回 INVALID_NAME", async () => {
-    const missingDomain = await handleSkillsWrite({
+    const missingDomain = await Skills.write({
       name: "nope",
       content: skillDoc("nope", "缺域"),
       projectId,
@@ -195,7 +187,7 @@ describe("skills IPC handlers", () => {
       assert.equal(missingDomain.error.code, "SKILL_MISSING_DOMAIN");
     }
 
-    const badName = await handleSkillsWrite({
+    const badName = await Skills.write({
       domain: "global",
       name: "has space",
       content: skillDoc("has space", "非法名"),
@@ -207,7 +199,7 @@ describe("skills IPC handlers", () => {
   });
 
   it("delete 后清单与合并视图同步移除", async () => {
-    const write = await handleSkillsWrite({
+    const write = await Skills.write({
       domain: "project",
       projectId: otherProjectId,
       name: "foo",
@@ -215,14 +207,14 @@ describe("skills IPC handlers", () => {
     });
     assert.equal(write.ok, true);
 
-    const removed = await handleSkillsDelete({
+    const removed = await Skills.remove({
       domain: "project",
       projectId: otherProjectId,
       name: "foo",
     });
     assert.equal(removed.ok, true);
 
-    const afterDelete = await handleSkillsList({
+    const afterDelete = await Skills.list({
       domain: "project",
       projectId: otherProjectId,
     });
@@ -233,7 +225,7 @@ describe("skills IPC handlers", () => {
   });
 
   it("辅助文件写入与读取（相对路径，缺省 SKILL.md）", async () => {
-    const write = await handleSkillsWrite({
+    const write = await Skills.write({
       domain: "project",
       projectId,
       name: "foo",
@@ -242,7 +234,7 @@ describe("skills IPC handlers", () => {
     });
     assert.equal(write.ok, true);
 
-    const read = await handleSkillsRead({
+    const read = await Skills.read({
       domain: "project",
       projectId,
       name: "foo",
@@ -253,7 +245,7 @@ describe("skills IPC handlers", () => {
       assert.equal(read.data.content, "辅助内容");
     }
 
-    const list = await handleSkillsList({ domain: "project", projectId });
+    const list = await Skills.list({ domain: "project", projectId });
     assert.equal(list.ok, true);
     if (list.ok) {
       const foo = list.data.find((s) => s.name === "foo")!;
@@ -263,32 +255,32 @@ describe("skills IPC handlers", () => {
 
   it("updateInfo（T-S4）：改名成功迁移目录并同步 front matter，仅改描述不动目录", async () => {
     // 改名：新名可读且 front matter name 同步；旧名 NOT_FOUND
-    const renamed = await handleSkillsUpdateInfo({
+    const renamed = await Skills.updateInfo({
       domain: "global",
       name: "bar",
       newName: "bar-renamed",
     });
     assert.equal(renamed.ok, true);
 
-    const readNew = await handleSkillsRead({ domain: "global", name: "bar-renamed" });
+    const readNew = await Skills.read({ domain: "global", name: "bar-renamed" });
     assert.equal(readNew.ok, true);
     if (readNew.ok) {
       assert.match(readNew.data.content, /name: "bar-renamed"/);
     }
-    const readOld = await handleSkillsRead({ domain: "global", name: "bar" });
+    const readOld = await Skills.read({ domain: "global", name: "bar" });
     assert.equal(readOld.ok, false);
     if (!readOld.ok) {
       assert.equal(readOld.error.code, "SKILL_NOT_FOUND");
     }
 
     // 仅改描述：目录不迁（同名可读）、description 更新
-    const descRes = await handleSkillsUpdateInfo({
+    const descRes = await Skills.updateInfo({
       domain: "global",
       name: "bar-renamed",
       description: "改过的描述",
     });
     assert.equal(descRes.ok, true);
-    const list = await handleSkillsList({ domain: "global" });
+    const list = await Skills.list({ domain: "global" });
     assert.equal(list.ok, true);
     if (list.ok) {
       const item = list.data.find((s) => s.name === "bar-renamed")!;
@@ -298,7 +290,7 @@ describe("skills IPC handlers", () => {
 
   it("updateInfo（T-S4）：撞名与内置改名拒绝时错误码透传", async () => {
     // 域内撞名：SKILL_ALREADY_EXISTS（core 事务内错误解包后仍透传）
-    const dup = await handleSkillsUpdateInfo({
+    const dup = await Skills.updateInfo({
       domain: "global",
       name: "bar-renamed",
       newName: "foo",
@@ -312,7 +304,7 @@ describe("skills IPC handlers", () => {
 
     // global 域内置技能改名拒：BUILTIN_SKILL_RENAME（内置源门先于
     // 存在性检查，不依赖目录状态）
-    const builtinRes = await handleSkillsUpdateInfo({
+    const builtinRes = await Skills.updateInfo({
       domain: "global",
       name: "agent-config",
       newName: "agent-config-renamed",

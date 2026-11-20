@@ -6,20 +6,20 @@
  */
 
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { parseRuleSnapshotJson } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
+import { FileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { WorkplaceDisplay } from "@/domain/workplace/logic/workplace-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import type { SkillService } from "@/service/skills/skills.port.js";
-import { isBinaryFilePath } from "@/common/file.js";
-import { messageBodyTextFromBlocks } from "../../content/message-body-text.js";
-import { textBlocks } from "../../content/text-blocks.js";
+import type { SkillFileContent, SkillService } from "@/service/skills/skills.port.js";
+import { Guards } from "@/common/guards.js";
+import { MessageBodyText } from "../../content/message-body-text.js";
+import { TextBlocks } from "../../content/text-blocks.js";
 import type { ChatMessageData } from "../../model/message.js";
 import type { MessageAttachment } from "../../model/message-attachment.schema.js";
 import { AttachBudget, BINARY_ATTACH_NOTE, OVERSIZED_ATTACH_NOTE } from "../attachment/attach-budget.js";
 import { attachmentXmlCodec } from "../attachment/attachment-xml-codec.js";
-import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import { promptPathSeen } from "../attachment/prompt-path-seen.js";
 import { attachmentScanner } from "../attachment/attachment-scanner.js";
 import { dirAttachTreeRenderer } from "../attachment/render-dir-attach-tree.js";
@@ -41,20 +41,20 @@ const SKILL_ATTACH_MISSING_NOTE = "技能不存在或已删除";
 async function resolveWorkplaceStatus(path: string, runtime: AttachmentHydratorRuntime): Promise<WorkplaceDisplayStatus> {
   const raw = await runtime.sessionKkv.get(runtime.sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY);
   if (raw == null || raw === "") return "full";
-  const entries = parseRuleSnapshotJson(raw);
+  const entries = RuleSnapshotCodec.parseJson(raw);
   if (!entries.ok) return "full";
   return entries.value.find((entry) => entry.path === path)?.status ?? "full";
 }
 
 function resolveAttachFileStatus(path: string, type: MessageAttachment["type"]): WorkplaceDisplayStatus {
-  if (type === "image" || isBinaryFilePath(path)) return "filename";
+  if (type === "image" || Guards.isBinaryFilePath(path)) return "filename";
   return "full";
 }
 
 function isBinaryOrImageAttach(attachment: MessageAttachment): boolean {
   if (attachment.type === "image" || attachment.type === "dir") return attachment.type === "image";
   const path = attachment.path ?? "";
-  return isBinaryFilePath(path);
+  return Guards.isBinaryFilePath(path);
 }
 
 /** {@link fileRefAction} 的可选正文口径开关。 */
@@ -81,7 +81,7 @@ function fileRefAction(source: "attach" | "workplace", logicalPath: string, disp
       display: "filename",
     });
   }
-  const lineBody = opts?.bodyIsRendered === true ? rawContent : renderFileBlockBody({ logicalPath, display, content: rawContent });
+  const lineBody = opts?.bodyIsRendered === true ? rawContent : WorkplaceDisplay.renderFileBlockBody({ logicalPath, display, content: rawContent });
   return attachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: lineBody, display });
 }
 
@@ -110,7 +110,7 @@ function unwrapLegacyBody(content: string, tag: "file" | "dir"): { body: string;
 
 /** skillAttach 不存在提示行 XML（不写 seen：技能后续创建可自愈重附全文）。 */
 function buildSkillAttachMissingXml(name: string): string {
-  return buildUserVfsActionXml("skillAttach", { name, missing: true, note: SKILL_ATTACH_MISSING_NOTE });
+  return UserVfsActionXml.build("skillAttach", { name, missing: true, note: SKILL_ATTACH_MISSING_NOTE });
 }
 
 /** 一轮 prepare 独占的附件 hydrate 状态。 */
@@ -149,10 +149,10 @@ export class AttachmentHydrator {
       hydrated[i] = await this.hydrateFileFull({ ...attachment, path: logicalPath }, logicalPath);
     }
 
-    const plainText = messageBodyTextFromBlocks(message.content.blocks);
+    const plainText = MessageBodyText.fromBlocks(message.content.blocks);
     return {
       ...message,
-      content: textBlocks(userMessageFormatter.wrapForLlm(plainText, hydrated, effectiveExtraInfo)),
+      content: TextBlocks.of(userMessageFormatter.wrapForLlm(plainText, hydrated, effectiveExtraInfo)),
       attachments: hydrated,
     };
   }
@@ -206,7 +206,7 @@ export class AttachmentHydrator {
         ...attachment,
         path: logicalPath,
         action: "userAttach",
-        content: buildUserVfsActionXml("userAttach", { path: logicalPath, alreadyReferenced: true }),
+        content: UserVfsActionXml.build("userAttach", { path: logicalPath, alreadyReferenced: true }),
       };
     }
     return this.hydrateFileFull({ ...attachment, path: logicalPath }, logicalPath);
@@ -222,39 +222,44 @@ export class AttachmentHydrator {
       return {
         ...attachment,
         action: "skillAttach",
-        content: buildUserVfsActionXml("skillAttach", { name, alreadyReferenced: true }),
+        content: UserVfsActionXml.build("skillAttach", { name, alreadyReferenced: true }),
       };
     }
     if (this.runtime.skills == null || this.runtime.projectId == null) return attachment;
     const projectId = this.runtime.projectId;
     const skills = this.runtime.skills;
     this.skillNames ??= (async () => {
-      try {
-        return new Set((await skills.effectiveSkills(projectId)).map((skill) => skill.name));
-      } catch {
-        return new Set<string>();
-      }
+      const effective = await skills.effectiveSkills(projectId);
+      // 清单读取失败（已知失败）与旧 catch 同款兜底：按空清单收口，走「不存在提示」。
+      return new Set<string>(effective.ok ? effective.value.map((skill) => skill.name) : []);
     })();
     const names = await this.skillNames;
     if (!names.has(name)) {
       return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
     }
+    // 读盘竞态兜底（判定存在但读取抛错）：Err 分支与 throw 透传都按
+    // 「不存在提示」收口，不写 seen——与 Result 化前的 catch-all 同语义。
+    let file: SkillFileContent;
     try {
-      const file = await skills.readSkillFile(undefined, name, undefined, projectId);
-      this.seen.add(key);
-      const oversized = !this.budget.tryConsume(file.content.length);
-      return {
-        ...attachment,
-        action: "skillAttach",
-        content: buildUserVfsActionXml("skillAttach", {
-          name,
-          content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
-          ...(oversized ? { display: "filename" as const } : {}),
-        }),
-      };
+      const fileResult = await skills.readSkillFile(undefined, name, undefined, projectId);
+      if (!fileResult.ok) {
+        return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
+      }
+      file = fileResult.value;
     } catch {
       return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
     }
+    this.seen.add(key);
+    const oversized = !this.budget.tryConsume(file.content.length);
+    return {
+      ...attachment,
+      action: "skillAttach",
+      content: UserVfsActionXml.build("skillAttach", {
+        name,
+        content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
+        ...(oversized ? { display: "filename" as const } : {}),
+      }),
+    };
   }
 
   /** 首次全文 hydrate（文本 / workplace / filename 档）→ action XML。 */
@@ -289,7 +294,7 @@ export class AttachmentHydrator {
       path: logicalPath,
       status,
     };
-    const cached = await loadOrFillFileCache(cacheRequest);
+    const cached = await FileCache.loadOrFill(cacheRequest);
     const noteText = attachBinaryNote(attachment, status);
     const refOpts: FileRefActionOpts = {
       oversized: isOversizedAttach(attachment, cached.body.length, this.budget),

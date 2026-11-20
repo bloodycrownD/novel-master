@@ -11,9 +11,9 @@
 import {useCallback, useState} from 'react';
 import type {Dispatch, SetStateAction} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {formatError} from '../errors/format-error';
+import {FormatError} from '../errors/format-error';
 
-export interface UseFocusListReloadOptions<T> {
+interface UseFocusListReloadOptions<T> {
   /** 数据拉取；抛错由 hook 统一分流（默认进 error 态）。 */
   fetcher: () => Promise<T | null | undefined>;
   /** fetcher 返回 null/undefined 时的兜底值（须为模块级稳定引用）。 */
@@ -24,7 +24,7 @@ export interface UseFocusListReloadOptions<T> {
   onError?: (cause: unknown) => void;
 }
 
-export interface FocusListReloadResult<T> {
+interface FocusListReloadResult<T> {
   rows: T;
   loading: boolean;
   error: string | undefined;
@@ -34,12 +34,7 @@ export interface FocusListReloadResult<T> {
   setRows: Dispatch<SetStateAction<T>>;
 }
 
-export function useFocusListReload<T>({
-  fetcher,
-  fallbackValue,
-  focusSilent = false,
-  onError,
-}: UseFocusListReloadOptions<T>): FocusListReloadResult<T> {
+export function useFocusListReload<T>({fetcher, fallbackValue, focusSilent = false, onError}: UseFocusListReloadOptions<T>): FocusListReloadResult<T> {
   const [rows, setRows] = useState<T>(fallbackValue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -58,7 +53,7 @@ export function useFocusListReload<T>({
           onError(cause);
         } else {
           setRows(fallbackValue);
-          setError(formatError(cause));
+          setError(FormatError.format(cause));
         }
       } finally {
         setLoading(false);
@@ -67,11 +62,10 @@ export function useFocusListReload<T>({
     [fetcher, fallbackValue, onError],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      reload(focusSilent ? {silent: true} : undefined).catch(() => undefined);
-    }, [reload, focusSilent]),
-  );
+  const onScreenFocus = useCallback(() => {
+    reload(focusSilent ? {silent: true} : undefined).catch(() => undefined);
+  }, [reload, focusSilent]);
+  useFocusEffect(onScreenFocus);
 
   return {rows, loading, error, reload, setRows};
 }

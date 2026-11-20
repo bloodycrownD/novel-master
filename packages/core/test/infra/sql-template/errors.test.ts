@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { SqlTemplateError } from "@/infra/sql-template/errors.js";
+import {  describe, it  } from "node:test";
+import {  SqlTemplateParser  } from "@/infra/sql-template/index.js";
+import {  SqlTemplateError  } from "@/infra/sql-template/errors.js";
 
 describe("errors", () => {
   const parser = new SqlTemplateParser();

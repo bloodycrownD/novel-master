@@ -1,12 +1,11 @@
 /**
  * Prompt IPC handlers — real prompt preview turns, chat token label, agent meta.
  */
-import {
-  AgentRunResolveError,
-  resolveAgentForProject,
-} from "@novel-master/core/agent";
-import { savedModelDisplayName } from "@novel-master/core/provider";
-import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
+import { AgentProjectResolver, AGENT_RUN_RESOLVE_KEYS } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
+import { SavedModelDisplayName } from "@novel-master/core/provider";
+import { PromptPreviewTurns } from "@novel-master/core/prompt";
+import { Result } from "@novel-master/core/errors";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
@@ -17,21 +16,21 @@ import type {
   PromptToolGroupDto,
   PromptTurnCardDto,
 } from "../../../../shared/ipc-types.js";
-import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
-import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.service.js";
+import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
+import { ChatPromptTokensService } from "../../services/chat-prompt-tokens.service.js";
+import { PromptPreviewService } from "../../services/prompt-preview.service.js";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
-import { formatIpcError } from "../format-ipc-error.js";
+import { IpcResults } from "../ipc-result.js";
 
-export async function handlePromptRealPreview(
-  req: PromptScopeRequest,
-): Promise<IpcResult<PromptPreviewTurnDto[]>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const turns = await buildRealPromptPreviewTurns(rt, req);
-    return {
-      ok: true,
-      data: turns.map((turn) => ({
+export const Prompt = {
+  realPreview(req: PromptScopeRequest): Promise<IpcResult<PromptPreviewTurnDto[]>> {
+    return IpcResults.from(async (): Promise<Result<PromptPreviewTurnDto[], AppError>> => {
+      const built = await DesktopRuntimeSingleton.get();
+      if (!built.ok) return Result.err(built.error);
+      const rt = built.value;
+      const preview = await PromptPreviewService.buildRealTurnsAdapter(rt, req);
+      if (!preview.ok) return Result.err(preview.error);
+      return Result.ok(preview.value.map((turn) => ({
         id: turn.id,
         kind: turn.kind,
         // core 产出 MessageLike（G3.5）：main 翻译后写 string DTO（spec G4.3）
@@ -49,7 +48,7 @@ export async function handlePromptRealPreview(
                 inputJson: card.inputJson,
                 // 保结构截大 key 的预览在 main 侧算好下发（renderer 不引
                 // core 运行时——这条 import 会把 zod 等整图拖进沙箱 bundle）。
-                inputPreview: formatToolUsePreviewJson(card.inputJson),
+                inputPreview: PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson),
                 result: card.result,
                 status: card.status,
                 parallel: card.parallel,
@@ -67,128 +66,117 @@ export async function handlePromptRealPreview(
                   body: card.body,
                 } satisfies PromptTurnCardDto),
         ),
-      })),
-    };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
+      })));
+    });
+  },
 
-/**
- * chat token 占用读口 IPC。
- *
- * `data` 允许为 `null`（r3-dt-align 第 2 层的返回契约）：run 在途时读口跳过本轮
- * （整串级重活与发送链抢同一条 SQLite 连接），或中途被弃权，两种情况都回
- * `{ok:true, data:null}`。renderer 收到 null 必须**保留旧标签**——不清空、不显示
- * 占位（与 mobile 的空串哨兵同口径）。
- */
-export async function handlePromptChatTokenLabel(
-  req: PromptScopeRequest,
-): Promise<IpcResult<PromptChatTokenStatsResponse | null>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const stats = await loadChatPromptTokenStatsResilient(rt, req);
-    return { ok: true, data: stats };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
+  /**
+   * chat token 占用读口 IPC。
+   *
+   * `data` 允许为 `null`（r3-dt-align 第 2 层的返回契约）：run 在途时读口跳过本轮
+   * （整串级重活与发送链抢同一条 SQLite 连接），或中途被弃权，两种情况都回
+   * `{ok:true, data:null}`。renderer 收到 null 必须**保留旧标签**——不清空、不显示
+   * 占位（与 mobile 的空串哨兵同口径）。
+   */
+  chatTokenLabel(req: PromptScopeRequest): Promise<IpcResult<PromptChatTokenStatsResponse | null>> {
+    return IpcResults.from(async () => {
+      const built = await DesktopRuntimeSingleton.get();
+      if (!built.ok) return Result.err(built.error);
+      const rt = built.value;
+      // resilient 的已知失败（主路径 + fallback 双双失败）原样转码；弃权 → null（保留旧标签）。
+      return ChatPromptTokensService.loadResilient(rt, req);
+    });
+  },
 
-export async function handlePromptAgentMeta(
-  req: PromptScopeRequest,
-): Promise<IpcResult<PromptAgentMetaResponse>> {
-  try {
-    const rt = await getDesktopRuntime();
-    try {
-      const resolved = await resolveAgentForProject(
-        rt,
-        req.projectId,
-        req.sessionId,
-      );
-      const { definition } = resolved;
-      // workspace 层已移除：模型解析链收窄为 agent pin → session.modelId。
-      // 这里读 session 配置拿 modelId，同时用于 modelSource 判定。
-      const sessionConfig = await rt.sessions.getSessionAgentConfig(
-        req.sessionId,
-      );
-      const savedModelId = definition.model ?? sessionConfig.modelId;
-      let modelLabel = "未选择模型";
-      if (savedModelId) {
-        const saved = await rt.providerModels.getSavedById(savedModelId);
-        if (saved != null) {
-          const provider = await rt.providers.get(saved.providerId);
-          modelLabel = savedModelDisplayName(saved, provider.displayName);
-        } else {
-          modelLabel = savedModelId;
-        }
-      }
-      const hasDedicatedModel =
-        definition.model != null && definition.model !== "";
-      // modelSource 优先级链：agent pin 压制一切 → 否则取 session。
-      const modelSource: 'agent-pin' | 'session' = hasDedicatedModel
-        ? 'agent-pin'
-        : 'session';
-      // 项目智能体已下线：resolve 永远走 session 分支。
-      return {
-        ok: true,
-        data: {
-          source: "session",
-          agentId: resolved.agentId,
-          agentName: definition.name,
-          modelLabel,
-          hasDedicatedModel,
-          modelSource,
-        },
-      };
-    } catch (error) {
-      if (error instanceof AgentRunResolveError) {
-        return {
-          ok: true,
-          data: {
+  agentMeta(req: PromptScopeRequest): Promise<IpcResult<PromptAgentMetaResponse>> {
+    return IpcResults.from(async (): Promise<Result<PromptAgentMetaResponse, AppError>> => {
+      const built = await DesktopRuntimeSingleton.get();
+      if (!built.ok) return Result.err(built.error);
+      const rt = built.value;
+      const resolved = await AgentProjectResolver.resolve(rt, req.projectId, req.sessionId);
+      // resolve 已知失败沿 Result 到达（错误通道迁移四期），就地归一（错误通道
+      // 迁移七期）：resolve keys → source:'none'（T-C2 口径不变），其余沿 Result
+      // 上行交 toIpcResult 转码。
+      if (!resolved.ok) {
+        if (AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
+          return Result.ok({
             source: "none",
             agentName: "未配置 Agent",
             modelLabel: "—",
             hasDedicatedModel: false,
-          },
-        };
+          });
+        }
+        return Result.err(resolved.error);
       }
-      throw error;
-    }
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
+      const { definition, agentId } = resolved.value;
+      // workspace 层已移除：模型解析链收窄为 agent pin → session.modelId。
+      // 这里读 session 配置拿 modelId，同时用于 modelSource 判定。
+      const sessionConfig = await rt.sessions.getSessionAgentConfig(req.sessionId);
+      if (!sessionConfig.ok) return Result.err(sessionConfig.error);
+      const savedModelId = definition.model ?? sessionConfig.value.modelId;
+      let modelLabel = "未选择模型";
+      if (savedModelId) {
+        const saved = await rt.providerModels.getSavedById(savedModelId);
+        if (!saved.ok) return Result.err(saved.error);
+        if (saved.value != null) {
+          const provider = await rt.providers.get(saved.value.providerId);
+          if (!provider.ok) return Result.err(provider.error);
+          modelLabel = SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName);
+        } else {
+          modelLabel = savedModelId;
+        }
+      }
+      const hasDedicatedModel = definition.model != null && definition.model !== "";
+      // modelSource 优先级链：agent pin 压制一切 → 否则取 session。
+      const modelSource: "agent-pin" | "session" = hasDedicatedModel ? "agent-pin" : "session";
+      // 项目智能体已下线：resolve 永远走 session 分支。
+      return Result.ok({
+        source: "session",
+        agentId,
+        agentName: definition.name,
+        modelLabel,
+        hasDedicatedModel,
+        modelSource,
+      });
+    });
+  },
+} as const;
 
 // core 侧加字段而 DTO 未跟时，下列导出 const 构造 {} 编译红（TS2741：差集键 missing）
-export type CoreGroupParityCheck = Record<
+type CoreGroupParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptToolGroupCardData,
     keyof PromptToolGroupDto
   >,
   never
 >;
-export type CoreTextParityCheck = Record<
+type CoreTextParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptTextCardData,
     keyof PromptTextCardDto
   >,
   never
 >;
-export type CoreWorkplaceParityCheck = Record<
+type CoreWorkplaceParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptWorkplaceCardData,
     keyof import("../../../../shared/ipc-types.js").PromptWorkplaceDto
   >,
   never
 >;
-export type CoreWorkplaceFileParityCheck = Record<
+type CoreWorkplaceFileParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptWorkplaceFileCardData,
     keyof import("../../../../shared/ipc-types.js").PromptWorkplaceFileDto
   >,
   never
 >;
+
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_GROUP_PARITY_CHECK: CoreGroupParityCheck = {};
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_TEXT_PARITY_CHECK: CoreTextParityCheck = {};
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_WORKPLACE_PARITY_CHECK: CoreWorkplaceParityCheck = {};
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_WORKPLACE_FILE_PARITY_CHECK: CoreWorkplaceFileParityCheck = {};

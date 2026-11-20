@@ -1,1 +1,4 @@
-["createMessageCheckpointService", "createMessageRollbackService"]
+[
+  "MessageCheckpointFactory",
+  "RollbackErrorGuards"
+]

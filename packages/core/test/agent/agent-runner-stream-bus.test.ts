@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  EVENT_AGENT_STREAM_THINKING_DELTA,
-  EVENT_AGENT_STREAM_TOOL_USE,
-  EVENT_AGENT_STREAM_USAGE,
-  type AgentStreamTextDeltaPayload,
-  type AgentStreamThinkingDeltaPayload,
-  type AgentStreamToolUsePayload,
-  type AgentStreamUsagePayload,
-} from "../../src/domain/events/model/event-types.js";
-import { SimpleEventBus } from "../../src/infra/events/simple-event-bus.js";
-import { wrapStreamForBus } from "../../src/service/agent/impl/agent-runner.js";
+import {  describe, it  } from "node:test";
+import {  EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, EVENT_AGENT_STREAM_TOOL_USE, EVENT_AGENT_STREAM_USAGE, type AgentStreamTextDeltaPayload, type AgentStreamThinkingDeltaPayload, type AgentStreamToolUsePayload, type AgentStreamUsagePayload  } from "../../src/domain/events/model/event-types.js";
+import {  SimpleEventBus  } from "../../src/infra/events/simple-event-bus.js";
+import {  AgentRunner  } from "../../src/service/agent/impl/agent-runner.js";
 
 const RUN_ID = "run-test-uuid";
 
@@ -43,7 +34,7 @@ describe("agent-runner stream bus", () => {
       published.push("tool-use");
     });
 
-    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID, {}, () => {
+    const onStream = AgentRunner.wrapStreamForBus(bus, sessionId, RUN_ID, {}, () => {
       userCalled = true;
       // userOnStream 在 publish 之前同步触发，所以这里 published 必须仍是空的——
       // bus.publish 永远被推迟到 microtask 里跑，避免订阅者重入 runner。
@@ -86,7 +77,7 @@ describe("agent-runner stream bus", () => {
       published.push("text-delta");
     });
 
-    const onStream = wrapStreamForBus(bus, "sess-2", RUN_ID);
+    const onStream = AgentRunner.wrapStreamForBus(bus, "sess-2", RUN_ID);
     assert.ok(onStream);
 
     onStream!({ type: "text-delta", text: "x" });
@@ -109,7 +100,7 @@ describe("agent-runner stream bus", () => {
     bus.subscribe(EVENT_AGENT_STREAM_THINKING_DELTA, (p) => payloads.push(p));
     bus.subscribe(EVENT_AGENT_STREAM_TOOL_USE, (p) => payloads.push(p));
 
-    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID);
+    const onStream = AgentRunner.wrapStreamForBus(bus, sessionId, RUN_ID);
     onStream!({ type: "text-delta", text: "a" });
     onStream!({ type: "thinking-delta", text: "b" });
     onStream!({
@@ -157,7 +148,7 @@ describe("agent-runner stream bus", () => {
         published.push("tool-use"),
       );
 
-      const onStream = wrapStreamForBus(bus, `sess-sc8-${run}`, RUN_ID);
+      const onStream = AgentRunner.wrapStreamForBus(bus, `sess-sc8-${run}`, RUN_ID);
       assert.ok(onStream);
       // 故意把 publish 交错穿插：连续同类型 + 中间穿插 microtask drain，
       // 验证同批次内与跨批次的相对顺序都被保留。
@@ -203,7 +194,7 @@ describe("agent-runner stream bus", () => {
 
     // run 级基线：前序 step 已并入 100（step done 补发推进后的形态）
     const usageBase = { completionTokens: 100 };
-    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID, { usageBase });
+    const onStream = AgentRunner.wrapStreamForBus(bus, sessionId, RUN_ID, { usageBase });
 
     onStream!({ type: "usage", usage: { completionTokens: 7 } });
     // usage 缺输出侧（completionTokens undefined）→ 不发
@@ -224,7 +215,7 @@ describe("agent-runner stream bus", () => {
     const payloads: AgentStreamUsagePayload[] = [];
     bus.subscribe(EVENT_AGENT_STREAM_USAGE, (p) => payloads.push(p));
 
-    const onStream = wrapStreamForBus(bus, "sess-usage-2", RUN_ID);
+    const onStream = AgentRunner.wrapStreamForBus(bus, "sess-usage-2", RUN_ID);
     onStream!({ type: "usage", usage: { completionTokens: 9 } });
 
     await drainMicrotasks();

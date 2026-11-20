@@ -5,14 +5,11 @@
  */
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {
-  formatStatusChipLabelFromAttachment,
-  composerChips,
-  type MessageAttachment,
-} from '@novel-master/core/chat';
+import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {composerChips, type MessageAttachment} from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
 
-export type AttachmentDraftChipsProps = {
+type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachment[];
   disabled?: boolean;
   accessibilityLabel?: string;
@@ -20,19 +17,19 @@ export type AttachmentDraftChipsProps = {
   transparentRow?: boolean;
 };
 
-/**
- * Chip 文案：中文二字 + `:` + path（Core `formatStatusChipLabelFromAttachment`）。
- */
-export function formatAttachmentChipLabel(a: MessageAttachment): string {
-  return formatStatusChipLabelFromAttachment(a);
+// 偏离登记：文件名 AttachmentDraftChips 与组件同名，tsx helper namespace 不得撞组件名；
+// helper 主体是 chip 状态文案，按内容主体起名 AttachmentChipLabel，成员剥主体词剩动词。
+export namespace AttachmentChipLabel {
+  /**
+   * Chip 文案：中文二字 + `:` + path（Core `AttachmentChip.formatStatusLabelFromAttachment`）。
+   */
+  // nm-style: keep-public — chip 文案契约：core AttachmentChip.formatStatusLabelFromAttachment 的命名收口
+  export function format(a: MessageAttachment): string {
+    return AttachmentChip.formatStatusLabelFromAttachment(a);
+  }
 }
 
-export function AttachmentDraftChips({
-  attachments,
-  disabled,
-  accessibilityLabel,
-  transparentRow = false,
-}: AttachmentDraftChipsProps) {
+function AttachmentDraftChips({attachments, disabled, accessibilityLabel, transparentRow = false}: AttachmentDraftChipsProps) {
   const {tokens} = useTheme();
   if (attachments.length === 0) {
     return null;
@@ -46,7 +43,7 @@ export function AttachmentDraftChips({
       accessibilityLabel={accessibilityLabel}
     >
       {attachments.map((a, index) => {
-        const label = formatAttachmentChipLabel(a);
+        const label = AttachmentChipLabel.format(a);
         return (
           <View
             key={`${a.source}:${a.path ?? a.name}:${index}`}
@@ -58,10 +55,7 @@ export function AttachmentDraftChips({
               },
             ]}
           >
-            <Text
-              style={[styles.label, {color: tokens.text}]}
-              numberOfLines={1}
-            >
+            <Text style={[styles.label, {color: tokens.text}]} numberOfLines={1}>
               {label}
             </Text>
           </View>
@@ -72,22 +66,9 @@ export function AttachmentDraftChips({
 }
 
 /** 状态 chip（无叉）：放在输入框内顶部。 */
-export function ComposerStatusChips({
-  attachments,
-  disabled,
-}: {
-  attachments: readonly MessageAttachment[];
-  disabled?: boolean;
-}) {
+export function ComposerStatusChips({attachments, disabled}: {attachments: readonly MessageAttachment[]; disabled?: boolean}) {
   const {status} = composerChips.partition(attachments);
-  return (
-    <AttachmentDraftChips
-      attachments={status}
-      disabled={disabled}
-      transparentRow
-      accessibilityLabel="状态附件"
-    />
-  );
+  return <AttachmentDraftChips attachments={status} disabled={disabled} transparentRow accessibilityLabel="状态附件" />;
 }
 
 const styles = StyleSheet.create({

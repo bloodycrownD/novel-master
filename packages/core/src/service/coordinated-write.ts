@@ -18,19 +18,25 @@
  * @module service/coordinated-write
  */
 
+import { Result } from "@/errors/either.js";
+import { AppError } from "@/errors/app-error.js";
+
 /**
  * 单个写步骤。
  *
  * `execute` 是正向动作；`rollback` 是它的补偿动作，由协调器在失败时按注册逆序调用。
  * 名字 `name` 只用于错误信息可读性，不参与调度逻辑。
+ *
+ * 已知失败走返回值（四期门⑦）：`execute` / `rollback` 收 `Result`，Err 即失败
+ * 并触发逆序补偿；未知异常仍可抛，由 run() 的 catch 同口收编。
  */
-export interface WriteStep {
+interface WriteStep {
   /** 步骤名，仅用于错误上下文，便于排查。 */
   name: string;
-  /** 正向执行。任一 `execute` 抛错即视为整组失败。 */
-  execute: () => Promise<void>;
+  /** 正向执行。任一 `execute` 返回 Err 即视为整组失败。 */
+  execute: () => Promise<Result<void, AppError>>;
   /** 补偿动作。失败时由协调器逆序调用，应当尽量幂等。 */
-  rollback: () => Promise<void>;
+  rollback: () => Promise<Result<void, AppError>>;
 }
 
 /**
@@ -39,23 +45,14 @@ export interface WriteStep {
  * 原始失败原因放在 `cause`；回滚阶段收集到的错误通过 `rollbackErrors` 暴露给上层，
  * 这样既不掩盖第一次的根因，又不会把回滚失败悄悄吃掉。
  */
-export class CoordinatedWriteRollbackError extends Error {
+class CoordinatedWriteRollbackError extends Error {
   /** 回滚阶段（按逆序）收集到的错误，可能与 `cause` 一一对应，也可能为空。 */
   readonly rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>;
 
-  constructor(
-    cause: unknown,
-    rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>
-  ) {
+  constructor(cause: unknown, rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>) {
     const causeMessage = cause instanceof Error ? cause.message : String(cause);
-    const rolledBackNames = rollbackErrors
-      .map((entry) => entry.step)
-      .join(", ");
-    super(
-      `CoordinatedWrite 在回滚阶段再次失败（原始原因：${causeMessage}；回滚失败步骤：${
-        rolledBackNames || "<无>"
-      }）`
-    );
+    const rolledBackNames = rollbackErrors.map((entry) => entry.step).join(", ");
+    super(`CoordinatedWrite 在回滚阶段再次失败（原始原因：${causeMessage}；回滚失败步骤：${rolledBackNames || "<无>"}）`);
     this.name = "CoordinatedWriteRollbackError";
     this.cause = cause;
     this.rollbackErrors = rollbackErrors;
@@ -95,14 +92,10 @@ export class CoordinatedWrite {
   /** 注册一个步骤，返回 `this` 以便链式调用。 */
   register(step: WriteStep): this {
     if (!step || typeof step.execute !== "function") {
-      throw new TypeError(
-        `CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`
-      );
+      throw new TypeError(`CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`);
     }
     if (typeof step.rollback !== "function") {
-      throw new TypeError(
-        `CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`
-      );
+      throw new TypeError(`CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`);
     }
     this.steps.push(step);
     return this;
@@ -111,49 +104,52 @@ export class CoordinatedWrite {
   /**
    * 按注册顺序执行所有步骤。
    *
-   * 任一 `execute` 抛错时，协调器会：
-   *   1. 记下原始错误作为根因；
+   * 任一 `execute` 失败（Err 或抛错）时，协调器会：
+   *   1. 记下原始失败作为根因；
    *   2. 对「已经成功执行过」的步骤按注册逆序调用 `rollback`；
    *   3. 回滚阶段的错误会被聚合，不会中断后续步骤的回滚；
-   *   4. 若回滚阶段出现任何错误，抛 `CoordinatedWriteRollbackError`（根因挂在
-   *      `cause`）；否则直接透传原始错误。
+   *   4. 若回滚阶段出现任何失败，抛 `CoordinatedWriteRollbackError`（根因挂在
+   *      `cause`）；否则已知的步骤失败沿 `Result.err` 原样返回（四期门⑦）。
    */
-  async run(): Promise<void> {
+  async run(): Promise<Result<void, AppError>> {
     const executed: WriteStep[] = [];
-    try {
-      for (const step of this.steps) {
-        await step.execute();
-        executed.push(step);
-      }
-    } catch (rootCause) {
+    const rollbackExecuted = async (from: number, rootCause: unknown): Promise<Result<void, AppError>> => {
       const rollbackErrors: { step: string; error: unknown }[] = [];
       // 按注册逆序回滚已经成功执行的步骤。
-      for (let i = executed.length - 1; i >= 0; i--) {
+      for (let i = from; i >= 0; i--) {
         const step = executed[i];
         if (!step) continue;
         try {
-          await step.rollback();
+          const back = await step.rollback();
+          if (!back.ok) {
+            // 单步回滚失败不中断后续回滚，聚合起来统一上报。
+            rollbackErrors.push({ step: step.name, error: back.error });
+          }
         } catch (err) {
-          // 单步回滚失败不中断后续回滚，聚合起来统一上报。
           rollbackErrors.push({ step: step.name, error: err });
         }
       }
       if (rollbackErrors.length > 0) {
         throw new CoordinatedWriteRollbackError(rootCause, rollbackErrors);
       }
-      throw rootCause;
-    }
-  }
-}
+      // 未知异常（非 AppError）不塞 Result——按转码矩阵「未知 throw」行走异常通道。
+      if (!(rootCause instanceof AppError)) {
+        throw rootCause;
+      }
+      return Result.err(rootCause);
+    };
 
-/**
- * 把一组「执行 + 回滚」对快速拼成 `CoordinatedWrite` 并立刻运行。
- *
- * 适合一次性、不需要外部继续注册的场景。需要分批注册或链式拼装时，
- * 直接用 `new CoordinatedWrite()` 即可。
- */
-export async function runCoordinatedWrite(steps: WriteStep[]): Promise<void> {
-  const write = new CoordinatedWrite();
-  for (const step of steps) write.register(step);
-  await write.run();
+    try {
+      for (const step of this.steps) {
+        const outcome = await step.execute();
+        if (!outcome.ok) {
+          return rollbackExecuted(executed.length - 1, outcome.error);
+        }
+        executed.push(step);
+      }
+    } catch (rootCause) {
+      return rollbackExecuted(executed.length - 1, rootCause);
+    }
+    return Result.ok(undefined);
+  }
 }

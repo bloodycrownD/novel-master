@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it, mock, afterEach } from "node:test";
-import {
-  createSseChunkEmitter,
-  DEFAULT_TICK_MS,
-} from "../../../src/infra/llm-protocol/logic/sse-chunk-emitter.js";
+import {  describe, it, mock, afterEach  } from "node:test";
+import {  SseChunkEmitter, DEFAULT_TICK_MS  } from "../../../src/infra/llm-protocol/logic/sse-chunk-emitter.js";
 
 afterEach(() => {
   mock.timers.reset();
@@ -24,7 +21,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.enable({ apis: ["setInterval", "Date"] });
 
     const chunks: string[] = [];
-    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: 32,
     });
 
@@ -44,7 +41,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.enable({ apis: ["setInterval", "Date"] });
 
     const chunks: string[] = [];
-    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: 32,
     });
 
@@ -59,7 +56,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.tick(32);
     assert.equal(chunks.length, 0);
 
-    const emitter2 = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter2 = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: DEFAULT_TICK_MS,
     });
     emitter2.append("x");
@@ -72,7 +69,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.enable({ apis: ["setInterval", "Date"] });
 
     const chunks: string[] = [];
-    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: 32,
     });
 
@@ -95,7 +92,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.enable({ apis: ["setInterval", "Date"] });
 
     const chunks: string[] = [];
-    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: 32,
     });
 
@@ -118,7 +115,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.enable({ apis: ["setInterval"] });
 
     const chunks: string[] = [];
-    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: 32,
     });
 
@@ -149,7 +146,7 @@ describe("sse-chunk-emitter", () => {
     mock.timers.enable({ apis: ["setInterval"] });
 
     const chunks: string[] = [];
-    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+    const emitter = SseChunkEmitter.create((chunk) => chunks.push(chunk), {
       tickMs: 32,
     });
 

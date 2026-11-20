@@ -19,13 +19,7 @@ import {describe, expect, it, jest, afterEach} from '@jest/globals';
 import {Tiktoken} from 'js-tiktoken/lite';
 import * as cl100kRanksModule from 'js-tiktoken/ranks/cl100k_base';
 import * as o200kRanksModule from 'js-tiktoken/ranks/o200k_base';
-import {
-  createSessionStreamTokenEstimator,
-  createStreamTokenEstimator,
-  primeStreamTokenModelHint,
-  resolveStreamTokenEncodingName,
-  type StreamTokenModelHintRuntime,
-} from '@/services/stream-token-estimator';
+import {type StreamTokenModelHintRuntime, StreamTokenEstimator} from '@/services/stream-token-estimator';
 
 /** 中文长文（含标点与换行，3540 字符）。 */
 const ZH_PASSAGE =
@@ -49,7 +43,10 @@ function encodeFull(ranks: unknown, text: string): number {
 }
 
 /** 逐 delta 流过估算器，返回末值与耗时统计。 */
-function streamThrough(text: string, chunkChars = 7): {
+function streamThrough(
+  text: string,
+  chunkChars = 7,
+): {
   readonly tokens: number;
   readonly maxPushMs: number;
   readonly warmP99PushMs: number;
@@ -57,7 +54,7 @@ function streamThrough(text: string, chunkChars = 7): {
   readonly avgPushMs: number;
   readonly totalMs: number;
 } {
-  const counter = createStreamTokenEstimator({vendorModelId: null});
+  const counter = StreamTokenEstimator.create({vendorModelId: null});
   expect(counter).not.toBeNull();
   const estimator = counter!;
   const pushDurations: number[] = [];
@@ -121,9 +118,9 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         2,
       )}ms／均摊 ${result.avgPushMs.toFixed(
         3,
-      )}ms／峰值 ${result.maxPushMs.toFixed(2)}ms，总耗时 ${result.totalMs.toFixed(
-        0,
-      )}ms`,
+      )}ms／峰值 ${result.maxPushMs.toFixed(
+        2,
+      )}ms，总耗时 ${result.totalMs.toFixed(0)}ms`,
     );
     expect(errorRate).toBeLessThanOrEqual(0.01);
     expect(result.medianPushMs).toBeLessThanOrEqual(ASSERT_MEDIAN_PUSH_MS);
@@ -143,9 +140,9 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         2,
       )}ms／均摊 ${result.avgPushMs.toFixed(
         3,
-      )}ms／峰值 ${result.maxPushMs.toFixed(2)}ms，总耗时 ${result.totalMs.toFixed(
-        0,
-      )}ms`,
+      )}ms／峰值 ${result.maxPushMs.toFixed(
+        2,
+      )}ms，总耗时 ${result.totalMs.toFixed(0)}ms`,
     );
     expect(errorRate).toBeLessThanOrEqual(0.03);
     expect(result.medianPushMs).toBeLessThanOrEqual(ASSERT_MEDIAN_PUSH_MS);
@@ -154,11 +151,13 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
   });
 
   it('纯中文无空白超长串：单次 push 不退化成数十毫秒（拆段自保）', () => {
-    const counter = createStreamTokenEstimator({vendorModelId: null})!;
+    const counter = StreamTokenEstimator.create({vendorModelId: null})!;
     expect(counter).not.toBeNull();
     // 12,000 字符一次涌入（真实 tiktoken 全量 encode 是 88s 量级）。
     const pushStartedAt = performance.now();
-    counter.push('中文测试内容连续书写没有空白也不换行'.repeat(500).slice(0, 12_000));
+    counter.push(
+      '中文测试内容连续书写没有空白也不换行'.repeat(500).slice(0, 12_000),
+    );
     void counter.tokens;
     const elapsed = performance.now() - pushStartedAt;
     console.log(`[②无空白串] 12,000 字符单次 push ${elapsed.toFixed(1)}ms`);
@@ -169,8 +168,8 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
   });
 
   it('每条估算器状态独立：reset 归零、互不串值', () => {
-    const a = createStreamTokenEstimator()!;
-    const b = createStreamTokenEstimator()!;
+    const a = StreamTokenEstimator.create()!;
+    const b = StreamTokenEstimator.create()!;
     a.push('hello world');
     expect(a.tokens).toBeGreaterThan(0);
     expect(b.tokens).toBe(0);
@@ -180,42 +179,49 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
   });
 
   it('编码名解析：o200k 家族 vs cl100k 兜底', () => {
-    expect(resolveStreamTokenEncodingName('gpt-4o')).toBe('o200k_base');
-    expect(resolveStreamTokenEncodingName('gpt-5')).toBe('o200k_base');
-    expect(resolveStreamTokenEncodingName('openai/gpt-4o-mini')).toBe(
+    expect(StreamTokenEstimator.resolveEncodingName('gpt-4o')).toBe('o200k_base');
+    expect(StreamTokenEstimator.resolveEncodingName('gpt-5')).toBe('o200k_base');
+    expect(StreamTokenEstimator.resolveEncodingName('openai/gpt-4o-mini')).toBe(
       'o200k_base',
     );
-    expect(resolveStreamTokenEncodingName('gpt-4')).toBe('cl100k_base');
-    expect(resolveStreamTokenEncodingName('gpt-3.5-turbo')).toBe(
-      'cl100k_base',
-    );
+    expect(StreamTokenEstimator.resolveEncodingName('gpt-4')).toBe('cl100k_base');
+    expect(StreamTokenEstimator.resolveEncodingName('gpt-3.5-turbo')).toBe('cl100k_base');
     // 非 tiktoken 家族（claude/qwen/glm/gemini）本轮统一按 cl100k 估算。
-    expect(resolveStreamTokenEncodingName('claude-3-5-sonnet')).toBe(
+    expect(StreamTokenEstimator.resolveEncodingName('claude-3-5-sonnet')).toBe(
       'cl100k_base',
     );
-    expect(resolveStreamTokenEncodingName('qwen2.5-72b')).toBe('cl100k_base');
-    expect(resolveStreamTokenEncodingName('glm-4-plus')).toBe('cl100k_base');
-    expect(resolveStreamTokenEncodingName(null)).toBe('cl100k_base');
-    expect(resolveStreamTokenEncodingName('')).toBe('cl100k_base');
+    expect(StreamTokenEstimator.resolveEncodingName('qwen2.5-72b')).toBe('cl100k_base');
+    expect(StreamTokenEstimator.resolveEncodingName('glm-4-plus')).toBe('cl100k_base');
+    expect(StreamTokenEstimator.resolveEncodingName(null)).toBe('cl100k_base');
+    expect(StreamTokenEstimator.resolveEncodingName('')).toBe('cl100k_base');
   });
 
   it('会话估算器：仓储解析出的 vendorModelId 决定编码（o200k 家族走 o200k 表）', async () => {
     const runtime: StreamTokenModelHintRuntime = {
       sessions: {
-        getSessionAgentConfig: async () => ({agentId: 'a1'}),
+        // 错误通道迁移二期后走 Result 线上结构（生产侧 `!ok` 即 throw → 兜底 cl100k）。
+        getSessionAgentConfig: async () => ({
+          ok: true as const,
+          value: {agentId: 'a1'},
+        }),
       },
       agentRegistry: {
-        get: async () => ({model: 'saved-1'}),
+        // 五期门⑦：registry 读口走 Result 线上结构。
+        get: async () => ({ok: true as const, value: {model: 'saved-1'}}),
       },
       providerModels: {
-        getSavedById: async () => ({vendorModelId: 'gpt-5'}),
+        // 五期门⑦：getSavedById 走 Result 线上结构。
+        getSavedById: async () => ({
+          ok: true as const,
+          value: {vendorModelId: 'gpt-5'},
+        }),
       },
     };
-    primeStreamTokenModelHint(runtime, 'session-o200k');
+    StreamTokenEstimator.primeModelHint(runtime, 'session-o200k');
     // 让三层异步仓储解析落地（microtask 链）。
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    const counter = createSessionStreamTokenEstimator(runtime, 'session-o200k');
+    const counter = StreamTokenEstimator.createForSession(runtime, 'session-o200k');
     expect(counter).not.toBeNull();
     const text = '中文测试内容';
     counter!.push(text);
@@ -237,7 +243,10 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         getSavedById: async () => null,
       },
     };
-    const counter = createSessionStreamTokenEstimator(runtime, 'session-broken');
+    const counter = StreamTokenEstimator.createForSession(
+      runtime,
+      'session-broken',
+    );
     expect(counter).not.toBeNull();
     counter!.push('a b c');
     expect(counter!.tokens).toBeGreaterThan(0);
@@ -260,16 +269,21 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
   /** 造一个仓储口径 runtime；`setVendorModelId` 用于模拟「用户在会话内换模型」。 */
   function createRuntime(initialVendorModelId: string): {
     readonly runtime: StreamTokenModelHintRuntime;
-    readonly getSessionAgentConfig: jest.Mock<() => Promise<{agentId: string}>>;
+    readonly getSessionAgentConfig: jest.Mock<
+      () => Promise<{ok: true; value: {agentId: string}}>
+    >;
     readonly setVendorModelId: (id: string) => void;
   } {
     let vendorModelId = initialVendorModelId;
-    const getSessionAgentConfig = jest.fn(async () => ({agentId: 'a1'}));
+    const getSessionAgentConfig = jest.fn(async () => ({
+      ok: true as const,
+      value: {agentId: 'a1'},
+    }));
     const runtime: StreamTokenModelHintRuntime = {
       sessions: {getSessionAgentConfig},
-      agentRegistry: {get: async () => ({model: 'saved-1'})},
+      agentRegistry: {get: async () => ({ok: true as const, value: {model: 'saved-1'}})},
       providerModels: {
-        getSavedById: async () => ({vendorModelId}),
+        getSavedById: async () => ({ok: true as const, value: {vendorModelId}}),
       },
     };
     return {
@@ -283,11 +297,11 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
 
   it('过期条目不被采信：读口走 cl100k 兜底，重新 prime 后取到新值', async () => {
     const {runtime, setVendorModelId} = createRuntime('gpt-5');
-    primeStreamTokenModelHint(runtime, 'session-ttl');
+    StreamTokenEstimator.primeModelHint(runtime, 'session-ttl');
     await new Promise(resolve => setTimeout(resolve, 0));
 
     // TTL 内：提示被采信，走 o200k 编码表。
-    const before = createSessionStreamTokenEstimator(runtime, 'session-ttl')!;
+    const before = StreamTokenEstimator.createForSession(runtime, 'session-ttl')!;
     before.push('中文测试内容');
     expect(before.tokens).toBe(
       encodeFull(ranksOf(o200kRanksModule), '中文测试内容'),
@@ -302,7 +316,7 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
       .mockReturnValue(realNowMs + 11 * 60_000);
     try {
       // 读口判定过期 → 不采信旧提示 → 按 cl100k 起算，并顺手踢一次 prime。
-      const stale = createSessionStreamTokenEstimator(runtime, 'session-ttl')!;
+      const stale = StreamTokenEstimator.createForSession(runtime, 'session-ttl')!;
       stale.push('中文测试内容');
       expect(stale.tokens).toBe(
         encodeFull(ranksOf(cl100kRanksModule), '中文测试内容'),
@@ -311,7 +325,7 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
       // 重新 prime 落地后（条目已被淘汰，prime 的 has 守卫放行）取到新值
       // ——与过期前那条 o200k 计数器逐 token 相同 ⟺ 换模真的被看见了。
       await new Promise(resolve => setTimeout(resolve, 0));
-      const fresh = createSessionStreamTokenEstimator(runtime, 'session-ttl')!;
+      const fresh = StreamTokenEstimator.createForSession(runtime, 'session-ttl')!;
       fresh.push('中文测试内容');
       expect(fresh.tokens).toBe(stale.tokens);
       expect(fresh.tokens).toBe(
@@ -324,7 +338,7 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
 
   it('过期条目已从 Map 淘汰：读口之后 getSessionAgentConfig 计数 +1（代理断言）', async () => {
     const {runtime, getSessionAgentConfig} = createRuntime('gpt-5');
-    primeStreamTokenModelHint(runtime, 'session-ttl-delete');
+    StreamTokenEstimator.primeModelHint(runtime, 'session-ttl-delete');
     await new Promise(resolve => setTimeout(resolve, 0));
     // 预热已解析过一轮，计数为 1；此后不再有仓储调用。
     expect(getSessionAgentConfig).toHaveBeenCalledTimes(1);
@@ -335,7 +349,7 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
       .mockReturnValue(realNowMs + 11 * 60_000);
     try {
       // 读口命中但过期 → 判定为未命中并踢一次 prime。
-      createSessionStreamTokenEstimator(runtime, 'session-ttl-delete');
+      StreamTokenEstimator.createForSession(runtime, 'session-ttl-delete');
       await new Promise(resolve => setTimeout(resolve, 0));
 
       // `getSessionAgentConfig` 只在 `resolveStreamTokenVendorModelId` 里被调，

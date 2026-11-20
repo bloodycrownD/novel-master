@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import {  subagentTool  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
+import {  ToolRunner  } from "@/domain/tool/logic/tool-runner.js";
+import {  ToolRegistry  } from "@/domain/tool/logic/tool-registry.js";
+import {  Result  } from "@/errors/either.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -39,19 +40,22 @@ function setupParallel(opts: SetupOpts = {}): {
   const defs = [generalDef];
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => ["id-1"],
-    list: async () => defs,
+    list: async () => Result.ok(defs),
     get: async () => generalDef,
     getRawWire: async () => null,
     upsert: async () => undefined,
     delete: async () => undefined,
   };
   const messages: MessageService = {
-    listBySession: async (sid) => childMsgs.get(sid) ?? [],
+    // 错误通道迁移八期：大结果集读口走 Outcome，fake 与真实 service 同语义。
+    listBySession: async (sid) => ({ kind: "completed", value: childMsgs.get(sid) ?? [] }),
     // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条。
-    listBySessionTailOfRole: async (sid, options) =>
-      (childMsgs.get(sid) ?? [])
+    listBySessionTailOfRole: async (sid, options) => ({
+      kind: "completed",
+      value: (childMsgs.get(sid) ?? [])
         .filter((m) => m.role === options.role)
         .slice(-Math.max(1, Math.floor(options.limit))),
+    }),
   } as unknown as MessageService;
   const sessions: SessionService = {
     createSubSession: async (_parent, _proj, title) => {
@@ -74,25 +78,26 @@ function setupParallel(opts: SetupOpts = {}): {
     parentSignal: opts.parentSignal ?? new AbortController().signal,
     createChildSession: async (title) => {
       const s = await sessions.createSubSession("p", "proj", title);
-      return s.id;
+      return Result.ok(s.id);
     },
     // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
     parentSessionId: "p",
     isSessionRunActive: () => false,
-    resolveChildModelId: (def) => ({
-      savedModelId: def.model ?? "parent-saved",
-      workspaceModelId: "ws-model",
-    }),
+    resolveChildModelId: (def) =>
+      Result.ok({
+        savedModelId: def.model ?? "parent-saved",
+        workspaceModelId: "ws-model",
+      }),
     runChildAgent: async (_def, childSessionId, runOpts) => {
       runChildAgentCalls.push({ childSessionId, signal: runOpts.signal });
       // 模拟延迟，让 abort 有时间生效。
       await new Promise((r) => setTimeout(r, 20));
-      return {
+      return Result.ok({
         stepsExecuted: 1,
         finished: stopReason === "completed",
         stopReason,
         rounds: [],
-      };
+      });
     },
   };
 

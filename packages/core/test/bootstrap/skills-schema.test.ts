@@ -10,20 +10,14 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  open,
-  SCHEMA_BOOT_VERSION,
-} from "@novel-master/core";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import {  describe, it  } from "node:test";
+import {  NovelMasterBootstrap, TdbcOpen  } from "@novel-master/core";
+import {  SCHEMA_BOOT_VERSION  } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 async function openMemory() {
-  registerBetterSqlite3Driver();
-  return open("tdbc:sqlite:file::memory:", {
+  BetterSqlite3Register.register();
+  return TdbcOpen.open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
@@ -52,7 +46,7 @@ async function indexExists(
 describe("skill_disabled_rule 建表（T-SK3）", () => {
   it("空库 bootstrap 后 skill_disabled_rule 表与索引存在", async () => {
     const conn = await openMemory();
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.equal(await tableExists(conn, "skill_disabled_rule"), true);
     assert.equal(await indexExists(conn, "idx_skill_disabled_scope"), true);
@@ -67,7 +61,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     await conn.execute("PRAGMA user_version = 6");
     assert.equal(await tableExists(conn, "skill_disabled_rule"), false);
 
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.equal(
       await tableExists(conn, "skill_disabled_rule"),
@@ -93,7 +87,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     await conn.execute("PRAGMA user_version = 5");
     assert.equal(await tableExists(conn, "skill_disabled_rule"), false);
 
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
 
     assert.equal(
       await tableExists(conn, "skill_disabled_rule"),
@@ -127,7 +121,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     );
 
     // 再跑一遍 bootstrap（幂等）：表不重复、不报错
-    await bootstrapNovelMaster(conn);
+    await NovelMasterBootstrap.bootstrap(conn);
     assert.equal(await tableExists(conn, "skill_disabled_rule"), true);
 
     await conn.close();

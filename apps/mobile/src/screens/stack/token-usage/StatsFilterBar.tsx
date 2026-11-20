@@ -11,9 +11,9 @@ import {
   type ProviderModelFilterValue,
   type ProviderModelOption,
   type RangeKind,
-  providerModelFilterOptionKey,
-  providerModelKey,
+  UsageStats,
 } from './format';
+import {ModelKey} from '../../../utils/model-key';
 import {styles} from './styles';
 
 /** 弹层选项：id 为稳定键（testID/选中比对），value 为选中后回传的筛选值。 */
@@ -71,12 +71,12 @@ export function StatsFilterBar({
   const pickerOptions: readonly ModelPickerOption[] = [
     {id: MODEL_OPTION_ALL, label: '全部模型', value: undefined},
     ...combos.map(c => ({
-      id: providerModelKey(c.providerId, c.model),
+      id: ModelKey.providerModel(c.providerId, c.model),
       label: `${c.providerLabel}/${c.model}`,
       value: {providerId: c.providerId, model: c.model},
     })),
     ...providers.map(p => ({
-      id: providerModelKey(p.id, MODEL_OTHER_KEY),
+      id: ModelKey.providerModel(p.id, MODEL_OTHER_KEY),
       label: `${p.label}/其他模型`,
       value: {providerId: p.id, model: null},
     })),
@@ -129,37 +129,16 @@ export function StatsFilterBar({
         <Text style={{color: tokens.text}}>{modelFilterLabel}</Text>
         <Text style={{color: tokens.textSecondary}}>切换 ›</Text>
       </Pressable>
-      <MonthRangePickerSheet
-        visible={rangeSheetVisible}
-        onClose={onCloseRangeSheet}
-        onConfirm={onConfirmRange}
-        tokens={tokens}
-      />
-      <AppModal
-        visible={modelPickerVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={onCloseModelPicker}
-      >
+      <MonthRangePickerSheet visible={rangeSheetVisible} onClose={onCloseRangeSheet} onConfirm={onConfirmRange} tokens={tokens} />
+      <AppModal visible={modelPickerVisible} animationType="slide" transparent onRequestClose={onCloseModelPicker}>
         <Pressable style={styles.backdrop} onPress={onCloseModelPicker}>
-          <Pressable
-            style={[styles.pickerSheet, {backgroundColor: tokens.surface}]}
-            onPress={e => e.stopPropagation()}
-          >
-            <Text style={[styles.pickerTitle, {color: tokens.text}]}>
-              选择模型
-            </Text>
+          <Pressable style={[styles.pickerSheet, {backgroundColor: tokens.surface}]} onPress={e => e.stopPropagation()}>
+            <Text style={[styles.pickerTitle, {color: tokens.text}]}>选择模型</Text>
             {/* 模型列表可很长：必须包滚动容器，否则被 pickerSheet 的 maxHeight 裁剪、
                 后面的模型滚不到也点不到。 */}
-            <ScrollView
-              style={styles.pickerList}
-              contentContainerStyle={styles.pickerListContent}
-              keyboardShouldPersistTaps="handled"
-            >
+            <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent} keyboardShouldPersistTaps="handled">
               {pickerOptions.map(option => {
-                const selected =
-                  comboFilter !== undefined &&
-                  option.id === providerModelFilterOptionKey(comboFilter);
+                const selected = comboFilter !== undefined && option.id === UsageStats.providerModelFilterOptionKey(comboFilter);
                 return (
                   <Pressable
                     key={option.id}
@@ -168,18 +147,12 @@ export function StatsFilterBar({
                       onSelectComboFilter(option.value);
                       onCloseModelPicker();
                     }}
-                    style={[
-                      styles.pickerRow,
-                      {borderBottomColor: tokens.border},
-                      selected && {backgroundColor: tokens.bgSecondary},
-                    ]}
+                    style={[styles.pickerRow, {borderBottomColor: tokens.border}, selected && {backgroundColor: tokens.bgSecondary}]}
                   >
                     <Text style={{color: tokens.text}} numberOfLines={1}>
                       {option.label}
                     </Text>
-                    {selected ? (
-                      <Text style={{color: tokens.primary}}>当前</Text>
-                    ) : null}
+                    {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
                   </Pressable>
                 );
               })}

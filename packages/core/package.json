@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./abort": {
+      "types": "./dist/public/abort.d.ts",
+      "import": "./dist/public/abort.js"
+    },
     "./common": {
       "types": "./dist/common/index.d.ts",
       "import": "./dist/common/index.js"
@@ -29,6 +33,10 @@
     "./compaction": {
       "types": "./dist/public/compaction.d.ts",
       "import": "./dist/public/compaction.js"
+    },
+    "./errors": {
+      "types": "./dist/public/errors.d.ts",
+      "import": "./dist/public/errors.js"
     },
     "./events": {
       "types": "./dist/public/events.d.ts",
@@ -78,9 +86,21 @@
       "types": "./dist/infra/sksp/index.d.ts",
       "import": "./dist/infra/sksp/index.js"
     },
+    "./sksp-node": {
+      "types": "./dist/infra/sksp/node.d.ts",
+      "import": "./dist/infra/sksp/node.js"
+    },
     "./nmtp": {
       "types": "./dist/infra/nmtp/index.d.ts",
       "import": "./dist/infra/nmtp/index.js"
+    },
+    "./tokenizer": {
+      "types": "./dist/infra/tokenizer/index.d.ts",
+      "import": "./dist/infra/tokenizer/index.js"
+    },
+    "./llm-protocol": {
+      "types": "./dist/infra/llm-protocol/index.d.ts",
+      "import": "./dist/infra/llm-protocol/index.js"
     },
     "./log": {
       "types": "./dist/infra/log/index.d.ts",

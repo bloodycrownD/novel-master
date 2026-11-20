@@ -1,30 +1,22 @@
+import {  unwrap  } from "./helpers/result-unwrap.js";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {  describe, it  } from "node:test";
 import * as coreMain from "@novel-master/core";
-import { createKkvService, kkvNotFound } from "@novel-master/core/kkv";
-import {
-  createAgentRegistryService,
-  resolveAgentForProject,
-} from "@novel-master/core/agent";
+import {  createKkvService  } from "@novel-master/core/kkv";
+import {  AgentServiceFactory, AgentProjectResolver  } from "@novel-master/core/agent";
 import type { ResolvedAgentForProject } from "@novel-master/core/agent";
-import {
-  createMessageService,
-  sessionAgentConfigSchema,
-} from "@novel-master/core/chat";
+import {  ChatServiceFactory, sessionAgentConfigSchema  } from "@novel-master/core/chat";
 import type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
 } from "@novel-master/core/chat";
-import { createCompactionConditionsStore } from "@novel-master/core/compaction";
-import { buildPromptAssemblyFromLayout } from "@novel-master/core/prompt";
-import { createProviderServices } from "@novel-master/core/provider";
-import { createSessionFsService } from "@novel-master/core/session-fs";
-import { createScopedVfsService } from "@novel-master/core/vfs";
-import { createWorkplaceService } from "@novel-master/core/workplace";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-} from "./helpers/novel-master-fixture.js";
+import {  CompactionFactory  } from "@novel-master/core/compaction";
+import {  PromptBuilder  } from "@novel-master/core/prompt";
+import {  ProviderServiceFactory  } from "@novel-master/core/provider";
+import {  SessionFsServiceFactory  } from "@novel-master/core/session-fs";
+import {  VfsServiceFactory  } from "@novel-master/core/vfs";
+import {  WorkplaceServiceFactory  } from "@novel-master/core/workplace";
+import {  getNovelMasterTestContext, novelMasterTestFixture  } from "./helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -54,35 +46,41 @@ describe("T0 package exports (@novel-master/core entry)", () => {
 
   it("does not leak public sub-entry symbols from main entry", () => {
     const mainEntry = coreMain as Record<string, unknown>;
-    assert.equal(mainEntry.createAgentRegistryService, undefined);
-    assert.equal(mainEntry.createMessageService, undefined);
-    assert.equal(mainEntry.createCompactionConditionsStore, undefined);
-    assert.equal(mainEntry.buildPromptAssemblyFromLayout, undefined);
-    assert.equal(mainEntry.createProviderServices, undefined);
-    assert.equal(mainEntry.createSessionFsService, undefined);
-    assert.equal(mainEntry.createScopedVfsService, undefined);
-    assert.equal(mainEntry.createWorkplaceService, undefined);
+    assert.equal(mainEntry.AgentServiceFactory, undefined);
+    assert.equal(mainEntry.ChatServiceFactory, undefined);
+    assert.equal(mainEntry.CompactionFactory, undefined);
+    assert.equal(mainEntry.PromptBuilder, undefined);
+    assert.equal(mainEntry.ProviderServiceFactory, undefined);
+    assert.equal(mainEntry.SessionFsServiceFactory, undefined);
+    assert.equal(mainEntry.VfsServiceFactory, undefined);
+    assert.equal(mainEntry.WorkplaceServiceFactory, undefined);
   });
 
-  it("exports createKkvService and kkvNotFound from @novel-master/core/kkv", async () => {
+  it("exports createKkvService from @novel-master/core/kkv", async () => {
     assert.equal(typeof createKkvService, "function");
-    assert.equal(kkvNotFound("m", "k").key, "KKV_NOT_FOUND");
 
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
     await kkv.set("t0-smoke", "key", "value");
-    assert.equal(await kkv.get("t0-smoke", "key"), "value");
+    assert.equal(unwrap(await kkv.get("t0-smoke", "key")), "value");
   });
 
   it("exports new public sub-entries", () => {
-    assert.equal(typeof createAgentRegistryService, "function");
-    assert.equal(typeof createMessageService, "function");
-    assert.equal(typeof createCompactionConditionsStore, "function");
-    assert.equal(typeof buildPromptAssemblyFromLayout, "function");
-    assert.equal(typeof createProviderServices, "function");
-    assert.equal(typeof createSessionFsService, "function");
-    assert.equal(typeof createScopedVfsService, "function");
-    assert.equal(typeof createWorkplaceService, "function");
+    // 六组 Factory namespace 化后，create* 函数收敛为工厂对象上的方法。
+    assert.equal(typeof AgentServiceFactory, "object");
+    assert.equal(typeof AgentServiceFactory.createRegistry, "function");
+    assert.equal(typeof ChatServiceFactory, "object");
+    assert.equal(typeof ChatServiceFactory.createMessage, "function");
+    assert.equal(typeof CompactionFactory, "object");
+    assert.equal(typeof CompactionFactory.createConditionsStore, "function");
+    assert.equal(typeof PromptBuilder, "object");
+    assert.equal(typeof PromptBuilder.assemble, "function");
+    assert.equal(typeof ProviderServiceFactory, "object");
+    assert.equal(typeof ProviderServiceFactory.create, "function");
+    assert.equal(typeof SessionFsServiceFactory.create, "function");
+    assert.equal(typeof VfsServiceFactory, "object");
+    assert.equal(typeof VfsServiceFactory.createScoped, "function");
+    assert.equal(typeof WorkplaceServiceFactory.create, "function");
   });
 
   it("从 @novel-master/core/chat 导出 session agent config 符号", () => {
@@ -98,8 +96,8 @@ describe("T0 package exports (@novel-master/core entry)", () => {
 
   it("从 @novel-master/core/agent 导出 resolveAgentForProject（sessionId 必填签名）", () => {
     // Step 10 契约：sessionId 升级为必填后，函数仍从公开子入口导出。
-    assert.equal(typeof resolveAgentForProject, "function");
-    assert.equal(resolveAgentForProject.length, 3);
+    assert.equal(typeof AgentProjectResolver.resolve, "function");
+    assert.equal(AgentProjectResolver.resolve.length, 3);
     // 类型仅作 import 契约存在，锁定 ResolvedAgentForProject 两个 source 分支可达。
     const _typeCheck: ResolvedAgentForProject = {
       source: "session",
