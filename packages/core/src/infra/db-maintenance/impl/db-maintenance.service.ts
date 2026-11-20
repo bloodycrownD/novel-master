@@ -10,6 +10,7 @@
  */
 
 import { DeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
+import { Concurrency } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } from "../db-maintenance.port.js";
 
@@ -94,20 +95,20 @@ export const DbMaintenance = {
    * @returns 实际执行的维护结果；已跑过时返回 null（表示本进程跳过）。
    */
   async runStartupOnce(conn: TdbcConnection): Promise<DatabaseMaintenanceResult | null> {
-    if (startupMaintenanceRan) {
+    if (startupMaintenanceBusy.isBusy()) {
       return null;
     }
-    startupMaintenanceRan = true;
+    startupMaintenanceBusy.set(true);
     return await DbMaintenance.create(conn).runDatabaseMaintenance();
   },
 } as const;
 
 /**
- * 进程级「维护链路已跑过」标记。
+ * 进程级「维护链路已跑过」忙碌旗（一次置位、永不复位的闩锁）。
  *
  * @remarks 启动期后台任务完成后会触发一次 VACUUM；同一进程内多个任务叠加
  * 时不应反复全库 VACUUM。手动「数据清理」走 {@link
  * DbMaintenanceService.runDatabaseMaintenance}，**不受**本标记约束——用户
  * 显式点击必须永远真执行。
  */
-let startupMaintenanceRan = false;
+const startupMaintenanceBusy = Concurrency.createBusyFlag();

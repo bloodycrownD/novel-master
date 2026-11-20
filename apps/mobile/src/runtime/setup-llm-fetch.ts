@@ -22,16 +22,19 @@ import {DebugFetch, LlmSseTransport, Registry} from '@novel-master/core/llm-prot
 import {NativeSse, type LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
 import {LlmNativeFetchShim} from '../services/llm-native-fetch-shim';
 
-let configured = false;
-let fallbackWarned = false;
+/** 装配状态（模块内 holder，对象管理）：每进程注册一次 + 回落告警只打一次。 */
+const setupState = {
+  configured: false,
+  fallbackWarned: false,
+};
 
 export const LlmFetchSetup = {
   /** 每进程注册一次：native SSE transport + 非流式 fetch shim。 */
   ensureConfigured: (): void => {
-    if (configured) {
+    if (setupState.configured) {
       return;
     }
-    configured = true;
+    setupState.configured = true;
     NativeSse.registerWith(LlmSseTransport.register);
     // 装配工厂（原 createMobileLlmFetch）：native request 可用（Android 且已
     // autolink）→ 以它为底座的 fetch shim；不可用（iOS 工程 / Jest 环境）→ 回落
@@ -46,8 +49,8 @@ export const LlmFetchSetup = {
     if (request != null) {
       shim = LlmNativeFetchShim.create(requestAbort == null ? {request} : {request, requestAbort});
     } else {
-      if (!fallbackWarned) {
-        fallbackWarned = true;
+      if (!setupState.fallbackWarned) {
+        setupState.fallbackWarned = true;
         console.warn('[nm-llm] LlmSseNative request 底座不可用，非流式请求回落 globalThis.fetch');
       }
       shim = globalThis.fetch;

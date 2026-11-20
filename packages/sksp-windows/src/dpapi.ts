@@ -6,13 +6,16 @@
 
 import { SkspError } from "@novel-master/core/sksp";
 
-/** Test hook: bypass DPAPI (UTF-8 passthrough as "ciphertext"). @internal */
-let testPassthrough = false;
+/** DPAPI 旁路开关（模块内 holder，对象管理）：测试钩子状态。 */
+const dpapiFlags = {
+  /** Test hook: bypass DPAPI (UTF-8 passthrough as "ciphertext"). @internal */
+  testPassthrough: false,
+};
 
 export namespace Dpapi {
   /** Enables passthrough mode for non-Windows unit tests. @internal */
   export function setTestPassthrough(enabled: boolean): void {
-    testPassthrough = enabled;
+    dpapiFlags.testPassthrough = enabled;
   }
 
   function isWin32(): boolean {
@@ -25,7 +28,7 @@ export namespace Dpapi {
    */
   export async function protect(plain: string, ref: string): Promise<Uint8Array> {
     const data = Buffer.from(plain, "utf8");
-    if (testPassthrough) {
+    if (dpapiFlags.testPassthrough) {
       return new Uint8Array(data);
     }
     if (!isWin32()) {
@@ -51,7 +54,7 @@ export namespace Dpapi {
    * @throws SkspError DECRYPT_FAILED on failure
    */
   export async function unprotect(ciphertext: Uint8Array, ref: string,): Promise<string> {
-    if (testPassthrough) {
+    if (dpapiFlags.testPassthrough) {
       return Buffer.from(ciphertext).toString("utf8");
     }
     if (!isWin32()) {

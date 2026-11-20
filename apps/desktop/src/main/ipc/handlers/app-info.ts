@@ -20,16 +20,21 @@ type AppInfoSeams = {
   openExternal: (url: string) => Promise<void>;
 };
 
-let seamsOverride: AppInfoSeams | null = null;
-let defaultSeamsPromise: Promise<AppInfoSeams> | null = null;
+/** app-info seam 装配槽（模块内 holder，对象管理）：测试覆盖位与默认实现懒初始化。 */
+const seamsState = {
+  /** 测试 seam 覆盖位（null = 未覆盖，走默认实现）。 */
+  override: null as AppInfoSeams | null,
+  /** 默认 seam 的懒初始化 Promise（双检：并发 getSeams 只建一次）。 */
+  defaultPromise: null as Promise<AppInfoSeams> | null,
+};
 
 export const AppInfo = {
   async getSeams(): Promise<AppInfoSeams> {
-    if (seamsOverride) {
-      return seamsOverride;
+    if (seamsState.override) {
+      return seamsState.override;
     }
-    if (!defaultSeamsPromise) {
-      defaultSeamsPromise = (async () => {
+    if (!seamsState.defaultPromise) {
+      seamsState.defaultPromise = (async () => {
         const [{ app, shell }, { UpdateCheckService }] = await Promise.all([import("electron"), import("../../services/update-check.service.js")]);
         return {
           getVersion: () => app.getVersion(),
@@ -40,17 +45,17 @@ export const AppInfo = {
         };
       })();
     }
-    return defaultSeamsPromise;
+    return seamsState.defaultPromise;
   },
 
   /** @internal Test seam for handler unit tests. */
   __setSeamsForTests(overrides: Partial<AppInfoSeams> | null): void {
     if (overrides === null) {
-      seamsOverride = null;
-      defaultSeamsPromise = null;
+      seamsState.override = null;
+      seamsState.defaultPromise = null;
       return;
     }
-    seamsOverride = {
+    seamsState.override = {
       getVersion: overrides.getVersion ?? (() => "0.0.0"),
       getName: overrides.getName ?? (() => "Novel Master"),
       getPlatform: overrides.getPlatform ?? (() => process.platform),

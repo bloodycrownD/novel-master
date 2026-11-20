@@ -41,7 +41,8 @@ export const LLM_NATIVE_FETCH_CALL_TIMEOUT_MS = 600_000;
  */
 const NATIVE_FETCH_REQUEST_ID_PREFIX = Math.random().toString(36).slice(2, 8).padEnd(6, '0');
 
-let nextNativeFetchRequestId = 1;
+/** requestId 自增序号（模块内 holder，对象管理）。 */
+const nativeFetchRequestIdCounter = { next: 1 };
 
 /** native `request` 函数形状（装配层注入，测试 mock 点）。 */
 export type LlmNativeRequestFn = LlmSseNativeModule['request'];
@@ -179,7 +180,7 @@ export namespace LlmNativeFetchShim {
     const fetchLike = async (input: Parameters<FetchLike>[0], init?: Parameters<FetchLike>[1]): Promise<ShimResponse> => {
       const signal = init?.signal ?? undefined;
       // 本次请求的取消路由键（实例前缀 + 独立计数器）：abort 时用它调 requestAbort。
-      const requestId = `llm-native-fetch-${NATIVE_FETCH_REQUEST_ID_PREFIX}-${nextNativeFetchRequestId++}`;
+      const requestId = `llm-native-fetch-${NATIVE_FETCH_REQUEST_ID_PREFIX}-${nativeFetchRequestIdCounter.next++}`;
       if (signal?.aborted === true) {
         // fetch 语义：aborted signal 立即以 AbortError 拒绝；native 请求不发出。
         throw new NativeSseAbortError(requestId);

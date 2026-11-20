@@ -35,8 +35,10 @@ export interface ZlibCodecAccelerator {
   inflate(data: Uint8Array): Uint8Array | null;
 }
 
-/** 当前注册的加速器（模块级单例；注册语义对齐 tokenizer registry 先例）。 */
-let activeAccelerator: ZlibCodecAccelerator | null = null;
+/** 当前注册的加速器槽（模块级单例；注册语义对齐 tokenizer registry 先例）。 */
+const acceleratorSlot = {
+  current: null as ZlibCodecAccelerator | null,
+};
 
 /** 加速器回落告警是否已打过（每个方向只打一次，防热路径刷屏）。 */
 const warned = { deflate: false, inflate: false };
@@ -57,7 +59,7 @@ export const ZlibAccelerator = {
    * @param accelerator 同步 deflate/inflate 实现。
    */
   register(accelerator: ZlibCodecAccelerator): void {
-    activeAccelerator = accelerator;
+    acceleratorSlot.current = accelerator;
   },
 
   /**
@@ -69,7 +71,7 @@ export const ZlibAccelerator = {
    * 换上的加速器抛错时静默无声）。
    */
   clear(): void {
-    activeAccelerator = null;
+    acceleratorSlot.current = null;
     warned.deflate = false;
     warned.inflate = false;
   },
@@ -78,7 +80,7 @@ export const ZlibAccelerator = {
    * 尝试走加速器 deflate；未注册 / 返回 null / 抛错 → null（调用方回落 fflate）。
    */
   tryDeflate(data: Uint8Array, level?: number): Uint8Array | null {
-    const accelerator = activeAccelerator;
+    const accelerator = acceleratorSlot.current;
     if (accelerator == null) {
       return null;
     }
@@ -98,7 +100,7 @@ export const ZlibAccelerator = {
    * 尝试走加速器 inflate；未注册 / 返回 null / 抛错 → null（调用方回落 fflate）。
    */
   tryInflate(data: Uint8Array): Uint8Array | null {
-    const accelerator = activeAccelerator;
+    const accelerator = acceleratorSlot.current;
     if (accelerator == null) {
       return null;
     }

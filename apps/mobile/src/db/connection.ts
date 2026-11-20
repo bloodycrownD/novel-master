@@ -9,8 +9,11 @@ import {TokenizerRnRegister} from '@novel-master/tokenizer-driver-rn/native';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
 import {MobileDatabaseFilePath} from './db-file-path';
 
-let conn: TdbcConnection | undefined;
-let initPromise: Promise<TdbcConnection> | undefined;
+/** 单例连接槽（模块内 holder，对象管理）：共享连接与初始化中的 Promise。 */
+const connectionSlot = {
+  conn: undefined as TdbcConnection | undefined,
+  initPromise: undefined as Promise<TdbcConnection> | undefined,
+};
 
 export const MobileDb = {
   /**
@@ -47,11 +50,11 @@ export const MobileDb = {
 
   /** Opens (once) the app DB with core bootstrap and SKSP Android driver. */
   getMobileConnection: async (): Promise<TdbcConnection> => {
-    if (conn) {
-      return conn;
+    if (connectionSlot.conn) {
+      return connectionSlot.conn;
     }
-    if (!initPromise) {
-      initPromise = (async () => {
+    if (!connectionSlot.initPromise) {
+      connectionSlot.initPromise = (async () => {
         MobileDb.registerMobileOpSqliteDriver();
         SkspAndroidRegister.register();
         TokenizerRnRegister.register();
@@ -66,7 +69,7 @@ export const MobileDb = {
           await NovelMasterBootstrap.bootstrap(c);
         } catch (bootErr: unknown) {
           MobileDb.logCauseChain('bootstrap', bootErr);
-          // 此时 conn 还没赋值，MobileDb.closeMobileConnection() 里的 conn?.close()
+          // 此时 connectionSlot.conn 还没赋值，MobileDb.closeMobileConnection() 里的 connectionSlot.conn?.close()
           // 关不到这条连接；不在这里手动 close，局部变量 c 持有的已打开连接
           // 会随 throw 一起丢弃，文件句柄和 WAL 锁随之泄漏——Android 上重试
           // 重新 open 同一个库时，新旧连接可能互相锁死。close 本身失败不掩盖
@@ -75,18 +78,18 @@ export const MobileDb = {
           throw bootErr;
         }
         await MobileDatabaseFilePath.probeAndCache();
-        conn = c;
+        connectionSlot.conn = c;
         return c;
       })();
     }
-    return initPromise;
+    return connectionSlot.initPromise;
   },
 
   /** Closes the shared connection and clears init state. */
   closeMobileConnection: async (): Promise<void> => {
-    await conn?.close();
-    conn = undefined;
-    initPromise = undefined;
+    await connectionSlot.conn?.close();
+    connectionSlot.conn = undefined;
+    connectionSlot.initPromise = undefined;
     MobileDatabaseFilePath.clearCache();
   },
 

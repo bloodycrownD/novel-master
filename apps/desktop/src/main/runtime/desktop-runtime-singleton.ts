@@ -8,8 +8,13 @@ import { DesktopDb } from "./connection.js";
 import { DesktopRuntimeFactory } from "./create-desktop-runtime.js";
 import type { DesktopNovelMasterRuntime } from "./types.js";
 
-let runtime: DesktopNovelMasterRuntime | undefined;
-let initPromise: Promise<Result<DesktopNovelMasterRuntime, AppError>> | undefined;
+/** runtime 单例槽（模块内 holder，对象管理）：共享 runtime 与首次装配的在途 Promise。 */
+const runtimeSlot = {
+  /** 共享 runtime（undefined = 未装配）。 */
+  current: undefined as DesktopNovelMasterRuntime | undefined,
+  /** 首次装配的在途 Promise（双检：并发 get 只建一次）。 */
+  pending: undefined as Promise<Result<DesktopNovelMasterRuntime, AppError>> | undefined,
+};
 
 export namespace DesktopRuntimeSingleton {
   /**
@@ -19,27 +24,27 @@ export namespace DesktopRuntimeSingleton {
    * 未知的装配异常仍走 rejection 通道。
    */
   export async function get(): Promise<Result<DesktopNovelMasterRuntime, AppError>> {
-    if (runtime) {
-      return Result.ok(runtime);
+    if (runtimeSlot.current) {
+      return Result.ok(runtimeSlot.current);
     }
-    if (!initPromise) {
-      initPromise = DesktopRuntimeFactory.create().then((built) => {
+    if (!runtimeSlot.pending) {
+      runtimeSlot.pending = DesktopRuntimeFactory.create().then((built) => {
         if (built.ok) {
-          runtime = built.value;
+          runtimeSlot.current = built.value;
         }
         return built;
       });
     }
-    return initPromise;
+    return runtimeSlot.pending;
   }
 
   /** Synchronous access when handlers know bootstrap already completed. */
   export function getOrThrow(): DesktopNovelMasterRuntime {
-    if (!runtime) {
+    if (!runtimeSlot.current) {
       // nm-throw: keep — 同步访问器的不变量：调用方契约保证 bootstrap 已完成（名字即契约），未初始化属编程错误。
       throw new Error("Desktop runtime not initialized");
     }
-    return runtime;
+    return runtimeSlot.current;
   }
 
   /** Closes DB and rebuilds the full service graph (backup import, etc.). */
@@ -54,8 +59,8 @@ export namespace DesktopRuntimeSingleton {
    * concurrent IPC cannot observe a closed `runtime.conn` (better-sqlite3 abort).
    */
   export function clearHandle(): void {
-    runtime = undefined;
-    initPromise = undefined;
+    runtimeSlot.current = undefined;
+    runtimeSlot.pending = undefined;
   }
 
   /** Clears singleton state between integration tests (system Node host). */

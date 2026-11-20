@@ -97,8 +97,11 @@ export interface SseTransport {
   ): Promise<{ status: number; contentType: string | null }>;
 }
 
-let registeredSseTransport: SseTransport | undefined;
-let sseTransportOverrideForTests: SseTransport | undefined;
+/** 传输注册槽（模块内 holder，对象管理）：真实注册位与测试强制位，逐请求判定用。 */
+const transportSlots = {
+  registered: undefined as SseTransport | undefined,
+  overrideForTests: undefined as SseTransport | undefined,
+};
 
 const DEFAULT_LOG_TAG = "[novel-master/llm-sse]";
 
@@ -133,9 +136,13 @@ function getXmlHttpRequestCtor(): SseXmlHttpRequestConstructor | undefined {
   return (globalThis as { XMLHttpRequest?: SseXmlHttpRequestConstructor }).XMLHttpRequest;
 }
 
-let cachedShouldUseXhr: boolean | undefined;
-/** @internal Test hook to force or clear transport selection. */
-let shouldUseXhrOverrideForTests: boolean | undefined;
+/** RN 判定缓存与测试强制位（模块内 holder，对象管理）。 */
+const xhrSelection = {
+  /** 进程寿命内缓存的 RN 判定结果。 */
+  cached: undefined as boolean | undefined,
+  /** @internal Test hook to force or clear transport selection. */
+  overrideForTests: undefined as boolean | undefined,
+};
 
 export const LlmSseTransport = {
   /**
@@ -145,25 +152,25 @@ export const LlmSseTransport = {
    * spec §7）。
    */
   register(transport: SseTransport | undefined): void {
-    registeredSseTransport = transport;
+    transportSlots.registered = transport;
   },
 
   /** @internal Test hook: force a fake transport; `undefined` restores. */
   setOverrideForTests(transport: SseTransport | undefined): void {
-    sseTransportOverrideForTests = transport;
+    transportSlots.overrideForTests = transport;
   },
 
   /** @internal Reset cached RN detection and transport test overrides. */
   resetShouldUseXhrCacheForTests(): void {
-    cachedShouldUseXhr = undefined;
-    shouldUseXhrOverrideForTests = undefined;
-    sseTransportOverrideForTests = undefined;
+    xhrSelection.cached = undefined;
+    xhrSelection.overrideForTests = undefined;
+    transportSlots.overrideForTests = undefined;
   },
 
   /** @internal Force XHR/fetch branch in tests. */
   setShouldUseXhrOverrideForTests(value: boolean | undefined): void {
-    shouldUseXhrOverrideForTests = value;
-    cachedShouldUseXhr = undefined;
+    xhrSelection.overrideForTests = value;
+    xhrSelection.cached = undefined;
   },
 
   /**
@@ -171,15 +178,15 @@ export const LlmSseTransport = {
    * Result is cached for the process lifetime.
    */
   shouldUseXhr(): boolean {
-    if (shouldUseXhrOverrideForTests !== undefined) {
-      return shouldUseXhrOverrideForTests;
+    if (xhrSelection.overrideForTests !== undefined) {
+      return xhrSelection.overrideForTests;
     }
-    if (cachedShouldUseXhr !== undefined) {
-      return cachedShouldUseXhr;
+    if (xhrSelection.cached !== undefined) {
+      return xhrSelection.cached;
     }
     // RN exposes XMLHttpRequest and sets navigator.product; Node/CLI do not.
-    cachedShouldUseXhr = getXmlHttpRequestCtor() != null && (globalThis as { navigator?: { product?: string } }).navigator?.product === "ReactNative";
-    return cachedShouldUseXhr;
+    xhrSelection.cached = getXmlHttpRequestCtor() != null && (globalThis as { navigator?: { product?: string } }).navigator?.product === "ReactNative";
+    return xhrSelection.cached;
   },
 
   logSse(logTag: string, message: string, detail?: Record<string, unknown>): void {
@@ -206,7 +213,7 @@ export const LlmSseTransport = {
 
     // 三分支逐请求运行时判定（spec §3）：registered native → XHR → fetch。
     // 测试强制位优先于真实注册位；native 未注册时同进程自动回落 XHR。
-    const transport = sseTransportOverrideForTests ?? registeredSseTransport;
+    const transport = transportSlots.overrideForTests ?? transportSlots.registered;
     const usedRegisteredTransport = transport != null;
     const kind: "native" | "xhr" | "fetch" = usedRegisteredTransport ? "native" : LlmSseTransport.shouldUseXhr() ? "xhr" : "fetch";
 

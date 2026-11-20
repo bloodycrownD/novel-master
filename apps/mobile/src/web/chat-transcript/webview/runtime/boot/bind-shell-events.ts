@@ -9,7 +9,8 @@ import {CodeCopy} from '@web/shared/code-copy';
 import {post} from '../bridge';
 
 /**
- * 模块级持有 #scroller 的 ResizeObserver（null = 还没建过 / 无 RO 环境）。
+ * 模块级持有 #scroller 的 ResizeObserver 槽（模块内 holder，对象管理；
+ * null = 还没建过 / 无 RO 环境）。
  *
  * 去重口径必须写死：`addEventListener` 靠「同一个函数引用」被浏览器自动去重，所以
  * bindShellEvents 重复调用时 scroll / click 监听**天然**只有一份；而 ResizeObserver
@@ -17,7 +18,9 @@ import {post} from '../bridge';
  * #scroller，于是尺寸变化每帧多触发一次 Scroll.stickIfNearBottomNow（多写一次 scrollTop）。
  * 所以这里显式 disconnect 上一只再新建，把「可重复调用」真正做成幂等。
  */
-let scrollerResizeObserver: ResizeObserver | null = null;
+const scrollerResizeObserverSlot = {
+  observer: null as ResizeObserver | null,
+};
 
 export const BindShellEvents = {
   /** 绑定滚动与行区 click；可重复调用（listener 靠同引用去重，RO 走上面的 disconnect）。 */
@@ -32,11 +35,11 @@ export const BindShellEvents = {
       // 一处收口。typeof 守卫口径同 composer-input editor 的 visualViewport
       // 绑定；无 RO 的老 WebView 退化回旧行为（靠流式贴底事件兜），不更差。
       if (typeof ResizeObserver !== 'undefined') {
-        scrollerResizeObserver?.disconnect();
-        scrollerResizeObserver = new ResizeObserver(() =>
+        scrollerResizeObserverSlot.observer?.disconnect();
+        scrollerResizeObserverSlot.observer = new ResizeObserver(() =>
           Scroll.stickIfNearBottomNow(),
         );
-        scrollerResizeObserver.observe(scroller);
+        scrollerResizeObserverSlot.observer.observe(scroller);
       }
     }
     if (!rows) return;

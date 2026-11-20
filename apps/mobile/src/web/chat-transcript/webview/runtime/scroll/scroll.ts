@@ -9,7 +9,10 @@ import {RowWindow} from '../render/row-windowing';
  */
 const SCROLL_TOP_LOAD_OLDER = 24;
 
-let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+/** 防抖定时器槽（模块内 holder，对象管理）。 */
+const scrollTimerSlot = {
+  timer: null as ReturnType<typeof setTimeout> | null,
+};
 
 export const Scroll = {
   offsetFromBottom: (el: HTMLElement): number => {
@@ -95,9 +98,9 @@ export const Scroll = {
     if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
       Scroll.requestLoadOlder();
     }
-    if (scrollTimer != null) return;
-    scrollTimer = setTimeout(function () {
-      scrollTimer = null;
+    if (scrollTimerSlot.timer != null) return;
+    scrollTimerSlot.timer = setTimeout(function () {
+      scrollTimerSlot.timer = null;
       Scroll.emitSnapshot();
     }, 100);
   },

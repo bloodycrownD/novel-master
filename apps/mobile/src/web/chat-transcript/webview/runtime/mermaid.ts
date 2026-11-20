@@ -13,7 +13,10 @@ import {MermaidCore} from '@web/shared/mermaid-core';
 const mermaidCache = MermaidCore.createSourceCache();
 
 const SCAN_DEBOUNCE_MS = 150;
-let scanTimer: number | null = null;
+/** 防抖定时器槽（模块内 holder，对象管理）。 */
+const scanTimerSlot = {
+  timer: null as number | null,
+};
 
 export const Mermaid = {
   /** 防抖触发一次历史行 mermaid 扫描（多次连发只跑一轮）。 */
@@ -21,11 +24,11 @@ export const Mermaid = {
     if (typeof window === 'undefined') {
       return;
     }
-    if (scanTimer != null) {
-      window.clearTimeout(scanTimer);
+    if (scanTimerSlot.timer != null) {
+      window.clearTimeout(scanTimerSlot.timer);
     }
-    scanTimer = window.setTimeout(() => {
-      scanTimer = null;
+    scanTimerSlot.timer = window.setTimeout(() => {
+      scanTimerSlot.timer = null;
       void Mermaid.runScan();
     }, SCAN_DEBOUNCE_MS);
   },

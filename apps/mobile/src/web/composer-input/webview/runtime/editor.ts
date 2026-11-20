@@ -81,8 +81,13 @@ type MountComposerEditorOptions = {
   readonly heightReport?: boolean;
 };
 
-let editor: ComposerEditorState | null = null;
-let unbindStack: Array<() => void> = [];
+/** composer 编辑器运行时槽（模块内 holder，对象管理）。 */
+const composerRuntime = {
+  /** 当前挂载的编辑器实例状态（null = 未挂载）。 */
+  active: null as ComposerEditorState | null,
+  /** 事件解绑钩子栈（destroy 时先逐个调用再清空）。 */
+  unbinds: [] as Array<() => void>,
+};
 
 export namespace ComposerEditor {
   /** 按区间切分正文：区间外照原文，区间内标高亮（区间互不重叠且按序）。 */
@@ -267,7 +272,7 @@ export namespace ComposerEditor {
     state.measureScheduled = true;
     requestAnimationFrame(() => {
       state.measureScheduled = false;
-      if (editor === state) {
+      if (composerRuntime.active === state) {
         measureByClamp(state);
       }
     });
@@ -302,7 +307,7 @@ export namespace ComposerEditor {
   }
 
   export function applyMetrics(metrics: ComposerMetrics): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -322,7 +327,7 @@ export namespace ComposerEditor {
   }
 
   export function applyTheme(theme: ComposerTheme | null | undefined): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null || theme == null) {
       return;
     }
@@ -351,7 +356,7 @@ export namespace ComposerEditor {
   }
 
   export function applyDisabled(disabled: boolean): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -361,7 +366,7 @@ export namespace ComposerEditor {
   }
 
   export function applyPlaceholder(placeholder: string | null | undefined): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -369,7 +374,7 @@ export namespace ComposerEditor {
   }
 
   export function applyMode(mode: ComposerMode): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -382,7 +387,7 @@ export namespace ComposerEditor {
    * @param selectionStart 省略则保持内核写值后的光标位置
    */
   export function applyText(text: string, selectionStart?: number, selectionEnd?: number): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -411,7 +416,7 @@ export namespace ComposerEditor {
 
   /** 纯光标设置（value 不动；宏链挂载置顶 {0,0} 一拍）。 */
   export function applySelection(start: number, end: number): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -423,7 +428,7 @@ export namespace ComposerEditor {
   }
 
   export function applyInit(payload: Partial<InitPayload> | null | undefined): void {
-    const state = editor;
+    const state = composerRuntime.active;
     if (state == null) {
       return;
     }
@@ -439,7 +444,7 @@ export namespace ComposerEditor {
   }
 
   export function blur(): void {
-    editor?.input.blur();
+    composerRuntime.active?.input.blur();
   }
 
   /* ---- 事件装配 ---- */
@@ -527,7 +532,7 @@ export namespace ComposerEditor {
       pending = true;
       requestAnimationFrame(() => {
         pending = false;
-        if (editor !== state) {
+        if (composerRuntime.active !== state) {
           return;
         }
         const {input} = state;
@@ -591,21 +596,21 @@ export namespace ComposerEditor {
       initialized: false,
       heightReport,
     };
-    editor = state;
+    composerRuntime.active = state;
 
     applyMetrics(DEFAULT_METRICS);
     renderHighlight(state);
-    unbindStack = [...bindEditorEvents(state), ...bindViewportCaretGuard(state)];
+    composerRuntime.unbinds = [...bindEditorEvents(state), ...bindViewportCaretGuard(state)];
   }
 
   export function destroy(): void {
-    for (const off of unbindStack) {
+    for (const off of composerRuntime.unbinds) {
       off();
     }
-    unbindStack = [];
-    if (editor != null) {
-      editor.root.remove();
-      editor = null;
+    composerRuntime.unbinds = [];
+    if (composerRuntime.active != null) {
+      composerRuntime.active.root.remove();
+      composerRuntime.active = null;
     }
   }
 }

@@ -301,7 +301,7 @@ export const ChatPromptTokenLabel = {
         // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
         // （视图切走：升级不该与退出竞争，见 options.shouldBailPrecise 注释）。
         shouldBail: () => runtime.abortRegistry.has(ABORT_KEY.agent(scope.sessionId)) || options?.shouldBailPrecise?.() === true,
-        round: ++preciseUpgradeRoundSeq,
+        round: ++preciseUpgradeRoundCounter.seq,
         savedModelId: frame.savedModelId ?? '',
       };
       const inFlight = preciseUpgradeInflight.get(sessionId);
@@ -410,8 +410,8 @@ const preciseUpgradeInflight = new Map<string, {round: number; savedModelId: str
 /** 读数链路开发期留痕（错误通道迁移四期新增两处 Result 失败留痕走 logger，不占裸 console 基线）。 */
 const upgradeLog = LogFactory.create('chat.prompt-tokens');
 
-/** 轮次号自增源：只在 `ChatPromptTokenLabel.loadResilient` 构造请求时消费。 */
-let preciseUpgradeRoundSeq = 0;
+/** 轮次号自增源（模块内 holder，对象管理）：只在 `ChatPromptTokenLabel.loadResilient` 构造请求时消费。 */
+const preciseUpgradeRoundCounter = { seq: 0 };
 
 /**
  * 精确升级的启动延迟（2026-10-01 设 2500：升级轮是秒级重活且不可中断，首帧后
@@ -427,7 +427,10 @@ let preciseUpgradeRoundSeq = 0;
  * 测试里的字面量会静默变成错值（cr2-B-2）。
  */
 export const PRECISE_UPGRADE_START_DELAY_MS = 800;
-let preciseUpgradeStartDelayMs = PRECISE_UPGRADE_START_DELAY_MS;
+/** 启动延迟的运行时槽（模块内 holder，对象管理；测试经 setDelayForTests 注入小值）。 */
+const preciseUpgradeDelaySlot = {
+  ms: PRECISE_UPGRADE_START_DELAY_MS,
+};
 
 /** 升级轮启动延迟计时器（按 sessionId）：由 {@link PreciseUpgrade.cancelDelay} 收口。 */
 const preciseUpgradeDelayTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -472,7 +475,7 @@ export const PreciseUpgrade = {
    * 新增「延迟启动」用例还原默认值后用假计时器推进。
    */
   setDelayForTests: (ms: number): void => {
-    preciseUpgradeStartDelayMs = ms;
+    preciseUpgradeDelaySlot.ms = ms;
   },
 
   /**
@@ -563,7 +566,7 @@ export const PreciseUpgrade = {
       round: request.round,
       savedModelId: request.savedModelId,
     });
-    if (preciseUpgradeStartDelayMs <= 0) {
+    if (preciseUpgradeDelaySlot.ms <= 0) {
       void PreciseUpgrade.run(sessionId, request);
       return;
     }
@@ -579,7 +582,7 @@ export const PreciseUpgrade = {
       }
       preciseUpgradeDelayTimers.delete(sessionId);
       void PreciseUpgrade.run(sessionId, request);
-    }, preciseUpgradeStartDelayMs);
+    }, preciseUpgradeDelaySlot.ms);
     preciseUpgradeDelayTimers.set(sessionId, timer);
   },
 

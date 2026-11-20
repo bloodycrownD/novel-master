@@ -50,10 +50,6 @@ type SnapshotChunkAccumulator = {
   stream?: StreamCheckpoint;
 };
 
-/** 已完整应用的最新代次（RN 侧模块级计数器从 1 起单调递增）。 */
-let appliedSnapshotGeneration = 0;
-let pendingChunkAcc: SnapshotChunkAccumulator | null = null;
-
 /**
  * 分片收集在途时挂起的两通道动作（C-orch-1 web 侧防御）：appendTailRows /
  * prependPage 若在末片之前到达（协议异常时序），先按到达序挂起，末片
@@ -63,7 +59,16 @@ let pendingChunkAcc: SnapshotChunkAccumulator | null = null;
 type PendingChunkAction =
   | {kind: 'appendTail'; rows: TranscriptRow[]}
   | {kind: 'prependPage'; rows: TranscriptRow[]};
-let pendingChunkActions: PendingChunkAction[] = [];
+
+/** 快照分片管线状态（模块内 holder，对象管理）。 */
+const snapshotPipeline = {
+  /** 已完整应用的最新代次（RN 侧模块级计数器从 1 起单调递增）。 */
+  appliedGeneration: 0,
+  /** 在途分片收集器（null = 无在途收集；按 chunkIndex 顺序累计 rows 与流式检查点，每片 last-wins）。 */
+  pendingAcc: null as SnapshotChunkAccumulator | null,
+  /** 挂起的两通道动作（末片 applySnapshot 后原序重放）。 */
+  pendingActions: [] as PendingChunkAction[],
+};
 
 /** 连续异常快照退避参数（spec §3.4.1）：1s / 5s，连续 3 次停止自动 resync。 */
 const SNAPSHOT_RESYNC_ANOMALY_LIMIT = 3;
@@ -102,9 +107,9 @@ export const Snapshot = {
    * Stream.applyReset（spec C18/P2-8）；跨模块唯一入口。
    */
   invalidatePipeline: (generation: number): void => {
-    pendingChunkAcc = null;
-    pendingChunkActions = [];
-    appliedSnapshotGeneration = Math.max(appliedSnapshotGeneration, generation);
+    snapshotPipeline.pendingAcc = null;
+    snapshotPipeline.pendingActions = [];
+    snapshotPipeline.appliedGeneration = Math.max(snapshotPipeline.appliedGeneration, generation);
   },
 
   numberOf: (value: unknown): number => {
@@ -118,14 +123,14 @@ export const Snapshot = {
    * 每个片（含末片）先做代次判旧：旧代次末片不会整体替换 rows。
    *
    * nm-style: keep-public — bridge.ts 的 wire 分发唯一入口；分片收集器
-   * （pendingChunkAcc/pendingChunkActions/appliedSnapshotGeneration）是本模块
+   * （snapshotPipeline.pendingAcc/snapshotPipeline.pendingActions/snapshotPipeline.appliedGeneration）是本模块
    * 私有状态，bridge 只做转发。
    */
   handlePayload: (payload: SnapshotPayload): void => {
     const rawChunkTotal = Snapshot.numberOf(payload.chunkTotal);
     const chunkTotal = rawChunkTotal >= 1 ? rawChunkTotal : 1;
     const generation = Snapshot.numberOf(payload.generation);
-    if (generation > 0 && generation < appliedSnapshotGeneration) {
+    if (generation > 0 && generation < snapshotPipeline.appliedGeneration) {
       // 旧代次的任何片（含末片）：丢弃，不回退已应用基线。
       return;
     }
@@ -133,16 +138,16 @@ export const Snapshot = {
       if (generation > 0) {
         // 已应用代次的迟到单片（乱序/重复投递）与分片同口径判旧丢弃；
         // generation 缺省=旧协议载荷，不判代次直发。
-        if (generation <= appliedSnapshotGeneration) {
+        if (generation <= snapshotPipeline.appliedGeneration) {
           return;
         }
-        appliedSnapshotGeneration = generation;
+        snapshotPipeline.appliedGeneration = generation;
         // web/B-1：单片应用新代次时同步作废在途旧代次收集器——否则其末片
         // 随后到达仍会拼装并 applySnapshot，造成已应用代次回退（当前 RN 实现
         // 不可达，协议鲁棒性缺口）。挂起的增量动作一并作废（新基线为准）。
-        if (pendingChunkAcc != null && generation >= pendingChunkAcc.generation) {
-          pendingChunkAcc = null;
-          pendingChunkActions = [];
+        if (snapshotPipeline.pendingAcc != null && generation >= snapshotPipeline.pendingAcc.generation) {
+          snapshotPipeline.pendingAcc = null;
+          snapshotPipeline.pendingActions = [];
         }
       }
       Snapshot.apply(payload);
@@ -156,13 +161,13 @@ export const Snapshot = {
     if (chunkIndex < 0 || chunkIndex >= chunkTotal) {
       return;
     }
-    let acc = pendingChunkAcc;
+    let acc = snapshotPipeline.pendingAcc;
     // 迟到的旧代次分片：丢弃（被更新代次顶替后的余片）。
     if (acc != null && generation < acc.generation) {
       return;
     }
     // 无收集时不新于已应用代次=未知代次迟到片：丢弃（中间片无法启动收集）。
-    if (acc == null && generation <= appliedSnapshotGeneration) {
+    if (acc == null && generation <= snapshotPipeline.appliedGeneration) {
       return;
     }
     // 新代次首片：重置收集（顶替在途旧代次，旧余片随后被上面的判旧丢弃）；
@@ -179,8 +184,8 @@ export const Snapshot = {
         hasMore: payload.hasMore,
         stream: payload.stream,
       };
-      pendingChunkAcc = acc;
-      pendingChunkActions = [];
+      snapshotPipeline.pendingAcc = acc;
+      snapshotPipeline.pendingActions = [];
     }
     // 乱序/重复分片：丢弃（缺口无法自愈，由 force 新代次整体重发兜底）。
     if (chunkIndex !== acc.received) {
@@ -214,13 +219,13 @@ export const Snapshot = {
         scrollIntent: payload.scrollIntent || 'stick',
         restoreScroll: payload.restoreScroll,
       };
-      appliedSnapshotGeneration = generation;
-      pendingChunkAcc = null;
+      snapshotPipeline.appliedGeneration = generation;
+      snapshotPipeline.pendingAcc = null;
       Snapshot.apply(assembled);
       // 末片应用后按原序重放分片期间挂起的增量动作（C-orch-1 web 侧）：
       // applySnapshot 用分片启动时的旧闭包整体替换 rows，挂起的增量行由此恢复。
-      const actions = pendingChunkActions;
-      pendingChunkActions = [];
+      const actions = snapshotPipeline.pendingActions;
+      snapshotPipeline.pendingActions = [];
       for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
         if (action.kind === 'appendTail') {
@@ -526,15 +531,15 @@ export const Snapshot = {
    * 分片收集在途时挂起（C-orch-1），末片应用后重放。
    *
    * nm-style: keep-public — bridge.ts 的 wire 分发唯一入口：挂起队列
-   * （pendingChunkAcc/pendingChunkActions）是本模块私有状态，bridge 只做转发。
+   * （snapshotPipeline.pendingAcc/snapshotPipeline.pendingActions）是本模块私有状态，bridge 只做转发。
    */
   applyAppendTailRows: (payload: RowsPayload): void => {
     const newRows = (payload.rows || []).slice();
     if (newRows.length === 0) {
       return;
     }
-    if (pendingChunkAcc != null) {
-      pendingChunkActions.push({kind: 'appendTail', rows: newRows});
+    if (snapshotPipeline.pendingAcc != null) {
+      snapshotPipeline.pendingActions.push({kind: 'appendTail', rows: newRows});
       return;
     }
     Snapshot.applyAppendTailRowsNow(newRows);
@@ -575,12 +580,12 @@ export const Snapshot = {
    * 分片收集在途时挂起（C-orch-1），末片应用后重放。
    *
    * nm-style: keep-public — bridge.ts 的 wire 分发唯一入口：挂起队列
-   * （pendingChunkAcc/pendingChunkActions）是本模块私有状态，bridge 只做转发。
+   * （snapshotPipeline.pendingAcc/snapshotPipeline.pendingActions）是本模块私有状态，bridge 只做转发。
    */
   applyPrependPage: (payload: RowsPayload): void => {
     const newRows = (payload.rows || []).slice();
-    if (pendingChunkAcc != null) {
-      pendingChunkActions.push({kind: 'prependPage', rows: newRows});
+    if (snapshotPipeline.pendingAcc != null) {
+      snapshotPipeline.pendingActions.push({kind: 'prependPage', rows: newRows});
       return;
     }
     Snapshot.applyPrependPageNow(newRows);

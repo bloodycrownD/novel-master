@@ -44,15 +44,16 @@ export const LANG_ALIAS: Record<string, string> = {
   json: 'json',
 };
 
-let registered = false;
+/** 注册闩锁（模块内 holder，对象管理）：语言模块只注册一次。 */
+const highlightState = { registered: false };
 
 export namespace HighlightCode {
   /** core 按需注册 10 语言模块（幂等；html 由 xml 别名承载）。 */
   export function registerHighlightLanguages(): void {
-    if (registered) {
+    if (highlightState.registered) {
       return;
     }
-    registered = true;
+    highlightState.registered = true;
     hljs.registerLanguage('typescript', typescript);
     hljs.registerLanguage('javascript', javascript);
     hljs.registerLanguage('json', json);

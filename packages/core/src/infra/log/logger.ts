@@ -45,24 +45,26 @@ const consoleSink: LogSink = {
   },
 };
 
-/** 替换内置 sink 的开关；null = 关掉内置输出（已追加的 sink 不受影响）。 */
-// nm-style: keep-local — 模块级单例状态（defaultSink / extraSinks / emitting）是日志门面的标准形态
-// （对标 SLF4J LoggerFactory 的静态绑定）；对象化只会包一层没有第二实例的壳，包住的是同一组模块状态。
-let defaultSink: LogSink | null = consoleSink;
+/** 日志门面的模块级绑定状态（模块内 holder，对象管理；对标 SLF4J LoggerFactory 的静态绑定）。 */
+const loggerBindings = {
+  /** 替换内置 sink 的开关；null = 关掉内置输出（已追加的 sink 不受影响）。 */
+  defaultSink: consoleSink as LogSink | null,
+  /** 防重入：sink 内部再调 logger 时直接丢弃，避免无限递归。 */
+  emitting: false,
+};
 /** 追加 sink（文件 sink 走这条）。 */
 const extraSinks = new Set<LogSink>();
-/** 防重入：sink 内部再调 logger 时直接丢弃，避免无限递归。 */
-let emitting = false;
 
 /** 日志器工厂与 sink 绑定（对标 SLF4J LoggerFactory 的模块级绑定）。 */
 export const LogFactory = {
   emit(level: LogLevel, scope: string, message: string, detail?: LogDetail): void {
-    if (emitting) {
+    if (loggerBindings.emitting) {
       return;
     }
     const record = LogSanitize.toRecord(level, scope, message, detail);
+    const defaultSink = loggerBindings.defaultSink;
     const sinks = defaultSink == null ? [...extraSinks] : [defaultSink, ...extraSinks];
-    emitting = true;
+    loggerBindings.emitting = true;
     try {
       for (const sink of sinks) {
         try {
@@ -72,7 +74,7 @@ export const LogFactory = {
         }
       }
     } finally {
-      emitting = false;
+      loggerBindings.emitting = false;
     }
   },
 
@@ -100,12 +102,12 @@ export const LogFactory = {
   /** 替换内置 sink；传 null = 关掉内置输出（已追加的 sink 不受影响）。 */
   // nm-style: keep-public — CLI 把 core 日志移出 stdout 的入口（core 内无消费者）。
   setDefaultSink(sink: LogSink | null): void {
-    defaultSink = sink;
+    loggerBindings.defaultSink = sink;
   },
 
   /** 恢复初始的内置 console sink（测试 afterEach / 端上撤掉自定义 sink 时用）。 */
   // nm-style: keep-public — 测试与端上的 sink 复位入口（core 内无消费者）。
   restoreDefaultSink(): void {
-    defaultSink = consoleSink;
+    loggerBindings.defaultSink = consoleSink;
   },
 } as const;

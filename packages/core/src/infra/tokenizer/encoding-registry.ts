@@ -68,15 +68,16 @@ interface RegistryEntry {
 /** 编码表缓存：键为 `enc:<encodingName>`。 */
 const encodingByKey = new Map<string, RegistryEntry>();
 
-/**
- * 构造器覆盖钩子（仅测试用）：`null` = 调用方注入真实构造。
- * 设成抛错的函数即可复现「编码表建不起来」这条降级路径。
- */
-let encodingFactory: EncodingFactory | null = null;
-
-/** 时钟（仅测试可通过 {@link EncodingRegistry.setClockForTests} 替换为假时钟）。 */
-// nm-style: keep-local — 可替换时钟是测试冻结时间的状态旋钮（模块级可变量），不是转手 wrapper。
-let clock: () => number = () => Date.now();
+/** registry 的测试旋钮槽（模块内 holder，对象管理）：构造器覆盖与时钟替换。 */
+const registryKnobs = {
+  /**
+   * 构造器覆盖钩子（仅测试用）：`null` = 调用方注入真实构造。
+   * 设成抛错的函数即可复现「编码表建不起来」这条降级路径。
+   */
+  factory: null as EncodingFactory | null,
+  /** 时钟（仅测试可通过 {@link EncodingRegistry.setClockForTests} 替换为假时钟）。 */
+  clock: () => Date.now(),
+};
 
 export const EncodingRegistry = {
   /**
@@ -95,7 +96,7 @@ export const EncodingRegistry = {
       // 失败缓存：TTL 未满继续返回 null，不重试。
       if (
         cached.failedAt != null &&
-        clock() - cached.failedAt < ENCODING_RETRY_TTL_MS
+        registryKnobs.clock() - cached.failedAt < ENCODING_RETRY_TTL_MS
       ) {
         return null;
       }
@@ -106,11 +107,11 @@ export const EncodingRegistry = {
     let encoding: T | null = null;
     let failedAt: number | null = null;
     try {
-      encoding = (encodingFactory ? encodingFactory(encodingName) : build()) as T;
+      encoding = (registryKnobs.factory ? registryKnobs.factory(encodingName) : build()) as T;
     } catch (err) {
       log.warn(`tiktoken encoding init failed (${key})`, { error: err });
       encoding = null;
-      failedAt = clock();
+      failedAt = registryKnobs.clock();
     }
     encodingByKey.set(key, { encoding, failedAt });
     return encoding;
@@ -134,7 +135,7 @@ export const EncodingRegistry = {
    * 构造器换了，已缓存的表不再由它产出，必须一并作废。
    */
   setFactoryForTests<T extends EncodingHandle>(factory: EncodingFactory<T> | null): void {
-    encodingFactory = factory as EncodingFactory | null;
+    registryKnobs.factory = factory as EncodingFactory | null;
     encodingByKey.clear();
   },
 
@@ -143,6 +144,6 @@ export const EncodingRegistry = {
    * 仅供需要快进失败重试窗口的用例使用，生产代码不应触碰。
    */
   setClockForTests(now: (() => number) | null): void {
-    clock = now ?? (() => Date.now());
+    registryKnobs.clock = now ?? (() => Date.now());
   },
 } as const;

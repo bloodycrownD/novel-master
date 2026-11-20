@@ -15,9 +15,13 @@ type MermaidTheme = 'dark' | 'default';
 // 颜色解析与亮度推断已抽至 theme-mode.ts（代码高亮 token 配色同样需要）。
 import {ThemeMode} from './theme-mode';
 
-let mermaidIdCounter = 0;
+/** mermaid 渲染 id 计数器（模块内 holder，对象管理）。 */
+const mermaidIds = { counter: 0 };
 
-let mermaidMod: typeof import('mermaid')['default'] | null = null;
+/** 懒加载的 mermaid 模块槽（模块内 holder，对象管理；null = 未加载）。 */
+const mermaidModuleSlot = {
+  mod: null as typeof import('mermaid')['default'] | null,
+};
 
 interface MermaidSourceCache {
   lookup(theme: MermaidTheme, source: string): string | null;
@@ -39,16 +43,16 @@ export const MermaidCore = {
 
   /** 每次渲染唯一 id（自增），避免并发渲染共用固定 id 冲突。 */
   nextId: (): string => {
-    mermaidIdCounter += 1;
-    return `nm-mmd-${mermaidIdCounter}`;
+    mermaidIds.counter += 1;
+    return `nm-mmd-${mermaidIds.counter}`;
   },
 
   /** 懒加载 bundle 内 mermaid（IIFE 无分包，动态 import 已内联）。 */
   load: async (): Promise<typeof import('mermaid')['default']> => {
-    if (!mermaidMod) {
-      mermaidMod = (await import('mermaid')).default;
+    if (!mermaidModuleSlot.mod) {
+      mermaidModuleSlot.mod = (await import('mermaid')).default;
     }
-    return mermaidMod;
+    return mermaidModuleSlot.mod;
   },
 
   /** 渲染单张图表；失败时清理 mermaid 残留的 d<id> 错误元素后抛出。 */

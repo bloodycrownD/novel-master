@@ -4,8 +4,13 @@
  * @module common/encoding
  */
 
-/** 惰性持有的 TextEncoder；undefined = 未探测，null = 运行时无该全局。 */
-let textEncoder: TextEncoder | null | undefined;
+/**
+ * 惰性持有的 TextEncoder 槽（模块内 holder，对象管理，不裸露离散 let）；
+ * `undefined` = 未探测，`null` = 运行时无该全局。
+ */
+const textEncoderSlot = {
+  current: undefined as TextEncoder | null | undefined,
+};
 
 export const Encoding = {
     /** 解码 base64 文本（纯 JS atob，Node / RN 通用）。 */
@@ -30,11 +35,11 @@ export const Encoding = {
      * 落单代理按替换字符 U+FFFD 计 3 字节（与 TextEncoder 的行为一致）。
      */
     utf8ByteLength: (text: string): number => {
-        if (textEncoder === undefined) {
-            textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+        if (textEncoderSlot.current === undefined) {
+            textEncoderSlot.current = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
         }
-        if (textEncoder != null) {
-            return textEncoder.encode(text).byteLength;
+        if (textEncoderSlot.current != null) {
+            return textEncoderSlot.current.encode(text).byteLength;
         }
         let bytes = 0;
         for (const char of text) {

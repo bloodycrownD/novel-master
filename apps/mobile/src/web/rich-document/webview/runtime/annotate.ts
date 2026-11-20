@@ -17,17 +17,23 @@ export type AnnotateRenderMark = {
   readonly renderEnd: number;
 };
 
-let annotateEnabled = false;
-let annotations: AnnotateRenderMark[] = [];
-// createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），变量类型与之对齐
-let annotator: TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null = null;
+/** 划词批注运行时状态（模块内 holder，对象管理）。 */
+const annotateRuntime = {
+  /** 是否启用（RN menuItems 开关；关掉时同步销毁 Recogito）。 */
+  enabled: false,
+  /** 宿主下发的已确认批注渲染标记。 */
+  marks: [] as AnnotateRenderMark[],
+  // createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），字段类型与之对齐
+  /** Recogito 实例（null = 未建）。 */
+  instance: null as TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null,
+};
 /** 已由宿主确认并投影的 draft id；用于 selectionChanged 打开详情。 */
 const knownDraftIds = new Set<string>();
 
 export namespace Annotate {
   export function setEnabled(enabled: boolean): void {
-    annotateEnabled = enabled === true;
-    if (!annotateEnabled) {
+    annotateRuntime.enabled = enabled === true;
+    if (!annotateRuntime.enabled) {
       destroy();
       return;
     }
@@ -37,7 +43,7 @@ export namespace Annotate {
 
   export function setAnnotations(next: readonly AnnotateRenderMark[]): void {
     if (Array.isArray(next)) {
-      annotations = next
+      annotateRuntime.marks = next
         .map(a => ({
           id: String(a.id ?? ''),
           originalText: String(a.originalText ?? ''),
@@ -46,13 +52,13 @@ export namespace Annotate {
         }))
         .filter(a => a.id.length > 0 && Number.isFinite(a.renderStart) && Number.isFinite(a.renderEnd) && a.renderStart >= 0 && a.renderEnd > a.renderStart);
     } else {
-      annotations = [];
+      annotateRuntime.marks = [];
     }
     knownDraftIds.clear();
-    for (const a of annotations) {
+    for (const a of annotateRuntime.marks) {
       knownDraftIds.add(a.id);
     }
-    if (!annotateEnabled) {
+    if (!annotateRuntime.enabled) {
       destroy();
       return;
     }
@@ -66,7 +72,7 @@ export namespace Annotate {
    */
   export function refreshAfterDocument(): void {
     destroy();
-    if (!annotateEnabled) {
+    if (!annotateRuntime.enabled) {
       return;
     }
     ensureAnnotator();
@@ -74,13 +80,13 @@ export namespace Annotate {
   }
 
   export function destroy(): void {
-    if (annotator) {
+    if (annotateRuntime.instance) {
       try {
-        annotator.destroy();
+        annotateRuntime.instance.destroy();
       } catch {
         // ignore
       }
-      annotator = null;
+      annotateRuntime.instance = null;
     }
   }
 
@@ -90,7 +96,7 @@ export namespace Annotate {
   }
 
   function ensureAnnotator(): void {
-    if (annotator) {
+    if (annotateRuntime.instance) {
       return;
     }
     const body = document.querySelector('.doc-body');
@@ -110,16 +116,16 @@ export namespace Annotate {
       },
     });
     anno.on('selectionChanged', onSelectionChanged);
-    annotator = anno;
+    annotateRuntime.instance = anno;
   }
 
   function applyAnnotationsToAnnotator(): void {
-    if (!annotator) {
+    if (!annotateRuntime.instance) {
       return;
     }
-    const list = AnnotateRecogitoMap.draftsToAnnotations(annotations) as RecogitoTextAnnotation[];
+    const list = AnnotateRecogitoMap.draftsToAnnotations(annotateRuntime.marks) as RecogitoTextAnnotation[];
     // Recogito setAnnotations 接受 TextAnnotation[]；映射形状与库一致
-    annotator.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
+    annotateRuntime.instance.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
   }
 
   function onSelectionChanged(selected: unknown): void {
@@ -139,7 +145,7 @@ export namespace Annotate {
     post('annotateOpen', {ids});
     // 立刻取消选中：否则同一批注二次点击不触发 selectionChanged，体感卡死/极慢
     try {
-      annotator?.cancelSelected();
+      annotateRuntime.instance?.cancelSelected();
     } catch {
       // ignore
     }
@@ -148,7 +154,7 @@ export namespace Annotate {
   /** 宿主关弹窗时清选中，避免残留选中态拖慢下一次点击。 */
   export function clearSelection(): void {
     try {
-      annotator?.cancelSelected();
+      annotateRuntime.instance?.cancelSelected();
     } catch {
       // ignore
     }

@@ -315,11 +315,11 @@ interface SessionStreamUnitOptions {
 }
 
 /**
- * 进程级单元序号：同一毫秒建两个 unit 也不会撞 streamId。
+ * 进程级单元序号（模块内 holder，对象管理）：同一毫秒建两个 unit 也不会撞 streamId。
  * 用单调计数器而非 startedAtMs——同一毫秒内的重启/秒败重试都是不同单元；
  * 进程重启后 Web 文档也是新基线，跨进程复用 id 无影响（spec §2.1.2）。
  */
-let streamUnitEpoch = 0;
+const streamUnitEpochCounter = { current: 0 };
 
 /** streamRows 里 finished-未接管记录的最大保留条数（旧→新，投影时截取最近 N）。 */
 const FINISHED_STREAM_ROWS_LIMIT = 32;
@@ -475,7 +475,7 @@ export class SessionStreamUnit {
     // 不如整体回退。
     this.tokenEstimatorFactory = options.tokenEstimatorFactory;
     // 进程级单调序号（同一毫秒建两个 unit 也不撞 streamId；见模块顶部注释）。
-    this.streamEpoch = ++streamUnitEpoch;
+    this.streamEpoch = ++streamUnitEpochCounter.current;
     this.applyBuffer = StreamApplyBuffer.create(
       segments => this.applyStreamSegments(segments),
       {flushIntervalMs: SESSION_STREAM_APPLY_INTERVAL_MS},

@@ -75,7 +75,7 @@ type MetricsAcc = {
  * 信号——「桌面端指标条一直是启发式数字」这件事此前完全静默（mobile 侧同名
  * 分支有 `console.warn`，双端不对称），真机上零线索。
  */
-let warnedEstimatorFactoryFailure = false;
+const estimatorWarnState = { warned: false };
 
 function snapshotFromAcc(
   acc: MetricsAcc,
@@ -225,8 +225,8 @@ export function useAgentStreamMetrics(
           // 估算器构造失败：回退启发式（不阻断指标条）。首次打一条中文告警
           // （与 mobile 侧 `getOrCreateEncoding` 失败分支对齐），后续同类失败
           // 静默——回退行为本身不变。
-          if (!warnedEstimatorFactoryFailure) {
-            warnedEstimatorFactoryFailure = true;
+          if (!estimatorWarnState.warned) {
+            estimatorWarnState.warned = true;
             console.warn(
               "[novel-master/use-agent-stream-metrics] 估算器构造失败，回退启发式（不阻断指标条）",
               err,

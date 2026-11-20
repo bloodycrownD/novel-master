@@ -50,20 +50,22 @@ export type CloudSyncCoordinatorDeps = {
   pushAcquireTimeoutMs?: number;
 };
 
-/** 模块级默认互斥锁单例；coordinator 与 apps runtime 共享。 */
-let defaultPushMutex: PushAgentMutex | null = null;
+/** 模块级默认互斥锁槽（懒初始化单例，模块内 holder）；coordinator 与 apps runtime 共享同一把。 */
+const defaultPushMutexSlot = {
+  current: null as PushAgentMutex | null,
+};
 
 /**
  * 进程内默认 push/agent 互斥锁单例的访问器。
  */
-// nm-style: keep-public — M-25：apps runtime 的 agent 启动入口要与 coordinator 共享同一把进程内单例锁；本对象是单例状态 defaultPushMutex 的唯一访问器，内联会把单例契约摊进构造器。
+// nm-style: keep-public — M-25：apps runtime 的 agent 启动入口要与 coordinator 共享同一把进程内单例锁；本对象是单例槽 defaultPushMutexSlot 的唯一访问器，内联会把单例契约摊进构造器。
 export const DefaultPushAgentMutex = {
   /** 获取进程内默认 push/agent 互斥锁单例（apps runtime 的 agent 启动入口用同一个）。 */
   get(): PushAgentMutex {
-    if (defaultPushMutex == null) {
-      defaultPushMutex = new PushAgentMutex();
+    if (defaultPushMutexSlot.current == null) {
+      defaultPushMutexSlot.current = new PushAgentMutex();
     }
-    return defaultPushMutex;
+    return defaultPushMutexSlot.current;
   },
 } as const;
 

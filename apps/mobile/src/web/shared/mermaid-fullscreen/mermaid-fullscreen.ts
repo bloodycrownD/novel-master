@@ -31,9 +31,16 @@ type RenderMermaidViewerView = (props: MermaidViewerViewProps | null) => void;
 type MermaidViewerPost = (type: string, payload?: Record<string, unknown>) => void;
 
 const viewerSlot = ViewSlot.create<MermaidViewerViewProps | null>();
-let _post: MermaidViewerPost | null = null;
-let _open = false;
-let _delegationAttached = false;
+
+/** Mermaid 全屏查看器运行时槽（模块内 holder，对象管理）。 */
+const viewerRuntime = {
+  /** 向宿主发消息的通道（attachDelegation 注入）。 */
+  post: null as MermaidViewerPost | null,
+  /** 查看器是否处于打开态。 */
+  isOpen: false,
+  /** 代码块点击委托是否已挂接（幂等）。 */
+  delegationAttached: false,
+};
 
 export const MermaidFullscreen = {
   /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
@@ -44,11 +51,11 @@ export const MermaidFullscreen = {
 
   /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
   open: (chart: Element): void => {
-    if (_open) {
+    if (viewerRuntime.isOpen) {
       return;
     }
     // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
-    if (!viewerSlot.has() || !_post) {
+    if (!viewerSlot.has() || !viewerRuntime.post) {
       return;
     }
     const svg = chart.querySelector('svg');
@@ -56,24 +63,24 @@ export const MermaidFullscreen = {
       return;
     }
     const svgClone = svg.cloneNode(true) as Element;
-    _open = true;
+    viewerRuntime.isOpen = true;
     document.body.classList.add('mermaid-viewer-open');
     viewerSlot.invoke({svgClone});
-    if (_post) {
-      _post('mermaidViewerOpened', {});
+    if (viewerRuntime.post) {
+      viewerRuntime.post('mermaidViewerOpened', {});
     }
   },
 
   /** 关闭全屏：卸载覆盖层 → 解除禁滚 → 通知 RN（notifyHost=false 供测试/内部路径）。 */
   close: (notifyHost: boolean = true): void => {
-    if (!_open) {
+    if (!viewerRuntime.isOpen) {
       return;
     }
-    _open = false;
+    viewerRuntime.isOpen = false;
     document.body.classList.remove('mermaid-viewer-open');
     viewerSlot.invoke(null);
-    if (notifyHost && _post) {
-      _post('mermaidViewerClosed', {});
+    if (notifyHost && viewerRuntime.post) {
+      viewerRuntime.post('mermaidViewerClosed', {});
     }
   },
 
@@ -82,14 +89,14 @@ export const MermaidFullscreen = {
    * 每管线 main.ts 模块初始化处调用一次（不进 setDocument/renderRows 链路）。
    */
   attachDelegation: (post: MermaidViewerPost): void => {
-    _post = post;
+    viewerRuntime.post = post;
     // 幂等守卫：重复调用只更新 post，不叠加 document 监听器
-    if (_delegationAttached) {
+    if (viewerRuntime.delegationAttached) {
       return;
     }
-    _delegationAttached = true;
+    viewerRuntime.delegationAttached = true;
     document.addEventListener('click', event => {
-      if (_open) {
+      if (viewerRuntime.isOpen) {
         return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
       }
       const target = event.target as Element | null;

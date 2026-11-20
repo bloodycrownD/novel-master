@@ -100,12 +100,13 @@ function readDataTheme(): string | null {
   return document.documentElement.getAttribute("data-theme");
 }
 
-let mermaidIdCounter = 0;
+/** mermaid 渲染 id 计数器（模块内 holder，对象管理）。 */
+const mermaidIds = { counter: 0 };
 
 /** 每次渲染唯一 id（自增），避免共用固定 id 报错。 */
 export function nextMermaidId(): string {
-  mermaidIdCounter += 1;
-  return `nm-mermaid-${mermaidIdCounter}`;
+  mermaidIds.counter += 1;
+  return `nm-mermaid-${mermaidIds.counter}`;
 }
 
 export function mermaidCacheKey(theme: MermaidTheme, source: string): string {
@@ -227,10 +228,13 @@ async function defaultRenderMermaidSvg(
   }
 }
 
-let renderMermaidSvgImpl: MermaidSvgRenderer = defaultRenderMermaidSvg;
+/** SVG 渲染实现槽（模块内 holder，对象管理；测试可注入替身）。 */
+const rendererSlot = {
+  impl: defaultRenderMermaidSvg as MermaidSvgRenderer,
+};
 
 export function setMermaidSvgRendererForTests(fn: MermaidSvgRenderer | null) {
-  renderMermaidSvgImpl = fn ?? defaultRenderMermaidSvg;
+  rendererSlot.impl = fn ?? defaultRenderMermaidSvg;
 }
 
 /** 缓存感知的渲染入口：命中缓存 / 合并并发同源请求，失败写入失败占位。 */
@@ -248,7 +252,7 @@ export async function resolveMermaidSvg(
   if (pending) {
     return pending;
   }
-  const job = renderMermaidSvgImpl(nextMermaidId(), source, theme)
+  const job = rendererSlot.impl(nextMermaidId(), source, theme)
     .then((svg) => {
       writeCacheKey(key, svg);
       failedAtCache.delete(key);

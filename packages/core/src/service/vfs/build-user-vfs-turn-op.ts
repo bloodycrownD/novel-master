@@ -8,13 +8,14 @@ import { attachmentPath } from "@/domain/chat/logic/message/attachment-path.js";
 import { UserVfsSaveMapping, type UserVfsSaveMappingOptions } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import type { UserVfsTurnOp, UserVfsTurnToolSpec } from "@/service/chat/user-vfs-turn.port.js";
 
-let toolIdSeq = 0;
+/** 工具 ID 自增序号（模块内 holder，对象管理）。 */
+const toolIdCounter = { seq: 0 };
 
 /** UI VFS turn op 构建器集合（delete / mkdir / rename / create / save）。 */
 export const UserVfsTurnOps = {
   allocToolIds(count: number, prefix: string): string[] {
     const stamp = Date.now();
-    return Array.from({ length: count }, (_, index) => `tu_${prefix}_${stamp}_${toolIdSeq++}_${index}`);
+    return Array.from({ length: count }, (_, index) => `tu_${prefix}_${stamp}_${toolIdCounter.seq++}_${index}`);
   },
 
   toOp(actionXml: string, tools: UserVfsTurnToolSpec[]): UserVfsTurnOp {

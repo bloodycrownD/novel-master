@@ -51,7 +51,10 @@ interface WorkplaceViewCacheEntry {
   inFlight?: Promise<Result<WorkplaceViewCacheValue, AppError>>;
 }
 
-let cache = new WeakMap<TdbcConnection, Map<string, WorkplaceViewCacheEntry>>();
+/** 缓存槽（模块内 holder，对象管理）：clearAll 整体换新实例即等效清空（WeakMap 不可枚举）。 */
+const cacheSlot = {
+  map: new WeakMap<TdbcConnection, Map<string, WorkplaceViewCacheEntry>>(),
+};
 
 /** workplace 评估链进程内缓存（conn 级 WeakMap L1 memo）操作集合。 */
 export const WorkplaceViewCache = {
@@ -59,10 +62,10 @@ export const WorkplaceViewCache = {
    * ensure 语义：取（无则建）scope 的缓存条目，供 service 挂载/清除 inFlight。
    */
   ensureEntry(conn: TdbcConnection, scopeKey: string): WorkplaceViewCacheEntry {
-    let scopes = cache.get(conn);
+    let scopes = cacheSlot.map.get(conn);
     if (scopes == null) {
       scopes = new Map();
-      cache.set(conn, scopes);
+      cacheSlot.map.set(conn, scopes);
     }
     let entry = scopes.get(scopeKey);
     if (entry == null) {
@@ -107,6 +110,6 @@ export const WorkplaceViewCache = {
   clearAll(): void {
     // WeakMap 不可枚举：整体换新实例，旧 map 丢引用后连同各 conn 的条目一起
     // 可回收，语义上等价于清空且不阻止 conn 本身被 GC。
-    cache = new WeakMap();
+    cacheSlot.map = new WeakMap();
   },
 } as const;

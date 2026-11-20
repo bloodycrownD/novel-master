@@ -15,7 +15,10 @@ export const QUICK_SQLITE_DEFAULT_LOCATION = 'default';
  * 目录，也就是 files 目录（react-native-blob-util 的 DocumentDir）的兄弟目录。
  * iOS 默认落在 DocumentDir 根部，已被 `base/name` 候选覆盖，无需额外推导。
  */
-let cachedDbFilePath: string | undefined;
+/** 已探测到的真实库文件路径缓存（模块内 holder，对象管理；undefined = 未探测）。 */
+const dbFilePathCache = {
+  path: undefined as string | undefined,
+};
 
 /**
  * `novel_master_vfs` 库文件的磁盘路径（备份拷贝与缓存收口）。
@@ -61,18 +64,18 @@ export const MobileDatabaseFilePath = {
     const fs = RnFileIo.blobFs();
     for (const candidate of MobileDatabaseFilePath.buildCandidates(fs.dirs)) {
       if (await fs.exists(candidate)) {
-        cachedDbFilePath = candidate;
+        dbFilePathCache.path = candidate;
         return candidate;
       }
     }
     const fallback = MobileDatabaseFilePath.default();
-    cachedDbFilePath = fallback;
+    dbFilePathCache.path = fallback;
     return fallback;
   },
 
   /** Clears cached path (tests / after import replaces file at same location). */
   clearCache: (): void => {
-    cachedDbFilePath = undefined;
+    dbFilePathCache.path = undefined;
   },
 
   /**
@@ -80,16 +83,16 @@ export const MobileDatabaseFilePath = {
    * Prefer {@link MobileDatabaseFilePath.probeAndCache} after runtime bootstrap.
    */
   get: (): string => {
-    if (cachedDbFilePath != null) {
-      return cachedDbFilePath;
+    if (dbFilePathCache.path != null) {
+      return dbFilePathCache.path;
     }
     return MobileDatabaseFilePath.default();
   },
 
   /** Resolves path when cache is cold; probes disk if needed. */
   resolve: async (): Promise<string> => {
-    if (cachedDbFilePath != null) {
-      return cachedDbFilePath;
+    if (dbFilePathCache.path != null) {
+      return dbFilePathCache.path;
     }
     return MobileDatabaseFilePath.probeAndCache();
   },

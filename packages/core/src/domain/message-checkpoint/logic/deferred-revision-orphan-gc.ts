@@ -24,11 +24,12 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { LogFactory } from "@/infra/log/logger.js";
+import { Concurrency } from "@/common/concurrency.js";
 
 const log = LogFactory.create("message-checkpoint.revision-gc");
 
-/** 模块级 in-flight 守卫：清扫进行中不重入。 */
-let orphanGcInFlight = false;
+/** 模块级 in-flight 守卫：清扫进行中不重入（计数忙碌旗，布尔置位经 `set` 映射）。 */
+const orphanGcBusy = Concurrency.createBusyFlag();
 
 export const DeferredRevisionOrphanGc = {
   /**
@@ -44,22 +45,22 @@ export const DeferredRevisionOrphanGc = {
    * 化保证（不会与后续事务并发踩踏）。
    */
   schedule(conn: TdbcConnection): void {
-    if (orphanGcInFlight) {
+    if (orphanGcBusy.isBusy()) {
       return;
     }
-    orphanGcInFlight = true;
+    orphanGcBusy.set(true);
     setImmediate(() => {
       void new SqliteVfsRevisionRepository(conn)
         .deleteGlobalOrphans()
         .then((deleted) => {
-          orphanGcInFlight = false;
+          orphanGcBusy.set(false);
           if (deleted > 0) {
             // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
             log.info(`deferred orphan sweep deleted ${deleted} revision row(s)`);
           }
         })
         .catch((error: unknown) => {
-          orphanGcInFlight = false;
+          orphanGcBusy.set(false);
           log.warn("deferred orphan sweep failed", { error });
         });
     });

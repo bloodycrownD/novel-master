@@ -63,7 +63,8 @@ interface StreamRoutes {
  */
 const REQUEST_ID_INSTANCE_PREFIX = Math.random().toString(36).slice(2, 8).padEnd(6, "0");
 
-let nextRequestId = 1;
+/** requestId 自增序号（模块内 holder，对象管理）。 */
+const requestIdCounter = { next: 1 };
 
 /** init.headers 的三种 RequestInit 形态（无 DOM lib 环境下显式声明）。 */
 export type RequestHeadersLike =
@@ -136,7 +137,7 @@ export namespace NativeSseTransport {
 
     return {
       post(url, init, onChunk, opts) {
-        const requestId = `llm-sse-${REQUEST_ID_INSTANCE_PREFIX}-${nextRequestId++}`;
+        const requestId = `llm-sse-${REQUEST_ID_INSTANCE_PREFIX}-${requestIdCounter.next++}`;
         const headersKv = flattenRequestHeaders(init.headers);
         const body = init.body == null ? "" : String(init.body);
         const timeouts = opts?.nativeTimeouts;

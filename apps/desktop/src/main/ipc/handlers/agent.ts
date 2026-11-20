@@ -50,7 +50,11 @@ const activeRuns = new Map<string, RunEntry>();
 /** abort 删除 activeRuns 后仍用于 FINISHED/FAILED 与 runId 匹配。 */
 const sessionRunIds = new Map<string, string>();
 
-let lifecycleSubscriptions: Array<{ unsubscribe: () => void }> = [];
+/** agent 运行时装配槽（模块内 holder，对象管理）：生命周期订阅与 token 补跑注入。 */
+const agentRuntime = {
+  /** 生命周期订阅（attach 时整体换新，teardown 时逐个 unsubscribe 后清空）。 */
+  lifecycleSubs: [] as Array<{ unsubscribe: () => void }>,
+};
 
 /**
  * 「run 结束后补跑一次 token 读口」的注入口（r3-dt-align 第 4 层）。
@@ -66,7 +70,10 @@ type RunFinishedTokenStatsRefresh = (payload: {
   readonly projectId: string;
 }) => void;
 
-let runFinishedTokenStatsRefresh: RunFinishedTokenStatsRefresh | null = null;
+/** run 结束后补跑 token 读口的注入实现槽（模块内 holder，对象管理；null = 未注入）。 */
+const tokenStatsRefreshSlot = {
+  refresh: null as RunFinishedTokenStatsRefresh | null,
+};
 
 // namespace 要求单一连续块：模块级状态从函数区中段上移到文件头（仍为文件私有，语义不变）。
 export namespace Agent {
@@ -275,9 +282,9 @@ export namespace Agent {
   }
 
   /** 注册/注销 run 结束后的读口补跑（读口 service 在模块加载时注册自己）。 */
-  // nm-style: keep-local — 注入槽：写的是本模块私有状态 runFinishedTokenStatsRefresh，为避免 chat-prompt-tokens.service ↔ agent.ts 依赖环而设计（见上方注释）；内联需把模块状态外泄给读口 service。
+  // nm-style: keep-local — 注入槽：写的是本模块私有状态 tokenStatsRefreshSlot.refresh，为避免 chat-prompt-tokens.service ↔ agent.ts 依赖环而设计（见上方注释）；内联需把模块状态外泄给读口 service。
   export function setRunFinishedTokenStatsRefresh(refresh: RunFinishedTokenStatsRefresh | null): void {
-    runFinishedTokenStatsRefresh = refresh;
+    tokenStatsRefreshSlot.refresh = refresh;
   }
 
   /**
@@ -300,11 +307,11 @@ export namespace Agent {
     readonly sessionId: string;
     readonly projectId: string;
   }): void {
-    if (runFinishedTokenStatsRefresh == null) {
+    if (tokenStatsRefreshSlot.refresh == null) {
       return;
     }
     try {
-      runFinishedTokenStatsRefresh(payload);
+      tokenStatsRefreshSlot.refresh(payload);
     } catch (err) {
       // 补拍失败绝不能影响终态收口（refcount / activeRuns 已在上游处理完）。
       log.error("agent/run token stats refresh failed", { sessionId: payload.sessionId, error: err });
@@ -312,10 +319,10 @@ export namespace Agent {
   }
 
   function detachRunLifecycleListeners(): void {
-    for (const sub of lifecycleSubscriptions) {
+    for (const sub of agentRuntime.lifecycleSubs) {
       sub.unsubscribe();
     }
-    lifecycleSubscriptions = [];
+    agentRuntime.lifecycleSubs = [];
   }
 
   /**
@@ -326,7 +333,7 @@ export namespace Agent {
   export function attachRunLifecycleListeners(eventBus: SimpleEventBus): () => void {
     detachRunLifecycleListeners();
 
-    lifecycleSubscriptions = [
+    agentRuntime.lifecycleSubs = [
       eventBus.subscribe(EVENT_AGENT_RUN_STARTED, onCoreRunStarted),
       eventBus.subscribe(EVENT_AGENT_RUN_FINISHED, onCoreRunFinished),
       eventBus.subscribe(EVENT_AGENT_RUN_FAILED, (payload: unknown) => {

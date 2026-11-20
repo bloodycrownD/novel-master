@@ -35,12 +35,15 @@ type RowWindowRange = {start: number; end: number};
 /** 测量所需的最小盒子接口（fake DOM 测试只需提供这两个属性）。 */
 type LayoutBox = {offsetTop: number; offsetHeight: number};
 
-/** 当前窗口（模块级；测试经 isolateModules 取干净实例）。 */
-let win: RowWindowRange = {start: 0, end: 0};
-/** 实测平均槽高（px）。 */
-let avgSlotPx = ROW_WINDOW_FALLBACK_SLOT_PX;
-/** 上次实测过的窗口（相同窗口跳过重测，避免流式期高频 reflow）。 */
-let lastMeasuredWin: RowWindowRange | null = null;
+/** 窗口渲染态（模块内 holder，对象管理；测试经 isolateModules 取干净实例）。 */
+const winState = {
+  /** 当前窗口。 */
+  current: {start: 0, end: 0} as RowWindowRange,
+  /** 实测平均槽高（px）。 */
+  avgSlot: ROW_WINDOW_FALLBACK_SLOT_PX,
+  /** 上次实测过的窗口（相同窗口跳过重测，避免流式期高频 reflow）。 */
+  lastMeasured: null as RowWindowRange | null,
+};
 
 function clamp(v: number, lo: number, hi: number): number {
   if (!(v >= lo)) return lo;
@@ -51,8 +54,8 @@ function clamp(v: number, lo: number, hi: number): number {
 export const RowWindow = {
   /** RowList 渲染取窗口：对当前 rows 总数做防御性 clamp。 */
   getRange: (total: number): RowWindowRange => {
-    const end = clamp(win.end, 0, Math.max(0, total));
-    const start = clamp(win.start, 0, end);
+    const end = clamp(winState.current.end, 0, Math.max(0, total));
+    const start = clamp(winState.current.start, 0, end);
     return {start, end};
   },
 
@@ -61,15 +64,15 @@ export const RowWindow = {
    * `pinnedTail`（spec C19）：流式行被窗口滚出后钉在下占位之后单独渲染，下占位
    * 必须少算这 1 行——它的真实高度由 DOM 自己贡献，不能被估算重复计算。
    *
-   * nm-style: keep-public — 跨层唯一读出口（ui/render/RowList）；avgSlotPx 是
+   * nm-style: keep-public — 跨层唯一读出口（ui/render/RowList）；winState.avgSlot 是
    * 本模块私有渲染态，ui 层不能直读，内联会把状态估算搬到 ui。
    */
   getSpacerHeights: (total: number, pinnedTail = false) => {
     const range = RowWindow.getRange(total);
     const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
     return {
-      top: Math.round(range.start * avgSlotPx),
-      bottom: Math.round(bottomRows * avgSlotPx),
+      top: Math.round(range.start * winState.avgSlot),
+      bottom: Math.round(bottomRows * winState.avgSlot),
     };
   },
 
@@ -77,10 +80,10 @@ export const RowWindow = {
    * 测试 / 调试窥视当前平均槽高估算。
    *
    * nm-style: keep-public — 测试支持 API：window 测试经 isolateModules 直接
-   * 断言 EWMA 收敛；生产无读取入口，也不该把私有 avgSlotPx 直接暴露成字段。
+   * 断言 EWMA 收敛；生产无读取入口，也不该把私有 winState.avgSlot 直接暴露成字段。
    */
   getAvgSlotPx: (): number => {
-    return avgSlotPx;
+    return winState.avgSlot;
   },
 
   /** 目标窗口（纯函数）：视口行 ± 缓冲，clamp 到 [0, total]。 */
@@ -136,9 +139,9 @@ export const RowWindow = {
 
   /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
   retarget: (total: number, firstRow: number): void => {
-    win = RowWindow.desired(total, firstRow);
+    winState.current = RowWindow.desired(total, firstRow);
     // 窗口内容大换血：下次 render 后必须重测平均槽高。
-    lastMeasuredWin = null;
+    winState.lastMeasured = null;
   },
 
   /**
@@ -154,7 +157,7 @@ export const RowWindow = {
       return;
     }
     const offsetBottom = Math.max(0, positioning.offsetFromBottom);
-    const v = total - (offsetBottom + positioning.clientHeight) / avgSlotPx;
+    const v = total - (offsetBottom + positioning.clientHeight) / winState.avgSlot;
     RowWindow.retarget(total, v);
   },
 
@@ -166,14 +169,14 @@ export const RowWindow = {
    * handleScroll 收敛（下端收缩不动 scrollTop）。
    *
    * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPage）：
-   * 直接改写模块私有 win/lastMeasuredWin，调用方不能 own 这份状态。
+   * 直接改写模块私有 winState.current/winState.lastMeasured，调用方不能 own 这份状态。
    */
   retargetForPrepend: (prependedRows: number): void => {
     const total = state.rows.length;
     const oldTotal = Math.max(0, total - prependedRows);
-    const bottomRows = Math.max(0, oldTotal - win.end);
-    win = {start: 0, end: clamp(total - bottomRows, 0, total)};
-    lastMeasuredWin = null;
+    const bottomRows = Math.max(0, oldTotal - winState.current.end);
+    winState.current = {start: 0, end: clamp(total - bottomRows, 0, total)};
+    winState.lastMeasured = null;
   },
 
   /**
@@ -195,17 +198,17 @@ export const RowWindow = {
     if (!scroller) return false;
     const top = RowWindow.windowTopPxInDocument();
     if (top == null) return false;
-    const v = win.start + (scroller.scrollTop - top) / avgSlotPx;
+    const v = winState.current.start + (scroller.scrollTop - top) / winState.avgSlot;
     if (!isFinite(v)) return false;
     const firstRow = clamp(v, 0, Math.max(0, total - 1));
-    const move = RowWindow.planMove(total, win.start, win.end, firstRow);
+    const move = RowWindow.planMove(total, winState.current.start, winState.current.end, firstRow);
     if (!move) return false;
     // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
     // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
     // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
     // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
     // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
-    if (move.startDelta > 0 && win.end >= total) {
+    if (move.startDelta > 0 && winState.current.end >= total) {
       return false;
     }
     // 两端分步：先上端（渲染 + 读位重映射），后下端（渲染，不动 scrollTop）。
@@ -213,22 +216,22 @@ export const RowWindow = {
       const topBefore = RowWindow.windowTopPxInDocument();
       let rowBefore: number | null = null;
       if (topBefore != null) {
-        rowBefore = win.start + (scroller.scrollTop - topBefore) / avgSlotPx;
+        rowBefore = winState.current.start + (scroller.scrollTop - topBefore) / winState.avgSlot;
       }
-      const nextStart = clamp(win.start + move.startDelta, 0, win.end);
-      win = {start: nextStart, end: win.end};
+      const nextStart = clamp(winState.current.start + move.startDelta, 0, winState.current.end);
+      winState.current = {start: nextStart, end: winState.current.end};
       RowLogic.render();
       if (rowBefore != null && isFinite(rowBefore)) {
         const topAfter = RowWindow.windowTopPxInDocument();
         if (topAfter != null) {
-          scroller.scrollTop = topAfter + (rowBefore - win.start) * avgSlotPx;
+          scroller.scrollTop = topAfter + (rowBefore - winState.current.start) * winState.avgSlot;
         }
       }
     }
     if (move.endDelta !== 0) {
-      const nextEnd = clamp(win.end + move.endDelta, win.start, total);
-      if (nextEnd !== win.end) {
-        win = {start: win.start, end: nextEnd};
+      const nextEnd = clamp(winState.current.end + move.endDelta, winState.current.start, total);
+      if (nextEnd !== winState.current.end) {
+        winState.current = {start: winState.current.start, end: nextEnd};
         RowLogic.render();
       }
     }
@@ -246,18 +249,18 @@ export const RowWindow = {
    * 估算反而偏大）。窗口外钉住的流式行在下占位之后，天然不进测量。
    *
    * nm-style: keep-public — renderRows 后唯一装配回调（runtime/factory 挂点）：
-   * 直接更新模块私有 avgSlotPx/lastMeasuredWin，调用方无法持有这份渲染态。
+   * 直接更新模块私有 winState.avgSlot/winState.lastMeasured，调用方无法持有这份渲染态。
    */
   measure: (): void => {
-    // 删行后 win.end 可能仍大于当前 rows 总数（RowList 渲染用 clamp 后的窗口）：
+    // 删行后 winState.current.end 可能仍大于当前 rows 总数（RowList 渲染用 clamp 后的窗口）：
     // 计数必须同口径 clamp，否则分母偏大、平均槽高被系统性低估（P2-8）。
     const range = RowWindow.getRange(state.rows.length);
     const count = range.end - range.start;
     if (count <= 0) return;
     if (
-      lastMeasuredWin != null &&
-      lastMeasuredWin.start === range.start &&
-      lastMeasuredWin.end === range.end
+      winState.lastMeasured != null &&
+      winState.lastMeasured.start === range.start &&
+      winState.lastMeasured.end === range.end
     ) {
       return;
     }
@@ -296,8 +299,8 @@ export const RowWindow = {
     const measuredPx = bottomPx - topPx;
     if (!(measuredPx > 0)) return;
     const measuredSlot = measuredPx / effectiveCount;
-    avgSlotPx += (measuredSlot - avgSlotPx) * ROW_WINDOW_AVG_ALPHA;
-    lastMeasuredWin = {start: range.start, end: range.end};
+    winState.avgSlot += (measuredSlot - winState.avgSlot) * ROW_WINDOW_AVG_ALPHA;
+    winState.lastMeasured = {start: range.start, end: range.end};
   },
 
   firstOrLastRowEl: (last: boolean): LayoutBox | null => {
@@ -336,7 +339,7 @@ export const RowWindow = {
    * 真实平均高」。缺省时保持旧行为（不扣除、分母仅新行数）。
    *
    * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPageNow）：
-   * 把差值样本并入模块私有 avgSlotPx 的 EWMA，不能搬进调用方。
+   * 把差值样本并入模块私有 winState.avgSlot 的 EWMA，不能搬进调用方。
    */
   // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
   // prettier-ignore
@@ -351,7 +354,7 @@ export const RowWindow = {
     const per = (heightDeltaPx - spacerDelta) / sampledRows;
     if (!(per > 0)) return;
     const keep = 1 - ROW_WINDOW_AVG_ALPHA;
-    avgSlotPx = avgSlotPx * keep + per * ROW_WINDOW_AVG_ALPHA;
+    winState.avgSlot = winState.avgSlot * keep + per * ROW_WINDOW_AVG_ALPHA;
   },
 } as const;
 

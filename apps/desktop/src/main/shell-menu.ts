@@ -10,7 +10,10 @@ const log = LogFactory.create("desktop.shell-menu");
 
 const isDev = !app.isPackaged;
 
-let appMenu: Menu | null = null;
+/** 应用菜单槽（模块内 holder，对象管理；installApplicationMenu 写入、popupShellSubmenu 读取）。 */
+const menuSlot = {
+  menu: null as Menu | null,
+};
 
 const TITLEBAR_OVERLAY = {
   light: { color: "#eef3fb", symbolColor: "#1a1d24" },
@@ -91,9 +94,9 @@ export const ShellMenu = {
     ];
   },
 
-  // nm-style: keep-public — shell-menu 模块状态 appMenu 的唯一写入方（popupShellSubmenu 读取）；内联进 main.ts 需把模块状态外泄出本文件。
+  // nm-style: keep-public — shell-menu 模块状态 menuSlot.menu 的唯一写入方（popupShellSubmenu 读取）；内联进 main.ts 需把模块状态外泄出本文件。
   installApplicationMenu(): void {
-    // 原 buildApplicationMenu 内联：模板 + 模块状态 appMenu 的唯一写入点。
+    // 原 buildApplicationMenu 内联：模板 + 模块状态 menuSlot.menu 的唯一写入点。
     const menu = Menu.buildFromTemplate(ShellMenu.buildTemplate({
       isDev,
       onAbout: () => {
@@ -113,13 +116,13 @@ export const ShellMenu = {
         void DesktopDiagnostics.export(DesktopDiagnostics.createSeams()).catch((error: unknown) => log.error("export diagnostics failed", { error }));
       },
     }));
-    appMenu = menu;
+    menuSlot.menu = menu;
     Menu.setApplicationMenu(menu);
   },
 
-  // nm-style: keep-public — appMenu 模块状态的读取方（与 installApplicationMenu 写入配对）；内联进 IPC handler 需跨模块外泄状态。
+  // nm-style: keep-public — menuSlot.menu 模块状态的读取方（与 installApplicationMenu 写入配对）；内联进 IPC handler 需跨模块外泄状态。
   popupSubmenu(menuId: ShellMenuId, window: BrowserWindow, x: number, y: number): void {
-    const item = appMenu?.getMenuItemById(menuId);
+    const item = menuSlot.menu?.getMenuItemById(menuId);
     const submenu = item?.submenu;
     if (!submenu) return;
     submenu.popup({ window, x: Math.round(x), y: Math.round(y) });

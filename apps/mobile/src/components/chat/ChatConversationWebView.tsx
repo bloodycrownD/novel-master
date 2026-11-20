@@ -304,8 +304,8 @@ type SendSnapshot = (req: SnapshotRequest) => void;
 /** 快照末片的流检查点（payload.stream）。 */
 type StreamCheckpoint = {id: string; seq: number; status: TranscriptRowStatus};
 
-/** 快照分片代次（模块级单调递增计数器，见 ChatTranscriptWebView 同款注释）。 */
-let snapshotGenerationCounter = 0;
+/** 快照分片代次（模块级单调递增计数器，模块内 holder，对象管理；见 ChatTranscriptWebView 同款注释）。 */
+const snapshotGeneration = { counter: 0 };
 
 /** streamResync 宿主侧限流窗口（spec T-SP29）：同 streamId 100ms 内只补一次快照。 */
 const STREAM_RESYNC_MIN_INTERVAL_MS = 100;
@@ -902,7 +902,7 @@ const ConversationHost = forwardRef<Handle, Props>(
       postToWeb({
         v: CONVERSATION_BRIDGE_V,
         type: 'streamReset',
-        payload: {streamIds, generation: ++snapshotGenerationCounter},
+        payload: {streamIds, generation: ++snapshotGeneration.counter},
       });
       // 被 reset 的流不会有后续 status：连同 resync 限流条目一起清掉（P2-11）。
       if (streamIds == null) {
@@ -974,7 +974,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         // 在途 rAF 的尾 delta 必须先以更小 seq 发出（快照 checkpoint 才能覆盖它）。
         flushPendingStreamNow();
         const streamRowsAtStart = streamingRowsRef.current;
-        const generation = ++snapshotGenerationCounter;
+        const generation = ++snapshotGeneration.counter;
         activeSnapshotGenerationRef.current = generation;
         const buildLog = `snapshot build begin (msgs=${snapshotMessages.length})`;
         rollbackTimingLog(buildLog);

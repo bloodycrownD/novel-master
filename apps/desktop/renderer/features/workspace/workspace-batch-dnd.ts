@@ -46,7 +46,13 @@ type StagedExport = {
   readonly skipped?: readonly VfsBatchExportSkippedDto[];
 };
 
-let activeNativeDrag: ActiveNativeDrag | null = null;
+/** 批量拖拽运行时槽（模块内 holder，对象管理）：在途原生拖拽与 prefetch 失败订阅。 */
+const dndRuntime = {
+  /** 当前在途的原生拖拽（null = 无在途）。 */
+  active: null as ActiveNativeDrag | null,
+  /** prefetch 失败 toast 的退订钩子（null = 未订阅）。 */
+  failedUnsub: null as (() => void) | null,
+};
 const stagedByPath = new Map<string, StagedExport>();
 /** prefetch 已失败的路径：dragstart 无 staged 时补 toast（避免与 prefetch toast 重复）。 */
 const failedStagePaths = new Set<string>();
@@ -54,7 +60,6 @@ const failedStagePaths = new Set<string>();
 const prefetchInFlight = new Set<string>();
 /** dragEnd 递增以作废仍在途的 prefetch 结果。 */
 const prefetchGeneration = new Map<string, number>();
-let startDragFailedUnsub: (() => void) | null = null;
 
 function clearStagingOnMain(stagingRoot: string): void {
   void ipcVfsBatchClearStaging({ stagingRoot });
@@ -78,40 +83,40 @@ export function releaseStagedExport(logicalPath: string): void {
   clearStagingOnMain(staged.stagingRoot);
 }
 
-/** dragEnd / 取消：清理 activeNativeDrag 与对应 staging。 */
+/** dragEnd / 取消：清理 dndRuntime.active 与对应 staging。 */
 export function finalizeRowDrag(logicalPath: string): void {
   prefetchGeneration.set(
     logicalPath,
     (prefetchGeneration.get(logicalPath) ?? 0) + 1,
   );
   releaseStagedExport(logicalPath);
-  if (activeNativeDrag != null) {
-    clearStagingOnMain(activeNativeDrag.stagingRoot);
-    removeStagedByRoot(activeNativeDrag.stagingRoot);
-    activeNativeDrag = null;
+  if (dndRuntime.active != null) {
+    clearStagingOnMain(dndRuntime.active.stagingRoot);
+    removeStagedByRoot(dndRuntime.active.stagingRoot);
+    dndRuntime.active = null;
   }
 }
 
 /** 订阅 main startDrag 失败事件（幂等）。 */
 export function ensureStartDragFailureToast(): () => void {
-  if (startDragFailedUnsub == null) {
-    startDragFailedUnsub = onVfsStartDragFailed((payload) => {
-      if (activeNativeDrag != null) {
-        clearStagingOnMain(activeNativeDrag.stagingRoot);
-        removeStagedByRoot(activeNativeDrag.stagingRoot);
+  if (dndRuntime.failedUnsub == null) {
+    dndRuntime.failedUnsub = onVfsStartDragFailed((payload) => {
+      if (dndRuntime.active != null) {
+        clearStagingOnMain(dndRuntime.active.stagingRoot);
+        removeStagedByRoot(dndRuntime.active.stagingRoot);
       }
-      activeNativeDrag = null;
+      dndRuntime.active = null;
       showToast(payload.message || "拖出失败");
     });
   }
   return () => {
-    startDragFailedUnsub?.();
-    startDragFailedUnsub = null;
+    dndRuntime.failedUnsub?.();
+    dndRuntime.failedUnsub = null;
   };
 }
 
 export function clearActiveNativeDrag(): void {
-  activeNativeDrag = null;
+  dndRuntime.active = null;
 }
 
 export function formatBatchApplyToast(report: VfsBatchApplyReportDto): string {
@@ -237,7 +242,7 @@ export function startPrefetchedNativeDrag(options: {
     return false;
   }
   options.dragEvent.preventDefault();
-  activeNativeDrag = {
+  dndRuntime.active = {
     logicalPaths: staged.logicalPaths,
     stagingRoot: staged.stagingRoot,
   };
@@ -247,7 +252,7 @@ export function startPrefetchedNativeDrag(options: {
   } catch (err) {
     clearStagingOnMain(staged.stagingRoot);
     removeStagedByRoot(staged.stagingRoot);
-    activeNativeDrag = null;
+    dndRuntime.active = null;
     showToast(err instanceof Error ? err.message : "拖出失败");
     return false;
   }
@@ -362,7 +367,7 @@ export async function handleTreeDrop(options: {
   readonly onNeedsConfirm: (req: BatchIngestConfirmRequest) => void;
   readonly onMutated: () => void;
 }): Promise<void> {
-  const active = activeNativeDrag;
+  const active = dndRuntime.active;
   const hostPaths = hostPathsFromDataTransfer(options.dataTransfer);
 
   if (
@@ -372,7 +377,7 @@ export async function handleTreeDrop(options: {
   ) {
     clearStagingOnMain(active.stagingRoot);
     removeStagedByRoot(active.stagingRoot);
-    activeNativeDrag = null;
+    dndRuntime.active = null;
     await moveVfsPathsToDir({
       scope: options.scope,
       targetDir: options.targetDir,

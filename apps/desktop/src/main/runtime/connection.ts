@@ -12,23 +12,29 @@ import { DesktopSksp } from "./register-platform-drivers.js";
 import { DesktopDbPath } from "./resolve-db-path.js";
 import { TokenizerAssetsRoot } from "./resolve-tokenizer-assets-root.js";
 
-let conn: TdbcConnection | undefined;
-let initPromise: Promise<TdbcConnection> | undefined;
-let registered = false;
+/** 单例连接槽（模块内 holder，对象管理）：共享连接、首次 open 的在途 Promise 与驱动注册闩锁。 */
+const connectionSlot = {
+  /** 共享连接（undefined = 未打开）。 */
+  current: undefined as TdbcConnection | undefined,
+  /** 首次 open 的在途 Promise（双检：并发 get 只建一次）。 */
+  pending: undefined as Promise<TdbcConnection> | undefined,
+  /** 平台驱动是否已注册（进程内一次）。 */
+  driversRegistered: false,
+};
 
 // nm-style 注记：命名镜像 mobile db/connection.ts 的 MobileDb 先例。
 export namespace DesktopDb {
   /** Opens (once) the app DB with core bootstrap and platform drivers. */
   export async function get(): Promise<TdbcConnection> {
-    if (conn) {
-      return conn;
+    if (connectionSlot.current) {
+      return connectionSlot.current;
     }
-    if (!initPromise) {
-      initPromise = (async (): Promise<TdbcConnection> => {
+    if (!connectionSlot.pending) {
+      connectionSlot.pending = (async (): Promise<TdbcConnection> => {
         // SKSP 平台解析失败沿拒绝通道出：本 singleton 的失败通道是 rejection
         // （bootstrap 的 INFRA_BASELINE_TOO_OLD 同款），不为此把
         // DesktopDb.get 改成 Result 去波及全部调用方。
-        if (!registered) {
+        if (!connectionSlot.driversRegistered) {
           BetterSqlite3Register.register();
           const sksp = DesktopSksp.registerDriver();
           if (!sksp.ok) return Promise.reject(sksp.error);
@@ -38,24 +44,24 @@ export namespace DesktopDb {
           // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给
           // 将来 level 透传预留的；保持它是因为加速器契约里 level 是可选形参。
           ZlibAccelerator.register({ deflate: (data, level) => (level === undefined ? deflateSync(data) : deflateSync(data, { level })), inflate: (data) => inflateSync(data) });
-          registered = true;
+          connectionSlot.driversRegistered = true;
         }
         const dbPath = resolve(DesktopDbPath.resolve());
         await mkdir(dirname(dbPath), { recursive: true });
         const c = await TdbcOpen.open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
         await NovelMasterBootstrap.bootstrap(c);
-        conn = c;
+        connectionSlot.current = c;
         return c;
       })();
     }
-    return initPromise;
+    return connectionSlot.pending;
   }
 
   /** Closes the shared connection and clears init state (backup import / rebootstrap). */
   export async function close(): Promise<void> {
-    await conn?.close();
-    conn = undefined;
-    initPromise = undefined;
+    await connectionSlot.current?.close();
+    connectionSlot.current = undefined;
+    connectionSlot.pending = undefined;
   }
 
   /** WAL checkpoint before file-level copy (export backup). */

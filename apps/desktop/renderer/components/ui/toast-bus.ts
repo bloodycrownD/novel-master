@@ -12,7 +12,10 @@ export type ToastState = {
 type ToastListener = (state: ToastState | null) => void;
 
 const listeners = new Set<ToastListener>();
-let hideTimer: ReturnType<typeof setTimeout> | undefined;
+/** 自动隐藏定时器槽（模块内 holder，对象管理）。 */
+const hideTimerSlot = {
+  timer: undefined as ReturnType<typeof setTimeout> | undefined,
+};
 
 /** Lightweight pub/sub for transient success/error messages. */
 export function subscribeToast(listener: ToastListener): () => void {
@@ -36,10 +39,10 @@ export function showToast(
     actionLabel: options?.actionLabel,
     onAction: options?.onAction,
   });
-  if (hideTimer) {
-    clearTimeout(hideTimer);
+  if (hideTimerSlot.timer) {
+    clearTimeout(hideTimerSlot.timer);
   }
-  hideTimer = setTimeout(() => {
+  hideTimerSlot.timer = setTimeout(() => {
     emit(null);
   }, durationMs);
 }

@@ -97,14 +97,30 @@ type TokenChunkCacheItem = readonly [
   count: number
 ];
 
-// ---- 三代环形状态（index 越小越新：0=当前代，1=第二代，2=第三代） ----
-let genCurrent = new Map<string, number>();
-let genSecond = new Map<string, number>();
-let genThird = new Map<string, number>();
-
-let maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
-let hits = 0;
-let misses = 0;
+// ---- 三代环形状态（模块内 holder，对象管理，不裸露离散 let）----
+const generationRing = {
+  /** 当前代（index 越小越新：0=当前代，1=第二代，2=第三代）。 */
+  genCurrent: new Map<string, number>(),
+  /** 第二代。 */
+  genSecond: new Map<string, number>(),
+  /** 第三代（最旧；推进时淘汰清空后轮换为新当前代）。 */
+  genThird: new Map<string, number>(),
+  /** 三代总量条数上限（测试可注入小值，clearForTests 恢复默认）。 */
+  maxTotalEntries: CHUNK_CACHE_MAX_TOTAL_ENTRIES,
+  /** 命中计数（观测用，stats() 读出）。 */
+  hits: 0,
+  /** 未命中计数（观测用，stats() 读出）。 */
+  misses: 0,
+  /**
+   * 当前代自上次**安排**持久化以来是否有过新记录（`record` 置位）。
+   *
+   * false ⇒ 当前代与上次落盘的内容逐条相同，整表序列化 + 覆盖写纯浪费，跳过。
+   * 注意只被 `record` 置位：`lookup` 的「提升至当前代」不改任何计数，漏记它
+   * 最多让某条块计数不进这次的种子表（下次重启重算一次），不值得为它每轮多
+   * 写一次整表。
+   */
+  currentGenDirty: false,
+};
 
 /**
  * 已完成 KKV 种子载入的会话（每会话每进程只 seed 一次）。
@@ -115,16 +131,6 @@ let misses = 0;
  * 种子块（首次计数重算），口径不受影响。
  */
 const seededSessions = new Set<string>();
-
-/**
- * 当前代自上次**安排**持久化以来是否有过新记录（`record` 置位）。
- *
- * false ⇒ 当前代与上次落盘的内容逐条相同，整表序列化 + 覆盖写纯浪费，跳过。
- * 注意只被 `record` 置位：`lookup` 的「提升至当前代」不改任何计数，漏记它
- * 最多让某条块计数不进这次的种子表（下次重启重算一次），不值得为它每轮多
- * 写一次整表。
- */
-let currentGenDirty = false;
 
 export const TokenChunkCache = {
   /**
@@ -159,23 +165,23 @@ export const TokenChunkCache = {
 
   /** 总量超限时淘汰：先清最旧代，仍超再清次旧代，最后按插入序裁当前代。 */
   enforceTotalCap(): void {
-    let total = genCurrent.size + genSecond.size + genThird.size;
-    if (total <= maxTotalEntries) {
+    let total = generationRing.genCurrent.size + generationRing.genSecond.size + generationRing.genThird.size;
+    if (total <= generationRing.maxTotalEntries) {
       return;
     }
-    genThird.clear();
-    total = genCurrent.size + genSecond.size;
-    if (total <= maxTotalEntries) {
+    generationRing.genThird.clear();
+    total = generationRing.genCurrent.size + generationRing.genSecond.size;
+    if (total <= generationRing.maxTotalEntries) {
       return;
     }
-    genSecond.clear();
+    generationRing.genSecond.clear();
     // 单代自身超限（测试注入小上限时的路径）：按插入序删当前代最旧条目。
-    while (genCurrent.size > maxTotalEntries) {
-      const oldest = genCurrent.keys().next();
+    while (generationRing.genCurrent.size > generationRing.maxTotalEntries) {
+      const oldest = generationRing.genCurrent.keys().next();
       if (oldest.done === true) {
         break;
       }
-      genCurrent.delete(oldest.value);
+      generationRing.genCurrent.delete(oldest.value);
     }
   },
 
@@ -245,29 +251,29 @@ export const tokenChunkCache = {
    */
   lookup(hash16: string, scope: string): number | undefined {
     const key = TokenChunkCache.buildEntryKey(hash16, scope);
-    const current = genCurrent.get(key);
+    const current = generationRing.genCurrent.get(key);
     if (current !== undefined) {
-      hits += 1;
+      generationRing.hits += 1;
       return current;
     }
-    for (const gen of [genSecond, genThird]) {
+    for (const gen of [generationRing.genSecond, generationRing.genThird]) {
       const count = gen.get(key);
       if (count !== undefined) {
         // 提升至当前代：从旧代摘除、写当前代（下一次推进才再往后挪）。
         gen.delete(key);
-        genCurrent.set(key, count);
-        hits += 1;
+        generationRing.genCurrent.set(key, count);
+        generationRing.hits += 1;
         return count;
       }
     }
-    misses += 1;
+    generationRing.misses += 1;
     return undefined;
   },
 
   /** 记一块的 token 数（写当前代，覆盖同键旧值），随后执行总量上限淘汰。 */
   record(hash16: string, scope: string, count: number): void {
-    genCurrent.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
-    currentGenDirty = true;
+    generationRing.genCurrent.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
+    generationRing.currentGenDirty = true;
     TokenChunkCache.enforceTotalCap();
   },
 
@@ -286,9 +292,9 @@ export const tokenChunkCache = {
   advanceGeneration(sessionId: string, options?: AdvanceGenerationOptions): void {
     const sessionKkv = options?.persist?.sessionKkv;
     let payload: string | null = null;
-    if (sessionKkv != null && options?.realRefresh === true && currentGenDirty && genCurrent.size > 0) {
+    if (sessionKkv != null && options?.realRefresh === true && generationRing.currentGenDirty && generationRing.genCurrent.size > 0) {
       const items: [string, string, number][] = [];
-      for (const [key, count] of genCurrent) {
+      for (const [key, count] of generationRing.genCurrent) {
         const [hash16, scope] = [key.slice(3, 3 + CHUNK_HASH_HEX_LENGTH), key.slice(4 + CHUNK_HASH_HEX_LENGTH)];
         items.push([hash16, scope, count]);
       }
@@ -296,16 +302,16 @@ export const tokenChunkCache = {
     }
 
     // 三代环形轮换：第三代淘汰后清空复用为新当前代（省一次分配）。
-    const evicted = genThird;
+    const evicted = generationRing.genThird;
     evicted.clear();
-    genThird = genSecond;
-    genSecond = genCurrent;
-    genCurrent = evicted;
+    generationRing.genThird = generationRing.genSecond;
+    generationRing.genSecond = generationRing.genCurrent;
+    generationRing.genCurrent = evicted;
 
     if (sessionKkv != null && payload != null) {
       // 脏标记在**安排**写入后即清（不等落库结果）：整表写入是 fire-and-forget
       // 的覆盖写，没有重试语义；等落库反而会让写失败时下一轮又付一次整表代价。
-      currentGenDirty = false;
+      generationRing.currentGenDirty = false;
       const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload);
       void write.catch((error) => {
         log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
@@ -364,7 +370,7 @@ export const tokenChunkCache = {
     }
     for (const [hash16, scope, count] of items) {
       // 合并进最旧代：同键以种子覆盖（种子即该会话最近一次落盘的当前代）。
-      genThird.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
+      generationRing.genThird.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
     }
     TokenChunkCache.enforceTotalCap();
     return items.length;
@@ -377,19 +383,19 @@ export const tokenChunkCache = {
    * 重启后重新 seed」的后续用例静默按已 seed 处理。
    */
   clearForTests(): void {
-    genCurrent.clear();
-    genSecond.clear();
-    genThird.clear();
-    hits = 0;
-    misses = 0;
-    maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
+    generationRing.genCurrent.clear();
+    generationRing.genSecond.clear();
+    generationRing.genThird.clear();
+    generationRing.hits = 0;
+    generationRing.misses = 0;
+    generationRing.maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
     seededSessions.clear();
-    currentGenDirty = false;
+    generationRing.currentGenDirty = false;
   },
 
   /** 测试用：注入小总量上限（clearForTests 会恢复默认值）。 */
   setMaxTotalEntriesForTests(max: number): void {
-    maxTotalEntries = max;
+    generationRing.maxTotalEntries = max;
     TokenChunkCache.enforceTotalCap();
   },
 
@@ -401,10 +407,10 @@ export const tokenChunkCache = {
     genCounts: [number, number, number];
   } {
     return {
-      hits,
-      misses,
-      total: genCurrent.size + genSecond.size + genThird.size,
-      genCounts: [genCurrent.size, genSecond.size, genThird.size],
+      hits: generationRing.hits,
+      misses: generationRing.misses,
+      total: generationRing.genCurrent.size + generationRing.genSecond.size + generationRing.genThird.size,
+      genCounts: [generationRing.genCurrent.size, generationRing.genSecond.size, generationRing.genThird.size],
     };
   },
 } as const;

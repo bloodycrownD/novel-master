@@ -28,9 +28,12 @@ const log = LogFactory.create("desktop.main");
 // 文件 sink 必须在 app.whenReady() 之前装好：启动早期的失败也要留痕。
 DesktopLogSink.install();
 
-let detachEventBusForwarder: (() => void) | undefined;
-let detachAgentActivityForwarder: (() => void) | undefined;
-let detachAgentRunLifecycleListeners: (() => void) | undefined;
+/** 前向器退订钩子槽（模块内 holder，对象管理；runtime 装配时挂、teardown 时摘）。 */
+const forwarderSlots = {
+  eventBus: undefined as (() => void) | undefined,
+  agentActivity: undefined as (() => void) | undefined,
+  agentRunLifecycle: undefined as (() => void) | undefined,
+};
 
 function createMainWindow(): BrowserWindow {
   const iconPath = AppIcon.resolvePath();
@@ -143,12 +146,12 @@ function createMainWindow(): BrowserWindow {
 }
 
 function detachMainEventBusListeners(): void {
-  detachEventBusForwarder?.();
-  detachEventBusForwarder = undefined;
-  detachAgentRunLifecycleListeners?.();
-  detachAgentRunLifecycleListeners = undefined;
-  detachAgentActivityForwarder?.();
-  detachAgentActivityForwarder = undefined;
+  forwarderSlots.eventBus?.();
+  forwarderSlots.eventBus = undefined;
+  forwarderSlots.agentRunLifecycle?.();
+  forwarderSlots.agentRunLifecycle = undefined;
+  forwarderSlots.agentActivity?.();
+  forwarderSlots.agentActivity = undefined;
 }
 
 app.whenReady().then(async () => {
@@ -164,9 +167,9 @@ app.whenReady().then(async () => {
     } else {
       const runtime = built.value;
       detachMainEventBusListeners();
-      detachEventBusForwarder = EventBusForwarder.attach(runtime.eventBus);
-      detachAgentRunLifecycleListeners = Agent.attachRunLifecycleListeners(runtime.eventBus);
-      detachAgentActivityForwarder = AgentActivityForwarder.attach();
+      forwarderSlots.eventBus = EventBusForwarder.attach(runtime.eventBus);
+      forwarderSlots.agentRunLifecycle = Agent.attachRunLifecycleListeners(runtime.eventBus);
+      forwarderSlots.agentActivity = AgentActivityForwarder.attach();
     }
   } catch (error) {
     log.error("bootstrap failed", { error });

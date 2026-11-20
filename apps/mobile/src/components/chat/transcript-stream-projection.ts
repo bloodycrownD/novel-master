@@ -45,9 +45,11 @@ type TextOverride = {text: string; thinking: string};
 /** 输入数组引用 → 输出数组（unit 的 streamRows 只在内容变化时换引用）。 */
 const streamingRowsCache = new WeakMap<ProjectionInput, StreamingRows>();
 
-/** 上一次「数组引用变了但内容没变」的输入/输出（保持输出引用稳定）。 */
-let lastProjectionInput: ProjectionInput | null = null;
-let lastBridgeOutput: StreamingRows = EMPTY_STREAMING_ROWS;
+/** 上一次「数组引用变了但内容没变」的输入/输出（模块内 holder，对象管理；保持输出引用稳定）。 */
+const lastProjectionMemo = {
+  input: null as ProjectionInput | null,
+  output: EMPTY_STREAMING_ROWS as StreamingRows,
+};
 
 export namespace TranscriptStreamProjection {
   /** service 层工具投影 → 桥层工具投影（同形结构，显式搬字段避免越层扩展）。 */
@@ -77,9 +79,9 @@ export namespace TranscriptStreamProjection {
     }
     // 字段级等价：数组引用变了但内容未变时复用上一次输出（引用稳定契约）。
     if (
-      lastProjectionInput != null &&
-      lastProjectionInput.length === input.length &&
-      lastProjectionInput.every((row, index) => {
+      lastProjectionMemo.input != null &&
+      lastProjectionMemo.input.length === input.length &&
+      lastProjectionMemo.input.every((row, index) => {
         const next = input[index]!;
         return (
           row.streamId === next.streamId &&
@@ -91,8 +93,8 @@ export namespace TranscriptStreamProjection {
         );
       })
     ) {
-      streamingRowsCache.set(input, lastBridgeOutput);
-      return lastBridgeOutput;
+      streamingRowsCache.set(input, lastProjectionMemo.output);
+      return lastProjectionMemo.output;
     }
     const output = input.map(message => ({
       streamId: message.streamId,
@@ -103,8 +105,8 @@ export namespace TranscriptStreamProjection {
       messageId: message.messageId,
     }));
     streamingRowsCache.set(input, output);
-    lastProjectionInput = input;
-    lastBridgeOutput = output;
+    lastProjectionMemo.input = input;
+    lastProjectionMemo.output = output;
     return output;
   }
 
