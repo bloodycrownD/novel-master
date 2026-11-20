@@ -37,17 +37,34 @@ const log = LogFactory.create("chat.usage-stats");
  * 其余协议 prompt 已含 cached。FILTER 只对 cache 列非 NULL 的行求和——
  * 缺失行不入分母（PRD 口径，避免拉低命中率）。
  */
-const BILLED_INPUT_SUM_SQL = `SUM(CASE WHEN provider = 'anthropic' THEN prompt_tokens + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0) ELSE prompt_tokens END) FILTER (WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)`;
+const BILLED_INPUT_SUM_SQL = `
+  SUM(CASE WHEN provider = 'anthropic'
+    THEN prompt_tokens + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)
+    ELSE prompt_tokens
+  END) FILTER (WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)`;
 
 /**
  * 速率聚合的有效行 FILTER（summary 与桶查询共用）：token 三列与耗时两列
  * 均非 NULL，且 duration_ms > first_token_ms（非流式行 first=duration
  * 与时钟毛刺行不入分母，避免除零与负速率）。
  */
-const RATE_FILTER_SQL = `WHERE completion_tokens IS NOT NULL ` + `AND first_token_ms IS NOT NULL ` + `AND duration_ms IS NOT NULL AND duration_ms > first_token_ms`;
+const RATE_FILTER_SQL = `
+  WHERE completion_tokens IS NOT NULL
+    AND first_token_ms IS NOT NULL
+    AND duration_ms IS NOT NULL AND duration_ms > first_token_ms`;
 
 /** 聚合 SELECT 列表（bucket 复用后丢弃 total_tokens）。 */
-const AGG_SELECT_SQL = `COUNT(*) AS calls, COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens, COALESCE(SUM(total_tokens), 0) AS total_tokens, COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens, COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens, COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens, AVG(first_token_ms) AS avg_first_token_ms, CAST(SUM(completion_tokens) FILTER (${RATE_FILTER_SQL}) AS REAL) / (SUM(duration_ms - first_token_ms) FILTER (${RATE_FILTER_SQL}) / 1000.0) AS avg_tokens_per_second`;
+const AGG_SELECT_SQL = `
+  COUNT(*) AS calls,
+  COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+  COALESCE(SUM(total_tokens), 0) AS total_tokens,
+  COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+  COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+  COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens,
+  AVG(first_token_ms) AS avg_first_token_ms,
+  CAST(SUM(completion_tokens) FILTER (${RATE_FILTER_SQL}) AS REAL)
+    / (SUM(duration_ms - first_token_ms) FILTER (${RATE_FILTER_SQL}) / 1000.0) AS avg_tokens_per_second`;
 
 /**
  * 账本有效行判据（公共片断）：prompt / completion 至少一侧非空。
@@ -58,7 +75,8 @@ const AGG_SELECT_SQL = `COUNT(*) AS calls, COALESCE(SUM(prompt_tokens), 0) AS pr
  * 写入契约的防御性复核；旧口径的 `role = 'assistant'` 判据随之退役（账本表
  * 不存在非 assistant 行，hidden 维度也不存在——hidden 只是内容侧可见性）。
  */
-const USAGE_NOT_NULL_SQL = `(prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
+const USAGE_NOT_NULL_SQL = `
+  (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
 
 /**
  * 动态筛选模板片断（原三函数迁 SqlTemplate `<if>`，绑定值传原始入参，
@@ -72,9 +90,14 @@ const USAGE_NOT_NULL_SQL = `(prompt_tokens IS NOT NULL OR completion_tokens IS N
  * - 时间谓词：fromMs/toMs 任一为 null 时不限时间（全历史），非空时拼
  *   [fromMs, toMs) 半开区间条件（与 range 可选语义配套）。
  */
-const MODEL_FILTER_SQL = `<if test="model === null"> AND (model_name IS NULL OR model_name NOT IN (SELECT DISTINCT vendor_model_id FROM llm_saved_model))</if><if test="model !== undefined and model !== null"> AND model_name = #{model}</if>`;
-const PROVIDER_FILTER_SQL = `<if test="providerId === null"> AND provider_id IS NULL</if><if test="providerId !== undefined and providerId !== null"> AND provider_id = #{providerId}</if>`;
-const TIME_RANGE_SQL = `<if test="fromMs != null and toMs != null"> AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}</if>`;
+const MODEL_FILTER_SQL = `<if test="model === null">
+  AND (model_name IS NULL OR model_name NOT IN (SELECT DISTINCT vendor_model_id FROM llm_saved_model))</if><if test="model !== undefined and model !== null">
+  AND model_name = #{model}</if>`;
+const PROVIDER_FILTER_SQL = `<if test="providerId === null">
+  AND provider_id IS NULL</if><if test="providerId !== undefined and providerId !== null">
+  AND provider_id = #{providerId}</if>`;
+const TIME_RANGE_SQL = `<if test="fromMs != null and toMs != null">
+  AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}</if>`;
 
 /** 解析 `YYYY-MM-DD` 为本地日期分量（拒绝溢出日期如 02-30；`label` 用于报错指认字段）。 */
 function parseDayLocalDate(dayLocalDate: string, label = "dayLocalDate"): Result<{ year: number; month: number; day: number }, AppError> {
