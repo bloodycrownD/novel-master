@@ -140,14 +140,20 @@ checkpoint(): Interrupt | null;   // null = 继续跑
 
 ## 五、平台例外清单
 
-只有以下四处允许 throw，新增例外必须先改本文件：
+只有以下例外允许 throw，新增例外必须先改本文件：
 
 1. **`fetch` 的 `AbortError`**——平台在取消时 reject，签名不是我们的；`isAbortLikeError` 按 `name === "AbortError"` 判别。
-2. **`better-sqlite3` 的事务回滚**——`db.transaction(fn)` 只认「抛错回滚」，`fn` 内 `if (!r.ok) throw r.error` 是必需的。
+2. **事务回滚（better-sqlite3 与 tdbc 同判）**——`db.transaction(fn)` / `conn.transaction(fn)` 只认「抛错回滚」，`fn` 内 `if (!r.ok) throw r.error` 是必需的；`fn` 直接 return 会 commit 半写（p26 R1 起按此判据登记实例文件，throw-audit 规则对「`.transaction(...)` 回调实参内的 throw」AST 自动放行）。
 3. **`Promise.race` / `raceWithAbort` 的 reject**——Promise 只有 reject 通道，没有返回值通道。
 4. **`AbortSignal.throwIfAborted()`**——标准库 API，形态固定。
 5. **`LlmProtocolAdapter` 与 sse parser 出口的 ProviderError throw 通道**（2026-11-16 六期收口裁决）——port 契约 `listModels`/`chat` 返回 `LlmListModelsResult`/`LlmChatResult`（无失败位），retry 按 catch + code 分派是 spec-2 §2.1 明文保留的协议；内部 `fetchJson`/`assertOk`/`assertSseParseSucceededOrThrow` 已 Result 化，adapter 与 `*-sse-parser` 的流出口把 Result 失败解包转 throw 喂给 transport 的 catch → reject。仅限 `infra/llm-protocol` 的三个 adapter 与三个 sse-parser 文件。
-6. **`IntegrityRepairOperation.detect/repair` 的报告契约**（同上裁决）——接口「只认报告/异常」，`runAll` 捕异常写进修复报告；repo 已 Result 化，操作实现在读 repo 处解包转 throw 由 `runAll` 收口。仅限 `domain/provider/logic/provider-identity-repair.ts`（同形新增操作须逐个登记，不放行整个目录）。
+6. ~~**`IntegrityRepairOperation.detect/repair` 的报告契约**（2026-11-16 六期收口裁决）——接口「只认报告/异常」，`runAll` 捕异常写进修复报告；repo 已 Result 化，操作实现在读 repo 处解包转 throw 由 `runAll` 收口。~~ **已随 p26 R4 退役（2026-11-20）**：接口改为 `detect(): Promise<Result<IntegrityRepairDetection, AppError>>` / `repair(): Promise<Result<void, AppError>>`，已知失败沿 Result 上行、runAll 的 catch 降级为平台异常兜网；本例外不再授权任何 unwrap-throw。
+7. **unwrap-throw 边界转码**（2026-11-20 p26 R1 裁决，门⑦ ALLOW_FILES 与 throw-audit baseline 双登记）——`throw x.error` 在以下边界形态合法：
+   - **a. runner 收口漏斗**：`run-agent-turn.ts` 的 `run`（throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件）与 `mapResolveError`（OrThrow 转码边界，desktop rejection 契约，十八期 T3 已审）。
+   - **b. IPC handler 边界**：`apps/desktop/src/main/ipc/handlers/agent-registry.ts` 的 exportYaml（依赖调用只有 throw 通道，handler catch 转 IpcResult 线格式）。
+   - **c. AgentSession.list port 契约**：`chat-agent-session.ts` / `assemble-agent-runner-deps.ts`——已知失败抛出交 agent-runner 主 catch 收口（步进漏斗）；list 的消费点在 runner 步进循环内，Result 化只会把 unwrap-throw 挪进 runner（同款 `raiseRunError` 形态已存在），不改变净违规数。
+   - **d. 写库边界契约**：`provider-table-snapshot.ts` 的 restore——对外契约「任意行非法则抛 AppError（`DB_BACKUP_*`）」，调用方按 catch 收口（文件 JSDoc 自白）。
+   - **e. 校验槽位回调（zod preprocess 同款例外）**：`vfs-character-card.service.ts` / `yaml-shared.ts` 的 assertFileName 槽——DocumentIo 槽位契约只认 throw，没有 Result 通道；Result 边界在 `CharacterCardDocumentPick` / `YamlDocumentPick`。
 
 ## 六、三期路线
 
