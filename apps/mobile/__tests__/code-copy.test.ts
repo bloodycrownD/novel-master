@@ -44,8 +44,9 @@ describe('copyCode 共享委托模块源码契约 (T-CB19)', () => {
       /window\.setTimeout\(\s*\(\) => btn\.classList\.remove\('copied'\)/,
     );
     // 幂等：重复挂接只挂一次，不叠加 document 监听
-    expect(src).toMatch(/if \(attached \|\| typeof document === 'undefined'\)/);
-    expect(src).toContain('attached = true;');
+    // （守卫变量被 R3 收编进 copyAttachState 对象槽——正则对齐新形态，断言意图不变）
+    expect(src).toMatch(/if \(copyAttachState\.attached \|\| typeof document === 'undefined'\)/);
+    expect(src).toContain('copyAttachState.attached = true;');
   });
 });
 

@@ -159,9 +159,10 @@ describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
   it('setDocument 自增序号：连续刷新时旧异步链不按中间态重建 Recogito', () => {
     const main = readSrc('web/rich-document/webview/main.ts');
     // 每轮自增 + finally 里序号过期则放弃刷新（防 Recogito 按中间态建层）
-    expect(main).toMatch(/\+\+setDocumentSeq/);
+    // （setDocumentSeq 被 R3 收编进 documentSeq 对象槽——正则对齐新形态，断言意图不变）
+    expect(main).toMatch(/\+\+documentSeq\.counter/);
     expect(main).toMatch(
-      /seq !== setDocumentSeq[\s\S]*?Annotate\.refreshAfterDocument/,
+      /seq !== documentSeq\.counter[\s\S]*?Annotate\.refreshAfterDocument/,
     );
   });
 
