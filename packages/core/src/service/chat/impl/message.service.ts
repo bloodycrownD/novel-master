@@ -15,7 +15,7 @@ import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
+import { ForkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
@@ -332,7 +332,7 @@ export class DefaultMessageService implements MessageService {
       if (inserted.kind !== "completed") throw AbortError.create();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
-      await TdbcTransaction.unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
+      await TdbcTransaction.unwrapOrRollback(await ForkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
       return forked;
     });
     return Result.ok(await forkTransaction);

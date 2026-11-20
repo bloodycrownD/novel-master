@@ -36,12 +36,12 @@ export type {
 export {
   ATTACH_PROMPT_CHAR_BUDGET,
 } from "../domain/chat/logic/attachment/attach-budget.js";
-export { userMessageFormatter } from "../domain/chat/logic/prompt/user-message-formatter.js";
-export { promptAssembler } from "../domain/chat/logic/prompt/prompt-assembler.js";
+export { UserMessageFormatter } from "../domain/chat/logic/prompt/user-message-formatter.js";
+export { PromptAssembler } from "../domain/chat/logic/prompt/prompt-assembler.js";
 export { attachmentPath } from "../domain/chat/logic/message/attachment-path.js";
 export { attachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
 export { promptPathSeen } from "../domain/chat/logic/attachment/prompt-path-seen.js";
-export { attachmentScanner } from "../domain/chat/logic/attachment/attachment-scanner.js";
+export { AttachmentScanner } from "../domain/chat/logic/attachment/attachment-scanner.js";
 export type {
   ContentBlock,
   TextBlock,
@@ -73,7 +73,7 @@ export type { ChatServicesSessionDeps } from "../service/chat/chat-service-facto
 // 归属例外（check-public-ownership）：VFS 工具卡路径解析，desktop/mobile
 // 的 transcript 消费方都在 chat 门面取（domain/tool 无独立出口）。
 export { VfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
-export { skillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
+export { SkillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
 export type { SkillToolRef } from "../domain/chat/model/content-block.js";
 export type {
   UserVfsTurnService,

@@ -7,7 +7,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import {  AppErrorOps  } from "@/errors/app-error.js";
 import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
-import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  AttachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
@@ -21,7 +21,7 @@ function scanComposerRanges(
   const out: MessageAttachment[] = [];
   for (const range of ranges) {
     const slice = text.slice(range.start, range.end);
-    out.push(...attachmentScanner.scanAtPaths(slice), ...attachmentScanner.scanSkills(slice));
+    out.push(...AttachmentScanner.scanAtPaths(slice), ...AttachmentScanner.scanSkills(slice));
   }
   return out;
 }

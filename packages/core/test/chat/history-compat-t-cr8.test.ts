@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  TextBlocks  } from "@novel-master/core/chat";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
-import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  PromptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {  AttachmentChip  } from "../../src/presentation/chat/attachment-chip.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
@@ -111,7 +111,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     await vfs.write("/hist.md", "hist-body");
     const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg(
           "回放",

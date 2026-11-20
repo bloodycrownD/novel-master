@@ -4,14 +4,14 @@
  */
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  attachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import {  AttachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import {  MessageAttachmentSchema, messageAttachmentsSchema, type MessageAttachment  } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
     const text = "请看 @notes/a.md 与补充";
-    const scanned = attachmentScanner.scanAtPaths(text);
+    const scanned = AttachmentScanner.scanAtPaths(text);
     assert.equal(scanned.length, 1);
     assert.equal(scanned[0]!.source, "attach");
     assert.equal(scanned[0]!.path, "/notes/a.md");
@@ -21,7 +21,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 合并后 content 仍含 @path token（未剥离）", () => {
     const text = "见 @notes/a.md";
     const chips: MessageAttachment[] = [];
-    const merged = attachmentScanner.mergeScannedAtPaths(text, chips);
+    const merged = AttachmentScanner.mergeScannedAtPaths(text, chips);
     assert.equal(merged.length, 1);
     assert.equal(merged[0]!.path, "/notes/a.md");
     assert.ok(text.includes("@notes/a.md"));
@@ -38,7 +38,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
         path: "notes/a.md",
       },
     ];
-    const merged = attachmentScanner.mergeScannedAtPaths(text, chips);
+    const merged = AttachmentScanner.mergeScannedAtPaths(text, chips);
     assert.equal(merged.length, 1);
     // 已有优先，保留原 path 写法
     assert.equal(merged[0]!.path, "notes/a.md");
@@ -46,13 +46,13 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
 
   it("允许多个不同 path 与中文路径；落库一律带前导 /", () => {
     const text = "见 @docs/说明.md 和 @foo/bar.txt";
-    const scanned = attachmentScanner.scanAtPaths(text);
+    const scanned = AttachmentScanner.scanAtPaths(text);
     assert.equal(scanned.length, 2);
     assert.deepEqual(scanned.map((a) => a.path).sort(), ["/docs/说明.md", "/foo/bar.txt"]);
   });
 
   it("目录尾 /：type=dir，落库可保留尾 /，seen 去重去尾", () => {
-    const scanned = attachmentScanner.scanAtPaths("树 @notes/ @notes");
+    const scanned = AttachmentScanner.scanAtPaths("树 @notes/ @notes");
     assert.equal(scanned.length, 1);
     assert.equal(scanned[0]!.type, "dir");
     assert.equal(scanned[0]!.path, "/notes/");
@@ -61,7 +61,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
 
 /** 测试内解包；失败直接抛出以便定位。 */
 function fromPaths(paths: readonly string[]): MessageAttachment[] {
-  const r = attachmentScanner.fromPaths(paths);
+  const r = AttachmentScanner.fromPaths(paths);
   if (!r.ok) throw r.error;
   return r.value;
 }
@@ -117,7 +117,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
 
   it("空串 / 纯空白元素返回 CHAT_INVALID_ARGUMENT（调用方转 ToolError）", () => {
     for (const paths of [["notes/a.md", ""], ["   "]]) {
-      const r = attachmentScanner.fromPaths(paths);
+      const r = AttachmentScanner.fromPaths(paths);
       assert.equal(r.ok, false);
       if (r.ok) continue;
       assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
@@ -127,7 +127,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("路径穿越写法返回 CHAT_INVALID_ARGUMENT（不再抛旧 VfsError / AttachmentPathArgumentError）", () => {
-    const r = attachmentScanner.fromPaths(["/../evil"]);
+    const r = AttachmentScanner.fromPaths(["/../evil"]);
     assert.equal(r.ok, false);
     if (r.ok) return;
     assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
@@ -142,12 +142,12 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
 
 describe("F-A4: mobile 双终止符明文 `@path@` 在 core 扫描下照常可用（实现零改动）", () => {
   it("`@notes/a.md@` → /notes/a.md；目录尾 `@notes/@` → /notes/", () => {
-    const file = attachmentScanner.scanAtPaths("看 @notes/a.md@ 谢谢");
+    const file = AttachmentScanner.scanAtPaths("看 @notes/a.md@ 谢谢");
     assert.equal(file.length, 1);
     assert.equal(file[0]!.source, "attach");
     assert.equal(file[0]!.path, "/notes/a.md");
 
-    const dir = attachmentScanner.scanAtPaths("搬 @notes/@ 好了");
+    const dir = AttachmentScanner.scanAtPaths("搬 @notes/@ 好了");
     assert.equal(dir.length, 1);
     assert.equal(dir[0]!.path, "/notes/");
   });

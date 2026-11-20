@@ -27,7 +27,7 @@ import { PromptBuilder } from "../../prompt/render-prompt.js";
 import { OrphanToolResults } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { ThinkingContext } from "../../prompt/apply-thinking-context-for-llm.js";
 import { LlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
-import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
+import { PromptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { LlmProtocol } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -367,7 +367,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
           skills: this.deps.skills?.(),
           projectId,
         };
-        const prepared = await promptAssembler.prepare(visible, prepareRuntime);
+        const prepared = await PromptAssembler.prepare(visible, prepareRuntime);
         if (!prepared.ok) AgentRunner.raiseRunError(prepared.error);
         visible = prepared.value;
         if (signal?.aborted) {

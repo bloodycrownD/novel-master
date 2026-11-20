@@ -4,14 +4,14 @@
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  unwrap  } from "../helpers/result-unwrap.js";
-import {  attachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import {  AttachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import {  composerAtPath  } from "../../src/domain/chat/logic/composer/composer-at-path.js";
 
 describe("composer-at-path", () => {
   it("T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /", () => {
     const tokens = unwrap(composerAtPath.tokensFromPickerSelection(["/notes"], ["/a.md"]));
     assert.deepEqual(tokens, ["@/notes/", "@/a.md"]);
-    const scanned = attachmentScanner.scanAtPaths(tokens.join(" "));
+    const scanned = AttachmentScanner.scanAtPaths(tokens.join(" "));
     assert.equal(scanned.length, 2);
     assert.equal(scanned[0]!.path, "/notes/");
     assert.equal(scanned[0]!.type, "dir");
@@ -58,8 +58,8 @@ describe("composer-at-path", () => {
   });
 
   it("T-ATD4: 删除正文 @path 后扫描为空", () => {
-    assert.equal(attachmentScanner.scanAtPaths("看 @/a.md").length, 1);
-    assert.equal(attachmentScanner.scanAtPaths("看").length, 0);
+    assert.equal(AttachmentScanner.scanAtPaths("看 @/a.md").length, 1);
+    assert.equal(AttachmentScanner.scanAtPaths("看").length, 0);
   });
 });
 

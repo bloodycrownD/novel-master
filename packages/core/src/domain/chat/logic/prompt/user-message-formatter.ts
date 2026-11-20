@@ -7,35 +7,35 @@
  * 送模型时 body 每行非空前缀 4 空格；落库 action XML 保持顶格（本函数不改附件 content）。
  * 运行时可选注入 `<extra-info>` 纯文本块（customAttach），位置在 `</user-ops>` 之后、`</attachment>` 之前。
  *
- * @module domain/chat/logic/prompt/wrap-user-message-for-llm
+ * @module domain/chat/logic/prompt/user-message-formatter
  */
 
 import type {MessageAttachment} from "../../model/message-attachment.schema.js";
 
-/** 送 LLM 时对 body 每行非空前缀 4 空格（落库 XML 仍顶格）。 */
-function indentUserOpsBody(body: string): string {
-    return body.split("\n").map((line) => (line.length === 0 ? line : `    ${line}`)).join("\n");
-}
+export namespace UserMessageFormatter {
+    /** 送 LLM 时对 body 每行非空前缀 4 空格（落库 XML 仍顶格）。 */
+    function indentUserOpsBody(body: string): string {
+        return body.split("\n").map((line) => (line.length === 0 ? line : `    ${line}`)).join("\n");
+    }
 
-/**
- * 无附件 → 恒等原文；有附件 → `<attachment>…</attachment><user-input>…</user-input>`。
- *
- * 全部非空 attachment 的 action XML 拼进单一 `<user-ops>`；
- * 顺序：`userAttach`（attach）→ `workplaceChange`（workplace，历史只读兼容）→ 手改/annotate（user_ops）。
- * 若全部 body 空 → **直接返回 `plainText`**，不包空 `<attachment>`。
- *
- * `extraInfo`（customAttach）非空时在 `</user-ops>` 之后、`</attachment>` 之前插入 `<extra-info>` 纯文本块。
- *
- * 边界：当无附件 body 但 `extraInfo` 非空时，仍会包外层 `<attachment>` 以承载 `<extra-info>`，
- * 此时不含 `<user-ops>`（仅 `<extra-info>` + `<user-input>`）。上游解析器应按「外层 `<attachment>` 是否存在」
- * 判定，而非假定 `<user-ops>` 必然出现。
- *
- * 调用方须保证 workplace/attach 的 `content` 已 hydrate 为 action XML。
- * `user_ops` 的 `content` 为 action XML。
- */
-class UserMessageFormatter {
+    /**
+     * 无附件 → 恒等原文；有附件 → `<attachment>…</attachment><user-input>…</user-input>`。
+     *
+     * 全部非空 attachment 的 action XML 拼进单一 `<user-ops>`；
+     * 顺序：`userAttach`（attach）→ `workplaceChange`（workplace，历史只读兼容）→ 手改/annotate（user_ops）。
+     * 若全部 body 空 → **直接返回 `plainText`**，不包空 `<attachment>`。
+     *
+     * `extraInfo`（customAttach）非空时在 `</user-ops>` 之后、`</attachment>` 之前插入 `<extra-info>` 纯文本块。
+     *
+     * 边界：当无附件 body 但 `extraInfo` 非空时，仍会包外层 `<attachment>` 以承载 `<extra-info>`，
+     * 此时不含 `<user-ops>`（仅 `<extra-info>` + `<user-input>`）。上游解析器应按「外层 `<attachment>` 是否存在」
+     * 判定，而非假定 `<user-ops>` 必然出现。
+     *
+     * 调用方须保证 workplace/attach 的 `content` 已 hydrate 为 action XML。
+     * `user_ops` 的 `content` 为 action XML。
+     */
     /** nm-style: keep-public — LLM wrap 唯一入口；测试直接锁 XML 形态。 */
-    wrapForLlm(plainText: string, attachments: readonly MessageAttachment[] | undefined | null, extraInfo?: string): string {
+    export function wrapForLlm(plainText: string, attachments: readonly MessageAttachment[] | undefined | null, extraInfo?: string): string {
         const hasAttachments = attachments != null && attachments.length > 0;
         let body = "";
         if (hasAttachments) {
@@ -67,5 +67,3 @@ class UserMessageFormatter {
         return lines.join("\n");
     }
 }
-
-export const userMessageFormatter = new UserMessageFormatter();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
-import {  userVfsTurns, USER_VFS_TURN_ACK_TEXT  } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-view.js";
+import {  UserVfsTurns, USER_VFS_TURN_ACK_TEXT  } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-view.js";
 import {  userVfsTurnStorage  } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
@@ -37,7 +37,7 @@ const BURST_ACTIONS_XML =
 
 describe("parseAllUserVfsActionsFromText", () => {
   it("解析 burst 合并的多条 action", () => {
-    const actions = userVfsTurns.parseActions(BURST_ACTIONS_XML);
+    const actions = UserVfsTurns.parseActions(BURST_ACTIONS_XML);
     assert.equal(actions.length, 2);
     assert.equal(actions[0]?.kind, "delete");
     assert.equal(actions[1]?.method, "edit");
@@ -55,9 +55,9 @@ describe("matchUserVfsTurnAt", () => {
         metadata: { kind: "user_vfs_ack", synthetic: true },
       }),
     ];
-    const turn = userVfsTurns.matchAt(messages, 0);
+    const turn = UserVfsTurns.matchAt(messages, 0);
     assert.ok(turn != null);
-    const view = userVfsTurns.buildView(turn);
+    const view = UserVfsTurns.buildView(turn);
     assert.equal(view.id, "u1");
     assert.equal(view.bridgeText, USER_VFS_TURN_ACK_TEXT);
     assert.equal(view.actions.length, 1);
@@ -84,7 +84,7 @@ describe("matchUserVfsTurnAt", () => {
     hiddenMessages[0] = { ...hiddenMessages[0]!, hidden: true };
     hiddenMessages[1] = { ...hiddenMessages[1]!, hidden: true };
 
-    assert.equal(userVfsTurns.matchAt(hiddenMessages, 0), null);
+    assert.equal(UserVfsTurns.matchAt(hiddenMessages, 0), null);
   });
 
   it("仅 ack hidden 时 At 返回 null", () => {
@@ -105,7 +105,7 @@ describe("matchUserVfsTurnAt", () => {
       ),
     ];
     messages[1] = { ...messages[1]!, hidden: true };
-    assert.equal(userVfsTurns.matchAt(messages, 0), null);
+    assert.equal(UserVfsTurns.matchAt(messages, 0), null);
   });
 
   it("旧 U-A-U-A 四段不匹配", () => {
@@ -123,7 +123,7 @@ describe("matchUserVfsTurnAt", () => {
         metadata: { kind: "tool_turn_bridge", synthetic: true },
       }),
     ];
-    assert.equal(userVfsTurns.matchAt(messages, 0), null);
+    assert.equal(UserVfsTurns.matchAt(messages, 0), null);
   });
 });
 

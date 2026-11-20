@@ -21,7 +21,7 @@
  * 候选过滤 / 活动查询（函数本体没删——web 侧 typeahead 与 RN 侧 Picker 仍在用）。
  */
 import {describe, expect, it} from '@jest/globals';
-import { composerChips, attachmentScanner } from '@novel-master/core/chat';
+import { composerChips, AttachmentScanner } from '@novel-master/core/chat';
 import { composerAtPath } from '@/components/chat/composer-at-path';
 
 describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
@@ -30,7 +30,7 @@ describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
     if (!tokensResult.ok) throw tokensResult.error;
     const tokens = tokensResult.value;
     expect(tokens).toEqual(['@/notes/', '@/a.md']);
-    const scanned = attachmentScanner.scanAtPaths(tokens.join(' '));
+    const scanned = AttachmentScanner.scanAtPaths(tokens.join(' '));
     expect(scanned).toHaveLength(2);
     expect(scanned[0]!.path).toBe('/notes/');
     expect(scanned[0]!.type).toBe('dir');
@@ -56,12 +56,12 @@ describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
   });
 
   it('T-ATD4: 删除正文 @path 后扫描为空', () => {
-    expect(attachmentScanner.scanAtPaths('看 @/a.md')).toHaveLength(1);
-    expect(attachmentScanner.scanAtPaths('看')).toHaveLength(0);
+    expect(AttachmentScanner.scanAtPaths('看 @/a.md')).toHaveLength(1);
+    expect(AttachmentScanner.scanAtPaths('看')).toHaveLength(0);
   });
 
   it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
-    const scanned = attachmentScanner.scanAtPaths('请看 @/a.md');
+    const scanned = AttachmentScanner.scanAtPaths('请看 @/a.md');
     expect(scanned.length).toBeGreaterThan(0);
     expect(scanned.every(a => a.source === 'attach')).toBe(true);
     const {status, attach} = composerChips.partition(scanned);

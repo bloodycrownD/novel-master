@@ -5,7 +5,7 @@ import { AgentProjectResolver, type AgentDefinition } from "@novel-master/core/a
 import { type AppError } from "@novel-master/core/errors";
 import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { Result, type Interrupt } from "@novel-master/core/errors";
-import { promptAssembler } from "@novel-master/core/chat";
+import { PromptAssembler } from "@novel-master/core/chat";
 import { PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import { WorkplaceDisplayAssembler } from "@novel-master/core/workplace";
 import type { ChatMessageData } from "@novel-master/core/chat";
@@ -39,7 +39,7 @@ type PromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
 export namespace SessionPromptInputService {
   /**
    * Desktop prompt-input adapter：把 desktop runtime（messages / workplace / sessionKkv /
-   * skills）适配到 core 的 assemble + promptAssembler + PromptBuilder；失败沿用 core
+   * skills）适配到 core 的 assemble + PromptAssembler + PromptBuilder；失败沿用 core
    * 的 `Result` 通道（`ChatPromptBuildBailedError` 是控制流哨兵，仍走 throw）。
    */
   export async function buildAdapter(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: PromptBuildOptions): PromptInputResult {
@@ -118,7 +118,7 @@ export namespace SessionPromptInputService {
       skills: runtime.skills(),
       projectId: scope.projectId,
     };
-    const prepared = await promptAssembler.prepare(visibleMessages, prepareRuntime);
+    const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
     bail();

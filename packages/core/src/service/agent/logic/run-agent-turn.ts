@@ -44,7 +44,7 @@ import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schem
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import { AttachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -653,8 +653,8 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
         }
         scanText = masked + trimmed.slice(cursor);
       }
-      const withAtPaths = attachmentScanner.mergeScannedAtPaths(scanText, composerAttachOnly);
-      const scannedComposer = attachmentScanner.mergeScannedSkills(scanText, withAtPaths);
+      const withAtPaths = AttachmentScanner.mergeScannedAtPaths(scanText, composerAttachOnly);
+      const scannedComposer = AttachmentScanner.mergeScannedSkills(scanText, withAtPaths);
 
       let checkpointAnchorMessageId: string | undefined;
 

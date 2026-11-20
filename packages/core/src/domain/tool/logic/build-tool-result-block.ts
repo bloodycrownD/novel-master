@@ -13,7 +13,7 @@ import { Encoding } from "@/common/encoding.js";
 import { Number } from "@/common/number.js";
 import { AppErrorOps } from "@/errors/app-error.js";
 import type { ToolResultBlock as ChatToolResultBlock } from "@/domain/chat/model/content-block.js";
-import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
+import { SkillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
 import { ToolOutput } from "./format-tool-output.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
@@ -214,7 +214,7 @@ export const ToolResultBlock = {
       // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
       // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
       const skillToolName = meta?.toolName;
-      const skillRef = skillToolName == null ? undefined : skillToolRefResolver.fromOutput(skillToolName, outcome.output, meta?.skillProjectId);
+      const skillRef = skillToolName == null ? undefined : SkillToolRefResolver.fromOutput(skillToolName, outcome.output, meta?.skillProjectId);
 
       // 引用块（contentRef）已随 v1.5.30 的 unref 回迁整体退役：成功分支恒走
       // 全文形态（`formatForLlm` 直出），read / skill load / skill

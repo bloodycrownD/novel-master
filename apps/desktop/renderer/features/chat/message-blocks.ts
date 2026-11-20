@@ -1,7 +1,7 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { skillToolRefResolver, VfsToolFilePath } from "@shared/logic/chat";
+import { SkillToolRefResolver, VfsToolFilePath } from "@shared/logic/chat";
 import { ToolResultBlock } from "@shared/logic/root";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
@@ -116,7 +116,7 @@ export function vfsToolFilePath(tool: ToolCallView): string | undefined {
  */
 export function skillToolRef(tool: ToolCallView, projectId?: string): ToolCallView["skillRef"] {
   if (tool.skillRef != null) return tool.skillRef;
-  return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
+  return SkillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
 
 // nm-style: keep-public — 消息 → 列表项的视图组装入口；MessageList 只负责渲染，解析与工具配对语义不归调用方

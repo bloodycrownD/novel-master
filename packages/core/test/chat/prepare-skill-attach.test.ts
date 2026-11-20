@@ -12,7 +12,7 @@ import {  describe, it  } from "node:test";
 import {  TextBlocks  } from "@novel-master/core/chat";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
 import {  ATTACH_PROMPT_CHAR_BUDGET  } from "../../src/domain/chat/logic/attachment/attach-budget.js";
-import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  PromptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type {
@@ -135,7 +135,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [userMsg("用 $demo 改一下", { sessionId: session.id, attachments: [skillAttach("demo")] })],
       {
         sessionId: session.id,
@@ -162,7 +162,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
         userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
@@ -189,7 +189,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["other"] });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("ghost")] }),
         userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("ghost")] }),
@@ -225,7 +225,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
       skills,
       projectId: project.id,
     };
-    const before = unwrap(await promptAssembler.prepare(
+    const before = unwrap(await PromptAssembler.prepare(
       [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
       runtimeBase,
     ));
@@ -233,7 +233,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
     // 技能被创建：同一条消息再次 prepare → 重新附全文（seen 不残留）
     skills.state.names.push("demo");
-    const after = unwrap(await promptAssembler.prepare(
+    const after = unwrap(await PromptAssembler.prepare(
       [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
       runtimeBase,
     ));
@@ -282,7 +282,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
         }) as unknown as SkillFileContent,
     } as unknown as SkillService;
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", {
           sessionId: session.id,
@@ -309,7 +309,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"], readError: true });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] }),
         userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
@@ -343,7 +343,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     };
 
     // 全窗口：m1 全文、m2 短标记
-    const full = unwrap(await promptAssembler.prepare(
+    const full = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
         userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
@@ -354,7 +354,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     assert.match(MessageBodyText.fromBlocks(full[1]!.content.blocks), /"alreadyReferenced": true/);
 
     // 压缩/置位后可见窗口只剩 m2：skill seen 随窗口重置 → 再次全文
-    const compacted = unwrap(await promptAssembler.prepare(
+    const compacted = unwrap(await PromptAssembler.prepare(
       [userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] })],
       runtimeBase,
     ));
@@ -368,7 +368,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
       {
         sessionId: session.id,
@@ -392,7 +392,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         // load 的全文以 tool_result 形式留在可见历史，无需再附
         assistantSkillLoadMsg("load", "demo"),
@@ -422,7 +422,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         assistantSkillLoadMsg("read", "demo"),
         userMsg("用 $demo", {
@@ -451,7 +451,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     const sk = SessionKkvServiceFactory.create(ctx.conn);
 
     const att = skillAttach("demo");
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [userMsg("m1", { sessionId: session.id, attachments: [att] })],
       {
         sessionId: session.id,
@@ -482,7 +482,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
       content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET),
     });
     const exactBody = MessageBodyText.fromBlocks((
-        unwrap(await promptAssembler.prepare(
+        unwrap(await PromptAssembler.prepare(
           [
             userMsg("m1", {
               sessionId: session.id,
@@ -502,7 +502,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
       content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
     });
     const overBody = MessageBodyText.fromBlocks((
-        unwrap(await promptAssembler.prepare(
+        unwrap(await PromptAssembler.prepare(
           [
             userMsg("m1", {
               sessionId: session.id,
@@ -528,7 +528,7 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
       content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
     });
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
         userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),

@@ -6,38 +6,37 @@
  * 的输入侧解析：write/edit 的三元组必含于 tool_use 输入，这里直接读；
  * read 缺省域命中生效副本时，实际命中域由工具输出携带，经
  * `ToolResultBlock.build` 透传到 `ToolResultBlock.meta.skillRef`（本模块的
- * `resolveSkillToolRefFromOutput` 供其自动检测）。
+ * `SkillToolRefResolver.fromOutput` 供其自动检测）。
  *
- * @module domain/chat/logic/skill-tool-ref-resolver
+ * @module domain/chat/logic/skill-tool-ref
  */
 
 import type {SkillToolRef} from "@/domain/chat/model/content-block.js";
 
-/** 与 `domain/tool/builtin/skill-tool.ts` 的注册名同字符串（四处同名字符串之一）。 */
-const SKILL_TOOL_NAME = "skill";
+export namespace SkillToolRefResolver {
+    /** 与 `domain/tool/builtin/skill-tool.ts` 的注册名同字符串（四处同名字符串之一）。 */
+    const SKILL_TOOL_NAME = "skill";
 
-/** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
-const REF_ACTIONS: ReadonlySet<string> = new Set(["load", "read", "write", "edit"]);
+    /** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
+    const REF_ACTIONS: ReadonlySet<string> = new Set(["load", "read", "write", "edit"]);
 
-function parseDomain(raw: unknown): "global" | "project" | undefined {
-    return raw === "global" || raw === "project" ? raw : undefined;
-}
+    function parseDomain(raw: unknown): "global" | "project" | undefined {
+        return raw === "global" || raw === "project" ? raw : undefined;
+    }
 
-function parseName(raw: unknown): string | undefined {
-    return typeof raw === "string" && raw.length > 0 ? raw : undefined;
-}
+    function parseName(raw: unknown): string | undefined {
+        return typeof raw === "string" && raw.length > 0 ? raw : undefined;
+    }
 
-/**
- * 从 tool_use 输入解析技能跳转三元组（供 UI 卡片「跳详情」门控使用）。
- *
- * - 仅 `skill` 处理；action 为 list、name 非非空字符串时返回 undefined，不抛错。
- * - domain 缺省：write/edit 补工具同款默认 `project`；read 缺省读生效副本，
- *   实际命中域只有工具输出知道——此时返回 undefined，等 `meta.skillRef`。
- * - `projectId` 仅 project 域携带（global 域剥离，避免误导跳转）。
- */
-class SkillToolRefResolver {
-    /** 从 tool_use 输入解析技能跳转三元组。 */
-    fromInput(toolName: string, input: Record<string, unknown> | null | undefined, projectId?: string): SkillToolRef | undefined {
+    /**
+     * 从 tool_use 输入解析技能跳转三元组（供 UI 卡片「跳详情」门控使用）。
+     *
+     * - 仅 `skill` 处理；action 为 list、name 非非空字符串时返回 undefined，不抛错。
+     * - domain 缺省：write/edit 补工具同款默认 `project`；read 缺省读生效副本，
+     *   实际命中域只有工具输出知道——此时返回 undefined，等 `meta.skillRef`。
+     * - `projectId` 仅 project 域携带（global 域剥离，避免误导跳转）。
+     */
+    export function fromInput(toolName: string, input: Record<string, unknown> | null | undefined, projectId?: string): SkillToolRef | undefined {
         if (toolName !== SKILL_TOOL_NAME) return undefined;
         const action = input?.action;
         if (typeof action !== "string" || !REF_ACTIONS.has(action)) return undefined;
@@ -64,7 +63,7 @@ class SkillToolRefResolver {
 
     /** nm-style: keep-local — ToolResultBlock.build 单点解析入口，测试直接锁三元组输出；保持纯函数边界。 */
     /** nm-style: keep-public — ToolResultBlock.build 唯一输出侧解析入口；测试锁三元组。 */
-    fromOutput(toolName: string, output: unknown, projectId?: string): SkillToolRef | undefined {
+    export function fromOutput(toolName: string, output: unknown, projectId?: string): SkillToolRef | undefined {
         if (toolName !== SKILL_TOOL_NAME) return undefined;
         if (output == null || typeof output !== "object" || Array.isArray(output)) {
             return undefined;
@@ -83,5 +82,3 @@ class SkillToolRefResolver {
         };
     }
 }
-
-export const skillToolRefResolver = new SkillToolRefResolver();

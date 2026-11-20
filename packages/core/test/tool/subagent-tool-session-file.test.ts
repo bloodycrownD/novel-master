@@ -37,7 +37,7 @@ import type { ChatSession } from "@/domain/chat/model/session.js";
 import {  TextBlocks  } from "@novel-master/core/chat";
 import {  MessageBodyText  } from "@/domain/chat/content/message-body-text.js";
 import {  ATTACH_PROMPT_CHAR_BUDGET  } from "@/domain/chat/logic/attachment/attach-budget.js";
-import {  promptAssembler  } from "@/domain/chat/logic/prompt/prompt-assembler.js";
+import {  PromptAssembler  } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import {  SessionKkvServiceFactory  } from "@/service/session-kkv/create-session-kkv-service.js";
 import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
@@ -663,7 +663,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       hidden: false,
       attachments: attached,
     };
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [childMsg],
       {
         sessionId: session.id,

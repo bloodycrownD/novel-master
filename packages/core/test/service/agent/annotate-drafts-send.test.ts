@@ -11,9 +11,9 @@ import {  AppErrorOps  } from "@/errors/app-error.js";
 import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import {  userMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
+import {  UserMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
 import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  AttachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import {  messageAttachmentSchema, type MessageAttachment  } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import {  tCore  } from "../../helpers/core-i18n.js";
@@ -239,7 +239,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     ];
     const annotateAtts = drafts.map((draft) => attachmentXmlCodec.encodeAnnotateAttachment(draft));
     // 若误走 mergeAttachmentsByPath 会丢一条
-    const wronglyMerged = attachmentScanner.mergeByPath([], annotateAtts);
+    const wronglyMerged = AttachmentScanner.mergeByPath([], annotateAtts);
     assert.equal(
       wronglyMerged.length,
       1,
@@ -248,7 +248,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
 
     const concat = [...annotateAtts];
     assert.equal(concat.length, 2);
-    const wrapped = userMessageFormatter.wrapForLlm("x", concat);
+    const wrapped = UserMessageFormatter.wrapForLlm("x", concat);
     const matches = wrapped.match(/name="annotate"/g) ?? [];
     assert.equal(matches.length, 2);
     assert.match(wrapped, /"userAnnotation": "一"/);

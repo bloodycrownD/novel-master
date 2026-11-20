@@ -10,7 +10,7 @@ import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import {Coerce} from "@/common/coerce.js";
 import {AnnotateDraftSchema, type AnnotateDraft} from "../../model/annotate-draft.schema.js";
 import {MessageAttachmentSchema, type MessageAttachment} from "../../model/message-attachment.schema.js";
-import {userVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
+import {UserVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
 
 type AttachmentDisplayKind = "full" | "filename" | "header";
 
@@ -92,7 +92,7 @@ class AttachmentXmlCodec {
             let startCol: number | undefined;
             let endCol: number | undefined;
             if (typeof att.content === "string") {
-                const actions = userVfsTurns.parseActions(att.content);
+                const actions = UserVfsTurns.parseActions(att.content);
                 const annotate = actions.find((a) => a.name === "annotate");
                 if (annotate != null) {
                     if (!path) {

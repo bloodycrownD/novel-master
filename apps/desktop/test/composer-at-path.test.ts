@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachmentScanner } from "@shared/logic/chat";
+import { AttachmentScanner } from "@shared/logic/chat";
 import { composerAtPath } from "@/features/chat/composer-at-path";
 import { composerSendPolicy } from "@/features/chat/composer-send-intent";
 import { renderComposerAtPathHighlightHtml } from "@/features/chat/ComposerAtPathInput";
@@ -13,7 +13,7 @@ test("T-ATD2: Picker 确认 token 为 @path；目录带尾 /；扫描落库带�
   if (!tokensResult.ok) throw tokensResult.error;
   const tokens = tokensResult.value;
   assert.deepEqual(tokens, ["@/notes/", "@/a.md"]);
-  const scanned = attachmentScanner.scanAtPaths(tokens.join(" "));
+  const scanned = AttachmentScanner.scanAtPaths(tokens.join(" "));
   assert.equal(scanned.length, 2);
   assert.equal(scanned[0]!.path, "/notes/");
   assert.equal(scanned[0]!.type, "dir");
@@ -48,7 +48,7 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path", () => {
   });
   assert.equal(withAt.hasSendable, true);
   assert.equal(withAt.attachOnly.length, 0);
-  assert.equal(attachmentScanner.scanAtPaths("看 @/a.md").length, 1);
+  assert.equal(AttachmentScanner.scanAtPaths("看 @/a.md").length, 1);
 
   const without = composerSendPolicy.evaluate({
     text: "",
@@ -57,7 +57,7 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path", () => {
   });
   assert.equal(without.hasSendable, false);
   assert.equal(without.attachOnly.length, 0);
-  assert.equal(attachmentScanner.scanAtPaths("").length, 0);
+  assert.equal(AttachmentScanner.scanAtPaths("").length, 0);
 });
 
 test("T-CR3/门闩: 空输入 → 不可发；attachOnly 恒空", () => {

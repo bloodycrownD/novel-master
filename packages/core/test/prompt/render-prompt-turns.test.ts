@@ -3,7 +3,7 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 import {  readFileSync  } from "node:fs";
 import {  join  } from "node:path";
 import {  describe, it  } from "node:test";
-import {  TextBlocks, userMessageFormatter, type ChatMessageData, type  ContentBlock  } from "@novel-master/core/chat";
+import {  TextBlocks, UserMessageFormatter, type ChatMessageData, type  ContentBlock  } from "@novel-master/core/chat";
 import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 
@@ -1377,7 +1377,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
       content,
       display: "full",
     });
-    return userMessageFormatter.wrapForLlm("看看这个", [
+    return UserMessageFormatter.wrapForLlm("看看这个", [
       {
         name: "a.md",
         source: "attach",
@@ -1445,7 +1445,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
       originalText: "1|这行不是行号",
       userAnnotation: "2|批注也不是",
     });
-    const wrapped = userMessageFormatter.wrapForLlm("批注一下", [
+    const wrapped = UserMessageFormatter.wrapForLlm("批注一下", [
       { name: "a.md", source: "user_ops", type: "text", content: actionXml },
     ]);
     assert.equal(await userCardBody(wrapped), wrapped);
@@ -1461,7 +1461,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
       content: "1|第一行\n2|第二行",
       display: "full",
     });
-    const wrapped = userMessageFormatter.wrapForLlm("规则改了", [
+    const wrapped = UserMessageFormatter.wrapForLlm("规则改了", [
       { name: "a.md", source: "attach", type: "text", content: actionXml },
     ]);
     const body = await userCardBody(wrapped);
@@ -1489,7 +1489,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
       name: "novel-master",
       content: "第一行\n12|这不是行号",
     });
-    const wrapped = userMessageFormatter.wrapForLlm("用一下技能", [
+    const wrapped = UserMessageFormatter.wrapForLlm("用一下技能", [
       { name: "skill", source: "attach", type: "text", content: actionXml },
     ]);
     const body = await userCardBody(wrapped);
@@ -1498,7 +1498,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
 
   it("dirTree 块不动（ASCII 树不构成 `^ *\\d+\\|`）", async () => {
     const actionXml = attachmentXmlCodec.encodeDirTree("notes", "notes/\n├── sub/\n└── a.md");
-    const wrapped = userMessageFormatter.wrapForLlm("看下目录", [
+    const wrapped = UserMessageFormatter.wrapForLlm("看下目录", [
       { name: "notes", source: "attach", type: "text", content: actionXml },
     ]);
     const body = await userCardBody(wrapped);
@@ -1513,7 +1513,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
         content: note,
         display: "filename",
       });
-      const wrapped = userMessageFormatter.wrapForLlm("看下", [
+      const wrapped = UserMessageFormatter.wrapForLlm("看下", [
         { name: "a.bin", source: "attach", type: "text", content: actionXml },
       ]);
       assert.equal(await userCardBody(wrapped), wrapped);

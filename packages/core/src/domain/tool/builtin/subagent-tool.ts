@@ -30,7 +30,7 @@ import { assert } from "@/common/assert.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import { AttachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
@@ -180,7 +180,7 @@ ${callableList}
     let attachments: MessageAttachment[] | undefined;
     const filePaths = input.fileAttachment;
     if (filePaths != null && filePaths.length > 0) {
-      const materialized = attachmentScanner.fromPaths(filePaths);
+      const materialized = AttachmentScanner.fromPaths(filePaths);
       if (!materialized.ok) return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}` }));
       attachments = materialized.value;
     }

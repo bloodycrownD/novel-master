@@ -37,7 +37,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
-import {chatAnnotateDraftStore, composerSendPolicy, attachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
+import {chatAnnotateDraftStore, composerSendPolicy, AttachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -492,7 +492,7 @@ export function useChatComposerController({
       // 保留 existing——最终结果与 core 自行扫描逐项一致（手输 `$技能` /
       // `@路径` 照常挂载、贴字 `$` 维持不识别），发送行为零变化，只是让
       // 「与现状一致」可以在本链路端到端断言。
-      const sendAttachments = tokenRangesRef.current.length > 0 ? sendScan.attachments : [...attachmentScanner.scanAtPaths(content), ...attachmentScanner.scanSkills(content)];
+      const sendAttachments = tokenRangesRef.current.length > 0 ? sendScan.attachments : [...AttachmentScanner.scanAtPaths(content), ...AttachmentScanner.scanSkills(content)];
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）

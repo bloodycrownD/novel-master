@@ -4,7 +4,7 @@
  * @module domain/chat/logic/composer/composer-send-policy
  */
 
-import {attachmentScanner} from "../attachment/attachment-scanner.js";
+import {AttachmentScanner} from "../attachment/attachment-scanner.js";
 
 type ComposerSendIntentInput = {
     text: string;
@@ -25,7 +25,7 @@ type ComposerSendIntent = {
 class ComposerSendPolicy {
     evaluate(input: ComposerSendIntentInput): ComposerSendIntent {
         const content = input.text.trim();
-        const scannedCount = attachmentScanner.scanAtPaths(input.text).length + attachmentScanner.scanSkills(input.text).length;
+        const scannedCount = AttachmentScanner.scanAtPaths(input.text).length + AttachmentScanner.scanSkills(input.text).length;
         const hasSendable = content !== "" || scannedCount > 0 || input.hasAnnotateDrafts === true;
         const allowResumeWithoutInput = !hasSendable && input.canResumeWithoutInput;
         const hasModel = input.hasModel !== false;

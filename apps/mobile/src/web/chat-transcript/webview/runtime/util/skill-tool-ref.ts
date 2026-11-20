@@ -1,6 +1,6 @@
 /**
  * skill 卡片跳转三元组解析（**权威实现**：core `domain/chat/logic/skill-tool-ref.ts`
- * 的 `skillToolRefResolver`；本文件是 WebView bundle 的镜像）。
+ * 的 `SkillToolRefResolver`；本文件是 WebView bundle 的镜像）。
  *
  * 镜像原因：core 该模块既未在 `packages/core/package.json` 的 exports 里暴露叶子
  * 子路径，也不在 webview 构建门 B 的 core 白名单（`scripts/build-webview.mjs` 的

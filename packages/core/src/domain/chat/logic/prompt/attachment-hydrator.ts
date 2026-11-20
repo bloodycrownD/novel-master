@@ -21,9 +21,9 @@ import { AttachBudget, BINARY_ATTACH_NOTE, OVERSIZED_ATTACH_NOTE } from "../atta
 import { attachmentXmlCodec } from "../attachment/attachment-xml-codec.js";
 import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import { promptPathSeen } from "../attachment/prompt-path-seen.js";
-import { attachmentScanner } from "../attachment/attachment-scanner.js";
-import { dirAttachTreeRenderer } from "../attachment/render-dir-attach-tree.js";
-import { userMessageFormatter } from "./user-message-formatter.js";
+import { AttachmentScanner } from "../attachment/attachment-scanner.js";
+import { DirAttachTreeRenderer } from "../attachment/render-dir-attach-tree.js";
+import { UserMessageFormatter } from "./user-message-formatter.js";
 
 /** hydrate 所需的最小运行时依赖。 */
 export interface AttachmentHydratorRuntime {
@@ -152,7 +152,7 @@ export class AttachmentHydrator {
     const plainText = MessageBodyText.fromBlocks(message.content.blocks);
     return {
       ...message,
-      content: TextBlocks.of(userMessageFormatter.wrapForLlm(plainText, hydrated, effectiveExtraInfo)),
+      content: TextBlocks.of(UserMessageFormatter.wrapForLlm(plainText, hydrated, effectiveExtraInfo)),
       attachments: hydrated,
     };
   }
@@ -186,7 +186,7 @@ export class AttachmentHydrator {
           sessionKkv: this.runtime.sessionKkv,
           vfs: this.runtime.vfs,
         };
-        const tree = await dirAttachTreeRenderer.render(logicalPath, treeRequest);
+        const tree = await DirAttachTreeRenderer.render(logicalPath, treeRequest);
         out = {
           ...attachment,
           path: logicalPath,
@@ -217,7 +217,7 @@ export class AttachmentHydrator {
   private async hydrateSkill(attachment: MessageAttachment): Promise<MessageAttachment> {
     const name = attachment.skillName;
     if (typeof name !== "string" || name === "") return attachment;
-    const key = attachmentScanner.skillKey(name);
+    const key = AttachmentScanner.skillKey(name);
     if (this.seen.has(key)) {
       return {
         ...attachment,

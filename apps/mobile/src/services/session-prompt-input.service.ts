@@ -4,7 +4,7 @@
 import {type AgentDefinition, AgentProjectResolver} from '@novel-master/core/agent';
 import {ChatPromptBuildBailedError} from '@novel-master/core';
 
-import {promptAssembler, type ChatMessageData} from '@novel-master/core/chat';
+import {PromptAssembler, type ChatMessageData} from '@novel-master/core/chat';
 import {PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
 import {WorkplaceDisplayAssembler} from '@novel-master/core/workplace';
 import {Result, AppError, type Interrupt} from '@novel-master/core/errors';
@@ -124,7 +124,7 @@ export namespace SessionPromptInputService {
       skills: runtime.skills(),
       projectId: scope.projectId,
     };
-    const prepared = await promptAssembler.prepare(visibleMessages, prepareRuntime);
+    const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
     bail();

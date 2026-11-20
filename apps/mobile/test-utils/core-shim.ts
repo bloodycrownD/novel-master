@@ -51,7 +51,7 @@ export type {AgentRunResult} from '../../../packages/core/dist/domain/agent/mode
 export {PRESET_ENGINE_TEMPLATES} from '../../../packages/core/dist/domain/tool/builtin/search/preset-templates.js';
 export {SearchEngine} from '../../../packages/core/dist/domain/tool/builtin/search/types.js';
 export {DEFAULT_USER_VFS_UNIFIED_TOOL_TURN, userVfsUnifiedToolTurnFlag} from '../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js';
-export {userVfsTurns, USER_VFS_TURN_SPAN} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
+export {USER_VFS_TURN_SPAN} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
 export {UserVfsTurnPreview} from '../../../packages/core/dist/presentation/chat/user-vfs-turn-preview.js';
 export {USER_VFS_TURN_ACK_TEXT, userVfsTurnStorage} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js';
 export type {ParsedUserVfsAction, ParsedUserVfsEditHunk, UserVfsTurnView} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';

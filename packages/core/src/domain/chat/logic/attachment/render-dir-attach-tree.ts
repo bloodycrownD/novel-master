@@ -12,7 +12,7 @@ import type {SessionKkvService} from "@/service/session-kkv/session-kkv.port.js"
 /** 单次目录树拼装 UTF-8 上限（SPEC：512KiB）。 */
 const ATTACH_DIR_TREE_MAX_UTF8_BYTES = 512 * 1024;
 
-/** {@link renderDirAttachTree} 依赖。 */
+/** {@link DirAttachTreeRenderer.render} 依赖。 */
 interface RenderDirAttachTreeDeps {
     readonly sessionId: string;
     /** 保留透传兼容；本函数不再读写 file_cache。 */
@@ -43,9 +43,9 @@ function entryDisplayName(entryPath: string, kind: "file" | "directory"): string
  * ```
  * nm-style: keep-local — 目录树格式化独立纯函数，prepare 单点调用但含截断/排序/根标签逻辑。
  */
-class DirAttachTreeRenderer {
+export namespace DirAttachTreeRenderer {
     /** nm-style: keep-public — prepare 目录附件单点渲染入口；测试直接锁 ASCII 树。 */
-    async render(rootDir: string, deps: RenderDirAttachTreeDeps): Promise<string> {
+    export async function render(rootDir: string, deps: RenderDirAttachTreeDeps): Promise<string> {
         const maxBytes = deps.maxUtf8Bytes ?? ATTACH_DIR_TREE_MAX_UTF8_BYTES;
         const normalizedRoot = rootDir.replace(/\/+$/, "") || "/";
         let rootLine = "/";
@@ -98,5 +98,3 @@ class DirAttachTreeRenderer {
         return treeBody;
     }
 }
-
-export const dirAttachTreeRenderer = new DirAttachTreeRenderer();

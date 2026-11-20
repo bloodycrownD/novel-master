@@ -21,7 +21,7 @@
 
 import type {WorkplaceService} from "@/service/workplace/workplace.port.js";
 import {DynamicMacrosExpansion} from "@/domain/prompt/logic/expand-dynamic-macros.js";
-import {attachmentScanner} from "../attachment/attachment-scanner.js";
+import {AttachmentScanner} from "../attachment/attachment-scanner.js";
 import {promptPathSeen} from "../attachment/prompt-path-seen.js";
 import {ChatMessage} from "../message/chat-message.js";
 import type {ChatMessageData} from "../../model/message.js";
@@ -33,7 +33,7 @@ import {Result} from "@/errors/either.js";
 /** 与 `domain/tool/builtin/skill-tool.ts` 注册名同字符串（方向 B 扫描用）。 */
 const SKILL_TOOL_NAME = "skill";
 
-/** {@link promptAssembler.prepare} 运行时依赖与可选初始 seen。 */
+/** {@link PromptAssembler.prepare} 运行时依赖与可选初始 seen。 */
 interface PrepareUserMessagesForPromptRuntime extends AttachmentHydratorRuntime {
     /**
      * 常驻前缀 path 集合 S0（已或未规范化均可）；prepare 内再规范化后写入 seen。
@@ -65,8 +65,8 @@ interface PrepareUserMessagesForPromptRuntime extends AttachmentHydratorRuntime 
  * 宏展开失败（`PROMPT_INVALID_MACRO`）走返回值通道，由调用方接力决定
  * （错误通道迁移四期门：throw x.error 清零）——prepare 不再原样上抛。
  */
-class PromptAssembler {
-    async prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<Result<ChatMessageData[], AppError>> {
+export namespace PromptAssembler {
+    export async function prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<Result<ChatMessageData[], AppError>> {
         const seen = promptPathSeen.createSet(runtime.seenPaths);
         const attachBudget = new AttachBudget();
         const workplaceSeen = promptPathSeen.createSet(runtime.workplaceSeenPaths ?? runtime.seenPaths);
@@ -77,7 +77,7 @@ class PromptAssembler {
             for (const block of message.content.blocks) {
                 if (block.type !== "tool_use" || block.name !== SKILL_TOOL_NAME) continue;
                 if (block.input?.action === "load" && typeof block.input?.name === "string" && block.input.name !== "") {
-                    seen.add(attachmentScanner.skillKey(block.input.name));
+                    seen.add(AttachmentScanner.skillKey(block.input.name));
                 }
             }
         }
@@ -118,5 +118,3 @@ class PromptAssembler {
         return Result.ok(out);
     }
 }
-
-export const promptAssembler = new PromptAssembler();

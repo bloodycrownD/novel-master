@@ -11,7 +11,7 @@ import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-
 import {  FileTools  } from "../../src/domain/tool/builtin/vfs-tools.js";
 import {  TextBlocks  } from "../../src/domain/chat/content/text-blocks.js";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
-import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  PromptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
@@ -568,7 +568,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
     // 段③：按真实接线（prefixPaths→seenPaths、visiblePaths→workplaceSeenPaths）
     // 喂 prepare，断言同路径 attach 拿到全文而不是 alreadyReferenced 短提示。
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         {
           id: "e2e-attach",

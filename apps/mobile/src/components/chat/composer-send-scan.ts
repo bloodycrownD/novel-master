@@ -19,7 +19,7 @@
  * @module components/chat/composer-send-scan
  */
 
-import {attachmentScanner, type ComposerDraftTokenRange, type MessageAttachment} from '@novel-master/core/chat';
+import {AttachmentScanner, type ComposerDraftTokenRange, type MessageAttachment} from '@novel-master/core/chat';
 
 /** 发送链区间扫描产物（空区间时为固定空对象，调用方可直接判空）。 */
 type ComposerSendScan = {
@@ -43,7 +43,7 @@ export namespace ComposerSendScan {
    * 2. **掩码全量扫描**：区间替换成**等长空白**（下标不变）后全量扫原文——
    *    区间内触发符不再参与识别，手输 token（区间外）照常可扫 →
    *    `fullScanResults`；
-   * 3. **合并**：`attachmentScanner.mergeByPath(rangeResults, fullScanResults)`——
+   * 3. **合并**：`AttachmentScanner.mergeByPath(rangeResults, fullScanResults)`——
    *    该函数已有优先，区间结果必须放 existing 位。
    *
    * @param sourceText 未 trim 的草稿原文（区间下标基准）
@@ -87,7 +87,7 @@ export namespace ComposerSendScan {
     const rangeResults: MessageAttachment[] = [];
     for (const range of normalized) {
       const slice = sourceText.slice(range.start, range.end);
-      rangeResults.push(...attachmentScanner.scanAtPaths(slice), ...attachmentScanner.scanSkills(slice));
+      rangeResults.push(...AttachmentScanner.scanAtPaths(slice), ...AttachmentScanner.scanSkills(slice));
     }
 
     // 第 2 段：掩码全量扫描。等长空白保证下标不变；区间外的手输 token
@@ -100,7 +100,7 @@ export namespace ComposerSendScan {
       cursor = range.end;
     }
     maskedText += sourceText.slice(cursor);
-    const fullScanResults: MessageAttachment[] = [...attachmentScanner.scanAtPaths(maskedText), ...attachmentScanner.scanSkills(maskedText)];
+    const fullScanResults: MessageAttachment[] = [...AttachmentScanner.scanAtPaths(maskedText), ...AttachmentScanner.scanSkills(maskedText)];
 
     // 第 3 段：合并——existing=区间（区间结果优先，去重键相同则保留区间对象）。
     // 区间换算到 trim 后正文坐标：整体左移 trimStart 字符数，`end` 夹到正文
@@ -115,7 +115,7 @@ export namespace ComposerSendScan {
       }
     }
     return {
-      attachments: attachmentScanner.mergeByPath(rangeResults, fullScanResults),
+      attachments: AttachmentScanner.mergeByPath(rangeResults, fullScanResults),
       excludedScanRanges,
     };
   }

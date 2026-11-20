@@ -4,7 +4,7 @@
 import {type ChatMessageData, type ContentBlock, type MessageAttachment, type ToolResultBlock, type ToolUseBlock} from '@novel-master/core/chat';
 import {ToolResultBlock as CoreToolResultBlock} from '@novel-master/core';
 
-import {skillToolRefResolver, VfsToolFilePath} from '@novel-master/core/chat';
+import {SkillToolRefResolver, VfsToolFilePath} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import {Text} from '@novel-master/core/common';
 import type {TranscriptRow} from './ChatTranscriptBridge';
@@ -262,7 +262,7 @@ export namespace MessageBlocks {
   // prettier-ignore
   export function skillToolRef(tool: ToolCallView, projectId?: string): SkillToolRef | undefined {
     if (tool.skillRef != null) return tool.skillRef;
-    return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
+    return SkillToolRefResolver.fromInput(tool.name, tool.input, projectId);
   }
 
   /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */

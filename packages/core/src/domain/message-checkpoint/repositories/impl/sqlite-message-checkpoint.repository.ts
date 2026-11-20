@@ -158,7 +158,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
   }
 
-  /** nm-style: keep-public — 实现 MessageCheckpointRepository.seedCheckpoints 端口方法；forkCopySeeder 经端口单点调用，内联会把三表批量 seed SQL 搬进调用层。 */
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.seedCheckpoints 端口方法；ForkCopySeeder 经端口单点调用，内联会把三表批量 seed SQL 搬进调用层。 */
   async seedCheckpoints(sessionId: string, messages: ReadonlyArray<{ readonly id: string }>, files: ReadonlyArray<{ readonly entryId: number; readonly revisionVersion: number; readonly path: string }>, createdAtMs: number): Promise<void> {
     if (messages.length === 0 || files.length === 0) {
       return;

@@ -14,15 +14,15 @@ import { Result } from "@/errors/either.js";
 import { MessageAttachmentSchema, type MessageAttachment } from "../../model/message-attachment.schema.js";
 import { promptPathSeen } from "./prompt-path-seen.js";
 
-const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
-const SKILL_TOKEN_RE = /(?<!\S)\$([^\s$/@]+)/g;
-
 type ChatLogicError = AppError<"CHAT_INVALID_ARGUMENT">;
 
 /** 附件领域服务：扫描、物化、按 path/skillName 去重。 */
-class AttachmentScanner {
+export namespace AttachmentScanner {
+  const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
+  const SKILL_TOKEN_RE = /(?<!\S)\$([^\s$/@]+)/g;
+
   /** 从正文扫描 `@path` token，生成 `source:attach` 附件（按规范化 seen key 去重）。 */
-  scanAtPaths(text: string): MessageAttachment[] {
+  export function scanAtPaths(text: string): MessageAttachment[] {
     if (text === "") {
       return [];
     }
@@ -46,12 +46,12 @@ class AttachmentScanner {
   }
 
   /** 技能 seen / 去重 key。 */
-  skillKey(name: string): string {
+  export function skillKey(name: string): string {
     return `skill:${name}`;
   }
 
   /** 从正文扫描 `$技能名` token，生成 skillAttach 附件（按 skillName 去重）。 */
-  scanSkills(text: string): MessageAttachment[] {
+  export function scanSkills(text: string): MessageAttachment[] {
     if (text === "") {
       return [];
     }
@@ -64,7 +64,7 @@ class AttachmentScanner {
       if (!SKILL_NAME_PATTERN.test(name)) {
         continue;
       }
-      const key = this.skillKey(name);
+      const key = skillKey(name);
       if (seen.has(key)) {
         continue;
       }
@@ -82,17 +82,17 @@ class AttachmentScanner {
   }
 
   /** nm-style: keep-public — run-agent-turn 发送编排的统一合并入口；测试锁顺序。 */
-  mergeScannedAtPaths(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
-    return this.mergeByPath(existing, this.scanAtPaths(text));
+  export function mergeScannedAtPaths(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
+    return mergeByPath(existing, scanAtPaths(text));
   }
 
   /** nm-style: keep-public — run-agent-turn 发送编排的统一合并入口；测试锁顺序。 */
-  mergeScannedSkills(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
-    return this.mergeByPath(existing, this.scanSkills(text));
+  export function mergeScannedSkills(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
+    return mergeByPath(existing, scanSkills(text));
   }
 
   /** 按 path（或 user_ops name / skillName）去重合并；已有优先。 */
-  mergeByPath(existing: readonly MessageAttachment[], incoming: readonly MessageAttachment[]): MessageAttachment[] {
+  export function mergeByPath(existing: readonly MessageAttachment[], incoming: readonly MessageAttachment[]): MessageAttachment[] {
     const out = [...existing];
     const seen = new Set(existing.map((a) => attachmentDedupeKey(a)).filter((k): k is string => k != null));
     for (const item of incoming) {
@@ -109,7 +109,7 @@ class AttachmentScanner {
   }
 
   /** nm-style: keep-public — task 工具 fileAttachment 单点入口；失败以 CHAT_INVALID_ARGUMENT 返回。 */
-  fromPaths(paths: readonly string[]): Result<MessageAttachment[], ChatLogicError> {
+  export function fromPaths(paths: readonly string[]): Result<MessageAttachment[], ChatLogicError> {
     const materialized: MessageAttachment[] = [];
     for (const raw of paths) {
       if (typeof raw !== "string" || raw.trim() === "") {
@@ -124,38 +124,36 @@ class AttachmentScanner {
         action: "userAttach",
       });
     }
-    return Result.ok(this.mergeByPath([], materialized));
+    return Result.ok(mergeByPath([], materialized));
   }
-}
 
-export const attachmentScanner = new AttachmentScanner();
+  function attachmentDedupeKey(a: MessageAttachment): string | null {
+    if (a.action === "skillAttach") {
+      return typeof a.skillName === "string" && a.skillName !== "" ? skillKey(a.skillName) : null;
+    }
+    if (a.path != null && a.path !== "") {
+      const seenKey = promptPathSeen.tryNormalize(a.path);
+      return `path:${seenKey ?? a.path}`;
+    }
+    if (a.source === "user_ops") {
+      return `user_ops:${a.name}`;
+    }
+    return null;
+  }
 
-function attachmentDedupeKey(a: MessageAttachment): string | null {
-  if (a.action === "skillAttach") {
-    return typeof a.skillName === "string" && a.skillName !== "" ? attachmentScanner.skillKey(a.skillName) : null;
-  }
-  if (a.path != null && a.path !== "") {
-    const seenKey = promptPathSeen.tryNormalize(a.path);
-    return `path:${seenKey ?? a.path}`;
-  }
-  if (a.source === "user_ops") {
-    return `user_ops:${a.name}`;
-  }
-  return null;
-}
-
-function attachFromPath(rawPath: string, seenKey: string): MessageAttachment {
-  const isDir = promptPathSeen.isDirToken(rawPath);
-  const storePath = isDir && seenKey !== "/" ? `${seenKey}/` : seenKey;
-  const basename = seenKey.split("/").filter(Boolean).pop() ?? seenKey;
-  if (Guards.isImageFilePath(seenKey) || Guards.isImageFilePath(rawPath)) {
-    return { name: basename, source: "attach", type: "image", content: null, path: storePath };
-  }
-  if (isDir) {
-    return { name: basename || storePath, source: "attach", type: "dir", content: null, path: storePath };
-  }
-  if (Guards.isBinaryFilePath(seenKey) || Guards.isBinaryFilePath(rawPath)) {
+  function attachFromPath(rawPath: string, seenKey: string): MessageAttachment {
+    const isDir = promptPathSeen.isDirToken(rawPath);
+    const storePath = isDir && seenKey !== "/" ? `${seenKey}/` : seenKey;
+    const basename = seenKey.split("/").filter(Boolean).pop() ?? seenKey;
+    if (Guards.isImageFilePath(seenKey) || Guards.isImageFilePath(rawPath)) {
+      return { name: basename, source: "attach", type: "image", content: null, path: storePath };
+    }
+    if (isDir) {
+      return { name: basename || storePath, source: "attach", type: "dir", content: null, path: storePath };
+    }
+    if (Guards.isBinaryFilePath(seenKey) || Guards.isBinaryFilePath(rawPath)) {
+      return { name: basename, source: "attach", type: "text", content: null, path: storePath };
+    }
     return { name: basename, source: "attach", type: "text", content: null, path: storePath };
   }
-  return { name: basename, source: "attach", type: "text", content: null, path: storePath };
 }
