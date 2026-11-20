@@ -23,7 +23,7 @@ const coreDistSmokeFiles = [
   'infra/tokenizer/encoding-registry.js',
   'infra/log/index.js',
   'infra/nmtp/logic/registry.js',
-  'service/compaction-conditions/create-compaction-condition-evaluator.js',
+  'service/compaction-conditions/compaction-factory.js',
 ];
 for (const rel of coreDistSmokeFiles) {
   const abs = path.join(coreDistRoot, rel);
