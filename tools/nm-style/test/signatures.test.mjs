@@ -292,6 +292,18 @@ test("CLI 端到端：--changed 在非 git 目录给友好报错并 exit 2", () 
   }
 });
 
+test("CLI 端到端：--changed 从子目录运行 fail loud（exit 2）——变更路径按 cwd 解析会静默扫 0 文件", () => {
+  const repo = makeRepo("rs-changed-subdir", { "src/h.ts": "alpha\nconst moved =\n  compute();\n" });
+  try {
+    fs.writeFileSync(path.join(repo, "src/h.ts"), "alpha\nconst moved =\n  compute();\nconst other =\n  thing();\n");
+    const result = runCli(["check", "--changed"], path.join(repo, "src"));
+    assert.equal(result.status, 2);
+    assert.ok(result.stderr.includes("仓根"), "报错信息要说明需从仓根运行");
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 test("--range 规则层：读 range 右端 blob 且只报新增行，工作树漂移不影响结果", () => {
   const repo = makeRepo("rs-range", { "src/h.ts": "alpha\nconst moved =\n  compute();\n" });
   try {

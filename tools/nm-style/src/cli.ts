@@ -94,6 +94,17 @@ function insideGitWorktree(): boolean {
   return result.status === 0 && result.stdout?.trim() === "true";
 }
 
+/** diff 通道（--changed/--range）要求 cwd=仓根：变更路径与基线快照都按 cwd 解析，子目录会静默扫 0 文件（假 PASS）。
+ * 判定用 `git rev-parse --show-prefix`（cwd 相对仓根的偏移，空串=仓根）——比路径字面比对稳：Windows 上
+ * git 返回长路径而 node cwd 可能是 8.3 短路径形态（fs.realpathSync 不展开短路径，比对必失手）。 */
+function repoRootMismatch(): string | null {
+  const result = spawnSync("git", ["rev-parse", "--show-prefix"], { encoding: "utf8" });
+  if (result.status !== 0) return null; // 不在仓内——外层 insideGitWorktree 守卫已拦。
+  const prefix = (result.stdout ?? "").trim();
+  if (prefix === "") return null;
+  return `nm-style: diff 通道（--changed/--range）需从仓根运行：当前目录相对仓根为「${prefix}」——请改从仓根执行，或用 <paths...> 显式指定扫描面。`;
+}
+
 function runCheck(argv: string[]): number {
   const flags = parseFlags(argv);
   const { range, error } = rangeSpecOf(argv);
@@ -110,11 +121,21 @@ function runCheck(argv: string[]): number {
       console.error("nm-style: --range/--since 需要 git 仓：当前目录不在 git 工作树内（cwd=被扫仓根）。");
       return 2;
     }
+    const mismatch = repoRootMismatch();
+    if (mismatch != null) {
+      console.error(mismatch);
+      return 2;
+    }
     context = rangeScanInput(range, flags.includeTests);
     mode = "changed";
   } else if (flags.changed) {
     if (!insideGitWorktree()) {
       console.error("nm-style: --changed 需要 git 仓：当前目录不在 git 工作树内（cwd=被扫仓根）。");
+      return 2;
+    }
+    const mismatch = repoRootMismatch();
+    if (mismatch != null) {
+      console.error(mismatch);
       return 2;
     }
     context = { entries: collectFiles(flags).map((file) => ({ file, text: null })), isAdded: addedLineFilter(true) };
