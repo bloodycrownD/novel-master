@@ -25,12 +25,7 @@ export class NativeSseTransportError extends Error {
   readonly requestId: string;
   readonly httpStatus: number | null;
 
-  constructor(
-    kind: "network" | "timeout" | "http",
-    message: string,
-    requestId: string,
-    httpStatus: number | null = null,
-  ) {
+  constructor(kind: "network" | "timeout" | "http", message: string, requestId: string, httpStatus: number | null = null,) {
     super(message);
     this.name = "NativeSseTransportError";
     this.kind = kind;
@@ -66,10 +61,7 @@ interface StreamRoutes {
  * 报 "duplicate requestId" 直接把新请求打掉。加前缀后两份实例的 id 空间
  * 天然不相交（热重载 / 双实例共存都安全）。
  */
-const REQUEST_ID_INSTANCE_PREFIX = Math.random()
-  .toString(36)
-  .slice(2, 8)
-  .padEnd(6, "0");
+const REQUEST_ID_INSTANCE_PREFIX = Math.random().toString(36).slice(2, 8).padEnd(6, "0");
 
 let nextRequestId = 1;
 
@@ -82,9 +74,7 @@ export type RequestHeadersLike =
 // nm-style 注记：文件名 transport 太泛，按内容主体起名（NativeSseTransport，同文件错误类的前缀）。
 export namespace NativeSseTransport {
   /** init.headers（Headers | string[][] | Record）→ 扁平 ["k","v",...] 数组（native 侧成对消费）。 */
-  export function flattenRequestHeaders(
-    headers: RequestHeadersLike | undefined,
-  ): string[] {
+  export function flattenRequestHeaders(headers: RequestHeadersLike | undefined,): string[] {
     if (headers == null) {
       return [];
     }
@@ -115,9 +105,7 @@ export namespace NativeSseTransport {
    * settle 语义对齐 core XHR 分支——promise 在流结束时 settle：2xx resolve
    * `{status, contentType}`；非 2xx 收完错误 body 后 reject（kind "http" + body 摘要）。
    */
-  export function create(
-    bridge: LlmSseNativeBridge,
-  ): SseTransport {
+  export function create(bridge: LlmSseNativeBridge,): SseTransport {
     /** requestId → 路由表（settle 或 abort 后移除，后续事件按未知 id 丢弃）。 */
     const routes = new Map<string, StreamRoutes>();
 
@@ -194,46 +182,18 @@ export namespace NativeSseTransport {
               onDone() {
                 const finalStatus = status;
                 if (finalStatus == null) {
-                  finish(() =>
-                    reject(
-                      new NativeSseTransportError(
-                        "network",
-                        "stream ended before headers",
-                        requestId,
-                      ),
-                    ),
-                  );
+                  finish(() => reject(new NativeSseTransportError("network", "stream ended before headers", requestId,),),);
                   return;
                 }
                 if (finalStatus < 200 || finalStatus >= 300) {
-                  const snippet =
-                    errorBody.length > 500
-                      ? `${errorBody.slice(0, 500)}…`
-                      : errorBody;
-                  finish(() =>
-                    reject(
-                      new NativeSseTransportError(
-                        "http",
-                        `HTTP ${finalStatus}: ${snippet}`,
-                        requestId,
-                        finalStatus,
-                      ),
-                    ),
-                  );
+                  const snippet = errorBody.length > 500 ? `${errorBody.slice(0, 500)}…` : errorBody;
+                  finish(() => reject(new NativeSseTransportError("http", `HTTP ${finalStatus}: ${snippet}`, requestId, finalStatus,),),);
                   return;
                 }
                 finish(() => resolve({ status: finalStatus, contentType }));
               },
               onError(event) {
-                finish(() =>
-                  reject(
-                    new NativeSseTransportError(
-                      event.kind,
-                      event.message,
-                      requestId,
-                    ),
-                  ),
-                );
+                finish(() => reject(new NativeSseTransportError(event.kind, event.message, requestId,),),);
               },
             });
 
@@ -250,14 +210,7 @@ export namespace NativeSseTransport {
               signal.addEventListener("abort", onAbort, { once: true });
             }
 
-            bridge.sseConnect(
-              requestId,
-              url,
-              headersKv,
-              body,
-              readTimeoutMs,
-              callTimeoutMs,
-            );
+            bridge.sseConnect(requestId, url, headersKv, body, readTimeoutMs, callTimeoutMs,);
           },
         );
       },
@@ -275,10 +228,7 @@ export namespace NativeSseTransport {
     return event as Record<string, unknown>;
   }
 
-  function requireString(
-    record: Record<string, unknown>,
-    key: string,
-  ): string | null {
+  function requireString(record: Record<string, unknown>, key: string,): string | null {
     const value = record[key];
     return typeof value === "string" ? value : null;
   }
@@ -293,8 +243,7 @@ export namespace NativeSseTransport {
     if (requestId == null || typeof status !== "number") {
       return null;
     }
-    const contentType =
-      typeof record["contentType"] === "string" ? record["contentType"] : null;
+    const contentType = typeof record["contentType"] === "string" ? record["contentType"] : null;
     return { requestId, status, contentType };
   }
 

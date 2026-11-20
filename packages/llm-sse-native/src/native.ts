@@ -30,9 +30,7 @@ export {
   NativeSseTransport,
 } from "./transport.js";
 
-const nativeModule = NativeModules.LlmSseNative as
-  | LlmSseNativeModule
-  | undefined;
+const nativeModule = NativeModules.LlmSseNative as | LlmSseNativeModule | undefined;
 
 // nm-style 注记：文件名 native 太泛，按内容主体起名（NativeSse）。
 export namespace NativeSse {
@@ -90,9 +88,7 @@ export namespace NativeSse {
     const bridge = createBridge();
     if (bridge == null) {
       // nm-throw: keep — native bridge 边界：LlmSseNative 模块不可用（非 Android / 未 autolink），须先经 isAvailable 判定。
-      throw new Error(
-        "LlmSseNative 模块不可用（非 Android 或未 autolink）；请先经 NativeSse.isAvailable() 判定",
-      );
+      throw new Error("LlmSseNative 模块不可用（非 Android 或未 autolink）；请先经 NativeSse.isAvailable() 判定",);
     }
     cachedTransport = NativeSseTransport.create(bridge);
     return cachedTransport;
@@ -109,9 +105,7 @@ export namespace NativeSse {
    *
    * @returns native 是否可用并已完成注册；false 时装配点应跳过（transport 择优回落 XHR）。
    */
-  export function registerWith(
-    register: (transport: SseTransport) => void,
-  ): boolean {
+  export function registerWith(register: (transport: SseTransport) => void,): boolean {
     if (!isAvailable()) {
       return false;
     }
