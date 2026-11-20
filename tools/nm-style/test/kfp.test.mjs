@@ -21,12 +21,12 @@ function captureErrors(fn) {
   }
 }
 
-test("加载包根真实 KFP：entries 11 条零警告（10 hygiene + 1 signatures 防御性保留）+ 尾部 retired 段 22 条留档", () => {
+test("加载包根真实 KFP：entries 30 条零警告（29 hygiene + 1 signatures 防御性保留；11 条 burn-in + 19 条 p25 波5 desktop）+ 尾部 retired 段 22 条留档", () => {
   const { result: manifest, errors } = captureErrors(() => loadKfp());
   assert.equal(errors.length, 0);
-  assert.equal(manifest.entries.length, 11);
+  assert.equal(manifest.entries.length, 30);
   assert.deepEqual(manifest.suppressPrefixes, ["apps/cli/"]);
-  assert.equal(manifest.entries.filter((entry) => entry.rule === "hygiene").length, 10);
+  assert.equal(manifest.entries.filter((entry) => entry.rule === "hygiene").length, 29);
   assert.equal(manifest.entries.filter((entry) => entry.rule === "signatures").length, 1);
   for (const entry of manifest.entries) {
     assert.equal(typeof entry.file, "string");

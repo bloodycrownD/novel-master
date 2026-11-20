@@ -42,7 +42,8 @@
     "mobile:e2e:build-apk": "npm run e2e:build-apk -w @novel-master/mobile",
     "desktop:dev": "npm run dev -w @novel-master/desktop",
     "desktop:build": "npm run build -w @novel-master/desktop",
-    "desktop:dist": "npm run dist -w @novel-master/desktop"
+    "desktop:dist": "npm run dist -w @novel-master/desktop",
+    "check:throw-audit": "nm-style throw-audit --gate"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

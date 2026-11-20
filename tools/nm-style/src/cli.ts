@@ -2,7 +2,7 @@
 // 用法：nm-style <command> [args...]；--help、无参、未知命令打印用法并 exit 2。
 // 退出码：0=干净；1=有发现或 gate 新增；2=用法错误；3=构建失败（由 bin 启动器给出）。
 // check = signatures + hygiene（阻断矩阵见 rules）+ bare-exports（--changed 阻断 / 其余 INFO）+
-//         dup-gate 透传（不阻断，只报数字）+ oop（--strict 阻断）；汇总行五行全实数。
+//         dup-gate 透传（不阻断，只报数字）+ throw-audit 透传（不阻断，p26 R3）+ oop（--strict 阻断）。
 
 import fs from "node:fs";
 import path from "node:path";
@@ -17,27 +17,30 @@ import { dupBaselinePayload, dupGateCompare, salvageJudged, scanDupGroups, type 
 import { scanOop } from "./rules/oop.js";
 import { hygieneUnits, scanHygiene, type HygieneMode } from "./rules/hygiene.js";
 import { rangeScanInput, scanSignatures, type SignaturesScanContext } from "./rules/signatures.js";
+import { parseThrowBaseline, scanThrowAudit, throwBaselinePayload, throwGateCompare, type ThrowSite } from "./rules/throw-audit.js";
 import { buildSymbolIndex } from "./lib/symbols.js";
 
 const USAGE_LINES = [
   "nm-style <command> [args...]",
   "",
   "commands:",
-  "  check    [--changed | --all | <paths...>] [--range <spec> | --since <base>] [--strict] [--json] [--include-tests]",
-  "  gate     dup | bare [--baseline <path>] [--include-tests]",
-  "  list     bare --summary | --bucket <桶> | clusters --all  [--json] [--include-tests]",
-  "  baseline write dup | bare  --baseline <path>",
-  "  index    [--json]",
+  "  check        [--changed | --all | <paths...>] [--range <spec> | --since <base>] [--strict] [--json] [--include-tests]",
+  "  gate         dup | bare [--baseline <path>] [--include-tests]",
+  "  list         bare --summary | --bucket <桶> | clusters --all  [--json] [--include-tests]",
+  "  baseline     write dup | bare  --baseline <path>",
+  "  throw-audit  [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]   # 四形态 throw 盘点（默认全量表）",
+  "  index        [--json]",
   "",
   "exit codes: 0=干净 1=有发现 2=用法错误 3=构建失败",
 ];
 
 const USAGE = USAGE_LINES.join("\n");
 
-const KNOWN_COMMANDS = new Set(["check", "gate", "list", "baseline", "index"]);
+const KNOWN_COMMANDS = new Set(["check", "gate", "list", "baseline", "index", "throw-audit"]);
 
 const DUP_BASELINE_NOTE = "签名重复基线 v2。新增重复组会让 gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。judged 段=人工裁决的有意保留组，键消失时由下次 write 警告丢弃。";
 const BARE_BASELINE_NOTE = "nm-style 裸导出基线。gate bare 判据：新增文件条目或既有文件新增函数名 → exit 1；减少是改善，不阻断。重建：nm-style baseline write bare --baseline <path>。";
+const THROW_BASELINE_NOTE = "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -60,6 +63,7 @@ function main(): number {
   if (command === "gate") return runGate(rest);
   if (command === "list") return runList(rest);
   if (command === "baseline") return runBaseline(rest);
+  if (command === "throw-audit") return runThrowAudit(rest);
   if (command === "index") return runIndex(rest);
   console.error(`nm-style: 命令「${command}」尚未实现`);
   return 2;
@@ -168,6 +172,8 @@ function runCheck(argv: string[]): number {
 
   // dup gate 透传：只报数字不阻断（spec §3.3「check = … + dup-gate 透传（不阻断，保持现状）」）。
   const dup = dupPassthrough();
+  // throw-audit 透传同款：阻断走独立 gate（nm-style throw-audit --gate），check 只显数（p26 R3）。
+  const throwAudit = throwAuditPassthrough();
 
   if (flags.json) {
     console.log(toJson([...reported, ...downgraded.map((item) => item.finding), ...bareBlocked]));
@@ -186,11 +192,13 @@ function runCheck(argv: string[]): number {
   }
   console.log("\n== dup（gate 透传，不阻断；dup=同名+形态 组数，(+新增/-消除)）==");
   for (const line of dup.lines) console.log(line);
+  console.log("\n== throw-audit（gate 透传，不阻断；四形态 throw 盘点，详见 nm-style throw-audit --gate）==");
+  for (const line of throwAudit.lines) console.log(line);
   const countOf = (rule: string): number => reported.filter((finding) => finding.rule === rule && finding.blocking).length;
   const bareSegment = flags.changed ? String(bareBlocked.length) : `INFO(${bareFindings.length})`;
   const oopSegment = flags.strict ? String(countOf("oop")) : `INFO(${oopFindings.length})`;
   const failed = reported.some((finding) => finding.blocking) || bareBlocked.length > 0;
-  console.log(`\nnm-style: ${failed ? "FINDINGS" : "PASS"}（signatures=${countOf("signatures")} hygiene=${countOf("hygiene")} bare-exports=${bareSegment} dup=${dup.summary} oop=${oopSegment}）`);
+  console.log(`\nnm-style: ${failed ? "FINDINGS" : "PASS"}（signatures=${countOf("signatures")} hygiene=${countOf("hygiene")} bare-exports=${bareSegment} dup=${dup.summary} oop=${oopSegment} throw-audit=${throwAudit.summary}）`);
   return failed ? 1 : 0;
 }
 
@@ -202,6 +210,11 @@ function dupBaselineDefault(): string {
 /** bare 缺省基线路径（cwd=被扫仓根）：scripts/bare-exports-baseline.json。 */
 function bareBaselineDefault(): string {
   return path.join("scripts", "bare-exports-baseline.json");
+}
+
+/** throw-audit 缺省基线路径（cwd=被扫仓根）：scripts/throw-audit-baseline.json。 */
+function throwAuditBaselineDefault(): string {
+  return path.join("scripts", "throw-audit-baseline.json");
 }
 
 /** check 内的 dup 透传：跑一次 gate 比对取数字，不参与 exit code；基线缺失/损坏时降级说明。 */
@@ -443,6 +456,126 @@ function writeBareBaseline(baselinePath: string, includeTests: boolean): number 
   return 0;
 }
 
+/**
+ * `throw-audit [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]`（p26 R3）。
+ * 默认打四形态全量表；--gate 与 baseline 比对（未登记 VIOLATION/VIOLATION-B/BOUNDARY → exit 1，
+ * UNTRIAGED 不拦但首行显数）；--write-baseline 落盘当前站点（旧 disposition 按 key salvage）。
+ */
+function runThrowAudit(argv: string[]): number {
+  const flags = parseFlags(argv);
+  const { value: baselineOpt, error } = optionValueOf(argv, "--baseline");
+  if (error != null) {
+    console.error(`nm-style: ${error}`);
+    return 2;
+  }
+  const baselinePath = path.resolve(process.cwd(), baselineOpt ?? throwAuditBaselineDefault());
+  const write = argv.includes("--write-baseline");
+  const gate = argv.includes("--gate");
+  if (write && gate) {
+    console.error("nm-style: --write-baseline 与 --gate 不能同用（先定性落盘，再跑 gate）");
+    return 2;
+  }
+  const sites = scanThrowAudit(flags.includeTests);
+
+  if (write) {
+    let old = null;
+    if (fs.existsSync(baselinePath)) {
+      try {
+        old = parseThrowBaseline(fs.readFileSync(baselinePath, "utf8"));
+      } catch (parseError) {
+        console.error(`nm-style: 旧 throw-audit 基线解析失败，disposition salvage 跳过 —— ${errorMessage(parseError)}`);
+      }
+    }
+    const payload = throwBaselinePayload(sites, old, THROW_BASELINE_NOTE, flags.includeTests);
+    const dropped = old == null ? [] : Object.keys(old.sites).filter((key) => !(key in payload.sites));
+    for (const key of dropped) console.error(`nm-style: 基线条目「${key}」已不在当前扫描，salvage 丢弃（已修复或语句改写）`);
+    fs.mkdirSync(path.dirname(baselinePath), { recursive: true });
+    fs.writeFileSync(baselinePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    const byDisposition = new Map<string, number>();
+    for (const entry of Object.values(payload.sites)) byDisposition.set(entry.disposition, (byDisposition.get(entry.disposition) ?? 0) + 1);
+    const tally = [...byDisposition.entries()].sort().map(([d, n]) => `${d}=${n}`).join(" ");
+    console.log(`已写基线：${sites.length} 站点（${tally}，UNTRIAGED 项须人工定性补 reason）→ ${baselinePath}`);
+    return 0;
+  }
+
+  if (flags.json) {
+    console.log(JSON.stringify({ sites }, null, 2));
+    return 0;
+  }
+
+  let baseline: ReturnType<typeof parseThrowBaseline> | null = null;
+  if (gate) {
+    if (!fs.existsSync(baselinePath)) {
+      console.error(`nm-style: 基线不存在：${baselinePath}。先跑 nm-style throw-audit --write-baseline。`);
+      return 2;
+    }
+    try {
+      baseline = parseThrowBaseline(fs.readFileSync(baselinePath, "utf8"));
+    } catch (parseError) {
+      console.error(`nm-style: throw-audit 基线解析失败：${baselinePath} —— ${errorMessage(parseError)}`);
+      return 2;
+    }
+  }
+
+  console.log(`== nm-style throw-audit ==（四形态 ${sites.length} 站点；T1=unwrap throw / T2=createAbortError / T3=new AppError / T4=new Error）`);
+  const byForm = new Map<string, number>();
+  const byVerdict = new Map<string, number>();
+  for (const site of sites) {
+    byForm.set(site.form, (byForm.get(site.form) ?? 0) + 1);
+    byVerdict.set(site.verdict, (byVerdict.get(site.verdict) ?? 0) + 1);
+  }
+  console.log(`形态：${[...byForm.entries()].sort().map(([f, n]) => `${f}=${n}`).join(" ")}　判定：${[...byVerdict.entries()].sort().map(([v, n]) => `${v}=${n}`).join(" ")}`);
+
+  if (baseline != null) {
+    const cmp = throwGateCompare(baseline, sites);
+    console.log(`UNTRIAGED=${cmp.untriaged.length}（定性欠账，gate 不拦、显数防膨胀）　已登记=${cmp.registered}　基线消失=${cmp.dropped.length}（改善）`);
+    if (cmp.dropped.length > 0) for (const key of cmp.dropped) console.log(`  [已消除] ${key}`);
+    if (cmp.keepWithoutReason.length > 0) {
+      console.log(`[KEEP 缺理由] ${cmp.keepWithoutReason.length} 处（nm-throw: keep 注释未带理由，须补）：`);
+      for (const site of cmp.keepWithoutReason) console.log(`  ${throwSiteLine(site)}`);
+    }
+    if (cmp.blockers.length > 0) {
+      console.log(`\n[未登记的 VIOLATION/VIOLATION-B/BOUNDARY] ${cmp.blockers.length} 处——VIOLATION 修 return，BOUNDARY 登记 baseline 补理由：`);
+      for (const site of cmp.blockers) console.log(`  ${throwSiteLine(site)}`);
+      console.log(`\nthrow-audit: FIND（未登记 ${cmp.blockers.length} 处；UNTRIAGED ${cmp.untriaged.length}）（基线 ${baselinePath}）`);
+      return 1;
+    }
+    console.log(`\nthrow-audit: PASS（无未登记站点；UNTRIAGED ${cmp.untriaged.length} 待还）（基线 ${baselinePath}）`);
+    return 0;
+  }
+
+  for (const site of sites) console.log(`  ${throwSiteLine(site)}`);
+  console.log(`\n处置：VIOLATION=所在函数返回 Result/Outcome，改 return；BOUNDARY=合法边界转码，须 baseline 登记理由；VIOLATION-B=该层应改返 Result；KEEP/ALLOWED=已豁免。定性落盘：nm-style throw-audit --write-baseline。`);
+  return 0;
+}
+
+/** 站点单行文本：形态 位置 函数 返回形态 catch/keep 摘要 判定。 */
+function throwSiteLine(site: ThrowSite): string {
+  const marks = [site.hasCatch ? "catch" : "-", site.keep != null ? `keep:${site.keep || "缺理由"}` : "-"].join(" ");
+  const ret = site.retText === "" ? site.ret : `${site.ret}(${site.retText})`;
+  return `${site.form}  ${site.file}:${site.line}  ${site.fn}  ${ret}  ${marks}  ${site.verdict}`;
+}
+
+/** check 内的 throw-audit 透传：报数字不阻断（阻断走 nm-style throw-audit --gate）；基线缺失/损坏时降级说明。 */
+function throwAuditPassthrough(): { summary: string; lines: string[] } {
+  const baselinePath = path.resolve(process.cwd(), throwAuditBaselineDefault());
+  if (!fs.existsSync(baselinePath)) return { summary: "无基线", lines: [] };
+  let baseline: ReturnType<typeof parseThrowBaseline>;
+  try {
+    baseline = parseThrowBaseline(fs.readFileSync(baselinePath, "utf8"));
+  } catch (error) {
+    console.error(`nm-style: throw-audit 基线解析失败，透传跳过 —— ${errorMessage(error)}`);
+    return { summary: "基线损坏", lines: [] };
+  }
+  const cmp = throwGateCompare(baseline, scanThrowAudit(false));
+  return {
+    summary: `blockers=${cmp.blockers.length}/UNTRIAGED=${cmp.untriaged.length}`,
+    lines: [
+      `throw-audit: 未登记 ${cmp.blockers.length} 处（VIOLATION/BOUNDARY 须修或登记）、UNTRIAGED ${cmp.untriaged.length} 处（定性欠账，显数防膨胀）、已消除 ${cmp.dropped.length} 处`,
+      `throw-audit: ${cmp.blockers.length === 0 ? "PASS（无未登记站点）" : "FIND（跑 nm-style throw-audit --gate 看明细）"}`,
+    ],
+  };
+}
 /** `index [--json]`：调试——dump 当前仓（packages+apps 口径树，与 hygiene 引用面同宇宙）的 symbol-index。 */
 function runIndex(argv: string[]): number {
   const flags = parseFlags(argv);
