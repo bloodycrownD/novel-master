@@ -9,7 +9,7 @@ import ts from "typescript";
 import { changedFiles } from "./git.js";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
-const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".worktree", "coverage", "build"]);
+const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".worktree", "coverage", "build", ".reference", ".rnstorybook", "tmp"]);
 
 export interface CliFlags {
   changed: boolean;
