@@ -100,7 +100,7 @@ export function SkillPanelScreen() {
         await runtime.skills().setDisabled(projectId, skill.name, !nextEnabled);
       } catch (error) {
         flip(!nextEnabled);
-        showToast(ToastMessage.toast(nextEnabled ? '启用失败' : '关闭失败', error));
+        showToast(ToastMessage.toast(nextEnabled ? coreT({key: "ui.skills.enable_failed"}) : coreT({key: "ui.skills.disable_failed"}), error));
       } finally {
         togglingRef.current = false;
       }
@@ -135,11 +135,10 @@ export function SkillPanelScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-                当前项目还没有可用技能。技能是可复用的说明文档，
-                创建后进入提示词索引，模型会按描述决定是否使用。
+                {coreT({key: "ui.skills.panel_empty_mobile"})}
               </Text>
               <SecondaryButton
-                label="新建技能"
+                label={coreT({key: "ui.skills.new_title"})}
                 tokens={tokens}
                 onPress={() => setCreateOpen(true)}
               />
@@ -157,7 +156,7 @@ export function SkillPanelScreen() {
                 (item.disabled || !item.valid) && styles.rowDimmed,
               ]}
               onPress={() => openDetail(item)}
-              accessibilityLabel={`技能 ${item.name}`}
+              accessibilityLabel={coreT({key: "ui.skills.skill_aria", params: {name: item.name}})}
             >
               <View style={styles.rowBody}>
                 <View style={styles.titleRow}>
@@ -183,7 +182,7 @@ export function SkillPanelScreen() {
                       style={[styles.invalidTag, {color: tokens.danger}]}
                       numberOfLines={1}
                     >
-                      无效 · {item.invalidReason != null ? coreT(item.invalidReason) : 'front matter 不合法'}
+                      {coreT({key: "ui.skills.invalid_tag", params: {reason: item.invalidReason != null ? coreT(item.invalidReason) : coreT({key: "ui.skills.invalid_default_reason"})}})}
                     </Text>
                   ) : null}
                 </View>
@@ -214,7 +213,7 @@ export function SkillPanelScreen() {
         defaultProjectId={projectId}
         onClose={() => setCreateOpen(false)}
         onCreated={target => {
-          showToast('已创建');
+          showToast(coreT({key: "ui.common.created"}));
           navigation.navigate('SkillDetail', {
             domain: target.domain,
             name: target.name,

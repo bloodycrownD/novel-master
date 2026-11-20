@@ -16,6 +16,7 @@ import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
 import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
 import {ModelKey} from '../../utils/model-key';
+import {coreT} from '../../i18n/core';
 
 interface SavedModelRow {
   readonly savedModelId: string;
@@ -82,7 +83,7 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
     }
     const collected: SavedModelRow[] = allModels.map(model => {
       const duplicate = (nameCounts.get(ModelKey.name(model.providerId, model.modelName)) ?? 0) > 1;
-      const providerDisplayName = nameById.get(model.providerId) ?? '未知服务商';
+      const providerDisplayName = nameById.get(model.providerId) ?? coreT({key: "ui.provider.unknown_provider"});
       return {
         savedModelId: model.id,
         label: SavedModelDisplayName.format(providerDisplayName, model.modelName),
@@ -101,23 +102,23 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
         if (sessionId != null) {
           const current = await runtime.sessions.getSessionAgentConfig(sessionId);
           if (!current.ok) {
-            showToast(ToastMessage.toast('设置失败', current.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), current.error));
             return;
           }
           const updated = await runtime.sessions.updateSessionAgentConfig(sessionId, {agentId: current.value.agentId, modelId: savedModelId});
           if (!updated.ok) {
-            showToast(ToastMessage.toast('设置失败', updated.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), updated.error));
             return;
           }
         } else {
           const updated = await runtime.state.setCurrentModelId(savedModelId);
           if (!updated.ok) {
-            showToast(ToastMessage.toast('设置失败', updated.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), updated.error));
             return;
           }
         }
       } catch (cause) {
-        showToast(ToastMessage.toast('设置失败', cause));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), cause));
         return;
       }
       onSelected?.(savedModelId);
@@ -129,7 +130,7 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
   return (
     <PickerListModal
       visible={visible}
-      title="选择工作区模型"
+      title={coreT({key: "ui.chat.select_model_title"})}
       load={load}
       keyExtractor={item => item.savedModelId}
       renderRow={(item, selected) => (
@@ -138,11 +139,11 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
             <Text style={{color: tokens.text}}>{item.label}</Text>
             {item.subtitle ? <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>{item.subtitle}</Text> : null}
           </View>
-          {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
+          {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
         </>
       )}
       onPick={item => select(item.savedModelId)}
-      emptyText="暂无已保存模型。请先在「服务商」页添加模型。"
+      emptyText={coreT({key: "ui.chat.no_saved_models"})}
       onClose={onClose}
     />
   );

@@ -15,6 +15,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type Props = {
   scope: {kind: 'session'; sessionId: string};
@@ -28,7 +29,7 @@ type Props = {
 /** 确认弹窗正文：一句话讲清覆盖事实与不可撤销即可，不展开项目工作区
  * 的作用说明（2026-09-08 真机反馈：描述过多）。 */
 function confirmMessage(): string {
-  return '将用当前聊天工作区覆盖项目工作区，覆盖后无法撤销。';
+  return coreT({key: "ui.vfs.push_confirm_mobile"});
 }
 
 export function TemplatePushButton({
@@ -47,17 +48,17 @@ export function TemplatePushButton({
     try {
       await runtime.sessions.pushSessionTemplate(scope.sessionId);
       onPushed?.();
-      showToast('推送完成');
+showToast(coreT({key: "ui.cloud_sync.push_done"}));
     } catch (error) {
-      showToast(ToastMessage.toast('推送失败', error));
+showToast(ToastMessage.toast(coreT({key: "ui.common.push_failed"}), error));
     } finally {
       setPushing(false);
     }
   };
 
   const confirmPush = () => {
-    Alert.alert('推送到项目工作区', confirmMessage(), [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.vfs.push_project_title"}), confirmMessage(), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
         text: '推送',
         style: 'destructive',
@@ -68,7 +69,7 @@ export function TemplatePushButton({
 
   return (
     <Pressable
-      accessibilityLabel="推送到项目工作区"
+      accessibilityLabel={coreT({key: "ui.vfs.push_project_title"})}
       style={
         iconOnly
           ? styles.iconBtn
@@ -91,7 +92,7 @@ export function TemplatePushButton({
               : {color: tokens.primary, fontWeight: '600'}
           }
         >
-          推送到项目工作区
+          {coreT({key: "ui.vfs.push_project_title"})}
         </Text>
       )}
     </Pressable>

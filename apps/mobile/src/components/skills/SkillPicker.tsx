@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/PickerListModal';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 type SkillPickerProps = {
   visible: boolean;
@@ -46,8 +47,8 @@ export function SkillPicker({
   return (
     <PickerListModal
       visible={visible}
-      title="引用技能"
-      subtitle="单选插入 $技能名；已关闭技能显式引用后仍生效"
+      title={coreT({key: "ui.chat.reference_skills"})}
+      subtitle={coreT({key: "ui.skills.pick_hint_mobile"})}
       load={load}
       keyExtractor={item => item.name}
       renderRow={item => (
@@ -77,7 +78,7 @@ export function SkillPicker({
                   {color: tokens.textSecondary, borderColor: tokens.border},
                 ]}
               >
-                已关闭
+                {coreT({key: "ui.skills.disabled_tag"})}
               </Text>
             ) : null}
           </View>
@@ -93,14 +94,14 @@ export function SkillPicker({
       )}
       getRowProps={item => ({
         testID: `skill-picker-row-${item.name}`,
-        accessibilityLabel: `引用技能 ${item.name}`,
+        accessibilityLabel: coreT({key: "ui.skills.pick_ref_aria", params: {name: item.name}}),
         opacity: item.disabled ? 0.55 : undefined,
       })}
       onPick={item => {
         onConfirm(item.name);
         onClose();
       }}
-      emptyText="当前项目暂无可用技能"
+      emptyText={coreT({key: "ui.skills.pick_empty_project"})}
       onClose={onClose}
       // 还原旧面板观感（cr-fix-spec ui-parity P2-4）：maxHeight 80%、圆角 16、取消色主文字色。
       sheetStyle={styles.sheetOverride}

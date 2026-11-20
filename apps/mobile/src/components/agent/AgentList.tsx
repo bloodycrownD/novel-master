@@ -56,22 +56,22 @@ const GENERAL_ROW: AgentRow = {
   builtin: true,
   // 双端文案对齐：desktop SettingsViews 合成行同款短文案；
   // 完整 description 留给编辑器详情页（initialDefinition）展示。
-  meta: '通用助手 · 不可编辑',
+  meta: coreT({key: "ui.agent.general_note"}),
 };
 
 const TAB_HINTS: Record<AgentSettingsTab, string> = {
-  primary: '主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。',
-  subagent: '子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。',
+  primary: coreT({key: "ui.agent.list_primary_hint"}),
+  subagent: coreT({key: "ui.agent.list_subagent_hint"}),
 };
 
 const EMPTY_TEXTS: Record<AgentSettingsTab, string> = {
-  primary: '暂无主智能体，点击「新建」创建。',
-  subagent: '暂无子智能体，点击「新建」创建。',
+  primary: coreT({key: "ui.agent.list_primary_empty"}),
+  subagent: coreT({key: "ui.agent.list_subagent_empty"}),
 };
 
 function agentMeta(d: AgentDefinition, label: string, ws: boolean): string {
   const steps = d.runtime?.maxSteps ?? 20;
-  const modelPart = ws ? `${label} · 工作区` : label;
+  const modelPart = ws ? coreT({key: "ui.agent.list_workspace_suffix", params: {label}}) : label;
   return `${modelPart} · ${coreT(storedConfig.AGENT_LIST_LABELS.maxSteps(steps))}`;
 }
 
@@ -171,10 +171,10 @@ export function AgentList({onCreate}: Props) {
     reload()
       .then(r => {
         if (!r.ok) {
-          showToast(ToastMessage.toast('加载智能体列表失败', r.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.agent.list_load_failed"}), r.error));
         }
       })
-      .catch(err => showToast(ToastMessage.toast('加载智能体列表失败', err)));
+      .catch(err => showToast(ToastMessage.toast(coreT({key: "ui.agent.list_load_failed"}), err)));
   }, [reload, showToast]);
   useFocusEffect(onScreenFocus);
 
@@ -194,10 +194,10 @@ export function AgentList({onCreate}: Props) {
     if (ids.length === 0) {
       return;
     }
-    Alert.alert('删除 Agent', `确定删除选中的 ${ids.length} 个 Agent？`, [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.agent.delete_agent_title"}), coreT({key: "ui.agent.delete_agents_confirm_msg", params: {count: ids.length}}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '删除',
+        text: coreT({key: "ui.common.delete"}),
         style: 'destructive',
         onPress: () => {
           (async () => {
@@ -207,9 +207,9 @@ export function AgentList({onCreate}: Props) {
             batch.exit();
             const lr = await reload();
             if (!lr.ok) {
-              showToast(ToastMessage.toast('删除失败', lr.error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), lr.error));
             }
-          })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
+          })().catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err)));
         },
       },
     ]);
@@ -224,20 +224,20 @@ export function AgentList({onCreate}: Props) {
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
         onDelete={confirmBatchDelete}
-        hint="选择要删除的 Agent"
-        normalActions={onCreate ? <PrimaryButton label="新建" tokens={tokens} onPress={() => onCreate(tab)} /> : null}
+        hint={coreT({key: "ui.agent.delete_select_title"})}
+        normalActions={onCreate ? <PrimaryButton label={coreT({key: "ui.common.new"})} tokens={tokens} onPress={() => onCreate(tab)} /> : null}
       />
       {/* 切 tab 退出批量模式（照技能管理页先例，两侧勾选集不互通） */}
       <SegmentedControl
         options={[
           {
             value: 'primary',
-            label: '主智能体',
+            label: coreT({key: "ui.agent.primary_tab"}),
             testID: 'agents-tab-primary',
           },
           {
             value: 'subagent',
-            label: '子智能体',
+            label: coreT({key: "ui.agent.subagent_tab"}),
             testID: 'agents-tab-subagent',
           },
         ]}
@@ -292,11 +292,11 @@ export function AgentList({onCreate}: Props) {
                   {/* mode 归一后为 all（显式/缺省）挂「全部」徽标；invalid 行读不到 def 也按 all */}
                   {item.builtin ? (
                     <View style={[styles.tagBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                      <Text style={[styles.tagBadgeText, {color: tokens.primary}]}>内置</Text>
+                      <Text style={[styles.tagBadgeText, {color: tokens.primary}]}>{coreT({key: "ui.common.builtin"})}</Text>
                     </View>
                   ) : (item.def?.mode ?? 'all') === 'all' ? (
                     <View style={[styles.tagBadge, {backgroundColor: `${tokens.textTertiary}1A`}]}>
-                      <Text style={[styles.tagBadgeText, {color: tokens.textTertiary}]}>全部</Text>
+                      <Text style={[styles.tagBadgeText, {color: tokens.textTertiary}]}>{coreT({key: "ui.common.all"})}</Text>
                     </View>
                   ) : null}
                 </View>
@@ -340,11 +340,11 @@ export function AgentList({onCreate}: Props) {
           !menuAgentId
             ? []
             : rows.find(r => r.id === menuAgentId)?.configInvalid
-            ? [{label: '删除', action: 'delete', danger: true}]
+            ? [{label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true}]
             : [
-                {label: '重命名', action: 'rename'},
-                {label: '复制', action: 'duplicate'},
-                {label: '删除', action: 'delete', danger: true},
+                {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+                {label: coreT({key: "ui.transcript.menu.copy"}), action: 'duplicate'},
+                {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
               ]
         }
         onClose={() => setMenuAgentId(undefined)}
@@ -373,19 +373,19 @@ export function AgentList({onCreate}: Props) {
             })().catch(() => undefined);
           } else if (action === 'delete') {
             const displayName = rows.find(r => r.id === id)?.name ?? id;
-            Alert.alert('删除 Agent', `删除 Agent「${displayName}」？`, [
-              {text: '取消', style: 'cancel'},
+            Alert.alert(coreT({key: "ui.agent.delete_agent_title"}), coreT({key: "ui.agent.delete_agent_confirm_msg_named", params: {name: displayName}}), [
+              {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
               {
-                text: '删除',
+                text: coreT({key: "ui.common.delete"}),
                 style: 'destructive',
                 onPress: () => {
                   void (async () => {
                     await runtime.agentRegistry.delete(id);
                     const lr = await reload();
                     if (!lr.ok) {
-                      showToast(ToastMessage.toast('删除失败', lr.error));
+                      showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), lr.error));
                     }
-                  })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
+                  })().catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err)));
                 },
               },
             ]);
@@ -394,11 +394,11 @@ export function AgentList({onCreate}: Props) {
       />
       <TextPromptModal
         visible={renamePrompt != null}
-        title="重命名 Agent"
-        label="显示名称"
-        placeholder="Agent 名称"
+        title={coreT({key: "ui.agent.rename_title"})}
+        label={coreT({key: "ui.agent.display_name_label"})}
+        placeholder={coreT({key: "ui.agent.agent_name_label"})}
         initialValue={renamePrompt?.initialName ?? ''}
-        confirmLabel="保存"
+        confirmLabel={coreT({key: "ui.common.save"})}
         onClose={() => setRenamePrompt(undefined)}
         onConfirm={async values => {
           const prompt = renamePrompt;

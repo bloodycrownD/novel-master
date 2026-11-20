@@ -19,6 +19,7 @@ import {AgentFinishedNotification} from '../../services/agent-finished-notificat
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 
 const DEFAULT_CONDITIONS: CompactionConditions = {
   schemaVersion: 4,
@@ -141,7 +142,7 @@ export function ChatConfigScreen() {
         await persist();
       } catch (cause) {
         rollback();
-        showToast(ToastMessage.toast('保存失败', cause));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), cause));
       }
     },
     [showToast],
@@ -158,15 +159,15 @@ export function ChatConfigScreen() {
       const ratio = ratioText.trim() ? Number(ratioText) : undefined;
       const hide = hideText.trim() ? Number(hideText) : undefined;
       if (ratio != null && !Number.isFinite(ratio)) {
-        showToast('Token 比例需为数字');
+        showToast(coreT({key: "ui.chat_config.token_ratio_number"}));
         return false;
       }
       if (hide != null && !Number.isFinite(hide)) {
-        showToast('隐藏起始深度需为数字');
+        showToast(coreT({key: "ui.chat_config.hidden_depth_number"}));
         return false;
       }
       if (enabled && ratio == null) {
-        showToast('启用时至少填写 token 比例');
+        showToast(coreT({key: "ui.chat_config.token_ratio_required"}));
         return false;
       }
       const conditions: CompactionConditions = {
@@ -179,7 +180,7 @@ export function ChatConfigScreen() {
         await runtime.compactionConditions.setConditions(conditions);
         return true;
       } catch (error) {
-        showToast(ToastMessage.toast('保存失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
         return false;
       }
     },
@@ -190,8 +191,8 @@ export function ChatConfigScreen() {
     <ScreenFormLayout tokens={tokens}>
       <ProfileSwitchItem
         icon="⚡"
-        label="父会话流式"
-        subtitle={llmStreamEnabled ? '主对话回复边生成边显示（推荐）' : '主对话回复完成后一次性显示'}
+        label={coreT({key: "ui.chat_config.stream_parent"})}
+        subtitle={llmStreamEnabled ? coreT({key: "ui.chat_config.stream_parent_on"}) : coreT({key: "ui.chat_config.stream_parent_off"})}
         value={llmStreamEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -204,8 +205,8 @@ export function ChatConfigScreen() {
       />
       <ProfileSwitchItem
         icon="🤖"
-        label="子会话流式"
-        subtitle={subagentStreamEnabled ? '子智能体回复边生成边显示' : '子智能体回复完成后一次性显示'}
+        label={coreT({key: "ui.chat_config.stream_sub"})}
+        subtitle={subagentStreamEnabled ? coreT({key: "ui.chat_config.stream_sub_on"}) : coreT({key: "ui.chat_config.stream_sub_off"})}
         value={subagentStreamEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -218,8 +219,8 @@ export function ChatConfigScreen() {
       />
       <ProfileSwitchItem
         icon="🧠"
-        label="思考提示词"
-        subtitle="开启后，模型的思考内容进入后续提示词，关闭则不进入。"
+        label={coreT({key: "ui.chat_config.thinking_prompt"})}
+        subtitle={coreT({key: "ui.chat_config.thinking_prompt_hint"})}
         value={thinkingContextEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -232,8 +233,8 @@ export function ChatConfigScreen() {
       />
       <ProfileSwitchItem
         icon="📝"
-        label="富文本消息"
-        subtitle={chatRichTextEnabled ? '用户与助手消息解析 Markdown/HTML' : '聊天消息显示为纯文本'}
+        label={coreT({key: "ui.chat_config.rich_text"})}
+        subtitle={chatRichTextEnabled ? coreT({key: "ui.chat_config.rich_text_on"}) : coreT({key: "ui.chat_config.rich_text_off"})}
         value={chatRichTextEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -249,8 +250,8 @@ export function ChatConfigScreen() {
 
       <ProfileSwitchItem
         icon="🔔"
-        label="消息通知"
-        subtitle={messageNotificationEnabled ? '进入应用即常驻状态栏保活，生成中显示状态，结束后台提醒' : '无常驻通知、无提醒（生成行为不受影响）'}
+        label={coreT({key: "ui.chat_config.notifications"})}
+        subtitle={messageNotificationEnabled ? coreT({key: "ui.chat_config.notifications_on"}) : coreT({key: "ui.chat_config.notifications_off"})}
         value={messageNotificationEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -262,12 +263,12 @@ export function ChatConfigScreen() {
                 // 存储已持久化，通知模块的进程级副作用失败只 toast 不回滚
                 //（不易回滚，下次启动按存储态收敛）。
                 AgentFinishedNotification.setResidentEnabled(enabled).catch(cause => {
-                  showToast(ToastMessage.toast('常驻保活切换失败', cause));
+                  showToast(ToastMessage.toast(coreT({key: "ui.chat_config.keepalive_toggle_failed"}), cause));
                 });
                 if (enabled) {
                   // 关→开：权限申请前移到开关切换（拒绝过一次后不再自动弹）。
                   AgentFinishedNotification.ensurePermission().catch(cause => {
-                    showToast(ToastMessage.toast('通知权限申请失败', cause));
+                    showToast(ToastMessage.toast(coreT({key: "ui.chat_config.permission_request_failed"}), cause));
                   });
                 }
               },
@@ -280,15 +281,15 @@ export function ChatConfigScreen() {
       {Platform.OS === 'android' ? (
         <ProfileMenuItem
           icon="🔔"
-          label="通知权限"
-          value={notificationPermission === 'authorized' ? '已授权' : notificationPermission === 'denied' ? '未授权' : '申请中…'}
+          label={coreT({key: "ui.chat_config.notification_permission"})}
+          value={notificationPermission === 'authorized' ? coreT({key: "ui.chat_config.perm_granted"}) : notificationPermission === 'denied' ? coreT({key: "ui.chat_config.perm_denied"}) : coreT({key: "ui.chat_config.perm_pending"})}
           onPress={handleNotificationPermissionPress}
           tokens={tokens}
         />
       ) : null}
 
-      <FormSectionCard title="压缩配置" tokens={tokens} hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
-        <FormField label="隐藏起始深度" tokens={tokens} row>
+      <FormSectionCard title={coreT({key: "ui.chat_config.compact_section"})} tokens={tokens} hint={coreT({key: "ui.chat_config.compact_hint"})}>
+        <FormField label={coreT({key: "ui.chat_config.hidden_start_depth"})} tokens={tokens} row>
           <FormTextInput
             tokens={tokens}
             value={compactionHideStartDepth}
@@ -301,7 +302,7 @@ export function ChatConfigScreen() {
             style={styles.compactionInput}
           />
         </FormField>
-        <FormField label="启用自动压缩" tokens={tokens} row>
+        <FormField label={coreT({key: "ui.chat_config.auto_compact"})} tokens={tokens} row>
           <Switch
             value={compactionEnabled}
             onValueChange={enabled => {
@@ -317,7 +318,7 @@ export function ChatConfigScreen() {
           />
         </FormField>
         {compactionEnabled ? (
-          <FormField label="Token 比例" tokens={tokens} row>
+          <FormField label={coreT({key: "ui.chat_config.token_ratio"})} tokens={tokens} row>
             <FormTextInput
               tokens={tokens}
               value={compactionTokenRatio}

@@ -16,13 +16,14 @@ import {Pressable, StyleSheet, Text} from 'react-native';
 import type {PromptTextCardData} from '@novel-master/core/prompt';
 import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 /** 详情页标题：thinking 卡单独叫「thinking」，其余读 core 给的 role 展示标签。 */
 function promptLeafTitle(card: PromptTextCardData): string {
   if (card.type === 'thinking') {
     return 'thinking';
   }
-  return card.role === '' ? '文本' : card.role;
+  return card.role === '' ? coreT({key: "ui.common.text"}) : card.role;
 }
 
 type Props = {

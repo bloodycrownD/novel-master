@@ -15,12 +15,13 @@ import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {PromptWorkplaceCardData} from '@novel-master/core/prompt';
 import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 /** 展示档文案：与 VFS/工作区侧 `displayStateLabel` 同源（全内容/文件头/文件名）。 */
 const DISPLAY_LABEL: Record<PromptWorkplaceCardData['files'][number]['display'], string> = {
-  full: '全内容',
-  filename: '文件名',
-  header: '文件头',
+  full: coreT({key: "ui.prompt.mode_full"}),
+  filename: coreT({key: "ui.prompt.mode_filename"}),
+  header: coreT({key: "ui.prompt.mode_header"}),
 };
 
 type Props = {
@@ -74,7 +75,7 @@ export function PromptWorkplaceCard({
               <Pressable
                 testID="prompt-workplace-file"
                 accessibilityRole="button"
-                accessibilityLabel={`${fileOpen ? '收起' : '展开'}文件预览 ${file.path}`}
+                accessibilityLabel={coreT({key: "ui.prompt.file_preview_aria", params: {action: fileOpen ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), path: file.path}})}
                 accessibilityState={{expanded: fileOpen}}
                 onPress={() => onToggleFile(file.path)}
                 style={[
@@ -107,7 +108,7 @@ export function PromptWorkplaceCard({
                 <Pressable
                   testID="prompt-workplace-file-preview"
                   accessibilityRole="button"
-                  accessibilityLabel={`查看文件全文 ${file.path}`}
+                  accessibilityLabel={coreT({key: "ui.prompt.file_full_aria", params: {path: file.path}})}
                   onPress={() => openFile(file.path, file.body)}
                   style={[
                     styles.preview,

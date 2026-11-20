@@ -199,19 +199,19 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
 
   const sheetContent = (
     <>
-      <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
+      <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.skills.new_title"})}</Text>
       {imported != null ? (
         <View style={styles.importRow}>
           <Text style={{color: tokens.textSecondary, flex: 1}} numberOfLines={1}>
-            已导入 ZIP · {imported.preview.fileCount} 个文件（创建后全部带入）
+            {coreT({key: "ui.skills.zip_imported_info", params: {count: imported.preview.fileCount}})}
           </Text>
           <Pressable testID="new-skill-import-clear" onPress={() => setImported(null)} hitSlop={8}>
-            <Text style={{color: tokens.primary}}>移除</Text>
+            <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.remove"})}</Text>
           </Pressable>
         </View>
       ) : (
         <Pressable testID="new-skill-import-btn" style={[styles.importBtn, {borderColor: tokens.border}]} disabled={importing} onPress={() => handleImport().catch(() => undefined)}>
-          {importing ? <ActivityIndicator size="small" color={tokens.primary} /> : <Text style={{color: tokens.primary}}>从 ZIP 导入…</Text>}
+          {importing ? <ActivityIndicator size="small" color={tokens.primary} /> : <Text style={{color: tokens.primary}}>{coreT({key: "ui.skills.importing_zip"})}</Text>}
         </Pressable>
       )}
       <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -230,12 +230,12 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
           ]}
           value={name}
           onChangeText={setName}
-          placeholder="如 worldbuilding-checker"
+          placeholder={coreT({key: "ui.skills.name_example_mobile"})}
           placeholderTextColor={tokens.textSecondary}
           autoCorrect={false}
         />
         {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
+        <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.description"})}</Text>
         <TextInput
           testID="new-skill-description-input"
           style={[
@@ -249,16 +249,16 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
           ]}
           value={description}
           onChangeText={setDescription}
-          placeholder="进入技能索引，模型据此决定是否使用"
+          placeholder={coreT({key: "ui.skills.desc_hint"})}
           placeholderTextColor={tokens.textSecondary}
           multiline
         />
         {needsProjectPicker ? (
           <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>所属项目</Text>
+            <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.skills.project_label"})}</Text>
             <Pressable testID="new-skill-project-picker" style={[styles.projectPicker, {borderColor: tokens.border}]} onPress={() => setProjectMenuOpen(true)}>
               <Text style={{color: tokens.text, flex: 1}} numberOfLines={1}>
-                {selectedProject ? selectedProject.name : '选择所属项目'}
+                {selectedProject ? selectedProject.name : coreT({key: "ui.skills.project_picker_title"})}
               </Text>
               <Text style={{color: tokens.textSecondary}}>▾</Text>
             </Pressable>
@@ -268,7 +268,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
       </ScrollView>
       <View style={styles.foot}>
         <Pressable onPress={onClose} style={styles.footBtn}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
         <Pressable
           testID="new-skill-submit"
@@ -276,7 +276,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
           disabled={!canSubmit}
           onPress={() => handleCreate().catch(() => undefined)}
         >
-          {creating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>创建</Text>}
+          {creating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>{coreT({key: "ui.common.create"})}</Text>}
         </Pressable>
       </View>
     </>
@@ -289,7 +289,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
       </ModalShell>
       <BottomSheetMenu
         visible={projectMenuOpen}
-        title="选择所属项目"
+        title={coreT({key: "ui.skills.project_picker_title"})}
         items={projects.map(p => ({label: p.name, action: p.id}))}
         onSelect={action => setProjectId(action)}
         onClose={() => setProjectMenuOpen(false)}

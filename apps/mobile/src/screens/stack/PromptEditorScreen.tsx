@@ -46,6 +46,7 @@ import {SkillPicker} from '../../components/skills/SkillPicker';
 import {composerToolBtnStyle} from '../../components/chat/composer-toolbar-style';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
+import {coreT} from '../../i18n/core';
 
 /** 伪路径以 .md 结尾：编辑器按 markdown 高亮，预览走 markdown 渲染管线。 */
 const PROMPT_EDITOR_PATH = 'prompt.md';
@@ -55,12 +56,6 @@ const PROMPT_EDITOR_PATH = 'prompt.md';
  * ——命中即挂胶囊扩展（@/$ token 高亮 + 原子删），改这里必须同步 web 侧。
  */
 const COMPOSER_EDITOR_PATH = 'composer.md';
-
-/**
- * 页内 toolbar 标题缺省值（仅 form 变体用；composer 变体不渲染 toolbar，
- * 它的「编辑消息」走导航栏标题）。
- */
-const DEFAULT_FORM_TITLE = '提示词';
 
 type PromptEditorRoute = RouteProp<RootStackParamList, 'PromptEditor'>;
 
@@ -258,7 +253,7 @@ export function PromptEditorScreen() {
     }
     onSavedRef.current?.(draft);
     setSavedDraft(draft);
-    showToast('已保存');
+showToast(coreT({key: "ui.common.saved"}));
   }, [previewMode, isDirty, draft, showToast]);
 
   // 预览态无软键盘，直接铺开；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
@@ -272,15 +267,15 @@ export function PromptEditorScreen() {
             ? undefined
             : {
                 testID: 'prompt-editor-save',
-                accessibilityLabel: '保存',
-                label: '保存',
+                accessibilityLabel: coreT({key: "ui.common.save"}),
+                label: coreT({key: "ui.common.save"}),
                 disabled: previewMode || !isDirty,
                 onPress: handleSave,
               }
         }
         /* composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
            （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。 */
-        title={isComposer ? undefined : isDirty ? '未保存' : title ?? DEFAULT_FORM_TITLE}
+        title={isComposer ? undefined : isDirty ? coreT({key: "ui.common.unsaved_title"}) : title ?? coreT({key: "ui.chat.tab_prompt"})}
         titleDanger={!isComposer && isDirty}
         /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
            不传 toggle / segmented / preview，shell 只渲染编辑器。 */
@@ -289,7 +284,7 @@ export function PromptEditorScreen() {
             ? undefined
             : {
                 testID: 'prompt-editor-toggle',
-                accessibilityLabel: previewMode ? '编辑' : '预览',
+                accessibilityLabel: previewMode ? coreT({key: "ui.common.edit"}) : coreT({key: "ui.common.preview"}),
                 previewMode,
                 onPress: togglePreview,
               }
@@ -300,7 +295,7 @@ export function PromptEditorScreen() {
             : {
                 options: [
                   {value: 'markdown', label: 'Markdown'},
-                  {value: 'txt', label: '文本'},
+                  {value: 'txt', label: coreT({key: "ui.common.text"})},
                 ],
                 value: previewRenderKind,
                 onChange: setPreviewRenderKind,
@@ -319,7 +314,7 @@ export function PromptEditorScreen() {
                   onPress={() => setPathPickerOpen(true)}
                   disabled={!canOpenPicker}
                   style={[composerToolBtnStyle, {borderColor: tokens.border}]}
-                  accessibilityLabel="引用文件"
+                  accessibilityLabel={coreT({key: "ui.chat.reference_files"})}
                 >
                   <Text style={{color: tokens.textSecondary, fontSize: 16}}>@</Text>
                 </Pressable>
@@ -328,7 +323,7 @@ export function PromptEditorScreen() {
                   onPress={() => setSkillPickerOpen(true)}
                   disabled={!canOpenPicker}
                   style={[composerToolBtnStyle, {borderColor: tokens.border}]}
-                  accessibilityLabel="引用技能"
+                  accessibilityLabel={coreT({key: "ui.chat.reference_skills"})}
                 >
                   <Text style={{color: tokens.textSecondary, fontSize: 16}}>$</Text>
                 </Pressable>

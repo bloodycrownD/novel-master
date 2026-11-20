@@ -23,6 +23,7 @@ import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -64,7 +65,7 @@ export function ProvidersScreen() {
     fallbackValue: EMPTY_ROWS,
   });
 
-  const metaLine = (row: ProviderRow) => `${row.savedCount} 个已保存模型`;
+  const metaLine = (row: ProviderRow) => coreT({key: "ui.provider.models_saved_meta", params: {count: row.savedCount}});
 
   // 删除单个服务商：级联清掉「当前服务商/模型」的指向，避免悬空引用。
   // ⚠️ currentModelId 的归属判定必须在 providers.delete 之前完成——delete 会级联抹掉
@@ -103,7 +104,7 @@ export function ProvidersScreen() {
     for (const providerId of providerIds) {
       const deleted = await deleteProviderOne(providerId);
       if (!deleted.ok) {
-        showToast(ToastMessage.toast('删除失败', deleted.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
         return;
       }
     }
@@ -111,8 +112,8 @@ export function ProvidersScreen() {
   };
 
   const confirmBatchDelete = useBatchDeleteConfirm<string>({
-    title: '删除服务商',
-    message: ids => `将同时移除其下所有已保存模型，确定删除选中的 ${ids.length} 个服务商？`,
+    title: coreT({key: "ui.provider.delete_title"}),
+    message: ids => coreT({key: "ui.provider.delete_batch_confirm", params: {count: ids.length}}),
     deleteOne: deleteProviderOne,
     onDone: async () => {
       await reload();
@@ -121,15 +122,15 @@ export function ProvidersScreen() {
   });
 
   const handleDelete = (providerId: string) => {
-    Alert.alert('删除服务商', '将同时移除其下所有已保存模型与采样配置，确定继续？', [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.provider.delete_title"}), coreT({key: "ui.provider.delete_confirm_msg"}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '删除',
+        text: coreT({key: "ui.common.delete"}),
         style: 'destructive',
         onPress: () => {
           (async () => {
             await deleteProviders([providerId]);
-          })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
+          })().catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err)));
         },
       },
     ]);
@@ -138,14 +139,14 @@ export function ProvidersScreen() {
   return (
     <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
       <ManageHeader
-        title="服务商"
+        title={coreT({key: "ui.provider.title"})}
         batchMode={batch.active}
         selectedCount={batch.selectedCount}
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
         onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
-        hint="选择要删除的服务商（将同时移除其下所有已保存模型）"
-        normalActions={<PrimaryButton label="添加" tokens={tokens} onPress={() => navigation.navigate('ProviderCreate')} />}
+        hint={coreT({key: "ui.provider.delete_select_hint_mobile"})}
+        normalActions={<PrimaryButton label={coreT({key: "ui.common.add"})} tokens={tokens} onPress={() => navigation.navigate('ProviderCreate')} />}
       />
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={listScreenStyles.loader} />
@@ -153,7 +154,7 @@ export function ProvidersScreen() {
         <View style={styles.center}>
           <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
           <Pressable onPress={() => void reload()}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
           </Pressable>
         </View>
       ) : (
@@ -162,7 +163,7 @@ export function ProvidersScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={listScreenStyles.listContent}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
-          ListEmptyComponent={<Text style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>暂无服务商，点击右上角「添加」创建。</Text>}
+          ListEmptyComponent={<Text style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.empty_hint"})}</Text>}
           renderItem={({item}) => (
             <ConfigListCard
               tokens={tokens}
@@ -185,7 +186,7 @@ export function ProvidersScreen() {
       )}
       <BottomSheetMenu
         visible={menuProviderId != null}
-        items={[{label: '删除', action: 'delete', danger: true}]}
+        items={[{label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true}]}
         onClose={() => setMenuProviderId(undefined)}
         onSelect={action => {
           const id = menuProviderId;

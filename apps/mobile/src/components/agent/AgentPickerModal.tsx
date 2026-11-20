@@ -11,6 +11,7 @@ import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
 import {
@@ -60,7 +61,7 @@ export function AgentPickerModal({
           await AgentPicker.selectWorkspace(runtime, agentId);
         }
       } catch (cause) {
-        showToast(ToastMessage.toast('设置失败', cause));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), cause));
         return;
       }
       onSelected?.(agentId);
@@ -72,7 +73,7 @@ export function AgentPickerModal({
   return (
     <PickerListModal<AgentPickerRow>
       visible={visible}
-      title="选择 Agent"
+      title={coreT({key: "ui.session.agent_picker_title"})}
       load={load}
       keyExtractor={item => item.agentId}
       isSelected={(item, index, selectedId) =>
@@ -81,7 +82,7 @@ export function AgentPickerModal({
       renderRow={(item, selected) => (
         <>
           <Text style={{color: tokens.text, flex: 1}}>{item.label}</Text>
-          {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
+          {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
         </>
       )}
       onPick={item => select(item.agentId)}

@@ -76,7 +76,7 @@ export function ModelSamplingScreen() {
       if (!got.ok) throw got.error;
       const saved = got.value;
       if (saved == null) {
-        showToast(ToastMessage.toast('加载失败', '模型不存在'));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), coreT({key: "ui.sampling.model_missing"})));
         return;
       }
       const gotProvider = await runtime.providers.get(saved.providerId);
@@ -94,7 +94,7 @@ export function ModelSamplingScreen() {
       setParams(stored);
       setThinkingLevel(SavedModelSettings.thinkingLevel(saved.settings));
     } catch (error) {
-      showToast(ToastMessage.toast('加载失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), error));
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ export function ModelSamplingScreen() {
 
   useEffect(() => {
     if (!savedModelId) {
-      showToast(ToastMessage.toast('错误', '缺少 savedModelId'));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.error"}), coreT({key: "ui.sampling.saved_model_id_missing"})));
       navigation.goBack();
     }
   }, [savedModelId, navigation, showToast]);
@@ -117,12 +117,12 @@ export function ModelSamplingScreen() {
     }
     const trimmedName = modelName.trim();
     if (!trimmedName) {
-      showToast('模型名称不能为空');
+      showToast(coreT({key: "ui.sampling.name_required"}));
       return;
     }
     const contextWindow = Number(contextWindowTokens);
     if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-      showToast('上下文上限须为正整数');
+      showToast(coreT({key: "ui.sampling.context_limit_positive"}));
       return;
     }
     setSaving(true);
@@ -147,7 +147,7 @@ export function ModelSamplingScreen() {
       showToast('已保存模型设置');
       navigation.goBack();
     } catch (error) {
-      showToast(ToastMessage.toast('保存失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
     } finally {
       setSaving(false);
     }
@@ -167,7 +167,7 @@ export function ModelSamplingScreen() {
       setParams(undefined);
       showToast('已恢复默认采样参数');
     } catch (error) {
-      showToast(ToastMessage.toast('恢复失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.restore_failed"}), error));
     } finally {
       setResetting(false);
     }
@@ -177,45 +177,45 @@ export function ModelSamplingScreen() {
     return <ActivityIndicator style={{marginTop: 32}} />;
   }
 
-  const sectionHint = modelSubtitle ? `${modelSubtitle}\n\n展示协议推荐默认值；保存后以本页为准。` : '展示协议推荐默认值；保存后以本页为准。';
+  const sectionHint = modelSubtitle ? `${modelSubtitle}\n\n${coreT({key: "ui.sampling.section_hint_plain"})}` : coreT({key: "ui.sampling.section_hint_plain"});
 
   return (
-    <ScreenFormLayout tokens={tokens} footer={<StickyFormFooter tokens={tokens} label="保存" loading={saving} onPress={() => handleSave().catch(() => undefined)} />}>
-      <FormSectionCard title="模型" tokens={tokens}>
-        <FormField label="模型名称" tokens={tokens}>
-          <FormTextInput tokens={tokens} value={modelName} onChangeText={setModelName} placeholder="模型名称" />
+    <ScreenFormLayout tokens={tokens} footer={<StickyFormFooter tokens={tokens} label={coreT({key: "ui.common.save"})} loading={saving} onPress={() => handleSave().catch(() => undefined)} />}>
+      <FormSectionCard title={coreT({key: "ui.common.model"})} tokens={tokens}>
+        <FormField label={coreT({key: "ui.common.model_name"})} tokens={tokens}>
+          <FormTextInput tokens={tokens} value={modelName} onChangeText={setModelName} placeholder={coreT({key: "ui.common.model_name"})} />
         </FormField>
-        {vendorModelId ? <Text style={[styles.vendorHint, {color: tokens.textSecondary}]}>厂商 ID：{vendorModelId}</Text> : null}
+        {vendorModelId ? <Text style={[styles.vendorHint, {color: tokens.textSecondary}]}>{coreT({key: "ui.sampling.vendor_id_line", params: {id: vendorModelId}})}</Text> : null}
       </FormSectionCard>
 
-      <FormSectionCard title="内部预算" tokens={tokens} hint="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。">
-        <FormField label="上下文上限 (tokens)" tokens={tokens}>
+      <FormSectionCard title={coreT({key: "ui.sampling.internal_budget_section"})} tokens={tokens} hint={coreT({key: "ui.sampling.internal_budget_hint"})}>
+        <FormField label={coreT({key: "ui.sampling.context_limit_label"})} tokens={tokens}>
           <FormTextInput tokens={tokens} value={contextWindowTokens} onChangeText={setContextWindowTokens} keyboardType="number-pad" />
         </FormField>
-        <FormField label="计数方式" tokens={tokens} hint="自动按模型名匹配分词器族；保存后以本页为准。">
+        <FormField label={coreT({key: "ui.sampling.counting_method_label"})} tokens={tokens} hint={coreT({key: "ui.sampling.counter_autos_hint"})}>
           <FormSelectField
             tokens={tokens}
             value={tokenCounterMode}
             onChange={v => setTokenCounterMode(v as TokenizerOverride)}
             options={TOKEN_COUNTER_MODE_SELECT_OPTIONS.map(o => ({...o, label: coreT(o.label)}))}
-            sheetTitle="Token 计数器"
+            sheetTitle={coreT({key: "ui.sampling.token_counter_label"})}
             placeholder="auto"
           />
         </FormField>
       </FormSectionCard>
 
       <FormSectionCard
-        title="生成参数"
+        title={coreT({key: "ui.sampling.generation_section"})}
         tokens={tokens}
         hint={sectionHint}
         rightAction={
           <Pressable disabled={resetting} style={[styles.resetLink, resetting ? styles.resetDisabled : null]} onPress={() => handleResetSamplingDefaults().catch(() => undefined)}>
-            <Text style={[styles.resetLinkText, {color: tokens.primary}]}>{resetting ? '恢复中…' : '恢复默认'}</Text>
+            <Text style={[styles.resetLinkText, {color: tokens.primary}]}>{resetting ? coreT({key: "ui.common.restoring"}) : coreT({key: "ui.common.reset_default"})}</Text>
           </Pressable>
         }
       >
         <SamplingForm tokens={tokens} protocol={protocol} params={params} onChange={setParams} />
-        <FormField label="思考强度" tokens={tokens}>
+        <FormField label={coreT({key: "ui.sampling.thinking_effort_label"})} tokens={tokens}>
           <SegmentedControl tokens={tokens} value={thinkingLevel} options={THINKING_LEVEL_SELECT_OPTIONS.map(o => ({...o, label: coreT(o.label)}))} onChange={setThinkingLevel} />
         </FormField>
       </FormSectionCard>

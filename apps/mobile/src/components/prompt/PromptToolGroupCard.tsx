@@ -23,9 +23,10 @@ import type {PromptToolGroupCardData} from '@novel-master/core/prompt';
 import {PromptPreviewTurns} from '@novel-master/core/prompt';
 import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 /** 悬挂 use 的占位文案（result 为 null，槽位保留不隐藏）。 */
-const LOST_RESULT_TEXT = '未返回结果';
+const LOST_RESULT_TEXT = coreT({key: "ui.prompt.lost_result"});
 
 /**
  * 状态点配色走主题 token（成功/危险/中性，对齐 app 工具卡先例 ToolCallCard 的
@@ -33,9 +34,9 @@ const LOST_RESULT_TEXT = '未返回结果';
  */
 /** 状态点旁的状态文案（三态可读，不只靠颜色区分）。 */
 const STATUS_LABEL: Record<PromptToolGroupCardData['status'], string> = {
-  ok: '成功',
-  error: '失败',
-  lost: '丢失',
+  ok: coreT({key: "ui.transcript.tool_status.success"}),
+  error: coreT({key: "ui.transcript.tool_status.error"}),
+  lost: coreT({key: "ui.prompt.status_lost"}),
 };
 
 type Props = {
@@ -88,7 +89,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
       <Pressable
         testID="prompt-tool-group-head"
         accessibilityRole="button"
-        accessibilityLabel={`${expanded ? '收起' : '展开'}工具调用 ${card.toolName}`}
+        accessibilityLabel={coreT({key: "ui.prompt.tool_group_aria", params: {action: expanded ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), name: card.toolName}})}
         accessibilityState={{expanded}}
         onPress={handleToggle}
         style={styles.head}
@@ -107,7 +108,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
               // 对齐 desktop 的中性色虚线徽标（role 徽标与状态三色是唯一的语义色留白）。
               style={[styles.parallel, {color: tokens.textTertiary, borderColor: tokens.borderLight}]}
             >
-              并行
+              {coreT({key: "ui.prompt.parallel_tag"})}
             </Text>
           ) : null}
           {/* 状态文案用主题正文色：语义色浅底对比 1.86~2.54:1 低于 3:1 门槛，
@@ -125,7 +126,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
           <Pressable
             testID="prompt-tool-group-use"
             accessibilityRole="button"
-            accessibilityLabel={`查看工具入参，${card.toolName}`}
+            accessibilityLabel={coreT({key: "ui.prompt.tool_input_aria", params: {name: card.toolName}})}
             onPress={openUse}
             style={[
               styles.cell,
@@ -146,7 +147,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
           <Pressable
             testID="prompt-tool-group-result"
             accessibilityRole="button"
-            accessibilityLabel={`查看工具结果，${card.toolName}`}
+            accessibilityLabel={coreT({key: "ui.prompt.tool_result_aria", params: {name: card.toolName}})}
             // 悬挂 use 的占位格不挂 onPress：否则点进去是一份空正文（假入口）。
             onPress={card.result == null ? undefined : openResult}
             style={[

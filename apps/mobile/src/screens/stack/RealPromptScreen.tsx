@@ -21,6 +21,7 @@ import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {PromptPreviewService} from '@/services/prompt-preview.service';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 import type {RootStackParamList} from '@/navigation/types';
 
 export function RealPromptScreen() {
@@ -162,8 +163,8 @@ export function RealPromptScreen() {
           maxToRenderPerBatch={8}
           windowSize={7}
           removeClippedSubviews
-          ListEmptyComponent={<Text style={{color: tokens.textSecondary}}>（空提示词）</Text>}
-          ListFooterComponent={<Text style={[styles.hint, {color: tokens.textSecondary}]}>在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。</Text>}
+          ListEmptyComponent={<Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.prompt.empty_prompt"})}</Text>}
+          ListFooterComponent={<Text style={[styles.hint, {color: tokens.textSecondary}]}>{coreT({key: "ui.prompt.viewer_hint_mobile"})}</Text>}
           renderItem={({item}) => <PromptTurnRow turn={item} openTurnIds={openTurnIds} openGroupIds={openGroupIds} onToggleTurn={toggleTurn} onToggleGroup={toggleGroup} />}
         />
       )}

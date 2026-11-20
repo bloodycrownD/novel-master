@@ -18,6 +18,7 @@ import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {type AppError, Result} from '@novel-master/core/errors';
 
 import {useRuntime} from '@/hooks/useRuntime';
+import {coreT} from '@/i18n/core';
 
 type MobileRuntime = ReturnType<typeof useRuntime>;
 
@@ -360,7 +361,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
     const modelOptions = savedModels
       .map(m => {
         const found = providers.find(p => p.id === m.providerId);
-        const providerLabel = found?.label ?? '未知服务商';
+        const providerLabel = found?.label ?? coreT({key: "ui.provider.unknown_provider"});
         return {
           value: m.id,
           label: SavedModelDisplayName.format(providerLabel, m.modelName),
@@ -368,7 +369,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-    return [{value: '', label: '默认(跟随)'}, ...modelOptions];
+    return [{value: '', label: coreT({key: "ui.agent.model_follow_option"})}, ...modelOptions];
   }, [savedModels, providers, modelNameCounts]);
 
   return {
@@ -400,7 +401,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
         return;
       }
       if (AgentEditorState.countFormPromptSources(nextForm) < 1) {
-        showToast('至少保留一个 Prompt 块');
+        showToast(coreT({key: "ui.agent.prompt_block_min"}));
         return;
       }
       setPersist(() => nextPersist);

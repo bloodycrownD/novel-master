@@ -98,28 +98,28 @@ export function AgentEditorForm(props: Props) {
     if (readOnly) {
       return;
     }
-    loadAgent().catch(err => showToast(ToastMessage.toast('加载失败', err)));
+    loadAgent().catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), err)));
   }, [loadAgent, showToast, readOnly]);
 
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleDeleteBrokenAgent = useCallback(() => {
-    Alert.alert('删除 Agent', `删除 Agent「${displayName ?? agentId}」？`, [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.agent.delete_agent_title"}), coreT({key: "ui.agent.delete_agent_confirm_msg_named", params: {name: displayName ?? agentId}}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '删除',
+        text: coreT({key: "ui.common.delete"}),
         style: 'destructive',
         onPress: () => {
           void (async () => {
             try {
               const ids = await runtime.agentRegistry.listAgentIds();
               if (ids.length <= 1) {
-                showToast('至少保留一个 Agent');
+                showToast(coreT({key: "ui.agent.min_one_agent"}));
                 return;
               }
               await runtime.agentRegistry.delete(agentId);
               navigation.goBack();
             } catch (error) {
-              showToast(ToastMessage.toast('删除失败', error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), error));
             }
           })();
         },
@@ -130,10 +130,10 @@ export function AgentEditorForm(props: Props) {
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleOverwriteDefault = useCallback(() => {
     // nm-style: keep-local — 确认文案是长中文串，外提成 const 会因宽度被 prettier 拆行
-    Alert.alert('覆盖为默认模板', '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？', [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.agent.template_overwrite_title"}), coreT({key: "ui.agent.template_overwrite_msg"}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '覆盖并保存',
+        text: coreT({key: "ui.agent.template_overwrite_confirm"}),
         onPress: () => {
           void (async () => {
             setRecovering(true);
@@ -149,9 +149,9 @@ export function AgentEditorForm(props: Props) {
               });
               await loadAgent();
               await onSaved?.();
-              showToast('已用默认模板覆盖并保存');
+              showToast(coreT({key: "ui.agent.template_overwritten"}));
             } catch (error) {
-              showToast(ToastMessage.toast('覆盖默认失败', error));
+              showToast(ToastMessage.toast(coreT({key: "ui.agent.overwrite_default_failed"}), error));
             } finally {
               setRecovering(false);
             }
@@ -172,7 +172,7 @@ export function AgentEditorForm(props: Props) {
     let def = built.definition;
     if (form.modelEnabled) {
       if (!form.savedModelId) {
-        showToast('请选择专属模型');
+        showToast(coreT({key: "ui.agent.select_dedicated_model"}));
         return;
       }
       def = {...def, model: form.savedModelId};
@@ -186,9 +186,9 @@ export function AgentEditorForm(props: Props) {
       });
       setSavedBaseline(snapshot);
       await onSaved?.();
-      showToast('已保存智能体配置');
+      showToast(coreT({key: "ui.agent.saved_done"}));
     } catch (error) {
-      showToast(ToastMessage.toast('保存失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
     } finally {
       setSaving(false);
     }
@@ -199,31 +199,31 @@ export function AgentEditorForm(props: Props) {
     try {
       const result = await AgentYamlService.exportYaml(runtime, agentId);
       if (result === 'saved') {
-        showToast('已导出 Agent YAML');
+        showToast(coreT({key: "ui.agent.yaml_exported"}));
       }
     } catch (error) {
-      showToast(ToastMessage.toast('导出 YAML 失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.agent.export_yaml_failed"}), error));
     }
   }, [runtime, agentId, showToast]);
 
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleImportYaml = useCallback(() => {
-    Alert.alert('导入 YAML', '将覆盖当前智能体配置，是否继续？', [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.agent.import_yaml"}), coreT({key: "ui.agent.yaml_import_confirm"}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '导入',
+        text: coreT({key: "ui.common.import"}),
         onPress: () => {
           void (async () => {
             try {
               const imported = await AgentYamlService.importYaml(runtime, agentId);
               if (!imported.ok) {
-                showToast(ToastMessage.toast('导入 YAML 失败', imported.error));
+                showToast(ToastMessage.toast(coreT({key: "ui.agent.import_yaml_failed"}), imported.error));
                 return;
               }
               await loadAgent();
-              showToast('已导入 Agent YAML');
+              showToast(coreT({key: "ui.agent.yaml_imported"}));
             } catch (error) {
-              showToast(ToastMessage.toast('导入 YAML 失败', error));
+              showToast(ToastMessage.toast(coreT({key: "ui.agent.import_yaml_failed"}), error));
             }
           })();
         },
@@ -245,13 +245,13 @@ export function AgentEditorForm(props: Props) {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <Text style={{color: tokens.textSecondary}}>加载中…</Text>
+        <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.loading"})}</Text>
       </View>
     );
   }
 
   if (loadError != null || invalidConfig != null) {
-    const title = invalidConfig != null ? coreT(STORED_CONFIG_LABELS.invalidTitle) : '加载失败';
+    const title = invalidConfig != null ? coreT(STORED_CONFIG_LABELS.invalidTitle) : coreT({key: "ui.common.load_failed"});
     let reason = loadError ?? '';
     if (invalidConfig != null) {
       reason = coreT(StoredConfigLabels.invalidReason(invalidConfig.code));
@@ -277,7 +277,7 @@ export function AgentEditorForm(props: Props) {
       {readOnly ? (
         <View style={styles.unsavedWrap}>
           <FormSectionCard tokens={tokens}>
-            <Text style={[styles.unsaved, {color: tokens.textSecondary}]}>内置智能体，不可编辑</Text>
+            <Text style={[styles.unsaved, {color: tokens.textSecondary}]}>{coreT({key: "ui.agent.builtin_note_mobile"})}</Text>
           </FormSectionCard>
         </View>
       ) : null}
@@ -289,7 +289,7 @@ export function AgentEditorForm(props: Props) {
           </FormSectionCard>
         </View>
       ) : null}
-      <ScreenFormLayout tokens={tokens} footer={readOnly ? undefined : <StickyFormFooter tokens={tokens} label="保存" loading={saving} onPress={() => handleSave().catch(() => undefined)} />}>
+      <ScreenFormLayout tokens={tokens} footer={readOnly ? undefined : <StickyFormFooter tokens={tokens} label={coreT({key: "ui.common.save"})} loading={saving} onPress={() => handleSave().catch(() => undefined)} />}>
         <AgentEditorBasicSection
           tokens={tokens}
           name={form.name}
@@ -307,7 +307,7 @@ export function AgentEditorForm(props: Props) {
 
         <AgentEditorModelSection tokens={tokens} value={form.modelEnabled ? form.savedModelId : ''} onChange={handleModelSelect} options={modelSelectOptions} readOnly={readOnly} />
 
-        <FormSectionCard title="运行时" tokens={tokens}>
+        <FormSectionCard title={coreT({key: "ui.agent.runtime_section"})} tokens={tokens}>
           <FormField label={PROMPT_REGION_LABELS.maxStepsLabel} tokens={tokens} hint={PROMPT_REGION_LABELS.maxStepsHint}>
             <FormTextInput tokens={tokens} value={form.maxSteps} onChangeText={value => patch({maxSteps: value})} keyboardType="number-pad" disabled={readOnly} />
           </FormField>

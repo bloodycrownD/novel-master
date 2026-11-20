@@ -14,6 +14,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type Props = {
   scope: {kind: 'session'; sessionId: string};
@@ -25,7 +26,7 @@ type Props = {
 };
 
 function confirmMessage(): string {
-  return '将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？';
+  return coreT({key: "ui.vfs.pull_confirm"});
 }
 
 export function TemplatePullButton({
@@ -44,19 +45,19 @@ export function TemplatePullButton({
     try {
       await runtime.sessions.pullSessionTemplate(scope.sessionId);
       onPulled?.();
-      showToast('同步完成');
+showToast(coreT({key: "ui.vfs.sync_done"}));
     } catch (error) {
-      showToast(ToastMessage.toast('同步失败', error));
+showToast(ToastMessage.toast(coreT({key: "ui.common.sync_failed"}), error));
     } finally {
       setPulling(false);
     }
   };
 
   const confirmPull = () => {
-    Alert.alert('从上级同步', confirmMessage(), [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.vfs.sync_menu_title"}), confirmMessage(), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '同步',
+        text: coreT({key: "ui.vfs.sync_action"}),
         style: 'destructive',
         onPress: () => runPull().catch(() => undefined),
       },
@@ -65,7 +66,7 @@ export function TemplatePullButton({
 
   return (
     <Pressable
-      accessibilityLabel="从上级同步"
+      accessibilityLabel={coreT({key: "ui.vfs.sync_menu_title"})}
       style={
         iconOnly
           ? styles.iconBtn
@@ -88,7 +89,7 @@ export function TemplatePullButton({
               : {color: tokens.primary, fontWeight: '600'}
           }
         >
-          从上级同步
+          {coreT({key: "ui.vfs.sync_menu_title"})}
         </Text>
       )}
     </Pressable>

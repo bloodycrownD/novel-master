@@ -25,6 +25,7 @@ import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 import {YamlShared} from '@/services/yaml-shared';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -48,7 +49,7 @@ export function SmartSortRulesScreen() {
     fallbackValue: EMPTY_RULES,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(ToastMessage.toast('加载失败', cause));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), cause));
       },
       [showToast],
     ),
@@ -66,7 +67,7 @@ export function SmartSortRulesScreen() {
         await runtime.smartSortRule.moveRule(ruleId, to);
         await reload({silent: true});
       } catch (error) {
-        showToast(ToastMessage.toast('调整失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.smart_sort.adjust_failed"}), error));
       }
     },
     [runtime, reload, showToast],
@@ -74,16 +75,16 @@ export function SmartSortRulesScreen() {
 
   const deleteRuleWithConfirm = useCallback(
     (rule: SmartSortRule) => {
-      Alert.alert('删除规则', `确定删除「${rule.name}」？`, [
-        {text: '取消', style: 'cancel'},
+      Alert.alert(coreT({key: "ui.smart_sort.delete_title"}), coreT({key: "ui.smart_sort.delete_confirm_named", params: {name: rule.name}}), [
+        {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
         {
-          text: '删除',
+          text: coreT({key: "ui.common.delete"}),
           style: 'destructive',
           onPress: () => {
             (async () => {
               await runtime.smartSortRule.deleteRule(rule.ruleId);
               await reload({silent: true});
-            })().catch(error => showToast(ToastMessage.toast('删除失败', error)));
+            })().catch(error => showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), error)));
           },
         },
       ]);
@@ -125,7 +126,7 @@ export function SmartSortRulesScreen() {
       setRows(prev => prev.map(r => (r.ruleId === rule.ruleId ? {...r, enabled: next} : r)));
       runtime.smartSortRule.setEnabled(rule.ruleId, next).catch(error => {
         setRows(prev => prev.map(r => (r.ruleId === rule.ruleId ? {...r, enabled: rule.enabled} : r)));
-        showToast(ToastMessage.toast('操作失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.op_failed"}), error));
       });
     },
     [runtime, setRows, showToast],
@@ -134,8 +135,8 @@ export function SmartSortRulesScreen() {
   // ---- 批量 ----
 
   const confirmBatchDelete = useBatchDeleteConfirm<string>({
-    title: '删除规则',
-    message: ids => `确定删除选中的 ${ids.length} 条规则？`,
+    title: coreT({key: "ui.smart_sort.delete_title"}),
+    message: ids => coreT({key: "ui.smart_sort.delete_batch_confirm", params: {count: ids.length}}),
     deleteOne: useCallback(
       async (ruleId: string) => {
         // builtin- 由 service 整体拒绝；这里逐条走 deleteRule 保持部分成功语义。
@@ -152,7 +153,7 @@ export function SmartSortRulesScreen() {
   const runBatchDelete = useCallback(() => {
     const ids = Array.from(batch.selectedIds);
     if (ids.some(id => SmartSortRule.isBuiltinId(id))) {
-      showToast('内置规则不可删除，请取消勾选后再删除');
+      showToast(coreT({key: "ui.smart_sort.builtin_delete_block_mobile"}));
       return;
     }
     confirmBatchDelete(ids);
@@ -170,7 +171,7 @@ export function SmartSortRulesScreen() {
           await reload({silent: true});
         })
         .catch(error => {
-          showToast(ToastMessage.toast('操作失败', error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.op_failed"}), error));
         });
     },
     [batch.selectedIds, runtime, reload, showToast],
@@ -183,10 +184,10 @@ export function SmartSortRulesScreen() {
       setMoreMenuVisible(false);
       switch (action) {
         case 'import':
-          Alert.alert('导入规则', '导入将替换全部现有规则（含内置规则的启停状态），确定继续？', [
-            {text: '取消', style: 'cancel'},
+          Alert.alert(coreT({key: "ui.smart_sort.import_title"}), coreT({key: "ui.smart_sort.import_confirm"}), [
+            {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
             {
-              text: '导入',
+              text: coreT({key: "ui.common.import"}),
               onPress: () => {
                 // 替换式导入（spec D10）：schema/decode 单源在 core
                 // `smart-sort-rule-io`；存储/事务类故障原样上抛、其余照旧套
@@ -207,16 +208,16 @@ export function SmartSortRulesScreen() {
                 })
                   .then(async imported => {
                     if (!imported.ok) {
-                      showToast(ToastMessage.toast('导入失败', imported.error));
+                      showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), imported.error));
                       return;
                     }
                     if (importedCount == null) {
                       return;
                     }
                     await reload({silent: true});
-                    showToast(`已导入 ${importedCount} 条规则`);
+                    showToast(coreT({key: "ui.smart_sort.imported_count", params: {count: importedCount}}));
                   })
-                  .catch(error => showToast(ToastMessage.toast('导入失败', error)));
+                  .catch(error => showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), error)));
               },
             },
           ]);
@@ -228,24 +229,24 @@ export function SmartSortRulesScreen() {
             .then(doc => YamlShared.exportWithDialog(SerializationStringifyText.stringify(doc, 'yaml'), 'smart-sort-rules.yaml'))
             .then(result => {
               if (result === 'saved') {
-                showToast('已导出规则');
+                showToast(coreT({key: "ui.smart_sort.exported"}));
               }
             })
-            .catch(error => showToast(ToastMessage.toast('导出失败', error)));
+            .catch(error => showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), error)));
           break;
         case 'reset':
-          Alert.alert('恢复默认', '将重灌全部内置规则（含删除后重建、恢复启用），用户自建规则不受影响。', [
-            {text: '取消', style: 'cancel'},
+          Alert.alert(coreT({key: "ui.common.reset_default"}), coreT({key: "ui.smart_sort.reset_confirm_mobile"}), [
+            {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
             {
-              text: '恢复',
+              text: coreT({key: "ui.common.restore"}),
               onPress: () => {
                 runtime.smartSortRule
                   .resetDefaults()
                   .then(async () => {
                     await reload({silent: true});
-                    showToast('已恢复默认规则');
+                    showToast(coreT({key: "ui.smart_sort.reset_done"}));
                   })
-                  .catch(error => showToast(ToastMessage.toast('恢复失败', error)));
+                  .catch(error => showToast(ToastMessage.toast(coreT({key: "ui.common.restore_failed"}), error)));
               },
             },
           ]);
@@ -260,20 +261,20 @@ export function SmartSortRulesScreen() {
   let rowMenuItems: {label: string; action: string; danger?: boolean}[] = [];
   if (menuRule) {
     rowMenuItems = [
-      {label: '编辑', action: 'edit'},
-      {label: '置顶', action: 'top'},
-      {label: '上移', action: 'up'},
-      {label: '下移', action: 'down'},
-      {label: '置底', action: 'bottom'},
+      {label: coreT({key: "ui.common.edit"}), action: 'edit'},
+      {label: coreT({key: "ui.common.move_top"}), action: 'top'},
+      {label: coreT({key: "ui.common.move_up"}), action: 'up'},
+      {label: coreT({key: "ui.common.move_down"}), action: 'down'},
+      {label: coreT({key: "ui.common.move_bottom"}), action: 'bottom'},
       // 内置规则仅可禁用不可删除（spec D3）。
-      ...(SmartSortRule.isBuiltinId(menuRule.ruleId) ? [] : [{label: '删除', action: 'delete', danger: true}]),
+      ...(SmartSortRule.isBuiltinId(menuRule.ruleId) ? [] : [{label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true}]),
     ];
   }
 
   return (
     <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
       <ManageHeader
-        title="智能排序规则"
+        title={coreT({key: "ui.nav.smart_sort_rules"})}
         batchMode={batch.active}
         selectedCount={batch.selectedCount}
         onEnterBatch={batch.enter}
@@ -282,14 +283,14 @@ export function SmartSortRulesScreen() {
         onSelectAll={rows.length > 0 ? () => batch.selectRange(rows.map(r => r.ruleId)) : undefined}
         allSelected={rows.length > 0 && batch.selectedCount === rows.length}
         actions={[
-          {label: '启用', onPress: () => runBatchSetEnabled(true)},
+          {label: coreT({key: "ui.common.enable"}), onPress: () => runBatchSetEnabled(true)},
           {label: '禁用', onPress: () => runBatchSetEnabled(false)},
         ]}
-        hint="选择要操作的规则；内置规则不可删除"
+        hint={coreT({key: "ui.smart_sort.batch_select_hint"})}
         normalActions={
           <View style={styles.headerActions}>
-            <SecondaryButton label="更多" tokens={tokens} onPress={() => setMoreMenuVisible(true)} />
-            <PrimaryButton label="新建" tokens={tokens} onPress={createRule} />
+            <SecondaryButton label={coreT({key: "ui.common.more"})} tokens={tokens} onPress={() => setMoreMenuVisible(true)} />
+            <PrimaryButton label={coreT({key: "ui.common.new"})} tokens={tokens} onPress={createRule} />
           </View>
         }
       />
@@ -301,7 +302,7 @@ export function SmartSortRulesScreen() {
           keyExtractor={item => item.ruleId}
           contentContainerStyle={listScreenStyles.listContent}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
-          ListEmptyComponent={<Text style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>暂无规则，点击「新建」创建。</Text>}
+          ListEmptyComponent={<Text style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.smart_sort.empty"})}</Text>}
           renderItem={({item}) => (
             <ConfigListCard
               tokens={tokens}
@@ -323,7 +324,7 @@ export function SmartSortRulesScreen() {
                 )
               }
               title={item.name}
-              subtitle={`${SmartSortRule.isBuiltinId(item.ruleId) ? '内置 · ' : ''}${item.description ?? '—'}`}
+              subtitle={`${SmartSortRule.isBuiltinId(item.ruleId) ? coreT({key: "ui.smart_sort.builtin_prefix"}) : ''}${item.description ?? '—'}`}
               onMenuPress={batch.active ? undefined : () => setMenuRule(item)}
               showChevron={!batch.active}
             />
@@ -333,11 +334,11 @@ export function SmartSortRulesScreen() {
       <BottomSheetMenu visible={menuRule != null} title={menuRule?.name} items={rowMenuItems} onSelect={handleRowMenuSelect} onClose={() => setMenuRule(null)} />
       <BottomSheetMenu
         visible={moreMenuVisible}
-        title="规则库"
+        title={coreT({key: "ui.smart_sort.library_title"})}
         items={[
-          {label: '导入 YAML', action: 'import'},
-          {label: '导出 YAML', action: 'export'},
-          {label: '恢复默认', action: 'reset'},
+          {label: coreT({key: "ui.agent.import_yaml"}), action: 'import'},
+          {label: coreT({key: "ui.agent.export_yaml"}), action: 'export'},
+          {label: coreT({key: "ui.common.reset_default"}), action: 'reset'},
         ]}
         onSelect={handleMoreSelect}
         onClose={() => setMoreMenuVisible(false)}

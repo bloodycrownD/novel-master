@@ -184,18 +184,6 @@
       "disposition": "BOUNDARY",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请填写服务商名称与 baseUrl');": {
-      "form": "T4",
-      "line": 90,
-      "disposition": "BOUNDARY",
-      "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
-    },
-    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请填写 API Key');": {
-      "form": "T4",
-      "line": 93,
-      "disposition": "BOUNDARY",
-      "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
-    },
     "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请至少修改一项');": {
       "form": "T4",
       "line": 134,
@@ -969,6 +957,18 @@
       "line": 678,
       "disposition": "BOUNDARY",
       "reason": "nm-style 自身 CLI 工具内部不变量：入参 symbol 必然取自同一索引，查不到=调用方编程错误；工具进程边界直接 throw 合理。"
+    },
+    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(coreT({key: \"ui.provider.name_baseurl_required\"}));": {
+      "form": "T4",
+      "line": 91,
+      "disposition": "BOUNDARY",
+      "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
+    },
+    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(coreT({key: \"ui.provider.api_key_required\"}));": {
+      "form": "T4",
+      "line": 94,
+      "disposition": "BOUNDARY",
+      "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     }
   }
 }

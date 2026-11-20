@@ -64,8 +64,8 @@ const EMPTY_PAYLOAD: SkillsPayload = {
   projectSkills: [],
 };
 
-const GLOBAL_TAB_HINT = '全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。';
-const PROJECT_TAB_HINT = '项目技能仅所属项目生效，同名时覆盖全局版。按所有项目分组展示全部项目技能。';
+const GLOBAL_TAB_HINT = coreT({key: "ui.skills.global_tab_hint_mobile"});
+const PROJECT_TAB_HINT = coreT({key: "ui.skills.project_tab_hint_mobile"});
 
 export function SkillsSettingsScreen() {
   const {tokens} = useTheme();
@@ -159,12 +159,12 @@ export function SkillsSettingsScreen() {
   };
 
   const confirmDeleteRows = useBatchDeleteConfirm<SkillRow>({
-    title: '删除技能',
+    title: coreT({key: "ui.skills.delete_title"}),
     message: targets => {
       const anyGlobal = targets.some(t => t.domain === 'global');
-      const scopeHint = anyGlobal ? '全局技能删除后影响所有项目' : targets.length === 1 && targets[0]!.projectName ? `该技能仅在该项目（${targets[0]!.projectName}）生效` : '项目技能仅所属项目生效';
+      const scopeHint = anyGlobal ? coreT({key: "ui.skills.scope_hint_global"}) : targets.length === 1 && targets[0]!.projectName ? coreT({key: "ui.skills.scope_hint_project_single", params: {project: targets[0]!.projectName}}) : coreT({key: "ui.skills.scope_hint_project"});
       const names = targets.map(t => t.name).join('、');
-      return `${scopeHint}。确定删除${targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`}？删除会清理整目录与对应禁用记录。`;
+      return `${scopeHint}。确定删除${targets.length > 1 ? coreT({key: "ui.skills.selected_skills_label", params: {count: targets.length}}) : `「${names}」`}？删除会清理整目录与对应禁用记录。`;
     },
     deleteOne: useCallback(
       async (t: SkillRow) => {
@@ -178,7 +178,7 @@ export function SkillsSettingsScreen() {
     ),
     onDone: async () => {
       batch.exit();
-      showToast('已删除');
+      showToast(coreT({key: "ui.common.deleted"}));
       await reload();
     },
   });
@@ -194,14 +194,14 @@ export function SkillsSettingsScreen() {
       const exportOptions = {directoryPath: `/meta/skills/${skill.name}`, fileName: `${skill.name}.zip`};
       const exported = await VfsZipService.exportZip(runtime, zipScopeFor(skill), exportOptions);
       if (!exported.ok) {
-        showToast(ToastMessage.toast('导出失败', exported.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), exported.error));
         return;
       }
       if (exported.value === 'saved') {
-        showToast('ZIP 已保存到所选位置');
+        showToast(coreT({key: "ui.common.zip_saved"}));
       }
     } catch (error) {
-      showToast(ToastMessage.toast('导出失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), error));
     } finally {
       setZipBusy(false);
     }
@@ -219,8 +219,8 @@ export function SkillsSettingsScreen() {
         // front matter 重写，先修复 SKILL.md 再改信息
         disabled: !menuTarget.item.valid,
       },
-      {label: '导出 ZIP', action: 'export-zip'},
-      {label: '删除', action: 'delete', danger: true},
+      {label: coreT({key: "ui.skills.export_zip"}), action: 'export-zip'},
+      {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
     ];
     return items;
   }, [menuTarget]);
@@ -274,12 +274,12 @@ export function SkillsSettingsScreen() {
             </Text>
             {overridden ? (
               <Text style={[styles.overrideTag, {color: tokens.textTertiary}]} numberOfLines={1}>
-                被项目副本覆盖
+                {coreT({key: "ui.skills.overridden_tag"})}
               </Text>
             ) : null}
             {!row.item.valid ? (
               <Text style={[styles.invalidTag, {color: tokens.danger}]} numberOfLines={1}>
-                无效 · {row.item.invalidReason != null ? coreT(row.item.invalidReason) : 'front matter 不合法'}
+                {coreT({key: "ui.skills.invalid_tag", params: {reason: row.item.invalidReason != null ? coreT(row.item.invalidReason) : coreT({key: "ui.skills.invalid_default_reason"})}})}
               </Text>
             ) : null}
           </View>
@@ -290,7 +290,7 @@ export function SkillsSettingsScreen() {
           ) : null}
         </View>
         {batch.active ? null : (
-          <Pressable testID={`skills-settings-menu-${row.name}`} hitSlop={8} onPress={() => setMenuTarget(row)} accessibilityLabel={`技能 ${row.name} 更多操作`}>
+          <Pressable testID={`skills-settings-menu-${row.name}`} hitSlop={8} onPress={() => setMenuTarget(row)} accessibilityLabel={coreT({key: "ui.skills.menu_aria", params: {name: row.name}})}>
             <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>⋮</Text>
           </Pressable>
         )}
@@ -318,25 +318,25 @@ export function SkillsSettingsScreen() {
   return (
     <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
       <ManageHeader
-        title="技能管理"
+        title={coreT({key: "ui.nav.skills_manage"})}
         batchMode={batch.active}
         selectedCount={batch.selectedCount}
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
         onDelete={() => confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))}
-        hint="选择要删除的技能"
-        normalActions={<PrimaryButton label="新建" tokens={tokens} onPress={() => setCreateOpen(true)} />}
+        hint={coreT({key: "ui.skills.select_delete_title"})}
+        normalActions={<PrimaryButton label={coreT({key: "ui.common.new"})} tokens={tokens} onPress={() => setCreateOpen(true)} />}
       />
       <SegmentedControl
         options={[
           {
             value: 'global',
-            label: '全局技能',
+            label: coreT({key: "ui.skills.global_tab"}),
             testID: 'skills-settings-tab-global',
           },
           {
             value: 'project',
-            label: '项目技能',
+            label: coreT({key: "ui.skills.project_tab"}),
             testID: 'skills-settings-tab-project',
           },
         ]}
@@ -353,9 +353,9 @@ export function SkillsSettingsScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-              {tab === 'global' ? '暂无全局技能。新建全局技能后所有项目可用。' : '暂无项目技能。项目技能仅所属项目生效，同名时覆盖全局版。'}
+              {tab === 'global' ? coreT({key: "ui.skills.empty_global_mobile"}) : coreT({key: "ui.skills.empty_project_mobile"})}
             </Text>
-            <SecondaryButton label="新建技能" tokens={tokens} onPress={() => setCreateOpen(true)} />
+            <SecondaryButton label={coreT({key: "ui.skills.new_title"})} tokens={tokens} onPress={() => setCreateOpen(true)} />
           </View>
         }
         renderItem={({item}) =>
@@ -368,13 +368,13 @@ export function SkillsSettingsScreen() {
           )
         }
       />
-      <BottomSheetMenu visible={menuTarget != null} title={menuTarget ? `技能 ${menuTarget.name}` : undefined} items={menuItems} onSelect={handleMenuSelect} onClose={() => setMenuTarget(undefined)} />
+      <BottomSheetMenu visible={menuTarget != null} title={menuTarget ? coreT({key: "ui.skills.skill_aria", params: {name: menuTarget.name}}) : undefined} items={menuItems} onSelect={handleMenuSelect} onClose={() => setMenuTarget(undefined)} />
       <NewSkillModal
         visible={createOpen}
         domain={tab === 'global' ? 'global' : 'project'}
         onClose={() => setCreateOpen(false)}
         onCreated={target => {
-          showToast('已创建');
+          showToast(coreT({key: "ui.common.created"}));
           navigation.navigate('SkillDetail', {
             domain: target.domain,
             name: target.name,
@@ -388,7 +388,7 @@ export function SkillsSettingsScreen() {
         currentDescription={infoEditDescription}
         onClose={() => setInfoEdit(undefined)}
         onSaved={() => {
-          showToast('已保存技能信息');
+          showToast(coreT({key: "ui.skills.info_saved"}));
           reload().catch(() => undefined);
         }}
       />

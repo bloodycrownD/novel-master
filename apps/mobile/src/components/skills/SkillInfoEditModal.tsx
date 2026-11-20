@@ -91,7 +91,7 @@ export function SkillInfoEditModal({visible, target, currentDescription, onClose
 
   return (
     <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
-      <Text style={[styles.title, {color: tokens.text}]}>编辑信息</Text>
+      <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.skills.edit_info"})}</Text>
       <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text style={[styles.label, {color: tokens.textSecondary}]}>{builtin ? '技能名（内置技能不可改名）' : '技能名'}</Text>
         <TextInput
@@ -110,13 +110,13 @@ export function SkillInfoEditModal({visible, target, currentDescription, onClose
           autoCorrect={false}
         />
         {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
+        <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.description"})}</Text>
         <TextInput
           testID="skill-info-description-input"
           style={[styles.input, styles.descriptionInput, {color: tokens.text, borderColor: tokens.border, backgroundColor: tokens.background}]}
           value={description}
           onChangeText={setDescription}
-          placeholder="进入技能索引，模型据此决定是否使用"
+          placeholder={coreT({key: "ui.skills.desc_hint"})}
           placeholderTextColor={tokens.textSecondary}
           multiline
         />
@@ -124,7 +124,7 @@ export function SkillInfoEditModal({visible, target, currentDescription, onClose
       </ScrollView>
       <View style={styles.foot}>
         <Pressable onPress={onClose} style={styles.footBtn}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
         <Pressable
           testID="skill-info-submit"
@@ -132,7 +132,7 @@ export function SkillInfoEditModal({visible, target, currentDescription, onClose
           disabled={!canSubmit}
           onPress={() => handleSave().catch(() => undefined)}
         >
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>保存</Text>}
+          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>{coreT({key: "ui.common.save"})}</Text>}
         </Pressable>
       </View>
     </ModalShell>

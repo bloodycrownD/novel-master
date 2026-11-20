@@ -12,6 +12,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
 import {AgentCreate} from '@/services/agent-create';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -29,7 +30,7 @@ export function AgentsSettingsScreen() {
           const mode = tab === 'primary' ? 'primary' : 'subagent';
           void AgentCreate.createBlank(runtime, undefined, mode).then(created => {
             if (!created.ok) {
-              showToast(ToastMessage.toast('创建失败', created.error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
               return;
             }
             navigation.navigate('AgentEditor', {agentId: created.value});

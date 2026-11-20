@@ -8,6 +8,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProviderForm, ProviderFormMapper} from '@/components/provider/ProviderForm';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -32,13 +33,13 @@ export function ProviderCreateScreen() {
             const input = ProviderFormMapper.toCreateInput(values);
             const created = await runtime.providers.create(input);
             if (!created.ok) {
-              showToast(ToastMessage.toast('创建失败', created.error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
               return;
             }
-            showToast(`已创建服务商：${created.value.displayName}`);
+            showToast(coreT({key: "ui.provider.create_done", params: {name: created.value.displayName}}));
             navigation.replace('ProviderDetail', {providerId: created.value.id});
           } catch (err) {
-            showToast(ToastMessage.toast('创建失败', err));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), err));
           } finally {
             setSaving(false);
           }

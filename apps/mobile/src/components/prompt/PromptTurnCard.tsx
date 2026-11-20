@@ -97,7 +97,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
   const roleLabel = TURN_ROLE_LABEL[turn.kind];
   // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
   const summaryTail = coreT(turn.summaryText).slice(0, 20);
-  const headLabel = `${expanded ? '收起' : '展开'}${roleLabel}轮，${summaryTail}`;
+  const headLabel = coreT({key: "ui.prompt.turn_aria", params: {action: expanded ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), role: roleLabel, summary: summaryTail}});
 
   const handleToggle = useCallback(() => {
     onToggle(turn.id);

@@ -11,6 +11,7 @@ import {FormTextInput} from '../form/FormTextInput';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useTheme} from '../../theme/ThemeProvider';
+import {coreT} from '../../i18n/core';
 
 type SuggestionRow = {
   vendorModelId: string;
@@ -130,34 +131,34 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
     }
   };
 
-  const confirmLabel = batch.selectedCount > 0 ? `添加 (${batch.selectedCount})` : '添加';
+  const confirmLabel = batch.selectedCount > 0 ? coreT({key: "ui.provider.add_count_confirm", params: {count: batch.selectedCount}}) : coreT({key: "ui.common.add"});
 
   const body = (
     <>
-      <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
-      <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>从服务商获取可用模型，勾选后批量添加</Text>
+      <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.provider.fetch_models_title"})}</Text>
+      <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.fetch_models_hint"})}</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : error ? (
         <View style={styles.center}>
           <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
           <Pressable onPress={() => load().catch(() => undefined)}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
           </Pressable>
         </View>
       ) : (
         <>
           <View style={styles.searchWrap}>
-            <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder="过滤模型…" />
+            <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder={coreT({key: "ui.provider.filter_models_placeholder"})} />
           </View>
           {allSelectableCount > 0 ? (
             <View style={styles.selectBar}>
               {selectableRows.length > 0 ? (
                 <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
-                  <Text style={{color: tokens.primary, fontWeight: '600'}}>{allSelected ? '全不选' : '全选'}</Text>
+                  <Text style={{color: tokens.primary, fontWeight: '600'}}>{allSelected ? coreT({key: "ui.common.select_none"}) : coreT({key: "ui.common.select_all"})}</Text>
                 </Pressable>
               ) : null}
-              <Text style={{color: tokens.textSecondary, fontSize: 13}}>已选 {batch.selectedCount} 项</Text>
+              <Text style={{color: tokens.textSecondary, fontSize: 13}}>{coreT({key: "ui.common.selected_count", params: {count: batch.selectedCount}})}</Text>
             </View>
           ) : null}
           {/* key 技巧：过滤词变化时重建 FlatList，滚动位置归零 */}
@@ -168,9 +169,9 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
             style={styles.list}
             ListEmptyComponent={
               rows.length === 0 ? (
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>未拉取到可用模型，请检查 API Key 与 Base URL。</Text>
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.no_models_fetched"})}</Text>
               ) : (
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>无匹配模型</Text>
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.no_matching_models"})}</Text>
               )
             }
             renderItem={({item}) => {
@@ -193,7 +194,7 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
                     <Text style={{color: tokens.text, fontWeight: '500'}}>{label}</Text>
                     {item.displayName?.trim() && item.displayName.trim() !== item.vendorModelId ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>{item.vendorModelId}</Text> : null}
                   </View>
-                  {saving && selected && !saved ? <ActivityIndicator size="small" /> : saved ? <Text style={{color: tokens.textSecondary}}>已添加</Text> : null}
+                  {saving && selected && !saved ? <ActivityIndicator size="small" /> : saved ? <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.added"})}</Text> : null}
                 </Pressable>
               );
             }}
@@ -203,14 +204,14 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
       {saveError ? <Text style={[styles.saveError, {color: tokens.danger}]}>{saveError}</Text> : null}
       <View style={styles.actionRow}>
         <Pressable onPress={onClose} disabled={saving} style={styles.doneBtn}>
-          <Text style={{color: tokens.textSecondary}}>完成</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.done"})}</Text>
         </Pressable>
         <Pressable
           onPress={() => saveSelected().catch(() => undefined)}
           disabled={batch.selectedCount === 0 || saving}
           style={({pressed}) => [styles.confirmBtn, {backgroundColor: tokens.primary}, (batch.selectedCount === 0 || saving) && {opacity: 0.45}, pressed && {opacity: 0.85}]}
         >
-          <Text style={styles.confirmText}>{saving ? '添加中…' : confirmLabel}</Text>
+          <Text style={styles.confirmText}>{saving ? coreT({key: "ui.common.adding"}) : confirmLabel}</Text>
         </Pressable>
       </View>
     </>

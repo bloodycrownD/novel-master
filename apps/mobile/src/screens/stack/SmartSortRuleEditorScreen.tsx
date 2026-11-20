@@ -51,6 +51,7 @@ import {useTheme} from '@/theme/ThemeProvider';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
 import type {RootStackParamList} from '@/navigation/types';
 
@@ -85,14 +86,14 @@ const CAPTURE_KIND_OPTIONS: ReadonlyArray<{
   value: SmartSortCaptureKind;
   label: string;
 }> = [
-  {value: 'smart', label: '智能数字'},
-  {value: 'fixed_max', label: '固定最大'},
-  {value: 'fixed_min', label: '固定最小'},
+  {value: 'smart', label: coreT({key: "ui.smart_sort.capture_kind_smart"})},
+  {value: 'fixed_max', label: coreT({key: "ui.smart_sort.capture_kind_fixed_max"})},
+  {value: 'fixed_min', label: coreT({key: "ui.smart_sort.capture_kind_fixed_min"})},
 ];
 
 /** 档位显示名（回显/选项高亮共用）。 */
 function captureKindLabel(kind: SmartSortCaptureKind): string {
-  return CAPTURE_KIND_OPTIONS.find(o => o.value === kind)?.label ?? '智能数字';
+  return CAPTURE_KIND_OPTIONS.find(o => o.value === kind)?.label ?? coreT({key: "ui.smart_sort.capture_kind_smart"});
 }
 
 /** 正则输入自适应高度：单行起步，约 7 行封顶（超出内部滚动）。 */
@@ -213,7 +214,7 @@ export function SmartSortRuleEditorScreen() {
       const rules = await runtime.smartSortRule.listRules();
       const rule = rules.find(r => r.ruleId === ruleId);
       if (!rule) {
-        showToast('规则不存在或已删除');
+        showToast(coreT({key: "ui.smart_sort.missing_toast"}));
         navigation.goBack();
         return;
       }
@@ -221,7 +222,7 @@ export function SmartSortRuleEditorScreen() {
       setDraft(loaded);
       setBaseline(JSON.stringify(loaded));
     } catch (error) {
-      showToast(ToastMessage.toast('加载失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), error));
     } finally {
       setLoading(false);
     }
@@ -233,11 +234,11 @@ export function SmartSortRuleEditorScreen() {
 
   const collectFields = (): DraftFields | null => {
     if (!draft.name.trim()) {
-      showToast('请填写规则名称');
+      showToast(coreT({key: "ui.smart_sort.name_required"}));
       return null;
     }
     if (!draft.patternInput.trim()) {
-      showToast('请填写正则表达式');
+      showToast(coreT({key: "ui.smart_sort.regex_required"}));
       return null;
     }
     // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
@@ -288,7 +289,7 @@ export function SmartSortRuleEditorScreen() {
       captureKind: fields.captureKind,
     });
     if (!draftCheck.ok) {
-      showToast(ToastMessage.toast('无法保存', draftCheck.error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.cannot_save"}), draftCheck.error));
       return;
     }
     setSaving(true);
@@ -311,7 +312,7 @@ export function SmartSortRuleEditorScreen() {
       allowLeaveWithoutPrompt();
       navigation.goBack();
     } catch (error) {
-      showToast(ToastMessage.toast('保存失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
     } finally {
       setSaving(false);
     }
@@ -341,39 +342,39 @@ export function SmartSortRuleEditorScreen() {
       footer={
         <View>
           {dirty ? <Text style={[styles.unsaved, {color: tokens.danger}]}>未保存的更改</Text> : null}
-          <StickyFormFooter tokens={tokens} label="保存" loading={saving} onPress={() => handleSave().catch(() => undefined)} />
+          <StickyFormFooter tokens={tokens} label={coreT({key: "ui.common.save"})} loading={saving} onPress={() => handleSave().catch(() => undefined)} />
         </View>
       }
     >
       <FormSectionCard tokens={tokens}>
         <FormSwitchRow tokens={tokens} label="启用规则" value={draft.enabled} onValueChange={v => patchDraft({enabled: v})} />
-        <FormField label="名称" tokens={tokens}>
-          <FormTextInput tokens={tokens} value={draft.name} onChangeText={v => patchDraft({name: v})} placeholder="如 中文序号章节" />
+        <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
+          <FormTextInput tokens={tokens} value={draft.name} onChangeText={v => patchDraft({name: v})} placeholder={coreT({key: "ui.smart_sort.name_example"})} />
         </FormField>
-        <FormField label="正则表达式" tokens={tokens} hint="支持 /正则/flags 格式，如 /第(\d+)章/i">
+        <FormField label={coreT({key: "ui.smart_sort.regex_label"})} tokens={tokens} hint={coreT({key: "ui.smart_sort.regex_hint"})}>
           <AutoGrowMultilineInput
             tokens={tokens}
             value={draft.patternInput}
             onChangeText={applyPatternInput}
-            placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
+            placeholder={coreT({key: "ui.smart_sort.regex_example"})}
             minHeight={PATTERN_INPUT_MIN_HEIGHT}
             maxHeight={PATTERN_INPUT_MAX_HEIGHT}
           />
         </FormField>
         <FormField
-          label="捕获数字"
+          label={coreT({key: "ui.smart_sort.capture_label"})}
           tokens={tokens}
           hint={
             draft.captureKind === 'smart'
-              ? '从捕获组提取序号，中文数字自动转换'
+              ? coreT({key: "ui.smart_sort.capture_smart_hint"})
               : draft.captureKind === 'fixed_min'
-              ? '命中即排在所有序号之前（序章/楔子类）'
-              : '命中即沉底排在所有序号之后（终章/番外类）'
+              ? coreT({key: "ui.smart_sort.capture_hint_before"})
+              : coreT({key: "ui.smart_sort.capture_hint_after"})
           }
         >
           <Pressable
             testID="capture-kind-value-row"
-            accessibilityLabel="选择捕获数字方式"
+            accessibilityLabel={coreT({key: "ui.smart_sort.capture_picker_title"})}
             onPress={() => setCaptureKindPickerVisible(true)}
             style={[styles.pickerRow, {borderColor: tokens.border, backgroundColor: tokens.bgSecondary}]}
           >
@@ -383,24 +384,24 @@ export function SmartSortRuleEditorScreen() {
             <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
           </Pressable>
         </FormField>
-        <FormField label="描述" tokens={tokens}>
+        <FormField label={coreT({key: "ui.common.description"})} tokens={tokens}>
           <AutoGrowMultilineInput
             tokens={tokens}
             value={draft.description}
             onChangeText={v => patchDraft({description: v})}
-            placeholder="描述这条规则匹配什么，如 匹配 第X章 形式的标题"
+            placeholder={coreT({key: "ui.smart_sort.desc_hint"})}
             minHeight={DESCRIPTION_INPUT_MIN_HEIGHT}
             maxHeight={DESCRIPTION_INPUT_MAX_HEIGHT}
           />
         </FormField>
       </FormSectionCard>
 
-      <FormSectionCard title="测试" tokens={tokens} hint="输入一段文本，点击「测试」后显示全部匹配与每处匹配的提取序号。">
-        <FormField label="测试文本" tokens={tokens}>
-          <FormTextInput tokens={tokens} multiline value={testText} onChangeText={changeTestText} placeholder="输入测试文本" />
+      <FormSectionCard title={coreT({key: "ui.common.test"})} tokens={tokens} hint={coreT({key: "ui.smart_sort.test_hint_mobile"})}>
+        <FormField label={coreT({key: "ui.smart_sort.test_text_label"})} tokens={tokens}>
+          <FormTextInput tokens={tokens} multiline value={testText} onChangeText={changeTestText} placeholder={coreT({key: "ui.smart_sort.test_text_placeholder"})} />
         </FormField>
-        <SecondaryButton label="测试" tokens={tokens} onPress={runMatchTest} fullWidth />
-        <FormField label="结果" tokens={tokens}>
+        <SecondaryButton label={coreT({key: "ui.common.test"})} tokens={tokens} onPress={runMatchTest} fullWidth />
+        <FormField label={coreT({key: "ui.common.result"})} tokens={tokens}>
           <View
             style={[
               styles.resultBox,
@@ -411,7 +412,7 @@ export function SmartSortRuleEditorScreen() {
             ]}
           >
             {testOutcome.kind === 'idle' ? (
-              <Text style={[styles.resultText, {color: tokens.textSecondary}]}>点击「测试」查看匹配结果</Text>
+              <Text style={[styles.resultText, {color: tokens.textSecondary}]}>{coreT({key: "ui.smart_sort.result_pending"})}</Text>
             ) : testOutcome.kind === 'error' ? (
               <Text style={[styles.resultText, {color: tokens.danger}]}>{testOutcome.message}</Text>
             ) : testOutcome.result.ok ? (
@@ -437,12 +438,12 @@ export function SmartSortRuleEditorScreen() {
                   <View style={styles.tupleList}>
                     {testOutcome.result.matches.map((m, i) => (
                       <Text key={`${m.index}-${i}`} style={[styles.tupleRow, {color: tokens.textSecondary}]}>
-                        {`${m.text || '(空匹配)'} → ${m.tuple ?? '无序号'}`}
+                        {`${m.text || coreT({key: "ui.smart_sort.no_match_text"})} → ${m.tuple ?? coreT({key: "ui.smart_sort.no_tuple"})}`}
                       </Text>
                     ))}
                   </View>
                 ) : null}
-                <Text style={[styles.resultCount, {color: tokens.textSecondary}]}>{testOutcome.result.matches.length > 0 ? `共 ${testOutcome.result.matches.length} 处匹配` : '无匹配'}</Text>
+                <Text style={[styles.resultCount, {color: tokens.textSecondary}]}>{testOutcome.result.matches.length > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: testOutcome.result.matches.length}}) : coreT({key: "ui.smart_sort.no_matches"})}</Text>
               </>
             ) : (
               <Text style={[styles.resultText, {color: tokens.danger}]}>{`正则无效：${testOutcome.result.error}`}</Text>
@@ -454,18 +455,18 @@ export function SmartSortRuleEditorScreen() {
       {/* 捕获数字单选：独立底部弹层（RN Modal 叠层），选中即关（D13）。 */}
       <PickerListModal
         visible={captureKindPickerVisible}
-        title="捕获数字"
+        title={coreT({key: "ui.smart_sort.capture_label"})}
         load={loadCaptureKinds}
         keyExtractor={item => item.value}
         renderRow={(item, selected) => (
           <>
             <Text style={{color: tokens.text}}>{item.label}</Text>
-            {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
+            {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
           </>
         )}
         getRowProps={item => ({
           testID: `capture-kind-option-${item.value}`,
-          accessibilityLabel: `捕获数字 ${item.label}`,
+          accessibilityLabel: coreT({key: "ui.smart_sort.capture_aria", params: {label: item.label}}),
         })}
         onPick={item => {
           // 档位影响 tuple 提取，旧结果同样失效（dtcli/B-1，照 changeTestText 范式）。
@@ -473,18 +474,18 @@ export function SmartSortRuleEditorScreen() {
           setTestOutcome(IDLE_OUTCOME);
           setCaptureKindPickerVisible(false);
         }}
-        emptyText="暂无可选捕获方式"
+        emptyText={coreT({key: "ui.smart_sort.capture_empty"})}
         onClose={() => setCaptureKindPickerVisible(false)}
       />
       {/* 使用说明弹窗：规则优先级 / 智能数字 / 固定档 / 正则格式四段，照搜索配置同款。 */}
       <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
-        <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
-        <HelpSection tokens={tokens} title="规则与优先级" body="排序时按列表顺序逐条尝试，首个命中的规则生效；行菜单可上移/下移/置顶/置底调整优先级。" />
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>{coreT({key: "ui.smart_sort.help_title"})}</Text>
+        <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_priority_title"})} body={coreT({key: "ui.smart_sort.help_priority_body"})} />
         <HelpSection tokens={tokens} title="智能数字" body="从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。" />
-        <HelpSection tokens={tokens} title="固定最大/最小" body="命中即取固定序号：固定最小排在所有序号之前（序章/楔子类），固定最大沉底排在所有序号之后（终章/番外类），无需捕获组。" />
-        <HelpSection tokens={tokens} title="正则格式" body="支持 /正则/flags 字面量（如 /第(\\d+)章/i），也可直接输入裸正则（默认无 flags）。" />
+        <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_fixed_title"})} body={coreT({key: "ui.smart_sort.help_fixed_body"})} />
+        <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_regex_title"})} body={coreT({key: "ui.smart_sort.help_regex_body"})} />
         <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
-          <Text style={{color: tokens.primary, fontSize: 15}}>关闭</Text>
+          <Text style={{color: tokens.primary, fontSize: 15}}>{coreT({key: "ui.common.close"})}</Text>
         </Pressable>
       </ModalShell>
     </ScreenFormLayout>

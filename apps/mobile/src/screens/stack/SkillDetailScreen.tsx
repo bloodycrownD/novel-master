@@ -20,6 +20,7 @@ import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SkillDetail'>;
@@ -48,7 +49,7 @@ export function SkillDetailScreen() {
       setItem(found);
       if (found == null && !kickedRef.current) {
         kickedRef.current = true;
-        showToast('技能不存在或已被删除');
+        showToast(coreT({key: "ui.skills.missing_toast"}));
         navigation.goBack();
         return;
       }
@@ -103,7 +104,7 @@ export function SkillDetailScreen() {
   if (item == null) {
     return (
       <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
-        <Text style={{color: tokens.textSecondary}}>技能不存在或已被删除</Text>
+<Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.skills.missing_toast"})}</Text>
       </View>
     );
   }
@@ -118,7 +119,7 @@ export function SkillDetailScreen() {
         vfs={fileVfs}
         rootPath={skillRoot}
         onOpenFile={openFile}
-        isProtectedPath={path => (path === `${skillRoot}/SKILL.md` ? 'SKILL.md 是技能入口文件，不能删除或重命名' : null)}
+        isProtectedPath={path => (path === `${skillRoot}/SKILL.md` ? coreT({key: "ui.skills.entry_protected_mobile"}) : null)}
         pathLabel={path => (path === skillRoot ? '/' : path.slice(skillRoot.length))}
       />
     </View>

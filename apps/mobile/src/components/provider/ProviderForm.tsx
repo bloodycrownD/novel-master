@@ -14,6 +14,7 @@ import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 const PROTOCOLS: LlmProtocolKind[] = ['openai', 'anthropic', 'gemini'];
 
@@ -87,10 +88,10 @@ export namespace ProviderFormMapper {
     const baseUrl = values.baseUrl.trim();
     const apiKey = values.apiKey.trim();
     if (!displayName || !baseUrl) {
-      throw new Error('请填写服务商名称与 baseUrl');
+      throw new Error(coreT({key: "ui.provider.name_baseurl_required"}));
     }
     if (!apiKey) {
-      throw new Error('请填写 API Key');
+      throw new Error(coreT({key: "ui.provider.api_key_required"}));
     }
     return {
       protocol: values.protocol,
@@ -164,7 +165,7 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
     try {
       await onSubmit(values);
     } catch (error) {
-      showToast(ToastMessage.toast('保存失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
     }
   };
 
@@ -183,15 +184,15 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
             <ActivityIndicator color={tokens.primary} />
           </View>
         ) : (
-          <StickyFormFooter tokens={tokens} label={mode === 'create' ? '创建' : '保存'} disabled={!canSave} onPress={() => handleSave().catch(() => undefined)} />
+          <StickyFormFooter tokens={tokens} label={mode === 'create' ? coreT({key: "ui.common.create"}) : coreT({key: "ui.common.save"})} disabled={!canSave} onPress={() => handleSave().catch(() => undefined)} />
         )
       }
     >
       <FormSectionCard title="连接" tokens={tokens}>
-        <FormField label="服务商名称" tokens={tokens}>
-          <FormTextInput tokens={tokens} value={values.displayName} onChangeText={text => patch({displayName: text})} autoCapitalize="none" autoCorrect={false} placeholder="例如 智谱" />
+        <FormField label={coreT({key: "ui.provider.name_label"})} tokens={tokens}>
+          <FormTextInput tokens={tokens} value={values.displayName} onChangeText={text => patch({displayName: text})} autoCapitalize="none" autoCorrect={false} placeholder={coreT({key: "ui.provider.name_placeholder"})} />
         </FormField>
-        <FormField label="协议" tokens={tokens}>
+        <FormField label={coreT({key: "ui.provider.protocol_label"})} tokens={tokens}>
           <FormChipGroup tokens={tokens} value={values.protocol} onChange={p => patch({protocol: p})} options={protocolOptions} />
         </FormField>
         <FormField label="Base URL" tokens={tokens}>
@@ -202,17 +203,17 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
       <FormSectionCard title="认证" tokens={tokens}>
         {mode === 'edit' && apiKeyStatus != null ? (
           <View style={styles.statusRow}>
-            <Text style={[styles.statusLabel, {color: tokens.textSecondary}]}>当前状态</Text>
+            <Text style={[styles.statusLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.status_label"})}</Text>
             <ApiKeyStatusTag status={apiKeyStatus} tokens={tokens} />
           </View>
         ) : null}
-        <FormField label="API Key" tokens={tokens} hint={mode === 'edit' ? '留空则不修改' : '必填，写入 SKSP 安全存储'}>
+        <FormField label="API Key" tokens={tokens} hint={mode === 'edit' ? coreT({key: "ui.provider.api_key_keep_hint"}) : coreT({key: "ui.provider.api_key_required_hint"})}>
           <FormTextInput tokens={tokens} value={values.apiKey} onChangeText={text => patch({apiKey: text})} autoCapitalize="none" autoCorrect={false} secureTextEntry />
         </FormField>
       </FormSectionCard>
 
-      <FormSectionCard title="高级" tokens={tokens}>
-        <FormField label="Headers JSON" tokens={tokens} hint="可选，JSON 对象">
+      <FormSectionCard title={coreT({key: "ui.nav.settings_advanced"})} tokens={tokens}>
+        <FormField label="Headers JSON" tokens={tokens} hint={coreT({key: "ui.provider.custom_params_optional"})}>
           <FormTextInput
             tokens={tokens}
             value={values.headersJson}
@@ -223,7 +224,7 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
             placeholder='{"X-Custom":"value"}'
           />
         </FormField>
-        <FormField label="自定义参数" tokens={tokens} hint="JSON 对象，原样合并进请求体顶层（可覆盖标准字段）；清空保存即移除">
+        <FormField label={coreT({key: "ui.provider.custom_params_label"})} tokens={tokens} hint={coreT({key: "ui.provider.custom_params_hint"})}>
           <FormTextInput
             tokens={tokens}
             value={values.bodyParamsJson}
