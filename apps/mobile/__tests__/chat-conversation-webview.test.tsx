@@ -383,12 +383,15 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     // T-SP22：init.labels 与 core catalog 的 4 个 transcript key 逐字段 parity。
     expect(init?.payload.labels).toEqual(TranscriptLabelsFactory.build(coreT));
     // 再直比 zh-CN catalog 字面值：避免宿主与断言共用同一个装配函数造成自证。
+    // p27 R6 第 0 片：labels 随 build 扩 ui.* map，与 zh catalog 的 ui.* 键直比。
     const zh = CORE_CATALOGS['zh-CN']!;
+    const zhUi = Object.fromEntries(Object.entries(zh).filter(([key]) => key.startsWith('ui.')));
     expect(init?.payload.labels).toEqual({
       generating: zh['label.transcript.generating'],
       thinking: zh['label.transcript.thinking_header'],
       empty: zh['label.transcript.empty'],
       loadOlder: zh['label.transcript.load_older'],
+      ui: zhUi,
     });
     // D4c 收口：init.composer 段删除（web 侧 dispatcher 对缺失段有兜底）
     expect(init?.payload).not.toHaveProperty('composer');

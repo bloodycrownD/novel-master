@@ -110,6 +110,8 @@ export type TranscriptLabels = {
   readonly thinking: string;
   readonly empty: string;
   readonly loadOlder: string;
+  /** ui.* 域文案 map（dotted key → 文案；值可含 {param} 模板，由 web 消费方插值）。 */
+  readonly ui: Readonly<Record<string, string>>;
 };
 
 /** 流式 delta 的一段正文/思考（顺序即追加顺序）。 */

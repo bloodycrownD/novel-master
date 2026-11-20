@@ -1,6 +1,8 @@
 # en-US 骨架：允许部分覆盖，缺 key 按回退链落到 zh-CN（spec §2.3）。
 # 全量翻译归 G6；本文件只放已定稿的少量条目，且同 key 的 {param} 集合必须与 zh-CN 一致
 # （test/i18n/catalog.test.ts 有对齐断言，不得出现 zh-CN 没有的 key）。
+# ui.* 域例外：p27 R6 第 0 片骨架要求 zh 有键 en 必有，故 ui 域全量镜像，en 值是
+# 直译占位（非定稿），G6 全量翻译时复核。
 # 书写规范与 zh-CN.yaml 相同（缩进 2 空格、陷阱词禁裸值、含半角冒号的值加引号）。
 error:
   vfs:
@@ -99,3 +101,34 @@ label:
     thinking_header: Thinking
     empty: No messages yet
     load_older: Load earlier messages
+# —— ui：第 0 片骨架（键与 zh-CN 全量镜像；en 值为直译占位，G6 复核定稿）——
+ui:
+  transcript:
+    menu:
+      edit: Edit
+      copy: Copy
+      set_floor: Pin
+      fork: Fork
+      rollback: Roll back
+    tool_result_title: Tool result
+    tool_status:
+      success: Success
+      error: Failed
+      pending: Running
+      interrupted: Interrupted
+    tool_group_title: "Tool calls ({count})"
+    open_hint: "View · {kind}"
+    open_kind:
+      subagent: subagent session
+      skill: skill
+      result: result
+      workspace: chat workspace
+    role:
+      user: User
+      assistant: Assistant
+    message_actions: Message actions
+    attach_group_title: "Attachments ({count})"
+    attach_src:
+      workspace: workspace
+      dir: directory
+      file: file

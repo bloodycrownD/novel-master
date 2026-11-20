@@ -1,11 +1,12 @@
 /**
- * core 用户可见文案的 key 契约（error.* + label.*）。
+ * core 用户可见文案的 key 契约（error.* + label.* + ui.*）。
  *
  * 文案本体在 `./catalog/zh-CN.yaml`（唯一真源）；本文件只定义 key 与
  * descriptor 类型，不含任何用户可见文本。keyRule 与域词表见
- * docs/Iterations/i18n-normalization/spec.md §2.2：
- * `^(error|label)\.[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$`，段名全小写
+ * docs/Iterations/i18n-normalization/spec.md §2.2（p27 R6 扩 ui 域）：
+ * `^(error|label|ui)\.[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$`，段名全小写
  * snake_case；同一 code 多原因/多方向追加子段；参数占位 `{snake_case}`。
+ * ui.* 键名规范 `ui.<screen>.<element>` 见 docs/Iterations/p27-backlog/spec.md §6.2。
  *
  * @module i18n/keys
  */
@@ -13,7 +14,7 @@
 import type { MessageDescriptor } from "@/common/i18n.js";
 
 /** keyRule 的可执行形态；Catalog.parseCore 与 catalog 测试共用。 */
-export const CORE_MESSAGE_KEY_PATTERN = /^(error|label)\.[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$/;
+export const CORE_MESSAGE_KEY_PATTERN = /^(error|label|ui)\.[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$/;
 
 /** error.* 第二段（域）的固定词表（spec §2.2，19 域）。 */
 export const ERROR_KEY_DOMAINS = [
@@ -50,6 +51,11 @@ export const LABEL_KEY_DOMAINS = [
   "transcript",
   "prompt_preview",
   "smart_sort",
+] as const;
+
+/** ui.* 第二段（screen）的固定词表（p27 spec §6.2 `ui.<screen>.<element>`；screen 随波 3 分片迁移逐片补，用不到的不预留）。 */
+export const UI_KEY_DOMAINS = [
+  "transcript",
 ] as const;
 
 /** 错误消息 key（A 桶 187 处去重后的全量清单）。 */
@@ -342,8 +348,44 @@ const LABEL_MESSAGE_KEYS = [
   "label.workplace.display.filename",
 ] as const;
 
+/**
+ * ui.* 展示文案 key（p27 spec §6.2 `ui.<screen>.<element>`；波 3 分片迁移逐片入库）。
+ * 第 0 片先立 webview 转录渲染层（chat-transcript webview；宿主经 init.labels.ui
+ * 下发）。CSS ::before/::after content 4 处无法走 i18n，豁免登记见
+ * docs/Iterations/p27-backlog/r6-exemptions.md。
+ */
+const UI_MESSAGE_KEYS = [
+  // transcript：长按菜单（menu.ts）
+  "ui.transcript.menu.edit",
+  "ui.transcript.menu.copy",
+  "ui.transcript.menu.set_floor",
+  "ui.transcript.menu.fork",
+  "ui.transcript.menu.rollback",
+  // transcript：tool 卡片（rows-click / tool-logic / ToolGroup）
+  "ui.transcript.tool_result_title",
+  "ui.transcript.tool_status.success",
+  "ui.transcript.tool_status.error",
+  "ui.transcript.tool_status.pending",
+  "ui.transcript.tool_status.interrupted",
+  "ui.transcript.tool_group_title",
+  "ui.transcript.open_hint",
+  "ui.transcript.open_kind.subagent",
+  "ui.transcript.open_kind.skill",
+  "ui.transcript.open_kind.result",
+  "ui.transcript.open_kind.workspace",
+  // transcript：消息行角色与操作（MessageRow / StreamingMessageRow）
+  "ui.transcript.role.user",
+  "ui.transcript.role.assistant",
+  "ui.transcript.message_actions",
+  // transcript：附件组（AttachGroup）
+  "ui.transcript.attach_group_title",
+  "ui.transcript.attach_src.workspace",
+  "ui.transcript.attach_src.dir",
+  "ui.transcript.attach_src.file",
+] as const;
+
 /** core 全量消息 key（zh-CN catalog 必须 100% 覆盖）。 */
-export const CORE_MESSAGE_KEYS = [...ERROR_MESSAGE_KEYS, ...LABEL_MESSAGE_KEYS] as const;
+export const CORE_MESSAGE_KEYS = [...ERROR_MESSAGE_KEYS, ...LABEL_MESSAGE_KEYS, ...UI_MESSAGE_KEYS] as const;
 
 export type CoreMessageKey = (typeof CORE_MESSAGE_KEYS)[number];
 

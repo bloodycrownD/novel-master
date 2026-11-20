@@ -38,6 +38,7 @@ jest.mock('@web/shared/mermaid-fullscreen/mermaid-fullscreen', () => ({
 import {RowLogic} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
 import {Mermaid} from '../src/web/chat-transcript/webview/runtime/mermaid';
 import type {MessageRow} from '../src/web/chat-transcript/webview/runtime/state/state';
+import {DEFAULT_UI_LABELS} from '../src/web/chat-transcript/webview/ui/labels';
 import {
   countDescendantHtmlOccurrences,
   countHtmlOccurrences,
@@ -1593,6 +1594,8 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
       thinking: 'Thinking',
       empty: 'No messages',
       loadOlder: 'Load older',
+      // p27 R6 第 0 片：resolve 恒含 ui map；未下发 ui → DEFAULT_UI_LABELS 兜底。
+      ui: DEFAULT_UI_LABELS,
     });
     bridge.handleHostMessage({v: 1, type: 'init', payload: {}});
     expect(state.labels.generating).toBe('生成中');

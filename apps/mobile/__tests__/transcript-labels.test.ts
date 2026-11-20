@@ -19,7 +19,7 @@ import {
 } from '@novel-master/core/i18n';
 import {TranscriptLabelsFactory} from '../src/components/chat/transcript-labels'
 import {coreT} from '../src/i18n/core';
-import {DEFAULT_LABELS, Labels} from '../src/web/chat-transcript/webview/ui/labels';
+import {DEFAULT_LABELS, DEFAULT_UI_LABELS, Labels} from '../src/web/chat-transcript/webview/ui/labels';
 
 const TRANSCRIPT_KEYS = [
   'label.transcript.generating',
@@ -72,11 +72,23 @@ describe('宿主 labels 装配（T-SP22）', () => {
       thinking: ZH_VALUES[1],
       empty: ZH_VALUES[2],
       loadOlder: ZH_VALUES[3],
+      ui: DEFAULT_UI_LABELS,
     });
   });
 
   it('web 缺省 DEFAULT_LABELS 与 core catalog 逐字段一致（无漂移）', () => {
     expect(DEFAULT_LABELS).toEqual(TranscriptLabelsFactory.build(coreT));
+  });
+
+  it('build(coreT) 的 ui map 与 zh-CN catalog 逐键一致（p27 R6 ui 域桥）', () => {
+    const zh = CORE_CATALOGS['zh-CN']!;
+    const built = TranscriptLabelsFactory.build(coreT);
+    const uiKeys = Object.keys(built.ui);
+    expect(uiKeys.length).toBeGreaterThan(0);
+    for (const key of uiKeys) {
+      expect(key).toMatch(/^ui\.transcript\./);
+      expect(built.ui[key]).toBe(zh[key]);
+    }
   });
 
   it('ChatConversationWebView 的 init 带 labels: TranscriptLabelsFactory.build(coreT)', () => {
@@ -107,6 +119,7 @@ describe('web 缺省回退 resolveLabels（C30）', () => {
       thinking: DEFAULT_LABELS.thinking,
       empty: DEFAULT_LABELS.empty,
       loadOlder: DEFAULT_LABELS.loadOlder,
+      ui: DEFAULT_UI_LABELS,
     });
   });
 
@@ -119,7 +132,28 @@ describe('web 缺省回退 resolveLabels（C30）', () => {
         loadOlder: 'L',
         extra: 'ignored',
       }),
-    ).toEqual({generating: 'G', thinking: 'T', empty: 'E', loadOlder: 'L'});
+    ).toEqual({
+      generating: 'G',
+      thinking: 'T',
+      empty: 'E',
+      loadOlder: 'L',
+      ui: DEFAULT_UI_LABELS,
+    });
+  });
+});
+
+describe('ui.* 域桥（p27 R6 第 0 片）', () => {
+  it('ui map 逐键覆盖缺省；空串 / 非字符串回退 DEFAULT_UI_LABELS', () => {
+    const key = 'ui.transcript.menu.edit';
+    expect(Labels.resolve({ui: {[key]: '自定义编辑'}}).ui[key]).toBe('自定义编辑');
+    expect(Labels.resolve({ui: {[key]: ''}}).ui[key]).toBe(DEFAULT_UI_LABELS[key]);
+    expect(Labels.resolve({ui: {[key]: 42}}).ui[key]).toBe(DEFAULT_UI_LABELS[key]);
+  });
+
+  it('ui 缺省 / 非对象 → 全量 DEFAULT_UI_LABELS 兜底', () => {
+    expect(Labels.resolve({}).ui).toEqual(DEFAULT_UI_LABELS);
+    expect(Labels.resolve({ui: 'not-an-object'}).ui).toEqual(DEFAULT_UI_LABELS);
+    expect(Labels.resolve({ui: [1, 2]}).ui).toEqual(DEFAULT_UI_LABELS);
   });
 });
 

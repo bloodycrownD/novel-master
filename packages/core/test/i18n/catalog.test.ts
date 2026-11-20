@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {  readFileSync  } from "node:fs";
 import {  describe, it  } from "node:test";
 import {  Catalog  } from "../../src/i18n/catalog.js";
-import {  CORE_MESSAGE_KEYS, CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, type CoreMessageKey  } from "../../src/i18n/keys.js";
+import {  CORE_MESSAGE_KEYS, CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, UI_KEY_DOMAINS, type CoreMessageKey  } from "../../src/i18n/keys.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 import {  CORE_CATALOGS  } from "../../src/i18n/generated-catalog.js";
 
@@ -39,6 +39,13 @@ describe("core catalog（G0.7）", () => {
     }
   });
 
+  it("ui 域 zh 有键 en 必有（第 0 片骨架契约；error/label 允许部分覆盖）", () => {
+    for (const key of Object.keys(zhCn)) {
+      if (!key.startsWith("ui.")) continue;
+      assert.notEqual(enUs[key as CoreMessageKey], undefined, `ui 域 key 缺 en-US 骨架：${key}`);
+    }
+  });
+
   it("两 locale 同 key 的 {param} 集合一致", () => {
     for (const [key, template] of Object.entries(enUs)) {
       assert.deepEqual(paramsOf(template as string), paramsOf(zhCn[key as CoreMessageKey] as string), `param 集合不一致：${key}`);
@@ -49,7 +56,7 @@ describe("core catalog（G0.7）", () => {
     for (const key of Object.keys(zhCn)) {
       assert.ok(CORE_MESSAGE_KEY_PATTERN.test(key), `key 不匹配 keyRule：${key}`);
       const [area, domain] = key.split(".") as [string, string];
-      const domains: readonly string[] = area === "error" ? ERROR_KEY_DOMAINS : LABEL_KEY_DOMAINS;
+      const domains: readonly string[] = area === "error" ? ERROR_KEY_DOMAINS : area === "label" ? LABEL_KEY_DOMAINS : UI_KEY_DOMAINS;
       assert.ok(domains.includes(domain), `域不在词表内：${key}`);
     }
   });

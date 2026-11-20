@@ -330,3 +330,41 @@ label:
     thinking_header: 思考过程
     empty: 暂无消息
     load_older: 加载更早消息
+# —— ui：展示文案（p27 spec §6.2 ui.<screen>.<element>；波 3 分片迁移逐片入库。
+# 第 0 片先立 webview 转录渲染层（chat-transcript webview），宿主经 init.labels.ui
+# 下发；组件接线归波 3 webview 片。CSS ::before/::after content 4 处不走 i18n，
+# 豁免登记见 docs/Iterations/p27-backlog/r6-exemptions.md）——
+ui:
+  transcript:
+    # 长按菜单（menu.ts）
+    menu:
+      edit: 编辑
+      copy: 复制
+      set_floor: 置位
+      fork: 分叉
+      rollback: 回滚
+    # tool 卡片（rows-click / tool-logic / ToolGroup）
+    tool_result_title: 工具结果
+    tool_status:
+      success: 成功
+      error: 失败
+      pending: 执行中
+      interrupted: 已中断
+    tool_group_title: "工具调用 ({count})"
+    open_hint: "点击查看 · {kind}"
+    open_kind:
+      subagent: 子会话
+      skill: 技能
+      result: 结果
+      workspace: 聊天工作区
+    # 消息行角色与操作（MessageRow / StreamingMessageRow；'助手' '消息操作' 两端共用同键）
+    role:
+      user: 用户
+      assistant: 助手
+    message_actions: 消息操作
+    # 附件组（AttachGroup）
+    attach_group_title: "消息附件 ({count})"
+    attach_src:
+      workspace: 工作区
+      dir: 目录
+      file: 文件
