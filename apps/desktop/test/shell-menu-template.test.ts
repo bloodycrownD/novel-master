@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { MenuItemConstructorOptions } from "electron";
-import { buildMenuTemplate } from "../src/main/shell-menu.js";
+import { ShellMenu } from "../src/main/shell-menu.js";
 
 function helpItems(template: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
   const help = template.find((item) => item.id === "help");
@@ -15,7 +15,7 @@ function helpItems(template: MenuItemConstructorOptions[]): MenuItemConstructorO
 
 describe("buildMenuTemplate", () => {
   it("帮助子菜单含打开日志目录 / 导出诊断包 / 关于，且排在关于之前", () => {
-    const items = helpItems(buildMenuTemplate({ isDev: true, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} }));
+    const items = helpItems(ShellMenu.buildTemplate({ isDev: true, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} }));
     const labels = items.map((item) => item.label);
     assert.ok(labels.includes("打开日志目录"));
     assert.ok(labels.includes("导出诊断包"));
@@ -26,7 +26,7 @@ describe("buildMenuTemplate", () => {
   it("点击菜单项调到注入的 onOpenLogsDir / onExportDiagnostics", () => {
     const calls: string[] = [];
     const items = helpItems(
-      buildMenuTemplate({
+      ShellMenu.buildTemplate({
         isDev: true,
         onAbout: () => calls.push("about"),
         onOpenLogsDir: () => calls.push("open-logs"),
@@ -45,8 +45,8 @@ describe("buildMenuTemplate", () => {
   });
 
   it("isDev 控制开发者工具项", () => {
-    const devItems = buildMenuTemplate({ isDev: true, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} });
-    const prodItems = buildMenuTemplate({ isDev: false, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} });
+    const devItems = ShellMenu.buildTemplate({ isDev: true, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} });
+    const prodItems = ShellMenu.buildTemplate({ isDev: false, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} });
     const viewLabels = (template: MenuItemConstructorOptions[]): Array<string | undefined> =>
       (template.find((item) => item.id === "view")?.submenu as MenuItemConstructorOptions[]).map((item) => item.label);
     assert.ok(viewLabels(devItems).includes("开发者工具"));

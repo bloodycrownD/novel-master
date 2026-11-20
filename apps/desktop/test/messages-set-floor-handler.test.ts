@@ -4,15 +4,12 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import {
-  handleMessagesAppend,
-  handleMessagesSetFloor,
-} from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -34,7 +31,7 @@ describe("handleMessagesSetFloor", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-set-floor-"));
 
-    const project = await handleProjectsCreate({ name: "set-floor-ipc" });
+    const project = await Projects.create({ name: "set-floor-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -42,10 +39,10 @@ describe("handleMessagesSetFloor", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
   });
 
@@ -54,7 +51,7 @@ describe("handleMessagesSetFloor", () => {
   });
 
   async function createSession(title: string): Promise<string> {
-    const session = await handleSessionsCreate({ projectId, title });
+    const session = await Sessions.create({ projectId, title });
     assert.equal(session.ok, true);
     if (!session.ok) {
       throw new Error("failed to create session");
@@ -67,7 +64,7 @@ describe("handleMessagesSetFloor", () => {
     role: "user" | "assistant",
     text: string
   ): Promise<string> {
-    const result = await handleMessagesAppend({ sessionId, role, text });
+    const result = await Messages.append({ sessionId, role, text });
     assert.equal(result.ok, true);
     if (!result.ok) {
       throw new Error("failed to append message");
@@ -77,7 +74,7 @@ describe("handleMessagesSetFloor", () => {
 
   it("T-SF1/T-CR5: 置位成功仅清 file_cache（+rule_snapshot），保留 pending；不依赖 BlockStore capture", async () => {
     const sessionId = await createSession("sf1");
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     await appendMessage(sessionId, "user", "u1");
@@ -106,7 +103,7 @@ describe("handleMessagesSetFloor", () => {
       ])
     );
 
-    const result = await handleMessagesSetFloor({
+    const result = await Messages.setFloor({
       projectId,
       sessionId,
       messageId: anchorId,
@@ -159,7 +156,7 @@ describe("handleMessagesSetFloor", () => {
     await appendMessage(sessionId, "assistant", "a1");
     const anchorId = await appendMessage(sessionId, "user", "u2");
 
-    const first = await handleMessagesSetFloor({
+    const first = await Messages.setFloor({
       projectId,
       sessionId,
       messageId: anchorId,
@@ -169,7 +166,7 @@ describe("handleMessagesSetFloor", () => {
       assert.ok(first.data.hiddenCount + first.data.shownCount > 0);
     }
 
-    const second = await handleMessagesSetFloor({
+    const second = await Messages.setFloor({
       projectId,
       sessionId,
       messageId: anchorId,

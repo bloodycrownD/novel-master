@@ -3,16 +3,12 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import {
-  handleWorkplaceBuildListRows,
-  handleWorkplaceSetDirRule,
-  handleWorkplaceSetFileRule,
-} from "../src/main/ipc/handlers/workplace.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { Workplace } from "../src/main/ipc/handlers/workplace.js";
 import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import {
@@ -28,7 +24,7 @@ describe("workplace ipc handlers", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-workplace-"));
 
-    const project = await handleProjectsCreate({ name: "workplace-ipc" });
+    const project = await Projects.create({ name: "workplace-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -36,13 +32,13 @@ describe("workplace ipc handlers", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "session-1",
     });
@@ -59,7 +55,7 @@ describe("workplace ipc handlers", () => {
   });
 
   it("session buildListRows 成功", async () => {
-    const result = await handleWorkplaceBuildListRows({
+    const result = await Workplace.buildListRows({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -72,7 +68,7 @@ describe("workplace ipc handlers", () => {
   });
 
   it("T-CR2: setDirRule → 写 rule_snapshot canon；file_cache 空；不推差集 suggest", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     await rt.sessionKkv.set(
@@ -91,7 +87,7 @@ describe("workplace ipc handlers", () => {
       } as never;
     });
 
-    const result = await handleWorkplaceSetDirRule({
+    const result = await Workplace.setDirRule({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -113,7 +109,7 @@ describe("workplace ipc handlers", () => {
   });
 
   it("T-CR2: setFileRule → 写 rule_snapshot；file_cache 空", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     await rt.sessionKkv.set(
@@ -123,7 +119,7 @@ describe("workplace ipc handlers", () => {
       JSON.stringify({ body: "stale", mtimeMs: 1 }),
     );
 
-    const result = await handleWorkplaceSetFileRule({
+    const result = await Workplace.setFileRule({
       workspaceScope: "chat",
       projectId,
       sessionId,

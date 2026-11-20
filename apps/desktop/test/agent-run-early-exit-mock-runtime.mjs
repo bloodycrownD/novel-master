@@ -23,18 +23,20 @@ const fakeRuntime = {
   },
 };
 
-export async function getDesktopRuntime() {
-  return { ok: true, value: fakeRuntime };
-}
+export const DesktopRuntimeSingleton = {
+  async get() {
+    return { ok: true, value: fakeRuntime };
+  },
 
-export function getDesktopRuntimeOrThrow() {
-  return fakeRuntime;
-}
+  getOrThrow() {
+    return fakeRuntime;
+  },
 
-export async function resetDesktopRuntimeForTest() {}
+  async resetForTest() {},
 
-export async function rebootstrapDesktopRuntime() {
-  return { ok: true, value: fakeRuntime };
-}
+  async rebootstrap() {
+    return { ok: true, value: fakeRuntime };
+  },
 
-export function clearDesktopRuntimeHandle() {}
+  clearHandle() {},
+};

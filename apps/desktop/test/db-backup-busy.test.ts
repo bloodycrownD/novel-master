@@ -12,16 +12,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import {
-  exportDatabaseBackupToPath,
-  importDatabaseBackupFromBytes,
-  importDatabaseBackupFromPath,
-} from "../src/main/services/db-backup.service.js";
+import { DbBackupService } from "../src/main/services/db-backup.service.js";
 import { maintenanceBusy } from "../src/main/services/db-maintenance-busy.js";
-import {
-  getDesktopRuntime,
-  rebootstrapDesktopRuntime,
-} from "../src/main/runtime/desktop-runtime-singleton.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -41,7 +34,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
   });
 
   it("直接调 exportDatabaseBackupToPath 期间 busy=true、结束后 false", async () => {
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
     const conn = runtime.conn as unknown as {
@@ -57,7 +50,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
       return originalExecute(sql, params);
     };
     try {
-      await exportDatabaseBackupToPath(runtime, join(tempDir, "ic20-export.db"));
+      await DbBackupService.exportToPath(runtime, join(tempDir, "ic20-export.db"));
     } finally {
       conn.execute = originalExecute;
     }
@@ -68,7 +61,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
   it("直接调 importDatabaseBackupFromBytes 期间 busy=true、结束后 false", async () => {
     // 用上一用例导出的真实备份字节回灌：闭环无损（同一测试库）。
     const bytes = new Uint8Array(await readFile(join(tempDir, "ic20-export.db")));
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
     const conn = runtime.conn as unknown as {
@@ -89,7 +82,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
       return originalQuery(sql, params);
     };
     try {
-      await importDatabaseBackupFromBytes(bytes);
+      await DbBackupService.importFromBytes(bytes);
     } finally {
       conn.query = originalQuery;
     }
@@ -101,14 +94,14 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
     // 模拟 handleBackupImport / handleCloudSyncPull 的令牌时序（r3 定稿）：
     // 外层进入时 acquire，底层 import 自平衡（期间计数 2、结束回到 1，
     // 不互相提前清位），rebootstrap 完成之后才 release。
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
-    await exportDatabaseBackupToPath(runtime, join(tempDir, "ic20-roundtrip.db"));
+    await DbBackupService.exportToPath(runtime, join(tempDir, "ic20-roundtrip.db"));
 
     maintenanceBusy.acquire();
     try {
-      await importDatabaseBackupFromPath(join(tempDir, "ic20-roundtrip.db"));
+      await DbBackupService.importFromPath(join(tempDir, "ic20-roundtrip.db"));
       // 底层已 release 自身令牌，但外层仍持有：rebootstrap 完成之前必须
       // 保持 busy（「库文件已替换、连接仍处重建窗口」是最危险段）。
       assert.equal(
@@ -116,7 +109,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
         true,
         "rebootstrap 完成之前 busy 必须为 true（重建窗口互斥）",
       );
-      await rebootstrapDesktopRuntime();
+      await DesktopRuntimeSingleton.rebootstrap();
     } finally {
       maintenanceBusy.release();
     }

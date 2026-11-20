@@ -89,6 +89,158 @@
       "category": "rule-conflict",
       "reason": "具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参重新跨行（check-signatures ARGS/VARDECL），两条规则互斥。函数体约 13 行不满足 keep-local 的 >20 行豁免。",
       "basis": "smart-sort-rule.ts:191（keep-local）、:192-204（importRulesFromYaml 定义与单调用点 :205）；check-inline.mjs:130（>20 行才认 keep-local）；check-signatures.mjs VARDECL 判据。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/handlers/agent.ts",
+      "symbol": "Agent.registerTrackedRunForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：向 agent.ts 的 tracked run 注册表注入假 run，供 agent 状态类测试断言；ForTests 后缀即声明仅测试消费，生产零引用是设计而非死代码。",
+      "basis": "agent.ts:374 成员定义；测试消费 2 处（检测器自报 test 2c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/handlers/app-info.ts",
+      "symbol": "AppInfo.__setSeamsForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：app-info handler 的 seam 替换口（__ 前缀 + ForTests 后缀双重标记），语义就是仅测试消费。",
+      "basis": "app-info.ts:47 成员定义；测试消费 5 处（test 5c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "heuristic.countMessages",
+      "category": "test-seam",
+      "reason": "tokenizer heuristic 口径的对拍基准：保留 heuristic 估数是为了测试里与精确口径对拍回归（切换 stall 修复期的验收锚点），生产链走精确档不消费它。",
+      "basis": "chat-prompt-tokens.service.ts:205；测试消费 9 处（test 9c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.resetDebounceForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：重置 debounce 模块状态，跨用例隔离用；ForTests 后缀声明仅测试消费。",
+      "basis": "chat-prompt-tokens.service.ts:561；测试消费 5 处（test 5c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.debounceExecCountForTests",
+      "category": "test-seam",
+      "reason": "测试 seam：读 debounce 执行计数供断言；ForTests 后缀声明仅测试消费。",
+      "basis": "chat-prompt-tokens.service.ts:572；测试消费 10 处（test 10c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/cloud-sync.service.ts",
+      "symbol": "CloudSyncService.setStorageOverrideForTest",
+      "category": "test-seam",
+      "reason": "测试 seam：注入存储覆盖，隔离云同步测试；ForTests 后缀声明仅测试消费。",
+      "basis": "cloud-sync.service.ts:481；测试消费 3 处（test 3c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/db-backup.service.ts",
+      "symbol": "DbBackupService.setFsOpsForTest",
+      "category": "test-seam",
+      "reason": "测试 seam：替换备份服务的 fs 操作，避免测试写真实磁盘；ForTests 后缀声明仅测试消费。",
+      "basis": "db-backup.service.ts:64；测试消费 7 处（test 7c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/vfs-batch.service.ts",
+      "symbol": "VfsBatchService.stagingTtlCountForTest",
+      "category": "test-seam",
+      "reason": "测试 seam：读 staging TTL 计数供断言；ForTests 后缀声明仅测试消费。",
+      "basis": "vfs-batch.service.ts:116；测试消费 1 处（test 1c/0r）。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/runtime/connection.ts",
+      "symbol": "get.deflate",
+      "category": "callback-prop",
+      "reason": "ZlibAccelerator.register({...}) 的 deflate 回调属性：内联箭头函数按契约传入加速器注册表，属性本身就是终值而非待内联的单点函数。INLINE_CANDIDATE 判据（成员单点调用）不适用于回调传值属性。",
+      "basis": "connection.ts:40 ZlibAccelerator.register({ deflate: (data, level) => ..., inflate: ... })。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/agent-run.service.ts",
+      "symbol": "run.onAfterResolveModel",
+      "category": "callback-prop",
+      "reason": "AgentTurnRunner.run 选项对象的 onAfterResolveModel 回调属性：core 选项回调按接口传入，非独立函数。检测器把选项回调属性误判为成员函数单点调用。",
+      "basis": "agent-run.service.ts:57 AgentTurnRunner.run(..., { ...options, onAfterResolveModel: async (ctx) => {...} })。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/shell-menu.ts",
+      "symbol": "menu.onAbout",
+      "category": "callback-prop",
+      "reason": "ShellMenu.buildTemplate 的 onAbout 回调属性（关于对话框），传值即目的；对象字面量回调属性不是可内联的独立函数。",
+      "basis": "shell-menu.ts:99 Menu.buildFromTemplate(ShellMenu.buildTemplate({ ..., onAbout: () => {...} }))。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/shell-menu.ts",
+      "symbol": "menu.onOpenLogsDir",
+      "category": "callback-prop",
+      "reason": "buildTemplate 的 onOpenLogsDir 回调属性（打开日志目录），同 onAbout 形态。",
+      "basis": "shell-menu.ts:109。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/shell-menu.ts",
+      "symbol": "menu.onExportDiagnostics",
+      "category": "callback-prop",
+      "reason": "buildTemplate 的 onExportDiagnostics 回调属性（导出诊断），同 onAbout 形态。",
+      "basis": "shell-menu.ts:112。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.isPreciseWarmStillCurrent",
+      "category": "structural-step",
+      "reason": "两阶段暖机协议的判定步骤（读会话 agent 配置 + registry 定义比对 warm 期间模型是否已变）：函数带完整协议注释，内联会把两阶段协议细节埋进投递方；单点调用是协议结构使然（只在投递前判定一次）。",
+      "basis": "chat-prompt-tokens.service.ts:292 实现（20+ 行 + 协议 JSDoc）；pushPreciseStatsIfReady 内单一调用点。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/chat-prompt-tokens.service.ts",
+      "symbol": "ChatPromptTokensService.pushPreciseStatsIfReady",
+      "category": "structural-step",
+      "reason": "两阶段第二相的投递步骤（把暖机手里的精确档推给 renderer，含 estimated 闸与模型漂移补读）：内联会把 50 行协议逻辑埋进暖机主链。",
+      "basis": "chat-prompt-tokens.service.ts:323 实现；暖机链单一调用点。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts",
+      "symbol": "ComposerStatusRefresh.afterSessionKkvCleared",
+      "category": "structural-step",
+      "reason": "语义族成员：与 afterFloorOrCompaction 成对（Undo rewind/reset/undo_send 推空 vs 置位/压缩推实况），事件修饰区分场景；单点生产调用是因为该事件只有一个触发场景，内联会打散语义族（mobile 侧同族对齐）。",
+      "basis": "notify-composer-status-after-kkv-clear.ts:31；namespace 内成对成员。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/prompt-preview.service.ts",
+      "symbol": "PromptPreviewService.buildRealTurnsAdapter",
+      "category": "structural-step",
+      "reason": "desktop preview adapter：runtime→core 组装链的单一出口（resolve agent→build adapter→probe registry→previewTurns，50+ 行）；单点调用是 preview 场景唯一使然，内联把整段组装埋进 handler。",
+      "basis": "prompt-preview.service.ts:36 实现；prompt handler 单一调用点。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/ipc/ipc-result.ts",
+      "symbol": "from",
+      "category": "detector-limitation",
+      "reason": "对象简写收集形态：function from 重载声明在模块顶层、经 const IpcResults = { from } 简写收集入 namespace；IpcResults.from 的调用遍布 handlers（数十处），symbol-index 对该形态的成员归因不到顶层声明行，两行重载报 DEAD 均为误报。",
+      "basis": "ipc-result.ts:20-22 重载声明与实现；消费例：cloud-sync.ts:33 / agent-registry.ts:134 / preferences.ts:54 等几十处 IpcResults.from(...)。"
+    },
+    {
+      "rule": "hygiene",
+      "file": "apps/desktop/src/main/services/update-check.service.ts",
+      "symbol": "UpdateCheckService",
+      "category": "detector-limitation",
+      "reason": "动态 import 解构消费：app-info.ts 用 await import(...) + 解构取 UpdateCheckService（Electron 主进程按需加载更新检查模块），静态 symbol-index 数不到动态 import 的消费点。",
+      "basis": "update-check.service.ts:10 namespace 定义；消费：app-info.ts:33 const [{app,shell},{UpdateCheckService}] = await Promise.all([import(\"electron\"), import(\"../../services/update-check.service.js\")])。"
     }
   ],
   "suppressPrefixes": [

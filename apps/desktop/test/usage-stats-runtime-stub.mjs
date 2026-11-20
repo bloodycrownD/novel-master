@@ -9,10 +9,12 @@
  */
 import { Result } from "@novel-master/core/errors";
 
-export async function getDesktopRuntime() {
-  const rt = globalThis.__usageStatsTestRuntime;
-  if (rt == null) {
-    throw new Error("测试未设置 globalThis.__usageStatsTestRuntime");
-  }
-  return Result.ok(rt);
-}
+export const DesktopRuntimeSingleton = {
+  async get() {
+    const rt = globalThis.__usageStatsTestRuntime;
+    if (rt == null) {
+      throw new Error("测试未设置 globalThis.__usageStatsTestRuntime");
+    }
+    return Result.ok(rt);
+  },
+};

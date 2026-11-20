@@ -14,11 +14,11 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { ABORT_KEY, AbortScopeFactory, type AbortScope } from "@novel-master/core/abort";
-import { doBackupExport, doBackupImport } from "../src/main/ipc/handlers/backup.js";
-import { doCloudSyncPull, doCloudSyncPush } from "../src/main/ipc/handlers/cloud-sync.js";
-import { doCompactionManual } from "../src/main/ipc/handlers/compaction.js";
+import { Backup } from "../src/main/ipc/handlers/backup.js";
+import { CloudSync } from "../src/main/ipc/handlers/cloud-sync.js";
+import { CompactionIpc } from "../src/main/ipc/handlers/compaction.js";
 import { doDbMaintenance, handleDbMaintenance } from "../src/main/ipc/handlers/db-maintenance.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
 import { setupDesktopDbTestEnv, teardownDesktopDbTestEnv } from "./desktop-db-test-env.js";
 
@@ -36,7 +36,7 @@ describe("六类长任务 doWork 的入口检查点（T-S15）", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-run-abort-"));
-    const built = await getDesktopRuntime();
+    const built = await DesktopRuntimeSingleton.get();
     if (!built.ok) throw built.error;
     rt = built.value;
   });
@@ -48,8 +48,8 @@ describe("六类长任务 doWork 的入口检查点（T-S15）", () => {
   it("backup export / import：已 abort 时不进入拷贝", async () => {
     // export 的 scope 在保存对话框 resolve 后才创建；doWork 层因此只覆盖
     // 「对话框已选路径、copy 前已 abort」这一段，目标路径不会被写入。
-    assert.deepEqual(await doBackupExport(rt, join(tempDir, "abort-export.db"), abortedScope()), CANCELLED);
-    assert.deepEqual(await doBackupImport(abortedScope()), CANCELLED);
+    assert.deepEqual(await Backup.export(rt, join(tempDir, "abort-export.db"), abortedScope()), CANCELLED);
+    assert.deepEqual(await Backup.import(abortedScope()), CANCELLED);
   });
 
   it("db-maintenance：已 abort 时不进入 VACUUM 链路", async () => {
@@ -64,12 +64,12 @@ describe("六类长任务 doWork 的入口检查点（T-S15）", () => {
   });
 
   it("cloud-sync pull / push：已 abort 时不进入同步与换库窗口", async () => {
-    assert.deepEqual(await doCloudSyncPull(abortedScope()), CANCELLED);
-    assert.deepEqual(await doCloudSyncPush(undefined, abortedScope()), CANCELLED);
+    assert.deepEqual(await CloudSync.doPull(abortedScope()), CANCELLED);
+    assert.deepEqual(await CloudSync.doPush(undefined, abortedScope()), CANCELLED);
   });
 
   it("compaction：已 abort 时不进入 hide / KKV 清理", async () => {
-    const outcome = await doCompactionManual(rt, { projectId: "project-1", sessionId: "session-1" }, abortedScope());
+    const outcome = await CompactionIpc.manual(rt, { projectId: "project-1", sessionId: "session-1" }, abortedScope());
     assert.deepEqual(outcome, CANCELLED);
   });
 });

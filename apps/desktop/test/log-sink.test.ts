@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { LogFactory } from "@novel-master/core/log";
-import { installDesktopLogSink } from "../src/main/log/desktop-log-sink.js";
+import { DesktopLogSink } from "../src/main/log/desktop-log-sink.js";
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -34,7 +34,7 @@ function withTempDir(run: (dir: string) => void): void {
 describe("installDesktopLogSink", () => {
   it("按 ISO\\tlevel\\tscope\\tmessage\\tdetail 写当日文件", () => {
     withTempDir((dir) => {
-      const detach = installDesktopLogSink({ logsDir: dir });
+      const detach = DesktopLogSink.install({ logsDir: dir });
       LogFactory.create("test.scope").info("hello", { sessionId: "abc" });
       detach();
 
@@ -54,7 +54,7 @@ describe("installDesktopLogSink", () => {
       const baseName = todayBaseName(new Date());
       writeFileSync(path.join(dir, `${baseName}.log`), "x".repeat(2 * 1024 * 1024 + 1));
 
-      const detach = installDesktopLogSink({ logsDir: dir });
+      const detach = DesktopLogSink.install({ logsDir: dir });
       LogFactory.create("test.rotation").warn("rotated");
       detach();
 
@@ -74,7 +74,7 @@ describe("installDesktopLogSink", () => {
     delete process.env.NM_DEBUG_LLM_FETCH;
     try {
       withTempDir((dir) => {
-        const detach = installDesktopLogSink({ logsDir: dir });
+        const detach = DesktopLogSink.install({ logsDir: dir });
         const log = LogFactory.create("test.level");
         log.debug("hidden-debug");
         log.info("shown-info");

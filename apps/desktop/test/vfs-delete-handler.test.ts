@@ -3,12 +3,12 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { handleVfsDelete, handleVfsWrite } from "../src/main/ipc/handlers/vfs.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -22,7 +22,7 @@ describe("handleVfsDelete", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-vfs-delete-"));
 
-    const project = await handleProjectsCreate({ name: "vfs-delete-ipc" });
+    const project = await Projects.create({ name: "vfs-delete-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -30,13 +30,13 @@ describe("handleVfsDelete", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "vfs-delete-session",
     });
@@ -46,7 +46,7 @@ describe("handleVfsDelete", () => {
     }
     sessionId = session.data.id;
 
-    const write = await handleVfsWrite({
+    const write = await Vfs.write({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -61,12 +61,12 @@ describe("handleVfsDelete", () => {
   });
 
   it("VFS delete 成功且不写 file_cache（无 capture）", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
-    const result = await handleVfsDelete({
+    const result = await Vfs.remove({
       workspaceScope: "chat",
       projectId,
       sessionId,

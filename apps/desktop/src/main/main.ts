@@ -6,19 +6,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatLinkResolver } from "@novel-master/core/chat";
 import { LogFactory } from "@novel-master/core/log";
-import { installDesktopLogSink } from "./log/desktop-log-sink.js";
-import { closeDesktopConnection } from "./runtime/connection.js";
-import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
-import { attachAgentRunLifecycleListeners } from "./ipc/handlers/agent.js";
+import { DesktopLogSink } from "./log/desktop-log-sink.js";
+import { DesktopDb } from "./runtime/connection.js";
+import { AppIcon } from "./runtime/resolve-app-icon.js";
+import { Agent } from "./ipc/handlers/agent.js";
 import { EventBusForwarder } from "./ipc/forward-event-bus.js";
 import { AgentActivityForwarder } from "./ipc/forward-agent-activity.js";
 import { WorkspaceMutatedForwarder } from "./ipc/forward-workspace-mutated.js";
 import { ComposerAttachmentsSuggestForwarder } from "./ipc/forward-composer-attachments-suggest.js";
 import { PromptChatTokenUpdatedForwarder } from "./ipc/forward-prompt-chat-token-updated.js";
 import { UserMessageAppendedForwarder } from "./ipc/forward-user-message-appended.js";
-import { registerIpcHandlers } from "./ipc/register-handlers.js";
-import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
-import { installApplicationMenu, titleBarOverlayOptions } from "./shell-menu.js";
+import { HandlerRegistry } from "./ipc/handler-registry.js";
+import { DesktopRuntimeSingleton } from "./runtime/desktop-runtime-singleton.js";
+import { ShellMenu } from "./shell-menu.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = "http://localhost:5173";
@@ -26,14 +26,14 @@ const isDev = !app.isPackaged;
 const log = LogFactory.create("desktop.main");
 
 // 文件 sink 必须在 app.whenReady() 之前装好：启动早期的失败也要留痕。
-installDesktopLogSink();
+DesktopLogSink.install();
 
 let detachEventBusForwarder: (() => void) | undefined;
 let detachAgentActivityForwarder: (() => void) | undefined;
 let detachAgentRunLifecycleListeners: (() => void) | undefined;
 
 function createMainWindow(): BrowserWindow {
-  const iconPath = resolveAppIconPath();
+  const iconPath = AppIcon.resolvePath();
   const window = new BrowserWindow({
     title: "",
     width: 1280,
@@ -48,7 +48,7 @@ function createMainWindow(): BrowserWindow {
       : process.platform === "win32"
         ? {
             titleBarStyle: "hidden" as const,
-            titleBarOverlay: titleBarOverlayOptions("light"),
+            titleBarOverlay: ShellMenu.titleBarOverlayOptions("light"),
           }
         : {}),
     ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
@@ -152,11 +152,11 @@ function detachMainEventBusListeners(): void {
 }
 
 app.whenReady().then(async () => {
-  installApplicationMenu();
+  ShellMenu.installApplicationMenu();
   createMainWindow();
   try {
-    registerIpcHandlers();
-    const built = await getDesktopRuntime();
+    HandlerRegistry.register();
+    const built = await DesktopRuntimeSingleton.get();
     // 装配的已知失败在进程级边界收口（错误通道迁移七期）：落日志后继续，
     // 窗口仍在（与旧 catch 的未知异常分支同一终点）；未知异常仍走下方 catch。
     if (!built.ok) {
@@ -165,7 +165,7 @@ app.whenReady().then(async () => {
       const runtime = built.value;
       detachMainEventBusListeners();
       detachEventBusForwarder = EventBusForwarder.attach(runtime.eventBus);
-      detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(runtime.eventBus);
+      detachAgentRunLifecycleListeners = Agent.attachRunLifecycleListeners(runtime.eventBus);
       detachAgentActivityForwarder = AgentActivityForwarder.attach();
     }
   } catch (error) {
@@ -189,5 +189,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   detachMainEventBusListeners();
-  void closeDesktopConnection();
+  void DesktopDb.close();
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import {resetDesktopCloudSyncServiceForTest, syncBusy} from "../src/main/services/cloud-sync.service.js";
+import {CloudSyncService, syncBusy} from "../src/main/services/cloud-sync.service.js";
 import { runDbMaintenance } from "../src/main/services/db-maintenance.service.js";
 import { maintenanceBusy } from "../src/main/services/db-maintenance-busy.js";
 import {
@@ -8,7 +8,7 @@ import {
   handleDbStats,
 } from "../src/main/ipc/handlers/db-maintenance.js";
 import { agentActivity } from "../src/main/runtime/agent-activity.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -19,12 +19,12 @@ describe("db-maintenance ipc handlers", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-db-maintenance-"));
-    resetDesktopCloudSyncServiceForTest();
+    CloudSyncService.resetForTest();
     maintenanceBusy.resetForTest();
   });
 
   after(async () => {
-    resetDesktopCloudSyncServiceForTest();
+    CloudSyncService.resetForTest();
     maintenanceBusy.resetForTest();
     await teardownDesktopDbTestEnv(tempDir);
   });
@@ -79,7 +79,7 @@ describe("db-maintenance ipc handlers", () => {
     // busy 窗口断言不能靠事件循环插入（setImmediate/轮询）：better-sqlite3
     // 的同步 VACUUM 会冻住 main 事件循环，任何回调都要等 busy 复位后才能
     // 跑——所以在 conn.execute 上装探针，在 VACUUM 语句执行的一刻采样。
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
     const conn = runtime.conn as unknown as {
@@ -112,7 +112,7 @@ describe("db-maintenance ipc handlers", () => {
   it("T-DMD3：维护链路抛错时消息透传且 maintenanceBusy 复位", async () => {
     // 事务内 VACUUM 被 SQLite 拒绝（core 链路真实抛错点），
     // 用来构造 runDatabaseMaintenance 失败路径。
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
     await runtime.conn.execute("BEGIN");

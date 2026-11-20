@@ -22,13 +22,7 @@ register(
   import.meta.url,
 );
 
-const {
-  handleAgentRun,
-  onCoreRunStarted,
-  onCoreRunFinished,
-  onCoreRunFailed,
-  __testRunTrackingState,
-} = await import("../src/main/ipc/handlers/agent.js");
+const { Agent } = await import("../src/main/ipc/handlers/agent.js");
 
 const { __settleRun, __failRun } = await import(
   "./agent-prelude-terminal-mock-agent-run.mjs"
@@ -49,9 +43,9 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
   });
 
   it("T-MAIN-PRELUDE-FINISHED: 前奏 FINISHED('') → activeRuns 清空 + refcount 归零", async () => {
-    const before = __testRunTrackingState();
+    const before = Agent.__testRunTrackingState();
 
-    const res = await handleAgentRun({
+    const res = await Agent.run({
       projectId: "p1",
       sessionId: "s-prelude-finished",
       userContent: "hi",
@@ -60,7 +54,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     assert.equal(agentActivity.isActive(), true, "受理后 refcount 应为 1");
 
     // core 前奏检查点命中：RUN_STARTED 从未发出，终态 runId 是空串。
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       projectId: "p1",
       sessionId: "s-prelude-finished",
       runId: "",
@@ -73,7 +67,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
       false,
       "前奏终态必须递减 refcount（修前永久 AGENT_BUSY）",
     );
-    assert.equal(__testRunTrackingState().activeRunsCount, before.activeRunsCount);
+    assert.equal(Agent.__testRunTrackingState().activeRunsCount, before.activeRunsCount);
 
     // run 随后才 resolve，.finally 拿到 undefined entry 直接早退 → 不双递减。
     __settleRun();
@@ -82,16 +76,16 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
   });
 
   it("T-MAIN-PRELUDE-FAILED: 前奏 FAILED('') → 同款收敛，且 reject 后不双递减", async () => {
-    const before = __testRunTrackingState();
+    const before = Agent.__testRunTrackingState();
 
-    const res = await handleAgentRun({
+    const res = await Agent.run({
       projectId: "p1",
       sessionId: "s-prelude-failed",
       userContent: "hi",
     });
     assert.equal(res.ok, true);
 
-    onCoreRunFailed({
+    Agent.onCoreRunFailed({
       projectId: "p1",
       sessionId: "s-prelude-failed",
       runId: "",
@@ -102,17 +96,17 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     __failRun(new Error("前奏炸了"));
     await waitForBackgroundFinally();
     assert.equal(agentActivity.isActive(), false, "reject 后 .finally 不得双递减");
-    assert.equal(__testRunTrackingState().activeRunsCount, before.activeRunsCount);
+    assert.equal(Agent.__testRunTrackingState().activeRunsCount, before.activeRunsCount);
     assert.equal(
-      __testRunTrackingState().sessionRunIdsCount,
+      Agent.__testRunTrackingState().sessionRunIdsCount,
       before.sessionRunIdsCount,
     );
   });
 
   it("T-MAIN-NO-TERMINAL: STARTED 已达但无终态 → .finally 兜住（terminalSeen 语义）", async () => {
-    const before = __testRunTrackingState();
+    const before = Agent.__testRunTrackingState();
 
-    const res = await handleAgentRun({
+    const res = await Agent.run({
       projectId: "p1",
       sessionId: "s-no-terminal",
       userContent: "hi",
@@ -120,7 +114,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     assert.equal(res.ok, true);
 
     // RUN_STARTED 到达：entry.runId 被回填。
-    onCoreRunStarted({
+    Agent.onCoreRunStarted({
       sessionId: "s-no-terminal",
       projectId: "p1",
       runId: "run-x",
@@ -136,23 +130,23 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
       false,
       "无终态事件时 .finally 必须兜底清理（terminalSeen 判据）",
     );
-    assert.equal(__testRunTrackingState().activeRunsCount, before.activeRunsCount);
+    assert.equal(Agent.__testRunTrackingState().activeRunsCount, before.activeRunsCount);
     assert.equal(
-      __testRunTrackingState().sessionRunIdsCount,
+      Agent.__testRunTrackingState().sessionRunIdsCount,
       before.sessionRunIdsCount,
     );
   });
 
   it("T-MAIN-STALE-TERMINAL: 迟到的不匹配终态不误清在途 run（terminalSeen 的真实作用）", async () => {
-    const before = __testRunTrackingState();
+    const before = Agent.__testRunTrackingState();
 
-    const res = await handleAgentRun({
+    const res = await Agent.run({
       projectId: "p1",
       sessionId: "s-stale-terminal",
       userContent: "hi",
     });
     assert.equal(res.ok, true);
-    onCoreRunStarted({
+    Agent.onCoreRunStarted({
       sessionId: "s-stale-terminal",
       projectId: "p1",
       runId: "run-current",
@@ -161,7 +155,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     // 上一轮 run 的迟到终态：runId 不匹配 → finishTrackedRun 必须拒绝，
     // 不得据此清掉本轮在途 run 的登记（那正是 terminalSeen 换掉
     // 「runId != null 就早退」要防的坑）。
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       projectId: "p1",
       sessionId: "s-stale-terminal",
       runId: "run-previous",
@@ -174,7 +168,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     );
 
     // 本轮 run 正常收尾（匹配终态）→ 收敛。
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       projectId: "p1",
       sessionId: "s-stale-terminal",
       runId: "run-current",
@@ -185,17 +179,17 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     __settleRun();
     await waitForBackgroundFinally();
     assert.equal(agentActivity.isActive(), false, "不得双递减");
-    assert.equal(__testRunTrackingState().activeRunsCount, before.activeRunsCount);
+    assert.equal(Agent.__testRunTrackingState().activeRunsCount, before.activeRunsCount);
   });
 
   it("T-MAIN-REPEAT: 前奏终态后同会话可立即再发（不残留 AGENT_BUSY）", async () => {
-    const first = await handleAgentRun({
+    const first = await Agent.run({
       projectId: "p1",
       sessionId: "s-repeat",
       userContent: "hi",
     });
     assert.equal(first.ok, true);
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       projectId: "p1",
       sessionId: "s-repeat",
       runId: "",
@@ -205,7 +199,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     __settleRun();
     await waitForBackgroundFinally();
 
-    const second = await handleAgentRun({
+    const second = await Agent.run({
       projectId: "p1",
       sessionId: "s-repeat",
       userContent: "again",

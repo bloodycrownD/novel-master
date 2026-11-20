@@ -28,20 +28,23 @@ interface DesktopAppUiPreferences {
   set(key: string, value: string): Promise<void>;
 }
 
-export function createDesktopAppUiPreferences(kkv: KkvService): DesktopAppUiPreferences {
-  return {
-    async get(key: string): Promise<Result<string | undefined, AppError>> {
-      const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
-      if (!raw.ok) {
-        if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
-          return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
+// nm-style 注记：命名镜像 mobile storage/app-ui-prefs.ts 的 AppUiPrefs 先例。
+export namespace AppUiPrefs {
+  export function create(kkv: KkvService): DesktopAppUiPreferences {
+    return {
+      async get(key: string): Promise<Result<string | undefined, AppError>> {
+        const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
+        if (!raw.ok) {
+          if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
+            return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
+          }
+          return raw;
         }
         return raw;
-      }
-      return raw;
-    },
-    async set(key: string, value: string) {
-      await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);
-    },
-  };
+      },
+      async set(key: string, value: string) {
+        await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);
+      },
+    };
+  }
 }

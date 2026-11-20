@@ -7,10 +7,12 @@
  * 再取 `built.value`，所以替身也必须包一层成功侧（裸对象会让 `built.ok`
  * 恒为 undefined，handler 直接短路成失败）。
  */
-export async function getDesktopRuntime() {
-  const rt = globalThis.__sessionsPushTestRuntime;
-  if (rt == null) {
-    throw new Error("测试未设置 globalThis.__sessionsPushTestRuntime");
-  }
-  return { ok: true, value: rt };
-}
+export const DesktopRuntimeSingleton = {
+  async get() {
+    const rt = globalThis.__sessionsPushTestRuntime;
+    if (rt == null) {
+      throw new Error("测试未设置 globalThis.__sessionsPushTestRuntime");
+    }
+    return { ok: true, value: rt };
+  },
+};

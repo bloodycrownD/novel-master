@@ -5,7 +5,7 @@ import { AbortError } from "@novel-master/core/abort";
 import { ErrorMessage } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";
 import { AssertionError } from "../../../packages/core/src/common/assert.js";
-import { formatIpcError } from "../src/main/ipc/format-ipc-error.js";
+import { FormatIpcError } from "../src/main/ipc/format-ipc-error.js";
 
 describe("formatIpcError", () => {
   it("透传 SESSION_FS_ROLLBACK_NO_CHECKPOINT AppError（code 即 key，中文经 coreT 渲染）", () => {
@@ -13,7 +13,7 @@ describe("formatIpcError", () => {
       messageId: "msg-1",
       sessionId: "sess-1",
     });
-    const payload = formatIpcError(err);
+    const payload = FormatIpcError.format(err);
     assert.equal(payload.code, "SESSION_FS_ROLLBACK_NO_CHECKPOINT");
     assert.equal(payload.message, "该消息无回滚点");
   });
@@ -29,7 +29,7 @@ describe("formatIpcError", () => {
       sessionId: "sess-1",
       messageId: "msg-1",
     });
-    const payload = formatIpcError(err);
+    const payload = FormatIpcError.format(err);
     assert.equal(payload.code, "SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED");
     assert.equal(payload.message, "工作区无法恢复：revision 缺失");
   });
@@ -45,7 +45,7 @@ describe("formatIpcError", () => {
       sessionId: "sess-1",
       messageId: "msg-1",
     });
-    const payload = formatIpcError(err);
+    const payload = FormatIpcError.format(err);
     assert.equal(
       payload.code,
       "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"
@@ -77,14 +77,14 @@ describe("formatIpcError", () => {
       cause,
       detail: "Tool failed: write",
     });
-    const payload = formatIpcError(err);
+    const payload = FormatIpcError.format(err);
     assert.equal(payload.code, "VFS_ALREADY_EXISTS");
     assert.equal(payload.message, "名称不能重复");
   });
 
   it("AbortError（DOMException / RN Error 两种形态）→ IPC_ABORTED / 已取消", () => {
     // Node 侧 DOMException 形态（AbortError.create 的优先分支）。
-    const dom = formatIpcError(AbortError.create());
+    const dom = FormatIpcError.format(AbortError.create());
     assert.equal(dom.code, "IPC_ABORTED");
     assert.equal(dom.message, "已取消");
 
@@ -92,7 +92,7 @@ describe("formatIpcError", () => {
     // 手搓同形对象锁住 RequestAbort.isAbortLikeError 的识别口径。
     const rnShaped = new Error("Request aborted");
     rnShaped.name = "AbortError";
-    const payload = formatIpcError(rnShaped);
+    const payload = FormatIpcError.format(rnShaped);
     assert.equal(payload.code, "IPC_ABORTED");
     assert.equal(payload.message, "已取消");
     // 取消不是业务错误：不得落成 INFRA_UNEXPECTED_ERROR。
@@ -106,14 +106,14 @@ describe("formatIpcError", () => {
     } catch (error) {
       thrown = error;
     }
-    const payload = formatIpcError(thrown);
+    const payload = FormatIpcError.format(thrown);
     assert.equal(payload.code, "INFRA_UNEXPECTED_ERROR");
     assert.equal(payload.message, "[invariant] 穷尽分支破坏");
   });
 
   it("AGENT_MESSAGE_EMPTY 透出自身 code 与中文文案（不再笼统落 AGENT_RUN_FAILED）", () => {
     const err = new AppError("AGENT_MESSAGE_EMPTY");
-    const payload = formatIpcError(err);
+    const payload = FormatIpcError.format(err);
     assert.equal(payload.code, "AGENT_MESSAGE_EMPTY");
     assert.equal(payload.message, "消息不能为空");
   });
@@ -123,7 +123,7 @@ describe("formatIpcError", () => {
       "VFS_CHARACTER_CARD_UNRECOGNIZED",
       "无法识别为角色卡"
     );
-    const payload = formatIpcError(err);
+    const payload = FormatIpcError.format(err);
     assert.equal(payload.code, "VFS_CHARACTER_CARD_UNRECOGNIZED");
     assert.equal(payload.message, "无法识别为角色卡");
   });

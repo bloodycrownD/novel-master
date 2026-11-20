@@ -15,7 +15,7 @@ import {
 } from "@novel-master/core/events";
 import { LogFactory } from "@novel-master/core/log";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
-import { createEventForwarder } from "./event-forwarder.js";
+import { EventForwarder } from "./event-forwarder.js";
 
 const log = LogFactory.create("desktop.ipc.event-bus");
 
@@ -31,7 +31,7 @@ const FORWARDED_EVENTS = [
 ] as const;
 
 /** 注册如何解析用于事件转发的 renderer webContents。 */
-export const EventBusForwarder = createEventForwarder<AgentStreamEventPayload, [SimpleEventBus]>(IPC_CHANNELS.AGENT_STREAM, {
+export const EventBusForwarder = EventForwarder.create<AgentStreamEventPayload, [SimpleEventBus]>(IPC_CHANNELS.AGENT_STREAM, {
   /** 将 runtime eventBus 订阅挂到 renderer IPC；cleanup 供 quit / rebootstrap。 */
   subscribe: (emit, eventBus) => {
     const subscriptions = FORWARDED_EVENTS.map((eventType) =>

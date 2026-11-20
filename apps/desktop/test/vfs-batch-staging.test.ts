@@ -6,20 +6,16 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { app } from "electron";
-import {
-  clearVfsBatchExportStaging,
-  resolveDragIconForTest,
-  stagingTtlCountForTest,
-} from "../src/main/services/vfs-batch.service.js";
+import { VfsBatchService } from "../src/main/services/vfs-batch.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
-import { handleVfsBatchClearStaging } from "../src/main/ipc/handlers/vfs.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
 
 describe("resolveDragIcon", () => {
   it("返回非空 NativeImage（禁止 createEmpty）", () => {
-    const icon = resolveDragIconForTest();
+    const icon = VfsBatchService.resolveDragIconForTest();
     assert.equal(icon.isEmpty(), false);
   });
 });
@@ -48,7 +44,7 @@ describe("clearVfsBatchExportStaging", () => {
     await mkdir(stagingRoot, { recursive: true });
     await writeFile(join(stagingRoot, "note.md"), "x", "utf8");
 
-    await clearVfsBatchExportStaging(stagingRoot);
+    await VfsBatchService.clearStaging(stagingRoot);
 
     await assert.rejects(() => stat(stagingRoot));
   });
@@ -57,20 +53,20 @@ describe("clearVfsBatchExportStaging", () => {
     const stagingRoot = join(stagingBase(), "case-b");
     await mkdir(stagingRoot, { recursive: true });
 
-    const first = await handleVfsBatchClearStaging({ stagingRoot });
+    const first = await Vfs.batchClearStaging({ stagingRoot });
     assert.equal(first.ok, true);
 
-    const second = await handleVfsBatchClearStaging({ stagingRoot });
+    const second = await Vfs.batchClearStaging({ stagingRoot });
     assert.equal(second.ok, true);
   });
 
   it("stage 后注册 TTL（main 兜底）", async () => {
-    assert.equal(typeof stagingTtlCountForTest(), "number");
+    assert.equal(typeof VfsBatchService.stagingTtlCountForTest(), "number");
   });
 
   it("S-D-02-a: 拒绝清理 staging 根之外的路径", async () => {
     await assert.rejects(
-      () => clearVfsBatchExportStaging(app.getPath("userData")),
+      () => VfsBatchService.clearStaging(app.getPath("userData")),
       /拒绝清理/,
     );
   });
@@ -79,26 +75,26 @@ describe("clearVfsBatchExportStaging", () => {
     // 这条专门防「只判 startsWith(base) 不带分隔符」的错误实现——
     // `base + "-evil"` 这类前缀撞车必须也拒。
     const sibling = `${stagingBase()}-evil`;
-    await assert.rejects(() => clearVfsBatchExportStaging(sibling), /拒绝清理/);
+    await assert.rejects(() => VfsBatchService.clearStaging(sibling), /拒绝清理/);
     // join(base, "..") resolve 后落在 base 之外 ⇒ 同样拒
     await assert.rejects(
-      () => clearVfsBatchExportStaging(join(stagingBase(), "..")),
+      () => VfsBatchService.clearStaging(join(stagingBase(), "..")),
       /拒绝清理/,
     );
     // 系统根也必须拒（原先 rm('/', {recursive:true}) 会被执行）
-    await assert.rejects(() => clearVfsBatchExportStaging("/"), /拒绝清理/);
+    await assert.rejects(() => VfsBatchService.clearStaging("/"), /拒绝清理/);
   });
 
   it("S-D-02-c: staging 根本身与其下子目录仍可清理（正向不回归）", async () => {
     const self = stagingBase();
     // 清空 staging 根本身是合法的（IPC 通道允许 base 命中自身）
-    await clearVfsBatchExportStaging(self);
+    await VfsBatchService.clearStaging(self);
     await assert.rejects(() => stat(self));
 
     await mkdir(self, { recursive: true });
     const child = join(self, "case-c");
     await mkdir(child, { recursive: true });
-    await clearVfsBatchExportStaging(child);
+    await VfsBatchService.clearStaging(child);
     await assert.rejects(() => stat(child));
   });
 });

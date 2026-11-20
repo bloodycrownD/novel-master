@@ -12,8 +12,8 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { handleProvidersDelete } from "../src/main/ipc/handlers/providers.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -31,7 +31,7 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
   });
 
   it("currentModelId 指向被删服务商的模型时，删除后必须清空", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
 
@@ -53,7 +53,7 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
     if (!currentModel.ok) throw currentModel.error;
     assert.equal(currentModel.value, saved.id);
 
-    const res = await handleProvidersDelete({ providerId: created.value.id });
+    const res = await Providers.delete({ providerId: created.value.id });
     assert.equal(res.ok, true, res.ok ? "" : res.error.message);
 
     const currentModelAfter = await rt.state.getCurrentModelId();

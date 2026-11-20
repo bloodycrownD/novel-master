@@ -24,10 +24,10 @@ import { AppError, Result } from "@novel-master/core/errors";
 import { IPC_CHANNELS, type IpcChannel } from "../shared/ipc-types.js";
 
 register(new URL("./run-abort-runtime-hook.mjs", import.meta.url));
-const { handleRunAbort, handleAgentAbortAlias } = await import("../src/main/ipc/handlers/run-abort.js");
-const { handleUsageStatsQuery, doUsageStatsQuery } = await import("../src/main/ipc/handlers/usage-stats.js");
-const { handleProviderModelsFetch, doProviderModelsFetch } = await import("../src/main/ipc/handlers/provider-models.js");
-const { runAbortable } = await import("../src/main/ipc/run-scope.js");
+const { RunAbort } = await import("../src/main/ipc/handlers/run-abort.js");
+const { UsageStats } = await import("../src/main/ipc/handlers/usage-stats.js");
+const { ProviderModels } = await import("../src/main/ipc/handlers/provider-models.js");
+const { RunScope } = await import("../src/main/ipc/run-scope.js");
 
 type AbortRegistryLike = ReturnType<typeof AbortRegistryFactory.create>;
 
@@ -89,12 +89,12 @@ describe("nm:run/abort（T-S21）", () => {
 
   it("未知 kind → IPC_INVALID_ABORT_TARGET（含缺省请求体）", async () => {
     installRuntime();
-    const unknown = await handleRunAbort({ kind: "nope" as never, id: "x" });
+    const unknown = await RunAbort.abort({ kind: "nope" as never, id: "x" });
     assert.equal(unknown.ok, false);
     assert.equal(errorCodeOf(unknown), "IPC_INVALID_ABORT_TARGET");
     if (!unknown.ok) assert.equal(unknown.error.message, "无法识别的取消目标");
 
-    const missing = await handleRunAbort(undefined);
+    const missing = await RunAbort.abort(undefined);
     assert.equal(missing.ok, false);
     assert.equal(errorCodeOf(missing), "IPC_INVALID_ABORT_TARGET");
   });
@@ -108,7 +108,7 @@ describe("nm:run/abort（T-S21）", () => {
       { kind: "backup" as const, id: "" },
       { kind: "backup" as const, id: "not-registered" },
     ]) {
-      const res = await handleRunAbort(req);
+      const res = await RunAbort.abort(req);
       assert.equal(res.ok, true);
     }
     assert.equal(scope.reason, null);
@@ -119,7 +119,7 @@ describe("nm:run/abort（T-S21）", () => {
     const scope = AbortScopeFactory.create();
     rt.abortRegistry.register(ABORT_KEY.backup("r1"), scope);
 
-    const res = await handleRunAbort({ kind: "backup", id: "r1" });
+    const res = await RunAbort.abort({ kind: "backup", id: "r1" });
     assert.equal(res.ok, true);
     assert.equal(scope.reason, "user-stop");
     // abort 不删登记（删除交给 finally 的所有权比对 unregister）。
@@ -139,7 +139,7 @@ describe("nm:run/abort（T-S21）", () => {
     for (const [kind, id, key] of cases) {
       const scope = AbortScopeFactory.create();
       rt.abortRegistry.register(key, scope);
-      const res = await handleRunAbort({ kind, id });
+      const res = await RunAbort.abort({ kind, id });
       assert.equal(res.ok, true);
       assert.equal(scope.reason, "user-stop", `${kind} 应取消 ${key}`);
       rt.abortRegistry.unregister(key, scope);
@@ -153,7 +153,7 @@ describe("nm:run/abort（T-S21）", () => {
     rt.abortRegistry.register(ABORT_KEY.agent("s1"), agentScope);
     rt.abortRegistry.register("s1", bareScope);
 
-    const res = await handleAgentAbortAlias({ sessionId: "s1" });
+    const res = await RunAbort.abortAlias({ sessionId: "s1" });
     assert.equal(res.ok, true);
     assert.equal(agentScope.reason, "user-stop");
     assert.equal(bareScope.reason, null);
@@ -164,11 +164,11 @@ describe("runAbortable 边界三分派（T-S15 骨架）", () => {
   it("completed → ipcOk；failed → formatIpcError；cancelled / replaced → IPC_ABORTED；finally 释放登记", async () => {
     const registry = AbortRegistryFactory.create();
 
-    const completed = await runAbortable({ registry, key: "k-completed" }, async () => ({ kind: "completed", value: 42 }));
+    const completed = await RunScope.abortable({ registry, key: "k-completed" }, async () => ({ kind: "completed", value: 42 }));
     assert.deepEqual(completed, { ok: true, data: 42 });
     assert.equal(registry.has("k-completed"), false);
 
-    const failed = await runAbortable({ registry, key: "k-failed" }, async () => ({
+    const failed = await RunScope.abortable({ registry, key: "k-failed" }, async () => ({
       kind: "failed",
       error: new AppError("INFRA_UNEXPECTED_ERROR", { detail: "业务失败" }),
     }));
@@ -176,12 +176,12 @@ describe("runAbortable 边界三分派（T-S15 骨架）", () => {
     assert.equal(errorCodeOf(failed), "INFRA_UNEXPECTED_ERROR");
     assert.equal(registry.has("k-failed"), false);
 
-    const cancelled = await runAbortable({ registry, key: "k-cancelled" }, async () => ({ kind: "cancelled", reason: "timeout" }));
+    const cancelled = await RunScope.abortable({ registry, key: "k-cancelled" }, async () => ({ kind: "cancelled", reason: "timeout" }));
     assert.equal(cancelled.ok, false);
     assert.equal(errorCodeOf(cancelled), "IPC_ABORTED");
     assert.equal(registry.has("k-cancelled"), false);
 
-    const replaced = await runAbortable({ registry, key: "k-replaced" }, async () => ({ kind: "replaced" }));
+    const replaced = await RunScope.abortable({ registry, key: "k-replaced" }, async () => ({ kind: "replaced" }));
     assert.equal(replaced.ok, false);
     assert.equal(errorCodeOf(replaced), "IPC_ABORTED");
     assert.equal(registry.has("k-replaced"), false);
@@ -189,7 +189,7 @@ describe("runAbortable 边界三分派（T-S15 骨架）", () => {
 
   it("key 为 null（runId 缺省）：不触碰 registry，仍按 deadline 建 scope", async () => {
     const registry = AbortRegistryFactory.create();
-    const result = await runAbortable({ registry, key: null, timeoutMs: 60_000 }, async (scope) => {
+    const result = await RunScope.abortable({ registry, key: null, timeoutMs: 60_000 }, async (scope) => {
       assert.ok(scope.deadlineAt != null);
       return { kind: "completed", value: "ok" };
     });
@@ -203,15 +203,15 @@ describe("providerModels 取消与并发（T-S15 / T-S21）", () => {
     const gate = deferred<ReturnType<typeof Result.ok<undefined>>>();
     const rt = installRuntime({ providerModels: { fetch: () => gate.promise } });
 
-    const pending = handleProviderModelsFetch({ providerId: "p1" });
+    const pending = ProviderModels.fetch({ providerId: "p1" });
     await tick();
     assert.equal(rt.abortRegistry.has(ABORT_KEY.providerModels("p1")), true);
 
-    const conflict = await handleProviderModelsFetch({ providerId: "p1" });
+    const conflict = await ProviderModels.fetch({ providerId: "p1" });
     assert.equal(conflict.ok, false);
     assert.equal(errorCodeOf(conflict), "PROVIDER_MODELS_IN_FLIGHT");
 
-    await handleRunAbort({ kind: "models", id: "p1" });
+    await RunAbort.abort({ kind: "models", id: "p1" });
     const abortAt = Date.now();
     gate.resolve(Result.ok(undefined));
     const settled = await pending;
@@ -223,7 +223,7 @@ describe("providerModels 取消与并发（T-S15 / T-S21）", () => {
 
   it("doWork 直传已 abort 的 scope → Outcome.cancelled（入口检查点）", async () => {
     const rt = installRuntime({ providerModels: { fetch: () => Promise.resolve(Result.ok(undefined)) } });
-    const outcome = await doProviderModelsFetch(rt as never, "p1", abortedScope());
+    const outcome = await ProviderModels.doFetch(rt as never, "p1", abortedScope());
     assert.deepEqual(outcome, { kind: "cancelled", reason: "user-stop" });
   });
 });
@@ -233,11 +233,11 @@ describe("usageStats 取消（T-S15）", () => {
     const gate = deferred<ReturnType<typeof Result.ok<typeof SUMMARY>>>();
     const rt = installRuntime({ usageStats: { getSummary: () => gate.promise } });
 
-    const pending = handleUsageStatsQuery({ kind: "summary", filter: {}, runId: "u1" });
+    const pending = UsageStats.handleQuery({ kind: "summary", filter: {}, runId: "u1" });
     await tick();
     assert.equal(rt.abortRegistry.has(ABORT_KEY.usageStats("u1")), true);
 
-    await handleRunAbort({ kind: "stats", id: "u1" });
+    await RunAbort.abort({ kind: "stats", id: "u1" });
     const abortAt = Date.now();
     gate.resolve(Result.ok(SUMMARY));
     const settled = await pending;
@@ -249,7 +249,7 @@ describe("usageStats 取消（T-S15）", () => {
 
   it("doWork 直传已 abort 的 scope → Outcome.cancelled（入口检查点）", async () => {
     const rt = installRuntime({ usageStats: { getSummary: () => Promise.resolve(Result.ok(SUMMARY)) } });
-    const outcome = await doUsageStatsQuery(rt as never, { kind: "summary", filter: {} }, abortedScope());
+    const outcome = await UsageStats.query(rt as never, { kind: "summary", filter: {} }, abortedScope());
     assert.deepEqual(outcome, { kind: "cancelled", reason: "user-stop" });
   });
 });

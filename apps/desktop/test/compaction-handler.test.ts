@@ -35,21 +35,21 @@ import {
   promptWholeCache,
   sessionApiPromptTokenCache,
 } from "@novel-master/core/tokenizer";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
-import { handleCompactionManual } from "../src/main/ipc/handlers/compaction.js";
-import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleProvidersCreate } from "../src/main/ipc/handlers/providers.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { CompactionIpc } from "../src/main/ipc/handlers/compaction.js";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Providers } from "../src/main/ipc/handlers/providers.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
 import {
   IPC_CHANNELS,
   type PromptChatTokenUpdatedPayload,
 } from "../shared/ipc-types.js";
 import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
-import { loadChatPromptTokenStats } from "../src/main/services/chat-prompt-tokens.service.js";
+import { ChatPromptTokensService } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -63,7 +63,7 @@ describe("handleCompactionManual", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-compaction-"));
 
-    const project = await handleProjectsCreate({ name: "compaction-ipc" });
+    const project = await Projects.create({ name: "compaction-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -71,13 +71,13 @@ describe("handleCompactionManual", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
 
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "compaction-session",
     });
@@ -87,9 +87,9 @@ describe("handleCompactionManual", () => {
     }
     sessionId = session.data.id;
 
-    await handleMessagesAppend({ sessionId, role: "user", text: "u1" });
-    await handleMessagesAppend({ sessionId, role: "assistant", text: "a1" });
-    await handleMessagesAppend({ sessionId, role: "user", text: "u2" });
+    await Messages.append({ sessionId, role: "user", text: "u1" });
+    await Messages.append({ sessionId, role: "assistant", text: "a1" });
+    await Messages.append({ sessionId, role: "user", text: "u2" });
   });
 
   after(async () => {
@@ -97,7 +97,7 @@ describe("handleCompactionManual", () => {
   });
 
   it("T-IPC1R: manual 压缩（trigger:manual）成功后清 file_cache / rule_snapshot，保留 pending", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const pendingJson = JSON.stringify([
@@ -142,7 +142,7 @@ describe("handleCompactionManual", () => {
       } as never;
     });
 
-    const result = await handleCompactionManual({ projectId, sessionId });
+    const result = await CompactionIpc.handleManual({ projectId, sessionId });
     assert.equal(result.ok, true);
     // 手动压缩是用户主动的「重整 + 刷新」意图：按内容寻址的 file_cache 与
     // workplace 规则快照一并作废，下一次拼提示词（发送或预览）时 workplace
@@ -198,12 +198,12 @@ describe("handleCompactionManual", () => {
    * 防「空对空恒真」。
    */
   it("T-CR6: run 在途时手动压缩被拦（AGENT_RUN_IN_FLIGHT），不广播不清理", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
 
     // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId,
       title: "compaction-run-in-flight",
     });
@@ -241,7 +241,7 @@ describe("handleCompactionManual", () => {
     rt.agentAbortRegistry.register(cr6SessionId, controller);
 
     try {
-      const result = await handleCompactionManual({
+      const result = await CompactionIpc.handleManual({
         projectId,
         sessionId: cr6SessionId,
       });
@@ -297,7 +297,7 @@ describe("handleCompactionManual", () => {
       } as never;
     });
 
-    const result = await handleCompactionManual({ projectId, sessionId });
+    const result = await CompactionIpc.handleManual({ projectId, sessionId });
     assert.equal(result.ok, true);
     assert.equal(
       result.data?.ok,
@@ -333,13 +333,13 @@ describe("handleCompactionManual", () => {
    * 后台暖机推送精确档——这正是「交给常规刷新自然跟进」的形态。
    */
   it("T-IPC2: 压缩 IPC 成功返回不依赖也不触发显式暖机（读数交给常规刷新）", async () => {
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
 
     // 与旧用例同款前提：现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」
     // 的场景——没有可用模型时压根没有精确档，「没有推送」的断言会失去牙齿。
-    const provider = await handleProvidersCreate({
+    const provider = await Providers.create({
       protocol: "openai",
       baseUrl: "https://api.openai.com/v1",
       displayName: "openai-compaction-nowarm",
@@ -357,14 +357,14 @@ describe("handleCompactionManual", () => {
     if (!saved.ok) throw saved.error;
     await rt.state.setCurrentModelId(saved.value.id);
 
-    const project = await handleProjectsCreate({
+    const project = await Projects.create({
       name: "compaction-nowarm-ipc",
     });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
-    const session = await handleSessionsCreate({
+    const session = await Sessions.create({
       projectId: project.data.id,
       title: "compaction-nowarm",
     });
@@ -373,7 +373,7 @@ describe("handleCompactionManual", () => {
       return;
     }
     const scope = { projectId: project.data.id, sessionId: session.data.id };
-    await handleMessagesAppend({
+    await Messages.append({
       sessionId: scope.sessionId,
       role: "user",
       text: "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
@@ -398,7 +398,7 @@ describe("handleCompactionManual", () => {
     );
 
     try {
-      const result = await handleCompactionManual(scope);
+      const result = await CompactionIpc.handleManual(scope);
       assert.equal(result.ok, true);
       assert.equal(result.data?.ok, true);
 
@@ -418,7 +418,7 @@ describe("handleCompactionManual", () => {
       );
 
       // 判据③：常规读口首帧如实回落估算档（L1 没被压缩路径写热）。
-      const firstFrame = await loadChatPromptTokenStats(rt, scope);
+      const firstFrame = await ChatPromptTokensService.load(rt, scope);
       if (!firstFrame.ok) throw firstFrame.error;
       assert.equal(
         firstFrame.value?.estimated,

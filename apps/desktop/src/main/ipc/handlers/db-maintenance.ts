@@ -8,11 +8,11 @@
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
 import type { Outcome } from "@novel-master/core/errors";
 import type { DbMaintenanceResult, DbStatsResult, IpcResult } from "../../../../shared/ipc-types.js";
-import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
+import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import { getDbMaintenanceStats, runDbMaintenance } from "../../services/db-maintenance.service.js";
-import { formatIpcError } from "../ipc-error.js";
-import { ipcErr } from "../ipc-result.js";
-import { runAbortable, runKey } from "../run-scope.js";
+import { FormatIpcError } from "../ipc-error.js";
+import { IpcResults } from "../ipc-result.js";
+import { RunScope } from "../run-scope.js";
 
 /** 可选请求体：runId 只在会展示取消按钮的调用方生成。 */
 export type DbMaintenanceRunRequest = { readonly runId?: string };
@@ -21,18 +21,18 @@ export async function handleDbStats(): Promise<IpcResult<DbStatsResult>> {
   try {
     const stats = await getDbMaintenanceStats();
     // 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
-    if (!stats.ok) return { ok: false, error: formatIpcError(stats.error) };
+    if (!stats.ok) return { ok: false, error: FormatIpcError.format(stats.error) };
     return { ok: true, data: stats.value };
   } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
+    return { ok: false, error: FormatIpcError.format(err) };
   }
 }
 
 export async function handleDbMaintenance(req?: DbMaintenanceRunRequest): Promise<IpcResult<DbMaintenanceResult>> {
-  const built = await getDesktopRuntime();
-  if (!built.ok) return ipcErr(formatIpcError(built.error));
+  const built = await DesktopRuntimeSingleton.get();
+  if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
   const rt = built.value;
-  return runAbortable({ registry: rt.abortRegistry, key: runKey(ABORT_KEY.dbMaintenance, req?.runId) }, (scope) => doDbMaintenance(scope));
+  return RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.dbMaintenance, req?.runId) }, (scope) => doDbMaintenance(scope));
 }
 
 /**

@@ -29,51 +29,53 @@ export interface DiagnosticsSeams {
   readonly packaged: boolean;
 }
 
-/** 真实 Electron / node:fs 实现；菜单动作走这份。 */
-export function createDesktopDiagnosticsSeams(): DiagnosticsSeams {
-  return {
-    logsDir: app.getPath("logs"),
-    readdir: (dir) => readdir(dir),
-    stat: (file) => stat(file),
-    showOpenDialog: (options) => dialog.showOpenDialog({ properties: [...options.properties] }),
-    mkdir: (dir, options) => mkdir(dir, options),
-    copyFile: (source, target) => copyFile(source, target),
-    writeFile: (file, data, encoding) => writeFile(file, data, encoding),
-    openPath: (target) => shell.openPath(target),
-    now: () => new Date(),
-    appVersion: app.getVersion(),
-    platform: process.platform,
-    arch: process.arch,
-    packaged: app.isPackaged,
-  };
-}
+export const DesktopDiagnostics = {
+  /** 真实 Electron / node:fs 实现；菜单动作走这份。 */
+  createSeams(): DiagnosticsSeams {
+    return {
+      logsDir: app.getPath("logs"),
+      readdir: (dir) => readdir(dir),
+      stat: (file) => stat(file),
+      showOpenDialog: (options) => dialog.showOpenDialog({ properties: [...options.properties] }),
+      mkdir: (dir, options) => mkdir(dir, options),
+      copyFile: (source, target) => copyFile(source, target),
+      writeFile: (file, data, encoding) => writeFile(file, data, encoding),
+      openPath: (target) => shell.openPath(target),
+      now: () => new Date(),
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      packaged: app.isPackaged,
+    };
+  },
 
-/** 「打开日志目录」：把 logs 目录交给系统文件管理器。 */
-// nm-style: keep-public — spec 4.6 点名的菜单动作，shell-menu 接线、测试直接调用。
-export async function openLogsDirectory(seams: Pick<DiagnosticsSeams, "logsDir" | "openPath">): Promise<void> {
-  await seams.openPath(seams.logsDir);
-}
+  /** 「打开日志目录」：把 logs 目录交给系统文件管理器。 */
+  // nm-style: keep-public — spec 4.6 点名的菜单动作，shell-menu 接线、测试直接调用。
+  async openLogsDirectory(seams: Pick<DiagnosticsSeams, "logsDir" | "openPath">): Promise<void> {
+    await seams.openPath(seams.logsDir);
+  },
 
-/**
- * 「导出诊断包」：选目标父目录 → 建 `nm-diagnostics-<时间>/` → 复制全部 `*.log`
- * → 写 `meta.json` → 打开新目录。取消时返回 undefined。
- */
-// nm-style: keep-public — spec 4.6 点名的菜单动作，shell-menu 接线、测试直接调用。
-export async function exportDiagnostics(seams: DiagnosticsSeams): Promise<string | undefined> {
-  const picked = await seams.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
-  const parent = picked.filePaths[0];
-  if (picked.canceled || parent === undefined) {
-    return undefined;
-  }
-  const now = seams.now();
-  const targetDir = path.join(parent, `nm-diagnostics-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}-${Number.pad2(now.getHours())}${Number.pad2(now.getMinutes())}${Number.pad2(now.getSeconds())}`);
-  await seams.mkdir(targetDir, { recursive: true });
-  const names = (await seams.readdir(seams.logsDir)).filter((name) => name.endsWith(".log")).sort();
-  const files = await Promise.all(names.map(async (name) => ({ name, bytes: (await seams.stat(path.join(seams.logsDir, name))).size })));
-  for (const file of files) {
-    await seams.copyFile(path.join(seams.logsDir, file.name), path.join(targetDir, file.name));
-  }
-  await seams.writeFile(path.join(targetDir, "meta.json"), JSON.stringify({ appVersion: seams.appVersion, platform: seams.platform, arch: seams.arch, packaged: seams.packaged, generatedAt: now.toISOString(), files }, null, 2), "utf8");
-  await seams.openPath(targetDir);
-  return targetDir;
-}
+  /**
+   * 「导出诊断包」：选目标父目录 → 建 `nm-diagnostics-<时间>/` → 复制全部 `*.log`
+   * → 写 `meta.json` → 打开新目录。取消时返回 undefined。
+   */
+  // nm-style: keep-public — spec 4.6 点名的菜单动作，shell-menu 接线、测试直接调用。
+  async export(seams: DiagnosticsSeams): Promise<string | undefined> {
+    const picked = await seams.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    const parent = picked.filePaths[0];
+    if (picked.canceled || parent === undefined) {
+      return undefined;
+    }
+    const now = seams.now();
+    const targetDir = path.join(parent, `nm-diagnostics-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}-${Number.pad2(now.getHours())}${Number.pad2(now.getMinutes())}${Number.pad2(now.getSeconds())}`);
+    await seams.mkdir(targetDir, { recursive: true });
+    const names = (await seams.readdir(seams.logsDir)).filter((name) => name.endsWith(".log")).sort();
+    const files = await Promise.all(names.map(async (name) => ({ name, bytes: (await seams.stat(path.join(seams.logsDir, name))).size })));
+    for (const file of files) {
+      await seams.copyFile(path.join(seams.logsDir, file.name), path.join(targetDir, file.name));
+    }
+    await seams.writeFile(path.join(targetDir, "meta.json"), JSON.stringify({ appVersion: seams.appVersion, platform: seams.platform, arch: seams.arch, packaged: seams.packaged, generatedAt: now.toISOString(), files }, null, 2), "utf8");
+    await seams.openPath(targetDir);
+    return targetDir;
+  },
+} as const;

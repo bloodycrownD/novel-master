@@ -4,17 +4,19 @@
  * 让 handleAgentRun 走到 finally 的早退兜底分支。
  */
 
-export async function resolveCurrentAgentDefinitionOrThrow() {
-  return {
-    agentId: "agent-test",
-    definition: { name: "测试 Agent", mode: "primary" },
-  };
-}
+export const AgentRunService = {
+  async resolveCurrentDefinitionOrThrow() {
+    return {
+      agentId: "agent-test",
+      definition: { name: "测试 Agent", mode: "primary" },
+    };
+  },
 
-export async function resolveDesktopSavedModelIdOrThrow() {
-  return { savedModelId: "model-test", workspaceModelId: "" };
-}
+  async resolveSavedModelIdOrThrow() {
+    return { savedModelId: "model-test", workspaceModelId: "" };
+  },
 
-export function runAgentTurnAdapter() {
-  return Promise.reject(new Error("early-exit test boom"));
-}
+  run() {
+    return Promise.reject(new Error("early-exit test boom"));
+  },
+};

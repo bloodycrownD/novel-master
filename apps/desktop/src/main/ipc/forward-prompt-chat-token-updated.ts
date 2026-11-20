@@ -9,7 +9,7 @@
  * {@link PromptChatTokenUpdatedPayload}。
  */
 import { IPC_CHANNELS, type PromptChatTokenUpdatedPayload } from "../../../shared/ipc-types.js";
-import { createEventForwarder } from "./event-forwarder.js";
+import { EventForwarder } from "./event-forwarder.js";
 
 /** 与 workspaceMutated / composer 建议共用同一窗口解析器；notify 推送某会话的精确读数。 */
-export const PromptChatTokenUpdatedForwarder = createEventForwarder<PromptChatTokenUpdatedPayload>(IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED);
+export const PromptChatTokenUpdatedForwarder = EventForwarder.create<PromptChatTokenUpdatedPayload>(IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED);

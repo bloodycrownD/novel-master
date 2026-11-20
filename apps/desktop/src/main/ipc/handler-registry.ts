@@ -3,377 +3,267 @@
  */
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { IPC_CHANNELS } from "../../../shared/ipc-types.js";
-import { handleAppUiGet, handleAppUiSet } from "./handlers/app-ui.js";
-import {
-  handleAgentListPicker,
-  handleAgentResolveCurrent,
-  handleAgentRun,
-  handleAgentRunIsActive,
-  handleAgentSetCurrent,
-  handleModelListPicker,
-  handleModelSetCurrent,
-} from "./handlers/agent.js";
-import { handleAgentAbortAlias, handleRunAbort } from "./handlers/run-abort.js";
+import { AppUi } from "./handlers/app-ui.js";
+import { Agent } from "./handlers/agent.js";
+import { RunAbort } from "./handlers/run-abort.js";
 import { agentActivity } from "../runtime/agent-activity.js";
-import { handleBootstrapRebootstrap, handleBootstrapStatus } from "./handlers/bootstrap.js";
-import { handleCompactionManual } from "./handlers/compaction.js";
-import { handleCompactionConditionsGet, handleCompactionConditionsSet } from "./handlers/compaction-conditions.js";
-import {
-  handleAgentRegistryCreateBlank,
-  handleAgentRegistryDelete,
-  handleAgentRegistryGet,
-  handleAgentRegistryList,
-  handleAgentRegistryUpdate,
-  handleAgentRegistryUpsert,
-  handleAgentYamlExport,
-  handleAgentYamlImport,
-} from "./handlers/agent-registry.js";
-import { handleBackupExport, handleBackupImport } from "./handlers/backup.js";
+import { Bootstrap } from "./handlers/bootstrap.js";
+import { CompactionIpc } from "./handlers/compaction.js";
+import { CompactionConditions } from "./handlers/compaction-conditions.js";
+import { AgentRegistry } from "./handlers/agent-registry.js";
+import { Backup } from "./handlers/backup.js";
 import { handleDbMaintenance, handleDbStats } from "./handlers/db-maintenance.js";
-import {
-  handleCloudSyncGetConfig,
-  handleCloudSyncGetLocalStatus,
-  handleCloudSyncPull,
-  handleCloudSyncPush,
-  handleCloudSyncSetConfig,
-  handleCloudSyncSetEnabled,
-  handleCloudSyncTestConnection,
-} from "./handlers/cloud-sync.js";
-import {
-  handleSearchClearEngineKey,
-  handleSearchCreateCustomEngine,
-  handleSearchDeleteCustomEngine,
-  handleSearchGetConfig,
-  handleSearchResetPresetOverride,
-  handleSearchSaveEngineKey,
-  handleSearchSetEnabled,
-  handleSearchSetEngineBaseUrl,
-  handleSearchSetEngineOrder,
-  handleSearchUpdateCustomEngine,
-  handleSearchUpdatePresetOverride,
-} from "./handlers/search.js";
-import { handleAppCheckForUpdates, handleAppGetInfo, handleAppOpenExternal } from "./handlers/app-info.js";
-import { handleShellMenuPopup, handleShellSetTitleBarTheme } from "./handlers/shell.js";
-import { handlePreferencesGet, handlePreferencesSet, PREFERENCE_FEATURES, type PreferenceFeature } from "./handlers/preferences.js";
-import {
-  handleProviderModelsDeleteSaved,
-  handleProviderModelsEditSaved,
-  handleProviderModelsFetch,
-  handleProviderModelsGetSaved,
-  handleProviderModelsResetContextWindow,
-  handleProviderModelsSave,
-  handleProviderModelsSavedList,
-  handleProviderModelsSuggestList,
-  handleProviderModelsUpdateSettings,
-} from "./handlers/provider-models.js";
-import { handleProvidersCreate, handleProvidersDelete, handleProvidersEdit, handleProvidersGet, handleProvidersList } from "./handlers/providers.js";
-import {
-  handleSmartSortRuleCreate,
-  handleSmartSortRuleDelete,
-  handleSmartSortRuleDeleteBatch,
-  handleSmartSortRuleList,
-  handleSmartSortRuleMove,
-  handleSmartSortRuleMatch,
-  handleSmartSortRuleReorder,
-  handleSmartSortRuleResetDefaults,
-  handleSmartSortRuleSetEnabled,
-  handleSmartSortRuleSetEnabledBatch,
-  handleSmartSortRuleUpdate,
-  handleSmartSortRuleYamlExport,
-  handleSmartSortRuleYamlImport,
-} from "./handlers/smart-sort-rule.js";
-import {
-  handleSkillsAssertCreateName,
-  handleSkillsUpdateInfo,
-  handleSkillsDelete,
-  handleSkillsEffective,
-  handleSkillsList,
-  handleSkillsRead,
-  handleSkillsToggle,
-  handleSkillsWrite,
-} from "./handlers/skills.js";
-import {
-  handleMessagesAppend,
-  handleMessagesDelete,
-  handleMessagesEdit,
-  handleMessagesFork,
-  handleMessagesHide,
-  handleMessagesHideRange,
-  handleMessagesList,
-  handleMessagesRollback,
-  handleMessagesSetFloor,
-  handleMessagesShow,
-  handleMessagesShowRange,
-  handleMessagesTruncateAfter,
-} from "./handlers/messages.js";
-import { handlePromptAgentMeta, handlePromptChatTokenLabel, handlePromptRealPreview } from "./handlers/prompt.js";
-import { handleUsageStatsQuery } from "./handlers/usage-stats.js";
-import { handleProjectsCreate, handleProjectsDelete, handleProjectsList, handleProjectsRename } from "./handlers/projects.js";
-import { handleScopeGet, handleScopeSetProject, handleScopeSetSession } from "./handlers/scope.js";
+import { CloudSync } from "./handlers/cloud-sync.js";
+import { Search } from "./handlers/search.js";
+import { AppInfo } from "./handlers/app-info.js";
+import { Shell } from "./handlers/shell.js";
+import { Preferences, PREFERENCE_FEATURES, type PreferenceFeature } from "./handlers/preferences.js";
+import { ProviderModels } from "./handlers/provider-models.js";
+import { Providers } from "./handlers/providers.js";
+import { SmartSortRule } from "./handlers/smart-sort-rule.js";
+import { Skills } from "./handlers/skills.js";
+import { Messages } from "./handlers/messages.js";
+import { Prompt } from "./handlers/prompt.js";
+import { UsageStats } from "./handlers/usage-stats.js";
+import { Projects } from "./handlers/projects.js";
+import { Scope } from "./handlers/scope.js";
 
-import {
-  handleSessionsCreate,
-  handleSessionsDelete,
-  handleSessionsGetComposerDraft,
-  handleSessionsListByProject,
-  handleSessionsProjectComposerStatus,
-  handleSessionsPullTemplate,
-  handleSessionsPushTemplate,
-  handleSessionsRename,
-  handleSessionsSetAgentBinding,
-  handleSessionsSetComposerDraft,
-  handleSessionsSetModelOverride,
-} from "./handlers/sessions.js";
-import { handlePhysicalList, handlePhysicalRead } from "./handlers/physical.js";
-import {
-  handleVfsBatchClearStaging,
-  handleVfsBatchExportStage,
-  handleVfsBatchIngestFromPaths,
-  handleVfsDelete,
-  handleVfsFileExport,
-  handleVfsFilePick,
-  handleVfsMkdir,
-  handleVfsRead,
-  handleVfsRename,
-  handleVfsWrite,
-  handleVfsCharacterCardImport,
-  handleVfsZipExport,
-  handleVfsZipImport,
-  handleVfsZipPick,
-  handleVfsZipImportBytes,
-} from "./handlers/vfs.js";
-import { startDragExport } from "../services/vfs-batch.service.js";
-import { formatIpcError } from "./format-ipc-error.js";
+import { Sessions } from "./handlers/sessions.js";
+import { Physical } from "./handlers/physical.js";
+import { Vfs } from "./handlers/vfs.js";
+import { VfsBatchService } from "../services/vfs-batch.service.js";
+import { FormatIpcError } from "./format-ipc-error.js";
 import { LogFactory } from "@novel-master/core/log";
 import type { VfsStartDragFailedPayload, VfsStartDragRequest } from "../../../shared/ipc-types.js";
 
 const dragLog = LogFactory.create("desktop.ipc.vfs");
-import { handleWorkplaceBuildListRows, handleWorkplaceGetDirRule, handleWorkplaceSetDirRule, handleWorkplaceSetFileRule } from "./handlers/workplace.js";
+import { Workplace } from "./handlers/workplace.js";
 
 type NoArgHandler = () => unknown;
 type BoolHandler = (enabled: boolean) => unknown;
 
-function bindNoArg(channel: string, handler: NoArgHandler): void {
-  ipcMain.handle(channel, () => handler());
-}
+export const HandlerRegistry = {
+  bindNoArg(channel: string, handler: NoArgHandler): void {
+    ipcMain.handle(channel, () => handler());
+  },
 
-/** 注册带请求体的 invoke；泛型保留各 handler 的 req 类型，避免 unknown 逆变报错。 */
-function bindReq<T>(channel: string, handler: (req: T) => unknown): void {
-  ipcMain.handle(channel, (_event, req) => handler(req as T));
-}
+  /** 注册带请求体的 invoke；泛型保留各 handler 的 req 类型，避免 unknown 逆变报错。 */
+  bindReq<T>(channel: string, handler: (req: T) => unknown): void {
+    ipcMain.handle(channel, (_event, req) => handler(req as T));
+  },
 
-function bindBool(channel: string, handler: BoolHandler): void {
-  ipcMain.handle(channel, (_event, enabled: boolean) => handler(enabled));
-}
+  bindBool(channel: string, handler: BoolHandler): void {
+    ipcMain.handle(channel, (_event, enabled: boolean) => handler(enabled));
+  },
 
-function bindEventReq<T>(channel: string, handler: (event: IpcMainInvokeEvent, req: T) => unknown): void {
-  ipcMain.handle(channel, (event, req) => handler(event, req as T));
-}
+  bindEventReq<T>(channel: string, handler: (event: IpcMainInvokeEvent, req: T) => unknown): void {
+    ipcMain.handle(channel, (event, req) => handler(event, req as T));
+  },
 
-// nm-style: keep-public — main.ts:171 经 register-handlers.ts 的 registerIpcHandlers 别名调用；跨文件别名重导出，脚本不便解析
-/** 按映射表注册全部 ipcMain.handle。 */
-export function registerHandlersFromRegistry(): void {
-  bindNoArg(IPC_CHANNELS.BOOTSTRAP_STATUS, handleBootstrapStatus);
-  bindNoArg(IPC_CHANNELS.BOOTSTRAP_REBOOTSTRAP, handleBootstrapRebootstrap);
+  /** 按映射表注册全部 ipcMain.handle（main.ts 启动序列直调）。 */
+  register(): void {
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.BOOTSTRAP_STATUS, Bootstrap.status);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.BOOTSTRAP_REBOOTSTRAP, Bootstrap.rebootstrap);
 
-  bindNoArg(IPC_CHANNELS.SCOPE_GET, handleScopeGet);
-  bindReq(IPC_CHANNELS.SCOPE_SET_PROJECT, handleScopeSetProject);
-  bindReq(IPC_CHANNELS.SCOPE_SET_SESSION, handleScopeSetSession);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.SCOPE_GET, Scope.get);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SCOPE_SET_PROJECT, Scope.setProject);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SCOPE_SET_SESSION, Scope.setSession);
 
-  bindNoArg(IPC_CHANNELS.PROJECTS_LIST, handleProjectsList);
-  bindReq(IPC_CHANNELS.PROJECTS_CREATE, handleProjectsCreate);
-  bindReq(IPC_CHANNELS.PROJECTS_RENAME, handleProjectsRename);
-  bindReq(IPC_CHANNELS.PROJECTS_DELETE, handleProjectsDelete);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.PROJECTS_LIST, Projects.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROJECTS_CREATE, Projects.create);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROJECTS_RENAME, Projects.rename);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROJECTS_DELETE, Projects.delete);
 
-  bindReq(IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT, handleSessionsListByProject);
-  bindReq(IPC_CHANNELS.SESSIONS_CREATE, handleSessionsCreate);
-  bindReq(IPC_CHANNELS.SESSIONS_RENAME, handleSessionsRename);
-  bindReq(IPC_CHANNELS.SESSIONS_DELETE, handleSessionsDelete);
-  bindReq(IPC_CHANNELS.SESSIONS_PULL_TEMPLATE, handleSessionsPullTemplate);
-  bindReq(IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE, handleSessionsPushTemplate);
-  bindReq(IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT, handleSessionsGetComposerDraft);
-  bindReq(IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT, handleSessionsSetComposerDraft);
-  bindReq(IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS, handleSessionsProjectComposerStatus);
-  bindReq(IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING, handleSessionsSetAgentBinding);
-  bindReq(IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE, handleSessionsSetModelOverride);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT, Sessions.listByProject);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_CREATE, Sessions.create);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_RENAME, Sessions.rename);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_DELETE, Sessions.remove);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_PULL_TEMPLATE, Sessions.pullTemplate);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE, Sessions.pushTemplate);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT, Sessions.getComposerDraft);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT, Sessions.setComposerDraft);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS, Sessions.projectComposerStatus);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING, Sessions.setAgentBinding);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE, Sessions.setModelOverride);
 
-  bindReq(IPC_CHANNELS.APP_UI_GET, handleAppUiGet);
-  bindReq(IPC_CHANNELS.APP_UI_SET, handleAppUiSet);
+    HandlerRegistry.bindReq(IPC_CHANNELS.APP_UI_GET, AppUi.get);
+    HandlerRegistry.bindReq(IPC_CHANNELS.APP_UI_SET, AppUi.set);
 
-  bindReq(IPC_CHANNELS.VFS_READ, handleVfsRead);
-  // 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道）
-  bindReq(IPC_CHANNELS.PHYSICAL_LIST, handlePhysicalList);
-  bindReq(IPC_CHANNELS.PHYSICAL_READ, handlePhysicalRead);
-  bindReq(IPC_CHANNELS.VFS_WRITE, handleVfsWrite);
-  bindReq(IPC_CHANNELS.VFS_MKDIR, handleVfsMkdir);
-  bindReq(IPC_CHANNELS.VFS_DELETE, handleVfsDelete);
-  bindReq(IPC_CHANNELS.VFS_RENAME, handleVfsRename);
-  bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, handleVfsZipExport);
-  bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
-  bindNoArg(IPC_CHANNELS.VFS_ZIP_PICK, handleVfsZipPick);
-  bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES, handleVfsZipImportBytes);
-  bindReq(IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT, handleVfsCharacterCardImport);
-  bindNoArg(IPC_CHANNELS.VFS_FILE_PICK, handleVfsFilePick);
-  bindReq(IPC_CHANNELS.VFS_FILE_EXPORT, handleVfsFileExport);
-  bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
-  bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
-  bindReq(IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING, handleVfsBatchClearStaging);
-  // startDrag 须在 drag 流程中同步触发，使用 send 而非 invoke；失败经 VFS_START_DRAG_FAILED 回传
-  // （原 handleVfsStartDrag 内联：preload 经 ipcRenderer.send 触发，失败推回 renderer toast）
-  ipcMain.on(IPC_CHANNELS.VFS_START_DRAG, (event, req: VfsStartDragRequest) => {
-    try {
-      const dragResult = startDragExport(event.sender, req.filePaths ?? []);
-      if (!dragResult.ok) {
-        dragLog.error("vfs-batch startDrag failed", { error: dragResult.error });
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_READ, Vfs.read);
+    // 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道）
+    HandlerRegistry.bindReq(IPC_CHANNELS.PHYSICAL_LIST, Physical.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PHYSICAL_READ, Physical.read);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_WRITE, Vfs.write);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_MKDIR, Vfs.mkdir);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_DELETE, Vfs.remove);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_RENAME, Vfs.rename);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, Vfs.exportZip);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, Vfs.importZip);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.VFS_ZIP_PICK, Vfs.pickZip);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES, Vfs.importZipBytes);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT, Vfs.characterCardImport);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.VFS_FILE_PICK, Vfs.filePick);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_FILE_EXPORT, Vfs.fileExport);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, Vfs.batchIngestFromPaths);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, Vfs.batchExportStage);
+    HandlerRegistry.bindReq(IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING, Vfs.batchClearStaging);
+    // startDrag 须在 drag 流程中同步触发，使用 send 而非 invoke；失败经 VFS_START_DRAG_FAILED 回传
+    // （原 handleVfsStartDrag 内联：preload 经 ipcRenderer.send 触发，失败推回 renderer toast）
+    ipcMain.on(IPC_CHANNELS.VFS_START_DRAG, (event, req: VfsStartDragRequest) => {
+      try {
+        const dragResult = VfsBatchService.startDragExport(event.sender, req.filePaths ?? []);
+        if (!dragResult.ok) {
+          dragLog.error("vfs-batch startDrag failed", { error: dragResult.error });
+          const payload: VfsStartDragFailedPayload = {
+            message: FormatIpcError.format(dragResult.error).message || "拖出失败",
+          };
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
+          }
+        }
+      } catch (err) {
+        dragLog.error("vfs-batch startDrag failed", { error: err });
         const payload: VfsStartDragFailedPayload = {
-          message: formatIpcError(dragResult.error).message || "拖出失败",
+          message: FormatIpcError.format(err).message || "拖出失败",
         };
         if (!event.sender.isDestroyed()) {
           event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
         }
       }
-    } catch (err) {
-      dragLog.error("vfs-batch startDrag failed", { error: err });
-      const payload: VfsStartDragFailedPayload = {
-        message: formatIpcError(err).message || "拖出失败",
-      };
-      if (!event.sender.isDestroyed()) {
-        event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
-      }
+    });
+
+    HandlerRegistry.bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, Workplace.buildListRows);
+    HandlerRegistry.bindReq(IPC_CHANNELS.WORKPLACE_SET_DIR_RULE, Workplace.setDirRule);
+    HandlerRegistry.bindReq(IPC_CHANNELS.WORKPLACE_SET_FILE_RULE, Workplace.setFileRule);
+    HandlerRegistry.bindReq(IPC_CHANNELS.WORKPLACE_GET_DIR_RULE, Workplace.getDirRule);
+
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_LIST, Messages.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_APPEND, Messages.append);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_EDIT, Messages.edit);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_HIDE, Messages.hide);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_SHOW, Messages.show);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_HIDE_RANGE, Messages.hideRange);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_SHOW_RANGE, Messages.showRange);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER, Messages.truncateAfter);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_DELETE, Messages.remove);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_FORK, Messages.fork);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_ROLLBACK, Messages.rollback);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MESSAGES_SET_FLOOR, Messages.setFloor);
+
+    HandlerRegistry.bindReq(IPC_CHANNELS.USAGE_STATS_QUERY, UsageStats.handleQuery);
+
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_RUN, Agent.run);
+    // 取消入口：nm:agent/abort 是转发别名（转 ABORT_KEY.agent），nm:run/abort 按
+    // { kind, id } 分发到 6 类长任务的 key 命名空间。
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_ABORT, RunAbort.abortAlias);
+    HandlerRegistry.bindReq(IPC_CHANNELS.NM_RUN_ABORT, RunAbort.abort);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_RUN_IS_ACTIVE, Agent.runIsActive);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
+      active: agentActivity.isActive(),
+    }));
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.AGENT_RESOLVE_CURRENT, Agent.resolveCurrent);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.AGENT_LIST_PICKER, Agent.listPicker);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_SET_CURRENT, Agent.setCurrent);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.MODEL_LIST_PICKER, Agent.modelListPicker);
+    HandlerRegistry.bindReq(IPC_CHANNELS.MODEL_SET_CURRENT, Agent.modelSetCurrent);
+
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROMPT_REAL_PREVIEW, Prompt.realPreview);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL, Prompt.chatTokenLabel);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROMPT_AGENT_META, Prompt.agentMeta);
+
+    HandlerRegistry.bindReq(IPC_CHANNELS.COMPACTION_MANUAL, CompactionIpc.handleManual);
+
+    // 布尔偏好：feature 表是唯一来源（含 VFS 统一 tool turn），新增开关只加表内一行。
+    for (const feature of Object.keys(PREFERENCE_FEATURES) as PreferenceFeature[]) {
+      HandlerRegistry.bindNoArg(PREFERENCE_FEATURES[feature].getChannel, () => Preferences.get(feature));
+      HandlerRegistry.bindBool(PREFERENCE_FEATURES[feature].setChannel, (enabled) => Preferences.set(feature, enabled));
     }
-  });
 
-  bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, handleWorkplaceBuildListRows);
-  bindReq(IPC_CHANNELS.WORKPLACE_SET_DIR_RULE, handleWorkplaceSetDirRule);
-  bindReq(IPC_CHANNELS.WORKPLACE_SET_FILE_RULE, handleWorkplaceSetFileRule);
-  bindReq(IPC_CHANNELS.WORKPLACE_GET_DIR_RULE, handleWorkplaceGetDirRule);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.PROVIDERS_LIST, Providers.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDERS_GET, Providers.get);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDERS_CREATE, Providers.create);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDERS_EDIT, Providers.edit);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDERS_DELETE, Providers.delete);
 
-  bindReq(IPC_CHANNELS.MESSAGES_LIST, handleMessagesList);
-  bindReq(IPC_CHANNELS.MESSAGES_APPEND, handleMessagesAppend);
-  bindReq(IPC_CHANNELS.MESSAGES_EDIT, handleMessagesEdit);
-  bindReq(IPC_CHANNELS.MESSAGES_HIDE, handleMessagesHide);
-  bindReq(IPC_CHANNELS.MESSAGES_SHOW, handleMessagesShow);
-  bindReq(IPC_CHANNELS.MESSAGES_HIDE_RANGE, handleMessagesHideRange);
-  bindReq(IPC_CHANNELS.MESSAGES_SHOW_RANGE, handleMessagesShowRange);
-  bindReq(IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER, handleMessagesTruncateAfter);
-  bindReq(IPC_CHANNELS.MESSAGES_DELETE, handleMessagesDelete);
-  bindReq(IPC_CHANNELS.MESSAGES_FORK, handleMessagesFork);
-  bindReq(IPC_CHANNELS.MESSAGES_ROLLBACK, handleMessagesRollback);
-  bindReq(IPC_CHANNELS.MESSAGES_SET_FLOOR, handleMessagesSetFloor);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST, ProviderModels.savedList);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_FETCH, ProviderModels.fetch);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST, ProviderModels.suggestList);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_SAVE, ProviderModels.save);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED, ProviderModels.deleteSaved);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED, ProviderModels.getSaved);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS, ProviderModels.updateSettings);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW, ProviderModels.resetContextWindow);
+    HandlerRegistry.bindReq(IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED, ProviderModels.editSaved);
 
-  bindReq(IPC_CHANNELS.USAGE_STATS_QUERY, handleUsageStatsQuery);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.AGENT_REGISTRY_LIST, AgentRegistry.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_REGISTRY_GET, AgentRegistry.get);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, AgentRegistry.upsert);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPDATE, AgentRegistry.update);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_REGISTRY_DELETE, AgentRegistry.remove);
+    // 可选 payload：renderer 不传参时 req 为 undefined，handler 侧容忍（现行为回归）。
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK, AgentRegistry.createBlank);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, AgentRegistry.exportYaml);
+    HandlerRegistry.bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, AgentRegistry.importYaml);
 
-  bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);
-  // 取消入口：nm:agent/abort 是转发别名（转 ABORT_KEY.agent），nm:run/abort 按
-  // { kind, id } 分发到 6 类长任务的 key 命名空间。
-  bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbortAlias);
-  bindReq(IPC_CHANNELS.NM_RUN_ABORT, handleRunAbort);
-  bindReq(IPC_CHANNELS.AGENT_RUN_IS_ACTIVE, handleAgentRunIsActive);
-  bindNoArg(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
-    active: agentActivity.isActive(),
-  }));
-  bindNoArg(IPC_CHANNELS.AGENT_RESOLVE_CURRENT, handleAgentResolveCurrent);
-  bindNoArg(IPC_CHANNELS.AGENT_LIST_PICKER, handleAgentListPicker);
-  bindReq(IPC_CHANNELS.AGENT_SET_CURRENT, handleAgentSetCurrent);
-  bindNoArg(IPC_CHANNELS.MODEL_LIST_PICKER, handleModelListPicker);
-  bindReq(IPC_CHANNELS.MODEL_SET_CURRENT, handleModelSetCurrent);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_LIST, SmartSortRule.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_CREATE, SmartSortRule.create);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_UPDATE, SmartSortRule.update);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE, SmartSortRule.remove);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH, SmartSortRule.deleteBatch);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED, SmartSortRule.setEnabled);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH, SmartSortRule.setEnabledBatch);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_MOVE, SmartSortRule.move);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_REORDER, SmartSortRule.reorder);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS, SmartSortRule.resetDefaults);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SMART_SORT_RULE_MATCH, SmartSortRule.match);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT, SmartSortRule.exportYaml);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT, SmartSortRule.importYaml);
 
-  bindReq(IPC_CHANNELS.PROMPT_REAL_PREVIEW, handlePromptRealPreview);
-  bindReq(IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL, handlePromptChatTokenLabel);
-  bindReq(IPC_CHANNELS.PROMPT_AGENT_META, handlePromptAgentMeta);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_LIST, Skills.list);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, Skills.effective);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_READ, Skills.read);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_WRITE, Skills.write);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_TOGGLE, Skills.toggle);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_DELETE, Skills.remove);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, Skills.assertCreateName);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SKILLS_UPDATE_INFO, Skills.updateInfo);
 
-  bindReq(IPC_CHANNELS.COMPACTION_MANUAL, handleCompactionManual);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.COMPACTION_CONDITIONS_GET, CompactionConditions.get);
+    HandlerRegistry.bindReq(IPC_CHANNELS.COMPACTION_CONDITIONS_SET, CompactionConditions.set);
 
-  // 布尔偏好：feature 表是唯一来源（含 VFS 统一 tool turn），新增开关只加表内一行。
-  for (const feature of Object.keys(PREFERENCE_FEATURES) as PreferenceFeature[]) {
-    bindNoArg(PREFERENCE_FEATURES[feature].getChannel, () => handlePreferencesGet(feature));
-    bindBool(PREFERENCE_FEATURES[feature].setChannel, (enabled) => handlePreferencesSet(feature, enabled));
-  }
+    // 可选请求体 `{ runId? }`：renderer 只为会展示取消按钮的任务生成 runId，
+    // 缺省时 handler 只建 scope + deadline、不注册进 abort registry（既有调用零改动）。
+    HandlerRegistry.bindReq(IPC_CHANNELS.BACKUP_EXPORT, Backup.handleExport);
+    HandlerRegistry.bindReq(IPC_CHANNELS.BACKUP_IMPORT, Backup.handleImport);
 
-  bindNoArg(IPC_CHANNELS.PROVIDERS_LIST, handleProvidersList);
-  bindReq(IPC_CHANNELS.PROVIDERS_GET, handleProvidersGet);
-  bindReq(IPC_CHANNELS.PROVIDERS_CREATE, handleProvidersCreate);
-  bindReq(IPC_CHANNELS.PROVIDERS_EDIT, handleProvidersEdit);
-  bindReq(IPC_CHANNELS.PROVIDERS_DELETE, handleProvidersDelete);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.DB_STATS, handleDbStats);
+    HandlerRegistry.bindReq(IPC_CHANNELS.DB_MAINTENANCE, handleDbMaintenance);
 
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST, handleProviderModelsSavedList);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_FETCH, handleProviderModelsFetch);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST, handleProviderModelsSuggestList);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_SAVE, handleProviderModelsSave);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED, handleProviderModelsDeleteSaved);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED, handleProviderModelsGetSaved);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS, handleProviderModelsUpdateSettings);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW, handleProviderModelsResetContextWindow);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED, handleProviderModelsEditSaved);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, CloudSync.getConfig);
+    HandlerRegistry.bindReq(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, CloudSync.setConfig);
+    HandlerRegistry.bindBool(IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED, CloudSync.setEnabled);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION, CloudSync.testConnection);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS, CloudSync.getLocalStatus);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.CLOUD_SYNC_PULL, CloudSync.pull);
+    HandlerRegistry.bindReq(IPC_CHANNELS.CLOUD_SYNC_PUSH, CloudSync.push);
 
-  bindNoArg(IPC_CHANNELS.AGENT_REGISTRY_LIST, handleAgentRegistryList);
-  bindReq(IPC_CHANNELS.AGENT_REGISTRY_GET, handleAgentRegistryGet);
-  bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, handleAgentRegistryUpsert);
-  bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPDATE, handleAgentRegistryUpdate);
-  bindReq(IPC_CHANNELS.AGENT_REGISTRY_DELETE, handleAgentRegistryDelete);
-  // 可选 payload：renderer 不传参时 req 为 undefined，handler 侧容忍（现行为回归）。
-  bindReq(IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK, handleAgentRegistryCreateBlank);
-  bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
-  bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.SEARCH_GET_CONFIG, Search.getConfig);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY, Search.saveEngineKey);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY, Search.clearEngineKey);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER, Search.setEngineOrder);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_SET_ENABLED, Search.setEnabled);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_SET_ENGINE_BASE_URL, Search.setEngineBaseUrl);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_CREATE_CUSTOM_ENGINE, Search.createCustomEngine);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE, Search.updateCustomEngine);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE, Search.deleteCustomEngine);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE, Search.updatePresetOverride);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE, Search.resetPresetOverride);
 
-  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_LIST, handleSmartSortRuleList);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_CREATE, handleSmartSortRuleCreate);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_UPDATE, handleSmartSortRuleUpdate);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE, handleSmartSortRuleDelete);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH, handleSmartSortRuleDeleteBatch);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED, handleSmartSortRuleSetEnabled);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH, handleSmartSortRuleSetEnabledBatch);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_MOVE, handleSmartSortRuleMove);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_REORDER, handleSmartSortRuleReorder);
-  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS, handleSmartSortRuleResetDefaults);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_MATCH, handleSmartSortRuleMatch);
-  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT, handleSmartSortRuleYamlExport);
-  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT, handleSmartSortRuleYamlImport);
+    HandlerRegistry.bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, Shell.menuPopup);
+    HandlerRegistry.bindEventReq(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, Shell.setTitleBarTheme);
+    HandlerRegistry.bindReq(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, AppInfo.openExternal);
 
-  bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
-  bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);
-  bindReq(IPC_CHANNELS.SKILLS_READ, handleSkillsRead);
-  bindReq(IPC_CHANNELS.SKILLS_WRITE, handleSkillsWrite);
-  bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
-  bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
-  bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, handleSkillsAssertCreateName);
-  bindReq(IPC_CHANNELS.SKILLS_UPDATE_INFO, handleSkillsUpdateInfo);
-
-  bindNoArg(IPC_CHANNELS.COMPACTION_CONDITIONS_GET, handleCompactionConditionsGet);
-  bindReq(IPC_CHANNELS.COMPACTION_CONDITIONS_SET, handleCompactionConditionsSet);
-
-  // 可选请求体 `{ runId? }`：renderer 只为会展示取消按钮的任务生成 runId，
-  // 缺省时 handler 只建 scope + deadline、不注册进 abort registry（既有调用零改动）。
-  bindReq(IPC_CHANNELS.BACKUP_EXPORT, handleBackupExport);
-  bindReq(IPC_CHANNELS.BACKUP_IMPORT, handleBackupImport);
-
-  bindNoArg(IPC_CHANNELS.DB_STATS, handleDbStats);
-  bindReq(IPC_CHANNELS.DB_MAINTENANCE, handleDbMaintenance);
-
-  bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, handleCloudSyncGetConfig);
-  bindReq(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, handleCloudSyncSetConfig);
-  bindBool(IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED, handleCloudSyncSetEnabled);
-  bindNoArg(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION, handleCloudSyncTestConnection);
-  bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS, handleCloudSyncGetLocalStatus);
-  bindNoArg(IPC_CHANNELS.CLOUD_SYNC_PULL, handleCloudSyncPull);
-  bindReq(IPC_CHANNELS.CLOUD_SYNC_PUSH, handleCloudSyncPush);
-
-  bindNoArg(IPC_CHANNELS.SEARCH_GET_CONFIG, handleSearchGetConfig);
-  bindReq(IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY, handleSearchSaveEngineKey);
-  bindReq(IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY, handleSearchClearEngineKey);
-  bindReq(IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER, handleSearchSetEngineOrder);
-  bindReq(IPC_CHANNELS.SEARCH_SET_ENABLED, handleSearchSetEnabled);
-  bindReq(IPC_CHANNELS.SEARCH_SET_ENGINE_BASE_URL, handleSearchSetEngineBaseUrl);
-  bindReq(IPC_CHANNELS.SEARCH_CREATE_CUSTOM_ENGINE, handleSearchCreateCustomEngine);
-  bindReq(IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE, handleSearchUpdateCustomEngine);
-  bindReq(IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE, handleSearchDeleteCustomEngine);
-  bindReq(IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE, handleSearchUpdatePresetOverride);
-  bindReq(IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE, handleSearchResetPresetOverride);
-
-  bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
-  bindEventReq(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, handleShellSetTitleBarTheme);
-  bindReq(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, handleAppOpenExternal);
-
-  bindNoArg(IPC_CHANNELS.APP_GET_INFO, handleAppGetInfo);
-  bindNoArg(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, handleAppCheckForUpdates);
-}
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.APP_GET_INFO, AppInfo.getInfo);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, AppInfo.checkForUpdates);
+  },
+} as const;

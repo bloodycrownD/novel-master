@@ -7,8 +7,8 @@ import { stat } from "node:fs/promises";
 import { DbMaintenance } from "@novel-master/core";
 import { AppError } from "@novel-master/core/errors";
 import { Result, Outcome, type Interrupt } from "@novel-master/core/errors";
-import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
-import { resolveDbPath } from "../runtime/resolve-db-path.js";
+import { DesktopRuntimeSingleton } from "../runtime/desktop-runtime-singleton.js";
+import { DesktopDbPath } from "../runtime/resolve-db-path.js";
 import { agentActivity } from "../runtime/agent-activity.js";
 import { syncBusy } from "./cloud-sync.service.js";
 import { maintenanceBusy } from "./db-maintenance-busy.js";
@@ -19,10 +19,10 @@ export async function getDbMaintenanceStats(): Promise<
 > {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
   // bootstrap 落盘）时拿到 ENOENT。装配的已知失败沿 Result 上行（错误通道迁移七期）。
-  const built = await getDesktopRuntime();
+  const built = await DesktopRuntimeSingleton.get();
   if (!built.ok) return Result.err(built.error);
   const runtime = built.value;
-  const fileInfo = await stat(resolveDbPath());
+  const fileInfo = await stat(DesktopDbPath.resolve());
   const maintenance = DbMaintenance.create(runtime.conn);
   const storage = await maintenance.getStorageStats();
   return Result.ok({
@@ -61,10 +61,10 @@ export async function runDbMaintenance(options?: { readonly checkpoint?: () => I
     // 与 getDbMaintenanceStats 同口径：先确保 runtime/库文件就绪再 stat，
     // 冷启动（库尚未 bootstrap 落盘）时避免 ENOENT。装配的已知失败沿 Outcome
     // 上行（错误通道迁移十九期），busy 由 finally 复位。
-    const built = await getDesktopRuntime();
+    const built = await DesktopRuntimeSingleton.get();
     if (!built.ok) return { kind: "failed", error: built.error };
     const runtime = built.value;
-    const dbPath = resolveDbPath();
+    const dbPath = DesktopDbPath.resolve();
     const beforeInfo = await stat(dbPath);
     await DbMaintenance.create(runtime.conn).runDatabaseMaintenance();
     const afterInfo = await stat(dbPath);

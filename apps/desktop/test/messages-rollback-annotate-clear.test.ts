@@ -6,12 +6,12 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { TextBlocks, chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
-import { handleMessagesRollback } from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
-import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import { Messages } from "../src/main/ipc/handlers/messages.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
+import { Sessions } from "../src/main/ipc/handlers/sessions.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -27,7 +27,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-rollback-uol-"));
-    const project = await handleProjectsCreate({ name: "rollback-uol" });
+    const project = await Projects.create({ name: "rollback-uol" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -35,10 +35,10 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     projectId = project.data.id;
 
     // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await handleAgentRegistryCreateBlank();
+    const blank = await AgentRegistry.createBlank();
     assert.equal(blank.ok, true);
     if (blank.ok) {
-      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+      await Agent.setCurrent({ agentId: blank.data.agentId });
     }
   });
 
@@ -47,7 +47,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
   });
 
   async function createSession(title: string): Promise<string> {
-    const session = await handleSessionsCreate({ projectId, title });
+    const session = await Sessions.create({ projectId, title });
     assert.equal(session.ok, true);
     if (!session.ok) {
       throw new Error("failed to create session");
@@ -57,7 +57,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
 
   it("T-UO4 undo_send: rollback 后清 main 侧 annotate store 并 COMPOSER_ATTACHMENTS_SUGGEST 推空", async () => {
     const sessionId = await createSession("undo-send");
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const annotateActionXml =
@@ -101,7 +101,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
       } as never;
     });
 
-    const result = await handleMessagesRollback({
+    const result = await Messages.rollback({
       projectId,
       sessionId,
       messageId: msg.id,
@@ -123,7 +123,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
 
   it("T-UO4 rewind: rollback 后 main 侧 annotate store 清空、推空", async () => {
     const sessionId = await createSession("rewind");
-    const rtR = await getDesktopRuntime();
+    const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const userMsg = await rt.messages.append(
@@ -157,7 +157,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
       } as never;
     });
 
-    const result = await handleMessagesRollback({
+    const result = await Messages.rollback({
       projectId,
       sessionId,
       messageId: assistant.id,

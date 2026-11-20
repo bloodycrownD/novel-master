@@ -14,13 +14,9 @@ import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { VfsZipBuild } from "@novel-master/core/vfs";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import {
-  handleSkillsAssertCreateName,
-  handleSkillsList,
-  handleSkillsRead,
-} from "../src/main/ipc/handlers/skills.js";
-import { handleVfsZipImportBytes } from "../src/main/ipc/handlers/vfs.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Skills } from "../src/main/ipc/handlers/skills.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -49,7 +45,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-skill-zip-"));
-    const project = await handleProjectsCreate({ name: "skill-zip-import" });
+    const project = await Projects.create({ name: "skill-zip-import" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -62,7 +58,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
   });
 
   it("项目域整包导入：SKILL.md 与附属文件均落盘", async () => {
-    const res = await handleVfsZipImportBytes({
+    const res = await Vfs.importZipBytes({
       workspaceScope: "project-meta",
       projectId,
       bytes: skillZipBytes("zip-skill", "来自 zip 的技能"),
@@ -71,7 +67,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
     });
     assert.equal(res.ok, true);
 
-    const list = await handleSkillsList({ domain: "project", projectId });
+    const list = await Skills.list({ domain: "project", projectId });
     assert.equal(list.ok, true);
     if (!list.ok) {
       return;
@@ -80,7 +76,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
     assert.ok(row != null, "导入后技能应出现在项目域清单");
     assert.deepEqual(row?.files, ["SKILL.md", "references/notes.md"]);
 
-    const skillMd = await handleSkillsRead({
+    const skillMd = await Skills.read({
       domain: "project",
       projectId,
       name: "zip-skill",
@@ -91,7 +87,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
       assert.match(skillMd.data.content, /正文。/);
     }
 
-    const ref = await handleSkillsRead({
+    const ref = await Skills.read({
       domain: "project",
       projectId,
       name: "zip-skill",
@@ -104,7 +100,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
   });
 
   it("全局域整包导入：落入全局技能目录", async () => {
-    const res = await handleVfsZipImportBytes({
+    const res = await Vfs.importZipBytes({
       workspaceScope: "global-meta",
       bytes: skillZipBytes("zip-global-skill", "全局 zip 技能"),
       confirmed: true,
@@ -112,7 +108,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
     });
     assert.equal(res.ok, true);
 
-    const list = await handleSkillsList({ domain: "global" });
+    const list = await Skills.list({ domain: "global" });
     assert.equal(list.ok, true);
     if (!list.ok) {
       return;
@@ -124,7 +120,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
   });
 
   it("非 zip 字节拒绝（VFS_ZIP_INVALID_ARCHIVE 透出 key，message 含 not a ZIP）", async () => {
-    const res = await handleVfsZipImportBytes({
+    const res = await Vfs.importZipBytes({
       workspaceScope: "global-meta",
       bytes: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
       confirmed: true,
@@ -200,7 +196,7 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-skill-zip-guard-"));
-    const project = await handleProjectsCreate({ name: "skill-zip-reserved" });
+    const project = await Projects.create({ name: "skill-zip-reserved" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -213,7 +209,7 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
   });
 
   it("handler：project 域保留名（目录不存在）拒绝并透传英文 desc，非名单名放行", async () => {
-    const denied = await handleSkillsAssertCreateName({
+    const denied = await Skills.assertCreateName({
       domain: "project",
       projectId,
       name: "agent-config",
@@ -225,7 +221,7 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
       assert.equal(denied.error.message, "「agent-config」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑");
     }
 
-    const allowed = await handleSkillsAssertCreateName({
+    const allowed = await Skills.assertCreateName({
       domain: "project",
       projectId,
       name: "zip-plain-skill",

@@ -8,8 +8,8 @@ import { IPC_CHANNELS, type IpcChannel, type IpcResult } from "../../../../share
 import type { AppError } from "@novel-master/core/errors";
 import type { PersistentPreferences } from "@novel-master/core";
 import { Result } from "@novel-master/core/errors";
-import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import { toIpcResult } from "../ipc-result.js";
+import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
+import { IpcResults } from "../ipc-result.js";
 
 type PreferenceFeatureSpec = {
   readonly getChannel: IpcChannel;
@@ -48,23 +48,25 @@ export const PREFERENCE_FEATURES = {
 
 export type PreferenceFeature = keyof typeof PREFERENCE_FEATURES;
 
-/** nm-style: keep-public — IPC handler 模块入口：registry 单点注册 + 桌面测试直调，runtime 装配与 Result 转码归属本模块。 */
-export function handlePreferencesGet(feature: PreferenceFeature): Promise<IpcResult<boolean>> {
-  return toIpcResult(async () => {
-    const built = await getDesktopRuntime();
-    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return Result.err(built.error);
-    return PREFERENCE_FEATURES[feature].read(built.value.preferences);
-  });
-}
+export const Preferences = {
+  /** nm-style: keep-public — IPC handler 模块入口：registry 单点注册 + 桌面测试直调，runtime 装配与 Result 转码归属本模块。 */
+  get(feature: PreferenceFeature): Promise<IpcResult<boolean>> {
+    return IpcResults.from(async () => {
+      const built = await DesktopRuntimeSingleton.get();
+      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+      if (!built.ok) return Result.err(built.error);
+      return PREFERENCE_FEATURES[feature].read(built.value.preferences);
+    });
+  },
 
-/** nm-style: keep-public — 同上：set 入口由 registry 注册（bindBool），策略在本模块而非注册表。 */
-export function handlePreferencesSet(feature: PreferenceFeature, enabled: boolean): Promise<IpcResult<void>> {
-  return toIpcResult(async () => {
-    const built = await getDesktopRuntime();
-    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return Result.err(built.error);
-    await PREFERENCE_FEATURES[feature].write(built.value.preferences, enabled);
-    return Result.ok(undefined);
-  });
-}
+  /** nm-style: keep-public — 同上：set 入口由 registry 注册（bindBool），策略在本模块而非注册表。 */
+  async set(feature: PreferenceFeature, enabled: boolean): Promise<IpcResult<void>> {
+    return IpcResults.from(async () => {
+      const built = await DesktopRuntimeSingleton.get();
+      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+      if (!built.ok) return Result.err(built.error);
+      await PREFERENCE_FEATURES[feature].write(built.value.preferences, enabled);
+      return Result.ok(undefined);
+    });
+  },
+} as const;

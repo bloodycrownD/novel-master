@@ -35,19 +35,21 @@ export function __failRun(error) {
   p?.reject(error ?? new Error("prelude boom"));
 }
 
-export async function resolveCurrentAgentDefinitionOrThrow() {
-  return {
-    agentId: "agent-test",
-    definition: { name: "测试 Agent", mode: "primary" },
-  };
-}
+export const AgentRunService = {
+  async resolveCurrentDefinitionOrThrow() {
+    return {
+      agentId: "agent-test",
+      definition: { name: "测试 Agent", mode: "primary" },
+    };
+  },
 
-export async function resolveDesktopSavedModelIdOrThrow() {
-  return { savedModelId: "model-test", workspaceModelId: "" };
-}
+  async resolveSavedModelIdOrThrow() {
+    return { savedModelId: "model-test", workspaceModelId: "" };
+  },
 
-export function runAgentTurnAdapter() {
-  return new Promise((resolve, reject) => {
-    pending = { resolve, reject };
-  });
-}
+  run() {
+    return new Promise((resolve, reject) => {
+      pending = { resolve, reject };
+    });
+  },
+};

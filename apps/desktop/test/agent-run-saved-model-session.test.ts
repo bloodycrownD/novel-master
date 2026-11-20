@@ -4,8 +4,8 @@ import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
 } from "../shared/config-forms/agent.js";
-import { resolveDesktopSavedModelIdOrThrow } from "../src/main/services/agent-run.service.js";
-import { createDesktopNovelMasterRuntime } from "../src/main/runtime/create-desktop-runtime.js";
+import { AgentRunService } from "../src/main/services/agent-run.service.js";
+import { DesktopRuntimeFactory } from "../src/main/runtime/create-desktop-runtime.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -29,7 +29,7 @@ describe("resolveDesktopSavedModelIdOrThrow session passthrough", () => {
 
   it("session modelId 在 agent 无 pin 时作为模型来源生效", async () => {
     // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
-    const rtR = await createDesktopNovelMasterRuntime();
+    const rtR = await DesktopRuntimeFactory.create();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const prompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
@@ -61,7 +61,7 @@ describe("resolveDesktopSavedModelIdOrThrow session passthrough", () => {
     // resolveApplicationModelIdForRun 收 AGENT_MODEL_NOT_SET，经 mapResolveError
     // 转 AgentTurnError 抛出（抛出契约保留）。
     await assert.rejects(
-      () => resolveDesktopSavedModelIdOrThrow(rt, definition, session.id),
+      () => AgentRunService.resolveSavedModelIdOrThrow(rt, definition, session.id),
       (err: unknown) => err instanceof Error
     );
 
@@ -71,7 +71,7 @@ describe("resolveDesktopSavedModelIdOrThrow session passthrough", () => {
       modelId: "session-saved-model",
     });
     if (!bound.ok) throw bound.error;
-    const resolved = await resolveDesktopSavedModelIdOrThrow(
+    const resolved = await AgentRunService.resolveSavedModelIdOrThrow(
       rt,
       definition,
       session.id

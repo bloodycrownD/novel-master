@@ -17,7 +17,7 @@ import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { Concurrency, Path } from "@novel-master/core/common";
 import { agentActivity } from "../runtime/agent-activity.js";
 import { maintenanceBusy } from "./db-maintenance-busy.js";
-import { createCloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncConfigStore, type CloudSyncLocalMeta } from "./cloud-sync-config.store.js";
+import { CloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncLocalMeta } from "./cloud-sync-config.store.js";
 
 export type CloudSyncLocalStatusDto = {
   configured: boolean;
@@ -60,7 +60,7 @@ class DesktopCloudSyncService {
   constructor(runtime: DesktopNovelMasterRuntime) {
     this.runtime = runtime;
     this.runtimeIdentity = runtime;
-    this.configStore = createCloudSyncConfigStore(runtime.kkv, runtime.secretStore);
+    this.configStore = CloudSyncConfigStore.create(runtime.kkv, runtime.secretStore);
   }
 
   async getConfig(): Promise<Result<CloudSyncConfigDto, AppError>> {
@@ -206,7 +206,7 @@ class DesktopCloudSyncService {
    * ——此刻 `this.configStore` 背后的连接刚被 `importDatabaseBackupFrom*` 关掉，
    * 记账会抛 `CONNECTION_CLOSED`（且抛错发生在 recordPull 之前，把已完成的
    * 拉取记成失败，rev 永不推进）。记账改由 handler 在
-   * `rebootstrapDesktopRuntime()` 之后调 {@link recordPullSuccess} 完成。
+   * `DesktopRuntimeSingleton.rebootstrap()` 之后调 {@link recordPullSuccess} 完成。
    *
    * `ALREADY_UP_TO_DATE` 早返回分支与失败分支仍在本处记账：**库没换、连接没关**，
    * 此时旧 runtime 仍是活的，记账句柄有效。该早返回对象的
@@ -267,7 +267,7 @@ class DesktopCloudSyncService {
       // ⇒ 面板上「上次拉取结果」永远停在旧值，与实际发生的「换代成功但三表未恢复」
       // 永久不一致。**一次注定失败的写还不如不写**：它既不产生任何信息，还制造
       // 一次「以为自己记过了」的错觉。
-      // 换代路径的记账由 handler 在 `rebootstrapDesktopRuntime()` 之后走
+      // 换代路径的记账由 handler 在 `DesktopRuntimeSingleton.rebootstrap()` 之后走
       // `recordPullSuccess()` 现场造 store 来做（见该方法 JSDoc），不依赖本支。
       if (!(error instanceof DatabaseReplacedError)) {
         await this.configStore.recordPull(false, detail).catch(() => undefined);
@@ -289,20 +289,20 @@ class DesktopCloudSyncService {
   /**
    * 换代之后记账 pull 成功：每次现取 runtime 现场构造 config store。
    *
-   * 必须现取：handler 在 `rebootstrapDesktopRuntime()` **之前**捕获的 service
+   * 必须现取：handler 在 `DesktopRuntimeSingleton.rebootstrap()` **之前**捕获的 service
    * 仍是旧代实例，其 `configStore` 绑的是已被关掉的连接——按身份重建救不了
-   * 旧实例上的方法调用。`getDesktopRuntime()` 在 `closeLiveDbForBackupImport`
+   * 旧实例上的方法调用。`DesktopRuntimeSingleton.get()` 在 `closeLiveDbForBackupImport`
    * 之后会懒建出一个**新对象**，这里的 store 因此必然绑在活连接上。
    *
    * nm-style: keep-public — rebootstrap 后由 handler 调用的记账交接点；需在方法内现取新 runtime
    * 现场构造 store（见上方契约），handler 复制该逻辑只会多一份漂移点。
    */
   async recordPullSuccess(rev: number): Promise<void> {
-    const { getDesktopRuntimeOrThrow } = await import("../runtime/desktop-runtime-singleton.js");
-    // 调用契约：handler 在 `rebootstrapDesktopRuntime()` 成功之后才进本方法，
+    const { DesktopRuntimeSingleton } = await import("../runtime/desktop-runtime-singleton.js");
+    // 调用契约：handler 在 `DesktopRuntimeSingleton.rebootstrap()` 成功之后才进本方法，
     // 单例 runtime 字段必已就位（换库懒建已发生），同步取即可。
-    const rt = getDesktopRuntimeOrThrow();
-    const store = createCloudSyncConfigStore(rt.kkv, rt.secretStore);
+    const rt = DesktopRuntimeSingleton.getOrThrow();
+    const store = CloudSyncConfigStore.create(rt.kkv, rt.secretStore);
     await store.setLastSyncedRev(rev);
     await store.recordPull(true, `已同步至 rev ${rev}`);
   }
@@ -410,20 +410,20 @@ class DesktopCloudSyncService {
     const dbSync = {
       isAgentActive: () => agentActivity.isActive(),
       exportSnapshotToPath: async (destPath: string) => {
-        const { exportDatabaseBackupToPath } = await import("./db-backup.service.js");
-        await exportDatabaseBackupToPath(runtime, destPath);
+        const { DbBackupService } = await import("./db-backup.service.js");
+        await DbBackupService.exportToPath(runtime, destPath);
       },
       importSnapshot: async (bytes: Uint8Array) => {
-        const { importDatabaseBackupFromBytes } = await import("./db-backup.service.js");
+        const { DbBackupService } = await import("./db-backup.service.js");
         // 必须 return：不 return 完全合法、零类型错误，但运行时
         // databaseReplaced === undefined ⇒ handler 永不 rebootstrap ⇒ P0 原样复发。
         // 已知失败沿 Result 通道交给 coordinator（错误通道迁移七期：DbSyncPort
         // 导入面已 Result 化）；DatabaseReplacedError 仍走 throw 通道。
-        return importDatabaseBackupFromBytes(bytes);
+        return DbBackupService.importFromBytes(bytes);
       },
       importSnapshotFromPath: async (path: string) => {
-        const { importDatabaseBackupFromPath } = await import("./db-backup.service.js");
-        return importDatabaseBackupFromPath(path);
+        const { DbBackupService } = await import("./db-backup.service.js");
+        return DbBackupService.importFromPath(path);
       },
     };
 
@@ -455,6 +455,7 @@ class DesktopCloudSyncService {
     });
   }
 }
+
 /**
  * 测试用：让 pull 走注入的 storage（内存版远端）。
  *
@@ -464,14 +465,10 @@ class DesktopCloudSyncService {
  */
 let storageOverrideForTest: ObjectStoragePort | undefined;
 
-export function __setDesktopCloudSyncStorageOverrideForTest(storage: ObjectStoragePort | null): void {
-  storageOverrideForTest = storage ?? undefined;
-}
-
 /**
  * 云同步单例——**与 runtime 同寿命；runtime 换代时必须重建**。
  *
- * 旧实现只在首次构造时用 runtime，此后每次调用虽然都 `await getDesktopRuntime()`
+ * 旧实现只在首次构造时用 runtime，此后每次调用虽然都取新 runtime
  * 却不更新，于是 rebootstrap 之后拿到的是「新 runtime 外面套着旧 service」：
  * 旧 service 的 configStore 绑旧 kkv、buildCoordinator 里的 dbSync 用的也是
  * 旧 runtime ⇒ 面板全线 `CONNECTION_CLOSED` 直到重启应用。
@@ -480,20 +477,26 @@ export function __setDesktopCloudSyncStorageOverrideForTest(storage: ObjectStora
  */
 let service: DesktopCloudSyncService | undefined;
 
-export async function getDesktopCloudSyncService(): Promise<Result<DesktopCloudSyncService, AppError>> {
-  const { getDesktopRuntime } = await import("../runtime/desktop-runtime-singleton.js");
-  const built = await getDesktopRuntime();
-  if (!built.ok) return Result.err(built.error);
-  const runtime = built.value;
-  if (service == null || !service.isForRuntime(runtime)) {
-    service = new DesktopCloudSyncService(runtime);
+export namespace CloudSyncService {
+  export function setStorageOverrideForTest(storage: ObjectStoragePort | null): void {
+    storageOverrideForTest = storage ?? undefined;
   }
-  return Result.ok(service);
-}
 
-/** 测试用：重置单例与忙碌状态 */
-export function resetDesktopCloudSyncServiceForTest(): void {
-  service = undefined;
-  syncBusy.resetForTest();
-  storageOverrideForTest = undefined;
+  export async function get(): Promise<Result<DesktopCloudSyncService, AppError>> {
+    const { DesktopRuntimeSingleton } = await import("../runtime/desktop-runtime-singleton.js");
+    const built = await DesktopRuntimeSingleton.get();
+    if (!built.ok) return Result.err(built.error);
+    const runtime = built.value;
+    if (service == null || !service.isForRuntime(runtime)) {
+      service = new DesktopCloudSyncService(runtime);
+    }
+    return Result.ok(service);
+  }
+
+  /** 测试用：重置单例与忙碌状态 */
+  export function resetForTest(): void {
+    service = undefined;
+    syncBusy.resetForTest();
+    storageOverrideForTest = undefined;
+  }
 }

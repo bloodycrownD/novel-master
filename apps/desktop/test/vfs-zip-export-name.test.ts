@@ -9,8 +9,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { dialog } from "electron";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleVfsZipExport } from "../src/main/ipc/handlers/vfs.js";
+import { Projects } from "../src/main/ipc/handlers/projects.js";
+import { Vfs } from "../src/main/ipc/handlers/vfs.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -39,7 +39,7 @@ describe("handleVfsZipExport 保存框默认名", () => {
       return { canceled: true, filePath: undefined };
     }) as typeof dialog.showSaveDialog;
 
-    const project = await handleProjectsCreate({ name: projectName });
+    const project = await Projects.create({ name: projectName });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -53,7 +53,7 @@ describe("handleVfsZipExport 保存框默认名", () => {
   });
 
   it("fileName 覆盖透传到 dialog defaultPath", async () => {
-    const res = await handleVfsZipExport({
+    const res = await Vfs.exportZip({
       workspaceScope: "project-meta",
       projectId,
       fileName: "技能包.zip",
@@ -64,7 +64,7 @@ describe("handleVfsZipExport 保存框默认名", () => {
   });
 
   it("无覆盖根目录用项目名（与 mobile 同规则）", async () => {
-    const res = await handleVfsZipExport({
+    const res = await Vfs.exportZip({
       workspaceScope: "project-meta",
       projectId,
     });
@@ -73,7 +73,7 @@ describe("handleVfsZipExport 保存框默认名", () => {
   });
 
   it("子目录取末段（与 mobile 同规则）", async () => {
-    const res = await handleVfsZipExport({
+    const res = await Vfs.exportZip({
       workspaceScope: "project-meta",
       projectId,
       directoryPath: "/meta/skills/写作",
@@ -83,7 +83,7 @@ describe("handleVfsZipExport 保存框默认名", () => {
   });
 
   it("无 projectId 域根目录回退 workspace.zip", async () => {
-    const res = await handleVfsZipExport({ workspaceScope: "global-meta" });
+    const res = await Vfs.exportZip({ workspaceScope: "global-meta" });
     assert.equal(res.ok, true);
     assert.equal(lastDialogOptions().defaultPath, "workspace.zip");
   });

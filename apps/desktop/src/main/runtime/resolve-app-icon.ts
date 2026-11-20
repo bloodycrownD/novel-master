@@ -9,17 +9,20 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export function resolveAppIconPath(): string | undefined {
-  const candidates = [
-    path.join(app.getAppPath(), "build/icons/icon.png"),
-    path.join(app.getAppPath(), "..", "build/icons/icon.png"),
-    path.join(__dirname, "../../build/icons/icon.png"),
-    path.join(__dirname, "../../../build/icons/icon.png"),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate;
+// nm-style 注记：文件名 resolve- 动词前缀，按内容主体起名（AppIcon）。
+export namespace AppIcon {
+  export function resolvePath(): string | undefined {
+    const candidates = [
+      path.join(app.getAppPath(), "build/icons/icon.png"),
+      path.join(app.getAppPath(), "..", "build/icons/icon.png"),
+      path.join(__dirname, "../../build/icons/icon.png"),
+      path.join(__dirname, "../../../build/icons/icon.png"),
+    ];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
     }
+    return undefined;
   }
-  return undefined;
 }

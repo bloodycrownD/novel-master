@@ -18,9 +18,7 @@ register(
   import.meta.url,
 );
 
-const { handleAgentRun, __testRunTrackingState } = await import(
-  "../src/main/ipc/handlers/agent.js"
-);
+const { Agent } = await import("../src/main/ipc/handlers/agent.js");
 
 /** 等待 fire-and-forget 的 runAgentTurn 走完 catch+finally 的微任务队列。 */
 async function waitForBackgroundFinally(): Promise<void> {
@@ -37,9 +35,9 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
   });
 
   it("RUN_STARTED 之前 reject 时 refcount 回落到 0，再次 run 不被 AGENT_BUSY 挡，map 无泄漏", async () => {
-    const before = __testRunTrackingState();
+    const before = Agent.__testRunTrackingState();
 
-    const first = await handleAgentRun({
+    const first = await Agent.run({
       projectId: "p1",
       sessionId: "s-early-exit",
       userContent: "hi",
@@ -55,7 +53,7 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
     );
 
     // ② 再次调用不应被 AGENT_BUSY 门禁挡掉。
-    const second = await handleAgentRun({
+    const second = await Agent.run({
       projectId: "p1",
       sessionId: "s-early-exit",
       userContent: "again",
@@ -67,7 +65,7 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
     await waitForBackgroundFinally();
 
     // ③ 早退分支必须清掉 activeRuns，map 大小回到测试前水位。
-    const after = __testRunTrackingState();
+    const after = Agent.__testRunTrackingState();
     assert.equal(
       after.activeRunsCount,
       before.activeRunsCount,

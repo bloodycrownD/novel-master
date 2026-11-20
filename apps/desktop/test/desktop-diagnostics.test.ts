@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { exportDiagnostics, openLogsDirectory, type DiagnosticsSeams } from "../src/main/log/desktop-diagnostics.js";
+import { DesktopDiagnostics, type DiagnosticsSeams } from "../src/main/log/desktop-diagnostics.js";
 
 function fakeSeams(overrides: Partial<DiagnosticsSeams> = {}): {
   readonly seams: DiagnosticsSeams;
@@ -44,7 +44,7 @@ function fakeSeams(overrides: Partial<DiagnosticsSeams> = {}): {
 describe("openLogsDirectory", () => {
   it("把 logs 目录交给系统文件管理器", async () => {
     const { seams, opened } = fakeSeams();
-    await openLogsDirectory(seams);
+    await DesktopDiagnostics.openLogsDirectory(seams);
     assert.deepEqual(opened, [seams.logsDir]);
   });
 });
@@ -54,7 +54,7 @@ describe("exportDiagnostics", () => {
     const { seams, copied, written, opened } = fakeSeams();
     const targetDir = path.join("/tmp", "out", "nm-diagnostics-20261107-123456");
 
-    const result = await exportDiagnostics(seams);
+    const result = await DesktopDiagnostics.export(seams);
 
     assert.equal(result, targetDir);
     assert.deepEqual(
@@ -89,7 +89,7 @@ describe("exportDiagnostics", () => {
   it("取消选择时不建目录、不复制", async () => {
     const { seams, copied, written, opened } = fakeSeams({ showOpenDialog: async () => ({ canceled: true, filePaths: [] }) });
 
-    const result = await exportDiagnostics(seams);
+    const result = await DesktopDiagnostics.export(seams);
 
     assert.equal(result, undefined);
     assert.deepEqual(copied, []);

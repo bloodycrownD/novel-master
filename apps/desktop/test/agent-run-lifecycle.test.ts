@@ -6,11 +6,7 @@ import {
   SimpleEventBus,
 } from "@novel-master/core/events";
 import { agentActivity } from "../src/main/runtime/agent-activity.js";
-import {
-  attachAgentRunLifecycleListeners,
-  onCoreRunFinished,
-  onCoreRunStarted,
-} from "../src/main/ipc/handlers/agent.js";
+import { Agent } from "../src/main/ipc/handlers/agent.js";
 import { EventBusForwarder } from "../src/main/ipc/forward-event-bus.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 
@@ -23,12 +19,12 @@ describe("agent run lifecycle", () => {
 
   it("RUN_FINISHED 递减后再次 decrement 幂等（不双减）", () => {
     agentActivity.increment();
-    onCoreRunStarted({
+    Agent.onCoreRunStarted({
       sessionId: "s-finish",
       projectId: "p1",
       runId: "run-1",
     });
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       sessionId: "s-finish",
       projectId: "p1",
       runId: "run-1",
@@ -45,7 +41,7 @@ describe("agent run lifecycle", () => {
     // 这里不直接调 abortAgentRun（需 runtime 单例），而是验证契约本身：
     // 在收到 RUN_FINISHED 之前，refcount 恒为 true。
     agentActivity.increment();
-    onCoreRunStarted({
+    Agent.onCoreRunStarted({
       sessionId: "s-abort",
       projectId: "p1",
       runId: "run-abort",
@@ -53,7 +49,7 @@ describe("agent run lifecycle", () => {
     // 此处模拟 abort 后的中间态——abort 既不 increment 也不 decrement，
     // 所以 refcount 维持 RUN_STARTED 后的状态。
     assert.equal(agentActivity.isActive(), true);
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       sessionId: "s-abort",
       projectId: "p1",
       runId: "run-abort",
@@ -64,13 +60,13 @@ describe("agent run lifecycle", () => {
 
   it("stale RUN_FINISHED 不匹配 runId 时不递减", () => {
     agentActivity.increment();
-    onCoreRunStarted({
+    Agent.onCoreRunStarted({
       sessionId: "s-stale",
       projectId: "p1",
       runId: "run-a",
     });
 
-    onCoreRunFinished({
+    Agent.onCoreRunFinished({
       sessionId: "s-stale",
       projectId: "p1",
       runId: "run-b",
@@ -89,7 +85,7 @@ describe("agent run lifecycle", () => {
       },
     }));
     EventBusForwarder.attach(bus);
-    attachAgentRunLifecycleListeners(bus);
+    Agent.attachRunLifecycleListeners(bus);
 
     agentActivity.increment();
     bus.publish(EVENT_AGENT_RUN_STARTED, {

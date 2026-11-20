@@ -3,7 +3,7 @@
  * 空列表也发送，以便清掉上一条状态 chip。
  */
 import { IPC_CHANNELS, type ComposerAttachmentsSuggestPayload } from "../../../shared/ipc-types.js";
-import { createEventForwarder } from "./event-forwarder.js";
+import { EventForwarder } from "./event-forwarder.js";
 
 /** 与 workspaceMutated 共用同一窗口解析器；notify 整表替换 Composer 状态条附件。 */
-export const ComposerAttachmentsSuggestForwarder = createEventForwarder<ComposerAttachmentsSuggestPayload>(IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
+export const ComposerAttachmentsSuggestForwarder = EventForwarder.create<ComposerAttachmentsSuggestPayload>(IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);

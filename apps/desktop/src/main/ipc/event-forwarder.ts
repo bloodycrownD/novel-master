@@ -32,31 +32,30 @@ export interface EventForwarderOptions<Payload, AttachArgs extends unknown[]> {
   readonly subscribe?: (emit: (payload: Payload) => void, ...args: AttachArgs) => () => void;
 }
 
-export function createEventForwarder<Payload, AttachArgs extends unknown[] = []>(
-  channelName: string,
-  options: EventForwarderOptions<Payload, AttachArgs> = {},
-): EventForwarder<Payload, AttachArgs> {
-  let getTarget: ForwardTargetResolver | undefined;
-  let detach: (() => void) | undefined;
+export const EventForwarder = {
+  create<Payload, AttachArgs extends unknown[] = []>(channelName: string, options: EventForwarderOptions<Payload, AttachArgs> = {}): EventForwarder<Payload, AttachArgs> {
+    let getTarget: ForwardTargetResolver | undefined;
+    let detach: (() => void) | undefined;
 
-  const detachCurrent = (): void => {
-    detach?.();
-    detach = undefined;
-  };
+    const detachCurrent = (): void => {
+      detach?.();
+      detach = undefined;
+    };
 
-  return {
-    setTarget(resolver) {
-      getTarget = resolver;
-    },
+    return {
+      setTarget(resolver) {
+        getTarget = resolver;
+      },
 
-    attach(...args) {
-      detachCurrent();
-      detach = options.subscribe?.((payload) => getTarget?.()?.send(channelName, payload), ...args) ?? (() => undefined);
-      return detachCurrent;
-    },
+      attach(...args) {
+        detachCurrent();
+        detach = options.subscribe?.((payload) => getTarget?.()?.send(channelName, payload), ...args) ?? (() => undefined);
+        return detachCurrent;
+      },
 
-    notify(payload) {
-      getTarget?.()?.send(channelName, payload);
-    },
-  };
-}
+      notify(payload) {
+        getTarget?.()?.send(channelName, payload);
+      },
+    };
+  },
+} as const;

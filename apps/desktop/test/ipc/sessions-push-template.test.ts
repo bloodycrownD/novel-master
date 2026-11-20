@@ -17,7 +17,7 @@ import { after, beforeEach, describe, it, mock } from "node:test";
 import { IPC_CHANNELS } from "../../shared/ipc-types.js";
 
 register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));
-const { handleSessionsPushTemplate } = await import(
+const { Sessions } = await import(
   "../../src/main/ipc/handlers/sessions.js"
 );
 const { WorkspaceMutatedForwarder } =
@@ -66,7 +66,7 @@ describe("handleSessionsPushTemplate（T-WP6）", () => {
       sessions: { pushSessionTemplate: pushTemplate, get: getSession },
     };
 
-    const result = await handleSessionsPushTemplate({ sessionId: "s-1" });
+    const result = await Sessions.pushTemplate({ sessionId: "s-1" });
 
     assert.equal(result.ok, true);
     assert.equal(pushTemplate.mock.callCount(), 1);
@@ -90,7 +90,7 @@ describe("handleSessionsPushTemplate（T-WP6）", () => {
       sessions: { pushSessionTemplate: pushTemplate, get: getSession },
     };
 
-    const result = await handleSessionsPushTemplate({ sessionId: "s-1" });
+    const result = await Sessions.pushTemplate({ sessionId: "s-1" });
 
     assert.equal(result.ok, false);
     // 失败不 notify：send 零次

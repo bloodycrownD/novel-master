@@ -20,19 +20,10 @@ import { after, before, describe, it } from "node:test";
 import { CloudSyncPaths, type ObjectStoragePort } from "@novel-master/core";
 import { Path } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
-import {
-  __setDesktopCloudSyncStorageOverrideForTest,
-  resetDesktopCloudSyncServiceForTest,
-} from "../src/main/services/cloud-sync.service.js";
-import { exportDatabaseBackupToPath } from "../src/main/services/db-backup.service.js";
-import {
-  handleCloudSyncGetLocalStatus,
-  handleCloudSyncPull,
-  handleCloudSyncSetConfig,
-} from "../src/main/ipc/handlers/cloud-sync.js";
-import {
-  getDesktopRuntime,
-} from "../src/main/runtime/desktop-runtime-singleton.js";
+import { CloudSyncService } from "../src/main/services/cloud-sync.service.js";
+import { DbBackupService } from "../src/main/services/db-backup.service.js";
+import { CloudSync } from "../src/main/ipc/handlers/cloud-sync.js";
+import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -90,24 +81,24 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
 
   /** 导出一份真实快照，登记到内存远端上，返回快照路径。 */
   async function publishRemote(label: string): Promise<void> {
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
     const snapshotPath = join(tempDir, `remote-${label}.nmbackup`);
-    await exportDatabaseBackupToPath(runtime, snapshotPath);
+    await DbBackupService.exportToPath(runtime, snapshotPath);
     const snapshot = new Uint8Array(await readFile(snapshotPath));
     const sha256 = createHash("sha256").update(snapshot).digest("hex");
     revCounter += 1;
-    resetDesktopCloudSyncServiceForTest();
-    __setDesktopCloudSyncStorageOverrideForTest(
+    CloudSyncService.resetForTest();
+    CloudSyncService.setStorageOverrideForTest(
       createMemoryRemote({ rev: revCounter, snapshot, sha256 })
     );
   }
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-pull-accounting-"));
-    resetDesktopCloudSyncServiceForTest();
-    const saved = await handleCloudSyncSetConfig({
+    CloudSyncService.resetForTest();
+    const saved = await CloudSync.setConfig({
       endpoint: "https://s3.example.com",
       bucket: "test-bucket",
       region: "",
@@ -121,19 +112,19 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
   });
 
   after(async () => {
-    __setDesktopCloudSyncStorageOverrideForTest(null);
-    resetDesktopCloudSyncServiceForTest();
+    CloudSyncService.setStorageOverrideForTest(null);
+    CloudSyncService.resetForTest();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("pull 成功后 lastSyncedRev 推进且第二次 pull 命中 ALREADY_UP_TO_DATE", async () => {
     await publishRemote("rev2");
     const expectedRev = revCounter;
-    const beforeR = await getDesktopRuntime();
+    const beforeR = await DesktopRuntimeSingleton.get();
     if (!beforeR.ok) throw beforeR.error;
     const before = beforeR.value;
 
-    const first = await handleCloudSyncPull();
+    const first = await CloudSync.pull();
     assert.equal(
       first.ok,
       true,
@@ -144,12 +135,12 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     }
 
     // 换库之后 runtime 必须已换代。
-    const afterPullR = await getDesktopRuntime();
+    const afterPullR = await DesktopRuntimeSingleton.get();
     if (!afterPullR.ok) throw afterPullR.error;
     const afterPull = afterPullR.value;
     assert.notEqual(afterPull, before, "换库后 runtime 必须换代");
 
-    const status = await handleCloudSyncGetLocalStatus();
+    const status = await CloudSync.getLocalStatus();
     assert.equal(status.ok, true);
     if (status.ok) {
       assert.equal(
@@ -165,7 +156,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     }
 
     // 「rev 永不推进」这条主症状的直接反证：第二次 pull 不该再拉一遍同一 rev。
-    const second = await handleCloudSyncPull();
+    const second = await CloudSync.pull();
     assert.equal(second.ok, true);
     if (second.ok) {
       assert.equal(
@@ -174,7 +165,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
         "ALREADY_UP_TO_DATE 早返回时库没换、连接没关",
       );
     }
-    const status2 = await handleCloudSyncGetLocalStatus();
+    const status2 = await CloudSync.getLocalStatus();
     assert.equal(status2.ok, true);
     if (status2.ok) {
       assert.equal(status2.data.lastPullResult, "成功：已是最新");
@@ -187,17 +178,17 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     // 导入，node:test 基座没有可注入缝），改断言 runtime 身份——rebootstrap 必然
     // 产生新对象，身份不变恰好抓住「不该 rebuild 却 rebuild 了」的回归方向。
     // 远端 rev 未前进 ⇒ 必走 ALREADY_UP_TO_DATE。
-    resetDesktopCloudSyncServiceForTest();
-    __setDesktopCloudSyncStorageOverrideForTest(
+    CloudSyncService.resetForTest();
+    CloudSyncService.setStorageOverrideForTest(
       createMemoryRemote({ rev: revCounter, snapshot: new Uint8Array([0]), sha256: "x" })
     );
 
-    const beforeR = await getDesktopRuntime();
+    const beforeR = await DesktopRuntimeSingleton.get();
     if (!beforeR.ok) throw beforeR.error;
     const before = beforeR.value;
-    const result = await handleCloudSyncPull();
+    const result = await CloudSync.pull();
     assert.equal(result.ok, true, JSON.stringify(result));
-    const afterR = await getDesktopRuntime();
+    const afterR = await DesktopRuntimeSingleton.get();
     if (!afterR.ok) throw afterR.error;
     const after = afterR.value;
     assert.equal(
@@ -211,12 +202,12 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     await publishRemote("rev3");
     const expectedRev = revCounter;
 
-    const result = await handleCloudSyncPull();
+    const result = await CloudSync.pull();
     assert.equal(result.ok, true, JSON.stringify(result));
     if (result.ok) {
       assert.equal(result.data.databaseReplaced, true);
     }
-    const status = await handleCloudSyncGetLocalStatus();
+    const status = await CloudSync.getLocalStatus();
     assert.equal(status.ok, true);
     if (status.ok) {
       assert.equal(status.data.lastSyncedRev, expectedRev);
@@ -230,7 +221,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     // → 恢复三表前 ProviderTableSnapshotIo.validate 抛错
     // → coordinator 原样透传 DatabaseReplacedError。
     // 「库已换却不重建」比「记账失败」更糟，所以 catch 分支必须先换代再报错。
-    const runtimeR = await getDesktopRuntime();
+    const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
     await runtime.conn.execute(
@@ -239,10 +230,10 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     );
     await publishRemote("rev4");
 
-    const beforeR = await getDesktopRuntime();
+    const beforeR = await DesktopRuntimeSingleton.get();
     if (!beforeR.ok) throw beforeR.error;
     const before = beforeR.value;
-    const result = await handleCloudSyncPull();
+    const result = await CloudSync.pull();
 
     assert.equal(result.ok, false, "收尾失败应回报失败");
     if (!result.ok) {
@@ -252,7 +243,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
         "失败信息必须可读且带上 providerTablesRestored",
       );
     }
-    const afterR = await getDesktopRuntime();
+    const afterR = await DesktopRuntimeSingleton.get();
     if (!afterR.ok) throw afterR.error;
     const after = afterR.value;
     assert.notEqual(
@@ -261,7 +252,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
       "catch 分支必须先换代再报错（库已换却不重建比记账失败更糟）",
     );
     // 换代后的 runtime 必须可用（能读状态）——否则这个「换代」是假的。
-    const status = await handleCloudSyncGetLocalStatus();
+    const status = await CloudSync.getLocalStatus();
     assert.equal(status.ok, true);
   });
 });
