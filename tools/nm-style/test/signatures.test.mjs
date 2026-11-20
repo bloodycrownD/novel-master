@@ -56,6 +56,11 @@ function scanText(text) {
   return scanSignatures({ entries: [{ file: "fixture.ts", text }], isAdded: () => true });
 }
 
+/** JSX 语法用例专用：.tsx 后缀（.ts 下 JSX 解析不成立，豁免判定的 parent 链/体形态都会失真）。 */
+function scanTextTsx(text) {
+  return scanSignatures({ entries: [{ file: "fixture.tsx", text }], isAdded: () => true });
+}
+
 function runCli(args, cwd) {
   return spawnSync(process.execPath, [BIN, ...args], { cwd, encoding: "utf8" });
 }
@@ -330,4 +335,146 @@ test("CLI 用法：缺省扫描面目录不存在（无参 / --all，cwd=包根�
   assert.ok(bare.stderr.includes("缺省扫描面"));
   const allOnly = runCli(["check", "--all"], PKG_ROOT);
   assert.equal(allOnly.status, 2);
+});
+
+// ---------------------------------------------------------------------------
+// p27 R5/R7：形态豁免（E1 hook / E2 JSX / E3 解构形参 / E4 宽度闸）与判据修正
+// （M1 await 调用同口径 / M2 成员链实参前界基准）、R5 SQL 模板常量豁免。
+// ---------------------------------------------------------------------------
+
+test("p27 M1：await 调用 RHS 同行、调用体多行不报（与非 await call 同口径）；moved 仍报", () => {
+  const findings = scanText([
+    "async function f() {",
+    "  const ok = await load({",
+    "    a: 1,",
+    "    b: 2,",
+    "  });",
+    "  const moved =",
+    "    await load({ a: 1 });",
+    "  return ok && moved;",
+    "}",
+  ].join("\n"));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "VARDECL");
+  assert.equal(findings[0].symbol, "moved");
+});
+
+test("p27 M2：成员链实参紧跟调用点不报（基准取 method 名行）；直接调用的多实参拆行仍报", () => {
+  const findings = scanText([
+    "export function f(s: string) {",
+    "  const chained = s",
+    '    .replace(/a/g, "b")',
+    '    .replace(/c/g, "d");',
+    "  const direct = wrapper(",
+    "    1,",
+    "    2,",
+    "  );",
+    "  return chained + direct;",
+    "}",
+  ].join("\n"));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "ARGS");
+  assert.equal(findings[0].symbol, "wrapper");
+});
+
+test("p27 E1：useXxx hook 实参拆行与 hook 声明 RHS 拆行豁免；非 hook 照报", () => {
+  const findings = scanText([
+    "function f() {",
+    "  const [visible, setVisible] =",
+    "    useState<string | null>(null);",
+    "  const cache = useRef<Map<string, number>>(new Map([",
+    '    ["a", 1],',
+    "  ]));",
+    "  const plain = compute(",
+    "    1,",
+    "  );",
+    "  return visible + plain;",
+    "}",
+  ].join("\n"));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "ARGS");
+  assert.equal(findings[0].symbol, "compute");
+});
+
+test("p27 E2：JSX 属性内的调用与 JSX 实参豁免；JSX 外同类调用照报", () => {
+  const findings = scanTextTsx(
+    [
+      'const a = <div onClick={() => handleMultilineSubmitKeyDown(event, () => {',
+      "  save();",
+      "})} />;",
+      'const b = <Portal>{createPortal(<div id="x" />, container)}</Portal>;',
+      "const c = plainCall(",
+      "  firstArg,",
+      "  secondArg,",
+      ");",
+    ].join("\n")
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "ARGS");
+  assert.equal(findings[0].symbol, "plainCall");
+});
+
+test("p27 E3：hook 解构形参与组件 JSX 体的 props 解构豁免；纯逻辑函数解构形参照报", () => {
+  // 注：首参即解构 `{` 与 function 同行，既有 split 判定天然不报（规则盲区）；
+  // 命中形态是「第 2 参起解构」（renderer 唯一命中 useChatMessagesScrollFollow 即此形态），
+  // 豁免与负例都用双参形态对拍。
+  const findings = scanTextTsx([
+    "function useChatScroll(",
+    "  base: Session,",
+    "  {",
+    "    streamingText,",
+    "    onSend,",
+    "  }: ChatOptions",
+    ") {",
+    "  return onSend(streamingText);",
+    "}",
+    "function Panel(",
+    "  { title, rows }: PanelProps",
+    ") {",
+    "  return <div>{title}{rows}</div>;",
+    "}",
+    "function plain(",
+    "  base: string,",
+    "  {",
+    "    first,",
+    "    second,",
+    "  }: Pair",
+    ") {",
+    "  return first + second;",
+    "}",
+  ].join("\n"));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "PARAMS");
+  assert.equal(findings[0].symbol, "plain");
+});
+
+test("p27 E4：非 call RHS 展平超 200 豁免（宽度闸）；moved 且 ≤200 照报；call RHS 不受闸影响", () => {
+  const longText = "很长的中文文案".repeat(20);
+  const findings = scanText([
+    "function f(cond: boolean) {",
+    `  const big = cond ? { message: "${longText}" } : { message: "${longText}" };`,
+    "  const small =",
+    "    cond ? { a: 1 } : { b: 2 };",
+    "  return big && small;",
+    "}",
+  ].join("\n"));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "VARDECL");
+  assert.equal(findings[0].symbol, "small");
+});
+
+test("p27 R5：全大写 *_SQL 模板常量豁免一行要求（单行/多行/等号换行均不报）；非 _SQL 模板照报", () => {
+  const findings = scanText([
+    "const AGG_SELECT_SQL = `SELECT",
+    "  COUNT(*) AS calls,",
+    "  SUM(prompt_tokens) AS prompt_tokens",
+    "  FROM usage_record`;",
+    "const INSERT_SQL =",
+    "  `INSERT INTO usage_record (id) VALUES (#{id})`;",
+    "const OTHER_TEMPLATE = `multi",
+    "  line`;",
+  ].join("\n"));
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].verdict, "VARDECL");
+  assert.equal(findings[0].symbol, "OTHER_TEMPLATE");
 });
