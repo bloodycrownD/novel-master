@@ -15,7 +15,11 @@ import {agentDefinitionSchema} from "../../model/agent-definition.schema.js";
 import type {AgentDefinition} from "../../model/agent-definition.js";
 import type {AgentDefinitionRepository} from "../agent-definition.port.js";
 
-const UPSERT_SQL = `INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms) VALUES (#{agentId}, #{promptsJson}, #{now}, #{now}) ON CONFLICT(agent_id) DO UPDATE SET prompts_json = excluded.prompts_json, updated_at_ms = excluded.updated_at_ms`;
+const UPSERT_SQL = `
+  INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms)
+  VALUES (#{agentId}, #{promptsJson}, #{now}, #{now})
+  ON CONFLICT(agent_id) DO UPDATE
+    SET prompts_json = excluded.prompts_json, updated_at_ms = excluded.updated_at_ms`;
 
 /** TDBC-backed agent definition repository. */
 export class SqliteAgentDefinitionRepository implements AgentDefinitionRepository {

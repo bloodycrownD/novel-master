@@ -14,7 +14,9 @@ import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
 
 const PROJECT_COLUMNS = "id, name, created_at_ms, updated_at_ms";
 
-const PROJECT_INSERT_SQL = `INSERT INTO chat_project (${PROJECT_COLUMNS}) VALUES (${PROJECT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
+const PROJECT_INSERT_SQL = `
+  INSERT INTO chat_project (${PROJECT_COLUMNS})
+  VALUES (${PROJECT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 function rowToProject(row: Row): ChatProject {
   return {

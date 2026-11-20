@@ -304,7 +304,8 @@ describe("C2-3 C1: copy 事务内零全量读", () => {
     );
     assert.ok(inTxChatStatements.length > 0, "事务内必须有消息写入面");
     for (const stmt of inTxChatStatements) {
-      const norm = stmt.sql.replace(/\s+/g, " ").toUpperCase();
+      // SQL 常量重排多行后模板首部带换行，判断写入面前先 trim（语义不变）。
+      const norm = stmt.sql.replace(/\s+/g, " ").trim().toUpperCase();
       assert.ok(
         !norm.includes("CONTENT_ENCODING") || norm.startsWith("INSERT"),
         `事务内不该出现带正文的读：${stmt.sql.slice(0, 120)}`

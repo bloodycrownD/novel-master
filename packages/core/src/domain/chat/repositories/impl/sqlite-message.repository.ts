@@ -35,7 +35,9 @@ const MESSAGE_HEADER_COLUMNS = "id, session_id, seq, role, hidden, created_at_ms
  */
 const MESSAGE_INSERT_COLUMNS = "id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms";
 
-const MESSAGE_INSERT_SQL = `INSERT INTO chat_message (${MESSAGE_INSERT_COLUMNS}) VALUES (${MESSAGE_INSERT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
+const MESSAGE_INSERT_SQL = `
+  INSERT INTO chat_message (${MESSAGE_INSERT_COLUMNS})
+  VALUES (${MESSAGE_INSERT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 /**
  * 把 ChatMessageData 摊平成与 {@link MESSAGE_INSERT_COLUMNS} 列顺序对齐的参数数组。

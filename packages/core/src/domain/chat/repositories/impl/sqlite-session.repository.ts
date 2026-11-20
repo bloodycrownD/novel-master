@@ -14,7 +14,9 @@ import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
 
 const SESSION_COLUMNS = "id, project_id, title, parent_session_id, created_at_ms, updated_at_ms";
 
-const SESSION_INSERT_SQL = `INSERT INTO chat_session (${SESSION_COLUMNS}) VALUES (${SESSION_COLUMNS.split(", ").map(() => "?").join(", ")})`;
+const SESSION_INSERT_SQL = `
+  INSERT INTO chat_session (${SESSION_COLUMNS})
+  VALUES (${SESSION_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 function rowToSession(row: Row): ChatSession {
   return {

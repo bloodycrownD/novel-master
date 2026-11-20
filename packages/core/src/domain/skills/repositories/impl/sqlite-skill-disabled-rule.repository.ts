@@ -15,7 +15,10 @@ const INSERT_SQL = `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_ke
 const REMOVE_SQL = `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{scopeKey} AND skill_name = #{skillName}`;
 const REMOVE_SCOPE_SQL = `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
 const REMOVE_ALL_BY_NAME_SQL = `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE skill_name = #{skillName}`;
-const COPY_SCOPE_SQL = `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name) SELECT #{toScopeKey}, skill_name FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{fromScopeKey}`;
+const COPY_SCOPE_SQL = `
+  INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name)
+  SELECT #{toScopeKey}, skill_name FROM ${SKILL_DISABLED_RULE_TABLE}
+  WHERE scope_key = #{fromScopeKey}`;
 
 /** TDBC-backed `skill_disabled_rule` repository。 */
 export class SqliteSkillDisabledRuleRepository implements SkillDisabledRuleRepository {
