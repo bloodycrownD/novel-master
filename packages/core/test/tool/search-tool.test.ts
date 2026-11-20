@@ -1083,8 +1083,10 @@ describe("dispatch：引擎分发与链空文案", () => {
     assert.ok(urls[1]!.startsWith("https://html.duckduckgo.com/html/"));
   });
 
-  it("SearchDispatch.dispatch 未知 id / 无模板：rejected promise 抛 SearchEngine.failed 可读错误（含引擎 id，W3 async 化后同时序）", async () => {
+  it("SearchDispatch.dispatch 未知 id / 无模板：Result.err 携带 SearchEngine.failed 可读错误（含引擎 id，模板缺失不再走异常通道）", async () => {
     const fetchFn = (async () => bochaResponse()) as typeof globalThis.fetch;
-    await assert.rejects(SearchDispatch.dispatch({ engine: "custom:missing" }, "q", {}, {}, fetchFn), /unknown search engine: custom:missing/);
+    const r = await SearchDispatch.dispatch({ engine: "custom:missing" }, "q", {}, {}, fetchFn);
+    assert.ok(!r.ok);
+    assert.match(r.error.message, /unknown search engine: custom:missing/);
   });
 });
