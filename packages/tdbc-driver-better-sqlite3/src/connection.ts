@@ -43,11 +43,7 @@ export class BetterSqlite3Connection implements TdbcConnection {
     return this.mutex.run(async () => {
       this.assertOpen();
       if (this.inTransaction) {
-        throw new TdbcError(
-          "NESTED_TRANSACTION",
-          "Nested transactions are not supported",
-          { driver: "better-sqlite3" },
-        );
+        throw new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "better-sqlite3" },);
       }
 
       this.inTransaction = true;
@@ -144,11 +140,7 @@ export class BetterSqlite3Connection implements TdbcConnection {
   }
 
   private wrapSqlite(cause: unknown): TdbcError {
-    return new TdbcError(
-      "SQLITE_ERROR",
-      cause instanceof Error ? cause.message : String(cause),
-      { driver: "better-sqlite3", cause },
-    );
+    return new TdbcError("SQLITE_ERROR", cause instanceof Error ? cause.message : String(cause), { driver: "better-sqlite3", cause },);
   }
 }
 
@@ -169,10 +161,7 @@ class TransactionalConnection implements TdbcConnection {
     return this.parent.executeSync(sql, params);
   }
 
-  async query<T extends Row = Row>(
-    sql: string,
-    params?: SqlParams,
-  ): Promise<T[]> {
+  async query<T extends Row = Row>(sql: string, params?: SqlParams,): Promise<T[]> {
     return this.parent.querySync<T>(sql, params);
   }
 
@@ -181,13 +170,7 @@ class TransactionalConnection implements TdbcConnection {
   }
 
   transaction<T>(_fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
-    return Promise.reject(
-      new TdbcError(
-        "NESTED_TRANSACTION",
-        "Nested transactions are not supported",
-        { driver: "better-sqlite3" },
-      ),
-    );
+    return Promise.reject(new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "better-sqlite3" },),);
   }
 
   close(): Promise<void> {
