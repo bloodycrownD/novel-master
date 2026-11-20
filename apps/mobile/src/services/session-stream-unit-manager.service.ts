@@ -99,6 +99,7 @@ import type {
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
 import type {ChatMessageData, ComposerDraftTokenRange, MessageAttachment, SendAnnotateDraft} from '@novel-master/core/chat';
+import {Result, type AppError} from '@novel-master/core/errors';
 import type {EventSubscription} from '@novel-master/core/events';
 import {StreamFinalRate} from '@novel-master/core/format';
 import {SESSION_KKV_DOMAIN_STREAM_METRICS as METRICS_DOMAIN, STREAM_METRICS_FINAL_RATE_KEY as FINAL_RATE_KEY} from '@novel-master/core/session-kkv';
@@ -1022,7 +1023,7 @@ export class SessionStreamUnitManager {
    * 键用（缺省只回源、不读写缓存）。
    */
   // prettier-ignore
-  async loadSessionTailMessages(sessionId: string, options?: {readonly force?: boolean; readonly projectId?: string}): Promise<readonly ChatMessageData[] | null> {
+  async loadSessionTailMessages(sessionId: string, options?: {readonly force?: boolean; readonly projectId?: string}): Promise<Result<readonly ChatMessageData[] | null, AppError>> {
     const force = options?.force;
     const unit = this.units.get(sessionId);
     if (unit != null) {
@@ -1048,18 +1049,18 @@ export class SessionStreamUnitManager {
         const idleCount = this.idleMessageViews.get(sessionId)?.messages.length ?? 0;
         const adopted = idleCount === 0 ? SessionViewCache.hydrateWindowFromCache(cached) : cached;
         this.applyIdleMessages(sessionId, adopted);
-        return [...adopted.messages];
+        return Result.ok([...adopted.messages]);
       }
     }
     const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
     const fetchedRead = await this.runtime.messages.listBySessionTail(sessionId, {limit});
     if (fetchedRead.kind === 'failed') {
-      // 读口已换 Outcome：已知失败在 manager 边界转异常，沿用既有上抛出口。
-      throw fetchedRead.error;
+      // 读口已换 Outcome：已知失败沿 Result 接力给 UI 回调（p26 门⑦），不再抛。
+      return Result.err(fetchedRead.error);
     }
     if (fetchedRead.kind !== 'completed') {
       // 未注入 hooks 时中断分支不可达；真出现时按「本次不采纳」保留现有 idle 面。
-      return [...(this.idleMessageViews.get(sessionId)?.messages ?? [])];
+      return Result.ok([...(this.idleMessageViews.get(sessionId)?.messages ?? [])]);
     }
     const fetched = fetchedRead.value;
     const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
@@ -1068,7 +1069,7 @@ export class SessionStreamUnitManager {
       SessionViewCache.set(cacheKey, {messages: list, hasMoreMessages: hasMore});
     }
     this.applyIdleMessages(sessionId, {messages: list, hasMoreMessages: hasMore});
-    return [...list];
+    return Result.ok([...list]);
   }
 
   /**
@@ -1083,21 +1084,21 @@ export class SessionStreamUnitManager {
    * manager 私有 idleMessageViews/idleLoadingMore 与视图缓存。
    */
   // prettier-ignore
-  async loadOlderSessionMessages(sessionId: string, projectId?: string): Promise<void> {
+  async loadOlderSessionMessages(sessionId: string, projectId?: string): Promise<Result<void, AppError>> {
     const unit = this.units.get(sessionId);
     if (unit != null) {
       return unit.loadOlderMessages();
     }
     const idle = this.idleMessageViews.get(sessionId);
     if (idle == null || this.idleLoadingMore.has(sessionId)) {
-      return;
+      return Result.ok(undefined);
     }
     if (idle.messages.length === 0) {
-      return;
+      return Result.ok(undefined);
     }
     const beforeSeq = idle.messages[0]?.seq;
     if (beforeSeq == null) {
-      return;
+      return Result.ok(undefined);
     }
     this.idleLoadingMore.set(sessionId, {base: idle});
     this.notifyChanged();
@@ -1105,19 +1106,19 @@ export class SessionStreamUnitManager {
       const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
       const olderRead = await this.runtime.messages.listBySessionPage(sessionId, page);
       if (olderRead.kind === 'failed') {
-        // 同 loadSessionTailMessages：已知失败在 manager 边界转异常。
-        throw olderRead.error;
+        // 同 loadSessionTailMessages：已知失败沿 Result 接力（p26 门⑦），不再抛。
+        return Result.err(olderRead.error);
       }
       if (olderRead.kind !== 'completed') {
         // 未注入 hooks 时中断分支不可达；中断按「本次翻页不落地」处理。
-        return;
+        return Result.ok(undefined);
       }
       const older = olderRead.value;
       const inFlight = this.idleLoadingMore.get(sessionId);
       if (inFlight == null) {
         // 窗口期内会话被遗忘（forgetSession）或 manager 已 dispose：本次结果
         // 不再落地（与 in-flight 标记仍在 LRU 表内的旧行为同语义）。
-        return;
+        return Result.ok(undefined);
       }
       // 窗口期内本会话条目若被 LRU 淘汰（别的路径灌进 CAP+1 个 sessionId），
       // 用发起时的基线兜底合并——本次上翻的数据仍会 set 回 LRU，页面照常翻。
@@ -1126,7 +1127,7 @@ export class SessionStreamUnitManager {
         this.idleLoadingMore.delete(sessionId);
         this.idleMessageViews.set(sessionId, {...current, hasMoreMessages: false});
         this.notifyChanged();
-        return;
+        return Result.ok(undefined);
       }
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
       const next = MessagePaging.prependOlder(current.messages, older);
@@ -1141,6 +1142,7 @@ export class SessionStreamUnitManager {
         streamRowIds: current.streamRowIds,
       });
       this.notifyChanged();
+      return Result.ok(undefined);
     } finally {
       // 异常/早退路径的标记复位（成功路径已提前 delete，这里是幂等兜底）。
       if (this.idleLoadingMore.delete(sessionId)) {

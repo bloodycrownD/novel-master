@@ -41,6 +41,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const ALLOW_FILES = [
   // 事务回滚（better-sqlite3 靠抛错回滚，总纲 §五例外 2）
   /transaction-helper\.ts$/,
+  // 事务回调（p26 R1 登记，总纲 §五例外 2 的 tdbc 实例）：conn.transaction(fn)
+  // 只认抛错回滚——回调内 return 会 commit 半写（message/session service 的
+  // fork/copy 与 truncate-tail 现场注释自白）。
+  /truncate-tail-in-transaction\.ts$/,
+  /^packages\/core\/src\/service\/chat\/impl\/message\.service\.ts$/,
+  /^packages\/core\/src\/service\/chat\/impl\/session\.service\.ts$/,
   // tdbc 层
   /^packages\/core\/src\/infra\/tdbc\//,
   // 控制信号转码（2026-11-16 编排者裁决）：DbSyncPort 是 throw 通道 port
@@ -60,6 +66,26 @@ const ALLOW_FILES = [
   // IntegrityRepairOperation 报告契约（2026-11-16 六期收口裁决，总纲 §五 例外 6）：
   // detect/repair 只认报告/异常，runAll 捕异常进修复报告。
   /provider-identity-repair\.ts$/,
+  // p26 R1 边界转码登记（总纲 §五 例外 7，2026-11-20 裁决）——
+  // a. runner 前奏终态漏斗与 OrThrow 转码：run 的 throw 喂同函数 catch 的统一
+  //    收口（FAILED('') 补发 + onRunFailed），直接 return 会跳过终态事件；
+  //    mapResolveError 是 desktop rejection 契约的 OrThrow 边界（十八期 T3 已审）。
+  /^packages\/core\/src\/service\/agent\/logic\/run-agent-turn\.ts$/,
+  // b. IPC handler 边界：agentRegistry.get 只有 throw 通道，handler catch 转
+  //    IpcResult 线格式（同文件判据 2 形态：返回普通类型 + 同函数 catch）。
+  /^apps\/desktop\/src\/main\/ipc\/handlers\/agent-registry\.ts$/,
+  // c. AgentSession.list port 契约：已知失败抛出交 agent-runner 主 catch 收口
+  //    （步进漏斗）；Result 化只会把 unwrap-throw 挪进 agent-runner（同款
+  //    raiseRunError 形态已存在），chat-agent-session 与 assemble 是同一契约两端。
+  /^packages\/core\/src\/service\/agent\/impl\/chat-agent-session\.ts$/,
+  /^packages\/core\/src\/service\/agent\/logic\/assemble-agent-runner-deps\.ts$/,
+  // d. 写库边界契约：restore 对外「任意行非法则抛 AppError（DB_BACKUP_*）」，
+  //    调用方按 catch 收口（文件 JSDoc 自白）。
+  /^packages\/core\/src\/infra\/db-backup\/provider-table-snapshot\.ts$/,
+  // e. 校验槽位回调（zod preprocess 同款例外）：DocumentIo 的 assertFileName
+  //    槽位契约只认 throw；Result 边界在 CharacterCardDocumentPick/YamlDocumentPick。
+  /^apps\/mobile\/src\/services\/vfs-character-card\.service\.ts$/,
+  /^apps\/mobile\/src\/services\/yaml-shared\.ts$/,
 ];
 
 // 文件集 = packages/apps 下一层包的 src/*.ts。不用 `src/**/*.ts` glob——
@@ -70,6 +96,8 @@ const files = cp
   .split("\n")
   .filter(Boolean)
   .filter((f) => /^(?:packages|apps)\/[^/]+\/src\/.+\.ts$/.test(f))
+  // apps/cli 停止维护（#276）：与 nm-style suppressPrefixes 口径一致，整体排除。
+  .filter((f) => !f.startsWith("apps/cli/"))
   .filter((f) => fs.existsSync(path.join(REPO_ROOT, f)) && !ALLOW_FILES.some((re) => re.test(f)));
 
 // `throw x.error;` 与同行 if 形态（`if (!x.ok) throw x.error;`）一并抓取；

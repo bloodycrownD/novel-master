@@ -18,6 +18,7 @@ import React from 'react';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
+import {Result} from '@novel-master/core/errors';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
   EVENT_AGENT_RUN_FINISHED,
@@ -788,7 +789,7 @@ describe('SubagentSessionScreen 消费侧投影接线（P1-3/P2-5/P2-18c）', ()
     jest
       .spyOn(h.manager, 'snapshot')
       .mockReturnValue(makeUnitView({status: 'starting'}));
-    jest.spyOn(h.manager, 'loadSessionTailMessages').mockResolvedValue(history);
+    jest.spyOn(h.manager, 'loadSessionTailMessages').mockResolvedValue(Result.ok(history));
 
     const {texts, unmount} = await renderScreen();
     expect(texts.join(' | ')).not.toContain('子会话暂无消息');

@@ -335,13 +335,13 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     startRunningRun(h, 'sess-b', 'rb', 'p1');
 
     // 命中：直接采纳缓存行，不回源
-    const rowsA = await h.manager.loadSessionTailMessages('sess-a');
+    const rowsA = (await h.manager.loadSessionTailMessages('sess-a')).value;
     expect(rowsA).toHaveLength(1);
     expect(rowsA?.[0].seq).toBe(9);
     expect(h.messages.listBySessionTail).not.toHaveBeenCalled();
 
     // miss：回源 DB + 单查询 hasMore 判定 + 写缓存
-    const rowsB = await h.manager.loadSessionTailMessages('sess-b');
+    const rowsB = (await h.manager.loadSessionTailMessages('sess-b')).value;
     expect(rowsB).toHaveLength(2);
     expect(h.messages.listBySessionTail).toHaveBeenCalledWith('sess-b', {
       limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
@@ -408,7 +408,7 @@ describe('T-U5: 后台收尾缓存刷新（消息丢失回归）', () => {
 
     // 重进（非 force load）：缓存命中返回最终行、不再回源 DB
     const tailCallsBefore = h.messages.listBySessionTail.mock.calls.length;
-    const rows = await h.manager.loadSessionTailMessages('sess-b');
+    const rows = (await h.manager.loadSessionTailMessages('sess-b')).value;
     expect(rows).toHaveLength(2);
     expect(h.messages.listBySessionTail.mock.calls.length).toBe(
       tailCallsBefore,
@@ -575,9 +575,9 @@ describe('cr2-E-1: 缓存水合的窗口化只限冷启动', () => {
       .toHaveLength(grown);
 
     // 非 force 重进/切会话：缓存命中水合——面已非空，必须整面收下
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       projectId: 'p1',
-    });
+    })).value;
     expect(rows).toHaveLength(grown);
     snap = h.manager.snapshot('sess-a');
     expect(snap?.messages).toHaveLength(grown); // 没被截回 40
@@ -602,9 +602,9 @@ describe('cr2-E-1: 缓存水合的窗口化只限冷启动', () => {
     expect(grown).toBeGreaterThan(SESSION_STREAM_MESSAGES_PAGE_SIZE);
 
     // 非 force + 带 projectId：命中缓存水合，idle 面非空 → 整面收下
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       projectId: 'p1',
-    });
+    })).value;
     expect(rows).toHaveLength(grown);
     const view = h.manager.readMessagesSnapshot('sess-a');
     expect(view?.messages).toHaveLength(grown);
@@ -620,10 +620,10 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
       Array.from({length: 50}, (_, i) => makeMessage('sess-a', i + 1)),
     );
     // 不 startRun（无单元）→ loadSessionTailMessages 走 manager 的 idle 路径
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       force: true,
       projectId: 'p1',
-    });
+    })).value;
 
     // 一次往返：tail 查询 limit = 页大小 + 1，无第二次探针查询
     expect(h.messages.listBySessionTail).toHaveBeenCalledTimes(1);
@@ -650,10 +650,10 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
   it('不足一页时 hasMore=false 原样采纳（无裁剪），缓存口径不变', async () => {
     const h = createHarness();
     h.db.set('sess-a', [makeMessage('sess-a', 1), makeMessage('sess-a', 2)]);
-    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+    const rows = (await h.manager.loadSessionTailMessages('sess-a', {
       force: true,
       projectId: 'p1',
-    });
+    })).value;
     expect(rows).toHaveLength(2);
     expect(rows?.[0].seq).toBe(1);
     expect(h.messages.listBySessionPage).not.toHaveBeenCalled();

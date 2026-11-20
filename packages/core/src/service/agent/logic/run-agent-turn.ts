@@ -585,6 +585,9 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
         // 实锤 ~4s：续跑/「继续」按钮每轮白付，且这段前奏无停止观察点，用户
         // 连点停止无响应）。
         const tailRead = await runtime.messages.listBySessionTail(scope.sessionId, { limit: 1 }, { checkpoint: () => rootScope.checkpoint() });
+        // p26 门⑦边界登记（总纲 §五例外 7a）：throw 喂本函数 catch 的统一收口漏斗
+        // （前奏期唯一终态事件出口）——直接改 return Result.err 会跳过 catch 的
+        // FAILED('') 补发，双端 composer 解锁链断；走漏斗才保终态事件语义。
         if (tailRead.kind === "failed") throw tailRead.error;
         if (tailRead.kind !== "completed") {
           // 读分片间命中取消：与前奏其它检查点同款合成 cancelled 收尾（先发

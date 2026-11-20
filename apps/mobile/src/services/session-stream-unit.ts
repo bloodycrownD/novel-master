@@ -45,7 +45,7 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessageData} from '@novel-master/core/chat';
-import type {Outcome} from '@novel-master/core/errors';
+import {Result, type AppError, type Outcome} from '@novel-master/core/errors';
 import type {AgentStepCommittedPhase} from '@novel-master/core/events';
 import {SlidingTokenRate, StreamTokenAnchor} from '@novel-master/core/format';
 import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
@@ -446,7 +446,7 @@ export class SessionStreamUnit {
   private hasMoreMessagesValue = false;
   private loadingMoreMessagesValue = false;
   /** force tail reload 在途去重（蓝本 reloadInFlightRef：force 合流不重发）。 */
-  private tailReloadInFlight: Promise<readonly ChatMessageData[]> | null = null;
+  private tailReloadInFlight: Promise<Result<readonly ChatMessageData[], AppError>> | null = null;
 
   private readonly webviewHandles: SessionStreamWebviewHandle[] = [];
   private readonly messageStore?: SessionStreamMessageStore | undefined;
@@ -1197,12 +1197,12 @@ export class SessionStreamUnit {
    */
   async loadTailMessages(options?: {
     readonly force?: boolean;
-  }): Promise<readonly ChatMessageData[]> {
+  }): Promise<Result<readonly ChatMessageData[], AppError>> {
     const force = options?.force ?? false;
     if (force && this.tailReloadInFlight != null) {
       return this.tailReloadInFlight;
     }
-    const task = (async (): Promise<readonly ChatMessageData[]> => {
+    const task = (async (): Promise<Result<readonly ChatMessageData[], AppError>> => {
       const cacheKey = SessionViewCache.key(this.projectId, this.sessionId);
       if (!force) {
         const cached = SessionViewCache.get(cacheKey);
@@ -1214,24 +1214,24 @@ export class SessionStreamUnit {
           // 非 force 结果不消费待接管队列（缓存/普通 reload 可能是插入前的
           // 旧面，配对会把历史 assistant 错认成本 step 的落库行）。
           this.applyMessages(adopted, false);
-          return [...adopted.messages];
+          return Result.ok([...adopted.messages]);
         }
       }
       const store = this.messageStore;
       if (store == null) {
         // 未装配消息仓库（防御降级，正常装配不会走到）：保持现状返回。
-        return [...this.messagesValue];
+        return Result.ok([...this.messagesValue]);
       }
       const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
       const fetchedOutcome = await store.listBySessionTail(this.sessionId, {limit});
       if (fetchedOutcome.kind === 'failed') {
-        // 单元没有 Outcome 通道：回源失败在边界转异常，沿用既有上抛语义
-        // （kickTailReloadQuietly 的 catch 与调用方 catch 依赖它）。
-        throw fetchedOutcome.error;
+        // 读口已换 Outcome：已知失败沿 Result 接力（p26 门⑦），消费方
+        // （kickTailReloadQuietly / manager / UI 回调）按 !ok 收口，不再抛。
+        return Result.err(fetchedOutcome.error);
       }
       if (fetchedOutcome.kind !== 'completed') {
         // 未注入 hooks 时中断分支不可达；真出现时按「本次不采纳」保留现状。
-        return [...this.messagesValue];
+        return Result.ok([...this.messagesValue]);
       }
       const fetched = fetchedOutcome.value;
       const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
@@ -1241,7 +1241,7 @@ export class SessionStreamUnit {
       SessionViewCache.set(cacheKey, {messages: list, hasMoreMessages: hasMore});
       // 只有 force（step/settle 边界的权威回源）才消费待接管队列。
       this.applyMessages({messages: list, hasMoreMessages: hasMore}, force);
-      return [...list];
+      return Result.ok([...list]);
     })();
     if (!force) {
       return task;
@@ -1262,21 +1262,21 @@ export class SessionStreamUnit {
    * nm-style: keep-public — manager 的 loadOlderSessionMessages 唯一路由入口，
    * 读写单元私有 messagesValue/loadingMoreMessagesValue 与视图缓存。
    */
-  async loadOlderMessages(): Promise<void> {
+  async loadOlderMessages(): Promise<Result<void, AppError>> {
     if (
       this.destroyed ||
       this.loadingMoreMessagesValue ||
       this.messagesValue.length === 0
     ) {
-      return;
+      return Result.ok(undefined);
     }
     const beforeSeq = this.messagesValue[0]?.seq;
     if (beforeSeq == null) {
-      return;
+      return Result.ok(undefined);
     }
     const store = this.messageStore;
     if (store == null) {
-      return;
+      return Result.ok(undefined);
     }
     this.loadingMoreMessagesValue = true;
     this.onProjectionChanged?.();
@@ -1284,22 +1284,22 @@ export class SessionStreamUnit {
       const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
       const olderOutcome = await store.listBySessionPage(this.sessionId, page);
       if (olderOutcome.kind === 'failed') {
-        // 同 loadTailMessages：边界转异常，保持既有错误出口。
-        throw olderOutcome.error;
+        // 同 loadTailMessages：已知失败沿 Result 接力（p26 门⑦），不再抛。
+        return Result.err(olderOutcome.error);
       }
       if (olderOutcome.kind !== 'completed') {
         // 未注入 hooks 时中断分支不可达；中断按「本次翻页不落地」处理。
-        return;
+        return Result.ok(undefined);
       }
       const older = olderOutcome.value;
       if (this.destroyed) {
-        return;
+        return Result.ok(undefined);
       }
       if (older.length === 0) {
         // 没有更早的了：只收 hasMore，不动消息与缓存（蓝本同路径）。
         this.hasMoreMessagesValue = false;
         this.onProjectionChanged?.();
-        return;
+        return Result.ok(undefined);
       }
       const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
       const next = MessagePaging.prependOlder(this.messagesValue, older);
@@ -1310,6 +1310,7 @@ export class SessionStreamUnit {
       this.messagesValue = next;
       this.hasMoreMessagesValue = hasMore;
       this.onProjectionChanged?.();
+      return Result.ok(undefined);
     } finally {
       this.loadingMoreMessagesValue = false;
       this.onProjectionChanged?.();
@@ -1318,9 +1319,12 @@ export class SessionStreamUnit {
 
   /** step/settle 边界的 fire-and-forget force reload（错误吞掉不阻塞状态机）。 */
   private kickTailReloadQuietly(): void {
-    void this.loadTailMessages({force: true}).catch(err => {
-      log.error('tail reload failed', {err});
-    });
+    void (async () => {
+      const read = await this.loadTailMessages({force: true});
+      if (!read.ok) {
+        log.error('tail reload failed', {err: read.error});
+      }
+    })();
   }
 
   /**
