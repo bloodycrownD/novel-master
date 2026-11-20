@@ -249,15 +249,15 @@ export namespace PromptLlmInputCounter {
   }
 
   /**
-   * 表源覆盖钩子（仅测试用）：默认 null = 走驱动共享编码表
+   * 表源覆盖钩子槽（仅测试用）：默认 undefined = 走驱动共享编码表
    * {@link EncodingCache.get}（同进程单例，绝不 free）。
    * 注入 `(name) => 假 encoding / null` 即可在不建真表的情况下控制
    * countTiktoken 的表源分支（替代旧「tiktoken 模块注入」钩子形态）。
    */
-  let encodingSourceForTests: EncodingSource = null;
+  const encodingSourceSlot = { current: undefined as EncodingSource | undefined };
 
   function resolveEncoding(name: RnEncodingName): RnTokenEncoding | null {
-    return encodingSourceForTests == null ? EncodingCache.get(name) : encodingSourceForTests(name);
+    return encodingSourceSlot.current == null ? EncodingCache.get(name) : encodingSourceSlot.current(name);
   }
 
   // nm-style: keep-local — 表源解析、overhead 公式与 L2 分块计数共享 encoding/probe，内联会拆散精确档三段回退和探针状态。
@@ -378,7 +378,7 @@ export namespace PromptLlmInputCounter {
    * String 参数传 null/undefined 硬抛，见 spec r2-P0），所以缺 sessionId 的轮
    * 连序号都不递增，保持「不可取消轮 = 现状三参」这条二分口径干净。
    */
-  let nativeRequestSeq = 0;
+  const nativeRequestSeqSlot = { current: 0 };
 
   /**
    * native 档过桥请求：sessionId 与 requestId 同时在场才可能被桥判为可取消轮。
@@ -393,13 +393,13 @@ export namespace PromptLlmInputCounter {
     if (sessionId == null) {
       return { serialized, family, vendorModelId };
     }
-    nativeRequestSeq += 1;
+    nativeRequestSeqSlot.current += 1;
     return {
       serialized,
       family,
       vendorModelId,
       sessionId,
-      requestId: `${sessionId}:${nativeRequestSeq}`,
+      requestId: `${sessionId}:${nativeRequestSeqSlot.current}`,
     };
   }
 
@@ -663,7 +663,7 @@ export namespace PromptLlmInputCounter {
      * factory）；传 `null` 还原为驱动的共享编码表 EncodingCache.get。
      */
     setEncodingSourceForTests(source: EncodingSource): void {
-      encodingSourceForTests = source;
+      encodingSourceSlot.current = source;
     },
   };
 }

@@ -5,7 +5,7 @@
 
 import { formatTable } from "./core.js";
 
-export type RuleName = "signatures" | "hygiene" | "bare-exports" | "dup" | "clusters" | "oop";
+export type RuleName = "signatures" | "hygiene" | "bare-exports" | "dup" | "clusters" | "oop" | "top-level-let";
 export type HygieneFace = "private" | "class-public" | "exported";
 
 export interface Finding {
@@ -26,6 +26,7 @@ export interface Finding {
 export const SIGNATURES_VERDICTS = ["PARAMS", "ARGS", "IMPORT", "VARDECL", "ASSIGN"] as const;
 export const HYGIENE_VERDICTS = ["FAKE_PUBLIC", "DEAD", "TEST_ONLY", "INLINE_CANDIDATE", "PASS_THROUGH", "AMBIGUOUS", "KEEP_PUBLIC", "KEEP_LOCAL"] as const;
 export const OOP_VERDICTS = ["OOP_CANDIDATE", "MANY_EXPORTS"] as const;
+export const TOP_LEVEL_LET_VERDICTS = ["TOP_LEVEL_LET"] as const;
 /** hygiene 里永不阻断的 verdict（AMBIGUOUS 是短路信息项，KEEP_* 是豁免结果）。 */
 export const HYGIENE_NEVER_BLOCKING: ReadonlySet<string> = new Set(["AMBIGUOUS", "KEEP_PUBLIC", "KEEP_LOCAL"]);
 

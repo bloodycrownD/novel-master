@@ -77,26 +77,26 @@ export namespace NativeSse {
     return {sseConnect, sseAbort, request, requestAbort, events};
   }
 
-  /** 已缓存的 transport 单例（共享事件订阅，避免重复 addListener）。 */
-  let cachedTransport: SseTransport | null = null;
+  /** 已缓存的 transport 单例槽（共享事件订阅，避免重复 addListener）。 */
+  const transportSlot = { current: undefined as SseTransport | undefined };
 
   /** 基于静态 native 绑定构建 SseTransport；native 不可用时抛错（先经 {@link NativeSse.isAvailable} 判定）。 */
   export function createTransport(): SseTransport {
-    if (cachedTransport != null) {
-      return cachedTransport;
+    if (transportSlot.current != null) {
+      return transportSlot.current;
     }
     const bridge = createBridge();
     if (bridge == null) {
       // nm-throw: keep — native bridge 边界：LlmSseNative 模块不可用（非 Android / 未 autolink），须先经 isAvailable 判定。
       throw new Error("LlmSseNative 模块不可用（非 Android 或未 autolink）；请先经 NativeSse.isAvailable() 判定",);
     }
-    cachedTransport = NativeSseTransport.create(bridge);
-    return cachedTransport;
+    transportSlot.current = NativeSseTransport.create(bridge);
+    return transportSlot.current;
   }
 
   /** @internal 重置单例（测试用）。 */
   export function resetTransportForTests(): void {
-    cachedTransport = null;
+    transportSlot.current = undefined;
   }
 
   /**

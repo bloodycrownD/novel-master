@@ -33,19 +33,19 @@ export namespace NodeTokenizerLoader {
     };
   }
 
-  let activeLoader: TokenizerLoader | null = null;
+  const loaderSlot = { current: undefined as TokenizerLoader | undefined };
 
   /** Installs the loader used by web/sentencepiece counters in this package. */
   export function set(loader: TokenizerLoader): void {
-    activeLoader = loader;
+    loaderSlot.current = loader;
   }
 
   /** Returns the active loader set by {@link TokenizerNodeRegister.register}. */
   export function get(): TokenizerLoader {
-    if (activeLoader == null) {
+    if (loaderSlot.current == null) {
       // nm-throw: keep — 驱动装配不变量：未注册 loader 即调用属编程错误。
       throw new Error("Node tokenizer loader not installed. Call TokenizerNodeRegister.register() first.");
     }
-    return activeLoader;
+    return loaderSlot.current;
   }
 }
