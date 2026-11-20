@@ -321,7 +321,9 @@ test("T-CB16/T-CB17: 代码块带复制按钮（SVG 零文本节点，批注偏�
 test("T-CB18: 复制按钮 promise/定时器源码级断言（MF-10：静态渲染跑不了 effect，降级为源码级验收）", () => {
   const src = readFileSync(codeBlockPath, "utf8");
   // writeText 调用链上存在 .catch：复制失败（如权限被拒）不产生 unhandled rejection
-  assert.match(src, /navigator\.clipboard\.writeText\([\s\S]*?\.then\([\s\S]*?\.catch\(/);
+  // （成员链接点允许换行缩进——prettier-200 对超宽链的标准断行形态，p27 R7 起；断言意图是
+  // 「promise 链 + 错误兜底存在」，不是锁定排版）
+  assert.match(src, /navigator\s*\.\s*clipboard\s*\.\s*writeText\([\s\S]*?\.\s*then\([\s\S]*?\.\s*catch\(/);
   // 卸载路径清理复位定时器：clearTimeout + 句柄 ref，避免卸载后 setCopied
   assert.match(src, /useRef<number \| null>\(null\)/);
   assert.match(src, /clearTimeout\(/);
