@@ -12,11 +12,15 @@ import {MermaidFullscreen} from '@web/shared/mermaid-fullscreen/mermaid-fullscre
 import {HostMessageChannel} from '@web/shared/host-message-channel';
 import {HostTheme} from '@web/shared/host-theme';
 import {ViewSlot} from '@web/shared/view-slot';
+import {Labels, DEFAULT_RICH_DOCUMENT_LABELS, type RichDocumentLabels} from '../ui/labels';
 
 /**
  * P0-3：setDocument 视图槽。Preact DocumentApp 由 main 注册；本文件只持有实现引用。
  */
 export const documentViewSlot = ViewSlot.create<DocumentPayload>();
+
+/** 渲染层文案 holder（init.labels 下发；旧宿主/缺省回退默认中文，镜像 chat-transcript state.labels）。 */
+let resolvedLabels: RichDocumentLabels = DEFAULT_RICH_DOCUMENT_LABELS;
 
 export {post};
 
@@ -29,11 +33,20 @@ export namespace RichDocumentBridge {
     documentViewSlot.invoke(payload ?? {});
   }
 
+  /**
+   * 渲染层文案读取口（波 3-2 接线消费：over-limit 提示 / mermaid 全屏关闭）。
+   */
+  export function currentLabels(): RichDocumentLabels {
+    return resolvedLabels;
+  }
+
   export function handle(raw: unknown): void {
     const msg = HostMessageChannel.match(raw, BRIDGE_V);
     if (!msg) return;
     if (msg.type === 'init') {
       HostTheme.apply(msg.payload && (msg.payload.theme as HostTheme | undefined));
+      // labels：宿主经 core i18n 下发；旧宿主/缺省/非法值回退默认中文（第二桥镜像 C30）。
+      resolvedLabels = Labels.resolve(msg.payload?.labels);
       return;
     }
     if (msg.type === 'setDocument') {

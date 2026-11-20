@@ -21,6 +21,16 @@ export type RichDocumentTheme = {
   readonly borderLight: string;
 };
 
+/**
+ * rich-document 渲染层文案（`init.labels` 下发；web 缺省回退内置中文常量）。
+ * 首桥 TranscriptLabels 的 named 四键是 transcript 特有（label.* 域），本桥
+ * 消费面全是 `ui.*` key，故只有 ui map（p27 R6 波 3-1 第二桥）。
+ */
+export type RichDocumentLabels = {
+  /** ui.* 域文案 map（dotted key → 文案；值可含 {param} 模板，由 web 消费方插值）。 */
+  readonly ui: Readonly<Record<string, string>>;
+};
+
 type RichDocumentSetPayload = {
   readonly mode: 'html' | 'plain';
   readonly html?: string;
@@ -68,7 +78,7 @@ export type RichDocumentRecogitoCreatePayload = {
 
 /** Host → document WebView */
 export type HostToRichDocumentMessage =
-  | BridgeEnvelope<'init', {theme: RichDocumentTheme}>
+  | BridgeEnvelope<'init', {theme: RichDocumentTheme; labels?: RichDocumentLabels}>
   | BridgeEnvelope<'setDocument', RichDocumentSetPayload>
   | BridgeEnvelope<'themeUpdate', {theme: RichDocumentTheme}>
   | BridgeEnvelope<'setAnnotateEnabled', {enabled: boolean}>

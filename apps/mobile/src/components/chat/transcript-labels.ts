@@ -40,6 +40,8 @@ const UI_LABEL_KEYS = [
   'ui.transcript.attach_src.workspace',
   'ui.transcript.attach_src.dir',
   'ui.transcript.attach_src.file',
+  // mermaid 全屏关闭（两管线共享 portal；波 3-1 第二桥随两条 init.labels 通道都下发，波 3-2 接线）。
+  'ui.common.close',
 ] as const;
 
 // 偏离登记：文件名主体 TranscriptLabels 与本文件 import 的类型 TranscriptLabels 撞名，

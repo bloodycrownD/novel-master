@@ -45,6 +45,8 @@ export const DEFAULT_UI_LABELS: Readonly<Record<string, string>> = {
   'ui.transcript.attach_src.workspace': '工作区',
   'ui.transcript.attach_src.dir': '目录',
   'ui.transcript.attach_src.file': '文件',
+  // mermaid 全屏关闭（两管线共享 portal；波 3-1 第二桥老宿主兜底，宿主下发逐键覆盖）。
+  'ui.common.close': '关闭',
 };
 
 /** 默认文案（老宿主 / `init.labels` 缺省兜底；当前中文常量）。 */

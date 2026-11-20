@@ -330,11 +330,11 @@ label:
     thinking_header: 思考过程
     empty: 暂无消息
     load_older: 加载更早消息
-# —— ui：展示文案（p27 spec §6.2 ui.<screen>.<element>；波 3 分片迁移逐片入库。
-# 第 0 片先立 webview 转录渲染层（chat-transcript webview），宿主经 init.labels.ui
-# 下发；组件接线归波 3 webview 片。CSS ::before/::after content 4 处不走 i18n，
-# 豁免登记见 docs/Iterations/p27-backlog/r6-exemptions.md）——
+# —— ui：展示文案（p27 spec §6.2 ui.<screen>.<element>；波 3-1 预立全量骨架，
+# 波 3-2 按分片接线。第 0 片 transcript 原文保留；CSS ::before/::after content 4 处
+# 不走 i18n，豁免登记见 docs/Iterations/p27-backlog/r6-exemptions.md）——
 ui:
+  # —— transcript：webview 转录渲染层（第 0 片；宿主经 init.labels.ui 下发）——
   transcript:
     # 长按菜单（menu.ts）
     menu:
@@ -357,7 +357,7 @@ ui:
       skill: 技能
       result: 结果
       workspace: 聊天工作区
-    # 消息行角色与操作（MessageRow / StreamingMessageRow；'助手' '消息操作' 两端共用同键）
+    # 消息行角色与操作（MessageRow / StreamingMessageRow）
     role:
       user: 用户
       assistant: 助手
@@ -368,3 +368,1068 @@ ui:
       workspace: 工作区
       dir: 目录
       file: 文件
+  # —— common：跨屏通用动作词/状态词（波 3-2 各分片按需接线） ——
+  common:
+    cancel: 取消
+    confirm: 确定
+    confirm_alt: 确认
+    delete: 删除
+    save: 保存
+    saving: 保存中…
+    saved: 已保存
+    edit: 编辑
+    copy: 复制
+    copy_code: 复制代码
+    close: 关闭
+    create: 创建
+    creating: 创建中…
+    created: 已创建
+    add: 添加
+    adding: 添加中…
+    added: 已添加
+    new: 新建
+    retry: 重试
+    back: 返回
+    more: 更多
+    move_up: 上移
+    move_down: 下移
+    move_top: 置顶
+    move_bottom: 置底
+    select_all: 全选
+    select_none: 全不选
+    select: 选择
+    deselect: 取消选择
+    selected_count: "已选 {count} 项"
+    loading: 加载中…
+    processing: 处理中…
+    cancelled: 已取消
+    renamed: 已重命名
+    deleted: 已删除
+    remove: 移除
+    clear: 清除
+    done: 完成
+    understood: 知道了
+    current: 当前
+    preview: 预览
+    text: 文本
+    stay: 留下
+    leave: 离开
+    unsaved_title: 未保存
+    unsaved_confirm_msg: 有未保存的更改，确定离开？
+    unsaved_discard_msg: 有未保存的更改，离开将丢弃。是否继续？
+    confirm_delete: 确认删除
+    confirm_op: 确认操作
+    confirm_count_msg: "确定删除选中的 {count} 项？"
+    delete_named_confirm: "确定删除 {name}？"
+    overwrite: 覆盖
+    overwrite_confirm_title: 覆盖确认
+    expand: 展开
+    collapse: 收起
+    manage: 管理
+    stop: 停止
+    send: 发送
+    paste: 粘贴
+    import: 导入
+    export: 导出
+    rename: 重命名
+    move: 移动
+    view: 查看
+    enable: 启用
+    turn_off: 关闭
+    on: 开启
+    off: 关闭
+    builtin: 内置
+    all: 全部
+    not_enabled: 不启用
+    open_fullscreen: 全屏编辑
+    fullscreen_edit_aria: "全屏编辑：{label}"
+    dismiss_keyboard: 收起键盘
+    restoring: 恢复中…
+    reset_default: 恢复默认
+    restore: 恢复
+    name: 名称
+    description: 描述
+    content: 内容
+    role: 角色
+    model: 模型
+    model_name: 模型名称
+    file: 文件
+    result: 结果
+    test: 测试
+    copied: 已复制
+    empty_file: （空文件）
+    empty_note: （空说明）
+    picker_empty: 暂无可选项，请先在设置中创建。
+    zip_saved: ZIP 已保存到所选位置
+    updated_at: "更新于 {time}"
+    time_just_now: 刚刚
+    time_minutes_ago: "{count} 分钟前"
+    time_hours_ago: "{count} 小时前"
+    time_days_ago: "{count} 天前"
+  # —— nav：导航头/tab/设置分类/桌面壳导航（mobile header-config·RootNavigator·ProfileTabScreen + desktop AppChrome·MainShell·settings-nav·ChatRail·ShellNavProvider） ——
+  nav:
+    tab_chat: 对话
+    tab_profile: 我的
+    chat: 会话
+    profile_config: 配置
+    agent_settings: 智能体配置
+    view_prompt: 查看提示词
+    turn_detail: 轮详情
+    providers: 服务商配置
+    provider_create: 添加服务商
+    model_management: 模型管理
+    sampling: 采样配置
+    storage: 存储配置
+    cloud_sync: 云同步
+    cloud_storage: 云存储配置
+    cloud_storage_setup: 云端存储设置
+    search_engines: 搜索配置
+    file_browser: 文件浏览器
+    smart_sort_rules: 智能排序规则
+    rule_editor: 规则详情
+    file_editor: 编辑文件
+    session_detail: 会话详情
+    skills: 技能
+    prompt_editor: 编辑提示词
+    skills_manage: 技能管理
+    skill_detail: 技能详情
+    subagent_session: 子会话
+    subagent_session_view: 子智能体会话
+    token_stats: 数据统计
+    about: 关于 Novel Master
+    settings: 设置
+    settings_categories: 设置分类
+    settings_general: 常规
+    workspace: 工作区
+    settings_advanced: 高级
+    settings_data: 数据
+    settings_backup: 备份与恢复
+    settings_smart_sort: 智能排序
+    settings_app: 应用
+    global_actions: 全局操作
+    pane_visibility: 栏位显示
+    pane_left: 左侧栏（文件预览）
+    pane_center: 中间栏（工作区）
+    pane_right: 右侧栏（聊天）
+    pane_toggle_aria: "显示或隐藏{label}"
+    toggle_light_theme: 切换浅色主题
+    toggle_dark_theme: 切换深色主题
+    toggle_theme: 切换主题
+    open_settings: 打开设置
+    close_settings: 关闭设置
+    back_level: 返回上一级
+    chat_nav_aria: Chat 导航
+    chat_content_aria: Chat 内容
+    workspace_session: 会话工作区
+    workspace_chat: 聊天工作区
+    untitled_session: 未命名会话
+    this_session: 该会话
+    project_workspace_title: 项目工作区
+    project_list_menu: 项目列表
+    session_actions: 会话操作
+    project_actions: 项目操作
+    resize_left_aria: 调整预览区与工作区宽度
+    resize_right_aria: 调整工作区与聊天区宽度
+  # —— chat：会话屏：composer/消息操作/文件·技能引用（mobile chat-tab + desktop features/chat；ui.transcript.* 已覆盖转录层） ——
+  chat:
+    placeholder: 输入消息…
+    placeholder_no_model: 选择模型后可发送
+    placeholder_desktop: 输入消息…（Ctrl+Enter 发送）
+    composer_disabled_hint: 请先配置模型（设置 → Provider）
+    no_model_selected: 未选择模型
+    configure_model_first: 请先配置模型
+    no_workspace_model_hint: 请先选择工作区模型
+    message_input_aria: 消息输入
+    more_options: 更多选项
+    reference_files: 引用文件
+    reference_skills: 引用技能
+    stop_gen: 终止
+    stop_generating: 停止生成
+    stop_subagent: 停止子会话
+    attachment_draft_aria: 待发送附件
+    attachment_status_aria: 状态附件
+    remove_attachment_aria: "移除 {label}"
+    select_model_title: 选择工作区模型
+    no_saved_models: 暂无已保存模型。请先在「服务商」页添加模型。
+    select_project_first: 请先选择项目
+    select_session_first: 请先选择会话
+    select_session: 请选择会话
+    rename_prompt: 请输入名称
+    copy_session_done: "已复制会话：{name}"
+    delete_sessions_confirm: "确定删除选中的 {count} 个会话？"
+    delete_session_done: 已删除会话
+    delete_session_confirm: "确定删除会话「{name}」？消息与文件将一并删除，且无法恢复。"
+    edit_message_title: 编辑消息
+    edit_message_placeholder: 输入消息内容
+    fork_done: "已分叉：{name}"
+    rollback_success: 回滚成功
+    rollback_truncated: 对话已截断，工作区未恢复
+    rollback_blocked_title: 暂时无法回滚
+    rollback_blocked_msg: Agent 正在运行，请先停止生成或等本轮完成后再回滚。
+    set_floor_done: 已置位
+    set_floor_confirm_title: 置位到此消息？
+    set_floor_confirm_msg: 此消息之前将不参与提示词，此消息及之后将恢复可见。
+    rollback_confirm_title: 回滚到此消息
+    rollback_degraded_title: 仅删除后续对话
+    rollback_continue: 继续回滚
+    snapshot_missing: 快照丢失
+    workspace_restore_fail_title: 无法恢复工作区
+    context_up_to_date: 上下文已是最新状态
+    compacting_toast: 正在压缩上下文…
+    compact_done: 已压缩
+    compact_cancelled: 已取消压缩
+    active_suffix: " · 活跃中"
+    hidden_tag: 已隐藏
+    role_system: 系统
+    tab_chat: 聊天
+    tab_prompt: 提示词
+    tab_conversation: 会话内容
+    subagent_running_empty: 子智能体运行中…
+    subagent_pick_parent_hint: 请返回父会话并重新点击子智能体卡片
+    subagent_empty: 子会话暂无消息
+    thinking_sanitized: 思考（已脱敏）
+    workspace_unavailable: 聊天工作区不可用
+    parent_dir: 上一级
+    pick_target_dir_title: 选择目标目录
+    pick_dir_hint: 浏览到目标文件夹后确认；不可选中源自身或其子树
+    file_ref_hint: 可多选文件与目录
+    select_current_folder: 选择当前文件夹
+    deselect_current_folder: 取消选用
+    pick_dir_empty: 暂无子目录
+    pick_file_empty: 暂无文件
+    pick_dir_blocked: （不可作目标）
+    dir_blocked_hint: 当前目录是源自身或子树，不能作为目标
+    pick_dir_aria: "选用目录 {label}"
+    enter_dir_aria: "进入目录 {label}"
+    pick_file_aria: "选用文件 {label}"
+    file_path_suggest_aria: 文件路径建议
+    skill_suggest_aria: 技能建议
+    open_file_aria: "打开文件 {path}"
+    open_subagent_aria: "打开子会话 {id}"
+    open_skill_aria: "打开技能 {name}"
+    view_subagent_aria: "查看子智能体会话 {id}"
+    view_skill_aria: "查看技能 {name}"
+    view_result_aria: "查看工具结果 {name}"
+    io_input_label: 【输入】
+    io_output_label: 【输出】
+    reset_workplace_cache_done: 已重置常驻工作区缓存
+  # —— session：会话详情/会话级切换（mobile SessionDetailScreen·ChatTabScreen + desktop SessionDetailDrawer·ConversationPanel + 两端 chat-agent-meta） ——
+  session:
+    name_label: 会话名称
+    name_placeholder: 输入会话名称
+    name_input_aria: 会话名称输入框
+    rename_title: 编辑会话名称
+    untitled: （未命名）
+    current_agent: 当前智能体
+    current_model: 当前大模型
+    switch_agent: 切换智能体
+    switch_model: 切换大模型
+    switch_agent_aria: "切换智能体，当前 {name}"
+    switch_model_aria: "切换模型，当前 {name}"
+    switch_agent_error: 切换智能体（加载失败）
+    switch_agent_loading: 切换智能体（加载中）
+    switch_agent_pending: 切换智能体（待重选）
+    view_prompt_value: 预览提示词
+    compact_context: 压缩上下文
+    compact_confirm_msg: 将压缩上下文。是否继续？
+    compact_confirm_msg_desktop: 将按照事件配置压缩上下文。是否继续？
+    compacting: 正在压缩…
+    cancel_compact: 取消压缩
+    compact_value: 减少上下文占用
+    skills_value: 查看与管理
+    context_usage: 上下文占用
+    agent_locked: 智能体锁定
+    agent_deleted_hint: 智能体已删除 · 点击重选
+    agent_loading_guide: 智能体信息加载中，请稍候再试。
+    agent_loading_toast: 智能体信息加载中，请稍候再试
+    agent_lock_model_toast: 当前智能体已锁定模型，会话内无法覆盖
+    agent_model_locked_hint: 当前智能体已锁定模型，会话内无法覆盖。
+    agent_picker_title: 选择 Agent
+    agent_picker_title_aria: "选择 Agent（当前：{name}）"
+    model_picker_title_aria: "选择模型（当前：{name}）"
+    clear_model_override_aria: 清除会话覆盖（使用智能体锁定模型）
+    no_agents: 暂无 Agent，请先在设置中配置。
+    no_models: 暂无模型，请先在设置中配置 Provider。
+    agent_picker_empty: 暂无智能体。请先在「智能体配置」中创建。
+  # —— agent：智能体编辑器/列表/选择器/工具目录（config-forms agent-editor-state 两端共用 + mobile Agent* + desktop AgentEditorView·ToolPolicyPicker） ——
+  agent:
+    basic_info: 基本信息
+    import_yaml: 导入 YAML
+    export_yaml: 导出 YAML
+    scope: 作用域
+    scope_picker_title: 选择作用域
+    description_hint: 向 task 工具说明这个智能体擅长什么，可留空。
+    description_placeholder: 例如：擅长检索代码库、写测试。
+    description_task_hint: 用于在 task 工具中向主智能体介绍本智能体的能力。
+    tool_mode_default: 默认（全部工具）
+    tool_mode_default_all: 默认（全部）
+    tool_mode_allow: 白名单
+    tool_mode_deny: 黑名单
+    scope_primary: 仅主智能体
+    scope_subagent: 仅子智能体
+    workplace_label: 常驻工作区
+    workplace_hint: 可编辑助手确认语。
+    workplace_disabled_hint: 关闭时不注入项目文件树。
+    assistant_text_label: 助手确认语
+    assistant_text_readonly_hint: 助手确认语（只读）。
+    prompt_template_title: 提示词模版
+    system_label: 系统
+    system_blocks_label: 系统区
+    system_content_label: 系统内容
+    system_prompt_label: 系统提示词
+    enable_system: 启用系统
+    enable_persist: 启用持久区
+    enable_dynamic: 启用动态区
+    persist_blocks_label: 持久区
+    dynamic_blocks_label: 动态区
+    persist_macro_hint: 持久区禁止使用宏。
+    layout_order: 系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区
+    layout_order_prefix: 纵向顺序与模型组装一致：
+    layout_order_prefix_short: 纵向顺序：
+    system_disabled_hint: 关闭时不写入系统提示词。
+    persist_disabled_hint: 关闭后持久区内容不会发送给 AI，已填写的内容仍保留。
+    dynamic_disabled_hint: 关闭后动态区内容不会发送给 AI，已填写的内容仍保留。
+    system_placeholder: 单段系统级指令…
+    max_steps_label: 最大步数
+    max_steps_hint: 限制单轮任务中模型与工具的往返次数；未填写时默认为 20。
+    max_steps_value: "最大步数 {n}"
+    blocks_empty_hint: 暂无块，点击添加
+    chat_blocks_label: 会话历史
+    chat_tag: 会话消息
+    chat_blocks_short: 会话区
+    chat_readonly_hint: 运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。
+    skills_label: 技能索引
+    skills_blocks_label: 技能索引区
+    skills_readonly_hint: 运行时注入生效技能索引。
+    skills_disabled_hint: 关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。
+    block_role_picker_title: 选择角色
+    block_content_aria_persist: "常驻块 {name} 内容"
+    block_content_aria_dynamic: "动态块 {name} 内容"
+    macro_chip: 宏
+    macro_prefix: 宏：
+    attach_toggle_label: 开启自定义附加信息
+    attach_toggle_hint: 用户聊天历史，开启后可给每次输入附加额外内容
+    attach_text_label: 附加信息文本
+    attach_text_label_mobile: 附加信息内容
+    attach_text_hint: 每条用户消息都会附带这段文本给模型
+    attach_macro_hint: 支持 $time、$week_cn、$filetree…
+    blocks_list_label: 块列表
+    tools_section: 工具策略
+    tools_mode_label: 模式
+    tools_mode_picker_title: 工具名单模式
+    select_tools: 选择工具
+    allowlist_label: 白名单工具
+    denylist_label: 黑名单工具
+    builtin_tools_hint: "未配置时使用全部内置工具（{count} 个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search。"
+    selected_tools_aria: "已选工具（{selected}/{total}）"
+    no_tools_selected: "未选择工具（0/{total}）"
+    all_tools_selected: "全部工具（{total}/{total}）"
+    search_tools_placeholder: 搜索工具…
+    skill_injection_toggle: 开启技能注入与 skill 工具
+    skills_prefix_label: 索引前缀语
+    model_dedicated: 专属模型
+    model_follow_hint: 默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。
+    model_picker_title: 选择专属模型
+    model_follow_option: 默认(跟随)
+    no_models_hint: 请先在「服务商」页添加模型
+    unresolved_model_warn: "⚠ 原绑定模型当前不可用（{id}）"
+    unresolved_model_hint: 原绑定模型当前不可用（服务商可能已删除或模型列表加载失败），保存将保留原绑定；选择「默认(跟随)」可解除。
+    runtime_section: 运行时
+    unnamed: 未命名 Agent
+    deleted_done: 已删除 Agent
+    template_overwritten: 已用默认模板覆盖并保存
+    back_to_list: 返回列表
+    delete_agent_title: 删除 Agent
+    delete_agent_confirm_msg_named: "删除 Agent「{name}」？"
+    delete_agents_confirm_msg: "确定删除选中的 {count} 个 Agent？"
+    template_overwrite_title: 覆盖为默认模板
+    template_overwrite_msg: 将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？
+    template_overwrite_confirm: 覆盖并保存
+    saved_done: 已保存智能体配置
+    yaml_exported: 已导出 Agent YAML
+    yaml_import_confirm: 将覆盖当前智能体配置，是否继续？
+    yaml_imported: 已导入 Agent YAML
+    builtin_note_mobile: 内置智能体，不可编辑
+    builtin_note_desktop: 内置智能体，不可编辑——general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。
+    edit_title: "编辑 {name}{dirty}"
+    unsaved_suffix: " · 未保存"
+    list_primary_hint: 主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。
+    list_subagent_hint: 子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。
+    list_primary_empty: 暂无主智能体，点击「新建」创建。
+    list_subagent_empty: 暂无子智能体，点击「新建」创建。
+    list_workspace_suffix: "{label} · 工作区"
+    general_note: 通用助手 · 不可编辑
+    delete_select_title: 选择要删除的 Agent
+    primary_tab: 主智能体
+    subagent_tab: 子智能体
+    rename_title: 重命名 Agent
+    display_name_label: 显示名称
+    agent_name_label: Agent 名称
+    tool_desc_task: 委派子智能体执行子任务（仅主智能体可用）
+    tool_desc_read: 读取工作区文件（支持分页）
+    tool_desc_write: 写入或整文件覆盖
+    tool_desc_edit: 精确查找替换（含尾追）
+    tool_desc_fs: 文件系统命令（ls/rm/mv/cp/mkdir/rmdir）
+    tool_desc_glob: 按 glob 模式查找路径
+    tool_desc_grep: 在工作区文件内容中搜索（支持正则/反选/上下文）
+    tool_desc_skill: 使用与管理技能（load/read/write/edit/list）
+    tool_desc_agent: 管理 agent 定义（list/get/create/update，仅主智能体可用）
+    tool_desc_curl: 发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）
+    tool_desc_search: 联网搜索：按当前启用的搜索引擎串行检索网页，返回引擎原始结果数据（JSON 文本）；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）
+  # —— provider：服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui） ——
+  provider:
+    title: 服务商
+    name_label: 服务商名称
+    name_placeholder: 例如 智谱
+    protocol_label: 协议
+    auth_section: 认证
+    status_label: 当前状态
+    api_key_status_prefix: API Key 状态：
+    api_key_keep_hint: 留空则不修改
+    api_key_required_hint: 必填，写入 SKSP 安全存储
+    custom_params_optional: 可选，JSON 对象
+    custom_params_label: 自定义参数
+    custom_params_hint: JSON 对象，原样合并进请求体顶层（可覆盖标准字段）；清空保存即移除
+    custom_params_hint_desktop: 自定义参数（JSON 对象，原样合并进请求体顶层，可覆盖标准字段）
+    custom_params_placeholder: "{\"tool_stream\": true}，清空并保存即移除全部自定义参数"
+    create_done: "已创建服务商：{name}"
+    edit_title: 编辑服务商
+    add_model_title: 添加模型
+    vendor_model_id_label: 厂商模型 ID
+    vendor_model_id_placeholder: 如 gpt-4o
+    model_name_optional_label: 模型名称（可选）
+    model_name_keep_hint: 留空则使用厂商 ID
+    fetch_models_title: 拉取模型
+    fetch_models_hint: 从服务商获取可用模型，勾选后批量添加
+    fetching: 拉取中…
+    filter_models_placeholder: 过滤模型…
+    no_models_fetched: 未拉取到可用模型，请检查 API Key 与 Base URL。
+    no_matching_models: 无匹配模型
+    add_count_confirm: "添加 ({count})"
+    models_added_done: 已添加模型
+    delete_model_title: 删除模型
+    delete_models_confirm: "确定删除选中的 {count} 个模型？"
+    model_renamed_done: 已重命名模型
+    rename_model_title: 重命名模型
+    sampling_badge: 已配采样
+    remote_tag: 远程
+    delete_select_hint: 选择要删除的模型（批量模式下不会进入采样配置）
+    delete_models_select_title: 选择要删除的模型
+    delete_select_title: 选择要删除的服务商
+    delete_select_hint_mobile: 选择要删除的服务商（将同时移除其下所有已保存模型）
+    delete_title: 删除服务商
+    delete_confirm_msg: 将同时移除其下所有已保存模型与采样配置，确定继续？
+    delete_batch_confirm: "将同时移除其下所有已保存模型，确定删除选中的 {count} 个服务商？"
+    deleted_done: 已删除服务商
+    deleted_count_done: "已删除 {count} 个服务商"
+    models_deleted_done: 已删除模型
+    models_deleted_count: "已删除 {count} 个模型"
+    empty_hint: 暂无服务商，点击右上角「添加」创建。
+    empty_hint_desktop: 暂无服务商，点击上方按钮添加。
+    builtin_protocol_hint: 内置服务商不可修改协议。
+    models_meta: "{count} 个模型 · "
+    models_saved_meta: "{count} 个已保存模型"
+    detail_tab_aria: 服务商详情 tab
+    unknown_provider: 未知服务商
+    empty_saved_models: 暂无已保存模型
+    connected: 已连接
+    not_connected: 未连接
+    needs_fix: 需修复
+  # —— sampling：采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm） ——
+  sampling:
+    model_name_hint: 用于列表与选择器展示；派生 displayName 为 服务商/模型名称。
+    vendor_id_line: "厂商 ID：{id}"
+    model_name_placeholder_hint: 默认同厂商模型 ID
+    display_name_derived: 展示名称（派生）
+    save_name_label: 保存名称
+    internal_budget_section: 内部预算
+    internal_budget_hint: 上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。
+    context_limit_label: 上下文上限 (tokens)
+    counting_method_label: 计数方式
+    counter_autos_hint: 自动按模型名匹配分词器族；保存后以本页为准。
+    token_counter_label: Token 计数器
+    generation_section: 生成参数
+    thinking_effort_label: 思考强度
+    temperature_label: 温度
+    max_output_label: 输出最大长度
+    section_hint_plain: 展示协议推荐默认值；保存后以本页为准。
+  # —— chat_config：聊天/工作区配置（mobile ChatConfigScreen + desktop WorkspaceSettingsView） ——
+  chat_config:
+    stream_parent: 父会话流式
+    stream_parent_on: 主对话回复边生成边显示（推荐）
+    stream_parent_off: 主对话回复完成后一次性显示
+    stream_sub: 子会话流式
+    stream_sub_on: 子智能体回复边生成边显示
+    stream_sub_off: 子智能体回复完成后一次性显示
+    thinking_prompt: 思考提示词
+    thinking_prompt_hint: 开启后，模型的思考内容进入后续提示词，关闭则不进入。
+    rich_text: 富文本消息
+    rich_text_on: 用户与助手消息解析 Markdown/HTML
+    rich_text_off: 聊天消息显示为纯文本
+    notifications: 消息通知
+    notifications_on: 进入应用即常驻状态栏保活，生成中显示状态，结束后台提醒
+    notifications_off: 无常驻通知、无提醒（生成行为不受影响）
+    notification_permission: 通知权限
+    perm_granted: 已授权
+    perm_denied: 未授权
+    perm_pending: 申请中…
+    compact_section: 压缩配置
+    compact_hint: 满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。
+    hidden_start_depth: 隐藏起始深度
+    auto_compact: 启用自动压缩
+    token_ratio: Token 比例
+    default_section: 默认选择
+    default_hint: 新建会话时使用的工作区默认值，也可在会话底部随时切换。
+    chat_prefs_section: 聊天偏好
+    chat_prefs_hint: 影响消息展示与 LLM 请求行为。达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。
+    select_model: 选择模型
+  # —— skills：技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel） ——
+  skills:
+    new_title: 新建技能
+    name_label_plain: 技能名
+    name_label_manage_hint: 技能名（可在管理页重命名）
+    name_label_dir_hint: 技能名（即目录名，可在管理页重命名）
+    name_label_builtin_hint: 技能名（内置技能不可改名）
+    name_example_desktop: 如 lore-style-guide
+    name_example_mobile: 如 worldbuilding-checker
+    desc_required_label: 描述（进入技能索引，必填）
+    desc_label_desktop: 描述（进入技能索引）
+    desc_hint: 进入技能索引，模型据此决定是否使用
+    desc_hint_desktop: 模型会据此决定是否使用该技能
+    domain_label: 存储域
+    domain_global: 全局（所有项目）
+    domain_project: 项目
+    project_label: 所属项目
+    project_picker_title: 选择所属项目
+    no_projects_option: （暂无项目）
+    importing_zip: 从 ZIP 导入…
+    reading_zip: 读取中…
+    zip_imported_info: "已导入 ZIP · {count} 个文件（创建后全部带入）"
+    create_and_edit: 创建并编辑
+    domain_tag_global: 全局
+    domain_tag_overridden: 项目 · 覆盖全局
+    global_tab: 全局技能
+    project_tab: 项目技能
+    domain_section: 技能域
+    global_hint: 全局技能对所有项目生效；同名项目副本会覆盖全局版（仅对无副本的项目生效）。
+    project_hint: 项目技能仅所属项目生效；按所有项目分组展示。
+    global_tab_hint_mobile: 全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。
+    project_tab_hint_mobile: 项目技能仅所属项目生效，同名时覆盖全局版。按所有项目分组展示全部项目技能。
+    edit_info: 编辑信息
+    export_zip: 导出 ZIP
+    exported_zip: "已导出「{name}.zip」"
+    delete_title: 删除技能
+    deleted_done: 已删除技能
+    global_delete_warn: 该技能影响所有项目，删除后全部会话不再注入。
+    project_delete_warn: 该技能仅所属项目生效，删除后其他项目不受影响。
+    batch_delete_warn_global: 其中的全局技能影响所有项目，删除后全部会话不再注入。
+    batch_delete_warn_project: 项目技能仅所属项目生效，删除后其他项目不受影响。
+    global_shadow_note: 该全局版仅对没有同名副本的项目生效；有副本的项目使用项目版。
+    overridden_tag: 被项目副本覆盖
+    invalid_tag: "无效 · {reason}"
+    invalid_default_reason: front matter 不合法
+    selected_skills_label: "选中的 {count} 个技能"
+    delete_confirm_named: "删除「{name}」？{scope}"
+    scope_hint_global: 全局技能删除后影响所有项目
+    scope_hint_project_single: "该技能仅在该项目（{project}）生效"
+    scope_hint_project: 项目技能仅所属项目生效
+    select_delete_title: 选择要删除的技能
+    empty_global: 暂无全局技能，点击上方「新建」创建。
+    empty_global_mobile: 暂无全局技能。新建全局技能后所有项目可用。
+    empty_projects_desktop: 暂无项目，先在主导航创建项目。
+    empty_project_desktop: 该项目暂无技能。
+    empty_project_mobile: 暂无项目技能。项目技能仅所属项目生效，同名时覆盖全局版。
+    menu_aria: "技能 {name} 更多操作"
+    skill_aria: "技能 {name}"
+    info_saved: 已保存技能信息
+    file_saved: 已保存技能文件
+    file_entry_protected: SKILL.md 是保留入口文件，不可新建同名文件。
+    file_entry_delete_protected: SKILL.md 是保留入口文件，不可删除。
+    entry_protected_mobile: SKILL.md 是技能入口文件，不能删除或重命名
+    unspecified: 未指定技能。
+    missing_panel: 技能不存在或已删除。
+    missing_toast: 技能不存在或已被删除
+    back_to_manage: 返回技能管理
+    domain_project_line: "项目域 · {project}"
+    domain_global_line: 全局域 · 所有项目生效
+    new_aux_file: 新建辅助文件
+    entry_file_tag: 入口文件
+    delete_file_aria: "删除 {path}"
+    file_mode_label: 技能文件模式
+    editor_title: 技能文件编辑
+    unsaved_hint: 未保存（Ctrl+S 保存）
+    delete_aux_title: 删除辅助文件
+    pick_hint_mobile: 单选插入 $技能名；已关闭技能显式引用后仍生效
+    pick_hint_desktop: 平铺当前项目合并视图，可多选；已关闭的技能仍会注入全文
+    pick_empty: 暂无可用技能
+    pick_empty_project: 当前项目暂无可用技能
+    pick_aria: "选用技能 {name}"
+    pick_ref_aria: "引用技能 {name}"
+    disabled_tag: 已关闭
+    session_panel_back: 返回会话详情
+    session_organize: 整理
+    session_enabled_stat: "{enabled}/{valid} 启用"
+    session_empty: 暂无技能。点击「新建」创建项目技能，或在设置·技能管理页维护全局技能。
+    session_toggle_aria: "{action}技能 {name}（仅当前项目）"
+    panel_empty_mobile: 当前项目还没有可用技能。技能是可复用的说明文档，创建后进入提示词索引，模型会按描述决定是否使用。
+  # —— smart_sort：智能排序规则（mobile SmartSort* + desktop SettingsViews 规则库/编辑器） ——
+  smart_sort:
+    delete_title: 删除规则
+    delete_confirm_named: "确定删除「{name}」？"
+    delete_batch_confirm: "确定删除选中的 {count} 条规则？"
+    delete_rules_done: 已删除规则
+    delete_rules_count: "已删除 {count} 条规则"
+    import_title: 导入规则
+    import_confirm: 导入将替换全部现有规则（含内置规则的启停状态），确定继续？
+    import_confirm_desktop: 导入将清空并替换当前全部规则（含内置规则），确定继续？
+    imported_count: "已导入 {count} 条规则"
+    imported_all: 已导入并替换全部规则
+    exported: 已导出规则
+    exported_yaml: 已导出规则 YAML
+    reset_confirm_mobile: 将重灌全部内置规则（含删除后重建、恢复启用），用户自建规则不受影响。
+    reset_confirm_desktop: 将删除并重灌全部内置规则（自定义规则不受影响），确定继续？
+    reset_done: 已恢复默认规则
+    enable_batch_done: 已启用所选规则
+    disable_batch_done: 已禁用所选规则
+    builtin_delete_block_mobile: 内置规则不可删除，请取消勾选后再删除
+    builtin_delete_block_desktop: 内置规则不可删除，仅可禁用
+    builtin_delete_block_desktop2: 内置规则仅可禁用不可删除
+    batch_select_hint: 选择要操作的规则；内置规则不可删除
+    empty: 暂无规则，点击「新建」创建。
+    builtin_prefix: "内置 · "
+    disabled_tag: 已禁用
+    library_title: 规则库
+    new_rule_title: 新规则
+    unnamed_rule: 未命名规则
+    form_title: 排序规则
+    capture_kind_smart: 智能数字
+    capture_kind_fixed_max: 固定最大
+    capture_kind_fixed_min: 固定最小
+    name_example: 如 中文序号章节
+    name_example_desktop: 如 中文卷章复合
+    regex_label: 正则表达式
+    regex_hint: 支持 /正则/flags 格式，如 /第(\d+)章/i
+    regex_example: "如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
+    capture_label: 捕获数字
+    capture_smart_hint: 从捕获组提取序号，中文数字自动转换
+    capture_hint_before: 命中即排在所有序号之前（序章/楔子类）
+    capture_hint_after: 命中即沉底排在所有序号之后（终章/番外类）
+    capture_picker_title: 选择捕获数字方式
+    capture_aria: "捕获数字 {label}"
+    capture_empty: 暂无可选捕获方式
+    desc_hint: 描述这条规则匹配什么，如 匹配 第X章 形式的标题
+    test_hint_mobile: 输入一段文本，点击「测试」后显示全部匹配与每处匹配的提取序号。
+    test_hint_desktop: 输入一段文本，点击「测试」后原文内高亮显示全部匹配段，并给出匹配计数。
+    test_text_label: 测试文本
+    test_text_placeholder: 输入测试文本
+    result_pending: 点击「测试」查看匹配结果
+    no_match_text: （空匹配）
+    no_tuple: 无序号
+    match_count: "共 {count} 处匹配"
+    no_matches: 无匹配
+    help_title: 使用说明
+    help_priority_title: 规则与优先级
+    help_priority_body: 排序时按列表顺序逐条尝试，首个命中的规则生效；行菜单可上移/下移/置顶/置底调整优先级。
+    help_fixed_title: 固定最大/最小
+    help_fixed_body: 命中即取固定序号：固定最小排在所有序号之前（序章/楔子类），固定最大沉底排在所有序号之后（终章/番外类），无需捕获组。
+    help_regex_title: 正则格式
+    help_regex_body: 支持 /正则/flags 字面量（如 /第(\d+)章/i），也可直接输入裸正则（默认无 flags）。
+    list_hint_desktop: 目录选「智能排序」时按本列表从上到下逐条尝试，首条命中规则的捕获组提取序号；可拖拽或用行菜单调整优先级。
+  # —— prompt：提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard） ——
+  prompt:
+    turn_aria: "{action}{role}轮，{summary}"
+    tool_group_aria: "{action}工具调用 {name}"
+    file_preview_aria: "{action}文件预览 {path}"
+    parallel_tag: 并行
+    tool_input_aria: "查看工具入参，{name}"
+    tool_result_aria: "查看工具结果，{name}"
+    leaf_view_aria: "查看{leaf}，{name}"
+    lost_result: 未返回结果
+    status_lost: 丢失
+    mode_full: 全内容
+    mode_filename: 文件名
+    mode_header: 文件头
+    file_full_aria: "查看文件全文 {path}"
+    viewer_hint_mobile: 在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
+    viewer_hint_desktop: 在会话工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
+    fullscreen_aria: "{title}详情"
+    input_label: 入参
+    empty_prompt: （空提示词）
+    empty_value: （空）
+  # —— stats：数据统计/用量详情/图表/区间选择（mobile TokenUsageStats*·charts + desktop TokenUsageStatsView + 两端 metrics 条与详情表） ——
+  stats:
+    filter_label: 筛选
+    time_range: 时间范围
+    range_today: 今天
+    range_7d: 近 7 天
+    range_30d: 近 30 天
+    range_custom: 自定义
+    start_date: 开始日期
+    end_date: 结束日期
+    model_filter_aria: 模型筛选
+    model_all: 全部模型
+    model_other: 其他模型
+    provider_unlogged: 未记录服务商
+    provider_other_label: "{provider}/其他模型"
+    view_tabs_aria: 视图页签
+    tab_summary: 汇总
+    tab_charts: 图表
+    tab_requests: 流水
+    empty_db: 库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
+    empty_filtered: 当前筛选范围内暂无用量数据，可调整时间范围或模型筛选后再试。
+    empty_range: 该区间无数据
+    overview_title: "总览 · {range}"
+    overview_desc: 跟随当前时间范围与模型筛选
+    total_tokens: 总 token
+    input_label: 输入
+    output_label: 输出
+    calls_label: 调用次数
+    hit_rate: 命中率
+    avg_rate: 平均速率
+    avg_first_token: 平均首字延迟
+    nonstream_hint: 非流式请求按完成时刻计
+    pie_section: 服务商 × 模型
+    pie_desc: 点选扇区或图例查看用量、调用次数与占比
+    slice_aria: "{label} · 用量 {value} · {calls} 次 · 占比 {share}"
+    chart_input_aria: "输入 {count}"
+    chart_output_aria: "输出 {count}"
+    chart_calls_aria: "调用 {count} 次"
+    requests_title: "请求流水 · 共 {count} 条"
+    requests_desc: 按时间倒序列出当前筛选范围内的请求
+    col_time: 时间
+    col_cache_read: 缓存读
+    col_first_token: 首字延迟
+    col_total_time: 总时间
+    page_prev: 上一页
+    page_next: 下一页
+    day_hourly_title: 今天 · 按小时分布
+    day_hourly_desc: 当天 0-24 点的输入输出与调用量
+    by_day_title: 按天用量
+    hour_label: "{hour}时"
+    detail_title: 用量详情
+    recent_requests: 最近请求
+    recent_empty: 暂无请求记录
+    requests_empty: （无请求记录）
+    cache_read: 缓存读取
+    cache_write: 缓存写入
+    cache_hit_rate: 缓存命中率
+    visible_messages: 消息数（可见）
+    tool_calls: 工具调用
+    footnote_visible: 消息数为可见口径 · 工具调用含已隐藏消息
+    footnote_recent: 最近请求为单步真值，与指标条整轮读数不同源
+    metrics_bar_aria: "流式指标，{line}"
+    metrics_bar_aria_desktop: "流式指标：{line}"
+    bucket_line: "{key} · 输入 {input} · 输出 {output} · 调用 {calls} 次"
+    range_picker_title: 选择日期区间
+    range_pick_start: 先选起始日，再选结束日
+    range_pick_end: 已选起始日，请选择结束日
+    date_md: "{month} 月 {day} 日"
+    weekday_mon: 一
+    weekday_tue: 二
+    weekday_wed: 三
+    weekday_thu: 四
+    weekday_fri: 五
+    weekday_sat: 六
+    weekday_sun: 日
+    switch_more: 切换 ›
+  # —— cloud_sync：云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel） ——
+  cloud_sync:
+    save_config: 保存配置
+    s3_section: S3 兼容存储
+    endpoint_hint: "含 https://"
+    bucket_hint: 可留空（MinIO）
+    prefix_label: 路径前缀
+    prefix_hint: 须以 / 结尾，保存时自动规范化
+    path_style_hint: MinIO 需开启；阿里云 OSS 官方 Endpoint 请关闭
+    credentials_section: 凭据
+    secret_saved_hint: 已保存；留空则保留原密钥
+    secret_create_hint: 保存时写入 SKSP
+    secret_placeholder: 留空保留已存密钥
+    device_label: 设备名称（可选）
+    device_hint: 便于识别本机
+    testing: 测试中…
+    test_connection: 测试连接
+    test_note: 测试连接仅校验桶访问权限，不会执行拉取或推送。
+    connected_done: 连接成功
+    config_saved: 配置已保存
+    config_saved_desktop: 云同步配置已保存
+    pull_title: 从云端拉取
+    push_title: 推送到云端
+    cloud_newer_title: 云端有更新
+    cloud_newer_msg: 建议先拉取云端数据。仍要覆盖云端吗？
+    pull_first: 先拉取
+    force_overwrite: 仍要覆盖云端
+    cloud_newer_hint: 云端有更新，建议先拉取后再推送。
+    push_cancelled: 推送已取消
+    pull_cancelled: 拉取已取消
+    up_to_date: 已是最新
+    pull_reloading: 拉取成功，正在重新加载…
+    push_done: 推送完成
+    pull_done: 拉取完成
+    sync_status: 同步状态
+    status_desc: 显示本机与云端的 rev 对齐情况
+    status_desc_desktop: 显示本机与云端的 rev 对齐情况；须先保存配置后再拉取/推送。
+    agent_active_note: Agent 运行中，同步操作已禁用。
+    local_status: 本机与云端 rev 已对齐。
+    rev_cloud: 云端 rev
+    rev_local: 本机 rev
+    rev_cloud_line: "云端 rev：{rev}"
+    rev_synced_line: "本机已同步 rev：{rev}"
+    last_pull_line: "上次拉取：{time}"
+    last_push_line: "上次推送：{time}"
+    last_pull_result: "拉取结果：{result}"
+    last_push_result: "推送结果：{result}"
+    pulled_done: "已拉取云端数据（rev {rev}）"
+    pushed_done: "已推送到云端（rev {rev}）"
+    enabled_toggle: 启用云同步
+    desc: 通过 S3 兼容对象存储在 Desktop 与 Mobile 之间同步数据库快照。Secret Key 经 SKSP 加密存储。
+    agent_busy_value: Agent 运行中
+    configured: 已配置
+    not_configured: 未配置
+    result_ok: 成功
+    result_fail: 失败
+    last_time: "上次 {time}"
+    manual_sync: 手动同步
+    not_configured_msg: 请先完成云存储配置
+    status_unreadable: 无法读取同步状态
+    pull_confirm_msg: 将用云端最新快照替换本机数据（项目、会话、消息等）。本机服务商与 API Key 将保留。是否继续？
+    pull_action: 拉取
+    progress_push_prepare: 准备推送…
+    progress_pull_prepare: 准备拉取…
+    progress_connecting: 连接云端…
+    progress_checking_remote: 检查云端状态…
+    progress_reading_remote: 读取云端状态…
+    progress_acquiring_lock: 获取同步锁…
+    progress_lock_acquired: 同步锁已获取
+    progress_exporting: 导出本地数据库…
+    progress_exported: 导出完成
+    progress_hashing: 校验快照…
+    progress_hashed: 校验完成
+    progress_reading_snapshot: 读取快照…
+    progress_snapshot_read: 读取完成
+    progress_uploading: 上传快照到云端…
+    progress_uploaded: 快照已上传
+    progress_downloading: 下载云端快照…
+    progress_downloaded: 下载完成
+    progress_importing: 导入数据库…
+    progress_imported: 导入完成
+    progress_syncing: 正在同步…
+    progress_transferring: 传输中…
+    progress_keep_open: 请勿关闭应用，大文件可能需要数分钟
+  # —— storage：存储配置（mobile StorageConfigScreen + desktop SettingsViews data） ——
+  storage:
+    space_section: 存储空间
+    space_desc: 数据库文件体积与清理可回收的空间
+    db_size: 库体积
+    reclaimable: 可回收
+    cloud_entry: 云端配置
+    cleanup_section: 数据清理
+    cleanup_action: 清理数据库空间
+    cleanup_confirm: 将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？
+    cleanup_start: 开始清理
+    cleanup_done: "清理完成：{before} → {after}"
+    cleanup_desktop_desc: "回收缓存冗余与空闲页并压缩数据库文件。当前库体积 {before} · 可回收约 {after}"
+    cleanup_confirm_desktop: 清理将回收缓存冗余并压缩数据库文件，耗时随库体积增长（大库可能数十秒），期间应用可能短暂无响应；完成后磁盘占用通常会下降。确定继续？
+    cleanup_confirm_title_desktop: 确认清理
+    export_db: 导出数据库
+    export_desc: 将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。
+    share_backup: 分享备份文件
+    export_db_done: 数据库已导出；备份文件包含聊天记录明文，请妥善保管
+    export_db_done_desktop: 已导出数据库
+    export_logs: 导出日志
+    share_logs: 分享日志文件
+    logs_exported: 日志已导出
+    import_db: 导入数据库
+    import_desc_desktop: 用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。
+    replace_all: 完全替换
+    import_confirm_mobile: 将用所选备份完全替换当前应用数据（项目、会话、消息等）。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。此操作不可撤销，是否继续？
+    import_confirm_desktop: 导入将完全替换当前数据库；本机服务商与 API Key 将保留，备份中的服务商配置不会导入。确定继续？
+    import_confirm_title_desktop: 确认导入
+    continue_pick: 继续选择文件
+    reloading: 正在重新加载，请稍候…
+    imported_done: 已导入并重新加载
+  # —— vfs：工作区文件管理/导入导出/目录规则/预览编辑/批注（mobile Vfs* + desktop workspace 组件群 + FileMarkdownPreview·PreviewAnnotateUi·workspace-actions 等） ——
+  vfs:
+    import_kind_file: 单文件
+    import_kind_zip: ZIP 包
+    import_kind_card: 角色卡
+    import_form_section: 导入形式
+    import_zip_title: 导入 ZIP
+    import_card_title: 导入角色卡
+    import_single_title: 导入单文件
+    zip_import_done: ZIP 导入完成
+    card_import_done: 已导入角色卡
+    single_import_done: 已导入单文件
+    single_import_skipped: "已导入单文件，跳过 {count} 个非 UTF-8 文件"
+    skip_non_utf8: "跳过 {count} 个非 UTF-8 文件"
+    import_done_nochange: 导入完成（无变更）
+    import_done_report: "导入完成：{report}"
+    import_report_written: "已写入 {count}"
+    import_report_skipped: "跳过 {count}"
+    import_report_failed: "失败 {count}"
+    export_preparing: 导出准备中…
+    file_saved_location: 文件已保存到所选位置
+    exported_zip: 已导出 ZIP
+    exported_file: 已导出文件
+    imported_zip: 已导入 ZIP
+    target_root: 当前目录（工作区根）
+    target_root_quoted: 「当前目录（工作区根）」
+    import_overwrite_confirm: "将覆盖目录{target}下的全部文件，同级其他内容不受影响。是否继续？"
+    import_overwrite_confirm_desktop: "将覆盖目录「{path}」下的全部文件，同级其他内容不受影响。确定继续？"
+    import_card_confirm: "将覆盖目录{target}下的同名角色卡文件，同级其他文件不受影响。是否继续？"
+    import_card_confirm_desktop: "将把角色卡内容写入目录「{path}」，其中同名文件会被覆盖。确定继续？"
+    conflict_confirm: "目标处已有 {count} 个同名文件，覆盖后不可撤销，是否继续？"
+    conflict_confirm_desktop: "目标处已有 {count} 个同名文件/目录。覆盖后不可撤销，是否继续？"
+    menu_status_change: 状态变更
+    menu_status_settings: 状态设置
+    menu_create_directory: 新建目录
+    menu_create_folder: 新建文件夹
+    create_file: 新建文件
+    menu_directory_rule: 目录规则
+    menu_rules_config: 规则配置
+    menu_delete_folder: 删除文件夹
+    menu_delete_file: 删除文件
+    rename_placeholder: 新名称
+    create_file_placeholder: 文件名，如 note.md
+    create_directory_placeholder: 目录名
+    folder_name_label: 文件夹名称
+    parent_dir_aria: 上级目录
+    more_actions_aria: 更多操作
+    batch_hint: 选择要操作的条目
+    empty_dir: 空目录
+    moved_count: "已移动 {count} 项"
+    moved_skipped: "已移动 {moved} 项，跳过 {skipped} 项"
+    target_exists_skipped: 目标已存在同名项，已跳过
+    row_badge_hidden: 隐藏
+    row_badge_follow: 跟随
+    row_subtitle_follow_full: 跟随·全内容
+    row_files_count: "{count}个文件"
+    inclusion_title: 文件纳入状态
+    inclusion_mode_label: 纳入方式
+    inclusion_show: 展示
+    inclusion_full_hint: 强制纳入 Agent 上下文，显示全内容
+    inclusion_hide_hint: 强制不纳入 Agent 上下文
+    inclusion_follow_hint: 由父目录纳入规则决定（默认）
+    sort_mode_label: 排序方式
+    sort_mode_picker: 选择排序方式
+    sort_mode_aria: "排序方式 {label}"
+    sort_mode_empty: 暂无可选排序方式
+    sort_dir_label: 排序方向
+    sort_by_name: 文件名称
+    sort_by_created: 创建时间
+    sort_by_updated: 更新时间
+    sort_asc: 升序
+    sort_desc: 降序
+    header_field_header: 头信息
+    header_field_hidden: 不展示
+    header_count_label: 头部数量 (0–1000)
+    tail_count_label: 尾部数量 (0–1000)
+    rest_fill_label: 其余文件填充
+    rule_saved_done: 目录规则已保存
+    rule_enabled_done: 目录规则已开启
+    rule_disabled_done: 目录规则已关闭
+    synced_from_project: 已从项目工作区同步
+    pushed_to_project: 已推送到项目工作区
+    init_action: 初始化
+    push_confirm_desktop: 将用当前聊天工作区覆盖项目工作区。项目工作区是该项目所有会话的模板母本，之后新建的会话与其它会话的「从上级同步」都会拿到覆盖后的内容。
+    pull_confirm: 将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？
+    push_confirm_mobile: 将用当前聊天工作区覆盖项目工作区，覆盖后无法撤销。
+    sync_done: 同步完成
+    sync_menu_title: 从上级同步
+    sync_action: 同步
+    push_project_title: 推送到项目工作区
+    workplace_ops_title: 工作区操作
+    entry_label: 条目
+    preview_title: 文件预览
+    preview_mode_label: 预览模式
+    select_to_edit: 在工作区选择文件以编辑
+    select_to_preview: 在工作区选择文件以预览
+    file_missing: 文件已删除或不存在
+    editor_title: 文件编辑
+    line_count: "{count} 行"
+    ctrl_s_hint: Ctrl+S 保存
+    char_count: "{count} 字"
+    dirty_suffix: " · 编辑中未保存"
+    tabs_title: 打开的文件
+    tab_deleted_suffix: "{path}（已删除）"
+    annotate: 批注
+    annotate_desc_placeholder: 批注说明
+    annotate_add: 添加批注
+    annotate_input_hint: 输入批注说明
+    annotate_detail_title: 批注详情
+    annotate_pick_title: 选择批注
+    annotate_empty_aria: 空说明
+    edit_annotate_title: 编辑批注
+    markdown_empty_body: （正文为空）
+    fm_empty: （空 Front Matter）
+    global_template_hint: 全库文件只读浏览：全局模板、技能与各项目/会话文件合并展示，仅用于阅读。
+  # —— project：项目抽屉/项目列表（mobile ProjectDrawer + desktop ChatRail 项目段） ——
+  project:
+    title: 项目
+    new_title: 新建项目
+    rename_title: 重命名项目
+    name_label: 项目名称
+    name_placeholder: 如 科幻小说创作
+    delete_select_hint: 选择要删除的项目（将同时移除其下所有会话）
+    delete_batch_confirm: "确定删除选中的 {count} 个项目？将同时移除其下所有会话。"
+    delete_confirm_named: "确定删除项目「{name}」？将同时移除其下所有会话。"
+    empty_mobile: 暂无项目，点击「新建」开始。
+    empty_desktop: 暂无项目
+    new_session: 新建会话
+    rename_session: 重命名会话
+    empty_sessions: 暂无会话
+    select_sessions_hint: 选择要删除的会话
+  # —— update：更新检查（mobile UpdateCheckHost·UpdateCheckResultModal·AboutScreen + desktop Update*Modal·AboutView·SettingsViews） ——
+  update:
+    available_title: 发现新版本
+    available_line: "发现新版本 {version}"
+    open_releases_suffix: 将在浏览器中打开 GitHub 发行页下载。
+    open_releases_hint: 将在浏览器中打开 GitHub 发行页，请下载对应平台的安装包。
+    check_title: 版本检查
+    up_to_date: 当前已是最新版本
+    check_failed: 无法检查更新，请检查网络
+    later: 稍后
+    go_download: 前往下载
+    remind_off_today: 今日不再提醒
+    section: 更新
+    auto_check: 自动检查更新
+    check_now: 检查更新
+    checking: 检查中…
+    check_now_desktop: 立即检查
+    new_version_line: "有新版本 {version}"
+    last_check_failed: 上次检查失败
+  # —— about：关于页（mobile AboutScreen + desktop AboutView） ——
+  about:
+    version: "版本 {version}"
+    links_section: 项目链接
+    github_repo: GitHub 仓库
+    releases: 发行版
+    license: 许可证
+  # —— runtime：启动/加载屏（mobile novel-master-context·ChatConversationWebView 错误态 + desktop NovelMasterProvider） ——
+  runtime:
+    loading: 正在加载…
+    boot_failed: 启动失败
+    reload: 重载
+    load_failed: 对话页加载失败
+    timeout_hint: 页面加载超时，点重载恢复；若持续出现请重启应用
+  # —— notification：生成结束/进行中系统通知（mobile agent-finished-notification·novel-master-context） ——
+  notification:
+    channel_finished: 生成结束通知
+    channel_running: 生成进行中
+    finished_title: 生成完成
+    failed_title: 生成失败
+    body_finished: "「{session}」生成结束"
+    body_interrupted: "「{session}」的生成已中断"
+    body_finished_short: 本次生成已结束
+    body_interrupted_short: 本次生成已中断
+    idle_title: novel master · 空闲
+    running_title: "正在生成 · {session}"
+    running_title_plain: 正在生成
+    running_count: "共 {count} 个会话生成中"
+    running_hint: 完成后自动结束；期间请勿强行关闭应用
+  # —— rich_document：rich-document webview 管线（r6-exemptions 桥接面盘点：1 处未立键，波 3-1 随第二座桥补齐） ——
+  rich_document:
+    over_limit_hint: 内容过长，已显示原文
+  # —— mermaid：mermaid 全屏浮层与桌面失败徽标（r6-exemptions 桥接面盘点：1 处未立键，随第二座桥补齐） ——
+  mermaid:
+    render_failed_badge: 图表渲染失败，已显示源码

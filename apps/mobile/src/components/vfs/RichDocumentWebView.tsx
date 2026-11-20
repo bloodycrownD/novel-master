@@ -12,6 +12,8 @@ import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes
 import Clipboard from '@react-native-clipboard/clipboard';
 import type {ThemeTokens} from '@/theme/tokens';
 import {richDocumentBridge, type HostToRichDocumentMessage, type RichDocumentAnnotationMark, type RichDocumentRecogitoCreatePayload, type RichDocumentTheme} from './RichDocumentBridge';
+import {RichDocumentLabelsFactory} from './rich-document-labels';
+import {coreT} from '@/i18n/core';
 import {RICH_DOCUMENT_WEBVIEW_PACKAGE_ID} from '@/webview-host/rich-document/uri';
 import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
 import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
@@ -144,7 +146,12 @@ export function RichDocumentWebView({
     postToWeb({
       v: 1,
       type: 'init',
-      payload: {theme: themeFromTokens(tokens)},
+      payload: {
+        theme: themeFromTokens(tokens),
+        // rich-document 渲染层文案（p27 R6 波 3-1 第二桥）：`ui.*` 经 core i18n
+        // 取值；web 缺省回退内置中文常量。
+        labels: RichDocumentLabelsFactory.build(coreT),
+      },
     });
   }, [postToWeb, tokens]);
 

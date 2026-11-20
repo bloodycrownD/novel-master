@@ -102,6 +102,8 @@ label:
     empty: No messages yet
     load_older: Load earlier messages
 # —— ui：第 0 片骨架（键与 zh-CN 全量镜像；en 值为直译占位，G6 复核定稿）——
+# —— ui：display texts (p27 spec §6.2; wave 3-1 skeleton, zh-CN.yaml is the source of truth.
+# G6 复核定稿：ui 域 en 全镜像，占位符与 zh 对齐；终稿前由 G6 逐键复核。) ——
 ui:
   transcript:
     menu:
@@ -132,3 +134,1046 @@ ui:
       workspace: workspace
       dir: directory
       file: file
+  common:
+    cancel: Cancel
+    confirm: OK
+    confirm_alt: Confirm
+    delete: Delete
+    save: Save
+    saving: Saving…
+    saved: Saved
+    edit: Edit
+    copy: Copy
+    copy_code: Copy code
+    close: Close
+    create: Create
+    creating: Creating…
+    created: Created
+    add: Add
+    adding: Adding…
+    added: Added
+    new: New
+    retry: Retry
+    back: Back
+    more: More
+    move_up: Move up
+    move_down: Move down
+    move_top: Move to top
+    move_bottom: Move to bottom
+    select_all: Select all
+    select_none: Deselect all
+    select: Select
+    deselect: Deselect
+    selected_count: "{count} selected"
+    loading: Loading…
+    processing: Processing…
+    cancelled: Cancelled
+    renamed: Renamed
+    deleted: Deleted
+    remove: Remove
+    clear: Clear
+    done: Done
+    understood: Got it
+    current: Current
+    preview: Preview
+    text: Text
+    stay: Stay
+    leave: Leave
+    unsaved_title: Unsaved
+    unsaved_confirm_msg: You have unsaved changes. Leave anyway?
+    unsaved_discard_msg: Unsaved changes will be discarded. Continue?
+    confirm_delete: Confirm deletion
+    confirm_op: Confirm action
+    confirm_count_msg: "Delete the selected {count} items?"
+    delete_named_confirm: "Delete {name}?"
+    overwrite: Overwrite
+    overwrite_confirm_title: Overwrite confirmation
+    expand: Expand
+    collapse: Collapse
+    manage: Manage
+    stop: Stop
+    send: Send
+    paste: Paste
+    import: Import
+    export: Export
+    rename: Rename
+    move: Move
+    view: View
+    enable: Enable
+    turn_off: Turn off
+    on: "On"
+    off: "Off"
+    builtin: Built-in
+    all: All
+    not_enabled: Not enabled
+    open_fullscreen: Full-screen editor
+    fullscreen_edit_aria: "Full-screen editor: {label}"
+    dismiss_keyboard: Dismiss keyboard
+    restoring: Restoring…
+    reset_default: Restore defaults
+    restore: Restore
+    name: Name
+    description: Description
+    content: Content
+    role: Role
+    model: Model
+    model_name: Model name
+    file: File
+    result: Result
+    test: Test
+    copied: Copied
+    empty_file: (empty file)
+    empty_note: (no note)
+    picker_empty: No options yet. Create them in Settings first.
+    zip_saved: ZIP saved to the chosen location
+    updated_at: "Updated {time}"
+    time_just_now: Just now
+    time_minutes_ago: "{count} min ago"
+    time_hours_ago: "{count} h ago"
+    time_days_ago: "{count} d ago"
+  nav:
+    tab_chat: Chat
+    tab_profile: Me
+    chat: Sessions
+    profile_config: Configuration
+    agent_settings: Agent settings
+    view_prompt: View prompt
+    turn_detail: Turn details
+    providers: Providers
+    provider_create: Add provider
+    model_management: Model management
+    sampling: Sampling
+    storage: Storage
+    cloud_sync: Cloud sync
+    cloud_storage: Cloud storage settings
+    cloud_storage_setup: Cloud storage setup
+    search_engines: Search engines
+    file_browser: File browser
+    smart_sort_rules: Smart sort rules
+    rule_editor: Rule details
+    file_editor: Edit file
+    session_detail: Session details
+    skills: Skills
+    prompt_editor: Edit prompt
+    skills_manage: Skill management
+    skill_detail: Skill details
+    subagent_session: Subagent session
+    subagent_session_view: Subagent session
+    token_stats: Usage stats
+    about: About Novel Master
+    settings: Settings
+    settings_categories: Settings categories
+    settings_general: General
+    workspace: Workspace
+    settings_advanced: Advanced
+    settings_data: Data
+    settings_backup: "Backup & restore"
+    settings_smart_sort: Smart sort
+    settings_app: App
+    global_actions: Global actions
+    pane_visibility: Pane visibility
+    pane_left: Left pane (file preview)
+    pane_center: Center pane (workspace)
+    pane_right: Right pane (chat)
+    pane_toggle_aria: "Show or hide {label}"
+    toggle_light_theme: Switch to light theme
+    toggle_dark_theme: Switch to dark theme
+    toggle_theme: Toggle theme
+    open_settings: Open settings
+    close_settings: Close settings
+    back_level: Back
+    chat_nav_aria: Chat navigation
+    chat_content_aria: Chat content
+    workspace_session: Session workspace
+    workspace_chat: Chat workspace
+    untitled_session: Untitled session
+    this_session: This session
+    project_workspace_title: Project workspace
+    project_list_menu: Project list
+    session_actions: Session actions
+    project_actions: Project actions
+    resize_left_aria: Adjust preview and workspace width
+    resize_right_aria: Adjust workspace and chat width
+  chat:
+    placeholder: Type a message…
+    placeholder_no_model: Select a model to start chatting
+    placeholder_desktop: Type a message… (Ctrl+Enter to send)
+    composer_disabled_hint: Configure a model first (Settings → Provider)
+    no_model_selected: No model selected
+    configure_model_first: Configure a model first
+    no_workspace_model_hint: Select a workspace model first
+    message_input_aria: Message input
+    more_options: More options
+    reference_files: Reference files
+    reference_skills: Reference skills
+    stop_gen: Stop
+    stop_generating: Stop generating
+    stop_subagent: Stop subagent
+    attachment_draft_aria: Pending attachments
+    attachment_status_aria: Status attachments
+    remove_attachment_aria: "Remove {label}"
+    select_model_title: Select workspace model
+    no_saved_models: No saved models yet. Add models on the Providers page first.
+    select_project_first: Select a project first
+    select_session_first: Select a session first
+    select_session: Select a session
+    rename_prompt: Enter a name
+    copy_session_done: "Session duplicated: {name}"
+    delete_sessions_confirm: "Delete the selected {count} sessions?"
+    delete_session_done: Session deleted
+    delete_session_confirm: "Delete session \"{name}\"? Its messages and files are deleted too and cannot be recovered."
+    edit_message_title: Edit message
+    edit_message_placeholder: Edit message content
+    fork_done: "Forked: {name}"
+    rollback_success: Rollback completed
+    rollback_truncated: Conversation truncated; workspace not restored
+    rollback_blocked_title: Rollback unavailable right now
+    rollback_blocked_msg: An agent is running. Stop generation or wait for this turn to finish before rolling back.
+    set_floor_done: Set as floor
+    set_floor_confirm_title: Set floor at this message?
+    set_floor_confirm_msg: Messages before this one are excluded from the prompt; this message and later ones become visible again.
+    rollback_confirm_title: Roll back to this message
+    rollback_degraded_title: Delete later messages only
+    rollback_continue: Continue rollback
+    snapshot_missing: Snapshot missing
+    workspace_restore_fail_title: Cannot restore workspace
+    context_up_to_date: Context is already up to date
+    compacting_toast: Compacting context…
+    compact_done: Compacted
+    compact_cancelled: Compaction cancelled
+    active_suffix: " · active"
+    hidden_tag: Hidden
+    role_system: System
+    tab_chat: Chat
+    tab_prompt: Prompt
+    tab_conversation: Conversation content
+    subagent_running_empty: Subagent running…
+    subagent_pick_parent_hint: Go back to the parent session and tap the subagent card again
+    subagent_empty: No messages in this subagent session
+    thinking_sanitized: Thinking (sanitized)
+    workspace_unavailable: Chat workspace unavailable
+    parent_dir: Up one level
+    pick_target_dir_title: Choose target directory
+    pick_dir_hint: Browse to the target folder and confirm; the source itself and its subtree cannot be selected
+    file_ref_hint: Select multiple files and directories
+    select_current_folder: Select current folder
+    deselect_current_folder: Deselect current folder
+    pick_dir_empty: No subdirectories
+    pick_file_empty: No files
+    pick_dir_blocked: (not usable as target)
+    dir_blocked_hint: The current directory is the source itself or inside its subtree and cannot be a target
+    pick_dir_aria: "Select directory {label}"
+    enter_dir_aria: "Enter directory {label}"
+    pick_file_aria: "Select file {label}"
+    file_path_suggest_aria: File path suggestions
+    skill_suggest_aria: Skill suggestions
+    open_file_aria: "Open file {path}"
+    open_subagent_aria: "Open subagent session {id}"
+    open_skill_aria: "Open skill {name}"
+    view_subagent_aria: "View subagent session {id}"
+    view_skill_aria: "View skill {name}"
+    view_result_aria: "View tool result {name}"
+    io_input_label: Input
+    io_output_label: Output
+    reset_workplace_cache_done: Persistent workspace cache reset
+  session:
+    name_label: Session name
+    name_placeholder: Enter session name
+    name_input_aria: Session name input
+    rename_title: Edit session name
+    untitled: (unnamed)
+    current_agent: Current agent
+    current_model: Current model
+    switch_agent: Switch agent
+    switch_model: Switch model
+    switch_agent_aria: "Switch agent, current {name}"
+    switch_model_aria: "Switch model, current {name}"
+    switch_agent_error: Switch agent (failed to load)
+    switch_agent_loading: Switch agent (loading)
+    switch_agent_pending: Switch agent (pending reselection)
+    view_prompt_value: Preview prompt
+    compact_context: Compact context
+    compact_confirm_msg: Compact the context? Continue?
+    compact_confirm_msg_desktop: The context will be compacted per event settings. Continue?
+    compacting: Compacting…
+    cancel_compact: Cancel compaction
+    compact_value: Reduce context usage
+    skills_value: "View & manage"
+    context_usage: Context usage
+    agent_locked: Agent locked
+    agent_deleted_hint: Agent deleted · tap to reselect
+    agent_loading_guide: Agent info is loading; try again shortly.
+    agent_loading_toast: Agent info is loading; try again shortly
+    agent_lock_model_toast: The agent locks its model; it cannot be overridden in this session
+    agent_model_locked_hint: The agent locks its model; it cannot be overridden in this session.
+    agent_picker_title: Select agent
+    agent_picker_title_aria: "Select agent (current: {name})"
+    model_picker_title_aria: "Select model (current: {name})"
+    clear_model_override_aria: "Clear session override (use the agent's locked model)"
+    no_agents: No agents yet. Configure them in Settings first.
+    no_models: No models yet. Configure a Provider in Settings first.
+    agent_picker_empty: No agents yet. Create one in Agent settings first.
+  agent:
+    basic_info: Basics
+    import_yaml: Import YAML
+    export_yaml: Export YAML
+    scope: Scope
+    scope_picker_title: Select scope
+    description_hint: Tell the task tool what this agent is good at. Optional.
+    description_placeholder: e.g. good at codebase search and writing tests.
+    description_task_hint: "Introduces this agent's abilities to the primary agent via the task tool."
+    tool_mode_default: Default (all tools)
+    tool_mode_default_all: Default (all)
+    tool_mode_allow: Allowlist
+    tool_mode_deny: Denylist
+    scope_primary: Primary only
+    scope_subagent: Subagents only
+    workplace_label: Persistent workspace
+    workplace_hint: The assistant confirmation text is editable.
+    workplace_disabled_hint: "When off, the project file tree is not injected."
+    assistant_text_label: Assistant confirmation text
+    assistant_text_readonly_hint: Assistant confirmation text (read-only).
+    prompt_template_title: Prompt template
+    system_label: System
+    system_blocks_label: System section
+    system_content_label: System content
+    system_prompt_label: System prompt
+    enable_system: Enable system
+    enable_persist: Enable persistent section
+    enable_dynamic: Enable dynamic section
+    persist_blocks_label: Persistent section
+    dynamic_blocks_label: Dynamic section
+    persist_macro_hint: Macros are not allowed in the persistent section.
+    layout_order: System → Skill index → Persistent workspace → Persistent section → Chat history → Dynamic section
+    layout_order_prefix: "Vertical order matches model assembly:"
+    layout_order_prefix_short: "Vertical order:"
+    system_disabled_hint: "When off, the system prompt is not written."
+    persist_disabled_hint: "When off, persistent-section content is not sent to the AI; entered content is kept."
+    dynamic_disabled_hint: "When off, dynamic-section content is not sent to the AI; entered content is kept."
+    system_placeholder: Single system-level instruction…
+    max_steps_label: Max steps
+    max_steps_hint: Caps model/tool round-trips per turn; defaults to 20 when empty.
+    max_steps_value: "Max steps {n}"
+    blocks_empty_hint: No blocks yet. Tap add.
+    chat_blocks_label: Chat history
+    chat_tag: Chat messages
+    chat_blocks_short: Chat section
+    chat_readonly_hint: "Visible session messages are injected at runtime, fixed between the persistent and dynamic sections. Not editable, cannot be turned off, and always sent to the AI."
+    skills_label: Skill index
+    skills_blocks_label: Skill index section
+    skills_readonly_hint: The active skill index is injected at runtime.
+    skills_disabled_hint: "When off, the index is not injected and the skill tool is not registered; manual skill references still work."
+    block_role_picker_title: Select role
+    block_content_aria_persist: "Persistent block {name} content"
+    block_content_aria_dynamic: "Dynamic block {name} content"
+    macro_chip: Macros
+    macro_prefix: "Macros:"
+    attach_toggle_label: Enable custom extra info
+    attach_toggle_hint: "User chat history; when on, extra content can be attached to every input"
+    attach_text_label: Extra info text
+    attach_text_label_mobile: Extra info content
+    attach_text_hint: This text is attached to every user message sent to the model
+    attach_macro_hint: "Supports $time, $week_cn, $filetree…"
+    blocks_list_label: Blocks
+    tools_section: Tool policy
+    tools_mode_label: Mode
+    tools_mode_picker_title: Tool list mode
+    select_tools: Select tools
+    allowlist_label: Allowlist tools
+    denylist_label: Denylist tools
+    builtin_tools_hint: "When unset, all {count} built-in tools are used: task, read, write, edit, fs, glob, grep, skill, agent, curl, search."
+    selected_tools_aria: "Selected tools ({selected}/{total})"
+    no_tools_selected: "No tools selected (0/{total})"
+    all_tools_selected: "All tools ({total}/{total})"
+    search_tools_placeholder: Search tools…
+    skill_injection_toggle: Enable skill injection and the skill tool
+    skills_prefix_label: Index prefix text
+    model_dedicated: Dedicated model
+    model_follow_hint: "\"Default (follow)\" means using the current model set in the session drawer / Me tab."
+    model_picker_title: Select dedicated model
+    model_follow_option: Default (follow)
+    no_models_hint: Add models on the Providers page first
+    unresolved_model_warn: "⚠ The previously bound model is currently unavailable ({id})"
+    unresolved_model_hint: "The previously bound model is unavailable (the provider may have been deleted or the model list failed to load). Saving keeps the binding; choose \"Default (follow)\" to release it."
+    runtime_section: Runtime
+    unnamed: Unnamed agent
+    deleted_done: Agent deleted
+    template_overwritten: Overwritten with the default template and saved
+    back_to_list: Back to list
+    delete_agent_title: Delete agent
+    delete_agent_confirm_msg_named: "Delete agent \"{name}\"?"
+    delete_agents_confirm_msg: "Delete the selected {count} agents?"
+    template_overwrite_title: Overwrite with default template
+    template_overwrite_msg: "This overwrites the current configuration with the default prompts and runtime, keeping the Agent ID and display name. Continue?"
+    template_overwrite_confirm: Overwrite and save
+    saved_done: Agent settings saved
+    yaml_exported: Agent YAML exported
+    yaml_import_confirm: This overwrites the current agent settings. Continue?
+    yaml_imported: Agent YAML imported
+    builtin_note_mobile: "Built-in agent, not editable"
+    builtin_note_desktop: "Built-in agent, not editable — general is a factory built-in generic subagent, virtually injected at runtime (not persisted); the primary agent can delegate to it anytime."
+    edit_title: "Edit {name}{dirty}"
+    unsaved_suffix: " · unsaved"
+    list_primary_hint: "Primary agents can be picked directly as the conversation; agents tagged \"All\" are available in both tabs."
+    list_subagent_hint: "Subagents are invoked by the primary agent via task delegation; agents tagged \"All\" are available in both tabs."
+    list_primary_empty: "No primary agents. Tap \"New\" to create one."
+    list_subagent_empty: "No subagents. Tap \"New\" to create one."
+    list_workspace_suffix: "{label} · Workspace"
+    general_note: General assistant · not editable
+    delete_select_title: Select agents to delete
+    primary_tab: Primary agents
+    subagent_tab: Subagents
+    rename_title: Rename agent
+    display_name_label: Display name
+    agent_name_label: Agent name
+    tool_desc_task: Delegate subtasks to subagents (primary agent only)
+    tool_desc_read: Read workspace files (paginated)
+    tool_desc_write: Write or overwrite whole files
+    tool_desc_edit: Exact find-and-replace (with append)
+    tool_desc_fs: Filesystem commands (ls/rm/mv/cp/mkdir/rmdir)
+    tool_desc_glob: Find paths by glob patterns
+    tool_desc_grep: Search workspace file contents (regex/exclude/context)
+    tool_desc_skill: Use and manage skills (load/read/write/edit/list)
+    tool_desc_agent: Manage agent definitions (list/get/create/update; primary agent only)
+    tool_desc_curl: "Send http/https requests to fetch or submit web/API content, with custom methods, headers and bodies; responses over 50KB are saved to the session workspace /tmp/ (readable via read)"
+    tool_desc_search: "Web search: query pages serially through the enabled search engines and return raw engine results (JSON text); engines are managed under Settings → Search (only the built-in DuckDuckGo free search is enabled by default, no configuration needed)"
+  provider:
+    title: Providers
+    name_label: Provider name
+    name_placeholder: e.g. Zhipu
+    protocol_label: Protocol
+    auth_section: Authentication
+    status_label: Current status
+    api_key_status_prefix: "API key status:"
+    api_key_keep_hint: Leave empty to keep unchanged
+    api_key_required_hint: Required; stored encrypted via SKSP
+    custom_params_optional: Optional; JSON object
+    custom_params_label: Custom parameters
+    custom_params_hint: JSON object merged as-is into the request body top level (can override standard fields); clearing and saving removes it
+    custom_params_hint_desktop: Custom parameters (JSON object merged as-is into the request body top level; can override standard fields)
+    custom_params_placeholder: "{\"tool_stream\": true}; clearing and saving removes all custom parameters"
+    create_done: "Provider created: {name}"
+    edit_title: Edit provider
+    add_model_title: Add model
+    vendor_model_id_label: Vendor model ID
+    vendor_model_id_placeholder: e.g. gpt-4o
+    model_name_optional_label: Model name (optional)
+    model_name_keep_hint: Leave empty to use the vendor ID
+    fetch_models_title: Fetch models
+    fetch_models_hint: Fetch available models from the provider and add the checked ones in bulk
+    fetching: Fetching…
+    filter_models_placeholder: Filter models…
+    no_models_fetched: No models fetched. Check the API key and Base URL.
+    no_matching_models: No matching models
+    add_count_confirm: "Add ({count})"
+    models_added_done: Models added
+    delete_model_title: Delete models
+    delete_models_confirm: "Delete the selected {count} models?"
+    model_renamed_done: Model renamed
+    rename_model_title: Rename model
+    sampling_badge: Sampling configured
+    remote_tag: Remote
+    delete_select_hint: Select models to delete (batch mode skips sampling config)
+    delete_models_select_title: Select models to delete
+    delete_select_title: Select providers to delete
+    delete_select_hint_mobile: Select providers to delete (all their saved models are removed too)
+    delete_title: Delete providers
+    delete_confirm_msg: This also removes all their saved models and sampling settings. Continue?
+    delete_batch_confirm: "This also removes their saved models. Delete the selected {count} providers?"
+    deleted_done: Providers deleted
+    deleted_count_done: "Deleted {count} providers"
+    models_deleted_done: Models deleted
+    models_deleted_count: "Deleted {count} models"
+    empty_hint: "No providers. Tap \"Add\" in the top right to create one."
+    empty_hint_desktop: No providers. Use the button above to add one.
+    builtin_protocol_hint: Built-in providers cannot change protocol.
+    models_meta: "{count} models · "
+    models_saved_meta: "{count} saved models"
+    detail_tab_aria: Provider details tabs
+    unknown_provider: Unknown provider
+    empty_saved_models: No saved models
+    connected: Connected
+    not_connected: Not connected
+    needs_fix: Needs fix
+  sampling:
+    model_name_hint: Shown in lists and pickers; the derived displayName is Provider/Model name.
+    vendor_id_line: "Vendor ID: {id}"
+    model_name_placeholder_hint: Defaults to the vendor model ID
+    display_name_derived: Display name (derived)
+    save_name_label: Save name
+    internal_budget_section: Internal budget
+    internal_budget_hint: Context window and token counting; not mapped directly to the HTTP generation body.
+    context_limit_label: Context limit (tokens)
+    counting_method_label: Counting method
+    counter_autos_hint: Tokenizer family is auto-matched by model name; after saving this page takes precedence.
+    token_counter_label: Token counter
+    generation_section: Generation parameters
+    thinking_effort_label: Thinking effort
+    temperature_label: Temperature
+    max_output_label: Max output length
+    section_hint_plain: Shows protocol-recommended defaults; after saving this page takes precedence.
+  chat_config:
+    stream_parent: Parent streaming
+    stream_parent_on: Main conversation replies stream as generated (recommended)
+    stream_parent_off: Main conversation replies appear at once when finished
+    stream_sub: Subagent streaming
+    stream_sub_on: Subagent replies stream as generated
+    stream_sub_off: Subagent replies appear at once when finished
+    thinking_prompt: Thinking in prompt
+    thinking_prompt_hint: "When on, the model's thinking content enters later prompts; off excludes it."
+    rich_text: Rich text messages
+    rich_text_on: User and assistant messages parse Markdown/HTML
+    rich_text_off: Chat messages render as plain text
+    notifications: Message notifications
+    notifications_on: "Keeps a persistent status-bar notification while the app runs, shows progress during generation, and reminds when finished"
+    notifications_off: No persistent notification or reminders (generation behavior unchanged)
+    notification_permission: Notification permission
+    perm_granted: Granted
+    perm_denied: Denied
+    perm_pending: Requesting…
+    compact_section: Compaction settings
+    compact_hint: Auto-compacts when the token ratio threshold is met; hidden start depth applies to both auto and manual compaction.
+    hidden_start_depth: Hidden start depth
+    auto_compact: Enable auto-compaction
+    token_ratio: Token ratio
+    default_section: Defaults
+    default_hint: Workspace defaults for new sessions; can be switched anytime at the bottom of a session.
+    chat_prefs_section: Chat preferences
+    chat_prefs_hint: Affects message display and LLM request behavior. Compaction triggers at the threshold; hidden start depth applies to auto and manual compaction.
+    select_model: Select model
+  skills:
+    new_title: New skill
+    name_label_plain: Skill name
+    name_label_manage_hint: Skill name (rename in the manage page)
+    name_label_dir_hint: Skill name (also the directory name; rename in the manage page)
+    name_label_builtin_hint: Skill name (built-in skills cannot be renamed)
+    name_example_desktop: e.g. lore-style-guide
+    name_example_mobile: e.g. worldbuilding-checker
+    desc_required_label: Description (enters the skill index; required)
+    desc_label_desktop: Description (enters the skill index)
+    desc_hint: Enters the skill index; the model decides usage based on it
+    desc_hint_desktop: The model decides whether to use the skill based on this
+    domain_label: Storage domain
+    domain_global: Global (all projects)
+    domain_project: Project
+    project_label: Owning project
+    project_picker_title: Select owning project
+    no_projects_option: (no projects)
+    importing_zip: Importing from ZIP…
+    reading_zip: Reading…
+    zip_imported_info: "ZIP imported · {count} files (all brought in on create)"
+    create_and_edit: Create and edit
+    domain_tag_global: Global
+    domain_tag_overridden: Project · overrides global
+    global_tab: Global skills
+    project_tab: Project skills
+    domain_section: Skill domains
+    global_hint: Global skills apply to all projects; same-name project copies override the global version (the global version applies only to projects without a copy).
+    project_hint: Project skills apply only to their project; grouped by all projects.
+    global_tab_hint_mobile: "Global skills apply to all projects. If any project has a same-name copy, that copy wins — the global version applies only to projects without one."
+    project_tab_hint_mobile: Project skills apply only to their project and override the global version on same name. All project skills are grouped by project.
+    edit_info: Edit info
+    export_zip: Export ZIP
+    exported_zip: "Exported \"{name}.zip\""
+    delete_title: Delete skills
+    deleted_done: Skills deleted
+    global_delete_warn: This skill affects all projects; after deletion no session injects it.
+    project_delete_warn: This skill applies only to its project; deleting it does not affect other projects.
+    batch_delete_warn_global: Global skills among them affect all projects; after deletion no session injects them.
+    batch_delete_warn_project: Project skills apply only to their projects; deleting them does not affect other projects.
+    global_shadow_note: This global version applies only to projects without a same-name copy; projects with a copy use the project version.
+    overridden_tag: Overridden by project copy
+    invalid_tag: "Invalid · {reason}"
+    invalid_default_reason: Invalid front matter
+    selected_skills_label: "Selected {count} skills"
+    delete_confirm_named: "Delete \"{name}\"? {scope}"
+    scope_hint_global: Deleting global skills affects all projects
+    scope_hint_project_single: "This skill applies only to this project ({project})"
+    scope_hint_project: Project skills apply only to their project
+    select_delete_title: Select skills to delete
+    empty_global: "No global skills. Use \"New\" above to create one."
+    empty_global_mobile: No global skills. Create one and it becomes available to all projects.
+    empty_projects_desktop: No projects yet. Create one in the main navigation first.
+    empty_project_desktop: No skills in this project.
+    empty_project_mobile: No project skills. Project skills apply only to their project and override the global version on same name.
+    menu_aria: "Skill {name} more actions"
+    skill_aria: "Skill {name}"
+    info_saved: Skill info saved
+    file_saved: Skill file saved
+    file_entry_protected: SKILL.md is the reserved entry file; a file with this name cannot be created.
+    file_entry_delete_protected: SKILL.md is the reserved entry file and cannot be deleted.
+    entry_protected_mobile: SKILL.md is the skill entry file; it cannot be deleted or renamed
+    unspecified: No skill specified.
+    missing_panel: The skill does not exist or was deleted.
+    missing_toast: The skill does not exist or was deleted
+    back_to_manage: Back to skill management
+    domain_project_line: "Project domain · {project}"
+    domain_global_line: Global domain · applies to all projects
+    new_aux_file: New auxiliary file
+    entry_file_tag: Entry file
+    delete_file_aria: "Delete {path}"
+    file_mode_label: Skill file mode
+    editor_title: Skill file editing
+    unsaved_hint: Unsaved (Ctrl+S to save)
+    delete_aux_title: Delete auxiliary file
+    pick_hint_mobile: Single-select inserts the skill name; disabled skills still apply when explicitly referenced
+    pick_hint_desktop: "Flat merged view of the current project, multi-select; disabled skills still inject full text"
+    pick_empty: No available skills
+    pick_empty_project: No available skills in this project
+    pick_aria: "Select skill {name}"
+    pick_ref_aria: "Reference skill {name}"
+    disabled_tag: Disabled
+    session_panel_back: Back to session details
+    session_organize: Organize
+    session_enabled_stat: "{enabled}/{valid} enabled"
+    session_empty: "No skills yet. Tap \"New\" to create project skills, or maintain global skills in Settings → Skill management."
+    session_toggle_aria: "{action} skill {name} (this project only)"
+    panel_empty_mobile: No skills in this project yet. Skills are reusable instruction docs; after creation they enter the prompt index and the model decides usage by description.
+  smart_sort:
+    delete_title: Delete rules
+    delete_confirm_named: "Delete \"{name}\"?"
+    delete_batch_confirm: "Delete the selected {count} rules?"
+    delete_rules_done: Rules deleted
+    delete_rules_count: "Deleted {count} rules"
+    import_title: Import rules
+    import_confirm: Importing replaces all existing rules (including built-in enable state). Continue?
+    import_confirm_desktop: Importing clears and replaces all rules (including built-ins). Continue?
+    imported_count: "Imported {count} rules"
+    imported_all: Imported and replaced all rules
+    exported: Rules exported
+    exported_yaml: Rules YAML exported
+    reset_confirm_mobile: This re-seeds all built-in rules (rebuilding deleted ones and restoring enable state); user-created rules are unaffected.
+    reset_confirm_desktop: This deletes and re-seeds all built-in rules (custom rules unaffected). Continue?
+    reset_done: Default rules restored
+    enable_batch_done: Selected rules enabled
+    disable_batch_done: Selected rules disabled
+    builtin_delete_block_mobile: Built-in rules cannot be deleted; uncheck them first
+    builtin_delete_block_desktop: "Built-in rules cannot be deleted, only disabled"
+    builtin_delete_block_desktop2: "Built-in rules can only be disabled, not deleted"
+    batch_select_hint: Select rules to operate on; built-in rules cannot be deleted
+    empty: "No rules. Tap \"New\" to create one."
+    builtin_prefix: "Built-in · "
+    disabled_tag: Disabled
+    library_title: Rule library
+    new_rule_title: New rule
+    unnamed_rule: Unnamed rule
+    form_title: Sort rule
+    capture_kind_smart: Smart number
+    capture_kind_fixed_max: Fixed max
+    capture_kind_fixed_min: Fixed min
+    name_example: e.g. Chinese numeral chapter
+    name_example_desktop: e.g. Chinese volume-chapter combo
+    regex_label: Regular expression
+    regex_hint: "Supports the /regex/flags form, e.g. /第(\\d+)章/i"
+    regex_example: "e.g. /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
+    capture_label: Capture number
+    capture_smart_hint: Extracts the number from capture groups; Chinese numerals convert automatically
+    capture_hint_before: "On match, sorts before all numbers (prologue-type)"
+    capture_hint_after: "On match, sinks after all numbers (epilogue-type)"
+    capture_picker_title: Select capture mode
+    capture_aria: "Capture number {label}"
+    capture_empty: No capture modes available
+    desc_hint: "Describe what this rule matches, e.g. titles like 第X章"
+    test_hint_mobile: "Enter text and tap \"Test\" to show all matches and each extracted number."
+    test_hint_desktop: "Enter text and tap \"Test\" to highlight all matched segments inline and show the match count."
+    test_text_label: Test text
+    test_text_placeholder: Enter test text
+    result_pending: "Tap \"Test\" to see match results"
+    no_match_text: (empty match)
+    no_tuple: No number
+    match_count: "{count} matches"
+    no_matches: No matches
+    help_title: Usage help
+    help_priority_title: "Rules & priority"
+    help_priority_body: Rules are tried top-down in list order; the first hit wins. The row menu adjusts priority with move up/down/top/bottom.
+    help_fixed_title: Fixed max/min
+    help_fixed_body: "On hit, uses a fixed number: fixed-min sorts before all numbers (prologue-type), fixed-max sinks after all numbers (epilogue-type); no capture groups needed."
+    help_regex_title: Regex format
+    help_regex_body: Supports /regex/flags literals (e.g. /第(\d+)章/i) or a bare regex (no flags by default).
+    list_hint_desktop: "When a directory uses Smart sort, rules are tried top-down in this list; the first hit extracts the number via capture groups. Drag or use the row menu to adjust priority."
+  prompt:
+    turn_aria: "{action} {role} turn, {summary}"
+    tool_group_aria: "{action} tool calls {name}"
+    file_preview_aria: "{action} file preview {path}"
+    parallel_tag: Parallel
+    tool_input_aria: "View tool input, {name}"
+    tool_result_aria: "View tool result, {name}"
+    leaf_view_aria: "View {leaf}, {name}"
+    lost_result: No result returned
+    status_lost: Lost
+    mode_full: Full content
+    mode_filename: File name
+    mode_header: File header
+    file_full_aria: "View full file {path}"
+    viewer_hint_mobile: Adjust inclusion rules in the chat workspace to change preview content. Tap a turn header to expand in place; tap a child card for full-screen reading.
+    viewer_hint_desktop: Adjust inclusion rules in the session workspace to change preview content. Click a turn header to expand in place; click a child card for full-screen reading.
+    fullscreen_aria: "{title} details"
+    input_label: Input
+    empty_prompt: (empty prompt)
+    empty_value: (empty)
+  stats:
+    filter_label: Filters
+    time_range: Time range
+    range_today: Today
+    range_7d: Last 7 days
+    range_30d: Last 30 days
+    range_custom: Custom
+    start_date: Start date
+    end_date: End date
+    model_filter_aria: Model filter
+    model_all: All models
+    model_other: Other models
+    provider_unlogged: Unlogged provider
+    provider_other_label: "{provider}/other models"
+    view_tabs_aria: View tabs
+    tab_summary: Summary
+    tab_charts: Charts
+    tab_requests: Requests
+    empty_db: No usage data yet. Token usage accumulates from when recording shipped; stats appear here after you start chatting. Cache-hit-rate data is recorded from this version; rate and first-token latency data accumulate from this version.
+    empty_filtered: No usage data in this filter range. Adjust the time range or model filter and retry.
+    empty_range: No data in this range
+    overview_title: "Overview · {range}"
+    overview_desc: Follows the current time range and model filter
+    total_tokens: Total tokens
+    input_label: Input
+    output_label: Output
+    calls_label: Calls
+    hit_rate: Hit rate
+    avg_rate: Average rate
+    avg_first_token: Avg first-token latency
+    nonstream_hint: Non-streaming requests are measured at completion time
+    pie_section: Provider × model
+    pie_desc: "Click a slice or legend for usage, calls and share"
+    slice_aria: "{label} · usage {value} · {calls} calls · {share} share"
+    chart_input_aria: "Input {count}"
+    chart_output_aria: "Output {count}"
+    chart_calls_aria: "{count} calls"
+    requests_title: "Request log · {count} total"
+    requests_desc: "Lists requests in the current filter range, newest first"
+    col_time: Time
+    col_cache_read: Cache read
+    col_first_token: First token
+    col_total_time: Total time
+    page_prev: Previous page
+    page_next: Next page
+    day_hourly_title: Today · hourly distribution
+    day_hourly_desc: "Input/output and calls for the day, 0–24h"
+    by_day_title: Usage by day
+    hour_label: "{hour}:00"
+    detail_title: Usage details
+    recent_requests: Recent requests
+    recent_empty: No request records
+    requests_empty: (no request records)
+    cache_read: Cache read
+    cache_write: Cache write
+    cache_hit_rate: Cache hit rate
+    visible_messages: Messages (visible)
+    tool_calls: Tool calls
+    footnote_visible: Message count is visible-only; tool calls include hidden messages
+    footnote_recent: "Recent requests are per-step ground truth, sourced differently from the bar's whole-turn reading"
+    metrics_bar_aria: "Streaming metrics, {line}"
+    metrics_bar_aria_desktop: "Streaming metrics: {line}"
+    bucket_line: "{key} · input {input} · output {output} · {calls} calls"
+    range_picker_title: Select date range
+    range_pick_start: "Pick the start date, then the end date"
+    range_pick_end: Start picked; now pick the end date
+    date_md: "{month}/{day}"
+    weekday_mon: Mo
+    weekday_tue: Tu
+    weekday_wed: We
+    weekday_thu: Th
+    weekday_fri: Fr
+    weekday_sat: Sa
+    weekday_sun: Su
+    switch_more: Switch ›
+  cloud_sync:
+    save_config: Save settings
+    s3_section: S3-compatible storage
+    endpoint_hint: "Include https://"
+    bucket_hint: Optional (MinIO)
+    prefix_label: Path prefix
+    prefix_hint: Must end with /; normalized on save
+    path_style_hint: Required for MinIO; turn off for official Aliyun OSS endpoints
+    credentials_section: Credentials
+    secret_saved_hint: Saved; leave empty to keep the existing key
+    secret_create_hint: Written to SKSP on save
+    secret_placeholder: Leave empty to keep the stored key
+    device_label: Device name (optional)
+    device_hint: Helps identify this machine
+    testing: Testing…
+    test_connection: Test connection
+    test_note: Test connection only checks bucket access; it does not pull or push.
+    connected_done: Connected
+    config_saved: Settings saved
+    config_saved_desktop: Cloud sync settings saved
+    pull_title: Pull from cloud
+    push_title: Push to cloud
+    cloud_newer_title: Cloud has updates
+    cloud_newer_msg: Pull cloud data first. Overwrite the cloud anyway?
+    pull_first: Pull first
+    force_overwrite: Overwrite cloud anyway
+    cloud_newer_hint: Cloud has updates; pull before pushing.
+    push_cancelled: Push cancelled
+    pull_cancelled: Pull cancelled
+    up_to_date: Already up to date
+    pull_reloading: Pull succeeded; reloading…
+    push_done: Push completed
+    pull_done: Pull completed
+    sync_status: Sync status
+    status_desc: Shows how local and cloud revs align
+    status_desc_desktop: Shows how local and cloud revs align; save settings before pulling/pushing.
+    agent_active_note: Agent running; sync actions are disabled.
+    local_status: Local and cloud revs are aligned.
+    rev_cloud: Cloud rev
+    rev_local: Local rev
+    rev_cloud_line: "Cloud rev: {rev}"
+    rev_synced_line: "Last synced rev: {rev}"
+    last_pull_line: "Last pull: {time}"
+    last_push_line: "Last push: {time}"
+    last_pull_result: "Pull result: {result}"
+    last_push_result: "Push result: {result}"
+    pulled_done: "Pulled cloud data (rev {rev})"
+    pushed_done: "Pushed to cloud (rev {rev})"
+    enabled_toggle: Enable cloud sync
+    desc: Syncs database snapshots between Desktop and Mobile via S3-compatible object storage. Secret keys are stored encrypted via SKSP.
+    agent_busy_value: Agent running
+    configured: Configured
+    not_configured: Not configured
+    result_ok: Success
+    result_fail: Failed
+    last_time: "Last {time}"
+    manual_sync: Manual sync
+    not_configured_msg: Complete cloud storage setup first
+    status_unreadable: Cannot read sync status
+    pull_confirm_msg: "This replaces local data (projects, sessions, messages, etc.) with the latest cloud snapshot. Local providers and API keys are kept. Continue?"
+    pull_action: Pull
+    progress_push_prepare: Preparing push…
+    progress_pull_prepare: Preparing pull…
+    progress_connecting: Connecting to cloud…
+    progress_checking_remote: Checking cloud state…
+    progress_reading_remote: Reading cloud state…
+    progress_acquiring_lock: Acquiring sync lock…
+    progress_lock_acquired: Sync lock acquired
+    progress_exporting: Exporting local database…
+    progress_exported: Export completed
+    progress_hashing: Hashing snapshot…
+    progress_hashed: Hashing completed
+    progress_reading_snapshot: Reading snapshot…
+    progress_snapshot_read: Read completed
+    progress_uploading: Uploading snapshot to cloud…
+    progress_uploaded: Snapshot uploaded
+    progress_downloading: Downloading cloud snapshot…
+    progress_downloaded: Download completed
+    progress_importing: Importing database…
+    progress_imported: Import completed
+    progress_syncing: Syncing…
+    progress_transferring: Transferring…
+    progress_keep_open: Keep the app open; large files can take several minutes
+  storage:
+    space_section: Storage
+    space_desc: Database file size and reclaimable space
+    db_size: Database size
+    reclaimable: Reclaimable
+    cloud_entry: Cloud settings
+    cleanup_section: Data cleanup
+    cleanup_action: Clean up database space
+    cleanup_confirm: This reclaims cache slack and compacts the database file; duration grows with database size (possibly tens of seconds). Keep the app open; cleanup may temporarily use extra disk space. Continue?
+    cleanup_start: Start cleanup
+    cleanup_done: "Cleanup done: {before} → {after}"
+    cleanup_desktop_desc: "Reclaims cache slack and free pages and compacts the database file. Current size {before} · reclaimable about {after}"
+    cleanup_confirm_desktop: Cleanup reclaims cache slack and compacts the database; duration grows with size (tens of seconds for large databases) and the app may briefly hang; disk usage usually drops afterwards. Continue?
+    cleanup_confirm_title_desktop: Confirm cleanup
+    export_db: Export database
+    export_desc: "Exports the current database as a .nmbackup file, interoperable with mobile."
+    share_backup: Share backup file
+    export_db_done: Database exported; the backup contains plaintext chat history — keep it safe
+    export_db_done_desktop: Database exported
+    export_logs: Export logs
+    share_logs: Share log file
+    logs_exported: Logs exported
+    import_db: Import database
+    import_desc_desktop: Fully replaces the current database with the backup file. Local providers and API keys are kept; provider settings in the backup are not imported. Irreversible.
+    replace_all: Replace all
+    import_confirm_mobile: "This fully replaces app data (projects, sessions, messages, etc.) with the selected backup. Local providers and API keys are kept; provider settings in the backup are not imported. Irreversible. Continue?"
+    import_confirm_desktop: Import fully replaces the current database; local providers and API keys are kept; provider settings in the backup are not imported. Continue?
+    import_confirm_title_desktop: Confirm import
+    continue_pick: Continue choosing a file
+    reloading: Reloading; please wait…
+    imported_done: Imported and reloaded
+  vfs:
+    import_kind_file: Single file
+    import_kind_zip: ZIP archive
+    import_kind_card: Character card
+    import_form_section: Import mode
+    import_zip_title: Import ZIP
+    import_card_title: Import character card
+    import_single_title: Import single file
+    zip_import_done: ZIP import completed
+    card_import_done: Character card imported
+    single_import_done: Single file imported
+    single_import_skipped: "Single file imported; skipped {count} non-UTF-8 files"
+    skip_non_utf8: "Skipped {count} non-UTF-8 files"
+    import_done_nochange: Import completed (no changes)
+    import_done_report: "Import completed: {report}"
+    import_report_written: "Wrote {count}"
+    import_report_skipped: "Skipped {count}"
+    import_report_failed: "Failed {count}"
+    export_preparing: Preparing export…
+    file_saved_location: File saved to the chosen location
+    exported_zip: ZIP exported
+    exported_file: File exported
+    imported_zip: ZIP imported
+    target_root: Current directory (workspace root)
+    target_root_quoted: "\"Current directory (workspace root)\""
+    import_overwrite_confirm: "This overwrites all files under {target}; sibling content is unaffected. Continue?"
+    import_overwrite_confirm_desktop: "This overwrites all files under \"{path}\"; sibling content is unaffected. Continue?"
+    import_card_confirm: "This overwrites same-name character-card files under {target}; other files are unaffected. Continue?"
+    import_card_confirm_desktop: "Character-card content is written to \"{path}\"; same-name files are overwritten. Continue?"
+    conflict_confirm: "The target already has {count} same-name files; overwriting is irreversible. Continue?"
+    conflict_confirm_desktop: "The target already has {count} same-name files/directories. Overwriting is irreversible. Continue?"
+    menu_status_change: Status change
+    menu_status_settings: Status settings
+    menu_create_directory: New directory
+    menu_create_folder: New folder
+    create_file: New file
+    menu_directory_rule: Directory rules
+    menu_rules_config: Rule settings
+    menu_delete_folder: Delete folder
+    menu_delete_file: Delete file
+    rename_placeholder: New name
+    create_file_placeholder: "File name, e.g. note.md"
+    create_directory_placeholder: Directory name
+    folder_name_label: Folder name
+    parent_dir_aria: Parent directory
+    more_actions_aria: More actions
+    batch_hint: Select entries to operate on
+    empty_dir: Empty directory
+    moved_count: "Moved {count} items"
+    moved_skipped: "Moved {moved} items; skipped {skipped}"
+    target_exists_skipped: Target already has a same-name entry; skipped
+    row_badge_hidden: Hidden
+    row_badge_follow: Follow
+    row_subtitle_follow_full: Follow · full content
+    row_files_count: "{count} files"
+    inclusion_title: File inclusion status
+    inclusion_mode_label: Inclusion mode
+    inclusion_show: Show
+    inclusion_full_hint: Force into agent context with full content
+    inclusion_hide_hint: Force out of agent context
+    inclusion_follow_hint: Decided by the parent directory rule (default)
+    sort_mode_label: Sort by
+    sort_mode_picker: Select sort mode
+    sort_mode_aria: "Sort mode {label}"
+    sort_mode_empty: No sort modes available
+    sort_dir_label: Sort direction
+    sort_by_name: File name
+    sort_by_created: Created time
+    sort_by_updated: Updated time
+    sort_asc: Ascending
+    sort_desc: Descending
+    header_field_header: Header info
+    header_field_hidden: Hidden
+    header_count_label: Header count (0–1000)
+    tail_count_label: Tail count (0–1000)
+    rest_fill_label: Fill for remaining files
+    rule_saved_done: Directory rules saved
+    rule_enabled_done: Directory rules enabled
+    rule_disabled_done: Directory rules disabled
+    synced_from_project: Synced from project workspace
+    pushed_to_project: Pushed to project workspace
+    init_action: Initialize
+    push_confirm_desktop: "This overwrites the project workspace with the current chat workspace. The project workspace is the template for all of the project's sessions; new sessions and other sessions' \"sync from parent\" receive the overwritten content."
+    pull_confirm: This overwrites the current chat workspace from the project workspace; local changes will be lost. Continue?
+    push_confirm_mobile: This overwrites the project workspace with the current chat workspace and cannot be undone.
+    sync_done: Sync completed
+    sync_menu_title: Sync from parent
+    sync_action: Sync
+    push_project_title: Push to project workspace
+    workplace_ops_title: Workspace actions
+    entry_label: Entry
+    preview_title: File preview
+    preview_mode_label: Preview mode
+    select_to_edit: Select a file in the workspace to edit
+    select_to_preview: Select a file in the workspace to preview
+    file_missing: File deleted or missing
+    editor_title: File editing
+    line_count: "{count} lines"
+    ctrl_s_hint: Ctrl+S to save
+    char_count: "{count} chars"
+    dirty_suffix: " · unsaved edits"
+    tabs_title: Open files
+    tab_deleted_suffix: "{path} (deleted)"
+    annotate: Annotate
+    annotate_desc_placeholder: Annotation note
+    annotate_add: Add annotation
+    annotate_input_hint: Enter annotation note
+    annotate_detail_title: Annotation details
+    annotate_pick_title: Select annotation
+    annotate_empty_aria: No note
+    edit_annotate_title: Edit annotation
+    markdown_empty_body: (empty body)
+    fm_empty: (empty front matter)
+    global_template_hint: "Read-only browsing of all library files: global templates, skills and per-project/session files merged into one view, for reading only."
+  project:
+    title: Projects
+    new_title: New project
+    rename_title: Rename project
+    name_label: Project name
+    name_placeholder: e.g. sci-fi novel
+    delete_select_hint: Select projects to delete (all their sessions are removed too)
+    delete_batch_confirm: "Delete the selected {count} projects? All their sessions are removed too."
+    delete_confirm_named: "Delete project \"{name}\"? All its sessions are removed too."
+    empty_mobile: "No projects. Tap \"New\" to start."
+    empty_desktop: No projects
+    new_session: New session
+    rename_session: Rename session
+    empty_sessions: No sessions
+    select_sessions_hint: Select sessions to delete
+  update:
+    available_title: New version available
+    available_line: "New version {version}"
+    open_releases_suffix: Will open the GitHub releases page in your browser to download.
+    open_releases_hint: Opens the GitHub releases page in your browser; download the installer for your platform.
+    check_title: Update check
+    up_to_date: Already the latest version
+    check_failed: Cannot check for updates; check the network
+    later: Later
+    go_download: Go to download
+    remind_off_today: "Don't remind me today"
+    section: Updates
+    auto_check: Auto-check updates
+    check_now: Check for updates
+    checking: Checking…
+    check_now_desktop: Check now
+    new_version_line: "New version {version}"
+    last_check_failed: Last check failed
+  about:
+    version: "Version {version}"
+    links_section: Project links
+    github_repo: GitHub repository
+    releases: Releases
+    license: License
+  runtime:
+    loading: Loading…
+    boot_failed: Startup failed
+    reload: Reload
+    load_failed: Chat page failed to load
+    timeout_hint: "Page load timed out; tap reload. If it persists, restart the app"
+  notification:
+    channel_finished: Generation finished
+    channel_running: Generation in progress
+    finished_title: Generation completed
+    failed_title: Generation failed
+    body_finished: "\"{session}\" generation finished"
+    body_interrupted: "\"{session}\" generation was interrupted"
+    body_finished_short: This generation has finished
+    body_interrupted_short: This generation was interrupted
+    idle_title: novel master · idle
+    running_title: "Generating · {session}"
+    running_title_plain: Generating
+    running_count: "{count} sessions generating"
+    running_hint: "Ends automatically when done; don't force-close the app meanwhile"
+  rich_document:
+    over_limit_hint: Content too long; showing raw text
+  mermaid:
+    render_failed_badge: Render failed; showing source

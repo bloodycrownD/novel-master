@@ -6,5 +6,6 @@
   "ErrorMessage",
   "LABEL_KEY_DOMAINS",
   "LocalizedMessage",
+  "UI_KEY_DOMAINS",
   "createTranslator"
 ]
