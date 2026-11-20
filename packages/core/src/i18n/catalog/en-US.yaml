@@ -231,6 +231,36 @@ ui:
     time_minutes_ago: "{count} min ago"
     time_hours_ago: "{count} h ago"
     time_days_ago: "{count} d ago"
+    # p27 R6 wave 3-2a: failure toast titles / guard hints (direct UI strings, merged "<action> failed" patterns)
+    load_failed: Load failed
+    delete_failed: Delete failed
+    save_failed: Save failed
+    import_failed: Import failed
+    export_failed: Export failed
+    create_failed: Create failed
+    rename_failed: Rename failed
+    set_failed: Update failed
+    op_failed: Operation failed
+    rollback_failed: Rollback failed
+    copy_failed: Copy failed
+    connect_failed: Connection failed
+    read_failed: Read failed
+    set_floor_failed: Set floor failed
+    move_failed: Move failed
+    cleanup_failed: Cleanup failed
+    check_failed: Check failed
+    restore_failed: Restore failed
+    failed: Failed
+    error: Error
+    please_wait: Please wait
+    cannot_edit: Cannot edit
+    cannot_copy: Cannot copy
+    cannot_save: Cannot save
+    open_link_failed: Cannot open link
+    unknown_action: Unknown action
+    push_failed: Push failed
+    sync_failed: Sync failed
+    pull_failed: Pull failed
   nav:
     tab_chat: Chat
     tab_profile: Me
@@ -376,6 +406,17 @@ ui:
     io_input_label: Input
     io_output_label: Output
     reset_workplace_cache_done: Persistent workspace cache reset
+    # p27 R6 wave 3-2a: agent-running guards and message action failures (incl. U-line conservative item 7)
+    agent_running_compact_blocked: Cannot compact while an agent is running
+    agent_running_fork_blocked: Cannot fork while an agent is running
+    agent_running_set_floor_blocked: Cannot set floor while an agent is running
+    agent_running_rollback_blocked: Cannot roll back while an agent is running
+    message_missing: Message not found
+    message_no_editable_text: This message has no editable text
+    message_no_copyable_text: This message has no copyable text
+    message_content_required: Message content cannot be empty
+    compact_partial_failed: Compaction partially failed
+    select_or_create_project: Create or select a project first
   session:
     name_label: Session name
     name_placeholder: Enter session name
@@ -413,6 +454,10 @@ ui:
     no_agents: No agents yet. Configure them in Settings first.
     no_models: No models yet. Configure a Provider in Settings first.
     agent_picker_empty: No agents yet. Create one in Agent settings first.
+    # p27 R6 wave 3-2a: load failure titles (session details / subagent session / agent info)
+    agent_info_load_failed: Failed to load agent info
+    detail_load_failed: Failed to load session details
+    subsession_load_failed: Failed to load subagent session
   agent:
     basic_info: Basics
     import_yaml: Import YAML
@@ -537,6 +582,17 @@ ui:
     tool_desc_agent: Manage agent definitions (list/get/create/update; primary agent only)
     tool_desc_curl: "Send http/https requests to fetch or submit web/API content, with custom methods, headers and bodies; responses over 50KB are saved to the session workspace /tmp/ (readable via read)"
     tool_desc_search: "Web search: query pages serially through the enabled search engines and return raw engine results (JSON text); engines are managed under Settings → Search (only the built-in DuckDuckGo free search is enabled by default, no configuration needed)"
+    # p27 R6 wave 3-2a: editor validations and failure titles (agent-editor-state shared validations + mobile editor toasts)
+    name_required: Agent name is required
+    assistant_text_required: Workplace assistant confirmation text is required
+    prompt_block_min: Keep at least one Prompt block
+    dedicated_model_uuid_invalid: Dedicated model must be the UUID of a saved model
+    min_one_agent: Keep at least one agent
+    select_dedicated_model: Select a dedicated model first
+    list_load_failed: Failed to load agent list
+    overwrite_default_failed: Failed to overwrite with default template
+    export_yaml_failed: YAML export failed
+    import_yaml_failed: YAML import failed
   provider:
     title: Providers
     name_label: Provider name
@@ -595,6 +651,10 @@ ui:
     connected: Connected
     not_connected: Not connected
     needs_fix: Needs fix
+    # p27 R6 wave 3-2a: form validations and missing-param guards (ProviderForm throw validations + missing providerId)
+    name_baseurl_required: Provider name and baseUrl are required
+    api_key_required: API Key is required
+    provider_id_missing: providerId is missing
   sampling:
     model_name_hint: Shown in lists and pickers; the derived displayName is Provider/Model name.
     vendor_id_line: "Vendor ID: {id}"
@@ -612,6 +672,11 @@ ui:
     temperature_label: Temperature
     max_output_label: Max output length
     section_hint_plain: Shows protocol-recommended defaults; after saving this page takes precedence.
+    # p27 R6 wave 3-2a: form validations and missing-param guards (ModelSamplingScreen validations + missing model/savedModelId)
+    name_required: Model name cannot be empty
+    context_limit_positive: Context limit must be a positive integer
+    model_missing: Model not found
+    saved_model_id_missing: savedModelId is missing
   chat_config:
     stream_parent: Parent streaming
     stream_parent_on: Main conversation replies stream as generated (recommended)
@@ -641,6 +706,12 @@ ui:
     chat_prefs_section: Chat preferences
     chat_prefs_hint: Affects message display and LLM request behavior. Compaction triggers at the threshold; hidden start depth applies to auto and manual compaction.
     select_model: Select model
+    # p27 R6 wave 3-2a: form validations and toggle failures (ChatConfigScreen number validations + keep-alive/permission)
+    token_ratio_number: Token ratio must be a number
+    hidden_depth_number: Hidden start depth must be a number
+    token_ratio_required: Token ratio is required when enabled
+    keepalive_toggle_failed: Failed to toggle keep-alive
+    permission_request_failed: Failed to request notification permission
   skills:
     new_title: New skill
     name_label_plain: Skill name
@@ -729,6 +800,12 @@ ui:
     session_empty: "No skills yet. Tap \"New\" to create project skills, or maintain global skills in Settings → Skill management."
     session_toggle_aria: "{action} skill {name} (this project only)"
     panel_empty_mobile: No skills in this project yet. Skills are reusable instruction docs; after creation they enter the prompt index and the model decides usage by description.
+    # p27 R6 wave 3-2a: panel toggle failures and desktop aux-file form validations (SkillPanelScreen + SkillDetailView)
+    enable_failed: Failed to enable
+    disable_failed: Failed to disable
+    path_relative_required: Enter a relative path.
+    path_no_dotdot: 'Path cannot contain "..".'
+    file_exists: This file already exists.
   smart_sort:
     delete_title: Delete rules
     delete_confirm_named: "Delete \"{name}\"?"
@@ -791,6 +868,11 @@ ui:
     help_regex_title: Regex format
     help_regex_body: Supports /regex/flags literals (e.g. /第(\d+)章/i) or a bare regex (no flags by default).
     list_hint_desktop: "When a directory uses Smart sort, rules are tried top-down in this list; the first hit extracts the number via capture groups. Drag or use the row menu to adjust priority."
+    # p27 R6 wave 3-2a: rule editor validations and list operations (SmartSortRule* validations/guards/failures)
+    name_required: Rule name is required
+    regex_required: Regex is required
+    adjust_failed: Failed to adjust order
+    missing_toast: Rule does not exist or has been deleted
   prompt:
     turn_aria: "{action} {role} turn, {summary}"
     tool_group_aria: "{action} tool calls {name}"
@@ -886,6 +968,11 @@ ui:
     weekday_sat: Sa
     weekday_sun: Su
     switch_more: Switch ›
+    # p27 R6 wave 3-2a: stats load failures and range validation (TokenUsageStatsScreen)
+    load_failed: Failed to load statistics
+    requests_load_failed: Failed to load requests
+    hourly_load_failed: Failed to load hourly distribution
+    range_start_after_end: Custom range start date cannot be after the end date
   cloud_sync:
     save_config: Save settings
     s3_section: S3-compatible storage
@@ -969,6 +1056,9 @@ ui:
     progress_syncing: Syncing…
     progress_transferring: Transferring…
     progress_keep_open: Keep the app open; large files can take several minutes
+    # p27 R6 wave 3-2a: config load failure and Secret validation (CloudSyncConfigScreen)
+    secret_required: Secret Key is required
+    load_config_failed: Failed to load cloud sync configuration
   storage:
     space_section: Storage
     space_desc: Database file size and reclaimable space
@@ -1114,6 +1204,11 @@ ui:
     markdown_empty_body: (empty body)
     fm_empty: (empty front matter)
     global_template_hint: "Read-only browsing of all library files: global templates, skills and per-project/session files merged into one view, for reading only."
+    # p27 R6 wave 3-2a: move guard / rule load / drag-in import failures (VfsFileManager both ends + workspace-batch-dnd)
+    move_self_blocked: Cannot move into itself or its own subdirectory
+    rule_load_failed: Failed to load rules
+    local_file_read_failed: Cannot read the dropped local file
+    import_incomplete: Import not completed
   project:
     title: Projects
     new_title: New project

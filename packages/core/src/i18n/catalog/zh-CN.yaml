@@ -466,6 +466,36 @@ ui:
     time_minutes_ago: "{count} 分钟前"
     time_hours_ago: "{count} 小时前"
     time_days_ago: "{count} 天前"
+    # —— 波 3-2a 补键：失败标题/守卫提示（ToastMessage.toast 失败标题直取字符串，按「<动作>失败」通用模式归并） ——
+    load_failed: 加载失败
+    delete_failed: 删除失败
+    save_failed: 保存失败
+    import_failed: 导入失败
+    export_failed: 导出失败
+    create_failed: 创建失败
+    rename_failed: 重命名失败
+    set_failed: 设置失败
+    op_failed: 操作失败
+    rollback_failed: 回滚失败
+    copy_failed: 复制失败
+    connect_failed: 连接失败
+    read_failed: 读取失败
+    set_floor_failed: 置位失败
+    move_failed: 移动失败
+    cleanup_failed: 清理失败
+    check_failed: 检查失败
+    restore_failed: 恢复失败
+    failed: 失败
+    error: 错误
+    please_wait: 请稍候
+    cannot_edit: 无法编辑
+    cannot_copy: 无法复制
+    cannot_save: 无法保存
+    open_link_failed: 无法打开链接
+    unknown_action: 未知操作
+    push_failed: 推送失败
+    sync_failed: 同步失败
+    pull_failed: 拉取失败
   # —— nav：导航头/tab/设置分类/桌面壳导航（mobile header-config·RootNavigator·ProfileTabScreen + desktop AppChrome·MainShell·settings-nav·ChatRail·ShellNavProvider） ——
   nav:
     tab_chat: 对话
@@ -613,6 +643,17 @@ ui:
     io_input_label: 【输入】
     io_output_label: 【输出】
     reset_workplace_cache_done: 已重置常驻工作区缓存
+    # —— 波 3-2a 补键：Agent 运行中守卫与消息操作失败提示（含 U 线保守清单第 7 条「该消息没有可复制的文本」「未知操作」） ——
+    agent_running_compact_blocked: Agent 运行中无法压缩
+    agent_running_fork_blocked: Agent 运行中无法分叉
+    agent_running_set_floor_blocked: Agent 运行中无法置位
+    agent_running_rollback_blocked: Agent 运行中无法回滚
+    message_missing: 消息不存在
+    message_no_editable_text: 该消息没有可编辑的文本
+    message_no_copyable_text: 该消息没有可复制的文本
+    message_content_required: 消息内容不能为空
+    compact_partial_failed: 压缩部分失败
+    select_or_create_project: 请先创建或选择项目
   # —— session：会话详情/会话级切换（mobile SessionDetailScreen·ChatTabScreen + desktop SessionDetailDrawer·ConversationPanel + 两端 chat-agent-meta） ——
   session:
     name_label: 会话名称
@@ -651,6 +692,10 @@ ui:
     no_agents: 暂无 Agent，请先在设置中配置。
     no_models: 暂无模型，请先在设置中配置 Provider。
     agent_picker_empty: 暂无智能体。请先在「智能体配置」中创建。
+    # —— 波 3-2a 补键：加载失败标题（会话详情/子会话/智能体信息，两端同文同键） ——
+    agent_info_load_failed: 智能体信息加载失败
+    detail_load_failed: 加载会话详情失败
+    subsession_load_failed: 加载子会话失败
   # —— agent：智能体编辑器/列表/选择器/工具目录（config-forms agent-editor-state 两端共用 + mobile Agent* + desktop AgentEditorView·ToolPolicyPicker） ——
   agent:
     basic_info: 基本信息
@@ -776,6 +821,17 @@ ui:
     tool_desc_agent: 管理 agent 定义（list/get/create/update，仅主智能体可用）
     tool_desc_curl: 发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）
     tool_desc_search: 联网搜索：按当前启用的搜索引擎串行检索网页，返回引擎原始结果数据（JSON 文本）；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）
+    # —— 波 3-2a 补键：编辑器校验与失败标题（agent-editor-state 两端共用校验 4 条 + mobile 编辑器 toast） ——
+    name_required: 请填写 Agent 名称
+    assistant_text_required: 请填写常驻工作区助手确认语
+    prompt_block_min: 至少保留一个 Prompt 块
+    dedicated_model_uuid_invalid: 专属模型须为已保存模型的 UUID
+    min_one_agent: 至少保留一个 Agent
+    select_dedicated_model: 请选择专属模型
+    list_load_failed: 加载智能体列表失败
+    overwrite_default_failed: 覆盖默认失败
+    export_yaml_failed: 导出 YAML 失败
+    import_yaml_failed: 导入 YAML 失败
   # —— provider：服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui） ——
   provider:
     title: 服务商
@@ -835,6 +891,10 @@ ui:
     connected: 已连接
     not_connected: 未连接
     needs_fix: 需修复
+    # —— 波 3-2a 补键：表单校验与缺参守卫（ProviderForm throw 校验 + 详情页缺 providerId） ——
+    name_baseurl_required: 请填写服务商名称与 baseUrl
+    api_key_required: 请填写 API Key
+    provider_id_missing: 缺少 providerId
   # —— sampling：采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm） ——
   sampling:
     model_name_hint: 用于列表与选择器展示；派生 displayName 为 服务商/模型名称。
@@ -853,6 +913,11 @@ ui:
     temperature_label: 温度
     max_output_label: 输出最大长度
     section_hint_plain: 展示协议推荐默认值；保存后以本页为准。
+    # —— 波 3-2a 补键：表单校验与缺参守卫（ModelSamplingScreen 校验 + 缺模型缺 savedModelId） ——
+    name_required: 模型名称不能为空
+    context_limit_positive: 上下文上限须为正整数
+    model_missing: 模型不存在
+    saved_model_id_missing: 缺少 savedModelId
   # —— chat_config：聊天/工作区配置（mobile ChatConfigScreen + desktop WorkspaceSettingsView） ——
   chat_config:
     stream_parent: 父会话流式
@@ -883,6 +948,12 @@ ui:
     chat_prefs_section: 聊天偏好
     chat_prefs_hint: 影响消息展示与 LLM 请求行为。达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。
     select_model: 选择模型
+    # —— 波 3-2a 补键：表单校验与开关失败（ChatConfigScreen 数字校验 + 保活/权限开关） ——
+    token_ratio_number: Token 比例需为数字
+    hidden_depth_number: 隐藏起始深度需为数字
+    token_ratio_required: 启用时至少填写 token 比例
+    keepalive_toggle_failed: 常驻保活切换失败
+    permission_request_failed: 通知权限申请失败
   # —— skills：技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel） ——
   skills:
     new_title: 新建技能
@@ -972,6 +1043,12 @@ ui:
     session_empty: 暂无技能。点击「新建」创建项目技能，或在设置·技能管理页维护全局技能。
     session_toggle_aria: "{action}技能 {name}（仅当前项目）"
     panel_empty_mobile: 当前项目还没有可用技能。技能是可复用的说明文档，创建后进入提示词索引，模型会按描述决定是否使用。
+    # —— 波 3-2a 补键：面板开关失败与 desktop 辅助文件表单校验（SkillPanelScreen + SkillDetailView） ——
+    enable_failed: 启用失败
+    disable_failed: 关闭失败
+    path_relative_required: 请输入相对路径。
+    path_no_dotdot: 路径不能包含「..」。
+    file_exists: 该文件已存在。
   # —— smart_sort：智能排序规则（mobile SmartSort* + desktop SettingsViews 规则库/编辑器） ——
   smart_sort:
     delete_title: 删除规则
@@ -1035,6 +1112,11 @@ ui:
     help_regex_title: 正则格式
     help_regex_body: 支持 /正则/flags 字面量（如 /第(\d+)章/i），也可直接输入裸正则（默认无 flags）。
     list_hint_desktop: 目录选「智能排序」时按本列表从上到下逐条尝试，首条命中规则的捕获组提取序号；可拖拽或用行菜单调整优先级。
+    # —— 波 3-2a 补键：规则编辑校验与列表操作（SmartSortRule* 校验/守卫/失败） ——
+    name_required: 请填写规则名称
+    regex_required: 请填写正则表达式
+    adjust_failed: 调整失败
+    missing_toast: 规则不存在或已删除
   # —— prompt：提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard） ——
   prompt:
     turn_aria: "{action}{role}轮，{summary}"
@@ -1132,6 +1214,11 @@ ui:
     weekday_sat: 六
     weekday_sun: 日
     switch_more: 切换 ›
+    # —— 波 3-2a 补键：统计加载失败与区间校验（TokenUsageStatsScreen） ——
+    load_failed: 加载统计失败
+    requests_load_failed: 加载流水失败
+    hourly_load_failed: 加载小时分布失败
+    range_start_after_end: 自定义区间起始日不能晚于结束日
   # —— cloud_sync：云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel） ——
   cloud_sync:
     save_config: 保存配置
@@ -1216,6 +1303,9 @@ ui:
     progress_syncing: 正在同步…
     progress_transferring: 传输中…
     progress_keep_open: 请勿关闭应用，大文件可能需要数分钟
+    # —— 波 3-2a 补键：配置加载失败与 Secret 校验（CloudSyncConfigScreen） ——
+    secret_required: 请填写 Secret Key
+    load_config_failed: 加载云同步配置失败
   # —— storage：存储配置（mobile StorageConfigScreen + desktop SettingsViews data） ——
   storage:
     space_section: 存储空间
@@ -1363,6 +1453,11 @@ ui:
     markdown_empty_body: （正文为空）
     fm_empty: （空 Front Matter）
     global_template_hint: 全库文件只读浏览：全局模板、技能与各项目/会话文件合并展示，仅用于阅读。
+    # —— 波 3-2a 补键：移动守卫/规则加载/拖入导入失败（VfsFileManager 两端 + workspace-batch-dnd） ——
+    move_self_blocked: 不能移动到自身或子目录
+    rule_load_failed: 加载规则失败
+    local_file_read_failed: 无法读取拖入的本机文件
+    import_incomplete: 导入未完成
   # —— project：项目抽屉/项目列表（mobile ProjectDrawer + desktop ChatRail 项目段） ——
   project:
     title: 项目

@@ -526,6 +526,37 @@ const UI_MESSAGE_KEYS = [
   "ui.common.time_hours_ago",
   "ui.common.time_days_ago",
 
+  // common：失败标题/守卫提示（波 3-2a 补键：ToastMessage.toast 失败标题直取字符串，按「<动作>失败」通用模式归并）
+  "ui.common.load_failed",
+  "ui.common.delete_failed",
+  "ui.common.save_failed",
+  "ui.common.import_failed",
+  "ui.common.export_failed",
+  "ui.common.create_failed",
+  "ui.common.rename_failed",
+  "ui.common.set_failed",
+  "ui.common.op_failed",
+  "ui.common.rollback_failed",
+  "ui.common.copy_failed",
+  "ui.common.connect_failed",
+  "ui.common.read_failed",
+  "ui.common.set_floor_failed",
+  "ui.common.move_failed",
+  "ui.common.cleanup_failed",
+  "ui.common.check_failed",
+  "ui.common.restore_failed",
+  "ui.common.failed",
+  "ui.common.error",
+  "ui.common.please_wait",
+  "ui.common.cannot_edit",
+  "ui.common.cannot_copy",
+  "ui.common.cannot_save",
+  "ui.common.open_link_failed",
+  "ui.common.unknown_action",
+  "ui.common.push_failed",
+  "ui.common.sync_failed",
+  "ui.common.pull_failed",
+
   // nav（导航头/tab/设置分类/桌面壳导航（mobile header-config·RootNavigator·ProfileTabScreen + desktop AppChrome·MainShell·settings-nav·ChatRail·ShellNavProvider））
   "ui.nav.tab_chat",
   "ui.nav.tab_profile",
@@ -673,6 +704,18 @@ const UI_MESSAGE_KEYS = [
   "ui.chat.io_output_label",
   "ui.chat.reset_workplace_cache_done",
 
+  // chat：Agent 运行中守卫与消息操作失败提示（波 3-2a 补键；含 U 线保守清单第 7 条「该消息没有可复制的文本」「未知操作」）
+  "ui.chat.agent_running_compact_blocked",
+  "ui.chat.agent_running_fork_blocked",
+  "ui.chat.agent_running_set_floor_blocked",
+  "ui.chat.agent_running_rollback_blocked",
+  "ui.chat.message_missing",
+  "ui.chat.message_no_editable_text",
+  "ui.chat.message_no_copyable_text",
+  "ui.chat.message_content_required",
+  "ui.chat.compact_partial_failed",
+  "ui.chat.select_or_create_project",
+
   // session（会话详情/会话级切换（mobile SessionDetailScreen·ChatTabScreen + desktop SessionDetailDrawer·ConversationPanel + 两端 chat-agent-meta））
   "ui.session.name_label",
   "ui.session.name_placeholder",
@@ -710,6 +753,11 @@ const UI_MESSAGE_KEYS = [
   "ui.session.no_agents",
   "ui.session.no_models",
   "ui.session.agent_picker_empty",
+
+  // session：加载失败标题（波 3-2a 补键：会话详情/子会话/智能体信息，两端同文同键）
+  "ui.session.agent_info_load_failed",
+  "ui.session.detail_load_failed",
+  "ui.session.subsession_load_failed",
 
   // agent（智能体编辑器/列表/选择器/工具目录（config-forms agent-editor-state 两端共用 + mobile Agent* + desktop AgentEditorView·ToolPolicyPicker））
   "ui.agent.basic_info",
@@ -836,6 +884,18 @@ const UI_MESSAGE_KEYS = [
   "ui.agent.tool_desc_curl",
   "ui.agent.tool_desc_search",
 
+  // agent：编辑器校验与失败标题（波 3-2a 补键：agent-editor-state 两端共用校验 4 条 + mobile 编辑器 toast）
+  "ui.agent.name_required",
+  "ui.agent.assistant_text_required",
+  "ui.agent.prompt_block_min",
+  "ui.agent.dedicated_model_uuid_invalid",
+  "ui.agent.min_one_agent",
+  "ui.agent.select_dedicated_model",
+  "ui.agent.list_load_failed",
+  "ui.agent.overwrite_default_failed",
+  "ui.agent.export_yaml_failed",
+  "ui.agent.import_yaml_failed",
+
   // provider（服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui））
   "ui.provider.title",
   "ui.provider.name_label",
@@ -895,6 +955,11 @@ const UI_MESSAGE_KEYS = [
   "ui.provider.not_connected",
   "ui.provider.needs_fix",
 
+  // provider：表单校验与缺参守卫（波 3-2a 补键：ProviderForm throw 校验 + 详情页缺 providerId）
+  "ui.provider.name_baseurl_required",
+  "ui.provider.api_key_required",
+  "ui.provider.provider_id_missing",
+
   // sampling（采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm））
   "ui.sampling.model_name_hint",
   "ui.sampling.vendor_id_line",
@@ -912,6 +977,12 @@ const UI_MESSAGE_KEYS = [
   "ui.sampling.temperature_label",
   "ui.sampling.max_output_label",
   "ui.sampling.section_hint_plain",
+
+  // sampling：表单校验与缺参守卫（波 3-2a 补键：ModelSamplingScreen 校验 + 缺模型缺 savedModelId）
+  "ui.sampling.name_required",
+  "ui.sampling.context_limit_positive",
+  "ui.sampling.model_missing",
+  "ui.sampling.saved_model_id_missing",
 
   // chat_config（聊天/工作区配置（mobile ChatConfigScreen + desktop WorkspaceSettingsView））
   "ui.chat_config.stream_parent",
@@ -942,6 +1013,13 @@ const UI_MESSAGE_KEYS = [
   "ui.chat_config.chat_prefs_section",
   "ui.chat_config.chat_prefs_hint",
   "ui.chat_config.select_model",
+
+  // chat_config：表单校验与开关失败（波 3-2a 补键：ChatConfigScreen 数字校验 + 保活/权限开关）
+  "ui.chat_config.token_ratio_number",
+  "ui.chat_config.hidden_depth_number",
+  "ui.chat_config.token_ratio_required",
+  "ui.chat_config.keepalive_toggle_failed",
+  "ui.chat_config.permission_request_failed",
 
   // skills（技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel））
   "ui.skills.new_title",
@@ -1032,6 +1110,13 @@ const UI_MESSAGE_KEYS = [
   "ui.skills.session_toggle_aria",
   "ui.skills.panel_empty_mobile",
 
+  // skills：面板开关失败与 desktop 辅助文件表单校验（波 3-2a 补键：SkillPanelScreen + SkillDetailView）
+  "ui.skills.enable_failed",
+  "ui.skills.disable_failed",
+  "ui.skills.path_relative_required",
+  "ui.skills.path_no_dotdot",
+  "ui.skills.file_exists",
+
   // smart_sort（智能排序规则（mobile SmartSort* + desktop SettingsViews 规则库/编辑器））
   "ui.smart_sort.delete_title",
   "ui.smart_sort.delete_confirm_named",
@@ -1094,6 +1179,12 @@ const UI_MESSAGE_KEYS = [
   "ui.smart_sort.help_regex_title",
   "ui.smart_sort.help_regex_body",
   "ui.smart_sort.list_hint_desktop",
+
+  // smart_sort：规则编辑校验与列表操作（波 3-2a 补键：SmartSortRule* 校验/守卫/失败）
+  "ui.smart_sort.name_required",
+  "ui.smart_sort.regex_required",
+  "ui.smart_sort.adjust_failed",
+  "ui.smart_sort.missing_toast",
 
   // prompt（提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard））
   "ui.prompt.turn_aria",
@@ -1192,6 +1283,12 @@ const UI_MESSAGE_KEYS = [
   "ui.stats.weekday_sun",
   "ui.stats.switch_more",
 
+  // stats：统计加载失败与区间校验（波 3-2a 补键：TokenUsageStatsScreen）
+  "ui.stats.load_failed",
+  "ui.stats.requests_load_failed",
+  "ui.stats.hourly_load_failed",
+  "ui.stats.range_start_after_end",
+
   // cloud_sync（云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel））
   "ui.cloud_sync.save_config",
   "ui.cloud_sync.s3_section",
@@ -1275,6 +1372,10 @@ const UI_MESSAGE_KEYS = [
   "ui.cloud_sync.progress_syncing",
   "ui.cloud_sync.progress_transferring",
   "ui.cloud_sync.progress_keep_open",
+
+  // cloud_sync：配置加载失败与 Secret 校验（波 3-2a 补键：CloudSyncConfigScreen）
+  "ui.cloud_sync.secret_required",
+  "ui.cloud_sync.load_config_failed",
 
   // storage（存储配置（mobile StorageConfigScreen + desktop SettingsViews data））
   "ui.storage.space_section",
@@ -1422,6 +1523,12 @@ const UI_MESSAGE_KEYS = [
   "ui.vfs.markdown_empty_body",
   "ui.vfs.fm_empty",
   "ui.vfs.global_template_hint",
+
+  // vfs：移动守卫/规则加载/拖入导入失败（波 3-2a 补键：VfsFileManager 两端 + workspace-batch-dnd）
+  "ui.vfs.move_self_blocked",
+  "ui.vfs.rule_load_failed",
+  "ui.vfs.local_file_read_failed",
+  "ui.vfs.import_incomplete",
 
   // project（项目抽屉/项目列表（mobile ProjectDrawer + desktop ChatRail 项目段））
   "ui.project.title",
