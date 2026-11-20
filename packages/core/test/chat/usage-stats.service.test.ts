@@ -1883,6 +1883,67 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
   });
 });
 
+describe("usage stats service 动态筛选 `<if>` 片段（R4 迁移回归）", () => {
+  /** 建数据面：4 行账本（3 行界内 + 1 行次日界外）+ provider/saved-model 配置。 */
+  async function seedFilterFixture(): Promise<{ ctx: ReturnType<typeof getNovelMasterTestContext>; today0: number }> {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // A：配置模型 × 已记录服务商（唯一可被 string×string 命中）。
+    await seedMsg(ctx, session.id, 1, { createdAtMs: today0 + 10 * MIN, providerId: "r4-provider", modelName: "model-a", usage: { prompt: 10, total: 10 } });
+    // B：未配置模型（「其他」桶模型侧）。
+    await seedMsg(ctx, session.id, 2, { createdAtMs: today0 + 20 * MIN, providerId: "r4-provider", modelName: "[3]legacy", usage: { prompt: 20, total: 20 } });
+    // C：provider_id IS NULL 的未记录服务商历史行（「其他」桶服务商侧）。
+    await seedMsg(ctx, session.id, 3, { createdAtMs: today0 + 30 * MIN, providerId: null, modelName: "model-a", usage: { prompt: 30, total: 30 } });
+    // E：彻底未记录行（provider 与 model 双 null），「其他」桶两条件同时命中。
+    await seedMsg(ctx, session.id, 5, { createdAtMs: today0 + 40 * MIN, providerId: null, modelName: null, usage: { prompt: 50, total: 50 } });
+    // D：次日界外行（时间半开区间验证）。
+    await seedMsg(ctx, session.id, 4, { createdAtMs: today0 + 25 * HOUR, providerId: "r4-provider", modelName: "model-a", usage: { prompt: 40, total: 40 } });
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('r4-provider', 'openai', 'https://example.com', 'R4 Provider', '{}', 0, ${ts}, ${ts})`
+    );
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('r4-som-1', 'r4-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    );
+    return { ctx, today0 };
+  }
+
+  it("filter 三态分派：undefined 全部 / null 其他桶 / string 指定；单条件与双条件组合", async () => {
+    const { ctx, today0 } = await seedFilterFixture();
+    const svc = new DefaultUsageStatsService(ctx.conn);
+    const filter = { range: dayRange(today0, today0) };
+
+    // undefined × undefined：全部界内行（A/B/C/E）。
+    assert.equal(unwrap(await svc.getSummary({ ...filter, model: undefined, providerId: undefined })).calls, 4);
+    // string × string：双条件只命中 A。
+    assert.equal(unwrap(await svc.getSummary({ ...filter, model: "model-a", providerId: "r4-provider" })).calls, 1);
+    // 单条件 null：模型侧「其他」桶 = 未配置/未记录模型行（B/E），已配置的 A/C 被排除。
+    assert.equal(unwrap(await svc.getSummary({ ...filter, model: null, providerId: undefined })).calls, 2);
+    // 单条件 null：服务商侧「其他」桶 = provider_id IS NULL 行（C/E）。
+    assert.equal(unwrap(await svc.getSummary({ ...filter, model: undefined, providerId: null })).calls, 2);
+    // 全 null：两条件交集 = 双未记录行（E；B 的 provider 非 NULL、C 的模型在配置集合内，均被排除）。
+    assert.equal(unwrap(await svc.getSummary({ ...filter, model: null, providerId: null })).calls, 1);
+    // 行集与 COUNT 同用 where 片段（listRequestUsage）：total 与 rows 数一致。
+    const page = unwrap(await svc.listRequestUsage({ ...filter, model: null, providerId: null }, { limit: 50, offset: 0 }));
+    assert.equal(page.total, 1);
+    assert.equal(page.rows.length, 1);
+  });
+
+  it("时间谓词半开区间 [fromMs, toMs)：上界压线不入；range 缺省全历史", async () => {
+    const { ctx, today0 } = await seedFilterFixture();
+    const svc = new DefaultUsageStatsService(ctx.conn);
+    // 有界：D（次日 +1h）在 [today0, 次日 0 点) 之外，只有 A/B/C/E 入。
+    assert.equal(unwrap(await svc.getSummary({ range: dayRange(today0, today0), model: undefined, providerId: undefined })).calls, 4);
+    // 无 range：全历史，D 也入。
+    assert.equal(unwrap(await svc.getSummary({ model: undefined, providerId: undefined })).calls, 5);
+    // hourly 的 24 桶按本地钟点构造边界：D 在次日凌晨，当日各桶不含它。
+    const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), { model: undefined, providerId: undefined }));
+    assert.equal(hourly.reduce((sum, b) => sum + b.calls, 0), 4, "hourly 当日桶不含次日界外行");
+  });
+});
+
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
   const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};

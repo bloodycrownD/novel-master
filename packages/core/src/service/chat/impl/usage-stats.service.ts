@@ -61,44 +61,20 @@ const AGG_SELECT_SQL = `COUNT(*) AS calls, COALESCE(SUM(prompt_tokens), 0) AS pr
 const USAGE_NOT_NULL_SQL = `(prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
 
 /**
- * 模型筛选片断：undefined = 全部；null = 「其他」桶（未记录 + 不在
- * 已保存模型集合内）；字符串 = 指定模型。子查询免动态参数。
+ * 动态筛选模板片断（原三函数迁 SqlTemplate `<if>`，绑定值传原始入参，
+ * 由 test 表达式分派三态）：
+ *
+ * - 模型：undefined = 全部（无谓词）；null = 「其他」桶（未记录 + 不在
+ *   已保存模型集合内）；字符串 = 指定模型。子查询免动态参数。
+ * - 服务商：undefined = 全部；null = 「其他」桶（provider_id IS NULL 的
+ *   历史行）；字符串 = 指定服务商配置 id（写入时快照，服务商已删除也照常
+ *   按 id 匹配——解析不到展示名是 UI 层的事）。
+ * - 时间谓词：fromMs/toMs 任一为 null 时不限时间（全历史），非空时拼
+ *   [fromMs, toMs) 半开区间条件（与 range 可选语义配套）。
  */
-function modelFilterSql(model: string | null | undefined): string {
-  if (model === undefined) {
-    return "";
-  }
-  if (model === null) {
-    return "AND (model_name IS NULL OR model_name NOT IN " + "(SELECT DISTINCT vendor_model_id FROM llm_saved_model))";
-  }
-  return "AND model_name = #{modelName}";
-}
-
-/**
- * 服务商筛选片断（与 modelFilterSql 同构）：undefined = 全部；null =
- * 「其他」桶（provider_id IS NULL 的历史行）；字符串 = 指定服务商配置 id
- * （写入时快照，服务商已删除也照常按 id 匹配——解析不到展示名是 UI 层的事）。
- */
-function providerFilterSql(providerId: string | null | undefined): string {
-  if (providerId === undefined) {
-    return "";
-  }
-  if (providerId === null) {
-    return "AND provider_id IS NULL";
-  }
-  return "AND provider_id = #{providerId}";
-}
-
-/**
- * 时间谓词片断：fromMs/toMs 任一为 null 时不限时间（全历史），
- * 非空时拼 [fromMs, toMs) 半开区间条件（与 range 可选语义配套）。
- */
-function timeRangeSql(fromMs: number | null, toMs: number | null): string {
-  if (fromMs == null || toMs == null) {
-    return "";
-  }
-  return "AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}";
-}
+const MODEL_FILTER_SQL = `<if test="model === null"> AND (model_name IS NULL OR model_name NOT IN (SELECT DISTINCT vendor_model_id FROM llm_saved_model))</if><if test="model !== undefined and model !== null"> AND model_name = #{model}</if>`;
+const PROVIDER_FILTER_SQL = `<if test="providerId === null"> AND provider_id IS NULL</if><if test="providerId !== undefined and providerId !== null"> AND provider_id = #{providerId}</if>`;
+const TIME_RANGE_SQL = `<if test="fromMs != null and toMs != null"> AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}</if>`;
 
 /** 解析 `YYYY-MM-DD` 为本地日期分量（拒绝溢出日期如 02-30；`label` 用于报错指认字段）。 */
 function parseDayLocalDate(dayLocalDate: string, label = "dayLocalDate"): Result<{ year: number; month: number; day: number }, AppError> {
@@ -170,10 +146,10 @@ export class DefaultUsageStatsService implements UsageStatsService {
        WHERE ${USAGE_NOT_NULL_SQL}
          AND created_at_ms >= #{fromMs}
          AND created_at_ms < #{toMs}
-         ${modelFilterSql(filter.model)}
-         ${providerFilterSql(filter.providerId)}
+         ${MODEL_FILTER_SQL}
+         ${PROVIDER_FILTER_SQL}
        GROUP BY day_key`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, dailyBucketsSql, { fromMs, toMs, modelName: filter.model ?? null, providerId: filter.providerId ?? null });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, dailyBucketsSql, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
     const rowByDay = new Map<string, Row>();
     for (const row of rows) {
       rowByDay.set(String(row.day_key), row);
@@ -216,12 +192,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const modelBreakdownSql = `SELECT provider_id, model_name, ${AGG_SELECT_SQL}
        FROM usage_record
        WHERE ${USAGE_NOT_NULL_SQL}
-         ${timeRangeSql(fromMs, toMs)}
-         ${modelFilterSql(filter.model)}
-         ${providerFilterSql(filter.providerId)}
+         ${TIME_RANGE_SQL}
+         ${MODEL_FILTER_SQL}
+         ${PROVIDER_FILTER_SQL}
        GROUP BY provider_id, model_name
        -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, modelBreakdownSql, { fromMs, toMs, modelName: filter.model ?? null, providerId: filter.providerId ?? null });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, modelBreakdownSql, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
     const mapped = rows.map((row) => ({
       providerId: row.provider_id == null ? null : String(row.provider_id),
       modelName: row.model_name == null ? null : String(row.model_name),
@@ -273,13 +249,16 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const range = this.resolveOptionalRange(filter.range);
     if (!range.ok) return Result.err(range.error);
     const { fromMs, toMs } = range.value;
-    // total 与行集同用 whereSql：range 缺省时两者都不含时间谓词（全历史）。
-    const whereSql = `WHERE ${USAGE_NOT_NULL_SQL}` + ` ${timeRangeSql(fromMs, toMs)}` + ` ${modelFilterSql(filter.model)}` + ` ${providerFilterSql(filter.providerId)}`;
+    // total 与行集同用 where 片段：range 缺省时两者都不含时间谓词（全历史）。
+    const whereSql = `WHERE ${USAGE_NOT_NULL_SQL}
+         ${TIME_RANGE_SQL}
+         ${MODEL_FILTER_SQL}
+         ${PROVIDER_FILTER_SQL}`;
     const params = {
       fromMs,
       toMs,
-      modelName: filter.model ?? null,
-      providerId: filter.providerId ?? null,
+      model: filter.model,
+      providerId: filter.providerId,
       offset,
       limit,
     };
@@ -440,10 +419,10 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const aggregateSql = `SELECT ${AGG_SELECT_SQL}
        FROM usage_record
        WHERE ${USAGE_NOT_NULL_SQL}
-         ${timeRangeSql(fromMs, toMs)}
-         ${modelFilterSql(model)}
-         ${providerFilterSql(providerId)}`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, aggregateSql, { fromMs, toMs, modelName: model ?? null, providerId: providerId ?? null });
+         ${TIME_RANGE_SQL}
+         ${MODEL_FILTER_SQL}
+         ${PROVIDER_FILTER_SQL}`;
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, aggregateSql, { fromMs, toMs, model, providerId });
     return rows[0] ?? ZERO_AGG_ROW;
   }
 
