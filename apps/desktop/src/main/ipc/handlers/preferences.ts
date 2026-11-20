@@ -19,7 +19,10 @@ type PreferenceFeatureSpec = {
 };
 
 /** 布尔偏好 feature 表：桌面端与 Core 端口的三对开关对齐（含 VFS 统一 tool turn）。 */
-export const PREFERENCE_FEATURES = {
+/** feature 键显式列出（导出表注解成可命名类型——推断类型的 read/write 返回值引用 core dist 的窄码 Result，声明发射不可命名 TS2883）。 */
+export type PreferenceFeature = "llmStream" | "subagentStream" | "thinkingContext" | "userVfsUnifiedToolTurn";
+
+export const PREFERENCE_FEATURES: Record<PreferenceFeature, PreferenceFeatureSpec> = {
   llmStream: {
     getChannel: IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,
     setChannel: IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
@@ -44,9 +47,7 @@ export const PREFERENCE_FEATURES = {
     read: (preferences) => preferences.getUserVfsUnifiedToolTurn(),
     write: (preferences, enabled) => preferences.setUserVfsUnifiedToolTurn(enabled),
   },
-} as const satisfies Record<string, PreferenceFeatureSpec>;
-
-export type PreferenceFeature = keyof typeof PREFERENCE_FEATURES;
+};
 
 export const Preferences = {
   /** nm-style: keep-public — IPC handler 模块入口：registry 单点注册 + 桌面测试直调，runtime 装配与 Result 转码归属本模块。 */
