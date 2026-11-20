@@ -31,11 +31,7 @@ const androidStrategy: SkspCryptoStrategy = {
       // 存 base64 文本，不走 Uint8Array BLOB 绑定（quick-sqlite heap 损伤）。
       return { ciphertext: enc.ciphertext, iv: enc.iv };
     } catch (cause) {
-      throw new SkspError(
-        "ENCRYPT_FAILED",
-        `Keystore encrypt failed for ${ref}`,
-        { ref, cause },
-      );
+      throw new SkspError("ENCRYPT_FAILED", `Keystore encrypt failed for ${ref}`, { ref, cause },);
     }
   },
   async decrypt(ref, row: Row) {
@@ -45,17 +41,9 @@ const androidStrategy: SkspCryptoStrategy = {
     }
     const native = SkspNative.get();
     try {
-      return await native.decrypt(
-        ref,
-        Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(row.ciphertext)),
-        Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(iv)),
-      );
+      return await native.decrypt(ref, Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(row.ciphertext)), Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(iv)),);
     } catch (cause) {
-      throw new SkspError(
-        "DECRYPT_FAILED",
-        `Keystore decrypt failed for ${ref}. Re-configure apiKey.`,
-        { ref, cause },
-      );
+      throw new SkspError("DECRYPT_FAILED", `Keystore decrypt failed for ${ref}. Re-configure apiKey.`, { ref, cause },);
     }
   },
 };
