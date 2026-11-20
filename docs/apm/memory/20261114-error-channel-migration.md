@@ -1,8 +1,8 @@
 ---
-date: 2026-11-14
+date: 2026-11-20
 title: 错误通道迁移：总纲 + 一期 spec（errors/ 收敛）
 keywords: Either, Result, Outcome, Interrupt, AppError, 错误通道, 错误码表, Error 子类, 错误工厂, format-ipc-error, spec-generate, 分期迁移
-abstract: 用户拍板把 NM 的错误通道从「throw 为主」迁为「已知走返回值、未知走 throw」，并纠正了此前「29 个 Error 子类 / 38 个纯转发工厂」的错误口径——实测 errors/ 只有 8 个类、39 个工厂且仅 4 个纯转发。派 3 个 readonly 探索子代理产出全仓现状（875 处 throw、217 文件提 Result、attempt*/revive 零调用、三套失败通道并存）后，定下四类型（Outcome/Interrupt/AppError/Result）、三期路线（errors/ → core → apps+导出面），落盘总纲与一期 spec，待用户确认。
+abstract: 错误通道迁移全记录：一期定四类型（Outcome/Interrupt/AppError/Result）与总纲，历期推进至 p26——throw-audit 四形态工具化进 nm-style、门⑦ 18 处定性修复（mobile 读链 Result 化 + 总纲 §五例外 7 边界转码登记）、drivers 92 条 signatures 机械清、IntegrityRepairOperation 接口 Result 化（例外 6 退役）。tag p26-throw-audit。
 ---
 
 # 错误通道迁移
@@ -290,3 +290,22 @@ yieldToEventLoop(): Promise<void>                   住 vfs/logic/vfs-import-chu
 ```
 
 两路独立报出 `yieldToEventLoop`。**判据不是「有没有第二份」，而是「common 里有没有它的家」**——有家不回就搬。
+
+user:
+执行 docs/Iterations/throw-audit/spec.md：门⑦ 回归 18 处定性修复 + drivers 92 条 signatures 机械清 + throw-audit 规则进 nm-style + IntegrityRepairOperation 接口 Result 化，目标 tag p26-throw-audit。
+
+assistant:
+四波全部收口，tag p26-throw-audit（14 提交），验收八项全过（typecheck 15 workspace / core 3540 / desktop 774 / mobile 2381 / 门⑦ FIND 0 / throw-audit gate PASS / drivers 六包 signatures 0 / dup+bare gate PASS）。关键定性决策与数字：
+
+- R3 工具：四形态（T1 unwrap / T2 createAbortError / T3 new AppError / T4 new Error），实扫 186 站点 = T1 64 / T2 0（grep 命中全是 JSDoc 文本）/ T3 33 / T4 89；KEEP 65 与九期「65 带标记」对上。修掉两个自身 bug：返回形态最初取到最外层函数（回调标注被外层顶替），修正为最近一层；事务回调从文件名模式扩为 AST 判定（.transaction(...) 回调实参内自动放行，T3 也吃到 14 处）。
+- 门⑦对拍：18 处全部命中且 core 一致；mobile 屏 20+ 处 T1 是门⑦只扫 .ts 的盲区（口径漂移实锤），throw-audit 含 .tsx 修复。
+- R1 定性：mobile 读链 4 处真修（unit/manager 的 loadTail/loadOlder Result 化，消费方 UI 回调全吞错——relay 浅且保行为）；run:588 的 throw 喂同函数 catch 漏斗（FAILED('') 补发 + onRunFailed 记账，直接 return 会断 composer 解锁链）→ 边界登记；AgentSession.list 的 Result 化只会把 unwrap-throw 挪进 agent-runner（同款 raiseRunError 已存在）→ 登记例外 7c；assertFileName 槽位是 zod preprocess 同款例外。总纲 §五：例外 2 扩 tdbc 双判据 + 新增例外 7（五亚类 a-e）。
+- R2：子代理机械清六包 37+23+19+6+4+3 全归零、无超 200 行；主代理逐包串行重建 dist + 分包 commit。
+- R4：接口 Result 化 + safeDetect 统一收口（Result.err 与平台异常都保守判 needsRepair），报告语义不变；门⑦撤销 provider-identity 登记、总纲例外 6 标退役。
+- baseline：166 键 = BOUNDARY 47 / ALLOWED 30 / KEEP 61 / UNTRIAGED 28（29 站点实例，存量欠账显数不拦，下轮还）。
+
+user:
+这轮有什么坑要记住？
+
+assistant:
+三个实锤：① Windows 下 git add 传小写路径（docs/iterations/...）而 tracked 是大写（docs/Iterations/...）时命令静默不匹配，R1/R4 两笔各漏带 strategy.md，靠 git status 复查发现后补交——大写目录名 add 时要么 tab 补全要么事后 status 核对；② mobile 测试在 apps/mobile/__tests__/（不是 src 或 test/），按目录模式 grep 消费方时会漏，chat-session-view-cache 是全量跑才现形的漏网；③ throw-audit 的「返回 Result + 同函数 catch」不一定是 VIOLATION——run() 前奏的 throw 靠 catch 漏斗发终态事件，机械改 return 会断行为，矩阵判定要读 catch 块有没有副作用再定性。另：drivers hygiene 债（Dpapi.protect/unprotect 单点、conformance TEST_ONLY、convertMetadata/resolveColumnNames 内联候选）是 range 模式浮出的存量，R2 spec 明确不碰，留在未处理项。
