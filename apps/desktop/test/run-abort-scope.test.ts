@@ -17,7 +17,8 @@ import { ABORT_KEY, AbortScopeFactory, type AbortScope } from "@novel-master/cor
 import { Backup } from "../src/main/ipc/handlers/backup.js";
 import { CloudSync } from "../src/main/ipc/handlers/cloud-sync.js";
 import { CompactionIpc } from "../src/main/ipc/handlers/compaction.js";
-import { doDbMaintenance, handleDbMaintenance } from "../src/main/ipc/handlers/db-maintenance.js";
+import { DbMaintenance } from "../src/main/ipc/handlers/db-maintenance.js";
+import { DbMaintenanceService } from "../src/main/services/db-maintenance.service.js";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
 import { setupDesktopDbTestEnv, teardownDesktopDbTestEnv } from "./desktop-db-test-env.js";
@@ -53,12 +54,12 @@ describe("六类长任务 doWork 的入口检查点（T-S15）", () => {
   });
 
   it("db-maintenance：已 abort 时不进入 VACUUM 链路", async () => {
-    assert.deepEqual(await doDbMaintenance(abortedScope()), CANCELLED);
+    assert.deepEqual(await DbMaintenanceService.run({ checkpoint: () => abortedScope().checkpoint() }), CANCELLED);
   });
 
   it("db-maintenance：正常路径结束后释放 registry 登记", async () => {
     const key = ABORT_KEY.dbMaintenance("m1");
-    const result = await handleDbMaintenance({ runId: "m1" });
+    const result = await DbMaintenance.handle({ runId: "m1" });
     assert.equal(result.ok, true, result.ok ? "" : result.error.message);
     assert.equal(rt.abortRegistry.has(key), false);
   });

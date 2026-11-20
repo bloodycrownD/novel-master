@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import {CloudSyncService, syncBusy} from "../src/main/services/cloud-sync.service.js";
-import { runDbMaintenance } from "../src/main/services/db-maintenance.service.js";
+import { DbMaintenanceService } from "../src/main/services/db-maintenance.service.js";
 import { maintenanceBusy } from "../src/main/services/db-maintenance-busy.js";
-import {
-  handleDbMaintenance,
-  handleDbStats,
-} from "../src/main/ipc/handlers/db-maintenance.js";
+import { DbMaintenance } from "../src/main/ipc/handlers/db-maintenance.js";
 import { agentActivity } from "../src/main/runtime/agent-activity.js";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
@@ -32,7 +29,7 @@ describe("db-maintenance ipc handlers", () => {
   it("T-DMD1：Agent 运行中或云同步进行中时返回中文错误", async () => {
     agentActivity.increment();
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, false);
       if (!res.ok) {
         assert.equal(res.error.message, "Agent 运行中，请稍后再操作");
@@ -43,7 +40,7 @@ describe("db-maintenance ipc handlers", () => {
 
     syncBusy.set(true);
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, false);
       if (!res.ok) {
         assert.equal(res.error.message, "云同步进行中，请稍后再操作");
@@ -55,7 +52,7 @@ describe("db-maintenance ipc handlers", () => {
     // 第三分支：自身数据清理 busy 时拒绝并发（spec 风险表承诺的口径）
     maintenanceBusy.set(true);
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, false);
       if (!res.ok) {
         assert.equal(res.error.message, "数据清理进行中，请稍后再操作");
@@ -69,7 +66,7 @@ describe("db-maintenance ipc handlers", () => {
 
   it("T-DMD2：正常路径返回前后体积且执行窗口内 maintenanceBusy 为真", async () => {
     // stats 顺带验证：fileBytes 来自 stat，reclaimableBytes 来自 PRAGMA 口径
-    const stats = await handleDbStats();
+    const stats = await DbMaintenance.handleDbStats();
     assert.equal(stats.ok, true);
     if (stats.ok) {
       assert.ok(stats.data.fileBytes > 0);
@@ -94,7 +91,7 @@ describe("db-maintenance ipc handlers", () => {
       return originalExecute(sql);
     };
     try {
-      const res = await handleDbMaintenance();
+      const res = await DbMaintenance.handle();
       assert.equal(res.ok, true);
       if (res.ok) {
         assert.ok(res.data.beforeBytes > 0);
@@ -117,7 +114,7 @@ describe("db-maintenance ipc handlers", () => {
     const runtime = runtimeR.value;
     await runtime.conn.execute("BEGIN");
 
-    const pending = handleDbMaintenance();
+    const pending = DbMaintenance.handle();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(maintenanceBusy.isBusy(), true);
     const res = await pending;
@@ -134,7 +131,7 @@ describe("db-maintenance ipc handlers", () => {
     await runtime.conn.execute("BEGIN");
     let rawMessage = "";
     try {
-      await runDbMaintenance();
+      await DbMaintenanceService.run();
     } catch (err) {
       rawMessage = err instanceof Error ? err.message : String(err);
     }

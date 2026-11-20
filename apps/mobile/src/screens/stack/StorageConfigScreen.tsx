@@ -15,14 +15,14 @@ import {Number, STORAGE_BYTES} from '@novel-master/core/common';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {settingsTranslator} from '../../i18n/settings';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {exportDatabaseBackup, importDatabaseBackup} from '../../services/db-backup.service';
-import {getDbMaintenanceStats, runDbMaintenance} from '../../services/db-maintenance.service';
-import {exportMobileLogs} from '../../services/log-export';
-import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
+import {DbBackupService} from '../../services/db-backup.service';
+import {DbMaintenanceService} from '../../services/db-maintenance.service';
+import {LogExport} from '../../services/log-export';
+import {CloudSyncConfigStore} from '../../services/cloud-sync-config.store';
 import {agentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -55,12 +55,12 @@ export function StorageConfigScreen() {
     // 仅取本地 configured 布尔值，走 kkv 本地读取，不触发 S3 网络往返；
     // 远端同步状态（rev/建议拉取等）由 CloudSyncStorageScreen 负责。
     // 读失败（错误通道迁移四期：Result）与旧 catch 同款按未配置呈现。
-    const status = await getCloudSyncLocalStatus(runtime);
+    const status = await CloudSyncConfigStore.getLocalStatus(runtime);
     setCloudConfigured(status.ok && status.value.configured);
   }, [runtime]);
 
   const refreshMaintenanceStats = useCallback(async () => {
-    const stats = await getDbMaintenanceStats(runtime);
+    const stats = await DbMaintenanceService.getStats(runtime);
     // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位；
     // 平台异常仍走 reject，由外层调用方的 .catch 收口。
     setDbFileBytes(stats.ok ? stats.value.fileBytes : null);
@@ -120,10 +120,10 @@ export function StorageConfigScreen() {
               text: '开始清理',
               onPress: () => {
                 setDbBusy(true);
-                runDbMaintenance(runtime)
+                DbMaintenanceService.run(runtime)
                   .then(result => {
                     if (!result.ok) {
-                      showToast(toastMessage('清理失败', result.error));
+                      showToast(ToastMessage.toast('清理失败', result.error));
                       return;
                     }
                     const before = formatStorageBytes(result.value.beforeBytes);
@@ -131,7 +131,7 @@ export function StorageConfigScreen() {
                     showToast(`清理完成：${before} → ${after}`);
                     refreshMaintenanceStats().catch(() => undefined);
                   })
-                  .catch(err => showToast(toastMessage('清理失败', err)))
+                  .catch(err => showToast(ToastMessage.toast('清理失败', err)))
                   .finally(() => setDbBusy(false));
               },
             },
@@ -150,7 +150,7 @@ export function StorageConfigScreen() {
           setDbBusy(true);
           setBackupBusy('export');
           setBackupCancelling(false);
-          exportDatabaseBackup(runtime)
+          DbBackupService.exportViaPicker(runtime)
             .then(result => {
               if (result.ok && result.value === 'saved') {
                 showToast('数据库已导出；备份文件包含聊天记录明文，请妥善保管');
@@ -161,7 +161,7 @@ export function StorageConfigScreen() {
               if (RequestAbort.isAbortLikeError(err)) {
                 return;
               }
-              showToast(toastMessage('导出失败', err));
+              showToast(ToastMessage.toast('导出失败', err));
             })
             .finally(() => {
               setBackupBusy(null);
@@ -180,13 +180,13 @@ export function StorageConfigScreen() {
             return;
           }
           setDbBusy(true);
-          exportMobileLogs()
+          LogExport.export()
             .then(result => {
               if (result === 'saved') {
                 showToast('日志已导出');
               }
             })
-            .catch(err => showToast(toastMessage('导出失败', err)))
+            .catch(err => showToast(ToastMessage.toast('导出失败', err)))
             .finally(() => setDbBusy(false));
         }}
       />
@@ -207,12 +207,12 @@ export function StorageConfigScreen() {
                 setDbBusy(true);
                 setBackupBusy('import');
                 setBackupCancelling(false);
-                importDatabaseBackup(runtime, retry)
+                DbBackupService.importViaPicker(runtime, retry)
                   .then(result => {
                     if (result.ok) {
                       showToast('正在重新加载，请稍候…');
                     } else {
-                      showToast(toastMessage('导入失败', result.error));
+                      showToast(ToastMessage.toast('导入失败', result.error));
                     }
                   })
                   .catch(err => {
@@ -220,7 +220,7 @@ export function StorageConfigScreen() {
                     if (RequestAbort.isAbortLikeError(err)) {
                       return;
                     }
-                    showToast(toastMessage('导入失败', err));
+                    showToast(ToastMessage.toast('导入失败', err));
                   })
                   .finally(() => {
                     setBackupBusy(null);

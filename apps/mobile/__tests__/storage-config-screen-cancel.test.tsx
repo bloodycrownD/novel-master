@@ -68,23 +68,34 @@ jest.mock('@/runtime/agent-activity', () => ({
   agentActivity: {isActive: () => false, subscribe: () => () => undefined},
 }));
 
-jest.mock('@/services/db-backup.service', () => ({
+jest.mock('@/services/db-backup.service', () => {
+  const legacy = {
   exportDatabaseBackup: (..._args: unknown[]) => mockExportDatabaseBackup(),
   importDatabaseBackup: (..._args: unknown[]) => mockImportDatabaseBackup(),
-}));
+};
+  return {...legacy, DbBackupService: {exportViaPicker: legacy.exportDatabaseBackup, importViaPicker: legacy.importDatabaseBackup}};
+});
 
 jest.mock('@/services/db-maintenance.service', () => ({
-  getDbMaintenanceStats: (..._args: unknown[]) => mockGetDatabaseMaintenanceStats(),
-  runDbMaintenance: (..._args: unknown[]) => mockRunDatabaseMaintenance(),
+  DbMaintenanceService: {
+    getStats: (..._args: unknown[]) => mockGetDatabaseMaintenanceStats(),
+    run: (..._args: unknown[]) => mockRunDatabaseMaintenance(),
+  },
 }));
 
-jest.mock('@/services/log-export', () => ({
+jest.mock('@/services/log-export', () => {
+  const legacy = {
   exportMobileLogs: (..._args: unknown[]) => mockExportMobileLogs(),
-}));
+};
+  return {...legacy, LogExport: {export: legacy.exportMobileLogs}};
+});
 
-jest.mock('@/services/cloud-sync-config.store', () => ({
+jest.mock('@/services/cloud-sync-config.store', () => {
+  const legacy = {
   getCloudSyncLocalStatus: (..._args: unknown[]) => mockGetCloudSyncLocalStatus(),
-}));
+};
+  return {...legacy, CloudSyncConfigStore: {getLocalStatus: legacy.getCloudSyncLocalStatus}};
+});
 
 jest.mock('@/components/profile/ProfileStatusCard', () => ({
   ProfileStatusCard: () => null,

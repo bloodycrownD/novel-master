@@ -12,7 +12,7 @@ import { CompactionIpc } from "./handlers/compaction.js";
 import { CompactionConditions } from "./handlers/compaction-conditions.js";
 import { AgentRegistry } from "./handlers/agent-registry.js";
 import { Backup } from "./handlers/backup.js";
-import { handleDbMaintenance, handleDbStats } from "./handlers/db-maintenance.js";
+import { DbMaintenance } from "./handlers/db-maintenance.js";
 import { CloudSync } from "./handlers/cloud-sync.js";
 import { Search } from "./handlers/search.js";
 import { AppInfo } from "./handlers/app-info.js";
@@ -236,8 +236,8 @@ export const HandlerRegistry = {
     HandlerRegistry.bindReq(IPC_CHANNELS.BACKUP_EXPORT, Backup.handleExport);
     HandlerRegistry.bindReq(IPC_CHANNELS.BACKUP_IMPORT, Backup.handleImport);
 
-    HandlerRegistry.bindNoArg(IPC_CHANNELS.DB_STATS, handleDbStats);
-    HandlerRegistry.bindReq(IPC_CHANNELS.DB_MAINTENANCE, handleDbMaintenance);
+    HandlerRegistry.bindNoArg(IPC_CHANNELS.DB_STATS, DbMaintenance.handleDbStats);
+    HandlerRegistry.bindReq(IPC_CHANNELS.DB_MAINTENANCE, DbMaintenance.handle);
 
     HandlerRegistry.bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, CloudSync.getConfig);
     HandlerRegistry.bindReq(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, CloudSync.setConfig);
