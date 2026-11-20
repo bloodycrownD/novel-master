@@ -12,7 +12,7 @@ import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/lo
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import {  UserMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
-import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  AttachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {  AttachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import {  messageAttachmentSchema, type MessageAttachment  } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
@@ -237,7 +237,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         userAnnotation: "二",
       },
     ];
-    const annotateAtts = drafts.map((draft) => attachmentXmlCodec.encodeAnnotateAttachment(draft));
+    const annotateAtts = drafts.map((draft) => AttachmentXmlCodec.encodeAnnotateAttachment(draft));
     // 若误走 mergeAttachmentsByPath 会丢一条
     const wronglyMerged = AttachmentScanner.mergeByPath([], annotateAtts);
     assert.equal(
@@ -287,14 +287,14 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("T-MA6: 文件形 attachmentXmlCodec.encodeAnnotateAttachment(AnnotateDraft) 签名仍可用", () => {
+  it("T-MA6: 文件形 AttachmentXmlCodec.encodeAnnotateAttachment(AnnotateDraft) 签名仍可用", () => {
     const fileOnly: AnnotateDraft = {
       id: "desktop-ok",
       path: "/desktop.md",
       originalText: "x",
       userAnnotation: "y",
     };
-    const att = attachmentXmlCodec.encodeAnnotateAttachment(fileOnly);
+    const att = AttachmentXmlCodec.encodeAnnotateAttachment(fileOnly);
     assert.equal(att.path, "/desktop.md");
     assert.equal(att.action, "annotate");
     assert.equal(att.name, "/desktop.md");
@@ -320,9 +320,9 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
   });
 });
 
-describe("attachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", () => {
+describe("AttachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", () => {
   it("有 startLine/endLine → params 含 locationLabel 自然语言", () => {
-    const att = attachmentXmlCodec.encodeAnnotateAttachment({
+    const att = AttachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -336,7 +336,7 @@ describe("attachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", (
   });
 
   it("单行 locationLabel", () => {
-    const att = attachmentXmlCodec.encodeAnnotateAttachment({
+    const att = AttachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -348,7 +348,7 @@ describe("attachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", (
   });
 
   it("无行号 → 不写 locationLabel（老附件兼容）", () => {
-    const att = attachmentXmlCodec.encodeAnnotateAttachment({
+    const att = AttachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",

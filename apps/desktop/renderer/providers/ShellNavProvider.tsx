@@ -57,7 +57,7 @@ import {
 } from "../ipc/client";
 
 import { resolveChatLinkAction } from "../features/chat/chat-link-route";
-import { chatLinkResolver } from "@shared/logic/chat";
+import { ChatLinkResolver } from "@shared/logic/chat";
 import { coreT } from "@shared/logic/core-i18n";
 import { showToast } from "@/components/ui/show-toast";
 
@@ -194,11 +194,7 @@ interface ShellNavContextValue {
 const WORKSPACE_MUTATED_DEBOUNCE_MS = 100;
 
 /** 判断 main push 的工作区变更是否影响当前导航上下文。 */
-function workspaceMutatedMatchesNav(
-  payload: WorkspaceMutatedPayload,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): boolean {
+function workspaceMutatedMatchesNav( payload: WorkspaceMutatedPayload, projectId: string | undefined, sessionId: string | undefined ): boolean {
   if (payload.workspaceScope === "global") {
     return true;
   }
@@ -214,13 +210,7 @@ const ShellNavContext = createContext<ShellNavContextValue | undefined>(undefine
 
 /** Maps reconciled scope pointers to the chat-rail drill-down view. */
 
-function viewIdForScope(
-
-  projectId: string | undefined,
-
-  sessionId: string | undefined,
-
-): NavViewId {
+function viewIdForScope( projectId: string | undefined, sessionId: string | undefined ): NavViewId {
 
   if (projectId == null) {
 
@@ -383,10 +373,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   // 接 console.info 日志（MF-5：生产可观测，兑现 chat-link-route 头注承诺）。
   const openChatLink = useCallback(
     (href: string) => {
-      const sessionContext =
-        projectId != null && sessionId != null
-          ? { projectId, sessionId }
-          : null;
+      const sessionContext = projectId != null && sessionId != null ? { projectId, sessionId } : null;
       const projectContext = projectId != null ? { projectId } : null;
       void resolveChatLinkAction(href, {
         sessionContext,
@@ -409,7 +396,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
         }
         if (action.kind === "not-found") {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showToast(coreT(chatLinkResolver.notFoundMessage(action.path)));
+          showToast(coreT(ChatLinkResolver.notFoundMessage(action.path)));
         }
       });
     },
@@ -488,13 +475,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   );
 
   const renamePreviewTab = useCallback(
-    (
-      workspaceScope: PreviewFileSelection["workspaceScope"],
-      oldPath: string,
-      newPath: string,
-    ) => {
-      const newName =
-        newPath === "/" ? "/" : newPath.slice(newPath.lastIndexOf("/") + 1);
+    ( workspaceScope: PreviewFileSelection["workspaceScope"], oldPath: string, newPath: string ) => {
+      const newName = newPath === "/" ? "/" : newPath.slice(newPath.lastIndexOf("/") + 1);
       const oldKey = previewTabKey(workspaceScope, oldPath);
       const newKey = previewTabKey(workspaceScope, newPath);
       setPreviewTabs((prev) =>

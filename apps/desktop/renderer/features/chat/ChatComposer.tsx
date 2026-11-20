@@ -31,7 +31,7 @@ import {
   shouldClearComposerBodyAfterAgentStarted,
   shouldClearComposerBodyOnUserMessageAppended,
 } from "./composer-body-clear";
-import { composerSendPolicy } from "./composer-send-intent";
+import { ComposerSendPolicy } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
 import { SkillTypeahead } from "./SkillTypeahead";
 import { SkillPicker } from "@/features/skills/SkillPicker";
@@ -100,9 +100,7 @@ export function ChatComposer({
   const checkModel = useCallback(async () => {
     const result = await ipcPromptAgentMeta({ projectId, sessionId });
     if (result.ok) {
-      setHasModel(
-        result.data.modelLabel !== "未选择模型" && result.data.modelLabel !== "—",
-      );
+      setHasModel( result.data.modelLabel !== "未选择模型" && result.data.modelLabel !== "—" );
     }
   }, [projectId, sessionId]);
 
@@ -118,9 +116,7 @@ export function ChatComposer({
       if (payload.sessionId !== sessionId) {
         return;
       }
-      onAttachmentsChange(
-        unionComposerStatusWithAnnotate(payload.attachments, sessionId),
-      );
+      onAttachmentsChange( unionComposerStatusWithAnnotate(payload.attachments, sessionId) );
     });
   }, [sessionId, onAttachmentsChange]);
 
@@ -130,12 +126,7 @@ export function ChatComposer({
       if (changedSessionId !== sessionId) {
         return;
       }
-      onAttachmentsChange(
-        unionComposerStatusWithAnnotate(
-          attachmentsRef.current.filter((a) => a.action !== "annotate"),
-          sessionId,
-        ),
-      );
+      onAttachmentsChange( unionComposerStatusWithAnnotate( attachmentsRef.current.filter((a) => a.action !== "annotate"), sessionId ) );
     });
   }, [sessionId, onAttachmentsChange]);
 
@@ -146,10 +137,7 @@ export function ChatComposer({
     return onUserMessageAppended((payload) => {
       chatAnnotateDraftStore.clear(payload.sessionId);
       if (
-        !shouldClearComposerBodyOnUserMessageAppended(
-          payload.sessionId,
-          sessionId,
-        )
+        !shouldClearComposerBodyOnUserMessageAppended( payload.sessionId, sessionId )
       ) {
         return;
       }
@@ -178,9 +166,7 @@ export function ChatComposer({
     }
     let cancelled = false;
     void (async () => {
-      const result = await ipcWorkplaceBuildListRows(
-        vfsScope("session", projectId, sessionId),
-      );
+      const result = await ipcWorkplaceBuildListRows( vfsScope("session", projectId, sessionId) );
       if (cancelled || !result.ok) {
         return;
       }
@@ -276,12 +262,10 @@ export function ChatComposer({
       const replaceEnd = activeTokenQuery != null ? selStart : selEnd;
       const before = value.slice(0, replaceStart);
       const after = value.slice(replaceEnd);
-      const gapBefore =
-        before.length === 0 || /\s$/.test(before) ? "" : " ";
+      const gapBefore = before.length === 0 || /\s$/.test(before) ? "" : " ";
       const joined = tokens.join(" ");
       // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
-      const gapAfter =
-        after.length === 0 || !/^\s/.test(after) ? " " : "";
+      const gapAfter = after.length === 0 || !/^\s/.test(after) ? " " : "";
       const inserted = `${gapBefore}${joined}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
       onChange(next);
@@ -363,9 +347,7 @@ export function ChatComposer({
         attachmentsRef.current.some((a) => a.action === "annotate") &&
         annotateDrafts.length === 0
       ) {
-        console.error(
-          `[annotate-guard] 发送时批注 chip 在而 store 读空 sessionId=${sessionId}`,
-        );
+        console.error( `[annotate-guard] 发送时批注 chip 在而 store 读空 sessionId=${sessionId}` );
       }
 
       const streamResult = await ipcPreferencesGetLlmStream();
@@ -395,9 +377,7 @@ export function ChatComposer({
       const statusRes = await ipcSessionsProjectComposerStatus({ sessionId });
       if (statusRes.ok) {
         // 用 live ref：若 append 已晚清 attachments，避免 stale previous 写回
-        onAttachmentsChange(
-          unionComposerStatusWithAnnotate(statusRes.data, sessionId),
-        );
+        onAttachmentsChange( unionComposerStatusWithAnnotate(statusRes.data, sessionId) );
       }
       return true;
     },
@@ -420,7 +400,7 @@ export function ChatComposer({
       return;
     }
 
-    const intent = composerSendPolicy.evaluate({
+    const intent = ComposerSendPolicy.evaluate({
       text: value,
       canResumeWithoutInput,
       hasAnnotateDrafts: chatAnnotateDraftStore.has(sessionId),
@@ -440,9 +420,8 @@ export function ChatComposer({
     await runAgent(content, allowResumeWithoutInput);
   };
 
-  const inputDisabled =
-    (!hasModel && !running) || lastMessageIsPlainUserText;
-  const sendIntent = composerSendPolicy.evaluate({
+  const inputDisabled = (!hasModel && !running) || lastMessageIsPlainUserText;
+  const sendIntent = ComposerSendPolicy.evaluate({
     text: value,
     canResumeWithoutInput,
     hasAnnotateDrafts: chatAnnotateDraftStore.has(sessionId),
@@ -451,9 +430,7 @@ export function ChatComposer({
   });
   const sendDisabled = sendIntent.sendDisabled;
 
-  const inputPlaceholder = hasModel
-    ? "输入消息…（Ctrl+Enter 发送）"
-    : "请先配置模型（设置 → Provider）";
+  const inputPlaceholder = hasModel ? "输入消息…（Ctrl+Enter 发送）" : "请先配置模型（设置 → Provider）";
 
   return (
     <>

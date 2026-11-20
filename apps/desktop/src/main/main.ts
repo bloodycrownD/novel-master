@@ -4,7 +4,7 @@
 import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chatLinkResolver } from "@novel-master/core/chat";
+import { ChatLinkResolver } from "@novel-master/core/chat";
 import { LogFactory } from "@novel-master/core/log";
 import { DesktopLogSink } from "./log/desktop-log-sink.js";
 import { DesktopDb } from "./runtime/connection.js";
@@ -125,12 +125,12 @@ function createMainWindow(): BrowserWindow {
       return; // dev：vite full-reload 放行
     }
     event.preventDefault();
-    if (chatLinkResolver.isHttp(url)) {
+    if (ChatLinkResolver.isHttp(url)) {
       void shell.openExternal(url).catch(() => undefined);
     }
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (chatLinkResolver.isHttp(url)) {
+    if (ChatLinkResolver.isHttp(url)) {
       void shell.openExternal(url).catch(() => undefined);
     }
     return { action: "deny" };

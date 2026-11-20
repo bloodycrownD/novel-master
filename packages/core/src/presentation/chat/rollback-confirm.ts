@@ -37,31 +37,28 @@ const ROLLBACK_CONFIRM_KEYS = {
   },
 } as const satisfies Record<"primary" | "degraded", Record<RollbackMode, RollbackConfirmKey>>;
 
-/**
- * 解析回滚确认 Alert 的 descriptor。
- *
- * @param mode - 由 `ChatMessage.isUndoSendEligible()` 推导的模式
- * @param kind - primary / degraded / backfill
- * @param ctx - backfill 时需提供缺失快照路径
- */
-class RollbackConfirmView {
-  /** 解析回滚确认 Alert 的 descriptor。 */
-  descriptor(mode: RollbackMode, kind: RollbackConfirmKind, ctx?: { missingPaths?: readonly string[] }): RollbackConfirmDescriptor {
-  if (kind === "backfill") {
-    const missingPaths = ctx?.missingPaths ?? [];
-    const files: ChatMessageDescriptor[] = [];
-    if (missingPaths.length === 0) {
-      files.push({ key: "chat.rollback.confirm.backfill.file.empty" });
-    } else {
-      for (const path of missingPaths) {
-        files.push({ key: "chat.rollback.confirm.backfill.file", params: { path: path.startsWith("/") ? path.slice(1) : path } });
+export namespace RollbackConfirmView {
+  /**
+   * 解析回滚确认 Alert 的 descriptor。
+   *
+   * @param mode - 由 `ChatMessage.isUndoSendEligible()` 推导的模式
+   * @param kind - primary / degraded / backfill
+   * @param ctx - backfill 时需提供缺失快照路径
+   */
+  export function descriptor(mode: RollbackMode, kind: RollbackConfirmKind, ctx?: { missingPaths?: readonly string[] }): RollbackConfirmDescriptor {
+    if (kind === "backfill") {
+      const missingPaths = ctx?.missingPaths ?? [];
+      const files: ChatMessageDescriptor[] = [];
+      if (missingPaths.length === 0) {
+        files.push({ key: "chat.rollback.confirm.backfill.file.empty" });
+      } else {
+        for (const path of missingPaths) {
+          files.push({ key: "chat.rollback.confirm.backfill.file", params: { path: path.startsWith("/") ? path.slice(1) : path } });
+        }
       }
+      const tailKey = mode === "undo_send" ? "chat.rollback.confirm.backfill.tail.undo_send" : "chat.rollback.confirm.backfill.tail.rewind";
+      return { key: "chat.rollback.confirm.backfill", params: { files, tail: { key: tailKey } } };
     }
-    const tailKey = mode === "undo_send" ? "chat.rollback.confirm.backfill.tail.undo_send" : "chat.rollback.confirm.backfill.tail.rewind";
-    return { key: "chat.rollback.confirm.backfill", params: { files, tail: { key: tailKey } } };
+    return { key: ROLLBACK_CONFIRM_KEYS[kind][mode] };
   }
-  return { key: ROLLBACK_CONFIRM_KEYS[kind][mode] };
 }
-}
-
-export const rollbackConfirm = new RollbackConfirmView();

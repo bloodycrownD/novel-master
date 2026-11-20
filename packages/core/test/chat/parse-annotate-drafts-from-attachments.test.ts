@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  AttachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {  AnnotateDraftSchema, type AnnotateDraft  } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
@@ -41,8 +41,8 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
       originalText: "选中原文",
       userAnnotation: "请改短",
     };
-    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
-    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
+    const att = AttachmentXmlCodec.encodeAnnotateAttachment(draft);
+    const parsed = AttachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.path, "/chapter/a.md");
     assert.equal(parsed[0]!.originalText, "选中原文");
@@ -63,10 +63,10 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     };
     assert.ok(AnnotateDraftSchema.isMessagePath(withSlash.path));
 
-    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([
+    const parsed = AttachmentXmlCodec.decodeAnnotateDrafts([
       msgAtt,
       withSlash,
-      attachmentXmlCodec.encodeAnnotateAttachment({
+      AttachmentXmlCodec.encodeAnnotateAttachment({
         id: "f1",
         path: "/ok.md",
         originalText: "a",
@@ -82,11 +82,11 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     assert.equal(att.path, "__message__:msg-y:draft-x");
     assert.equal(att.name, att.path);
     assert.ok(AnnotateDraftSchema.isMessagePath(att.path));
-    assert.equal(attachmentXmlCodec.decodeAnnotateDrafts([att]).length, 0);
+    assert.equal(AttachmentXmlCodec.decodeAnnotateDrafts([att]).length, 0);
   });
 
   it("非 annotate / 空 path 跳过", () => {
-    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([
+    const parsed = AttachmentXmlCodec.decodeAnnotateDrafts([
       {
         name: "/a.md",
         source: "attach",

@@ -2,7 +2,7 @@
  * Mobile annotate store 直连 core 烟测（主测在 core；T-X2-3）。
  */
 import {describe, expect, it, afterEach} from '@jest/globals';
-import { chatAnnotateDraftStore, composerSendPolicy } from '@novel-master/core/chat';
+import { chatAnnotateDraftStore, ComposerSendPolicy } from '@novel-master/core/chat';
 
 afterEach(() => {
   chatAnnotateDraftStore.resetForTests();
@@ -25,7 +25,7 @@ describe('chat-annotate-draft wiring', () => {
   });
 
   it('T-AN4: 仅 hasAnnotateDrafts → resolveComposerSendIntent 可发', () => {
-    const intent = composerSendPolicy.evaluate({
+    const intent = ComposerSendPolicy.evaluate({
       text: '',
       canResumeWithoutInput: false,
       hasAnnotateDrafts: true,

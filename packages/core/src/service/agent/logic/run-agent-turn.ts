@@ -43,7 +43,7 @@ import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, EVENT_SUBAGENT_CHILD_
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { AttachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import { AttachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
@@ -665,7 +665,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
       const annotateVfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
       const annotatePending = annotateDrafts.map(async (draft) => {
         if (draft.startLine != null && draft.endLine != null) {
-          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+          return AttachmentXmlCodec.encodeAnnotateAttachment(draft);
         }
         let sourceText: string | undefined;
         const source = await annotateVfs.read(draft.path);
@@ -674,11 +674,11 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
         }
         // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
         if (typeof sourceText !== "string" || sourceText.length === 0) {
-          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+          return AttachmentXmlCodec.encodeAnnotateAttachment(draft);
         }
         const needle = draft.originalText.replace(/\u00a0/g, " ");
         if (needle.length === 0) {
-          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+          return AttachmentXmlCodec.encodeAnnotateAttachment(draft);
         }
         let at = sourceText.indexOf(needle);
         let matchLen = needle.length;
@@ -688,7 +688,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
           const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
           at = normSource.indexOf(normNeedle);
           if (at < 0) {
-            return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+            return AttachmentXmlCodec.encodeAnnotateAttachment(draft);
           }
           matchLen = normNeedle.length;
           haystack = normSource;
@@ -702,7 +702,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
           startCol: start.col,
           endCol: end.col,
         };
-        return attachmentXmlCodec.encodeAnnotateAttachment(enriched);
+        return AttachmentXmlCodec.encodeAnnotateAttachment(enriched);
       });
       const annotateAttachments = await Promise.all(annotatePending);
 

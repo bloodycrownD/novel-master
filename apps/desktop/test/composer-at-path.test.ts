@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AttachmentScanner } from "@shared/logic/chat";
 import { composerAtPath } from "@/features/chat/composer-at-path";
-import { composerSendPolicy } from "@/features/chat/composer-send-intent";
+import { ComposerSendPolicy } from "@/features/chat/composer-send-intent";
 import { renderComposerAtPathHighlightHtml } from "@/features/chat/ComposerAtPathInput";
 
 test("T-ATD2: Picker 确认 token 为 @path；目录带尾 /；扫描落库带前导 /", () => {
@@ -41,7 +41,7 @@ test("findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭", 
 });
 
 test("T-ATD4: 删除正文 @path 后门闩扫描无该 path", () => {
-  const withAt = composerSendPolicy.evaluate({
+  const withAt = ComposerSendPolicy.evaluate({
     text: "看 @/a.md",
     canResumeWithoutInput: false,
     hasModel: true,
@@ -50,7 +50,7 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path", () => {
   assert.equal(withAt.attachOnly.length, 0);
   assert.equal(AttachmentScanner.scanAtPaths("看 @/a.md").length, 1);
 
-  const without = composerSendPolicy.evaluate({
+  const without = ComposerSendPolicy.evaluate({
     text: "",
     canResumeWithoutInput: false,
     hasModel: true,
@@ -61,7 +61,7 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path", () => {
 });
 
 test("T-CR3/门闩: 空输入 → 不可发；attachOnly 恒空", () => {
-  const intent = composerSendPolicy.evaluate({
+  const intent = ComposerSendPolicy.evaluate({
     text: "",
     canResumeWithoutInput: false,
     hasModel: true,

@@ -32,7 +32,7 @@ import type {SkillToolRef} from '@novel-master/core/chat';
 import {ChatStreamMetricsBarLive, SettledMetrics} from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatConversationWebView} from '../../components/chat/ChatConversationWebView';
 import {AppToast} from '@/services/app-toast';
-import {chatLinkResolver} from '@novel-master/core/chat';
+import {ChatLinkResolver} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
 import {promptTurnDetailSlot} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -212,7 +212,7 @@ export function SubagentSessionScreen() {
           }
           if (intent.kind === 'not-found') {
             // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-            AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
+            AppToast.show(coreT(ChatLinkResolver.notFoundMessage(intent.path)));
             return;
           }
           if (intent.kind === 'file') {

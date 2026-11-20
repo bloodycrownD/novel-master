@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { attachmentXmlCodec, chatAnnotateDraftStore } from "@shared/logic/chat";
+import { AttachmentXmlCodec, chatAnnotateDraftStore } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { applyUndoAnnotateRestore } from "@/features/chat/rollback-annotate-restore";
 
@@ -23,7 +23,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
       originalText: "未发送原文",
       userAnnotation: "未发送说明",
     });
-    const annotateAtt = attachmentXmlCodec.encodeAnnotateAttachment({
+    const annotateAtt = AttachmentXmlCodec.encodeAnnotateAttachment({
       id: "sent-ann",
       path: "/chapter/a.md",
       originalText: "选中原文",

@@ -19,12 +19,12 @@ export type { RollbackMode } from "@novel-master/core/presentation/chat/rollback
 export {
   ChatMessage,
   chatAnnotateDraftStore,
-  chatLinkResolver,
+  ChatLinkResolver,
   composerAtPath,
-  attachmentXmlCodec,
+  AttachmentXmlCodec,
   ComposerDraftSchema,
   composerChips,
-  composerSendPolicy,
+  ComposerSendPolicy,
   SkillToolRefResolver,
   VfsToolFilePath,
   AttachmentScanner,
@@ -35,4 +35,4 @@ export {
 } from "@novel-master/core/chat";
 export { ToolSummary } from "@novel-master/core/presentation/chat/tool-summary.js";
 export { AttachmentChip } from "@novel-master/core/presentation/chat/attachment-chip.js";
-export { rollbackConfirm } from "@novel-master/core/presentation/chat/rollback-confirm.js";
+export { RollbackConfirmView } from "@novel-master/core/presentation/chat/rollback-confirm.js";

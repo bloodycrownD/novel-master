@@ -18,7 +18,7 @@ import { TextBlocks } from "../../content/text-blocks.js";
 import type { ChatMessageData } from "../../model/message.js";
 import type { MessageAttachment } from "../../model/message-attachment.schema.js";
 import { AttachBudget, BINARY_ATTACH_NOTE, OVERSIZED_ATTACH_NOTE } from "../attachment/attach-budget.js";
-import { attachmentXmlCodec } from "../attachment/attachment-xml-codec.js";
+import { AttachmentXmlCodec } from "../attachment/attachment-xml-codec.js";
 import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import { promptPathSeen } from "../attachment/prompt-path-seen.js";
 import { AttachmentScanner } from "../attachment/attachment-scanner.js";
@@ -71,10 +71,10 @@ interface FileRefActionOpts {
 function fileRefAction(source: "attach" | "workplace", logicalPath: string, display: WorkplaceDisplayStatus, rawContent: string, opts?: FileRefActionOpts): string {
   const action = source === "workplace" ? ("workplaceChange" as const) : ("userAttach" as const);
   if (opts?.noteText != null) {
-    return attachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: opts.noteText, display });
+    return AttachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: opts.noteText, display });
   }
   if (opts?.oversized === true) {
-    return attachmentXmlCodec.encodeFileRef({
+    return AttachmentXmlCodec.encodeFileRef({
       action,
       path: logicalPath,
       content: OVERSIZED_ATTACH_NOTE,
@@ -82,7 +82,7 @@ function fileRefAction(source: "attach" | "workplace", logicalPath: string, disp
     });
   }
   const lineBody = opts?.bodyIsRendered === true ? rawContent : WorkplaceDisplay.renderFileBlockBody({ logicalPath, display, content: rawContent });
-  return attachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: lineBody, display });
+  return AttachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: lineBody, display });
 }
 
 function isOversizedAttach(attachment: MessageAttachment, plainLength: number, budget: AttachBudget): boolean {
@@ -177,7 +177,7 @@ export class AttachmentHydrator {
             ...attachment,
             path: logicalPath,
             action: "userAttach",
-            content: attachmentXmlCodec.encodeDirTree(logicalPath, body),
+            content: AttachmentXmlCodec.encodeDirTree(logicalPath, body),
           };
         }
       } else {
@@ -191,7 +191,7 @@ export class AttachmentHydrator {
           ...attachment,
           path: logicalPath,
           action: "userAttach",
-          content: attachmentXmlCodec.encodeDirTree(logicalPath, tree),
+          content: AttachmentXmlCodec.encodeDirTree(logicalPath, tree),
         };
       }
       this.seen.add(logicalPath);

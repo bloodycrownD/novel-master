@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  AttachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {  annotateDraftSchema, type AnnotateDraft  } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
@@ -114,11 +114,11 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       renderStart: 12,
       renderEnd: 17,
     };
-    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
+    const att = AttachmentXmlCodec.encodeAnnotateAttachment(draft);
     assert.match(att.content ?? "", /"renderStart": 12/);
     assert.match(att.content ?? "", /"renderEnd": 17/);
 
-    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
+    const parsed = AttachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.notEqual(parsed[0]!.id, "orig");
     assert.equal(parsed[0]!.path, "/round.md");
@@ -136,7 +136,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       path: "/legacy.md",
       action: "annotate",
     };
-    const legacyParsed = attachmentXmlCodec.decodeAnnotateDrafts([legacyAtt]);
+    const legacyParsed = AttachmentXmlCodec.decodeAnnotateDrafts([legacyAtt]);
     assert.equal(legacyParsed.length, 1);
     assert.equal(legacyParsed[0]!.renderStart, undefined);
     assert.equal(legacyParsed[0]!.renderEnd, undefined);
@@ -154,7 +154,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       path: "/broken.md",
       action: "annotate",
     };
-    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([brokenAtt]);
+    const parsed = AttachmentXmlCodec.decodeAnnotateDrafts([brokenAtt]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.renderStart, undefined);
     assert.equal(parsed[0]!.renderEnd, undefined);

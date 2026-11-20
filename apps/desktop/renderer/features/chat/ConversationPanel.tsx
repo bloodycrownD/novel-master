@@ -1,14 +1,11 @@
 import {
   ChatMessage,
   ComposerDraftSchema,
-  rollbackConfirm,
+  RollbackConfirmView,
   type RollbackMode,
 } from '@shared/logic/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  ChatMessageDto,
-  MessageAttachmentDto,
-} from '@shared/ipc-types';
+import type { ChatMessageDto, MessageAttachmentDto } from '@shared/ipc-types';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
@@ -43,9 +40,7 @@ import { showToast } from '@/components/ui/show-toast';
 import { formatUserError } from '@/utils/format-user-error';
 import { chatTranslator } from '@/i18n/chat';
 import { ChatComposer } from './ChatComposer';
-import {
-  unionComposerStatusWithAnnotate,
-} from './chat-annotate-draft';
+import { unionComposerStatusWithAnnotate } from './chat-annotate-draft';
 import {
   deriveComposerSendState,
   findLastVisibleMessageDto,
@@ -395,12 +390,7 @@ export function ConversationPanel({
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
-      handleStepCommittedAbortRetain(
-        payload,
-        abortRetainLifecycle,
-        reloadMessages,
-        onStreamReset,
-      );
+      handleStepCommittedAbortRetain( payload, abortRetainLifecycle, reloadMessages, onStreamReset );
       // Desktop-only 实时消费方 ①：Agent 工具突变后立即刷新 Explorer
       if (payload.vfsMutated) {
         vfsMutatedInRunRef.current = true;
@@ -428,11 +418,7 @@ export function ConversationPanel({
       // abort-retain 的 overlay 兜底又是空的（没有半截流式文本）→ 用户消息
       // 已落库却永不刷新，而 composer 正文已被清空 = 消息凭空消失。
       // 判据实现与理由见 shouldReloadOnRunFinished 的注释。
-      const shouldReload = shouldReloadOnRunFinished(
-        getUiRunning(),
-        getTranscriptFreezeCount(),
-        payload.runId,
-      );
+      const shouldReload = shouldReloadOnRunFinished( getUiRunning(), getTranscriptFreezeCount(), payload.runId );
       const accepted = handleRunFinishedAbortRetain(payload, abortRetainLifecycle, {
         finishUiRun,
         shouldReloadAfterFinish: shouldReload,
@@ -754,16 +740,10 @@ export function ConversationPanel({
         notifyWorkspaceMutated();
       }
       // 通知 SessionDetailDrawer 这类订阅方刷新（与 session-compacted 同范式，按 sessionId 过滤）
-      window.dispatchEvent(
-        new CustomEvent('messages-rollback', { detail: { sessionId } }),
-      );
+      window.dispatchEvent( new CustomEvent('messages-rollback', { detail: { sessionId } }) );
       // D8：main 已推空 ops；renderer 仅正文 + annotate ∪（禁止用 prev 盖回旧 user_ops chip）
       setComposerText(prevText => {
-        const next = resolveComposerDraftAfterRollbackSuccess(
-          { text: prevText, attachments: [] },
-          rollbackMode,
-          { text: restoreText, attachments: restoreAttachments },
-        );
+        const next = resolveComposerDraftAfterRollbackSuccess( { text: prevText, attachments: [] }, rollbackMode, { text: restoreText, attachments: restoreAttachments } );
         setComposerAttachments(
           applyUndoAnnotateRestore(
             sessionId,
@@ -889,9 +869,7 @@ export function ConversationPanel({
       showToast(changed ? '已置位' : '上下文已是最新状态');
       // 置位改变了上下文范围，token 计数随之变化。派发 context-changed 让
       // SessionDetailDrawer 这类订阅方按 sessionId 过滤后刷新自己的统计（回滚仍走 messages-rollback，不复用同一事件以免语义混淆）。
-      window.dispatchEvent(
-        new CustomEvent('context-changed', { detail: { sessionId } }),
-      );
+      window.dispatchEvent( new CustomEvent('context-changed', { detail: { sessionId } }) );
     }
   }, [
     confirmState,
@@ -908,35 +886,21 @@ export function ConversationPanel({
       return '此消息之前将不参与提示词，此消息及之后将恢复可见。';
     }
     if (confirmState.kind === 'rollback-degraded') {
-      const message = chatTranslator(rollbackConfirm.descriptor(confirmState.rollbackMode, 'degraded'));
+      const message = chatTranslator(RollbackConfirmView.descriptor(confirmState.rollbackMode, 'degraded'));
       return `${confirmState.errorMessage}\n\n${message}`;
     }
     if (confirmState.kind === 'rollback-backfill') {
-      return chatTranslator(rollbackConfirm.descriptor(confirmState.rollbackMode, 'backfill', { missingPaths: confirmState.missingLogicalPaths }));
+      return chatTranslator(RollbackConfirmView.descriptor(confirmState.rollbackMode, 'backfill', { missingPaths: confirmState.missingLogicalPaths }));
     }
     if (confirmState.kind === 'rollback') {
-      return chatTranslator(rollbackConfirm.descriptor(confirmState.rollbackMode, 'primary'));
+      return chatTranslator(RollbackConfirmView.descriptor(confirmState.rollbackMode, 'primary'));
     }
     return '';
   })();
 
-  const confirmTitle =
-    confirmState?.kind === 'set-floor'
-      ? '置位到此消息？'
-      : confirmState?.kind === 'rollback-degraded'
-      ? '无法恢复工作区'
-      : confirmState?.kind === 'rollback-backfill'
-      ? '快照丢失'
-      : '确认操作';
+  const confirmTitle = confirmState?.kind === 'set-floor' ? '置位到此消息？' : confirmState?.kind === 'rollback-degraded' ? '无法恢复工作区' : confirmState?.kind === 'rollback-backfill' ? '快照丢失' : '确认操作';
 
-  const confirmLabel =
-    confirmState?.kind === 'set-floor'
-      ? '置位'
-      : confirmState?.kind === 'rollback-degraded'
-      ? '仅删除后续对话'
-      : confirmState?.kind === 'rollback-backfill'
-      ? '继续回滚'
-      : '确定';
+  const confirmLabel = confirmState?.kind === 'set-floor' ? '置位' : confirmState?.kind === 'rollback-degraded' ? '仅删除后续对话' : confirmState?.kind === 'rollback-backfill' ? '继续回滚' : '确定';
 
   return (
     <>
@@ -1099,10 +1063,7 @@ export function ConversationPanel({
 
 /** 手动压缩：成功后派发 session-compacted 事件，让 ConversationPanel 重新拉取消息列表。 */
 // nm-style: keep-local — session-detail-drawer.test 以源码正则锁名（runCompaction…new CustomEvent('context-changed',）与 compaction-handler.test 的注释链都指名本函数；内联/改名会破坏测试锁名。
-export async function runCompaction(
-  projectId: string,
-  sessionId: string,
-): Promise<void> {
+export async function runCompaction( projectId: string, sessionId: string ): Promise<void> {
   const result = await ipcCompactionManual({ projectId, sessionId });
   if (!result.ok) {
     showToast(result.error.message);
@@ -1115,12 +1076,8 @@ export async function runCompaction(
   showToast('已压缩');
   // 压缩成功后 DB 里旧消息的 hidden 已置 true，但前端内存里的消息列表不会自动刷新。
   // session-compacted：让 ConversationPanel 重新拉取消息列表，使隐藏样式即时生效。
-  window.dispatchEvent(
-    new CustomEvent('session-compacted', { detail: { sessionId } }),
-  );
+  window.dispatchEvent( new CustomEvent('session-compacted', { detail: { sessionId } }) );
   // context-changed：上下文范围变了，token 计数也要刷新。SessionDetailDrawer
   // 订阅它来 reload 自己的统计（与置位共用同一事件，便于统一维护）。
-  window.dispatchEvent(
-    new CustomEvent('context-changed', { detail: { sessionId } }),
-  );
+  window.dispatchEvent( new CustomEvent('context-changed', { detail: { sessionId } }) );
 }

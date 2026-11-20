@@ -39,7 +39,7 @@ export {
 export { UserMessageFormatter } from "../domain/chat/logic/prompt/user-message-formatter.js";
 export { PromptAssembler } from "../domain/chat/logic/prompt/prompt-assembler.js";
 export { attachmentPath } from "../domain/chat/logic/message/attachment-path.js";
-export { attachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
+export { AttachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
 export { promptPathSeen } from "../domain/chat/logic/attachment/prompt-path-seen.js";
 export { AttachmentScanner } from "../domain/chat/logic/attachment/attachment-scanner.js";
 export type {
@@ -56,8 +56,8 @@ export { TextBlocks } from "../domain/chat/content/text-blocks.js";
 export { MessageContentParse } from "../domain/chat/content/parse-message-content.js";
 export { MessageCliFormat } from "../domain/chat/content/format-message-cli.js";
 export { MessageMetadata } from "../domain/chat/model/message-metadata.js";
-export { chatLinkResolver } from "../domain/chat/logic/resolve-chat-link-target.js";
-export { composerSendPolicy } from "../domain/chat/logic/composer/composer-send-policy.js";
+export { ChatLinkResolver } from "../domain/chat/logic/resolve-chat-link-target.js";
+export { ComposerSendPolicy } from "../domain/chat/logic/composer/composer-send-policy.js";
 export { composerChips } from "../domain/chat/logic/composer/composer-chips.js";
 export { composerAtPath } from "../domain/chat/logic/composer/composer-at-path.js";
 export type { AtPathRef } from "../domain/chat/logic/composer/composer-at-path.js";

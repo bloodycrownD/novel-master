@@ -22,7 +22,7 @@ import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-sa
 import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 import {SessionDefaultTitle} from '@/utils/session-default-title';
 import {ChatLinkNav} from './chat-link-nav';
-import {chatLinkResolver} from '@novel-master/core/chat';
+import {ChatLinkResolver} from '@novel-master/core/chat';
 import {Result, AppError} from '@novel-master/core/errors';
 import {coreT} from '@/i18n/core';
 
@@ -844,7 +844,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         }
         if (intent.kind === 'not-found') {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
+          AppToast.show(coreT(ChatLinkResolver.notFoundMessage(intent.path)));
         }
       });
     },

@@ -15,9 +15,9 @@ import {UserVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
 type AttachmentDisplayKind = "full" | "filename" | "header";
 
 /** 附件 XML 编解码器。 */
-class AttachmentXmlCodec {
+export namespace AttachmentXmlCodec {
     /** `userAttach` / `workplaceChange`：全文 / filename / header（行号正文）。 */
-    encodeFileRef(params: {
+    export function encodeFileRef(params: {
         readonly action: "userAttach" | "workplaceChange";
         readonly path: string;
         readonly content: string;
@@ -31,7 +31,7 @@ class AttachmentXmlCodec {
     }
 
     /** 目录树：`kind: "dirTree"`，content = ASCII 树（无外层 `<dir>`）。 */
-    encodeDirTree(path: string, treeBody: string): string {
+    export function encodeDirTree(path: string, treeBody: string): string {
         return UserVfsActionXml.build("userAttach", {
             path,
             content: treeBody,
@@ -40,7 +40,7 @@ class AttachmentXmlCodec {
     }
 
     /** 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。 */
-    encodeAnnotateAttachment(draft: AnnotateDraft): MessageAttachment {
+    export function encodeAnnotateAttachment(draft: AnnotateDraft): MessageAttachment {
         const path = draft.path;
         const params: Record<string, unknown> = {
             path,
@@ -71,7 +71,7 @@ class AttachmentXmlCodec {
     }
 
     /** 从消息 attachments 解析可 Undo 恢复的工作区批注草稿；每条新 mint id。 */
-    decodeAnnotateDrafts(attachments: readonly MessageAttachment[] | null | undefined): AnnotateDraft[] {
+    export function decodeAnnotateDrafts(attachments: readonly MessageAttachment[] | null | undefined): AnnotateDraft[] {
         if (attachments == null || attachments.length === 0) {
             return [];
         }
@@ -131,5 +131,3 @@ class AttachmentXmlCodec {
         return out;
     }
 }
-
-export const attachmentXmlCodec = new AttachmentXmlCodec();

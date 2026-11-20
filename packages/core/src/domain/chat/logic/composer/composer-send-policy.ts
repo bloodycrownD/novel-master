@@ -22,8 +22,8 @@ type ComposerSendIntent = {
 };
 
 /** 发送门闩策略。 */
-class ComposerSendPolicy {
-    evaluate(input: ComposerSendIntentInput): ComposerSendIntent {
+export namespace ComposerSendPolicy {
+    export function evaluate(input: ComposerSendIntentInput): ComposerSendIntent {
         const content = input.text.trim();
         const scannedCount = AttachmentScanner.scanAtPaths(input.text).length + AttachmentScanner.scanSkills(input.text).length;
         const hasSendable = content !== "" || scannedCount > 0 || input.hasAnnotateDrafts === true;
@@ -34,5 +34,3 @@ class ComposerSendPolicy {
         return {hasSendable, allowResumeWithoutInput, attachOnly: [], sendDisabled};
     }
 }
-
-export const composerSendPolicy = new ComposerSendPolicy();

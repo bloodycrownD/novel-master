@@ -4,7 +4,7 @@ import {  readFileSync  } from "node:fs";
 import {  join  } from "node:path";
 import {  describe, it  } from "node:test";
 import {  TextBlocks, UserMessageFormatter, type ChatMessageData, type  ContentBlock  } from "@novel-master/core/chat";
-import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  AttachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 
 /** DTO 断言 helper：summaryText 为 MessageLike、metaText 为 MessageLike[]（G3.5），渲染后比对。 */
@@ -1371,7 +1371,7 @@ describe("T-PL8 metaText 字数按剥后正文", () => {
 describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   /** 走生产构造器拼 wrap 形态，保证 fixture 与 wire 侧同源。 */
   function userAttachBody(content: string, path = "notes/a.md"): string {
-    const actionXml = attachmentXmlCodec.encodeFileRef({
+    const actionXml = AttachmentXmlCodec.encodeFileRef({
       action: "userAttach",
       path,
       content,
@@ -1455,7 +1455,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     // `LINE_NUMBERED_ATTACHMENT_ACTION` 显式枚举 `userAttach|workplaceChange`
     // 两个 action；此前只测了前者。工作区规则调整变更卡（workplaceChange）
     // 是生产常客，枚举被误改/收窄成只 userAttach 时本用例红。
-    const actionXml = attachmentXmlCodec.encodeFileRef({
+    const actionXml = AttachmentXmlCodec.encodeFileRef({
       action: "workplaceChange",
       path: "notes/a.md",
       content: "1|第一行\n2|第二行",
@@ -1497,7 +1497,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("dirTree 块不动（ASCII 树不构成 `^ *\\d+\\|`）", async () => {
-    const actionXml = attachmentXmlCodec.encodeDirTree("notes", "notes/\n├── sub/\n└── a.md");
+    const actionXml = AttachmentXmlCodec.encodeDirTree("notes", "notes/\n├── sub/\n└── a.md");
     const wrapped = UserMessageFormatter.wrapForLlm("看下目录", [
       { name: "notes", source: "attach", type: "text", content: actionXml },
     ]);
@@ -1507,7 +1507,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
 
   it("binary / 超限降级文案零改动", async () => {
     for (const note of ["二进制文件，不提供正文", "文件过长，可用 read 配合 offset/limit 分段读取"]) {
-      const actionXml = attachmentXmlCodec.encodeFileRef({
+      const actionXml = AttachmentXmlCodec.encodeFileRef({
         action: "userAttach",
         path: "a.bin",
         content: note,

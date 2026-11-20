@@ -7,8 +7,8 @@ import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {rollbackConfirm} from '@novel-master/core/presentation/chat/rollback-confirm.js';
-import {type ChatMessageData, ChatMessage, attachmentXmlCodec} from '@novel-master/core/chat';
+import {RollbackConfirmView} from '@novel-master/core/presentation/chat/rollback-confirm.js';
+import {type ChatMessageData, ChatMessage, AttachmentXmlCodec} from '@novel-master/core/chat';
 
 import {FormatError} from '@/errors/format-error';
 import {chatTranslator} from '@/i18n/chat';
@@ -229,7 +229,7 @@ export function useChatTabMessageActions({
         }
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
-          const restoredAnnotate = attachmentXmlCodec.decodeAnnotateDrafts(attachmentsSnapshot);
+          const restoredAnnotate = AttachmentXmlCodec.decodeAnnotateDrafts(attachmentsSnapshot);
           for (const draft of restoredAnnotate) {
             chatAnnotateDraftStore.add(sessionId, draft);
           }
@@ -249,7 +249,7 @@ export function useChatTabMessageActions({
         const onRollbackFailure = (error: unknown): void => {
           if (!options?.skipVfsReconcile && !options?.revisionHeadBackfill && RollbackErrorGuards.isRevisionBackfillRequired(error)) {
             const missingPaths = RollbackErrorGuards.readRevisionBackfillMissingPaths(error);
-            Alert.alert('快照丢失', chatTranslator(rollbackConfirm.descriptor(mode, 'backfill', {missingPaths})), [
+            Alert.alert('快照丢失', chatTranslator(RollbackConfirmView.descriptor(mode, 'backfill', {missingPaths})), [
               {text: '取消', style: 'cancel'},
               {
                 text: '继续回滚',
@@ -267,7 +267,7 @@ export function useChatTabMessageActions({
           }
           if (!options?.skipVfsReconcile && RollbackErrorGuards.isVfsDegradable(error)) {
             const errorMessage = FormatError.format(error);
-            const confirmMessage = chatTranslator(rollbackConfirm.descriptor(mode, 'degraded'));
+            const confirmMessage = chatTranslator(RollbackConfirmView.descriptor(mode, 'degraded'));
             Alert.alert('无法恢复工作区', `${errorMessage}\n\n${confirmMessage}`, [
               {text: '取消', style: 'cancel'},
               {
@@ -343,7 +343,7 @@ export function useChatTabMessageActions({
         }
       };
 
-      Alert.alert('回滚到此消息', chatTranslator(rollbackConfirm.descriptor(mode, 'primary')), [
+      Alert.alert('回滚到此消息', chatTranslator(RollbackConfirmView.descriptor(mode, 'primary')), [
         {text: '取消', style: 'cancel'},
         {
           text: '回滚',

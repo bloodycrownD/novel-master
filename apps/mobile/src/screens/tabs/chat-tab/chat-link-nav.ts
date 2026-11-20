@@ -12,7 +12,7 @@
  * @module screens/tabs/chat-tab/chat-link-nav
  */
 
-import {chatLinkResolver} from '@novel-master/core/chat';
+import {ChatLinkResolver} from '@novel-master/core/chat';
 import type {AppError, Result} from '@novel-master/core/errors';
 import type {VfsListEntry} from '@novel-master/core/vfs';
 
@@ -35,11 +35,11 @@ export const ChatLinkNav = {
    */
   resolveChatLinkIntent: async (href: string, deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null}): Promise<ChatLinkOpenIntent> => {
     const trimmed = href.trim();
-    if (chatLinkResolver.isHttp(trimmed)) {
+    if (ChatLinkResolver.isHttp(trimmed)) {
       return {kind: 'external', url: trimmed};
     }
     // mailto 及其它 scheme、非法序列、纯锚点等均为 null → 维持现状无动作
-    const target = chatLinkResolver.resolve(trimmed);
+    const target = ChatLinkResolver.resolve(trimmed);
     if (target == null) {
       return {kind: 'none'};
     }

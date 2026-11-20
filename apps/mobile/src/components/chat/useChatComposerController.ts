@@ -37,7 +37,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
-import {chatAnnotateDraftStore, composerSendPolicy, AttachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
+import {chatAnnotateDraftStore, ComposerSendPolicy, AttachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -592,7 +592,7 @@ export function useChatComposerController({
 
   const sendIntent = useMemo(
     () =>
-      composerSendPolicy.evaluate({
+      ComposerSendPolicy.evaluate({
         text,
         canResumeWithoutInput,
         hasAnnotateDrafts,
