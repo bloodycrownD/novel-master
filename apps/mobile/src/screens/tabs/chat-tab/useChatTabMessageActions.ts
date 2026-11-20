@@ -12,6 +12,7 @@ import {type ChatMessageData, ChatMessage, AttachmentXmlCodec} from '@novel-mast
 
 import {FormatError} from '@/errors/format-error';
 import {chatTranslator} from '@/i18n/chat';
+import {coreT} from '@/i18n/core';
 import {ToastMessage} from '@/errors/toast-message';
 import {MessageEdit} from '@/components/chat/message-edit';
 import {RollbackErrorGuards} from '@novel-master/core/message-checkpoint';
@@ -82,7 +83,7 @@ export function useChatTabMessageActions({
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
-      showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法压缩'));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.please_wait"}), coreT({key: "ui.chat.agent_running_compact_blocked"})));
       return;
     }
     if (projectId == null || sessionId == null) {
@@ -92,8 +93,8 @@ export function useChatTabMessageActions({
     // 「入口 + hide 开始前」，action toast 的 8s 行动窗口与之匹配；hide 之后
     // 取消无效，压缩按原语义跑完（hide → invalidate → KKV 清理不可中断）。
     const showCompactionCancel = () => {
-      showToast('正在压缩上下文…', {
-        actionLabel: '取消压缩',
+      showToast(coreT({key: "ui.chat.compacting_toast"}), {
+        actionLabel: coreT({key: "ui.session.cancel_compact"}),
         onAction: () => {
           runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
         },
@@ -103,8 +104,8 @@ export function useChatTabMessageActions({
       showCompactionCancel();
       return;
     }
-    Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.session.compact_context"}), coreT({key: "ui.session.compact_confirm_msg"}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
         text: '压缩',
         onPress: () => {
@@ -133,7 +134,7 @@ export function useChatTabMessageActions({
                 projectId,
                 sessionId,
               });
-              showToast('已压缩');
+              showToast(coreT({key: "ui.chat.compact_done"}));
             },
           };
           // 取消走返回值（Outcome.cancelled/replaced）：只留「已取消压缩」提示
@@ -142,7 +143,7 @@ export function useChatTabMessageActions({
           // 就是 unhandled rejection。
           void ManualCompactionService.run(runtime, {projectId, sessionId}, compactionHooks)
             .then(outcome => {
-              if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast('已取消压缩');
+              if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast(coreT({key: "ui.chat.compact_cancelled"}));
             })
             .catch((error: unknown) => {
               showToast(ToastMessage.toast('压缩失败', error));
@@ -161,7 +162,7 @@ export function useChatTabMessageActions({
         return;
       }
       if (agentRunning) {
-        showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法分叉'));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.please_wait"}), coreT({key: "ui.chat.agent_running_fork_blocked"})));
         return;
       }
       try {
@@ -179,7 +180,7 @@ export function useChatTabMessageActions({
         setChatSubview('conversation');
         setConversationPanel('chat');
         resetStreamingDisplay();
-        showToast(`已分叉：${forked.value.title ?? forked.value.id}`);
+        showToast(coreT({key: "ui.chat.fork_done", params: {name: forked.value.title ?? forked.value.id}}));
       } catch (error) {
         showToast(ToastMessage.toast('分叉失败', error));
       }
@@ -195,13 +196,13 @@ export function useChatTabMessageActions({
       if (agentRunning) {
         // run 在途时回滚不可用。toast 一闪即逝，用户极易错过、感知为
         // 「点了没反应/确认框迟迟不弹」——改用模态弹窗把原因说清楚。
-        Alert.alert('暂时无法回滚', 'Agent 正在运行，请先停止生成或等本轮完成后再回滚。', [{text: '知道了', style: 'cancel'}]);
+        Alert.alert(coreT({key: "ui.chat.rollback_blocked_title"}), coreT({key: "ui.chat.rollback_blocked_msg"}), [{text: coreT({key: "ui.common.understood"}), style: 'cancel'}]);
         return;
       }
 
       const target = chatMessages.find(m => m.id === messageId);
       if (target == null) {
-        showToast(ToastMessage.toast('回滚失败', '消息不存在'));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.rollback_failed"}), coreT({key: "ui.chat.message_missing"})));
         return;
       }
 
@@ -249,16 +250,16 @@ export function useChatTabMessageActions({
         const onRollbackFailure = (error: unknown): void => {
           if (!options?.skipVfsReconcile && !options?.revisionHeadBackfill && RollbackErrorGuards.isRevisionBackfillRequired(error)) {
             const missingPaths = RollbackErrorGuards.readRevisionBackfillMissingPaths(error);
-            Alert.alert('快照丢失', chatTranslator(RollbackConfirmView.descriptor(mode, 'backfill', {missingPaths})), [
-              {text: '取消', style: 'cancel'},
+            Alert.alert(coreT({key: "ui.chat.snapshot_missing"}), chatTranslator(RollbackConfirmView.descriptor(mode, 'backfill', {missingPaths})), [
+              {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
               {
-                text: '继续回滚',
+                text: coreT({key: "ui.chat.rollback_continue"}),
                 style: 'destructive',
                 onPress: () => {
                   void runRollback(targetMessageId, {
                     revisionHeadBackfill: true,
                   }).catch(err => {
-                    showToast(ToastMessage.toast('回滚失败', err));
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.rollback_failed"}), err));
                   });
                 },
               },
@@ -268,23 +269,23 @@ export function useChatTabMessageActions({
           if (!options?.skipVfsReconcile && RollbackErrorGuards.isVfsDegradable(error)) {
             const errorMessage = FormatError.format(error);
             const confirmMessage = chatTranslator(RollbackConfirmView.descriptor(mode, 'degraded'));
-            Alert.alert('无法恢复工作区', `${errorMessage}\n\n${confirmMessage}`, [
-              {text: '取消', style: 'cancel'},
+            Alert.alert(coreT({key: "ui.chat.workspace_restore_fail_title"}), `${errorMessage}\n\n${confirmMessage}`, [
+              {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
               {
-                text: '仅删除后续对话',
+                text: coreT({key: "ui.chat.rollback_degraded_title"}),
                 style: 'destructive',
                 onPress: () => {
                   void runRollback(targetMessageId, {
                     skipVfsReconcile: true,
                   }).catch(err => {
-                    showToast(ToastMessage.toast('回滚失败', err));
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.rollback_failed"}), err));
                   });
                 },
               },
             ]);
             return;
           }
-          showToast(ToastMessage.toast('回滚失败', error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.rollback_failed"}), error));
         };
         try {
           // 回滚链分段打点（rollback-large-jank Step 1）：t0 定在确认回滚、
@@ -325,7 +326,7 @@ export function useChatTabMessageActions({
           rollbackTimingLog(Array.isArray(reloaded) ? `tail reload done (rows=${reloaded.length})` : 'tail reload done');
           await applyComposerRestore();
           rollbackTimingLog('composer restore done');
-          showToast(options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功');
+          showToast(options?.skipVfsReconcile ? coreT({key: "ui.chat.rollback_truncated"}) : coreT({key: "ui.chat.rollback_success"}));
           rollbackTimingLog('toast shown');
           // token 刷新错峰（rollback-large-jank Step 5）：等「reloadMessages
           // 触发的快照末片 post + deferred actions 排空」信号之后再发起
@@ -343,14 +344,14 @@ export function useChatTabMessageActions({
         }
       };
 
-      Alert.alert('回滚到此消息', chatTranslator(RollbackConfirmView.descriptor(mode, 'primary')), [
-        {text: '取消', style: 'cancel'},
+      Alert.alert(coreT({key: "ui.chat.rollback_confirm_title"}), chatTranslator(RollbackConfirmView.descriptor(mode, 'primary')), [
+        {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
         {
-          text: '回滚',
+          text: coreT({key: "ui.transcript.menu.rollback"}),
           style: 'destructive',
           onPress: () => {
             void runRollback(messageId).catch(err => {
-              showToast(ToastMessage.toast('回滚失败', err));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.rollback_failed"}), err));
             });
           },
         },
@@ -365,7 +366,7 @@ export function useChatTabMessageActions({
         return;
       }
       if (agentRunning) {
-        showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法置位'));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.please_wait"}), coreT({key: "ui.chat.agent_running_set_floor_blocked"})));
         return;
       }
 
@@ -374,7 +375,7 @@ export function useChatTabMessageActions({
           // clear rule_snapshot + file_cache 由 Core setMessageFloorAtMessage 完成
           const result = await runtime.messageTranscriptEffects.setMessageFloorAtMessage(projectId, sessionId, messageId);
           if (!result.ok) {
-            showToast(ToastMessage.toast('置位失败', result.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.set_floor_failed"}), result.error));
             return;
           }
           await reloadMessages(true);
@@ -385,16 +386,16 @@ export function useChatTabMessageActions({
             sessionId,
           });
           const changed = result.value.hiddenCount + result.value.shownCount;
-          showToast(changed > 0 ? '已置位' : '上下文已是最新状态');
+          showToast(changed > 0 ? coreT({key: "ui.chat.set_floor_done"}) : coreT({key: "ui.chat.context_up_to_date"}));
         } catch (error) {
-          showToast(ToastMessage.toast('置位失败', error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.set_floor_failed"}), error));
         }
       };
 
-      Alert.alert('置位到此消息？', '此消息之前将不参与提示词，此消息及之后将恢复可见。', [
-        {text: '取消', style: 'cancel'},
+      Alert.alert(coreT({key: "ui.chat.set_floor_confirm_title"}), coreT({key: "ui.chat.set_floor_confirm_msg"}), [
+        {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
         {
-          text: '置位',
+          text: coreT({key: "ui.transcript.menu.set_floor"}),
           onPress: () => {
             void runSetFloor();
           },
@@ -409,7 +410,7 @@ export function useChatTabMessageActions({
       if (action === 'edit') {
         const initial = MessageEdit.editableTextFromMessage(target);
         if (initial == null) {
-          showToast(ToastMessage.toast('无法编辑', '该消息没有可编辑的文本'));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.cannot_edit"}), coreT({key: "ui.chat.message_no_editable_text"})));
           return;
         }
         // 编辑走 MessageEditModal，不写 Composer draft；否则取消后输入框会残留消息正文。
@@ -420,11 +421,11 @@ export function useChatTabMessageActions({
       } else if (action === 'copy') {
         const text = MessageEdit.editableTextFromMessage(target);
         if (text == null) {
-          showToast(ToastMessage.toast('无法复制', '该消息没有可复制的文本'));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.cannot_copy"}), coreT({key: "ui.chat.message_no_copyable_text"})));
           return;
         }
         Clipboard.setString(text);
-        showToast('已复制');
+        showToast(coreT({key: "ui.common.copied"}));
       } else if (action === 'fork') {
         handleForkFromMessage(target.id).catch(() => undefined);
       } else if (action === 'set-floor') {
@@ -440,19 +441,19 @@ export function useChatTabMessageActions({
     async (messageId: string, text: string) => {
       const trimmed = text.trim();
       if (trimmed === '') {
-        showToast(ToastMessage.toast('无法保存', '消息内容不能为空'));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.cannot_save"}), coreT({key: "ui.chat.message_content_required"})));
         return;
       }
       const original = chatMessages.find(m => m.id === messageId);
       if (original == null) {
-        showToast(ToastMessage.toast('保存失败', '消息不存在'));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), coreT({key: "ui.chat.message_missing"})));
         return;
       }
       try {
         await runtime.messages.updateContent(messageId, MessageEdit.applyTextEditToMessage(original, trimmed));
         await reloadMessages(true);
       } catch (error) {
-        showToast(ToastMessage.toast('保存失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
       }
     },
     [runtime, chatMessages, reloadMessages, showToast],

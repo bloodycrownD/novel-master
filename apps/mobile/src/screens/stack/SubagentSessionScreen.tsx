@@ -96,12 +96,12 @@ export function SubagentSessionScreen() {
           // 必须回源，否则进屏先看到旧内容
           const read = await manager.loadSessionTailMessages(sessionId, {force: true});
           if (!read.ok) {
-            showToast(ToastMessage.toast('加载子会话失败', read.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.session.subsession_load_failed"}), read.error));
             return [];
           }
           return read.value ?? [];
         } catch (error) {
-          showToast(ToastMessage.toast('加载子会话失败', error));
+          showToast(ToastMessage.toast(coreT({key: "ui.session.subsession_load_failed"}), error));
           return [];
         }
       }
@@ -112,7 +112,7 @@ export function SubagentSessionScreen() {
         if (read.kind !== 'completed') return [];
         return read.value;
       } catch (error) {
-        showToast(ToastMessage.toast('加载子会话失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.session.subsession_load_failed"}), error));
         return [];
       }
     })()
@@ -267,7 +267,7 @@ export function SubagentSessionScreen() {
   const openToolResult = useCallback(
     (payload: {title: string; content: string; inputJson?: string}) => {
       const {title, content, inputJson} = payload;
-      const bodyWithInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
+      const bodyWithInput = `${coreT({key: "ui.chat.io_input_label"})}\n${inputJson}\n\n${coreT({key: "ui.chat.io_output_label"})}\n${content}`;
       const body = inputJson ? bodyWithInput : content;
       promptTurnDetailSlot.set({title, body});
       navigation.navigate('PromptTurnDetail', {
@@ -299,7 +299,7 @@ export function SubagentSessionScreen() {
     return (
       <View style={[styles.root, {backgroundColor: tokens.background}]}>
         <View style={styles.center}>
-          <Text style={{color: tokens.textSecondary}}>加载中…</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.loading"})}</Text>
         </View>
       </View>
     );
@@ -337,7 +337,7 @@ export function SubagentSessionScreen() {
         // 复用既有视觉 token，不动 webview 协议。
         <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>
           <Text style={[styles.interruptedText, {color: tokens.danger}]}>
-            已中断
+            {coreT({key: "ui.transcript.tool_status.interrupted"})}
           </Text>
         </View>
       ) : null}
@@ -352,7 +352,7 @@ export function SubagentSessionScreen() {
       />
       {displayMessages.length === 0 && !agentRunning ? (
         <View style={styles.center}>
-          <Text style={{color: tokens.textSecondary}}>子会话暂无消息</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.chat.subagent_empty"})}</Text>
         </View>
       ) : (
         <ChatConversationWebView
@@ -379,13 +379,13 @@ export function SubagentSessionScreen() {
       {agentRunning ? (
         <Pressable
           onPress={onStop}
-          accessibilityLabel="停止子会话"
+          accessibilityLabel={coreT({key: "ui.chat.stop_subagent"})}
           style={[
             styles.stopBtn,
             {backgroundColor: tokens.danger, borderColor: tokens.border},
           ]}
         >
-          <Text style={styles.stopBtnText}>停止</Text>
+          <Text style={styles.stopBtnText}>{coreT({key: "ui.common.stop"})}</Text>
         </Pressable>
       ) : null}
     </View>

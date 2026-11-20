@@ -30,6 +30,7 @@ import {AGENT_LOCK_TOAST_STATEMENT, AGENT_RESELECT_HINT, ChatAgentMeta, MODEL_LO
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {agentActivity} from '../../runtime/agent-activity';
 import {ProjectComposerStatusService} from '../../services/project-composer-status.service';
 import type {RootStackParamList} from '../../navigation/types';
@@ -61,19 +62,19 @@ export function SessionDetailScreen() {
     try {
       const session = await runtime.sessions.get(sessionId);
       if (!session.ok) {
-        showToast(ToastMessage.toast('加载会话详情失败', session.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.session.detail_load_failed"}), session.error));
         return;
       }
       setSessionTitle(session.value.title ?? '');
       const agentMeta = await ChatAgentMeta.load(runtime, projectId, sessionId);
       // 非 agent 解析类失败（Result.err，错误通道迁移四期）与未知异常同终端。
       if (!agentMeta.ok) {
-        showToast(ToastMessage.toast('加载会话详情失败', agentMeta.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.session.detail_load_failed"}), agentMeta.error));
         return;
       }
       setMeta(agentMeta.value);
     } catch (error) {
-      showToast(ToastMessage.toast('加载会话详情失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.session.detail_load_failed"}), error));
     } finally {
       setLoading(false);
     }
@@ -102,9 +103,9 @@ export function SessionDetailScreen() {
         setSessionTitle(next);
         // 改名成功后广播，聊天页订阅 session-renamed 后刷新顶栏标题与列表。
         DeviceEventEmitter.emit('session-renamed', {sessionId, title: next});
-        showToast('已重命名');
+        showToast(coreT({key: "ui.common.renamed"}));
       } catch (error) {
-        showToast(ToastMessage.toast('重命名失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), error));
       }
     },
     [runtime, sessionId, sessionTitle, showToast],
@@ -145,11 +146,11 @@ export function SessionDetailScreen() {
       return;
     }
     if (agentActivity.isActive()) {
-      showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法压缩'));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.please_wait"}), coreT({key: "ui.chat.agent_running_compact_blocked"})));
       return;
     }
-    Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.session.compact_context"}), coreT({key: "ui.session.compact_confirm_msg"}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
         text: '压缩',
         onPress: () => {
@@ -167,7 +168,7 @@ export function SessionDetailScreen() {
                 projectId,
                 sessionId,
               });
-              showToast('已压缩');
+              showToast(coreT({key: "ui.chat.compact_done"}));
               // 通知聊天页刷新消息列表（压缩后旧消息 hidden 已置 true，聊天页需
               // reload 才能渲染降透明度；chip 顺带走常规两阶段刷新）。
               DeviceEventEmitter.emit('session-transcript-changed', {
@@ -184,7 +185,7 @@ export function SessionDetailScreen() {
           // 就是 unhandled rejection。
           void ManualCompactionService.run(runtime, {projectId, sessionId}, compactionHooks)
             .then(outcome => {
-              if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast('已取消压缩');
+              if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast(coreT({key: "ui.chat.compact_cancelled"}));
             })
             .catch((error: unknown) => {
               showToast(ToastMessage.toast('压缩失败', error));
@@ -215,7 +216,7 @@ export function SessionDetailScreen() {
     return (
       <View style={[styles.root, {backgroundColor: tokens.background}]}>
         <View style={styles.center}>
-          <Text style={{color: tokens.textSecondary}}>加载中…</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.loading"})}</Text>
         </View>
       </View>
     );
@@ -257,14 +258,14 @@ export function SessionDetailScreen() {
             onChangeText={setTitleDraft}
             onSubmitEditing={() => commitTitle(titleDraft)}
             onEndEditing={() => commitTitle(titleDraft)}
-            placeholder="输入会话名称"
+            placeholder={coreT({key: "ui.session.name_placeholder"})}
             placeholderTextColor={tokens.textTertiary}
-            accessibilityLabel="会话名称输入框"
+            accessibilityLabel={coreT({key: "ui.session.name_input_aria"})}
           />
         ) : (
-          <Pressable testID="session-title" onPress={startEditTitle} accessibilityLabel="编辑会话名称" style={styles.titleRow}>
+          <Pressable testID="session-title" onPress={startEditTitle} accessibilityLabel={coreT({key: "ui.session.rename_title"})} style={styles.titleRow}>
             <Text style={[styles.titleValue, {color: tokens.text}]} numberOfLines={2}>
-              {sessionTitle || '（未命名）'}
+              {sessionTitle || coreT({key: "ui.session.untitled"})}
             </Text>
             <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>✎</Text>
           </Pressable>
@@ -275,7 +276,7 @@ export function SessionDetailScreen() {
       <Pressable
         testID="agent-row"
         onPress={openAgentPicker}
-        accessibilityLabel="切换智能体"
+        accessibilityLabel={coreT({key: "ui.session.switch_agent"})}
         style={[
           styles.card,
           cardShadow,
@@ -290,7 +291,7 @@ export function SessionDetailScreen() {
           <Text style={styles.iconGlyph}>🤖</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>当前智能体</Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.session.current_agent"})}</Text>
           <Text style={[styles.cardValue, {color: tokens.text}]} numberOfLines={1}>
             {meta.agentName}
           </Text>
@@ -303,7 +304,7 @@ export function SessionDetailScreen() {
       <Pressable
         testID="model-row"
         onPress={openModelPicker}
-        accessibilityLabel="切换大模型"
+        accessibilityLabel={coreT({key: "ui.session.switch_model"})}
         style={[
           styles.card,
           cardShadow,
@@ -318,7 +319,7 @@ export function SessionDetailScreen() {
           <Text style={styles.iconGlyph}>⚡</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>当前大模型</Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.session.current_model"})}</Text>
           <Text style={[styles.cardValue, {color: tokens.text}]} numberOfLines={1}>
             {meta.modelLabel}
           </Text>
@@ -334,7 +335,7 @@ export function SessionDetailScreen() {
           // scope 时就会显示别的会话的提示词（同页「聊天记录」入口一直传了）。
           navigation.navigate('RealPrompt', {projectId, sessionId})
         }
-        accessibilityLabel="查看提示词"
+        accessibilityLabel={coreT({key: "ui.nav.view_prompt"})}
         style={[
           styles.card,
           cardShadow,
@@ -348,8 +349,8 @@ export function SessionDetailScreen() {
           <Text style={styles.iconGlyph}>📄</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>查看提示词</Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>预览提示词</Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.nav.view_prompt"})}</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>{coreT({key: "ui.session.view_prompt_value"})}</Text>
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>
@@ -360,7 +361,7 @@ export function SessionDetailScreen() {
         <Pressable
           testID="compact-cancel-row"
           onPress={handleCancelCompaction}
-          accessibilityLabel="取消压缩"
+          accessibilityLabel={coreT({key: "ui.session.cancel_compact"})}
           style={[
             styles.card,
             cardShadow,
@@ -374,16 +375,16 @@ export function SessionDetailScreen() {
             <Text style={styles.iconGlyph}>🗜️</Text>
           </View>
           <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>压缩上下文</Text>
-            <Text style={[styles.cardValue, {color: tokens.text}]}>正在压缩…</Text>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.session.compact_context"})}</Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>{coreT({key: "ui.session.compacting"})}</Text>
           </View>
-          <Text style={[styles.cancelAction, {color: tokens.danger}]}>取消</Text>
+          <Text style={[styles.cancelAction, {color: tokens.danger}]}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
       ) : (
         <Pressable
           testID="compact-row"
           onPress={handleCompact}
-          accessibilityLabel="压缩上下文"
+          accessibilityLabel={coreT({key: "ui.session.compact_context"})}
           style={[
             styles.card,
             cardShadow,
@@ -397,8 +398,8 @@ export function SessionDetailScreen() {
             <Text style={styles.iconGlyph}>🗜️</Text>
           </View>
           <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>压缩上下文</Text>
-            <Text style={[styles.cardValue, {color: tokens.text}]}>减少上下文占用</Text>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.session.compact_context"})}</Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>{coreT({key: "ui.session.compact_value"})}</Text>
           </View>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
         </Pressable>
@@ -408,7 +409,7 @@ export function SessionDetailScreen() {
       <Pressable
         testID="skills-row"
         onPress={() => navigation.navigate('SkillPanel', {projectId})}
-        accessibilityLabel="技能"
+        accessibilityLabel={coreT({key: "ui.nav.skills"})}
         style={[
           styles.card,
           cardShadow,
@@ -422,8 +423,8 @@ export function SessionDetailScreen() {
           <Text style={styles.iconGlyph}>🧩</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>技能</Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>查看与管理</Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.nav.skills"})}</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>{coreT({key: "ui.session.skills_value"})}</Text>
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>

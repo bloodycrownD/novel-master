@@ -22,6 +22,7 @@ import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
 import {Tokens} from '../theme/tokens';
+import {coreT} from '@/i18n/core';
 
 type RuntimeStatus = 'loading' | 'ready' | 'error';
 
@@ -393,7 +394,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>正在加载…</Text>
+        <Text style={styles.loadingText}>{coreT({key: "ui.runtime.loading"})}</Text>
       </View>
     );
   }
@@ -402,9 +403,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     const errorMessageColor = Tokens.forMode(colorScheme === 'dark' ? 'dark' : 'light').textSecondary;
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorTitle}>启动失败</Text>
+        <Text style={styles.errorTitle}>{coreT({key: "ui.runtime.boot_failed"})}</Text>
         <Text style={[styles.errorMessage, {color: errorMessageColor}]}>{error}</Text>
-        <Button title="重试" onPress={retry} />
+        <Button title={coreT({key: "ui.common.retry"})} onPress={retry} />
       </View>
     );
   }

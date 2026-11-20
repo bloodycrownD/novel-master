@@ -416,7 +416,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         // 终端：保持未加载（锁定）态并提示错误，绝不冒充「已删待重选」。
         if (!meta.ok) {
           setAgentMeta(undefined);
-          showToastRef.current(ToastMessage.toast('智能体信息加载失败', meta.error));
+          showToastRef.current(ToastMessage.toast(coreT({key: "ui.session.agent_info_load_failed"}), meta.error));
           return;
         }
         setAgentMeta(prev => ({
@@ -434,7 +434,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
           return;
         }
         setAgentMeta(undefined);
-        showToastRef.current(ToastMessage.toast('智能体信息加载失败', error));
+        showToastRef.current(ToastMessage.toast(coreT({key: "ui.session.agent_info_load_failed"}), error));
       }
     })();
     refreshChatMetaInflightRef.current = {key, round, promise};
@@ -505,14 +505,14 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (name: string) => {
       const created = await runtime.projects.create(name);
       if (!created.ok) {
-        showToast(ToastMessage.toast('创建失败', created.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
         return;
       }
       await setCurrentProject(created.value.id);
       await refreshScope();
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(ToastMessage.toast('创建失败', lr.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), lr.error));
       }
     },
     [runtime, setCurrentProject, refreshScope, reloadLists, showToast],
@@ -522,12 +522,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (targetProjectId: string, name: string) => {
       const renamed = await runtime.projects.rename(targetProjectId, name);
       if (!renamed.ok) {
-        showToast(ToastMessage.toast('重命名失败', renamed.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), renamed.error));
         return;
       }
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(ToastMessage.toast('重命名失败', lr.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), lr.error));
       }
     },
     [runtime, reloadLists, showToast],
@@ -535,23 +535,23 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
 
   const handleCreateSession = useCallback(async () => {
     if (projectId == null) {
-      showToast('请先创建或选择项目');
+      showToast(coreT({key: "ui.chat.select_or_create_project"}));
       return;
     }
     const list = await runtime.sessions.listByProject(projectId);
     if (!list.ok) {
-      showToast(ToastMessage.toast('创建失败', list.error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), list.error));
       return;
     }
     const title = SessionDefaultTitle.next(list.value.map(s => s.title));
     const created = await runtime.sessions.create(projectId, title);
     if (!created.ok) {
-      showToast(ToastMessage.toast('创建失败', created.error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
       return;
     }
     const lr = await reloadLists();
     if (!lr.ok) {
-      showToast(ToastMessage.toast('创建失败', lr.error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), lr.error));
     }
   }, [runtime, projectId, reloadLists, showToast]);
 
@@ -559,12 +559,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (targetSessionId: string, title: string) => {
       const renamed = await runtime.sessions.rename(targetSessionId, title);
       if (!renamed.ok) {
-        showToast(ToastMessage.toast('重命名失败', renamed.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), renamed.error));
         return;
       }
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(ToastMessage.toast('重命名失败', lr.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), lr.error));
       }
     },
     [runtime, reloadLists, showToast],
@@ -585,15 +585,15 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (sourceSessionId: string) => {
       const copy = await runtime.sessions.copy(sourceSessionId);
       if (!copy.ok) {
-        showToast(ToastMessage.toast('复制失败', copy.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.copy_failed"}), copy.error));
         return;
       }
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(ToastMessage.toast('复制失败', lr.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.copy_failed"}), lr.error));
         return;
       }
-      showToast(`已复制会话：${copy.value.title ?? copy.value.id}`);
+      showToast(coreT({key: "ui.chat.copy_session_done", params: {name: copy.value.title ?? copy.value.id}}));
     },
     [runtime, reloadLists, showToast],
   );
@@ -603,7 +603,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (targetSessionId: string) => {
       const deleted = await runtime.sessions.delete(targetSessionId);
       if (!deleted.ok) {
-        showToast(ToastMessage.toast('删除失败', deleted.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
         return;
       }
       // 会话已从库里消失：同步遗忘 manager 里该会话的四张常驻表与活跃 refcount
@@ -619,10 +619,10 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       await refreshScope();
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(ToastMessage.toast('删除失败', lr.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), lr.error));
         return;
       }
-      showToast('已删除会话');
+      showToast(coreT({key: "ui.chat.delete_session_done"}));
     },
     [runtime, projectId, sessionId, refreshScope, reloadLists, showToast],
   );
@@ -630,12 +630,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
   const confirmDeleteSession = useCallback(
     (targetSessionId: string) => {
       const session = sessions.find(s => s.id === targetSessionId);
-      const label = session?.title?.trim() || '该会话';
-      const msg = `确定删除会话「${label}」？消息与文件将一并删除，且无法恢复。`;
-      Alert.alert('确认删除', msg, [
-        {text: '取消', style: 'cancel'},
+      const label = session?.title?.trim() || coreT({key: "ui.nav.this_session"});
+      const msg = coreT({key: "ui.chat.delete_session_confirm", params: {name: label}});
+      Alert.alert(coreT({key: "ui.common.confirm_delete"}), msg, [
+        {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
         {
-          text: '删除',
+          text: coreT({key: "ui.common.delete"}),
           style: 'destructive',
           onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
         },
@@ -651,7 +651,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       for (const id of ids) {
         const deleted = await runtime.sessions.delete(id);
         if (!deleted.ok) {
-          showToast(ToastMessage.toast('删除失败', deleted.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
           break;
         }
         // 部分成功语义：每个 delete 成功就立刻 forget 一次，不能攒到最后统一做
@@ -692,12 +692,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
       const doomedSessions = await runtime.sessions.listByProject(id);
       if (!doomedSessions.ok) {
-        showToast(ToastMessage.toast('删除失败', doomedSessions.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), doomedSessions.error));
         break;
       }
       const deleted = await runtime.projects.delete(id);
       if (!deleted.ok) {
-        showToast(ToastMessage.toast('删除失败', deleted.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
         break;
       }
       for (const s of doomedSessions.value) {
@@ -799,7 +799,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
   const openToolResult = useCallback(
     (payload: {title: string; content: string; inputJson?: string}) => {
       const {title, content, inputJson} = payload;
-      const withInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
+      const withInput = `${coreT({key: "ui.chat.io_input_label"})}\n${inputJson}\n\n${coreT({key: "ui.chat.io_output_label"})}\n${content}`;
       const body = inputJson != null && inputJson !== '' ? withInput : content;
       promptTurnDetailSlot.set({title, body});
       navigation.navigate('PromptTurnDetail', {

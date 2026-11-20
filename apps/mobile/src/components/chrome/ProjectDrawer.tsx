@@ -16,6 +16,7 @@ import {FormatRelativeTime} from '../../utils/format-relative-time';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {EntityIcon} from '../../utils/entity-icon';
 
 const PROJECT_ICONS = ['📁', '📚', '✨', '🚀', '📝', '🎯'];
@@ -57,10 +58,10 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
     if (ids.length === 0) {
       return;
     }
-    Alert.alert('确认删除', `确定删除选中的 ${ids.length} 个项目？将同时移除其下所有会话。`, [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.common.confirm_delete"}), coreT({key: "ui.project.delete_batch_confirm", params: {count: ids.length}}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '删除',
+        text: coreT({key: "ui.common.delete"}),
         style: 'destructive',
         onPress: () => {
           void Promise.resolve(onDeleteSelected(ids)).then(() => {
@@ -87,18 +88,18 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
         ]}
       >
         <ManageHeader
-          title="项目"
+          title={coreT({key: "ui.project.title"})}
           batchMode={batch.active}
           selectedCount={batch.selectedCount}
           onEnterBatch={batch.enter}
           onCancelBatch={batch.exit}
           onDelete={confirmBatchDelete}
-          hint="选择要删除的项目（将同时移除其下所有会话）"
-          normalActions={<PrimaryButton label="新建" tokens={tokens} onPress={() => setNamePrompt({mode: 'create'})} />}
+          hint={coreT({key: "ui.project.delete_select_hint"})}
+          normalActions={<PrimaryButton label={coreT({key: "ui.common.new"})} tokens={tokens} onPress={() => setNamePrompt({mode: 'create'})} />}
         />
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardShouldPersistTaps="handled">
           {projects.length === 0 ? (
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>暂无项目，点击「新建」开始。</Text>
+            <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.project.empty_mobile"})}</Text>
           ) : (
             projects.map((project, index) => {
               const isCurrent = project.id === currentProjectId;
@@ -128,11 +129,11 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
                     <Text style={[styles.projectName, {color: tokens.text}]} numberOfLines={1}>
                       {project.name}
                     </Text>
-                    <Text style={[styles.projectMeta, {color: tokens.textSecondary}]}>更新于 {FormatRelativeTime.formatMs(project.updatedAtMs)}</Text>
+                    <Text style={[styles.projectMeta, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.updated_at", params: {time: FormatRelativeTime.formatMs(project.updatedAtMs)}})}</Text>
                   </View>
                   {isCurrent && !batch.active ? (
                     <View style={[styles.currentBadge, {backgroundColor: tokens.primary}]}>
-                      <Text style={styles.currentBadgeText}>当前</Text>
+                      <Text style={styles.currentBadgeText}>{coreT({key: "ui.common.current"})}</Text>
                     </View>
                   ) : null}
                   {!batch.active ? (
@@ -160,8 +161,8 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
       <BottomSheetMenu
         visible={menuProjectId != null}
         items={[
-          {label: '重命名', action: 'rename'},
-          {label: '删除', action: 'delete', danger: true},
+          {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+          {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
         ]}
         onClose={() => setMenuProjectId(undefined)}
         onSelect={action => {
@@ -176,13 +177,13 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
             return;
           }
           if (action === 'delete' && project) {
-            Alert.alert('确认删除', `确定删除项目「${project.name}」？将同时移除其下所有会话。`, [
-              {text: '取消', style: 'cancel'},
+            Alert.alert(coreT({key: "ui.common.confirm_delete"}), coreT({key: "ui.project.delete_confirm_named", params: {name: project.name}}), [
+              {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
               {
-                text: '删除',
+                text: coreT({key: "ui.common.delete"}),
                 style: 'destructive',
                 onPress: () => {
-                  void Promise.resolve(onDeleteSelected([project.id])).catch(err => showToast(ToastMessage.toast('删除失败', err)));
+                  void Promise.resolve(onDeleteSelected([project.id])).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err)));
                 },
               },
             ]);
@@ -192,11 +193,11 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
 
       <TextPromptModal
         visible={namePrompt != null}
-        title={namePrompt?.mode === 'rename' ? '重命名项目' : '新建项目'}
-        label="项目名称"
-        placeholder="如 科幻小说创作"
+        title={namePrompt?.mode === 'rename' ? coreT({key: "ui.project.rename_title"}) : coreT({key: "ui.project.new_title"})}
+        label={coreT({key: "ui.project.name_label"})}
+        placeholder={coreT({key: "ui.project.name_placeholder"})}
         initialValue={namePrompt?.mode === 'rename' ? namePrompt.initialName : ''}
-        confirmLabel={namePrompt?.mode === 'rename' ? '保存' : '创建'}
+        confirmLabel={namePrompt?.mode === 'rename' ? coreT({key: "ui.common.save"}) : coreT({key: "ui.common.create"})}
         onClose={() => setNamePrompt(null)}
         onConfirm={async values => {
           const name = values[0];

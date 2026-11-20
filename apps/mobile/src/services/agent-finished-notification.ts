@@ -16,6 +16,7 @@ import notifee, {AndroidImportance, AuthorizationStatus, EventType} from '@notif
 import {AppState, Platform} from 'react-native';
 import type {navigationContainerRef as NavigationContainerRef} from '@/navigation/navigation-container-ref';
 import {timingLog} from '@/debug/run-timing';
+import {coreT} from '@/i18n/core';
 
 /** 完成通知 channel（IMPORTANCE_DEFAULT：有横幅、不响铃）。 */
 const CHANNEL_AGENT_FINISHED = 'agent-finished';
@@ -204,12 +205,12 @@ export namespace AgentFinishedNotification {
     }
     await notifee.createChannel({
       id: CHANNEL_AGENT_FINISHED,
-      name: '生成结束通知',
+      name: coreT({key: "ui.notification.channel_finished"}),
       importance: AndroidImportance.DEFAULT,
     });
     await notifee.createChannel({
       id: CHANNEL_AGENT_KEEPALIVE,
-      name: '生成进行中',
+      name: coreT({key: "ui.notification.channel_running"}),
       importance: AndroidImportance.LOW,
     });
     notificationState.channelsReady = true;
@@ -322,13 +323,13 @@ export namespace AgentFinishedNotification {
     await ensureChannels();
     await notifee.displayNotification({
       id: `nm-agent-finished-${input.sessionId}`,
-      title: input.status === 'finished' ? '生成完成' : '生成失败',
+      title: input.status === 'finished' ? coreT({key: "ui.notification.finished_title"}) : coreT({key: "ui.notification.failed_title"}),
       body:
         input.sessionTitle != null && input.sessionTitle !== ''
-          ? `「${input.sessionTitle}」${input.status === 'finished' ? '生成结束' : '的生成已中断'}`
+          ? coreT({key: input.status === 'finished' ? "ui.notification.body_finished" : "ui.notification.body_interrupted", params: {session: input.sessionTitle}})
           : input.status === 'finished'
-          ? '本次生成已结束'
-          : '本次生成已中断',
+          ? coreT({key: "ui.notification.body_finished_short"})
+          : coreT({key: "ui.notification.body_interrupted_short"}),
       data: {sessionId: input.sessionId},
       android: {
         channelId: CHANNEL_AGENT_FINISHED,
@@ -411,19 +412,19 @@ export namespace AgentFinishedNotification {
     const labels = [...keepAliveLabels.values()];
     if (labels.length === 0) {
       // 空闲：仅 title、不设 body（常驻开关拉起后的默认态）。
-      return {title: 'novel master · 空闲'};
+      return {title: coreT({key: "ui.notification.idle_title"})};
     }
     const latest = labels[labels.length - 1];
     const scopeText = latest == null ? '' : [latest.projectName, latest.sessionTitle].filter(Boolean).join(' · ');
-    const title = latest?.sessionTitle != null ? `正在生成 · ${latest.sessionTitle}` : '正在生成';
+    const title = latest?.sessionTitle != null ? coreT({key: "ui.notification.running_title", params: {session: latest.sessionTitle}}) : coreT({key: "ui.notification.running_title_plain"});
     const lines: string[] = [];
     if (scopeText !== '') {
       lines.push(scopeText);
     }
     if (labels.length > 1) {
-      lines.push(`共 ${labels.length} 个会话生成中`);
+      lines.push(coreT({key: "ui.notification.running_count", params: {count: labels.length}}));
     }
-    lines.push('完成后自动结束；期间请勿强行关闭应用');
+    lines.push(coreT({key: "ui.notification.running_hint"}));
     return {title, body: lines.join('\n')};
   }
 

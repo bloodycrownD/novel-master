@@ -1,6 +1,8 @@
+import {coreT} from '../i18n/core';
+
 export namespace FormatRelativeTime {
   /**
-   * Short relative time for list subtitles (zh).
+   * Short relative time for list subtitles.
    */
   export function formatMs(ms: number, nowMs = Date.now()): string {
     const delta = Math.max(0, nowMs - ms);
@@ -9,16 +11,16 @@ export namespace FormatRelativeTime {
     const day = 24 * hour;
 
     if (delta < minute) {
-      return '刚刚';
+      return coreT({key: "ui.common.time_just_now"});
     }
     if (delta < hour) {
-      return `${Math.floor(delta / minute)} 分钟前`;
+      return coreT({key: "ui.common.time_minutes_ago", params: {count: Math.floor(delta / minute)}});
     }
     if (delta < day) {
-      return `${Math.floor(delta / hour)} 小时前`;
+      return coreT({key: "ui.common.time_hours_ago", params: {count: Math.floor(delta / hour)}});
     }
     if (delta < 7 * day) {
-      return `${Math.floor(delta / day)} 天前`;
+      return coreT({key: "ui.common.time_days_ago", params: {count: Math.floor(delta / day)}});
     }
     const d = new Date(ms);
     return `${d.getMonth() + 1}/${d.getDate()}`;

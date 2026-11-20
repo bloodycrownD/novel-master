@@ -14,6 +14,7 @@ import {MainTabBarStyle} from './main-tab-bar-style';
 import {StackScreenLayout} from './StackScreenLayout';
 import type {MainTabParamList, RootStackParamList} from './types';
 import {useTheme} from '../theme/ThemeProvider';
+import {coreT} from '../i18n/core';
 import {ChatTabScreen} from '../screens/tabs/ChatTabScreen';
 import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
 import {AgentsSettingsScreen} from '../screens/stack/AgentsSettingsScreen';
@@ -78,7 +79,7 @@ function MainTabs() {
         name="Chat"
         component={ChatTabScreen}
         options={{
-          tabBarLabel: '对话',
+          tabBarLabel: coreT({key: "ui.nav.tab_chat"}),
           tabBarIcon: tabIcon(ChatTabIcon),
         }}
       />
@@ -86,7 +87,7 @@ function MainTabs() {
         name="Profile"
         component={ProfileTabScreen}
         options={{
-          tabBarLabel: '我的',
+          tabBarLabel: coreT({key: "ui.nav.tab_profile"}),
           tabBarIcon: tabIcon(ProfileTabIcon),
         }}
       />

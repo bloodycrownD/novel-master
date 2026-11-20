@@ -26,6 +26,7 @@ import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
 import {ChatTabNavigationProvider} from './chat-tab/ChatTabNavigationProvider';
 import {useChatTabNavigation} from '@/navigation/ChatTabNavContext';
 import {useChatTabController} from './chat-tab/useChatTabController';
+import {coreT} from '@/i18n/core';
 
 type Nav = CompositeNavigationProp<BottomTabNavigationProp<MainTabParamList, 'Chat'>, NativeStackNavigationProp<RootStackParamList>>;
 
@@ -170,7 +171,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
         remappedRanges = TokenRanges.remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
       }
       navigation.navigate('PromptEditor', {
-        title: '编辑消息',
+        title: coreT({key: "ui.chat.edit_message_title"}),
         initialText: payload.text,
         variant: 'composer',
         // @/$ tag 的选择器需要 scope（技能合并视图 / 会话工作区）
@@ -185,11 +186,11 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
   const sessionRenameModal = (
     <TextPromptModal
       visible={ctx.scope.sessionRenamePrompt != null}
-      title="重命名会话"
-      label="会话名称"
-      placeholder="输入会话名称"
+      title={coreT({key: "ui.project.rename_session"})}
+      label={coreT({key: "ui.session.name_label"})}
+      placeholder={coreT({key: "ui.session.name_placeholder"})}
       initialValue={ctx.scope.sessionRenamePrompt?.initialTitle ?? ''}
-      confirmLabel="保存"
+      confirmLabel={coreT({key: "ui.common.save"})}
       onClose={() => ctx.scope.setSessionRenamePrompt(undefined)}
       onConfirm={async values => {
         const prompt = ctx.scope.sessionRenamePrompt;

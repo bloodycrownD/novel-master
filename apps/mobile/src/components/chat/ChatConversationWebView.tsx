@@ -1923,16 +1923,16 @@ const ConversationHost = forwardRef<Handle, Props>(
     if (readyFailed) {
       return (
         <View style={styles.fill} testID="chat-conversation-ready-error">
-          <Text style={{color: tokens.text}}>对话页加载失败</Text>
+          <Text style={{color: tokens.text}}>{coreT({key: "ui.runtime.load_failed"})}</Text>
           <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            页面加载超时，点重载恢复；若持续出现请重启应用
+            {coreT({key: "ui.runtime.timeout_hint"})}
           </Text>
           <Text
             style={[styles.retry, {color: tokens.primary}]}
             onPress={handleReload}
             testID="chat-conversation-ready-retry"
           >
-            重载
+            {coreT({key: "ui.runtime.reload"})}
           </Text>
         </View>
       );

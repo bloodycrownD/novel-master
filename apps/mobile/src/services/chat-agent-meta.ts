@@ -12,6 +12,7 @@ import {AGENT_RUN_RESOLVE_KEYS, AgentProjectResolver} from '@novel-master/core/a
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {ModelDisplayLabel} from './model-display-label';
+import {coreT} from '../i18n/core';
 
 /**
  * modelSource 与 desktop `PromptAgentMetaResponse.modelSource` 同语义
@@ -42,13 +43,13 @@ export interface ChatAgentMeta {
  * 不再锁死。
  */
 /** 会话面板锁定提示：meta 未加载，稍候再试。 */
-export const AGENT_LOCK_TOAST_GUIDE = '智能体信息加载中，请稍候再试';
+export const AGENT_LOCK_TOAST_GUIDE = coreT({key: "ui.session.agent_loading_toast"});
 /** 会话详情页锁定提示：meta 未加载，稍候再试。 */
-export const AGENT_LOCK_TOAST_STATEMENT = '智能体信息加载中，请稍候再试';
+export const AGENT_LOCK_TOAST_STATEMENT = coreT({key: "ui.session.agent_loading_toast"});
 /** none 态智能体卡上的待重选 badge 文案。 */
-export const AGENT_RESELECT_HINT = '智能体已删除 · 点击重选';
+export const AGENT_RESELECT_HINT = coreT({key: "ui.session.agent_deleted_hint"});
 /** 模型锁定提示：会话面板与会话详情页共用同一文案。 */
-export const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
+export const MODEL_LOCK_TOAST = coreT({key: "ui.session.agent_lock_model_toast"});
 
 export namespace ChatAgentMeta {
   /**
@@ -97,7 +98,7 @@ export namespace ChatAgentMeta {
       const {definition, agentId} = resolved.value;
       const hasDedicatedModel = definition.model != null && definition.model !== '';
       const savedModelId = definition.model ?? sessionConfig.value.modelId;
-      let modelLabel = '未选择模型';
+      let modelLabel = coreT({key: "ui.chat.no_model_selected"});
       if (savedModelId) {
         try {
           const label = await ModelDisplayLabel.resolve(runtime, savedModelId);
