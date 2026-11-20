@@ -1,9 +1,9 @@
 {
   "note": "签名重复基线 v2。新增重复组会让 gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。judged 段=人工裁决的有意保留组，键消失时由下次 write 警告丢弃。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-20T11:20:02.368Z",
-  "namedGroups": 94,
-  "shapedGroups": 139,
+  "generatedAt": "2026-11-20T14:02:53.363Z",
+  "namedGroups": 99,
+  "shapedGroups": 138,
   "named": {
     "list": [
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:55",
@@ -18,7 +18,10 @@
       "apps/desktop/src/main/services/cloud-sync.service.ts:485",
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:34",
       "apps/mobile/src/services/cloud-sync-config.store.ts:99",
-      "apps/mobile/src/services/search-config.store.ts:25"
+      "apps/mobile/src/services/search-config.store.ts:25",
+      "packages/sksp-android/src/native.ts:24",
+      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:44",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:65"
     ],
     "update": [
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:140",
@@ -30,7 +33,7 @@
       "apps/desktop/src/main/ipc/handlers/sessions.ts:77",
       "apps/desktop/src/main/ipc/handlers/skills.ts:123",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:80",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:242"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:215"
     ],
     "createBlank": [
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:172",
@@ -53,11 +56,14 @@
     "run": [
       "apps/desktop/src/main/ipc/handlers/agent.ts:380",
       "apps/desktop/src/main/services/agent-run.service.ts:54",
+      "apps/desktop/src/main/services/db-maintenance.service.ts:41",
       "apps/desktop/src/main/services/update-check.service.ts:12",
       "apps/mobile/src/screens/stack/CloudSyncProgressScreen.tsx:110",
       "apps/mobile/src/services/agent-run.service.ts:23",
+      "apps/mobile/src/services/db-maintenance.service.ts:55",
       "apps/mobile/src/services/manual-compaction.service.ts:71",
-      "apps/mobile/src/services/update-check-flow.ts:25"
+      "apps/mobile/src/services/update-check-flow.ts:25",
+      "packages/tdbc-conformance/src/suite.ts:39"
     ],
     "getConfig": [
       "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:27",
@@ -85,6 +91,12 @@
       "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:176",
       "apps/mobile/src/services/cloud-sync.service.ts:434",
       "apps/mobile/src/services/stream-apply-buffer.ts:58"
+    ],
+    "handle": [
+      "apps/desktop/src/main/ipc/handlers/db-maintenance.ts:36",
+      "apps/mobile/src/web/code-editor/webview/runtime/bridge.ts:17",
+      "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts:23",
+      "apps/mobile/src/web/rich-document/webview/runtime/bridge.ts:32"
     ],
     "toDto": [
       "apps/desktop/src/main/ipc/handlers/messages.ts:38",
@@ -123,31 +135,38 @@
       "apps/mobile/src/services/stream-token-estimator.ts:123",
       "apps/mobile/src/services/yield-quantum.ts:21",
       "apps/mobile/src/shims/aws-rn-s3-client.ts:31",
-      "apps/mobile/src/web/composer-input/webview/runtime/factory.ts:67"
+      "apps/mobile/src/web/composer-input/webview/runtime/factory.ts:67",
+      "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts:40",
+      "packages/llm-sse-native/src/transport.ts:118",
+      "packages/sksp-android/src/android-secret-store.ts:84",
+      "packages/sksp-linux/src/sqlite-secret-store.ts:28",
+      "packages/sksp-mac/src/sqlite-secret-store.ts:28",
+      "packages/sksp-windows/src/sqlite-secret-store.ts:40",
+      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:24"
     ],
     "rename": [
       "apps/desktop/src/main/ipc/handlers/sessions.ts:67",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:280"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:247"
     ],
     "read": [
       "apps/desktop/src/main/ipc/handlers/skills.ts:86",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:135",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:119",
       "apps/mobile/src/errors/format-error.ts:20"
     ],
     "write": [
       "apps/desktop/src/main/ipc/handlers/skills.ts:103",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:162"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:144"
     ],
     "match": [
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:161",
       "apps/mobile/src/web/shared/host-message-channel.ts:33"
     ],
     "exportZip": [
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:345",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:297",
       "apps/mobile/src/services/vfs-zip.service.ts:60"
     ],
     "importZip": [
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:406",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:348",
       "apps/mobile/src/services/vfs-zip.service.ts:99"
     ],
     "from": [
@@ -182,11 +201,11 @@
     ],
     "scheduleTrailing": [
       "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:489",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:280"
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:279"
     ],
     "settle": [
       "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:505",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:303",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:302",
       "apps/mobile/src/services/llm-native-fetch-shim.ts:136"
     ],
     "load": [
@@ -216,13 +235,9 @@
       "apps/desktop/src/main/services/yaml-shared.ts:47",
       "apps/mobile/src/services/yaml-shared.ts:45"
     ],
-    "getDbMaintenanceStats": [
-      "apps/desktop/src/main/services/db-maintenance.service.ts:17",
-      "apps/mobile/src/services/db-maintenance.service.ts:38"
-    ],
-    "runDbMaintenance": [
-      "apps/desktop/src/main/services/db-maintenance.service.ts:42",
-      "apps/mobile/src/services/db-maintenance.service.ts:54"
+    "getStats": [
+      "apps/desktop/src/main/services/db-maintenance.service.ts:18",
+      "apps/mobile/src/services/db-maintenance.service.ts:39"
     ],
     "forSession": [
       "apps/desktop/src/main/services/project-composer-status.service.ts:17",
@@ -238,7 +253,7 @@
       "apps/mobile/src/services/user-vfs-turn-execute.service.ts:28"
     ],
     "handleSave": [
-      "apps/mobile/src/components/agent/AgentEditorForm.tsx:168",
+      "apps/mobile/src/components/agent/AgentEditorForm.tsx:166",
       "apps/mobile/src/components/provider/ProviderForm.tsx:163",
       "apps/mobile/src/components/sheet/DirectoryRuleSheet.tsx:71",
       "apps/mobile/src/components/skills/SkillInfoEditModal.tsx:69",
@@ -258,10 +273,10 @@
     ],
     "sync": [
       "apps/mobile/src/components/chat/ChatStreamMetricsBarLive.tsx:79",
-      "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx:84",
+      "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx:78",
       "apps/mobile/src/screens/tabs/chat-tab/ChatSessionListPanel.tsx:118",
       "apps/mobile/src/screens/tabs/chat-tab/ChatSessionListPanel.tsx:131",
-      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:253"
+      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:251"
     ],
     "createComposerHandle": [
       "apps/mobile/src/components/chat/ComposerInputWebView.tsx:317",
@@ -303,7 +318,7 @@
       "apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:192"
     ],
     "openDetail": [
-      "apps/mobile/src/screens/stack/SkillPanelScreen.tsx:114",
+      "apps/mobile/src/screens/stack/SkillPanelScreen.tsx:111",
       "apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx:153"
     ],
     "importPickTypes": [
@@ -316,11 +331,13 @@
     ],
     "set": [
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:38",
-      "apps/mobile/src/services/cloud-sync-config.store.ts:158"
+      "apps/mobile/src/services/cloud-sync-config.store.ts:158",
+      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:39"
     ],
     "normalize": [
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:58",
-      "apps/mobile/src/services/fill-policy-mobile.ts:8"
+      "apps/mobile/src/services/fill-policy-mobile.ts:8",
+      "packages/tdbc-driver-op-sqlite/src/bindings.ts:21"
     ],
     "fail": [
       "apps/mobile/src/services/cloud-sync-progress-log.ts:66",
@@ -332,6 +349,10 @@
       "packages/core/src/domain/abort/logic/create-abort-scope.ts:178",
       "packages/core/src/domain/abort/logic/create-abort-scope.ts:401",
       "packages/core/src/service/provider/impl/model-request.service.ts:111"
+    ],
+    "map": [
+      "apps/mobile/src/services/map-cloud-sync-sdk-error.ts:32",
+      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:31"
     ],
     "clearTimer": [
       "apps/mobile/src/services/run-state-writethrough.ts:73",
@@ -356,11 +377,6 @@
       "apps/mobile/src/web/chat-transcript/webview/runtime/render/row-windowing.ts:45",
       "apps/mobile/src/web/shared/clamp-index.ts:8"
     ],
-    "handle": [
-      "apps/mobile/src/web/code-editor/webview/runtime/bridge.ts:17",
-      "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts:23",
-      "apps/mobile/src/web/rich-document/webview/runtime/bridge.ts:32"
-    ],
     "mount": [
       "apps/mobile/src/web/code-editor/webview/runtime/editor.ts:169",
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:556"
@@ -379,11 +395,11 @@
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:441"
     ],
     "finish": [
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:186",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:182",
       "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:272",
       "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:209",
       "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:79",
-      "packages/llm-sse-native/src/transport.ts:168"
+      "packages/llm-sse-native/src/transport.ts:170"
     ],
     "onCancel": [
       "packages/core/src/domain/abort/logic/create-abort-scope.ts:195",
@@ -412,6 +428,21 @@
       "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:268",
       "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:93"
     ],
+    "registerWith": [
+      "packages/llm-sse-native/src/native.ts:112",
+      "packages/tdbc-driver-op-sqlite/src/register.ts:30"
+    ],
+    "register": [
+      "packages/sksp-android/src/register.ts:14",
+      "packages/sksp-linux/src/register.ts:14",
+      "packages/sksp-mac/src/register.ts:14",
+      "packages/sksp-windows/src/register.ts:14",
+      "packages/tdbc-driver-better-sqlite3/src/index.ts:21",
+      "packages/tdbc-driver-op-sqlite/src/index.ts:32",
+      "packages/tdbc-driver-op-sqlite/src/native.ts:28",
+      "packages/tokenizer-driver-node/src/register.ts:20",
+      "packages/tokenizer-driver-rn/src/register.ts:15"
+    ],
     "TransactionalConnection.execute": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:168",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:295"
@@ -433,35 +464,48 @@
       "packages/tdbc-driver-op-sqlite/src/connection.ts:326"
     ],
     "mapValue": [
-      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:9",
-      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:14"
-    ],
-    "registerOpSqliteDriver": [
-      "packages/tdbc-driver-op-sqlite/src/index.ts:30",
-      "packages/tdbc-driver-op-sqlite/src/native.ts:26"
+      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:11",
+      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:15"
     ],
     "countChunksWithL2": [
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:64",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:143"
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:66",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:145"
     ],
     "fallbackCount": [
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:90",
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:36",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:40",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:183"
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:92",
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:39",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:43",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:185"
     ],
-    "countTextWithDefaultEncoding": [
-      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:106",
-      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:88"
+    "count": [
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:101",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:587"
+    ],
+    "getDefault": [
+      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:96",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:73"
+    ],
+    "countText": [
+      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:107",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:89"
+    ],
+    "__setFactoryForTests": [
+      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:128",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:110"
+    ],
+    "countPrompt": [
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:44",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:54",
+      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:123"
     ],
     "encodeText": [
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:191",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:287"
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:193",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:289"
     ]
   },
   "shaped": {
     "()": [
-      "apps/desktop/src/main/ipc/event-forwarder.ts:43",
+      "apps/desktop/src/main/ipc/event-forwarder.ts:40",
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:55",
       "apps/desktop/src/main/ipc/handlers/agent.ts:113",
       "apps/desktop/src/main/ipc/handlers/agent.ts:147",
@@ -478,9 +522,9 @@
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:172",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:185",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:40",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:106",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:438",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:504",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:378",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:431",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:95",
       "apps/desktop/src/main/main.ts:103",
       "apps/desktop/src/main/main.ts:145",
       "apps/desktop/src/main/main.ts:35",
@@ -508,7 +552,7 @@
       "apps/desktop/src/main/services/cloud-sync.service.ts:497",
       "apps/desktop/src/main/services/cloud-sync.service.ts:66",
       "apps/desktop/src/main/services/cloud-sync.service.ts:89",
-      "apps/desktop/src/main/services/db-maintenance.service.ts:17",
+      "apps/desktop/src/main/services/db-maintenance.service.ts:18",
       "apps/desktop/src/main/services/session-prompt-input.service.ts:50",
       "apps/desktop/src/main/services/update-check.service.ts:12",
       "apps/desktop/src/main/services/vfs-batch.service.ts:116",
@@ -517,17 +561,17 @@
       "apps/desktop/src/main/services/vfs-batch.service.ts:87",
       "apps/mobile/src/App.tsx:14",
       "apps/mobile/src/App.tsx:30",
-      "apps/mobile/src/components/agent/AgentEditorForm.tsx:168",
+      "apps/mobile/src/components/agent/AgentEditorForm.tsx:166",
       "apps/mobile/src/components/agent/AgentList.tsx:104",
       "apps/mobile/src/components/agent/AgentList.tsx:192",
       "apps/mobile/src/components/agent/ToolPolicyPicker.tsx:89",
-      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:283",
-      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:317",
-      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:68",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1011",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1633",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:596",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:687",
+      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:272",
+      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:306",
+      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:57",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1610",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:573",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:664",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:988",
       "apps/mobile/src/components/chat/ChatStreamMetricsBarLive.tsx:79",
       "apps/mobile/src/components/chat/ComposerInputWebView.tsx:317",
       "apps/mobile/src/components/chat/FileReferencePicker.tsx:128",
@@ -565,8 +609,8 @@
       "apps/mobile/src/components/update/UpdateCheckHost.tsx:35",
       "apps/mobile/src/components/vfs/CodeEditorWebView.tsx:82",
       "apps/mobile/src/components/vfs/FileMarkdownPreview.tsx:64",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:423",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:759",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:403",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:739",
       "apps/mobile/src/components/vfs/vfs-file-manager/VfsPromptModal.tsx:37",
       "apps/mobile/src/debug/run-timing.ts:36",
       "apps/mobile/src/debug/run-timing.ts:37",
@@ -581,10 +625,10 @@
       "apps/mobile/src/navigation/RootNavigator.tsx:56",
       "apps/mobile/src/runtime/create-mobile-runtime.ts:110",
       "apps/mobile/src/runtime/novel-master-context.tsx:415",
-      "apps/mobile/src/screens/stack/AboutScreen.tsx:46",
+      "apps/mobile/src/screens/stack/AboutScreen.tsx:40",
       "apps/mobile/src/screens/stack/AgentEditorScreen.tsx:16",
       "apps/mobile/src/screens/stack/AgentsSettingsScreen.tsx:18",
-      "apps/mobile/src/screens/stack/ChatConfigScreen.tsx:35",
+      "apps/mobile/src/screens/stack/ChatConfigScreen.tsx:30",
       "apps/mobile/src/screens/stack/CloudSyncConfigScreen.tsx:107",
       "apps/mobile/src/screens/stack/CloudSyncConfigScreen.tsx:42",
       "apps/mobile/src/screens/stack/CloudSyncConfigScreen.tsx:77",
@@ -604,7 +648,7 @@
       "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx:47",
       "apps/mobile/src/screens/stack/PromptEditorScreen.tsx:67",
       "apps/mobile/src/screens/stack/PromptTurnDetailScreen.tsx:30",
-      "apps/mobile/src/screens/stack/ProviderCreateScreen.tsx:20",
+      "apps/mobile/src/screens/stack/ProviderCreateScreen.tsx:17",
       "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx:44",
       "apps/mobile/src/screens/stack/ProvidersScreen.tsx:33",
       "apps/mobile/src/screens/stack/RealPromptScreen.tsx:26",
@@ -613,7 +657,7 @@
       "apps/mobile/src/screens/stack/SearchEnginesScreen.tsx:42",
       "apps/mobile/src/screens/stack/SessionDetailScreen.tsx:40",
       "apps/mobile/src/screens/stack/SkillDetailScreen.tsx:27",
-      "apps/mobile/src/screens/stack/SkillPanelScreen.tsx:48",
+      "apps/mobile/src/screens/stack/SkillPanelScreen.tsx:45",
       "apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx:70",
       "apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:150",
       "apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:234",
@@ -621,8 +665,8 @@
       "apps/mobile/src/screens/stack/SmartSortRulesScreen.tsx:32",
       "apps/mobile/src/screens/stack/SmartSortRulesScreen.tsx:57",
       "apps/mobile/src/screens/stack/StorageConfigScreen.tsx:38",
-      "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx:64",
-      "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx:84",
+      "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx:58",
+      "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx:78",
       "apps/mobile/src/screens/stack/TokenUsageStatsScreen.tsx:46",
       "apps/mobile/src/screens/tabs/ChatTabScreen.tsx:253",
       "apps/mobile/src/screens/tabs/ChatTabScreen.tsx:32",
@@ -630,21 +674,21 @@
       "apps/mobile/src/screens/tabs/chat-tab/ChatSessionListPanel.tsx:118",
       "apps/mobile/src/screens/tabs/chat-tab/ChatSessionListPanel.tsx:131",
       "apps/mobile/src/screens/tabs/chat-tab/ChatTabNavigationProvider.tsx:81",
-      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:180",
-      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:253",
+      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:178",
+      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:251",
       "apps/mobile/src/screens/tabs/chat-tab/useChatTabController.ts:22",
       "apps/mobile/src/screens/tabs/chat-tab/useChatTabMessageActions.ts:216",
       "apps/mobile/src/screens/tabs/chat-tab/useChatTabMessageActions.ts:372",
       "apps/mobile/src/screens/tabs/chat-tab/useChatTabMessageActions.ts:94",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:152",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:253",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:280",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:292",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:303",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:371",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:379",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:444",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:456",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:151",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:252",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:279",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:291",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:302",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:370",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:378",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:443",
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:455",
       "apps/mobile/src/services/agent-finished-notification.ts:143",
       "apps/mobile/src/services/agent-finished-notification.ts:196",
       "apps/mobile/src/services/agent-finished-notification.ts:220",
@@ -663,7 +707,7 @@
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:74",
       "apps/mobile/src/services/cloud-sync-config.store.ts:79",
       "apps/mobile/src/services/cloud-sync.service.ts:310",
-      "apps/mobile/src/services/db-maintenance.service.ts:27",
+      "apps/mobile/src/services/db-maintenance.service.ts:28",
       "apps/mobile/src/services/llm-native-fetch-shim.ts:122",
       "apps/mobile/src/services/llm-native-fetch-shim.ts:136",
       "apps/mobile/src/services/log-sink.mobile.ts:33",
@@ -673,45 +717,45 @@
       "apps/mobile/src/services/run-state-writethrough.ts:73",
       "apps/mobile/src/services/run-state-writethrough.ts:82",
       "apps/mobile/src/services/session-prompt-input.service.ts:50",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1007",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1728",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1899",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1909",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1929",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1972",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1981",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:671",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:679",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:709",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:911",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:931",
-      "apps/mobile/src/services/session-stream-unit.ts:1010",
-      "apps/mobile/src/services/session-stream-unit.ts:1110",
-      "apps/mobile/src/services/session-stream-unit.ts:1132",
-      "apps/mobile/src/services/session-stream-unit.ts:1175",
-      "apps/mobile/src/services/session-stream-unit.ts:1185",
-      "apps/mobile/src/services/session-stream-unit.ts:1274",
-      "apps/mobile/src/services/session-stream-unit.ts:1329",
-      "apps/mobile/src/services/session-stream-unit.ts:1478",
-      "apps/mobile/src/services/session-stream-unit.ts:1492",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1000",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1721",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1892",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1902",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1922",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1965",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1974",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:664",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:672",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:702",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:904",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:924",
+      "apps/mobile/src/services/session-stream-unit.ts:1001",
+      "apps/mobile/src/services/session-stream-unit.ts:1101",
+      "apps/mobile/src/services/session-stream-unit.ts:1123",
+      "apps/mobile/src/services/session-stream-unit.ts:1166",
+      "apps/mobile/src/services/session-stream-unit.ts:1176",
+      "apps/mobile/src/services/session-stream-unit.ts:1265",
+      "apps/mobile/src/services/session-stream-unit.ts:1320",
+      "apps/mobile/src/services/session-stream-unit.ts:1469",
+      "apps/mobile/src/services/session-stream-unit.ts:1483",
+      "apps/mobile/src/services/session-stream-unit.ts:1534",
       "apps/mobile/src/services/session-stream-unit.ts:1543",
       "apps/mobile/src/services/session-stream-unit.ts:1552",
-      "apps/mobile/src/services/session-stream-unit.ts:1561",
-      "apps/mobile/src/services/session-stream-unit.ts:1574",
-      "apps/mobile/src/services/session-stream-unit.ts:1644",
-      "apps/mobile/src/services/session-stream-unit.ts:500",
-      "apps/mobile/src/services/session-stream-unit.ts:613",
-      "apps/mobile/src/services/session-stream-unit.ts:698",
-      "apps/mobile/src/services/session-stream-unit.ts:715",
-      "apps/mobile/src/services/session-stream-unit.ts:719",
-      "apps/mobile/src/services/session-stream-unit.ts:723",
-      "apps/mobile/src/services/session-stream-unit.ts:727",
-      "apps/mobile/src/services/session-stream-unit.ts:745",
-      "apps/mobile/src/services/session-stream-unit.ts:750",
-      "apps/mobile/src/services/session-stream-unit.ts:762",
-      "apps/mobile/src/services/session-stream-unit.ts:784",
-      "apps/mobile/src/services/session-stream-unit.ts:987",
-      "apps/mobile/src/services/session-stream-unit.ts:999",
+      "apps/mobile/src/services/session-stream-unit.ts:1565",
+      "apps/mobile/src/services/session-stream-unit.ts:1635",
+      "apps/mobile/src/services/session-stream-unit.ts:491",
+      "apps/mobile/src/services/session-stream-unit.ts:604",
+      "apps/mobile/src/services/session-stream-unit.ts:689",
+      "apps/mobile/src/services/session-stream-unit.ts:706",
+      "apps/mobile/src/services/session-stream-unit.ts:710",
+      "apps/mobile/src/services/session-stream-unit.ts:714",
+      "apps/mobile/src/services/session-stream-unit.ts:718",
+      "apps/mobile/src/services/session-stream-unit.ts:736",
+      "apps/mobile/src/services/session-stream-unit.ts:741",
+      "apps/mobile/src/services/session-stream-unit.ts:753",
+      "apps/mobile/src/services/session-stream-unit.ts:775",
+      "apps/mobile/src/services/session-stream-unit.ts:978",
+      "apps/mobile/src/services/session-stream-unit.ts:990",
       "apps/mobile/src/services/snapshot-complete-signal.ts:33",
       "apps/mobile/src/services/stream-apply-buffer.ts:29",
       "apps/mobile/src/services/stream-apply-buffer.ts:36",
@@ -726,7 +770,7 @@
       "apps/mobile/src/update-check/app-meta.ts:17",
       "apps/mobile/src/update-check/app-meta.ts:21",
       "apps/mobile/src/update-check/app-meta.ts:25",
-      "apps/mobile/src/web/chat-transcript/webview/main.ts:61",
+      "apps/mobile/src/web/chat-transcript/webview/main.ts:58",
       "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts:420",
       "apps/mobile/src/web/chat-transcript/webview/ui/render/RowList.tsx:26",
       "apps/mobile/src/web/chat-transcript/webview/ui/stream/StreamingMessageRow.tsx:50",
@@ -753,14 +797,14 @@
       "apps/mobile/src/web/rich-document/webview/runtime/annotate.ts:76",
       "apps/mobile/src/web/rich-document/webview/runtime/annotate.ts:88",
       "apps/mobile/src/web/rich-document/webview/runtime/annotate.ts:92",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:133",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:162",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:178",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:186",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:343",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:73",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:82",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:93",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:129",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:158",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:174",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:182",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:339",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:69",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:78",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:89",
       "packages/core/src/common/concurrency.ts:41",
       "packages/core/src/common/concurrency.ts:44",
       "packages/core/src/common/update-check.ts:53",
@@ -887,20 +931,20 @@
       "packages/core/src/service/workplace/impl/workplace.service.ts:195",
       "packages/core/src/service/workplace/impl/workplace.service.ts:248",
       "packages/core/src/service/workplace/impl/workplace.service.ts:88",
-      "packages/llm-sse-native/src/native.ts:101",
-      "packages/llm-sse-native/src/native.ts:39",
-      "packages/llm-sse-native/src/native.ts:55",
-      "packages/llm-sse-native/src/native.ts:85",
-      "packages/sksp-android/src/native.ts:22",
-      "packages/sksp-android/src/register.ts:12",
-      "packages/sksp-linux/src/register.ts:12",
-      "packages/sksp-mac/src/register.ts:12",
-      "packages/sksp-windows/src/dpapi.ts:17",
-      "packages/sksp-windows/src/register.ts:12",
+      "packages/llm-sse-native/src/native.ts:102",
+      "packages/llm-sse-native/src/native.ts:40",
+      "packages/llm-sse-native/src/native.ts:56",
+      "packages/llm-sse-native/src/native.ts:86",
+      "packages/sksp-android/src/native.ts:24",
+      "packages/sksp-android/src/register.ts:14",
+      "packages/sksp-linux/src/register.ts:14",
+      "packages/sksp-mac/src/register.ts:14",
+      "packages/sksp-windows/src/dpapi.ts:18",
+      "packages/sksp-windows/src/register.ts:14",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:138",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:193",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:74",
-      "packages/tdbc-driver-better-sqlite3/src/index.ts:19",
+      "packages/tdbc-driver-better-sqlite3/src/index.ts:21",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:110",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:166",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:236",
@@ -915,22 +959,22 @@
       "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite.adapter.ts:128",
       "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite.adapter.ts:132",
       "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite.adapter.ts:99",
-      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:119",
-      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:95",
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:52",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:56",
-      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:19",
-      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:43",
-      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:100",
-      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:84",
-      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:95",
-      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:101",
-      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:72",
-      "packages/tokenizer-driver-rn/src/register.ts:13"
+      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:120",
+      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:96",
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:62",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:72",
+      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:20",
+      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:44",
+      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:101",
+      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:85",
+      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:96",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:102",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:73",
+      "packages/tokenizer-driver-rn/src/register.ts:15"
     ],
     "(: unknown, : string)": [
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:42",
-      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:133",
+      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:122",
       "apps/mobile/src/web/chat-transcript/webview/ui/labels.ts:30",
       "packages/core/src/common/assert.ts:16"
     ],
@@ -943,8 +987,8 @@
       "apps/desktop/src/main/services/vfs-batch.service.ts:93",
       "apps/mobile/src/components/agent/prompt-macro-input.ts:49",
       "apps/mobile/src/components/agent/prompt-macro-input.ts:80",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:746",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:839",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:723",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:816",
       "apps/mobile/src/components/chat/FileReferencePicker.tsx:144",
       "apps/mobile/src/components/chat/composer-highlight.ts:36",
       "apps/mobile/src/components/chat/composer-highlight.ts:52",
@@ -964,14 +1008,14 @@
       "apps/mobile/src/components/rich-content/sanitize-rich-html.ts:75",
       "apps/mobile/src/components/sheet/DirectoryRuleSheet.tsx:184",
       "apps/mobile/src/components/vfs/FileMarkdownPreview.tsx:31",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:142",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:147",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:152",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:620",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:630",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:838",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:883",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:929",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:122",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:127",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:132",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:600",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:610",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:818",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:863",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:909",
       "apps/mobile/src/components/vfs/vfs-row-mapper.ts:160",
       "apps/mobile/src/debug/run-timing.ts:44",
       "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx:170",
@@ -990,19 +1034,19 @@
       "apps/mobile/src/services/project-composer-status.service.ts:13",
       "apps/mobile/src/services/rn-file-io.ts:14",
       "apps/mobile/src/services/rn-file-io.ts:19",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1169",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1245",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1497",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1568",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1709",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1878",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:837",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:871",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:902",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:959",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:983",
-      "apps/mobile/src/services/session-stream-unit.ts:1117",
-      "apps/mobile/src/services/session-stream-unit.ts:545",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1162",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1238",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1490",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1561",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1702",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1871",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:830",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:864",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:895",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:952",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:976",
+      "apps/mobile/src/services/session-stream-unit.ts:1108",
+      "apps/mobile/src/services/session-stream-unit.ts:536",
       "apps/mobile/src/services/snapshot-file-hash.ts:20",
       "apps/mobile/src/services/stream-token-estimator.ts:96",
       "apps/mobile/src/services/user-vfs-turn-execute.service.ts:41",
@@ -1017,7 +1061,7 @@
       "apps/mobile/src/web/code-editor/webview/runtime/editor.ts:79",
       "apps/mobile/src/web/code-editor/webview/runtime/language-for-path.ts:6",
       "apps/mobile/src/web/shared/rich-content-styles.ts:10",
-      "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts:29",
+      "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts:31",
       "packages/core/src/common/guards.ts:55",
       "packages/core/src/common/release.ts:13",
       "packages/core/src/common/release.ts:51",
@@ -1167,22 +1211,22 @@
       "packages/core/src/service/vfs/logic/ensure-import-dir-rules.ts:111",
       "packages/core/src/service/workplace/impl/workplace.service.ts:103",
       "packages/core/src/service/workplace/impl/workplace.service.ts:77",
-      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:106",
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:36",
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:78",
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:95",
+      "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:107",
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:105",
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:39",
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:88",
       "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts:20",
       "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts:35",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:111",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:40",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:94",
-      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:23",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:131",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:191",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:208",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:287",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:44",
-      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:88"
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:110",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:127",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:43",
+      "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:24",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:133",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:193",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:210",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:289",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:46",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:89"
     ],
     "(: DesktopNovelMasterRuntime, : string)": [
       "apps/desktop/src/main/ipc/handlers/agent.ts:273",
@@ -1193,10 +1237,10 @@
     "(: string, : string)": [
       "apps/desktop/src/main/ipc/handlers/agent.ts:204",
       "apps/desktop/src/main/ipc/handlers/agent.ts:374",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:628",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:522",
       "apps/desktop/src/main/services/cloud-sync-config.store.ts:97",
       "apps/mobile/src/components/agent/prompt-macro-input.ts:112",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:351",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:328",
       "apps/mobile/src/components/chat/enrich-transcript-rows.ts:9",
       "apps/mobile/src/components/rich-content/highlight-code.ts:84",
       "apps/mobile/src/components/vfs/vfs-move-path.ts:21",
@@ -1205,14 +1249,14 @@
       "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx:35",
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:29",
       "apps/mobile/src/services/map-cloud-sync-sdk-error.ts:24",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1020",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1207",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1517",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1548",
-      "apps/mobile/src/services/session-stream-unit.ts:1052",
-      "apps/mobile/src/services/session-stream-unit.ts:1433",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1013",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1200",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1510",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1541",
+      "apps/mobile/src/services/session-stream-unit.ts:1043",
+      "apps/mobile/src/services/session-stream-unit.ts:1424",
+      "apps/mobile/src/services/session-stream-unit.ts:840",
       "apps/mobile/src/services/session-stream-unit.ts:849",
-      "apps/mobile/src/services/session-stream-unit.ts:858",
       "apps/mobile/src/services/yaml-shared.ts:24",
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:157",
       "apps/mobile/src/web/rich-document/webview/runtime/document-model.ts:28",
@@ -1267,20 +1311,20 @@
       "packages/core/src/service/vfs/impl/vfs.service.ts:52",
       "packages/core/src/service/vfs/impl/vfs.service.ts:90",
       "packages/core/src/service/workplace/impl/workplace.service.ts:114",
-      "packages/sksp-windows/src/dpapi.ts:25",
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:90",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:234"
+      "packages/sksp-windows/src/dpapi.ts:26",
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:92",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:236"
     ],
     "(: boolean)": [
       "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:52",
       "apps/desktop/src/main/services/cloud-sync.service.ts:84",
       "apps/mobile/src/components/vfs/vfs-row-mapper.ts:68",
-      "apps/mobile/src/screens/stack/SkillPanelScreen.tsx:95",
+      "apps/mobile/src/screens/stack/SkillPanelScreen.tsx:92",
       "apps/mobile/src/services/agent-finished-notification.ts:105",
       "apps/mobile/src/services/agent-finished-notification.ts:129",
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:353",
       "apps/mobile/src/web/rich-document/webview/runtime/annotate.ts:28",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:105",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:101",
       "packages/core/src/domain/feature-flags/user-vfs-unified-tool-turn.ts:22",
       "packages/core/src/service/agent/logic/agent-activity-tracker.ts:45",
       "packages/core/src/service/agent/logic/agent-activity-tracker.ts:56",
@@ -1288,11 +1332,7 @@
       "packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:44",
       "packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:57",
       "packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:71",
-      "packages/sksp-windows/src/dpapi.ts:13"
-    ],
-    "(: AbortScope)": [
-      "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:127",
-      "apps/desktop/src/main/ipc/handlers/db-maintenance.ts:43"
+      "packages/sksp-windows/src/dpapi.ts:14"
     ],
     "(: ChatMessageData)": [
       "apps/desktop/src/main/ipc/handlers/messages.ts:38",
@@ -1309,8 +1349,8 @@
       "apps/desktop/src/main/ipc/handlers/provider-models.ts:48"
     ],
     "(: VfsZipRequest)": [
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:345",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:406"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:297",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:348"
     ],
     "(: () => Promise<Result<T, AppError>>)": [
       "apps/desktop/src/main/ipc/ipc-result.ts:20",
@@ -1322,10 +1362,10 @@
       "packages/core/src/service/persistent-preferences/create-persistent-preferences.ts:19",
       "packages/core/src/service/session-run-state/create-session-run-state-service.ts:21",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:76",
-      "packages/sksp-android/src/android-secret-store.ts:81",
-      "packages/sksp-linux/src/sqlite-secret-store.ts:26",
-      "packages/sksp-mac/src/sqlite-secret-store.ts:26",
-      "packages/sksp-windows/src/sqlite-secret-store.ts:38"
+      "packages/sksp-android/src/android-secret-store.ts:84",
+      "packages/sksp-linux/src/sqlite-secret-store.ts:28",
+      "packages/sksp-mac/src/sqlite-secret-store.ts:28",
+      "packages/sksp-windows/src/sqlite-secret-store.ts:40"
     ],
     "(: DesktopNovelMasterRuntime)": [
       "apps/desktop/src/main/services/agent-run.service.ts:44",
@@ -1336,8 +1376,8 @@
       "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:141",
       "apps/mobile/src/components/chat/ChatConversationBridge.ts:223",
       "apps/mobile/src/components/chat/ComposerInputWebView.tsx:97",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:508",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:698",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:488",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:678",
       "apps/mobile/src/errors/format-error.ts:25",
       "apps/mobile/src/runtime/novel-master-context.tsx:209",
       "apps/mobile/src/runtime/novel-master-context.tsx:217",
@@ -1348,8 +1388,8 @@
       "apps/mobile/src/services/db-backup.service.ts:47",
       "apps/mobile/src/services/document-pick.ts:14",
       "apps/mobile/src/services/map-cloud-sync-sdk-error.ts:32",
-      "apps/mobile/src/services/session-stream-unit.ts:1146",
-      "apps/mobile/src/services/session-stream-unit.ts:1159",
+      "apps/mobile/src/services/session-stream-unit.ts:1137",
+      "apps/mobile/src/services/session-stream-unit.ts:1150",
       "apps/mobile/src/web/chat-transcript/webview/runtime/render/tool-logic.ts:20",
       "apps/mobile/src/web/chat-transcript/webview/ui/labels.ts:40",
       "apps/mobile/src/web/code-editor/webview/runtime/bridge.ts:17",
@@ -1368,18 +1408,18 @@
       "packages/core/src/service/provider/impl/model-request.service.ts:63",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:288",
       "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:37",
-      "packages/llm-sse-native/src/transport.ts:269",
-      "packages/llm-sse-native/src/transport.ts:284",
-      "packages/llm-sse-native/src/transport.ts:299",
-      "packages/llm-sse-native/src/transport.ts:312",
-      "packages/llm-sse-native/src/transport.ts:321",
-      "packages/sksp-android/src/android-secret-store.ts:24",
+      "packages/llm-sse-native/src/transport.ts:271",
+      "packages/llm-sse-native/src/transport.ts:286",
+      "packages/llm-sse-native/src/transport.ts:301",
+      "packages/llm-sse-native/src/transport.ts:314",
+      "packages/llm-sse-native/src/transport.ts:323",
+      "packages/sksp-android/src/android-secret-store.ts:74",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:146",
-      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:9",
+      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:11",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:283",
-      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:14",
-      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:104",
-      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:58"
+      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:15",
+      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:105",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:59"
     ],
     "(: DesktopNovelMasterRuntime, : SessionPromptScope)": [
       "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:536",
@@ -1388,19 +1428,19 @@
     ],
     "(options?: { readonly checkpoint?: () => Interrupt | null })": [
       "apps/desktop/src/main/services/cloud-sync.service.ts:215",
-      "apps/desktop/src/main/services/db-maintenance.service.ts:42"
+      "apps/desktop/src/main/services/db-maintenance.service.ts:41"
     ],
     "(: number)": [
       "apps/desktop/src/main/services/cloud-sync.service.ts:300",
       "apps/mobile/src/components/charts/PieChart.tsx:53",
       "apps/mobile/src/components/ui/MonthRangePickerSheet.tsx:106",
       "apps/mobile/src/components/ui/MonthRangePickerSheet.tsx:82",
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:157",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:137",
       "apps/mobile/src/screens/stack/FileEditorScreen.tsx:27",
       "apps/mobile/src/services/agent-finished-notification.ts:241",
       "apps/mobile/src/services/scope-key-cache.ts:76",
-      "apps/mobile/src/services/session-stream-unit.ts:736",
-      "apps/mobile/src/services/session-stream-unit.ts:777",
+      "apps/mobile/src/services/session-stream-unit.ts:727",
+      "apps/mobile/src/services/session-stream-unit.ts:768",
       "apps/mobile/src/web/chat-transcript/stream/block-split.ts:123",
       "apps/mobile/src/web/shared/post.ts:38",
       "packages/core/src/common/text.ts:21",
@@ -1427,8 +1467,8 @@
       "apps/mobile/src/services/project-composer-status.service.ts:33"
     ],
     "(: AgentDefinition)": [
-      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:102",
-      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:232",
+      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:221",
+      "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts:91",
       "packages/core/src/service/agent/impl/agent-registry.service.ts:33"
     ],
     "(: ThemeTokens)": [
@@ -1448,15 +1488,15 @@
     ],
     "(: Record<string, unknown>)": [
       "apps/mobile/src/components/chat/ChatConversationBridge.ts:254",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1280",
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1339",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1257",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:1316",
       "packages/core/src/domain/tool/builtin/agent-tool.ts:102",
       "packages/core/src/service/compaction-conditions/impl/compaction-conditions-store.service.ts:19",
-      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:30",
-      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:37"
+      "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:31",
+      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:38"
     ],
     "(: readonly string[], : string)": [
-      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:343",
+      "apps/mobile/src/components/chat/ChatConversationWebView.tsx:320",
       "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:28"
     ],
     "(: readonly WorkplaceListRow[], : string)": [
@@ -1468,7 +1508,7 @@
       "apps/mobile/src/components/chat/composer-send-state.ts:15",
       "apps/mobile/src/components/chat/message-blocks.ts:122",
       "apps/mobile/src/components/chat/message-blocks.ts:167",
-      "apps/mobile/src/services/session-stream-unit.ts:1391",
+      "apps/mobile/src/services/session-stream-unit.ts:1382",
       "packages/core/src/infra/tokenizer/impl/heuristic-token-counter.ts:26"
     ],
     "(: readonly ChatMessageData[], : BuildChatListItemsOptions)": [
@@ -1494,7 +1534,7 @@
       "apps/mobile/src/components/form/FormOverlayHost.tsx:22",
       "apps/mobile/src/navigation/HeaderContext.tsx:34",
       "apps/mobile/src/runtime/novel-master-context.tsx:112",
-      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:188",
+      "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:186",
       "apps/mobile/src/theme/ThemeProvider.tsx:20"
     ],
     "({color, size = 24}: IconProps)": [
@@ -1529,7 +1569,7 @@
       "packages/core/src/infra/tokenizer/logic/prompt-whole-cache.ts:125",
       "packages/core/src/service/chat/impl/usage-stats.service.ts:67",
       "packages/core/src/service/chat/impl/usage-stats.service.ts:82",
-      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:175"
+      "packages/tokenizer-driver-rn/src/android-native-bridge.ts:176"
     ],
     "({text, tokens}: {: string; : ThemeTokensShape})": [
       "apps/mobile/src/components/sheet/MetricDetailSheet.tsx:125",
@@ -1553,7 +1593,7 @@
       "packages/core/src/service/agent/impl/ephemeral-overlay-agent-session.ts:74"
     ],
     "(: readonly string[])": [
-      "apps/mobile/src/components/vfs/VfsFileManager.tsx:162",
+      "apps/mobile/src/components/vfs/VfsFileManager.tsx:142",
       "apps/mobile/src/web/shared/rich-content-styles.ts:8",
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:112",
       "packages/core/src/domain/tool/builtin/search/curl-import.ts:238",
@@ -1571,9 +1611,9 @@
     ],
     "(: () => void)": [
       "apps/mobile/src/hooks/useDismissOverlaysOnBlur.ts:5",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:995",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:988",
       "packages/core/src/service/agent/impl/agent-runner.ts:944",
-      "packages/llm-sse-native/src/transport.ts:168"
+      "packages/llm-sse-native/src/transport.ts:170"
     ],
     "(: MobileNovelMasterRuntime)": [
       "apps/mobile/src/runtime/novel-master-context.tsx:203",
@@ -1584,8 +1624,8 @@
       "apps/mobile/src/services/cloud-sync-config.store.ts:99",
       "apps/mobile/src/services/cloud-sync.service.ts:208",
       "apps/mobile/src/services/db-backup.service.ts:191",
-      "apps/mobile/src/services/db-maintenance.service.ts:38",
-      "apps/mobile/src/services/db-maintenance.service.ts:54",
+      "apps/mobile/src/services/db-maintenance.service.ts:39",
+      "apps/mobile/src/services/db-maintenance.service.ts:55",
       "apps/mobile/src/services/search-config.store.ts:25"
     ],
     "(: string, modelName?: string)": [
@@ -1595,7 +1635,7 @@
     "(: string[])": [
       "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx:133",
       "apps/mobile/src/screens/stack/ProvidersScreen.tsx:102",
-      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:678"
+      "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:677"
     ],
     "(: SkillRow)": [
       "apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx:151",
@@ -1634,8 +1674,8 @@
       "apps/mobile/src/services/document-io.ts:153"
     ],
     "(: string, : number)": [
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:852",
-      "apps/mobile/src/services/session-stream-unit.ts:876",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:845",
+      "apps/mobile/src/services/session-stream-unit.ts:867",
       "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:275",
       "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:375",
       "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:381",
@@ -1644,37 +1684,37 @@
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:125"
     ],
     "(: string, : SessionStreamUnit)": [
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1716",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1751"
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1709",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1744"
     ],
     "(: SessionStreamUnit)": [
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1794",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1803",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1833",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1865",
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1888"
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1787",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1796",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1826",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1858",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1881"
     ],
     "(: SessionRunState)": [
-      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1823",
+      "apps/mobile/src/services/session-stream-unit-manager.service.ts:1816",
       "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:54"
     ],
     "(: SessionStreamRunSettledStatus)": [
-      "apps/mobile/src/services/session-stream-unit.ts:568",
-      "apps/mobile/src/services/session-stream-unit.ts:684"
+      "apps/mobile/src/services/session-stream-unit.ts:559",
+      "apps/mobile/src/services/session-stream-unit.ts:675"
     ],
     "(: StreamRowIds)": [
-      "apps/mobile/src/services/session-stream-unit.ts:1019",
-      "apps/mobile/src/services/session-stream-unit.ts:1701"
+      "apps/mobile/src/services/session-stream-unit.ts:1010",
+      "apps/mobile/src/services/session-stream-unit.ts:1702"
     ],
     "(: readonly StreamWireChunk[])": [
-      "apps/mobile/src/services/session-stream-unit.ts:1513",
+      "apps/mobile/src/services/session-stream-unit.ts:1504",
       "apps/mobile/src/services/stream-apply-buffer.ts:69",
       "apps/mobile/src/services/stream-wire-queue.ts:30",
       "apps/mobile/src/services/stream-wire-queue.ts:51"
     ],
     "(: StreamStepRecord)": [
-      "apps/mobile/src/services/session-stream-unit.ts:1674",
-      "apps/mobile/src/services/session-stream-unit.ts:1686"
+      "apps/mobile/src/services/session-stream-unit.ts:1675",
+      "apps/mobile/src/services/session-stream-unit.ts:1687"
     ],
     "(: StreamTokenModelHintRuntime, : string)": [
       "apps/mobile/src/services/stream-token-estimator.ts:136",
@@ -1745,12 +1785,12 @@
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:304"
     ],
     "(: TouchEvent)": [
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:260",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:286",
-      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:318"
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:256",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:282",
+      "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:314"
     ],
     "(: string | undefined)": [
-      "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts:21",
+      "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts:23",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:143",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:34",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:42",
@@ -2044,27 +2084,25 @@
       "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite.adapter.ts:110"
     ],
     "(: OpSqliteResult)": [
-      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:68",
-      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:81"
-    ],
-    "(: readonly ChatMessage[])": [
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:83",
-      "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts:40",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:99"
+      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:69",
+      "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:82"
     ],
     "(: TokenizerFamily, : string)": [
-      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:108",
-      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:132"
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:44",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:54"
+    ],
+    "(: readonly ChatMessage[])": [
+      "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:93",
+      "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts:40",
+      "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:115"
     ],
     "(: RnEncodingName)": [
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:257",
-      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:64"
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:259",
+      "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:65"
     ]
   },
   "judged": {
     "named": {
-      "getDbMaintenanceStats": "双端镜像：desktop 无参走单例 / mobile 穿 runtime。C9 主动统一命名（mobile 原名 getDatabaseMaintenanceStats）。",
-      "runDbMaintenance": "双端镜像：同上，C9 统一 Db 短形。",
       "feed": "三协议 SSE parser 的 namespace 成员：anthropic/gemini/openai 状态机不同构（V1 已核实「不能硬造统一 parser」），C5 把 feedXxxSseChunk 收进各 parser 对象后成员名统一为 feed。三份是设计使然。",
       "finishPartial": "同上：三协议 finishPartial 收进 parser 对象后同名，语义各按协议。",
       "list": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
@@ -2119,7 +2157,16 @@
       "handle": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "mount": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "destroy": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
-      "blur": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。"
+      "blur": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
+      "getStats": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "map": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "registerWith": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "register": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "count": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "getDefault": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "countText": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "__setFactoryForTests": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。",
+      "countPrompt": "p25 收口 dup：跨端/跨包/跨平台同语义 namespace 成员（不同 runtime 各自实现），合并无意义，判定保留。"
     },
     "shaped": {
       "(: BooleanPrefName)": "C3 配置表产物：get/set/resetBooleanPref 三个方法同签名但操作不同维度（读 / 写 / 删），不是复制粘贴。",
