@@ -52,10 +52,7 @@ jest.mock('@react-native-documents/picker', () => ({
   types: {plainText: 'text/plain'},
 }));
 
-import {
-  exportAgentYaml,
-  importAgentYaml,
-} from '@/services/agent-yaml.service';
+import {AgentYamlService} from '@/services/agent-yaml.service';
 import {AgentYamlCodec} from '@novel-master/core/agent';
 
 describe('agent-yaml.service', () => {
@@ -72,7 +69,7 @@ describe('agent-yaml.service', () => {
         })),
       },
     } as any;
-    await expect(exportAgentYaml(runtime, 'a1')).resolves.toBe('saved');
+    await expect(AgentYamlService.exportYaml(runtime, 'a1')).resolves.toBe('saved');
     // 编解码单源在 core：写出的是真实 YAML（不再是 mock 的 'yaml' 字面量）。
     expect(mockWriteFile).toHaveBeenCalledWith(
       '/tmp/a1.agent.yaml',
@@ -88,7 +85,7 @@ describe('agent-yaml.service', () => {
       {uri: 'file:///sdcard/readme.txt', name: 'readme.txt'},
     ]);
     const runtime = {agentRegistry: {upsert: jest.fn()}} as any;
-    await expect(importAgentYaml(runtime, 'a1')).rejects.toThrow(/\.yaml/);
+    await expect(AgentYamlService.importYaml(runtime, 'a1')).rejects.toThrow(/\.yaml/);
     expect(mockKeepLocalCopy).not.toHaveBeenCalled();
   });
 
@@ -107,7 +104,7 @@ describe('agent-yaml.service', () => {
         upsert: jest.fn(async () => ({ok: true as const, value: undefined})),
       },
     } as any;
-    await importAgentYaml(runtime, 'a1');
+    await AgentYamlService.importYaml(runtime, 'a1');
     expect(mockPick).toHaveBeenCalled();
     expect(mockKeepLocalCopy).toHaveBeenCalled();
     expect(mockReadFile).toHaveBeenCalledWith(

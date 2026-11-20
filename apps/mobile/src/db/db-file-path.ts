@@ -4,7 +4,7 @@
  * @module db/db-file-path
  */
 import type ReactNativeBlobUtil from 'react-native-blob-util';
-import {blobFs} from '@/services/rn-file-io';
+import {RnFileIo} from '@/services/rn-file-io';
 import {MOBILE_VFS_DB_NAME} from '@/vfs/constants';
 
 /** Subfolder under app files dir used by quick-sqlite when `location: 'default'`. */
@@ -29,7 +29,7 @@ export const MobileDatabaseFilePath = {
   /**
    * Candidate paths for `novel_master_vfs` across driver layouts.
    */
-  buildCandidates: (dirs: typeof ReactNativeBlobUtil.fs.dirs = blobFs().dirs): string[] => {
+  buildCandidates: (dirs: typeof ReactNativeBlobUtil.fs.dirs = RnFileIo.blobFs().dirs): string[] => {
     const dirsWithSupport = dirs as typeof dirs & {ApplicationSupportDir?: string};
     const base = dirs.DocumentDir ?? dirs.LibraryDir ?? dirsWithSupport.ApplicationSupportDir;
     if (typeof base !== 'string' || base.length === 0) {
@@ -58,7 +58,7 @@ export const MobileDatabaseFilePath = {
    * Call from {@link getMobileConnection} bootstrap.
    */
   probeAndCache: async (): Promise<string> => {
-    const fs = blobFs();
+    const fs = RnFileIo.blobFs();
     for (const candidate of MobileDatabaseFilePath.buildCandidates(fs.dirs)) {
       if (await fs.exists(candidate)) {
         cachedDbFilePath = candidate;

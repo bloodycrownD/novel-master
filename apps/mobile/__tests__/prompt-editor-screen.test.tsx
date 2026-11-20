@@ -7,6 +7,7 @@
  * 预览走 FileMarkdownPreview（内存草稿，无 VFS），编辑器伪路径 prompt.md。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import {ComposerTokenInsert} from '@/components/chat/composer-token-insert';
 import React from 'react';
 import {Alert, Platform} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
@@ -660,7 +661,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     act(() => {
       mockSkillPickerProps[0]!.onConfirm('写作');
     });
-    // buildTokenInsertion('已有文本', 4, 4, '$写作$')：chip 零分隔空格直插，
+    // ComposerTokenInsert.buildTokenInsertion('已有文本', 4, 4, '$写作$')：chip 零分隔空格直插，
     // 光标落插入段末尾（8 = 4 + 4）——cursor 若停在 0 会插到整篇开头（该回归的本体）。
     expect(mockEditorSetText).toHaveBeenCalledWith('已有文本$写作$', {
       start: 8,

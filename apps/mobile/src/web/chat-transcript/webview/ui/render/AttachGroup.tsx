@@ -2,7 +2,7 @@
  * 消息附件组：对齐工具组折叠交互。
  */
 import type {AttachmentChip} from '../../runtime/state/state';
-import {attachmentChipLabel} from '../../runtime/render/row-logic';
+import {RowLogic} from '../../runtime/render/row-logic';
 import {CollapsibleSection} from './CollapsibleSection';
 
 type AttachGroupProps = {
@@ -41,7 +41,7 @@ export function AttachGroup({
         return (
           <div key={i} className="tool-group-item tool-card attach-card">
             <div className="tool-header">
-              <span className="tool-name">{attachmentChipLabel(a)}</span>
+              <span className="tool-name">{RowLogic.attachmentChipLabel(a)}</span>
               {src ? <span className="tool-status success">{src}</span> : null}
             </div>
           </div>

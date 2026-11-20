@@ -38,8 +38,8 @@ import {FileMarkdownPreview, type PreviewRenderKind} from '../../components/vfs/
 import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
 import {promptEditorOnSavedSlot, type PromptEditorOnSaved} from '../../components/agent/prompt-editor-callback';
 import {composerAtPath} from '../../components/chat/composer-at-path';
-import {buildTokenInsertion, queryWithinConfirmedRange, type ComposerTokenInsertion} from '../../components/chat/composer-token-insert';
-import {remapTokenRanges} from '../../components/chat/native-composer/token-ranges';
+import {ComposerTokenInsert, type ComposerTokenInsertion} from '../../components/chat/composer-token-insert';
+import {TokenRanges} from '../../components/chat/native-composer/token-ranges';
 import type {ComposerDraftTokenRange} from '@novel-master/core/chat';
 import {FileReferencePicker} from '../../components/chat/FileReferencePicker';
 import {SkillPicker} from '../../components/skills/SkillPicker';
@@ -141,7 +141,7 @@ export function PromptEditorScreen() {
    * 反推真实删除段，幸存区间才不会被子差分对齐误摘——与 dock 语义一致。
    */
   const advanceConfirmedRanges = useCallback((prevText: string, nextText: string, inserted: readonly ComposerDraftTokenRange[] = [], nextCursor?: number, prevCursor?: number) => {
-    const remapped = remapTokenRanges(prevText, nextText, confirmedRangesRef.current, nextCursor, prevCursor);
+    const remapped = TokenRanges.remapTokenRanges(prevText, nextText, confirmedRangesRef.current, nextCursor, prevCursor);
     confirmedRangesRef.current = inserted.length > 0 ? [...remapped, ...inserted].sort((a, b) => a.start - b.start) : remapped;
   }, []);
 
@@ -180,8 +180,8 @@ export function PromptEditorScreen() {
     (skillName: string) => {
       // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询；但整段落进已确认
       // 胶囊的查询是成品胶囊（光标贴其尾部），纯插入不替换。
-      const replaceStart = activeSkill != null && !queryWithinConfirmedRange(confirmedRangesRef.current, activeSkill.start, cursor) ? activeSkill.start : cursor;
-      commitDraft(buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}$`));
+      const replaceStart = activeSkill != null && !ComposerTokenInsert.queryWithinConfirmedRange(confirmedRangesRef.current, activeSkill.start, cursor) ? activeSkill.start : cursor;
+      commitDraft(ComposerTokenInsert.buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}$`));
     },
     [activeSkill, cursor, draft, commitDraft],
   );
@@ -195,10 +195,10 @@ export function PromptEditorScreen() {
       if (pathTokens.length === 0) {
         return;
       }
-      const replaceStart = activeAt != null && !queryWithinConfirmedRange(confirmedRangesRef.current, activeAt.start, cursor) ? activeAt.start : cursor;
+      const replaceStart = activeAt != null && !ComposerTokenInsert.queryWithinConfirmedRange(confirmedRangesRef.current, activeAt.start, cursor) ? activeAt.start : cursor;
       // picker 交上来的是裸 `@path`：终止符在 composer 侧补（picker 与目录移动共用）
       const insertTokens = pathTokens.map(token => `${token}@`);
-      const insertion = buildTokenInsertion(draft, cursor, replaceStart, insertTokens);
+      const insertion = ComposerTokenInsert.buildTokenInsertion(draft, cursor, replaceStart, insertTokens);
       commitDraft(insertion);
     },
     [activeAt, cursor, draft, commitDraft],

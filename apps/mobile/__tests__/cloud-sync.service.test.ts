@@ -1,12 +1,8 @@
 import {AppError, DatabaseReplacedError, Result} from '@novel-master/core';
 import {RequestAbort} from '@novel-master/core/llm-protocol';
 import {ABORT_KEY, AbortError, AbortRegistryFactory} from '@novel-master/core/abort';
-import {
-  pullCloudSync,
-  pushCloudSync,
-  sha256Hex,
-  testCloudSyncConnection,
-} from '@/services/cloud-sync.service';
+import {CloudSyncService} from '@/services/cloud-sync.service';
+import {SnapshotFileHash} from '@/services/snapshot-file-hash';
 import {maintenanceBusy} from '@/services/db-maintenance-busy';
 
 const mockGetConfig = jest.fn();
@@ -26,7 +22,8 @@ const mockUnlink = jest.fn();
 const mockReadFile = jest.fn();
 const mockStat = jest.fn();
 
-jest.mock('@/services/cloud-sync-config.store', () => ({
+jest.mock('@/services/cloud-sync-config.store', () => {
+  const legacy = {
   CLOUD_SYNC_KKV_MODULE: 'nm-cloud-sync',
   CLOUD_SYNC_SECRET_REF: 'cloud-sync/s3-secret-key',
   DEFAULT_CLOUD_SYNC_PATH_PREFIX: 'novel-master/sync/',
@@ -37,10 +34,24 @@ jest.mock('@/services/cloud-sync-config.store', () => ({
   buildS3StorageConfig: (...args: unknown[]) => mockBuildS3Config(...args),
   setCloudSyncConfig: jest.fn(),
   generateCloudSyncDeviceId: jest.fn(() => 'device-1'),
-}));
+};
+  return {
+    ...legacy,
+    CloudSyncConfigStore: {
+      get: legacy.getCloudSyncConfig,
+      getLocalStatus: legacy.getCloudSyncLocalStatus,
+      patchLocalStatus: legacy.patchCloudSyncLocalStatus,
+      buildS3StorageConfig: legacy.buildS3StorageConfig,
+      set: legacy.setCloudSyncConfig,
+      generateDeviceId: legacy.generateCloudSyncDeviceId,
+    },
+  };
+});
 
 jest.mock('@novel-master/cloud-sync-driver-s3', () => ({
-  createS3ObjectStorage: (...args: unknown[]) => mockCreateS3Storage(...args),
+  S3ObjectStorage: {
+    create: (...args: unknown[]) => mockCreateS3Storage(...args),
+  },
 }));
 
 jest.mock('@novel-master/core', () => {
@@ -162,7 +173,7 @@ beforeEach(() => {
 
 describe('sha256Hex', () => {
   it('空输入返回已知哈希', () => {
-    expect(sha256Hex(new Uint8Array())).toBe(
+    expect(SnapshotFileHash.sha256Hex(new Uint8Array())).toBe(
       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     );
   });
@@ -170,7 +181,7 @@ describe('sha256Hex', () => {
 
 describe('testCloudSyncConnection', () => {
   it('HeadBucket 成功时不抛错', async () => {
-    await expect(testCloudSyncConnection(runtime)).resolves.toEqual({
+    await expect(CloudSyncService.testConnection(runtime)).resolves.toEqual({
       ok: true,
       value: undefined,
     });
@@ -184,7 +195,7 @@ describe('testCloudSyncConnection', () => {
     mockHeadBucket.mockRejectedValue(sdkError);
     mockListObjects.mockRejectedValue(sdkError);
 
-    await expect(testCloudSyncConnection(runtime)).rejects.toMatchObject({
+    await expect(CloudSyncService.testConnection(runtime)).rejects.toMatchObject({
       key: 'CLOUD_SYNC_NETWORK',
       message: '云存储连接失败，请检查网络与配置',
     });
@@ -222,7 +233,7 @@ describe('pullCloudSync', () => {
       return Promise.resolve();
     });
 
-    const result = await pullCloudSync(runtime, rebootstrap);
+    const result = await CloudSyncService.pull(runtime, rebootstrap);
 
     expect(result).toEqual({ok: true, value: {rev: 3, alreadyUpToDate: false}});
     // checkpoint 由 service 注入，coordinator 在真实阶段边界调它（T-S16）。
@@ -254,7 +265,7 @@ describe('pullCloudSync', () => {
     mockCoordinatorPull.mockResolvedValue(Result.ok({rev: 3, databaseReplaced: false}));
     const rebootstrap = jest.fn(async () => freshRuntime);
 
-    const result = await pullCloudSync(runtime, rebootstrap);
+    const result = await CloudSyncService.pull(runtime, rebootstrap);
 
     expect(result).toEqual({ok: true, value: {rev: 3, alreadyUpToDate: false}});
     expect(rebootstrap).not.toHaveBeenCalled();
@@ -271,7 +282,7 @@ describe('pullCloudSync', () => {
     );
     const rebootstrap = jest.fn(async () => freshRuntime);
 
-    const result = await pullCloudSync(runtime, rebootstrap);
+    const result = await CloudSyncService.pull(runtime, rebootstrap);
 
     expect(result).toEqual({ok: true, value: {rev: 1, alreadyUpToDate: true}});
     expect(rebootstrap).not.toHaveBeenCalled();
@@ -287,7 +298,7 @@ describe('pullCloudSync', () => {
     );
     const rebootstrap = jest.fn(async () => freshRuntime);
 
-    const failed = await pullCloudSync(runtime, rebootstrap);
+    const failed = await CloudSyncService.pull(runtime, rebootstrap);
     expect(failed.ok).toBe(false);
 
     // mobile 的 runtime 是 React state、没有懒建自愈 ⇒ 不补这条，一次失败 pull
@@ -309,7 +320,7 @@ describe('pullCloudSync', () => {
       },
     });
 
-    const denied = await pullCloudSync(runtime, jest.fn(async () => freshRuntime));
+    const denied = await CloudSyncService.pull(runtime, jest.fn(async () => freshRuntime));
     expect(denied.ok).toBe(false);
     if (!denied.ok) {
       expect(denied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
@@ -329,7 +340,7 @@ describe('pullCloudSync', () => {
       error: new Error('请先完成云存储配置'),
     });
 
-    const deniedCoordinator = await pullCloudSync(
+    const deniedCoordinator = await CloudSyncService.pull(
       runtime,
       jest.fn(async () => freshRuntime),
     );
@@ -342,7 +353,7 @@ describe('pullCloudSync', () => {
     expect(mockUnlink).not.toHaveBeenCalledWith(undefined);
     // 弱断言：错因是配置没填全，与网络毫无关系；兜底分支会把它误报成
     // 「请检查网络」这种误导引导。
-    const deniedAgain = await pullCloudSync(
+    const deniedAgain = await CloudSyncService.pull(
       runtime,
       jest.fn(async () => freshRuntime),
     );
@@ -355,7 +366,7 @@ describe('pullCloudSync', () => {
     mockCoordinatorPull.mockResolvedValue(Result.err(new Error('快照校验失败')));
     const rebootstrap = jest.fn(async () => freshRuntime);
 
-    const failed = await pullCloudSync(runtime, rebootstrap);
+    const failed = await CloudSyncService.pull(runtime, rebootstrap);
     expect(failed.ok).toBe(false);
 
     expect(mockUnlink).toHaveBeenCalledTimes(2);
@@ -371,7 +382,7 @@ describe('pushCloudSync', () => {
   it('推送成功时更新 lastSyncedRev', async () => {
     mockCoordinatorPush.mockResolvedValue(Result.ok({rev: 2}));
 
-    const result = await pushCloudSync(runtime, undefined);
+    const result = await CloudSyncService.push(runtime, undefined);
 
     expect(result).toEqual({ok: true, value: {rev: 2}});
     expect(mockCoordinatorPush).toHaveBeenCalledWith(
@@ -396,7 +407,7 @@ describe('pushCloudSync', () => {
       Result.err(new AppError('CLOUD_SYNC_NEED_PULL_FIRST', {detail: '云端有更新，请先拉取'})),
     );
 
-    const result = await pushCloudSync(runtime, undefined);
+    const result = await CloudSyncService.push(runtime, undefined);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatchObject({key: 'CLOUD_SYNC_NEED_PULL_FIRST'});
@@ -434,7 +445,7 @@ describe('云同步任务级取消（T-S16）', () => {
       throw AbortError.create();
     });
 
-    const error = await captureRejection(pullCloudSync(runtime, jest.fn(), {onProgress}));
+    const error = await captureRejection(CloudSyncService.pull(runtime, jest.fn(), {onProgress}));
 
     // 原样上抛：不得被 mapCloudSyncSdkError 包成 CLOUD_SYNC_NETWORK。
     expect(RequestAbort.isAbortLikeError(error)).toBe(true);
@@ -462,7 +473,7 @@ describe('云同步任务级取消（T-S16）', () => {
       throw AbortError.create();
     });
 
-    const error = await captureRejection(pushCloudSync(runtime, {onProgress}));
+    const error = await captureRejection(CloudSyncService.push(runtime, {onProgress}));
 
     expect(RequestAbort.isAbortLikeError(error)).toBe(true);
     expect(error).not.toMatchObject({key: 'CLOUD_SYNC_NETWORK'});
@@ -487,7 +498,7 @@ describe('云同步任务级取消（T-S16）', () => {
     const onProgress = jest.fn();
     mockCoordinatorPush.mockResolvedValue(Result.err(new AppError('CLOUD_SYNC_LOCK_HELD_BY_OTHER', {detail: '锁被占用'})));
 
-    const result = await pushCloudSync(runtime, {onProgress});
+    const result = await CloudSyncService.push(runtime, {onProgress});
 
     expect(result.ok).toBe(false);
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(

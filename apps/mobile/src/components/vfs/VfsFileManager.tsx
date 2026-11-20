@@ -12,43 +12,23 @@ import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu, type SheetMenuItem} from '../sheet/BottomSheetMenu';
 import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
-import {
-  countFilesInDir,
-  isDirectChild,
-  mapVfsListEntry,
-  mapWorktreeRow,
-  parentLogicalPath,
-  patchDirRuleRow,
-  pathWithLabels,
-  remapDirectChildRows,
-  type MappedVfsRow,
-} from './vfs-row-mapper';
-import {orderedDirectChildPaths} from './vfs-direct-children-order';
+import {parentLogicalPath, VfsRowMapper, type MappedVfsRow} from './vfs-row-mapper';
+import {VfsDirectChildrenOrder} from './vfs-direct-children-order';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 
 import {AppErrorOps} from '@novel-master/core/errors';
 import {Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
-import {formatVfsErrorForUser} from '../../errors/format-error';
-import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
-import {
-  createVfsDirectory,
-  createVfsFile,
-  deleteScopedVfsEntry,
-  renameVfsDirectory,
-  renameVfsFile,
-  sessionCreateVfsDirectory,
-  sessionCreateVfsFile,
-  sessionRenameVfsDirectory,
-  sessionRenameVfsFile,
-} from '../../services/vfs-operations.service';
-import {cycleFileInclusion, defaultDirRuleForm, dirRuleToForm, emptyDirRuleForm, migrateWorkplaceDirRename, toggleDirRuleEnabled, vfsScopeRootPath} from '../../services/workplace-operations.service';
-import {refreshRuleSnapshotAfterRuleChange} from '../../services/workplace-rule-delta-draft.service';
-import {toastMessage} from '../../errors/toast-message';
+import {FormatError} from '../../errors/format-error';
+import {UserVfsTurnExecuteService} from '../../services/user-vfs-turn-execute.service';
+import {createVfsDirectory, createVfsFile, renameVfsDirectory, renameVfsFile, VfsOperationsService} from '../../services/vfs-operations.service';
+import {WorkplaceOperationsService} from '../../services/workplace-operations.service';
+import {WorkplaceRuleDeltaDraftService} from '../../services/workplace-rule-delta-draft.service';
+import {ToastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
-import {importCharacterCard} from '../../services/vfs-character-card.service';
-import {exportVfsSingleFile, importVfsSingleFile} from '../../services/vfs-single-file.service';
-import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
+import {VfsCharacterCardService} from '../../services/vfs-character-card.service';
+import {VfsSingleFileService} from '../../services/vfs-single-file.service';
+import {VfsZipService} from '../../services/vfs-zip.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {TemplatePullButton} from '../prompt/TemplatePullButton';
 import {TemplatePushButton} from '../prompt/TemplatePushButton';
@@ -56,7 +36,7 @@ import {useToast} from '../chrome/ToastHost';
 import {VfsPromptModal, type VfsPromptState} from './vfs-file-manager/VfsPromptModal';
 import {VfsMoveDirPicker} from './vfs-file-manager/VfsMoveDirPicker';
 import {vfsBatchHeaderWrapStyle, vfsFileManagerStyles} from './vfs-file-manager/styles';
-import {isSelfOrAncestorPath, resolveMoveDestination} from './vfs-move-path';
+import {VfsMovePath} from './vfs-move-path';
 
 /** 仅支持 session 域 pull（project 域 pull 已拆除）。 */
 type VfsFileManagerPullScope = {kind: 'session'; sessionId: string};
@@ -171,7 +151,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
   // readOnly 模式下全部写入口已隐藏，此引用仅供写路径调用
   // （物理树类型层面无写方法，运行时不可能被写入）。
   const writableVfs = vfs as VfsService;
-  const root = rootPath ?? vfsScopeRootPath(scope);
+  const root = rootPath ?? WorkplaceOperationsService.scopeRootPath(scope);
   const sessionId = scope.kind === 'session' ? scope.sessionId : undefined;
   const useUserVfsTurn = sessionId != null && userVfsUnifiedToolTurnFlag.isEnabled();
   const [currentPath, setCurrentPath] = useState(root);
@@ -300,7 +280,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
   const applyWorktreeRowsToVisibleList = useCallback(
     (allRows: WorkplaceListRow[]) => {
       setWorktreeRows(allRows);
-      setRows(prev => remapDirectChildRows(prev, currentPath, allRows));
+      setRows(prev => VfsRowMapper.remapDirectChildRows(prev, currentPath, allRows));
     },
     [currentPath],
   );
@@ -324,14 +304,14 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       const [listResult, allRowsResult, dirRuleResult] = await Promise.all([vfsSvc.list(currentPath), fetchWorktreeRows(), worktreeSvc?.getDirRule(currentPath) ?? Promise.resolve(null)]);
       // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走下方 catch。
       if (!listResult.ok) {
-        showToast(toastMessage('加载失败', listResult.error));
+        showToast(ToastMessage.toast('加载失败', listResult.error));
         return;
       }
       const listEntries = listResult.value;
       let dirRule: WorkplaceDirRule | undefined;
       if (dirRuleResult != null) {
         if (!dirRuleResult.ok) {
-          showToast(toastMessage('加载失败', dirRuleResult.error));
+          showToast(ToastMessage.toast('加载失败', dirRuleResult.error));
           return;
         }
         dirRule = dirRuleResult.value;
@@ -340,7 +320,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       // 智能排序目录才拉预编译规则（懒加载；其它排序方式零额外查表）。
       const compiledRules = (dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField) === 'smart' ? await runtime.smartSortRule.listCompiledRules() : undefined;
       if (compiledRules != null && !compiledRules.ok) {
-        showToast(toastMessage('加载失败', compiledRules.error));
+        showToast(ToastMessage.toast('加载失败', compiledRules.error));
         return;
       }
       const smartRules = compiledRules?.value;
@@ -363,7 +343,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
 
       const childPaths = new Set<string>();
       for (const row of allRows) {
-        if (row.kind === 'dir' && isDirectChild(currentPath, row.path)) {
+        if (row.kind === 'dir' && VfsRowMapper.isDirectChild(currentPath, row.path)) {
           childPaths.add(row.path);
         }
       }
@@ -373,7 +353,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         kindByPath.set(entry.path, entry.kind === 'directory' ? 'dir' : entry.kind);
       }
 
-      const orderedPaths = orderedDirectChildPaths({
+      const orderedPaths = VfsDirectChildrenOrder.orderedDirectChildPaths({
         parentPath: currentPath,
         rows: allRows,
         extraPaths: [...childPaths],
@@ -385,20 +365,20 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       const mapped = orderedPaths.map(path => {
         const meta = metaByPath.get(path);
         if (meta) {
-          const count = meta.kind === 'dir' ? countFilesInDir(allRows, path) : undefined;
-          return mapWorktreeRow(meta, count);
+          const count = meta.kind === 'dir' ? VfsRowMapper.countFilesInDir(allRows, path) : undefined;
+          return VfsRowMapper.mapWorktreeRow(meta, count);
         }
         const vfsEntry = listEntries.find((e: VfsListEntry) => e.path === path);
         if (vfsEntry) {
-          return mapVfsListEntry(vfsEntry);
+          return VfsRowMapper.mapVfsListEntry(vfsEntry);
         }
-        return mapVfsListEntry({path, kind: 'file'});
+        return VfsRowMapper.mapVfsListEntry({path, kind: 'file'});
       });
       // 无 workplace（非工作区域，如技能目录）：剥掉纳入状态/目录规则 tag 与
       // subtitle（跟随·全内容等是工作区语义，在此无意义）。
       setRows(workplace == null ? mapped.map(row => ({...row, subtitle: '', badge: null})) : mapped);
     } catch (error) {
-      showToast(toastMessage('加载失败', error));
+      showToast(ToastMessage.toast('加载失败', error));
     } finally {
       reloadInFlightRef.current = false;
       setLoading(false);
@@ -413,7 +393,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     await reload();
     if (sessionId != null && workplace != null) {
       try {
-        await refreshRuleSnapshotAfterRuleChange(runtime, workplace, sessionId);
+        await WorkplaceRuleDeltaDraftService.refreshRuleSnapshot(runtime, workplace, sessionId);
       } catch {
         // 差集推送失败不阻断列表刷新
       }
@@ -457,16 +437,16 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
             try {
               for (const path of paths) {
                 const deleteOptions = {recursive: true, useUserVfsTurn, sessionId};
-                const deleted = await deleteScopedVfsEntry(runtime, scope, writableVfs, path, deleteOptions);
+                const deleted = await VfsOperationsService.deleteScopedEntry(runtime, scope, writableVfs, path, deleteOptions);
                 if (!deleted.ok) {
-                  showToast(toastMessage('删除失败', deleted.error));
+                  showToast(ToastMessage.toast('删除失败', deleted.error));
                   return;
                 }
               }
               vfsBatch.exit();
               await reloadVfsListOnly();
             } catch (err) {
-              showToast(toastMessage('删除失败', err));
+              showToast(ToastMessage.toast('删除失败', err));
             }
           })();
         },
@@ -484,12 +464,12 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       let moved = 0;
       let skipped = 0;
       for (const sourcePath of paths) {
-        if (isSelfOrAncestorPath(sourcePath, targetDir)) {
+        if (VfsMovePath.isSelfOrAncestorPath(sourcePath, targetDir)) {
           showToast('不能移动到自身或子目录');
           skipped += 1;
           continue;
         }
-        const newPath = resolveMoveDestination(sourcePath, targetDir);
+        const newPath = VfsMovePath.resolveMoveDestination(sourcePath, targetDir);
         if (newPath === sourcePath) {
           continue;
         }
@@ -510,12 +490,12 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
             if (AppErrorOps.is(err, 'VFS_ALREADY_EXISTS')) {
               showToast('目标已存在同名项，已跳过');
             } else {
-              showToast(toastMessage('移动失败', err));
+              showToast(ToastMessage.toast('移动失败', err));
             }
           };
           if (isDir) {
             if (useUserVfsTurn) {
-              const renamed = await sessionRenameVfsDirectory(runtime, sessionId!, sourcePath, newPath, renameOpts);
+              const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, sourcePath, newPath, renameOpts);
               if (!renamed.ok) {
                 moveFailed(renamed.error);
                 continue;
@@ -528,14 +508,14 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               }
             }
             if (workplace != null) {
-              await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
+              await WorkplaceOperationsService.migrateDirRename(workplace, sourcePath, newPath);
             }
             if (currentPath === sourcePath || currentPath.startsWith(`${sourcePath}/`)) {
               setCurrentPath(Path.remapUnderDir(currentPath, sourcePath, newPath));
             }
           } else {
             if (useUserVfsTurn) {
-              const renamed = await sessionRenameVfsFile(runtime, sessionId!, sourcePath, newPath, renameOpts);
+              const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, sourcePath, newPath, renameOpts);
               if (!renamed.ok) {
                 moveFailed(renamed.error);
                 continue;
@@ -554,12 +534,12 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           if (AppErrorOps.is(err, 'VFS_ALREADY_EXISTS')) {
             showToast('目标已存在同名项，已跳过');
           } else {
-            showToast(toastMessage('移动失败', err));
+            showToast(ToastMessage.toast('移动失败', err));
           }
         }
       }
       if (useUserVfsTurn && moved > 0 && sessionId != null) {
-        await refreshComposerStatusAfterUserVfsOps(sessionId);
+        await UserVfsTurnExecuteService.refreshComposerStatus(sessionId);
       }
       vfsBatch.exit();
       await reloadVfsListOnly();
@@ -575,7 +555,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
   const canGoUp = currentPath !== root;
   const handleGoUp = goUp;
   const metaForMenu = menuPath ? worktreeRows.find(r => r.path === menuPath) : undefined;
-  const menuRow = menuPath ? rows.find(r => r.path === menuPath) ?? (metaForMenu ? mapWorktreeRow(metaForMenu, countFilesInDir(worktreeRows, menuPath)) : undefined) : undefined;
+  const menuRow = menuPath ? rows.find(r => r.path === menuPath) ?? (metaForMenu ? VfsRowMapper.mapWorktreeRow(metaForMenu, VfsRowMapper.countFilesInDir(worktreeRows, menuPath)) : undefined) : undefined;
 
   // 无 workplace（非工作区域，如技能目录）时隐藏纳入/目录规则/角色卡/ZIP 导入导出菜单
   // （技能包的导入导出在技能管理页提供）；readOnly 模式下整体置空（无任何入口可打开）。
@@ -624,7 +604,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     }
     setPrompt(null);
     const submitPromise = current.onSubmit(value);
-    submitPromise.then(() => reloadVfsListOnly()).catch(err => showToast(toastMessage('失败', err)));
+    submitPromise.then(() => reloadVfsListOnly()).catch(err => showToast(ToastMessage.toast('失败', err)));
   };
 
   const handleEntityAction = async (action: string) => {
@@ -644,15 +624,15 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           return;
         }
         if (menuRow.kind === 'file' && meta.kind === 'file') {
-          await cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
+          await WorkplaceOperationsService.cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
           const refreshed = await refreshVisibleRowsFromWorktree();
           if (!refreshed.ok) {
-            showToast(toastMessage('操作失败', refreshed.error));
+            showToast(ToastMessage.toast('操作失败', refreshed.error));
             return;
           }
           if (sessionId != null) {
             try {
-              await refreshRuleSnapshotAfterRuleChange(runtime, workplace, sessionId);
+              await WorkplaceRuleDeltaDraftService.refreshRuleSnapshot(runtime, workplace, sessionId);
             } catch {
               // ignore
             }
@@ -660,22 +640,22 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           return;
         }
         if (menuRow.kind === 'dir') {
-          const nextEnabledResult = await toggleDirRuleEnabled(workplace, menuPath, menuRow.ruleEnabled);
+          const nextEnabledResult = await WorkplaceOperationsService.toggleDirRuleEnabled(workplace, menuPath, menuRow.ruleEnabled);
           if (!nextEnabledResult.ok) {
-            showToast(toastMessage('操作失败', nextEnabledResult.error));
+            showToast(ToastMessage.toast('操作失败', nextEnabledResult.error));
             return;
           }
           const nextEnabled = nextEnabledResult.value;
           showToast(nextEnabled ? '目录规则已开启' : '目录规则已关闭');
           setWorktreeRows(prev => prev.map(row => (row.path === menuPath && row.kind === 'dir' ? {...row, ruleState: nextEnabled ? 'rule_on' : 'rule_off'} : row)));
-          setRows(prev => prev.map(row => (row.path === menuPath ? patchDirRuleRow(row, nextEnabled) : row)));
+          setRows(prev => prev.map(row => (row.path === menuPath ? VfsRowMapper.patchDirRuleRow(row, nextEnabled) : row)));
           // WHY: child file inclusion/display only changes inside the toggled dir.
           if (currentPath === menuPath || currentPath.startsWith(`${menuPath}/`)) {
             await reload();
           }
           if (sessionId != null) {
             try {
-              await refreshRuleSnapshotAfterRuleChange(runtime, workplace, sessionId);
+              await WorkplaceRuleDeltaDraftService.refreshRuleSnapshot(runtime, workplace, sessionId);
             } catch {
               // ignore
             }
@@ -699,12 +679,12 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               // WHY: 重命名失败的文案统一走 core formatVfsErrorForUser
               // 的 code 文案表（ALREADY_EXISTS → 名称不能重复），与
               // desktop 收敛到同一份映射，不再本地分支。
-              showToast(formatVfsErrorForUser(err));
+              showToast(FormatError.formatVfsForUser(err));
             };
             try {
               if (menuRow.kind === 'file') {
                 if (useUserVfsTurn) {
-                  const renamed = await sessionRenameVfsFile(runtime, sessionId!, menuPath, newPath);
+                  const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, menuPath, newPath);
                   if (!renamed.ok) {
                     renameFailed(renamed.error);
                     return;
@@ -718,7 +698,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                 }
               } else {
                 if (useUserVfsTurn) {
-                  const renamed = await sessionRenameVfsDirectory(runtime, sessionId!, menuPath, newPath);
+                  const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, menuPath, newPath);
                   if (!renamed.ok) {
                     renameFailed(renamed.error);
                     return;
@@ -731,7 +711,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                   }
                 }
                 if (workplace != null) {
-                  await migrateWorkplaceDirRename(workplace, menuPath, newPath);
+                  await WorkplaceOperationsService.migrateDirRename(workplace, menuPath, newPath);
                 }
                 if (currentPath === menuPath || currentPath.startsWith(`${menuPath}/`)) {
                   const remapped = Path.remapUnderDir(currentPath, menuPath, newPath);
@@ -743,7 +723,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               // WHY: 重命名失败的文案统一走 core formatVfsErrorForUser
               // 的 code 文案表（ALREADY_EXISTS → 名称不能重复），与
               // desktop 收敛到同一份映射，不再本地分支。
-              showToast(formatVfsErrorForUser(err));
+              showToast(FormatError.formatVfsForUser(err));
             }
           },
         });
@@ -758,14 +738,14 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
             onPress: () => {
               const runDelete = async () => {
                 const deleteOptions = {recursive: true, useUserVfsTurn, sessionId};
-                const deleted = await deleteScopedVfsEntry(runtime, scope, writableVfs, menuPath, deleteOptions);
+                const deleted = await VfsOperationsService.deleteScopedEntry(runtime, scope, writableVfs, menuPath, deleteOptions);
                 if (!deleted.ok) {
-                  showToast(toastMessage('删除失败', deleted.error));
+                  showToast(ToastMessage.toast('删除失败', deleted.error));
                   return;
                 }
                 await reloadVfsListOnly();
               };
-              runDelete().catch(err => showToast(toastMessage('删除失败', err)));
+              runDelete().catch(err => showToast(ToastMessage.toast('删除失败', err)));
             },
           },
         ]);
@@ -782,7 +762,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         return;
       }
     } catch (error) {
-      showToast(toastMessage('操作失败', error));
+      showToast(ToastMessage.toast('操作失败', error));
     }
   };
 
@@ -808,13 +788,13 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           void (async () => {
             try {
               if (kind === 'zip') {
-                const imported = await importVfsZip(runtime, scope, {confirmed: true, directoryPath: targetPath});
+                const imported = await VfsZipService.importZip(runtime, scope, {confirmed: true, directoryPath: targetPath});
                 if (!imported.ok) {
-                  showToast(toastMessage('导入失败', imported.error));
+                  showToast(ToastMessage.toast('导入失败', imported.error));
                   return;
                 }
               } else {
-                await importCharacterCard(runtime, scope, {
+                await VfsCharacterCardService.import(runtime, scope, {
                   confirmed: true,
                   directoryPath: targetPath,
                 });
@@ -822,7 +802,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               await reloadVfsListOnly();
               showToast(successToast);
             } catch (err) {
-              showToast(toastMessage('导入失败', err));
+              showToast(ToastMessage.toast('导入失败', err));
             }
           })();
         },
@@ -837,9 +817,9 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
    */
   const runImportFile = async (targetPath: string) => {
     try {
-      const imported = await importVfsSingleFile(runtime, scope, {targetDir: targetPath});
+      const imported = await VfsSingleFileService.importFile(runtime, scope, {targetDir: targetPath});
       if (!imported.ok) {
-        showToast(toastMessage('导入失败', imported.error));
+        showToast(ToastMessage.toast('导入失败', imported.error));
         return;
       }
       const result = imported.value;
@@ -858,13 +838,13 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                 try {
                   const applied = await confirm();
                   if (!applied.ok) {
-                    showToast(toastMessage('导入失败', applied.error));
+                    showToast(ToastMessage.toast('导入失败', applied.error));
                     return;
                   }
                   await reloadVfsListOnly();
                   showToast(singleFileImportToast(applied.value.skippedBinary));
                 } catch (err) {
-                  showToast(toastMessage('导入失败', err));
+                  showToast(ToastMessage.toast('导入失败', err));
                 }
               })();
             },
@@ -875,7 +855,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       await reloadVfsListOnly();
       showToast(singleFileImportToast(result.skippedBinary));
     } catch (err) {
-      showToast(toastMessage('导入失败', err));
+      showToast(ToastMessage.toast('导入失败', err));
     }
   };
 
@@ -911,18 +891,18 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       return;
     }
     setExporting(true);
-    const task = kind === 'zip' ? exportVfsZip(runtime, scope, {directoryPath: targetPath}) : exportVfsSingleFile(runtime, scope, targetPath);
+    const task = kind === 'zip' ? VfsZipService.exportZip(runtime, scope, {directoryPath: targetPath}) : VfsSingleFileService.exportFile(runtime, scope, targetPath);
     task
       .then(result => {
         if (!result.ok) {
-          showToast(toastMessage('导出失败', result.error));
+          showToast(ToastMessage.toast('导出失败', result.error));
           return;
         }
         if (result.value === 'saved') {
           showToast(kind === 'zip' ? 'ZIP 已保存到所选位置' : '文件已保存到所选位置');
         }
       })
-      .catch(err => showToast(toastMessage('导出失败', err)))
+      .catch(err => showToast(ToastMessage.toast('导出失败', err)))
       .finally(() => setExporting(false));
   };
 
@@ -939,9 +919,9 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           }
           const path = currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
           if (useUserVfsTurn) {
-            const created = await sessionCreateVfsFile(runtime, sessionId!, path);
+            const created = await VfsOperationsService.sessionCreateFile(runtime, sessionId!, path);
             if (!created.ok) {
-              showToast(toastMessage('失败', created.error));
+              showToast(ToastMessage.toast('失败', created.error));
               return;
             }
           } else {
@@ -964,16 +944,16 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           }
           const path = currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
           if (useUserVfsTurn) {
-            const created = await sessionCreateVfsDirectory(runtime, sessionId!, path);
+            const created = await VfsOperationsService.sessionCreateDirectory(runtime, sessionId!, path);
             if (!created.ok) {
-              showToast(toastMessage('失败', created.error));
+              showToast(ToastMessage.toast('失败', created.error));
               return;
             }
           } else {
             await createVfsDirectory(writableVfs, path);
           }
           if (workplace != null) {
-            await workplace.setDirRule(defaultDirRuleForm(path));
+            await workplace.setDirRule(WorkplaceOperationsService.defaultDirRuleForm(path));
             await reloadAfterRuleChange();
           } else {
             await reloadVfsListOnly();
@@ -990,21 +970,21 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         try {
           const existingRule = await workplace.getDirRule(currentPath);
           if (!existingRule.ok) {
-            showToast(toastMessage('加载规则失败', existingRule.error));
+            showToast(ToastMessage.toast('加载规则失败', existingRule.error));
             return;
           }
           const existing = existingRule.value;
           const listRow = worktreeRows.find(r => r.path === currentPath && r.kind === 'dir');
           let initialForm: Partial<SetDirRuleInput>;
           if (existing != null) {
-            initialForm = dirRuleToForm(existing);
+            initialForm = WorkplaceOperationsService.dirRuleToForm(existing);
           } else {
-            initialForm = {...emptyDirRuleForm(currentPath), ruleEnabled: listRow?.kind === 'dir' ? listRow.ruleState === 'rule_on' : currentPath === root};
+            initialForm = {...WorkplaceOperationsService.emptyDirRuleForm(currentPath), ruleEnabled: listRow?.kind === 'dir' ? listRow.ruleState === 'rule_on' : currentPath === root};
           }
           setDirRuleInitial(initialForm);
           setDirRuleOpen(true);
         } catch (error) {
-          showToast(toastMessage('加载规则失败', error));
+          showToast(ToastMessage.toast('加载规则失败', error));
         }
       })();
       return;
@@ -1040,7 +1020,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
             <ParentDirIcon color={canGoUp ? tokens.primary : tokens.textSecondary} />
           </Pressable>
           <Text testID="vfs-current-path" style={[styles.path, {color: tokens.text}]} numberOfLines={1} ellipsizeMode="middle">
-            {pathLabel ? pathLabel(currentPath) : pathWithLabels(currentPath, labelByPathRef.current)}
+            {pathLabel ? pathLabel(currentPath) : VfsRowMapper.pathWithLabels(currentPath, labelByPathRef.current)}
           </Text>
         </View>
         <View style={styles.toolbarActions}>

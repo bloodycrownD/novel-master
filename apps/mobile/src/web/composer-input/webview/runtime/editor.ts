@@ -15,10 +15,10 @@
  * 文件名 editor.ts 按内容主体起名 ComposerEditor：与 code-editor 的同名
  * editor.ts（CodeEditor）区分，域前缀自解释。
  */
-import {composerTokenRanges, splitComposerTokenSegments} from '@/components/chat/composer-highlight';
-import {tryAtomicRangeDelete, type AtomicDeleteRange} from '@/components/common/atomic-range-delete';
-import {escapeHtml} from '@/components/common/html';
-import {findWhitelistMacroRanges} from '@/components/agent/prompt-macro-input';
+import {ComposerHighlight} from '@/components/chat/composer-highlight';
+import {type AtomicDeleteRange, AtomicRangeDelete} from '@/components/common/atomic-range-delete';
+import {Html} from '@/components/common/html';
+import {PromptMacroInput} from '@/components/agent/prompt-macro-input';
 import {ClampIndex} from '@web/shared/clamp-index';
 import {post} from './bridge';
 import type {ComposerMetrics, ComposerMode, ComposerTheme, InitPayload} from './model';
@@ -114,9 +114,9 @@ export namespace ComposerEditor {
   /** 双模式分段来源：token 走 splitComposerTokenSegments，宏走 findWhitelistMacroRanges。 */
   function highlightSegments(text: string, mode: ComposerMode): readonly HighlightSegment[] {
     if (mode === 'prompt-macro') {
-      return segmentsFromRanges(text, findWhitelistMacroRanges(text));
+      return segmentsFromRanges(text, PromptMacroInput.findWhitelistMacroRanges(text));
     }
-    return splitComposerTokenSegments(text).map(segment => ({
+    return ComposerHighlight.splitTokenSegments(text).map(segment => ({
       highlighted: segment.kind === 'token',
       text: segment.text,
     }));
@@ -133,7 +133,7 @@ export namespace ComposerEditor {
     }
     let html = '';
     for (const segment of highlightSegments(text, mode)) {
-      html += segment.highlighted ? `<span class="composer-input__token">${escapeHtml(segment.text)}</span>` : escapeHtml(segment.text);
+      html += segment.highlighted ? `<span class="composer-input__token">${Html.escape(segment.text)}</span>` : Html.escape(segment.text);
     }
     if (text.endsWith('\n')) {
       html += '<br/>';
@@ -143,7 +143,7 @@ export namespace ComposerEditor {
 
   /** 按 mode 取原子删候选区间：chat 链 = token 区间，宏链 = 白名单宏区间。 */
   export function atomicDeleteRanges(text: string, mode: ComposerMode): readonly AtomicDeleteRange[] {
-    return mode === 'prompt-macro' ? findWhitelistMacroRanges(text) : composerTokenRanges(text);
+    return mode === 'prompt-macro' ? PromptMacroInput.findWhitelistMacroRanges(text) : ComposerHighlight.tokenRanges(text);
   }
 
   /**
@@ -151,7 +151,7 @@ export namespace ComposerEditor {
    * @returns 整段删除后的新串；无需拦截时返回 null（走内核默认差分）
    */
   export function resolveAtomicDelete(prev: string, next: string, mode: ComposerMode): string | null {
-    return tryAtomicRangeDelete(prev, next, atomicDeleteRanges(prev, mode));
+    return AtomicRangeDelete.tryAtomicRangeDelete(prev, next, atomicDeleteRanges(prev, mode));
   }
 
   function commonPrefixLength(a: string, b: string): number {

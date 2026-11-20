@@ -2,7 +2,7 @@
  * In-memory per-session message tail + paging flag (survives list ↔ conversation).
  */
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {createScopeKeyCache} from './scope-key-cache';
+import {ScopeKeyCache} from './scope-key-cache';
 
 export type SessionViewCache = {
   readonly messages: readonly ChatMessageData[];
@@ -15,7 +15,7 @@ export type SessionViewCache = {
  */
 export const SESSION_VIEW_HYDRATE_WINDOW = 40;
 
-const cache = createScopeKeyCache<SessionViewCache>({maxEntries: 500});
+const cache = ScopeKeyCache.create<SessionViewCache>({maxEntries: 500});
 
 /**
  * 会话视图缓存：key 收口、读写清理与水合窗口裁剪（隐藏 cache 对象）。

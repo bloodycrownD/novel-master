@@ -90,9 +90,12 @@ jest.mock('@/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
@@ -102,9 +105,12 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('@/services/model-display-label', () => ({
+jest.mock('@/services/model-display-label', () => {
+  const legacy = {
   resolveModelDisplayLabel: jest.fn().mockResolvedValue('gpt-4'),
-}));
+};
+  return {...legacy, ModelDisplayLabel: {resolve: legacy.resolveModelDisplayLabel}};
+});
 
 jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
   useDismissOverlaysOnBlur: () => undefined,
@@ -210,7 +216,7 @@ jest.mock('react-native', () => {
 });
 
 import {AgentList} from '@/components/agent/AgentList';
-import {createBlankAgent} from '@/services/agent-create';
+import {AgentCreate} from '@/services/agent-create'
 
 async function renderAgentList(onCreate?: (tab: 'primary' | 'subagent') => void) {
   mockListAgentIds.mockResolvedValue(allIds);
@@ -366,13 +372,13 @@ describe('createBlankAgent mode 落库（T-M2）', () => {
       },
     } as unknown as Parameters<typeof createBlankAgent>[0];
 
-    await createBlankAgent(runtime, 'agent-x', 'subagent');
+    await AgentCreate.createBlank(runtime, 'agent-x', 'subagent');
     expect(upsert).toHaveBeenCalledWith(
       'agent-x',
       expect.objectContaining({mode: 'subagent'}),
     );
 
-    await createBlankAgent(runtime, 'agent-y');
+    await AgentCreate.createBlank(runtime, 'agent-y');
     const defWithoutMode = upsert.mock.calls[1]![1] as {mode?: unknown};
     expect(defWithoutMode.mode).toBeUndefined();
   });

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {AgentModeTab} from '@/config-forms/agent/agent-mode-tab';
 import { it } from "@jest/globals";
 
 // 走 barrel 子路径导入，顺带锁 config-forms/agent/index.ts 的具名导出面。
@@ -15,17 +16,17 @@ import { API_KEY_STATUS_LABELS } from "@/config-forms/ui-labels";
  */
 it("agentModeMatchesTab 四态 × 两 tab 矩阵（T-C1）", () => {
   // primary 定义：仅主 tab 显示。
-  assert.equal(agentModeMatchesTab("primary", "primary"), true);
-  assert.equal(agentModeMatchesTab("primary", "subagent"), false);
+  assert.equal(AgentModeTab.agentModeMatchesTab("primary", "primary"), true);
+  assert.equal(AgentModeTab.agentModeMatchesTab("primary", "subagent"), false);
   // subagent 定义：仅子 tab 显示。
-  assert.equal(agentModeMatchesTab("subagent", "primary"), false);
-  assert.equal(agentModeMatchesTab("subagent", "subagent"), true);
+  assert.equal(AgentModeTab.agentModeMatchesTab("subagent", "primary"), false);
+  assert.equal(AgentModeTab.agentModeMatchesTab("subagent", "subagent"), true);
   // all 定义：双侧 tab 都显示。
-  assert.equal(agentModeMatchesTab("all", "primary"), true);
-  assert.equal(agentModeMatchesTab("all", "subagent"), true);
+  assert.equal(AgentModeTab.agentModeMatchesTab("all", "primary"), true);
+  assert.equal(AgentModeTab.agentModeMatchesTab("all", "subagent"), true);
   // 未填写（undefined）：按 all 归一，双侧都显示。
-  assert.equal(agentModeMatchesTab(undefined, "primary"), true);
-  assert.equal(agentModeMatchesTab(undefined, "subagent"), true);
+  assert.equal(AgentModeTab.agentModeMatchesTab(undefined, "primary"), true);
+  assert.equal(AgentModeTab.agentModeMatchesTab(undefined, "subagent"), true);
 });
 
 /**

@@ -88,11 +88,15 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (title: string, err?: unknown) => (err === undefined ? title : `${title}:${String(err)}`),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
   isAgentLocked: (agentMeta: {source?: string} | undefined) => agentMeta == null,
   isAgentDeleted: (agentMeta: {source?: string} | undefined) => agentMeta != null && agentMeta.source === 'none',
@@ -100,15 +104,20 @@ jest.mock('@/services/chat-agent-meta', () => ({
   AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
   AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
   MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta, isLocked: legacy.isAgentLocked, isModelLocked: legacy.isModelLocked, isDeleted: legacy.isAgentDeleted}};
+});
 
 jest.mock('@/runtime/agent-activity', () => ({
   agentActivity: {isActive: () => false},
 }));
 
-jest.mock('@/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => {
+  const legacy = {
   refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {refreshAfterFloorOrCompaction: legacy.refreshComposerStatusAfterFloorOrCompaction}};
+});
 
 jest.mock('@/components/agent/AgentPickerModal', () => {
   const ReactModule = require('react');

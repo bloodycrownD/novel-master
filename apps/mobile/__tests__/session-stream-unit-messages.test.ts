@@ -45,7 +45,7 @@ import {
   SESSION_VIEW_HYDRATE_WINDOW,
   SessionViewCache,
 } from '@/services/chat-session-view-cache';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 import * as finishedNotification from '@/services/agent-finished-notification';
 import type {ChatMessageData} from '@novel-master/core/chat';
 import type {
@@ -269,7 +269,7 @@ function createControlRecordingHandle(handleId: string): {
 beforeEach(() => {
   agentActivity.setActive(false);
   jest.clearAllMocks();
-  resetKeepAliveStateForTests();
+  AgentFinishedNotification.resetKeepAliveStateForTests();
   SessionViewCache.clearAll();
   jest.useFakeTimers();
   jest.setSystemTime(CLOCK_START_MS);
@@ -278,7 +278,7 @@ beforeEach(() => {
 afterEach(() => {
   jest.useRealTimers();
   agentActivity.setActive(false);
-  resetKeepAliveStateForTests();
+  AgentFinishedNotification.resetKeepAliveStateForTests();
   SessionViewCache.clearAll();
 });
 
@@ -936,7 +936,7 @@ describe('F-B3 复用子会话：宽限期内二次 RUN_STARTED 替换吸收（H
     // ③ 二轮 FINISHED 能被 finishRun 收口（runId 没回填就会永远 running），
     // 且消耗型单元照旧不写持久层、不发完成通知。
     const notifySpy = jest
-      .spyOn(finishedNotification, 'notifyAgentRunFinished')
+      .spyOn(AgentFinishedNotification, 'notifyRunFinished')
       .mockResolvedValue(undefined);
     try {
       publishFinished(h.eventBus, 'kid', 'r2');

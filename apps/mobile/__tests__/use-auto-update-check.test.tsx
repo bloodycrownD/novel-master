@@ -1,12 +1,14 @@
 import React from 'react';
+import {UpdatePrefs} from '@/storage/update-prefs';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Result} from '@novel-master/core/errors';
 import {UpdateCheckHost} from '@/components/update/UpdateCheckHost';
 
-const {isSnoozed: isSnoozedActual} = jest.requireActual<
+const isSnoozedActual = jest.requireActual<
   typeof import('@/storage/update-prefs')
->('../src/storage/update-prefs');
+>('../src/storage/update-prefs').UpdatePrefs.isSnoozed;
 
 const mockCheckForUpdates = jest.fn();
 const mockReadSnoozeUntil = jest.fn();
@@ -27,7 +29,7 @@ let modalProps: {
 jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     status: 'ready',
-    // auto-check 走 readBoolPref(appUi, key, true)：未写值回退默认开。
+    // auto-check 走 AppUiPrefIo.readBoolPref(appUi, key, true)：未写值回退默认开。
     appUi: {get: jest.fn(async () => ({ok: true, value: undefined})), set: jest.fn()},
   }),
 }));
@@ -36,8 +38,9 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/storage/update-prefs', () => ({
-  isSnoozed: jest.requireActual('@/storage/update-prefs').isSnoozed,
+jest.mock('@/storage/update-prefs', () => {
+  const legacy = {
+  isSnoozed: jest.requireActual('@/storage/update-prefs').UpdatePrefs.isSnoozed,
   readSnoozeUntil: (...args: unknown[]) => mockReadSnoozeUntil(...args),
   writeSnoozeUntil: (...args: unknown[]) => mockWriteSnoozeUntil(...args),
   persistUpdateCheckResult: (...args: unknown[]) =>
@@ -48,11 +51,16 @@ jest.mock('@/storage/update-prefs', () => ({
     mockReadDismissedVersion(...args),
   writeDismissedVersion: (...args: unknown[]) =>
     mockWriteDismissedVersion(...args),
-}));
+};
+  return {...legacy, UpdatePrefs: {isSnoozed: legacy.isSnoozed, readSnoozeUntil: legacy.readSnoozeUntil, writeSnoozeUntil: legacy.writeSnoozeUntil, persistFailedUpdateCheck: legacy.persistFailedUpdateCheck, persistUpdateCheckResult: legacy.persistUpdateCheckResult, readDismissedVersion: legacy.readDismissedVersion, writeDismissedVersion: legacy.writeDismissedVersion}};
+});
 
-jest.mock('@/update-check/check-for-updates', () => ({
+jest.mock('@/update-check/check-for-updates', () => {
+  const legacy = {
   checkForUpdates: (...args: unknown[]) => mockCheckForUpdates(...args),
-}));
+};
+  return {...legacy, CheckForUpdates: {check: legacy.checkForUpdates}};
+});
 
 jest.mock('@/components/update/UpdateCheckResultModal', () => ({
   UpdateCheckResultModal: (props: typeof modalProps & object) => {

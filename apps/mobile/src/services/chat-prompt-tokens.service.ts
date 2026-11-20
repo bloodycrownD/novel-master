@@ -21,12 +21,12 @@ import {MessageBodyText} from '@novel-master/core/prompt';
 
 import {PromptTokens, serializePromptLlmInput, type CountPromptLlmInputParams} from '@novel-master/core/tokenizer';
 import {TokenCounterMode} from '@novel-master/core/provider';
-import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
+import {EncodingCache} from '@novel-master/tokenizer-driver-rn/encoding';
 // 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
 // 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。
 // nm-style: keep-local — 三条具名导入（tokenizer 驱动子路径 / core 符号名较长）
 // 单行化后均超 80 列，prettier 必拆回；按可读性保留拆行。
-import {cancelSessionNativeCounts, PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
+import {AndroidNativeBridge, PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import {Result, AppError, type Interrupt} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
@@ -35,7 +35,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {TokenFormat} from '@novel-master/core/common';
 import {LogFactory} from '@novel-master/core/log';
 import {ChatPromptBuildBailedError} from '@novel-master/core';
-import {buildSessionPromptInputAdapter} from './session-prompt-input.service';
+import {SessionPromptInputService} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
 
 /** 会话身份（可空）：延迟计时/在途取消的统一入参形态。 */
@@ -84,7 +84,7 @@ export const ChatPromptTokenLabel = {
    * cl100k 兜底表），用它没有额外成本。
    */
   countFallback: (rt: MobileNovelMasterRuntime, text: string): number => {
-    const real = countTextWithDefaultEncoding(text);
+    const real = EncodingCache.countText(text);
     if (real != null) {
       return real;
     }
@@ -124,7 +124,7 @@ export const ChatPromptTokenLabel = {
     const resolveBail = (): Interrupt | null => (shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null);
     let bundle;
     try {
-      bundle = await buildSessionPromptInputAdapter(runtime, scope, undefined, opt);
+      bundle = await SessionPromptInputService.build(runtime, scope, undefined, opt);
     } catch (error) {
       if (error instanceof ChatPromptBuildBailedError) {
         // run 起步后中途弃权：label 空串是「保留旧标签」哨兵（hook 侧对空串
@@ -355,7 +355,7 @@ export const ChatPromptTokenLabel = {
     const workspaceModelId = currentModel.value ?? '';
     let savedModelId: string | undefined;
     try {
-      const built = await buildSessionPromptInputAdapter(runtime, scope);
+      const built = await SessionPromptInputService.build(runtime, scope);
       if (!built.ok) {
         savedModelId = workspaceModelId || undefined;
       } else {
@@ -530,7 +530,7 @@ export const PreciseUpgrade = {
       // 的间距，就是取消链路的送达延迟（logcat 过滤 [nm-chip]）。
       console.log('[nm-chip] cancel dispatch ' + sessionId);
     }
-    cancelSessionNativeCounts(sessionId);
+    AndroidNativeBridge.cancelSessionCounts(sessionId);
   },
 
   /**

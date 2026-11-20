@@ -14,7 +14,7 @@ import {SyncPushIcon} from '@/components/icons/TabIcons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 
 type Props = {
   scope: {kind: 'session'; sessionId: string};
@@ -49,7 +49,7 @@ export function TemplatePushButton({
       onPushed?.();
       showToast('推送完成');
     } catch (error) {
-      showToast(toastMessage('推送失败', error));
+      showToast(ToastMessage.toast('推送失败', error));
     } finally {
       setPushing(false);
     }

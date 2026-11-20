@@ -13,9 +13,9 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import type {ThemeTokens} from '@/theme/tokens';
 import {richDocumentBridge, type HostToRichDocumentMessage, type RichDocumentAnnotationMark, type RichDocumentRecogitoCreatePayload, type RichDocumentTheme} from './RichDocumentBridge';
 import {RICH_DOCUMENT_WEBVIEW_PACKAGE_ID} from '@/webview-host/rich-document/uri';
-import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
-import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
-import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
+import {WebviewThemeInject} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
@@ -57,7 +57,7 @@ type RichDocumentWebViewProps = {
 
 /** 主题组装：全量宿主主题取 rich-document 子集。 */
 function themeFromTokens(tokens: ThemeTokens): RichDocumentTheme {
-  const {background, text, textSecondary, primary, surface, borderLight} = hostThemeFromTokens(tokens);
+  const {background, text, textSecondary, primary, surface, borderLight} = HostThemeMapping.fromTokens(tokens);
   return {background, text, textSecondary, primary, surface, borderLight};
 }
 
@@ -300,7 +300,7 @@ export function RichDocumentWebView({
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID))) {
+    if (req.url.startsWith(WebviewAssetUri.getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -331,7 +331,7 @@ export function RichDocumentWebView({
            本体，不挂外层 wrapper View。 */
         style={[styles.fill, {backgroundColor: tokens.background}]}
         /* 首帧主题预注入（白闪 B）——见 buildThemeInjectScript 注释。 */
-        injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(tokens.background)}
+        injectedJavaScriptBeforeContentLoaded={WebviewThemeInject.buildThemeInjectScript(tokens.background)}
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
@@ -344,11 +344,11 @@ export function RichDocumentWebView({
            `shouldStartLoadWithRequest` 前缀判定与 originWhitelist=['file://']
            对带 hash 的 URI 均放行（prefix 命中 + scheme 不变）。 */
         source={{
-          uri: getWebViewPackageIndexUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
+          uri: WebviewAssetUri.getWebViewPackageIndexUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
         }}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)}
+        allowingReadAccessToURL={WebviewAssetUri.getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onOpenWindow={handleOpenWindow}
         onMessage={handleMessage}

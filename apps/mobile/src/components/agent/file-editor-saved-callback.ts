@@ -10,10 +10,10 @@
  * 语义（编辑回填）与取值时机都不同。
  */
 
-import {createCallbackSlot} from '../../runtime/callback-slot';
+import {CallbackSlot} from '../../runtime/callback-slot';
 
 /**
  * 模块级单槽：push 前 `set`（每次打开都覆盖新回调）、挂载时 `take`
  * （读后即清，避免上一次打开的回调泄漏到下一次）。
  */
-export const fileEditorOnSessionVfsSavedSlot = createCallbackSlot<() => void>();
+export const fileEditorOnSessionVfsSavedSlot = CallbackSlot.create<() => void>();

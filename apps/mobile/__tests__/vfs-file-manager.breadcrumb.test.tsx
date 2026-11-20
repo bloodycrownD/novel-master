@@ -34,12 +34,16 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
-jest.mock('@/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => {
+  const legacy = {
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
@@ -49,9 +53,12 @@ jest.mock('@/services/vfs-operations.service', () => ({
   sessionCreateVfsFile: jest.fn(),
   sessionRenameVfsDirectory: jest.fn(),
   sessionRenameVfsFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
+});
 
-jest.mock('@/services/workplace-operations.service', () => ({
+jest.mock('@/services/workplace-operations.service', () => {
+  const legacy = {
   cycleFileInclusion: jest.fn(),
   defaultDirRuleForm: jest.fn(() => ({})),
   dirRuleToForm: jest.fn(() => ({})),
@@ -59,7 +66,9 @@ jest.mock('@/services/workplace-operations.service', () => ({
   migrateWorkplaceDirRename: jest.fn(),
   toggleDirRuleEnabled: jest.fn(),
   vfsScopeRootPath: jest.fn(() => '/'),
-}));
+};
+  return {...legacy, WorkplaceOperationsService: {cycleFileInclusion: legacy.cycleFileInclusion, defaultDirRuleForm: legacy.defaultDirRuleForm, dirRuleToForm: legacy.dirRuleToForm, emptyDirRuleForm: legacy.emptyDirRuleForm, migrateDirRename: legacy.migrateWorkplaceDirRename, toggleDirRuleEnabled: legacy.toggleDirRuleEnabled, scopeRootPath: legacy.vfsScopeRootPath}};
+});
 
 jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
@@ -77,10 +86,13 @@ jest.mock('@/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
 }));
 
-jest.mock('@/services/vfs-zip.service', () => ({
+jest.mock('@/services/vfs-zip.service', () => {
+  const legacy = {
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
-}));
+};
+  return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
+});
 
 const mockRuntime = {
   workplace: jest.fn(),

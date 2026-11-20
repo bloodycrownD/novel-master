@@ -22,7 +22,7 @@ import type {RootStackParamList} from '../../navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -103,7 +103,7 @@ export function ProvidersScreen() {
     for (const providerId of providerIds) {
       const deleted = await deleteProviderOne(providerId);
       if (!deleted.ok) {
-        showToast(toastMessage('删除失败', deleted.error));
+        showToast(ToastMessage.toast('删除失败', deleted.error));
         return;
       }
     }
@@ -129,7 +129,7 @@ export function ProvidersScreen() {
         onPress: () => {
           (async () => {
             await deleteProviders([providerId]);
-          })().catch(err => showToast(toastMessage('删除失败', err)));
+          })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
         },
       },
     ]);

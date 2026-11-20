@@ -7,19 +7,13 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '@/components/profile/ProfileMenuItem';
 import {ProfileSwitchItem} from '@/components/profile/ProfileSwitchItem';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {useNovelMaster} from '@/runtime/novel-master-context';
-import {
-  persistFailedUpdateCheck,
-  persistUpdateCheckResult,
-  readLastCheckRemoteVersion,
-  readLastCheckStatus,
-  writeDismissedVersion,
-} from '@/storage/update-prefs';
-import {readBoolPref, writeBoolPref} from '@/storage/app-ui-pref-io';
+import {UpdatePrefs} from '@/storage/update-prefs';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_UPDATES_AUTO_CHECK} from '@/storage/app-ui-keys';
 import {APP_LINKS, APP_VERSION} from '@/update-check/app-meta';
-import {checkForUpdates} from '@/update-check/check-for-updates';
+import {CheckForUpdates} from '@/update-check/check-for-updates';
 import type {UpdateCheckData} from '@novel-master/core/common';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -56,7 +50,7 @@ export function AboutScreen() {
     if (!appUi) return;
     // 读偏好失败按「无记录」呈现（错误通道迁移四期：reader 走 Result），
     // 与旧异常通道 `void refresh()` 丢弃 rejection 的可见结果一致。
-    const [auto, status, remote] = await Promise.all([readBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, true), readLastCheckStatus(appUi), readLastCheckRemoteVersion(appUi)]);
+    const [auto, status, remote] = await Promise.all([AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, true), UpdatePrefs.readLastCheckStatus(appUi), UpdatePrefs.readLastCheckRemoteVersion(appUi)]);
     setAutoCheck(auto);
     setLastStatus(status.ok ? status.value : undefined);
     setLastRemote(remote.ok ? remote.value : undefined);
@@ -70,17 +64,17 @@ export function AboutScreen() {
     if (!appUi) return;
     setChecking(true);
     try {
-      const checked = await checkForUpdates();
+      const checked = await CheckForUpdates.check();
       // 已知失败（版本比较非法）沿 Result.err 收口，口径对齐下方 catch
       // （错误通道迁移六期）；网络等未知异常仍走 reject。
       if (!checked.ok) {
-        await persistFailedUpdateCheck(appUi);
+        await UpdatePrefs.persistFailedUpdateCheck(appUi);
         setLastStatus('error');
-        showToast(toastMessage('检查失败', checked.error));
+        showToast(ToastMessage.toast('检查失败', checked.error));
         return;
       }
       const data = checked.value;
-      await persistUpdateCheckResult(appUi, data);
+      await UpdatePrefs.persistUpdateCheckResult(appUi, data);
       setLastStatus(data.status === 'update-available' ? 'available' : 'up-to-date');
       setLastRemote(data.remoteVersion);
       if (data.status === 'up-to-date') {
@@ -88,12 +82,12 @@ export function AboutScreen() {
         return;
       }
       showUpdateAlert(data, () => {
-        void writeDismissedVersion(appUi, data.remoteVersion);
+        void UpdatePrefs.writeDismissedVersion(appUi, data.remoteVersion);
       });
     } catch (err) {
-      await persistFailedUpdateCheck(appUi);
+      await UpdatePrefs.persistFailedUpdateCheck(appUi);
       setLastStatus('error');
-      showToast(toastMessage('检查失败', err));
+      showToast(ToastMessage.toast('检查失败', err));
     } finally {
       setChecking(false);
     }
@@ -101,7 +95,7 @@ export function AboutScreen() {
 
   const openLink = useCallback(
     (url: string) => {
-      void Linking.openURL(url).catch(err => showToast(toastMessage('无法打开链接', err)));
+      void Linking.openURL(url).catch(err => showToast(ToastMessage.toast('无法打开链接', err)));
     },
     [showToast],
   );
@@ -141,7 +135,7 @@ export function AboutScreen() {
         onValueChange={next => {
           if (!appUi) return;
           setAutoCheck(next);
-          void writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).catch(err => showToast(toastMessage('保存失败', err)));
+          void AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).catch(err => showToast(ToastMessage.toast('保存失败', err)));
         }}
       />
       <ProfileMenuItem

@@ -10,9 +10,9 @@ import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes
 import type {ThemeTokens} from '@/theme/tokens';
 import {codeEditorBridge, type CodeEditorSelection, type CodeEditorTheme, type HostToCodeEditorMessage} from './CodeEditorBridge';
 import {CODE_EDITOR_WEBVIEW_PACKAGE_ID} from '@/webview-host/code-editor/uri';
-import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
-import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
-import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
+import {WebviewThemeInject} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type CodeEditorWebViewProps = {
@@ -37,7 +37,7 @@ export type CodeEditorWebViewHandle = {
 
 /** 主题组装：全量宿主主题取 code-editor 子集（primaryMuted 由宿主派生，web 条件式写入 --primary-muted）。 */
 function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
-  const {background, text, textSecondary, primary, primaryMuted, surface, borderLight} = hostThemeFromTokens(tokens);
+  const {background, text, textSecondary, primary, primaryMuted, surface, borderLight} = HostThemeMapping.fromTokens(tokens);
   return {background, text, textSecondary, primary, primaryMuted, surface, borderLight};
 }
 
@@ -182,7 +182,7 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID))) {
+    if (req.url.startsWith(WebviewAssetUri.getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -213,7 +213,7 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
            本体，不挂外层 wrapper View。 */
         style={[styles.fill, {backgroundColor: tokens.background}]}
         /* 首帧主题预注入（白闪 B）——见 buildThemeInjectScript 注释。 */
-        injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(tokens.background)}
+        injectedJavaScriptBeforeContentLoaded={WebviewThemeInject.buildThemeInjectScript(tokens.background)}
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
@@ -223,11 +223,11 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
            `var(--editor-bg, var(--bg, #fff))`，映射真源 host-theme.ts THEME_VARS：
            background→--bg，--editor-* 为其 extraVars 派生）。B 仍在作兜底。 */
         source={{
-          uri: getWebViewPackageIndexUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
+          uri: WebviewAssetUri.getWebViewPackageIndexUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
         }}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)}
+        allowingReadAccessToURL={WebviewAssetUri.getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onOpenWindow={handleOpenWindow}
         onMessage={handleMessage}

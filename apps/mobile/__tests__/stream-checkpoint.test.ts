@@ -4,11 +4,7 @@
  * 判定表与 mergeCheckpoint 四象限逐格钉死：故意改坏 decideStreamDelta /
  * mergeCheckpoint 时本套件必须变红。
  */
-import {
-  decideStreamDelta,
-  mergeCheckpoint,
-  type StreamCheckpoint,
-} from '../src/web/chat-transcript/webview/runtime/stream/stream-checkpoint';
+import {StreamCheckpoint} from '../src/web/chat-transcript/webview/runtime/stream/stream-checkpoint';
 
 const cp = (
   id: string,
@@ -84,7 +80,7 @@ describe('decideStreamDelta（delta 应用判定表）', () => {
 
   for (const item of cases) {
     it(item.name, () => {
-      expect(decideStreamDelta(item.local, item.streamId, item.seq)).toBe(
+      expect(StreamCheckpoint.decide(item.local, item.streamId, item.seq)).toBe(
         item.expected,
       );
     });
@@ -93,39 +89,39 @@ describe('decideStreamDelta（delta 应用判定表）', () => {
 
 describe('mergeCheckpoint（四象限）', () => {
   it('incoming == null → null（快照声明没有流式行）', () => {
-    expect(mergeCheckpoint(cp('st:a', 5), null)).toBeNull();
-    expect(mergeCheckpoint(null, null)).toBeNull();
+    expect(StreamCheckpoint.merge(cp('st:a', 5), null)).toBeNull();
+    expect(StreamCheckpoint.merge(null, null)).toBeNull();
   });
 
   it('local == null → incoming（原样）', () => {
     const incoming = cp('st:a', 3);
-    expect(mergeCheckpoint(null, incoming)).toBe(incoming);
+    expect(StreamCheckpoint.merge(null, incoming)).toBe(incoming);
   });
 
   it('异 id → incoming（新流换主，不取 max）', () => {
     const incoming = cp('st:b', 1);
-    expect(mergeCheckpoint(cp('st:a', 9), incoming)).toBe(incoming);
+    expect(StreamCheckpoint.merge(cp('st:a', 9), incoming)).toBe(incoming);
   });
 
   it('同 id → seq 取 max，status 收尾不可逆', () => {
-    expect(mergeCheckpoint(cp('st:a', 5), cp('st:a', 7))).toEqual({
+    expect(StreamCheckpoint.merge(cp('st:a', 5), cp('st:a', 7))).toEqual({
       id: 'st:a',
       seq: 7,
       status: 'streaming',
     });
-    expect(mergeCheckpoint(cp('st:a', 7), cp('st:a', 5))).toEqual({
+    expect(StreamCheckpoint.merge(cp('st:a', 7), cp('st:a', 5))).toEqual({
       id: 'st:a',
       seq: 7,
       status: 'streaming',
     });
     // local finished 不被 incoming streaming 翻回
-    expect(mergeCheckpoint(cp('st:a', 5, 'finished'), cp('st:a', 7))).toEqual({
+    expect(StreamCheckpoint.merge(cp('st:a', 5, 'finished'), cp('st:a', 7))).toEqual({
       id: 'st:a',
       seq: 7,
       status: 'finished',
     });
     // incoming finished 覆盖 local streaming
-    expect(mergeCheckpoint(cp('st:a', 5), cp('st:a', 6, 'finished'))).toEqual({
+    expect(StreamCheckpoint.merge(cp('st:a', 5), cp('st:a', 6, 'finished'))).toEqual({
       id: 'st:a',
       seq: 6,
       status: 'finished',

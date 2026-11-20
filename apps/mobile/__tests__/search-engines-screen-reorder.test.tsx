@@ -12,9 +12,10 @@
  *
  * 照 providers-screen-error.test.tsx 的 TestRenderer 直测风格：行卡片 / 菜单
  * mock 成带标记的可交互节点，树文本与调用参数断言；store 经
- * `getSearchConfigStore(runtime)` 取 runtime 上的装配实例，mock 同一入口。
+ * `SearchConfigStore.get(runtime)` 取 runtime 上的装配实例，mock 同一入口。
  */
 import React from 'react';
+import {SearchConfigStore} from '@/services/search-config.store';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Switch} from 'react-native';
@@ -121,7 +122,7 @@ jest.mock('@/components/ui/ModalShell', () => {
   };
 });
 
-// searchConfig store：UI 经 getSearchConfigStore(runtime) 直接取 runtime 上的
+// searchConfig store：UI 经 SearchConfigStore.get(runtime) 直接取 runtime 上的
 // 装配实例（core createSearchConfigStore 形状），本套件只替换该实例。
 const mockReadConfig = jest.fn();
 const mockSetEnabled = jest.fn();

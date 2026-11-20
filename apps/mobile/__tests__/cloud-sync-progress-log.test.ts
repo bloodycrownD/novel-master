@@ -1,13 +1,6 @@
 import {Result} from '@novel-master/core/errors';
-import {
-  createCloudSyncProgress,
-  shortStorageKey,
-  withCloudSyncStorageProgress,
-} from '@/services/cloud-sync-progress-log';
-import {
-  initialCloudSyncProgressUi,
-  mapCloudSyncProgressEvent,
-} from '@/services/cloud-sync-progress-ui';
+import {CloudSyncProgressLog} from '@/services/cloud-sync-progress-log';
+import {CloudSyncProgressUi} from '@/services/cloud-sync-progress-ui'
 
 describe('cloud-sync-progress-log', () => {
   const warnSpy = jest
@@ -23,15 +16,15 @@ describe('cloud-sync-progress-log', () => {
   });
 
   it('shortStorageKey 缩写长路径', () => {
-    expect(shortStorageKey('sync/status.json')).toBe('sync/status.json');
-    expect(shortStorageKey('sync/snapshots/rev-3.nmbackup')).toBe(
+    expect(CloudSyncProgressLog.shortStorageKey('sync/status.json')).toBe('sync/status.json');
+    expect(CloudSyncProgressLog.shortStorageKey('sync/snapshots/rev-3.nmbackup')).toBe(
       '…/snapshots/rev-3.nmbackup',
     );
   });
 
   it('withCloudSyncStorageProgress 记录 put 字节数', async () => {
-    const progress = createCloudSyncProgress('push');
-    const storage = withCloudSyncStorageProgress(
+    const progress = CloudSyncProgressLog.create('push');
+    const storage = CloudSyncProgressLog.withStorageProgress(
       {
         head: async () => ({exists: false}),
         get: async () => ({body: new Uint8Array(), etag: 'e'}),
@@ -51,7 +44,7 @@ describe('cloud-sync-progress-log', () => {
 
   it('createCloudSyncProgress 向 UI 回调推送阶段', () => {
     const uiUpdates: string[] = [];
-    const progress = createCloudSyncProgress('push', {
+    const progress = CloudSyncProgressLog.create('push', {
       onUiProgress: state => uiUpdates.push(state.label),
     });
 
@@ -69,11 +62,11 @@ describe('cloud-sync-progress-log', () => {
 
 describe('cloud-sync-progress-ui', () => {
   it('initialCloudSyncProgressUi 返回起始状态', () => {
-    expect(initialCloudSyncProgressUi('push').label).toBe('准备推送…');
+    expect(CloudSyncProgressUi.initial('push').label).toBe('准备推送…');
   });
 
   it('mapCloudSyncProgressEvent 区分快照上传', () => {
-    const mapped = mapCloudSyncProgressEvent('push', 'storage_put_file_start', {
+    const mapped = CloudSyncProgressUi.mapEvent('push', 'storage_put_file_start', {
       fromPath: true,
     });
     expect(mapped).toMatchObject({

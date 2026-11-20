@@ -11,7 +11,7 @@
 import {useCallback, useState} from 'react';
 import type {Dispatch, SetStateAction} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {formatError} from '../errors/format-error';
+import {FormatError} from '../errors/format-error';
 
 interface UseFocusListReloadOptions<T> {
   /** 数据拉取；抛错由 hook 统一分流（默认进 error 态）。 */
@@ -53,7 +53,7 @@ export function useFocusListReload<T>({fetcher, fallbackValue, focusSilent = fal
           onError(cause);
         } else {
           setRows(fallbackValue);
-          setError(formatError(cause));
+          setError(FormatError.format(cause));
         }
       } finally {
         setLoading(false);

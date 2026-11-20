@@ -41,7 +41,7 @@ export namespace SnapshotChunkBounds {
    * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
    */
   export function planSnapshotChunkBounds(messages: Messages): Bounds {
-    return SnapshotChunkBounds.planChunkBounds(messages.length, index =>
+    return planChunkBounds(messages.length, index =>
       Encoding.utf8ByteLength(JSON.stringify(messages[index]!.content)),
     );
   }
@@ -55,7 +55,7 @@ export namespace SnapshotChunkBounds {
     if (rows.length === 0) {
       return [];
     }
-    return SnapshotChunkBounds.planChunkBounds(rows.length, index =>
+    return planChunkBounds(rows.length, index =>
       Encoding.utf8ByteLength(JSON.stringify(rows[index])),
     );
   }

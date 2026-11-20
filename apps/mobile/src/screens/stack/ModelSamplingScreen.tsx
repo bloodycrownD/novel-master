@@ -26,7 +26,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 
 type SamplingRoute = RouteProp<RootStackParamList, 'ModelSampling'>;
@@ -76,7 +76,7 @@ export function ModelSamplingScreen() {
       if (!got.ok) throw got.error;
       const saved = got.value;
       if (saved == null) {
-        showToast(toastMessage('加载失败', '模型不存在'));
+        showToast(ToastMessage.toast('加载失败', '模型不存在'));
         return;
       }
       const gotProvider = await runtime.providers.get(saved.providerId);
@@ -94,7 +94,7 @@ export function ModelSamplingScreen() {
       setParams(stored);
       setThinkingLevel(SavedModelSettings.thinkingLevel(saved.settings));
     } catch (error) {
-      showToast(toastMessage('加载失败', error));
+      showToast(ToastMessage.toast('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ export function ModelSamplingScreen() {
 
   useEffect(() => {
     if (!savedModelId) {
-      showToast(toastMessage('错误', '缺少 savedModelId'));
+      showToast(ToastMessage.toast('错误', '缺少 savedModelId'));
       navigation.goBack();
     }
   }, [savedModelId, navigation, showToast]);
@@ -147,7 +147,7 @@ export function ModelSamplingScreen() {
       showToast('已保存模型设置');
       navigation.goBack();
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -167,7 +167,7 @@ export function ModelSamplingScreen() {
       setParams(undefined);
       showToast('已恢复默认采样参数');
     } catch (error) {
-      showToast(toastMessage('恢复失败', error));
+      showToast(ToastMessage.toast('恢复失败', error));
     } finally {
       setResetting(false);
     }

@@ -8,16 +8,7 @@
 import type {UserVfsTurnOp} from '@novel-master/core/chat';
 import {AppError} from '@novel-master/core/errors';
 import type {VfsListEntry, VfsScope, VfsService} from '@novel-master/core/vfs';
-import {
-  createVfsDirectory,
-  deleteScopedVfsEntry,
-  renameVfsDirectory,
-  renameVfsFile,
-  sessionCreateVfsDirectory,
-  sessionCreateVfsFile,
-  sessionRenameVfsFile,
-  sessionSaveVfsFile,
-} from '@/services/vfs-operations.service';
+import {createVfsDirectory, renameVfsDirectory, renameVfsFile, VfsOperationsService} from '@/services/vfs-operations.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 type FakeEntry = {path: string; kind: 'file' | 'directory'};
@@ -273,7 +264,7 @@ describe('vfs-operations 批量删除部分失败', () => {
       // 模拟文件管理器批量删除循环（fail-fast，失败中断批次；错误通道迁移
       // 四期后失败沿 Result 接力，不再 throw）。
       // eslint-disable-next-line no-await-in-loop
-      const outcome = await deleteScopedVfsEntry(
+      const outcome = await VfsOperationsService.deleteScopedEntry(
         runtime,
         scope,
         vfs as unknown as VfsService,
@@ -307,7 +298,7 @@ describe('vfs-operations 批量删除部分失败', () => {
       sessionId: 's1',
     } as VfsScope;
 
-    const denied = await deleteScopedVfsEntry(
+    const denied = await VfsOperationsService.deleteScopedEntry(
       runtime,
       scope,
       vfs as unknown as VfsService,
@@ -323,7 +314,7 @@ describe('vfs-operations 批量删除部分失败', () => {
     }
     expect(deleteRulesCalls).toEqual([]);
 
-    await deleteScopedVfsEntry(
+    await VfsOperationsService.deleteScopedEntry(
       runtime,
       scope,
       vfs as unknown as VfsService,
@@ -344,7 +335,7 @@ describe('vfs-operations 批量删除部分失败', () => {
       sessionId: 's1',
     } as VfsScope;
 
-    await deleteScopedVfsEntry(
+    await VfsOperationsService.deleteScopedEntry(
       runtime,
       scope,
       vfs as unknown as VfsService,
@@ -373,7 +364,7 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
   it('sessionCreateVfsFile 发 write（new-file）op 且透传 content', async () => {
     const vfs = new FakeVfs();
     const {runtime, executedOps} = makeRuntime();
-    await sessionCreateVfsFile(runtime, 's1', '/new.md', 'hello');
+    await VfsOperationsService.sessionCreateFile(runtime, 's1', '/new.md', 'hello');
     expect(executedOps).toHaveLength(1);
     expect(executedOps[0]!.op.tools[0]).toMatchObject({
       name: 'write',
@@ -383,7 +374,7 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
 
   it('sessionCreateVfsDirectory 去尾斜杠后发 mkdir op', async () => {
     const {runtime, executedOps} = makeRuntime();
-    await sessionCreateVfsDirectory(runtime, 's1', 'dir/');
+    await VfsOperationsService.sessionCreateDirectory(runtime, 's1', 'dir/');
     expect(executedOps[0]!.op.tools[0]).toMatchObject({
       name: 'fs',
       input: {action: 'mkdir', path: 'dir'},
@@ -392,7 +383,7 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
 
   it('sessionRenameVfsFile 发 mv op（from/to 透传）', async () => {
     const {runtime, executedOps} = makeRuntime();
-    await sessionRenameVfsFile(runtime, 's1', '/a.md', '/b/c.md');
+    await VfsOperationsService.sessionRenameFile(runtime, 's1', '/a.md', '/b/c.md');
     expect(executedOps[0]!.op.tools[0]).toMatchObject({
       name: 'fs',
       input: {action: 'mv', from: '/a.md', to: '/b/c.md'},
@@ -403,7 +394,7 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
     const vfs = seededVfs();
     const {runtime, executedOps} = makeRuntime();
 
-    await sessionSaveVfsFile(
+    await VfsOperationsService.sessionSaveFile(
       runtime,
       's1',
       vfs as unknown as VfsService,
@@ -412,7 +403,7 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
     );
     expect(executedOps).toHaveLength(0);
 
-    await sessionSaveVfsFile(
+    await VfsOperationsService.sessionSaveFile(
       runtime,
       's1',
       vfs as unknown as VfsService,

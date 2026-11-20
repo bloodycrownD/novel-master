@@ -6,19 +6,17 @@
  * session view cache 均用真实实现。
  */
 import {beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {ToastMessage} from '@/errors/toast-message';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
 import {SessionViewCache} from '../src/services/chat-session-view-cache';
-import {
-  clearAllTranscriptScrollSnapshots,
-  getTranscriptScrollSnapshot,
-  scrollCacheKey as transcriptScrollCacheKey,
-  setTranscriptScrollSnapshot,
-} from '../src/services/chat-transcript-scroll-cache';
-import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../src/components/chat/ChatTranscriptBridge';
+import {ChatTranscriptScrollCache} from '../src/services/chat-transcript-scroll-cache';
+import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../src/components/chat/ChatTranscriptBridge';
+const transcriptScrollCacheKey = ChatTranscriptScrollCache.key;
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -28,7 +26,9 @@ jest.mock('../src/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
@@ -108,7 +108,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
     deletedSessionIds.length = 0;
     deletedProjectIds.length = 0;
     SessionViewCache.clearAll();
-    clearAllTranscriptScrollSnapshots();
+    ChatTranscriptScrollCache.clearAll();
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
       return {ok: true, value: undefined};
@@ -169,7 +169,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
       expect(mockRuntime.sessions.delete.mock.calls).toEqual([['s1'], ['s2']]);
       expect(deletedSessionIds).toEqual(['s1']);
       expect(mockShowToast).toHaveBeenCalledTimes(1);
-      // 真实 toastMessage('删除失败', error) 产出「删除失败：db locked」。
+      // 真实 ToastMessage.toast('删除失败', error) 产出「删除失败：db locked」。
       expect(mockShowToast).toHaveBeenCalledWith(
         expect.stringContaining('删除失败'),
       );
@@ -213,12 +213,12 @@ describe('useChatTabScope 批量删除中途失败', () => {
       const p1TranscriptKey = transcriptScrollCacheKey('p1', 's1');
       const otherTranscriptKey = transcriptScrollCacheKey('p2', 's9');
       SessionViewCache.set(p1ViewKey, {messages: [], hasMoreMessages: false});
-      setTranscriptScrollSnapshot(p1TranscriptKey, {
+      ChatTranscriptScrollCache.set(p1TranscriptKey, {
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 10,
         nearBottom: false,
       });
-      setTranscriptScrollSnapshot(otherTranscriptKey, {
+      ChatTranscriptScrollCache.set(otherTranscriptKey, {
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 1,
         nearBottom: false,
@@ -230,8 +230,8 @@ describe('useChatTabScope 批量删除中途失败', () => {
       });
 
       expect(SessionViewCache.get(p1ViewKey)).toBeUndefined();
-      expect(getTranscriptScrollSnapshot(p1TranscriptKey)).toBeUndefined();
-      expect(getTranscriptScrollSnapshot(otherTranscriptKey)).toEqual({
+      expect(ChatTranscriptScrollCache.get(p1TranscriptKey)).toBeUndefined();
+      expect(ChatTranscriptScrollCache.get(otherTranscriptKey)).toEqual({
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 1,
         nearBottom: false,

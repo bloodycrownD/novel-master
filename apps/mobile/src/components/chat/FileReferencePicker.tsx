@@ -9,7 +9,7 @@ import type {WorkplaceListRow} from '@novel-master/core/workplace';
 import type {VfsScope} from '@novel-master/core/vfs';
 import {AppModal} from '@/components/ui/AppModal';
 import {useTheme} from '@/theme/ThemeProvider';
-import {formatError} from '@/errors/format-error';
+import {FormatError} from '@/errors/format-error';
 import {useRuntime} from '@/hooks/useRuntime';
 import {VfsRowMapper, parentLogicalPath} from '@/components/vfs/vfs-row-mapper';
 import {VfsMovePath} from '@/components/vfs/vfs-move-path';
@@ -81,6 +81,17 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
   const workplaceScope: VfsScope = props.mode === 'pick-directory' ? props.scope : {kind: 'session', projectId: props.projectId, sessionId: props.sessionId};
   const scopeKey = useMemo(() => JSON.stringify(workplaceScope), [workplaceScope]);
 
+  // namespace PickerRows 将 toggleInSet 收为私有（namespace 外不可见），勾选切换在组件内就地展开。
+  const toggleInSet = (prev: Set<string>, path: string): Set<string> => {
+    const next = new Set(prev);
+    if (next.has(path)) {
+      next.delete(path);
+    } else {
+      next.add(path);
+    }
+    return next;
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
@@ -91,11 +102,11 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
       if (built.ok) {
         setRows(built.value);
       } else {
-        setError(formatError(built.error));
+        setError(FormatError.format(built.error));
         setRows([]);
       }
     } catch (err) {
-      setError(formatError(err));
+      setError(FormatError.format(err));
       setRows([]);
     } finally {
       setLoading(false);
@@ -138,11 +149,11 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
       confirmPickDirectory();
       return;
     }
-    setSelectedDirs(prev => PickerRows.toggleInSet(prev, currentPath));
+    setSelectedDirs(prev => toggleInSet(prev, currentPath));
   };
 
   const toggleFile = (filePath: string) => {
-    setSelectedFiles(prev => PickerRows.toggleInSet(prev, filePath));
+    setSelectedFiles(prev => toggleInSet(prev, filePath));
   };
 
   const handleConfirm = () => {
@@ -152,7 +163,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
     }
     const tokens = composerAtPath.tokensFromPickerSelection(selectedDirs, selectedFiles);
     if (!tokens.ok) {
-      setError(formatError(tokens.error));
+      setError(FormatError.format(tokens.error));
       return;
     }
     props.onConfirm(tokens.value);
@@ -221,7 +232,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                     <View style={styles.row} testID={`file-ref-dir-${item.path}`}>
                       {isPickDirectory ? null : (
                         <Pressable
-                          onPress={() => setSelectedDirs(prev => PickerRows.toggleInSet(prev, item.path))}
+                          onPress={() => setSelectedDirs(prev => toggleInSet(prev, item.path))}
                           style={styles.checkHit}
                           testID={`file-ref-dir-check-${item.path}`}
                           accessibilityLabel={`选用目录 ${label}`}

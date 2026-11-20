@@ -12,10 +12,8 @@
 
 type MermaidTheme = 'dark' | 'default';
 
-// 颜色解析与亮度推断已抽至 theme-mode.ts（代码高亮 token 配色同样需要）；
-// 此处 re-export 保持既有 import 路径兼容。
-export {parseColorToRgb} from './theme-mode';
-import {inferThemeModeFromBg, parseColorToRgb} from './theme-mode';
+// 颜色解析与亮度推断已抽至 theme-mode.ts（代码高亮 token 配色同样需要）。
+import {ThemeMode} from './theme-mode';
 
 let mermaidIdCounter = 0;
 
@@ -36,7 +34,7 @@ interface RenderMermaidCodeBlocksOptions {
 export const MermaidCore = {
   /** 按背景亮度推断主题：暗底 dark，亮底 default；无法解析按 default。 */
   inferThemeFromBg: (bg: string | null | undefined): MermaidTheme => {
-    return inferThemeModeFromBg(bg) === 'dark' ? 'dark' : 'default';
+    return ThemeMode.inferFromBg(bg) === 'dark' ? 'dark' : 'default';
   },
 
   /** 每次渲染唯一 id（自增），避免并发渲染共用固定 id 冲突。 */

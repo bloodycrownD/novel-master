@@ -73,55 +73,32 @@ import type {
   TranscriptStreamingMessage,
   TranscriptToolView,
 } from './ChatTranscriptBridge';
-import {
-  CONVERSATION_BRIDGE_V,
-  decodeConversationUpstream,
-  parseConversationScrollSnapshot,
-  readReadyCapabilities,
-  type ConversationHostMessage,
-} from './ChatConversationBridge';
-import {enrichTranscriptRows} from './enrich-transcript-rows';
-import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
-import {createQuantumYield} from '@/services/yield-quantum';
-import {
-  buildTranscriptRows,
-  buildToolPairingContext,
-  buildTranscriptRowsWithContext,
-  selectTailTranscriptRows,
-} from './message-blocks';
-import {
-  planRowChunkBounds,
-  planSnapshotChunkBounds,
-} from './snapshot-chunk-bounds';
-import {
-  planMessagesUpdate,
-  planOpenSnapshot,
-} from './chat-conversation-update-plan';
-import {
-  EMPTY_STREAMING_ROWS,
-  EMPTY_STREAM_ROW_IDS,
-  applyStreamRowIds,
-  buildStreamingTranscriptRow,
-} from './transcript-stream-projection';
+import {ChatConversationBridge, CONVERSATION_BRIDGE_V, type ConversationHostMessage} from './ChatConversationBridge';
+import {EnrichTranscriptRows} from './enrich-transcript-rows';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
+import {YieldQuantum} from '@/services/yield-quantum';
+import {MessageBlocks} from './message-blocks';
+import {SnapshotChunkBounds} from './snapshot-chunk-bounds';
+import {ChatConversationUpdatePlan} from './chat-conversation-update-plan';
+import {EMPTY_STREAMING_ROWS, EMPTY_STREAM_ROW_IDS, TranscriptStreamProjection} from './transcript-stream-projection';
 import {CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID} from '@/webview-host/chat-transcript/uri';
-import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
-import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
-import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
+import {WebviewThemeInject} from '@/webview-host/webview-theme-inject';
+import {ChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
 import {useTheme} from '@/theme/ThemeProvider';
-import {prepareStreamTailHtml} from './prepare-stream-tail-html';
-import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
+import {StreamTailHtml} from './prepare-stream-tail-html';
+import {BlockSplit} from '@/web/chat-transcript/stream/block-split';
 import {
   TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
   TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
   TRANSCRIPT_READY_VERSION,
-  transcriptCapabilitiesInclude,
+  TranscriptCapabilities,
 } from '@/web/chat-transcript/transcript-capabilities';
 import {LogFactory} from '@novel-master/core/log';
 import {coreT} from '@/i18n/core';
-import {buildTranscriptLabels} from './transcript-labels';
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import {appendWireChunk} from '@/services/stream-wire-queue';
+import {TranscriptLabelsFactory} from './transcript-labels';
+import {StreamWireQueue, type StreamWireChunk} from '@/services/stream-wire-queue';
 import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
@@ -278,7 +255,7 @@ function propsEqual(prev: Props, next: Props): boolean {
 }
 
 /**
- * init / themeUpdate 的主题载荷即 `hostThemeFromTokens(tokens)` 的全量 9 键产物
+ * init / themeUpdate 的主题载荷即 `HostThemeMapping.fromTokens(tokens)` 的全量 9 键产物
  * （映射本体在 `webview-host/host-theme-from-tokens.ts`，与原生 composer 共用一份）。
  */
 
@@ -618,21 +595,21 @@ const ConversationHost = forwardRef<Handle, Props>(
         },
       ];
       for (const {kind, tail, committed, committedHtml} of kinds) {
-        const {blocks, activeTail} = splitStreamBlocks(tail.current);
+        const {blocks, activeTail} = BlockSplit.split(tail.current);
         if (blocks.length === 0) {
           continue;
         }
         tail.current = activeTail;
         committed.current.push(...blocks);
         const commits = blocks.map(block => {
-          const html = prepareStreamTailHtml(block, true);
+          const html = StreamTailHtml.prepare(block, true);
           committedHtml.current.push(html ?? '');
           return {html, text: block};
         });
         splits.push({
           kind,
           commits,
-          tailHtml: prepareStreamTailHtml(activeTail, true),
+          tailHtml: StreamTailHtml.prepare(activeTail, true),
           tailText: activeTail,
         });
       }
@@ -705,8 +682,8 @@ const ConversationHost = forwardRef<Handle, Props>(
       const richText = richTextRef.current;
       const liveText = streamTextAccumRef.current;
       const liveThinking = streamThinkingAccumRef.current;
-      const tailHtml = prepareStreamTailHtml(liveText, richText);
-      const tailThinking = prepareStreamTailHtml(liveThinking, richText);
+      const tailHtml = StreamTailHtml.prepare(liveText, richText);
+      const tailThinking = StreamTailHtml.prepare(liveThinking, richText);
       const textParts = committedTextHtmlPartsRef.current;
       const thinkingParts = committedThinkingHtmlPartsRef.current;
       const textHtml = joinStreamHtml(textParts, tailHtml);
@@ -806,7 +783,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         } else {
           streamThinkingAccumRef.current += segment.delta;
         }
-        appendWireChunk(pendingWireSegmentsRef.current.segments, segment);
+        StreamWireQueue.append(pendingWireSegmentsRef.current.segments, segment);
         queued += 1;
       }
       // tools 只在内容真变时进下一拍 delta（P2-18a）：重复推送同一份工具数组
@@ -873,7 +850,7 @@ const ConversationHost = forwardRef<Handle, Props>(
       const message = {...finished, messageId: found?.messageId ?? null};
       const body = {text, thinking};
       const richText = richTextRef.current;
-      const row = buildStreamingTranscriptRow(message, richText, body);
+      const row = TranscriptStreamProjection.buildStreamingTranscriptRow(message, richText, body);
       postToWeb({
         v: CONVERSATION_BRIDGE_V,
         type: 'streamStatus',
@@ -948,11 +925,11 @@ const ConversationHost = forwardRef<Handle, Props>(
      * splitInitPayload 对缺失段有兜底，合成包过渡期不崩）。
      */
     const initSnapshotRef = useRef({
-      theme: hostThemeFromTokens(tokens),
+      theme: HostThemeMapping.fromTokens(tokens),
       flags: resolvedFlags,
     });
     initSnapshotRef.current = {
-      theme: hostThemeFromTokens(tokens),
+      theme: HostThemeMapping.fromTokens(tokens),
       flags: resolvedFlags,
     };
 
@@ -969,7 +946,7 @@ const ConversationHost = forwardRef<Handle, Props>(
           flags: snapshot.flags,
           // 转录渲染层文案（spec §2.2.8）：4 个 `label.transcript.*` 经 core
           // i18n 取值；web 缺省回退内置中文常量。
-          labels: buildTranscriptLabels(coreT),
+          labels: TranscriptLabelsFactory.build(coreT),
           // 转录 only 变体（transcript-converge）：web 据此隐藏 dock。
           ...(transcriptOnly ? {transcriptOnly: true} : {}),
         },
@@ -1001,7 +978,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         activeSnapshotGenerationRef.current = generation;
         const buildLog = `snapshot build begin (msgs=${snapshotMessages.length})`;
         rollbackTimingLog(buildLog);
-        const ctx = buildToolPairingContext(snapshotMessages);
+        const ctx = MessageBlocks.buildToolPairingContext(snapshotMessages);
         const opts = transcriptListOptions;
         // 发片时都重取「捕获行 + 当前行」的合并结果（spec C9 第 7 条）：
         // 快照是异步分片的，期间新 step 启动会往 `streamingRowsRef` 追加新 id。
@@ -1054,7 +1031,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         /** 流式投影行 → wire 行（正文/思考优先取宿主累加器，取长一方）。 */
         const toWireRow = (message: TranscriptStreamingMessage) => {
           if (message.streamId !== streamIdRef.current) {
-            return buildStreamingTranscriptRow(message, richText, undefined);
+            return TranscriptStreamProjection.buildStreamingTranscriptRow(message, richText, undefined);
           }
           const textParts = committedTextPartsRef.current;
           const thinkingParts = committedThinkingPartsRef.current;
@@ -1071,21 +1048,21 @@ const ConversationHost = forwardRef<Handle, Props>(
           const tools = liveTools.length > 0 ? liveTools : message.tools;
           const body = {text, thinking};
           const wireRow = {...message, tools};
-          return buildStreamingTranscriptRow(wireRow, richText, body);
+          return TranscriptStreamProjection.buildStreamingTranscriptRow(wireRow, richText, body);
         };
         const initialStreamRows = currentStreamRows();
         // 空会话但已有流式行：只发流式片，不额外发空 DB 片。
         const noDbRows = snapshotMessages.length === 0;
         const onlyStream = noDbRows && initialStreamRows.length > 0;
-        const planned = planSnapshotChunkBounds(snapshotMessages);
+        const planned = SnapshotChunkBounds.planSnapshotChunkBounds(snapshotMessages);
         const dbChunkBounds = onlyStream ? [] : planned;
         const streamWireRows = initialStreamRows.map(toWireRow);
-        const streamChunkBounds = planRowChunkBounds(streamWireRows);
+        const streamChunkBounds = SnapshotChunkBounds.planRowChunkBounds(streamWireRows);
         const dbChunkCount = dbChunkBounds.length;
         const chunkTotal = dbChunkCount + streamChunkBounds.length;
         const prescanLog = `snapshot prescan done (pairing+bucket, chunks=${chunkTotal})`;
         rollbackTimingLog(prescanLog);
-        const yieldFn = createQuantumYield();
+        const yieldFn = YieldQuantum.create();
         const beginLog = `snapshot begin (msgs=${snapshotMessages.length}, chunks=${chunkTotal}, gen=${generation})`;
         bootTimingLog(beginLog);
         try {
@@ -1105,9 +1082,9 @@ const ConversationHost = forwardRef<Handle, Props>(
             if (chunkIndex < dbChunkCount) {
               const [start, end] = dbChunkBounds[chunkIndex]!;
               const part = snapshotMessages.slice(start, end);
-              const built = buildTranscriptRowsWithContext(part, ctx, opts);
-              const enriched = enrichTranscriptRows(built, richText);
-              rows = applyStreamRowIds(enriched, streamRowIds);
+              const built = MessageBlocks.buildTranscriptRowsWithContext(part, ctx, opts);
+              const enriched = EnrichTranscriptRows.enrich(built, richText);
+              rows = TranscriptStreamProjection.applyStreamRowIds(enriched, streamRowIds);
             } else {
               // 流式片前再 flush：快照期间新到的 delta 必须先以更小 seq 发出。
               flushPendingStreamNow();
@@ -1225,9 +1202,9 @@ const ConversationHost = forwardRef<Handle, Props>(
       (tail: readonly ChatMessageData[]) => {
         const richText = flags?.richText ?? false;
         const opts = transcriptListOptions;
-        const picked = selectTailTranscriptRows(messages, tail, opts);
-        const enriched = enrichTranscriptRows(picked, richText);
-        const rows = applyStreamRowIds(enriched, streamRowIds);
+        const picked = MessageBlocks.selectTailTranscriptRows(messages, tail, opts);
+        const enriched = EnrichTranscriptRows.enrich(picked, richText);
+        const rows = TranscriptStreamProjection.applyStreamRowIds(enriched, streamRowIds);
         if (rows.length === 0) {
           return;
         }
@@ -1278,12 +1255,12 @@ const ConversationHost = forwardRef<Handle, Props>(
      * onMessage 的 case 会把手势拆成两段。
      */
     const handleReadyNow = (payload: Record<string, unknown>): void => {
-      const caps = readReadyCapabilities(payload);
+      const caps = ChatConversationBridge.readReadyCapabilities(payload);
       const projection = TRANSCRIPT_CAPABILITY_STREAM_PROJECTION;
       const blockCommit = TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT;
       if (
         payload.version !== TRANSCRIPT_READY_VERSION ||
-        !transcriptCapabilitiesInclude(caps, projection)
+        !TranscriptCapabilities.include(caps, projection)
       ) {
         webReadyRef.current = false;
         setWebReady(false);
@@ -1299,7 +1276,7 @@ const ConversationHost = forwardRef<Handle, Props>(
       setWebReady(true);
       setReadyFailed(false);
       clearReadyTimeout();
-      const blockOk = transcriptCapabilitiesInclude(caps, blockCommit);
+      const blockOk = TranscriptCapabilities.include(caps, blockCommit);
       streamBlockCapableRef.current = blockOk;
       const rows = streamingRowsRef.current;
       const last = rows.length > 0 ? rows[rows.length - 1]! : null;
@@ -1379,7 +1356,7 @@ const ConversationHost = forwardRef<Handle, Props>(
      */
     const onUpstream = (event: WebViewMessageEvent): void => {
       // 宽松 decoder（纪律 B）：坏 JSON 静默丢弃；ready 由 v===2 判。
-      const decoded = decodeConversationUpstream(event.nativeEvent.data);
+      const decoded = ChatConversationBridge.decodeConversationUpstream(event.nativeEvent.data);
       if (!decoded.ok) {
         if (decoded.reason === 'stale-ready') {
           // 旧 dist 的 ready：不置 webReady，等 8s 兜底错误态
@@ -1406,7 +1383,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         }
         case 'scrollSnapshot': {
           const schema = CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION;
-          const snap = parseConversationScrollSnapshot(message, schema);
+          const snap = ChatConversationBridge.parseConversationScrollSnapshot(message, schema);
           if (snap != null) {
             rollbackTimingLog('web render receipt (scrollSnapshot)');
             const nearBottom = snap.nearBottom;
@@ -1450,7 +1427,7 @@ const ConversationHost = forwardRef<Handle, Props>(
           if (uiRunning) {
             return;
           }
-          emitChatTranscriptTelemetry({name: 'menu_open'});
+          ChatTranscriptTelemetry.emit({name: 'menu_open'});
           const messageId = String(payload.messageId ?? '');
           const pageX = Number(payload.pageX ?? 0);
           const pageY = Number(payload.pageY ?? 0);
@@ -1576,7 +1553,7 @@ const ConversationHost = forwardRef<Handle, Props>(
       postToWeb({
         v: CONVERSATION_BRIDGE_V,
         type: 'themeUpdate',
-        payload: {theme: hostThemeFromTokens(tokens)},
+        payload: {theme: HostThemeMapping.fromTokens(tokens)},
       });
     }, [webReady, tokens, postToWeb]);
 
@@ -1698,7 +1675,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         const finished = {...current, status: 'finished' as const, tools};
         const body = {text, thinking};
         const richText = richTextRef.current;
-        const row = buildStreamingTranscriptRow(finished, richText, body);
+        const row = TranscriptStreamProjection.buildStreamingTranscriptRow(finished, richText, body);
         postToWeb({
           v: CONVERSATION_BRIDGE_V,
           type: 'streamStatus',
@@ -1735,7 +1712,7 @@ const ConversationHost = forwardRef<Handle, Props>(
       // 无需再判「换会话」：切会话经 `key` 重挂，本组件整体重新初始化，
       // `needsOpenSnapshotRef` 从 true 起、流式基线本来就是空的。
       if (needsOpenSnapshotRef.current) {
-        const plan = planOpenSnapshot({
+        const plan = ChatConversationUpdatePlan.planOpenSnapshot({
           messageCount: messages.length,
           hasStreamingMessage,
           sessionKey,
@@ -1751,7 +1728,7 @@ const ConversationHost = forwardRef<Handle, Props>(
           restore: plan.restoreScroll,
         });
         for (const event of plan.events) {
-          emitChatTranscriptTelemetry(event);
+          ChatTranscriptTelemetry.emit(event);
         }
         prevFirstMessageIdRef.current = messages[0]?.id;
         prevMessageCountRef.current = messages.length;
@@ -1759,7 +1736,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         return;
       }
 
-      const plan = planMessagesUpdate({
+      const plan = ChatConversationUpdatePlan.planMessagesUpdate({
         messages,
         previousMessages: prevMessagesRef.current,
         prevFirstId: prevFirstMessageIdRef.current,
@@ -1781,12 +1758,12 @@ const ConversationHost = forwardRef<Handle, Props>(
       prevMessagesRef.current = messages;
       switch (plan.kind) {
         case 'prepend': {
-          emitChatTranscriptTelemetry(plan.event);
+          ChatTranscriptTelemetry.emit(plan.event);
           const richText = flags?.richText ?? false;
           const head = messages.slice(0, plan.prependedCount);
-          const built = buildTranscriptRows(head, transcriptListOptions);
-          const enriched = enrichTranscriptRows(built, richText);
-          const rows = applyStreamRowIds(enriched, streamRowIds);
+          const built = MessageBlocks.buildTranscriptRows(head, transcriptListOptions);
+          const enriched = EnrichTranscriptRows.enrich(built, richText);
+          const rows = TranscriptStreamProjection.applyStreamRowIds(enriched, streamRowIds);
           postToWeb({
             v: CONVERSATION_BRIDGE_V,
             type: 'prependPage',
@@ -1797,7 +1774,7 @@ const ConversationHost = forwardRef<Handle, Props>(
         case 'stream-adopted': {
           // DB 接管：不发 append/快照，对每条命中补 streamStatus{row}（逐条
           // 带 messageId，菜单/回滚可用）。
-          const ctx = buildToolPairingContext(messages);
+          const ctx = MessageBlocks.buildToolPairingContext(messages);
           const opts = transcriptListOptions;
           const richText = flags?.richText ?? false;
           for (const {streamId, messageId} of plan.adopted) {
@@ -1806,9 +1783,9 @@ const ConversationHost = forwardRef<Handle, Props>(
               continue;
             }
             const one = [message];
-            const built = buildTranscriptRowsWithContext(one, ctx, opts);
-            const enriched = enrichTranscriptRows(built, richText);
-            const wired = applyStreamRowIds(enriched, streamRowIds);
+            const built = MessageBlocks.buildTranscriptRowsWithContext(one, ctx, opts);
+            const enriched = EnrichTranscriptRows.enrich(built, richText);
+            const wired = TranscriptStreamProjection.applyStreamRowIds(enriched, streamRowIds);
             const row = wired.find(
               candidate =>
                 candidate.kind === 'message' && candidate.id === streamId,
@@ -1860,7 +1837,7 @@ const ConversationHost = forwardRef<Handle, Props>(
      */
     const shouldStartLoadWithRequest = useCallback(
       (req: {url: string}): boolean => {
-        if (req.url.startsWith(getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID))) {
+        if (req.url.startsWith(WebviewAssetUri.getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID))) {
           return true;
         }
         if (/^https?:\/\//i.test(req.url)) {
@@ -1939,7 +1916,7 @@ const ConversationHost = forwardRef<Handle, Props>(
      * onContentProcessDidTerminate 是 iOS 对应物，防御性同接。
      */
     const handleRenderProcessGone = useCallback(() => {
-      emitChatTranscriptTelemetry({name: 'render_process_gone'});
+      ChatTranscriptTelemetry.emit({name: 'render_process_gone'});
       handleReload();
     }, [handleReload]);
 
@@ -1962,7 +1939,7 @@ const ConversationHost = forwardRef<Handle, Props>(
     }
 
     /** 首帧主题预注入脚本（见下方属性注释；抽出来避免调用参数在 JSX 里拆行）。 */
-    const themeInjectScript = buildThemeInjectScript(tokens.background);
+    const themeInjectScript = WebviewThemeInject.buildThemeInjectScript(tokens.background);
 
     return (
       <View style={styles.fill}>
@@ -1989,13 +1966,13 @@ const ConversationHost = forwardRef<Handle, Props>(
              `var(--bg,#fff)` 的首绘帧。 */
           source={{
             uri:
-              getWebViewPackageIndexUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID) +
+              WebviewAssetUri.getWebViewPackageIndexUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID) +
               '#bg=' +
               encodeURIComponent(tokens.background),
           }}
           allowFileAccess
           allowFileAccessFromFileURLs
-          allowingReadAccessToURL={getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)}
+          allowingReadAccessToURL={WebviewAssetUri.getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)}
           onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
           onOpenWindow={handleOpenWindow}
           onMessage={handleUpstream}

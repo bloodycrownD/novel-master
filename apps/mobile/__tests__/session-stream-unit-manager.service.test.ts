@@ -28,10 +28,7 @@ import {SessionStreamUnit} from '@/services/session-stream-unit';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {Platform} from 'react-native';
 import notifee, {onForegroundEventUnsubscribe} from '@notifee/react-native';
-import {
-  resetKeepAliveStateForTests,
-  setKeepAliveResidentEnabled,
-} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 
 /** 与实现同值的默认宽限销毁时长（单元模块私有的 30s 默认值）。 */
 const DEFAULT_SETTLED_GRACE_PERIOD_MS = 30_000;
@@ -126,12 +123,12 @@ describe('SessionStreamUnitManager', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   afterEach(() => {
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     // 未在用例内 dispose 的 manager 统一收口：清校准轮询 interval 与
     // 复询定时器，防 jest 环境拆除后异步路径再触碰 RN 模块。
     for (const manager of liveManagers.splice(0)) {
@@ -530,7 +527,7 @@ describe('SessionStreamUnitManager', () => {
   it('r3-run-1: 前奏 FAILED(空串) 事件收口后 throw 路径不双弹 toast', async () => {
     // core 前奏抛错时发的是 FAILED(runId:'')——走的是**同一条** finishRun
     // 收口、同样已 onError 过一次。.catch 的 toast 条件必须补
-    // `!isSessionStreamUnitSettled(...)`，否则这里会弹第二次。
+    // `!SessionStreamUnit.isSettled(...)`，否则这里会弹第二次。
     const h = createHarness();
     h.runAgentTurn.mockRejectedValue(new Error('前奏炸了'));
     const onError = jest.fn();
@@ -872,7 +869,7 @@ describe('SessionStreamUnitManager', () => {
       });
 
       // 常驻前置（模拟开关开/启动拉起）：空闲文案先上屏 1 次
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
       const idle = notifee.displayNotification.mock.calls[0][0];
       expect(idle.title).toBe('novel master · 空闲');
@@ -940,7 +937,7 @@ describe('SessionStreamUnitManager', () => {
       );
 
       // 常驻前置：空闲文案 1 次后清零，聚焦受理窗口内的增量
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       notifee.displayNotification.mockClear();
 
       h.manager.startRun('a', 'p', 'hi');
@@ -1003,7 +1000,7 @@ describe('SessionStreamUnitManager', () => {
       h1.manager.setPrefBridge({
         isNotificationEnabled: async () => true,
       });
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       h1.manager.startRun('a', 'p', 'hi');
       await flushAsync();
       // 常驻前置空闲 1 次 + 带标签刷新 1 次，最后一条为「正在生成」
@@ -1026,13 +1023,13 @@ describe('SessionStreamUnitManager', () => {
       h2.manager.setPrefBridge({
         isNotificationEnabled: async () => true,
       });
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       h2.manager.startRun('b', 'p', 'hi');
       await flushAsync();
 
       notifee.stopForegroundService.mockClear();
       notifee.displayNotification.mockClear();
-      resetKeepAliveStateForTests();
+      AgentFinishedNotification.resetKeepAliveStateForTests();
       expect(() => h2.manager.dispose()).not.toThrow();
       await flushAsync();
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();

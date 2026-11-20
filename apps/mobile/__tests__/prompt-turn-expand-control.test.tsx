@@ -54,10 +54,13 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('@/services/prompt-preview.service', () => ({
+jest.mock('@/services/prompt-preview.service', () => {
+  const legacy = {
   buildRealPromptPreviewTurnsAdapter: (...args: unknown[]) =>
     mockBuildTurns(...(args as [])),
-}));
+};
+  return {...legacy, PromptPreviewService: {buildRealTurns: legacy.buildRealPromptPreviewTurnsAdapter}};
+});
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({

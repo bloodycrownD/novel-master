@@ -5,12 +5,9 @@ import React, {useState} from 'react';
 import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {
-  ProviderForm,
-  providerFormToCreateInput,
-} from '@/components/provider/ProviderForm';
+import {ProviderForm, ProviderFormMapper} from '@/components/provider/ProviderForm';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -32,16 +29,16 @@ export function ProviderCreateScreen() {
         onSubmit={async values => {
           setSaving(true);
           try {
-            const input = providerFormToCreateInput(values);
+            const input = ProviderFormMapper.toCreateInput(values);
             const created = await runtime.providers.create(input);
             if (!created.ok) {
-              showToast(toastMessage('创建失败', created.error));
+              showToast(ToastMessage.toast('创建失败', created.error));
               return;
             }
             showToast(`已创建服务商：${created.value.displayName}`);
             navigation.replace('ProviderDetail', {providerId: created.value.id});
           } catch (err) {
-            showToast(toastMessage('创建失败', err));
+            showToast(ToastMessage.toast('创建失败', err));
           } finally {
             setSaving(false);
           }

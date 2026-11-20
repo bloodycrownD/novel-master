@@ -5,6 +5,6 @@
  * 本文件既被当作旧包构建入口，又被新合成包 import，ESM import 即执行，所以顶层只能留
  * 「import 工厂 + 一行默认参数调用」——默认参数即旧包现行为（宏链活依赖本包）。
  */
-import {createComposerRuntime} from './runtime/factory';
+import {ComposerFactory} from './runtime/factory';
 
-createComposerRuntime('#root');
+ComposerFactory.create('#root');

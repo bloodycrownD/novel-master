@@ -34,7 +34,7 @@ import {HeuristicTokenCounter} from '@novel-master/core/tokenizer';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 
 /** 与单元实现同值的 ingress 合并窗口（32ms）。 */
 const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
@@ -217,7 +217,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -225,7 +225,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-U2: 无 webview 句柄 attach 时 delta/step 照常累积进 partial/指标，收尾照常', () => {
@@ -358,7 +358,7 @@ describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', (
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -366,7 +366,7 @@ describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', (
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('attach 不再注入 partial；快照 streamRows 携带完整当前流式行', () => {
@@ -554,7 +554,7 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -562,7 +562,7 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-U4-1: 新 run 重置——同会话再发起，指标/partial/历时全部回到零值', () => {
@@ -713,7 +713,7 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -721,7 +721,7 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-SUB: child-created 登记进父单元投影（插入序）', () => {
@@ -839,7 +839,7 @@ describe('T-U13: 跨项目并行等价', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -847,7 +847,7 @@ describe('T-U13: 跨项目并行等价', () => {
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('两个不同 project 的 session 并行：事件路由/投影/收尾互不串扰', () => {
@@ -1036,7 +1036,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -1044,7 +1044,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('T-M7: heuristic 按累计字符长度取 ceil——逐 delta 更新与 HeuristicTokenCounter.countText 全量计数严格一致', () => {

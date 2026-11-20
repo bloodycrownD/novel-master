@@ -78,9 +78,12 @@ const mockRuntime: Record<string, any> = {};
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
-jest.mock('../src/services/project-composer-status.service', () => ({
+jest.mock('../src/services/project-composer-status.service', () => {
+  const legacy = {
   projectComposerStatusForSession: jest.fn(async () => []),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {forSession: legacy.projectComposerStatusForSession}};
+});
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));

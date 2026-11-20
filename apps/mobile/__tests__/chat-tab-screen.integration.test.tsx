@@ -11,7 +11,7 @@ import {
 } from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {SessionViewCache} from '../src/services/chat-session-view-cache';
-import {decodeConversationUpstream} from '../src/components/chat/ChatConversationBridge';
+import {ChatConversationBridge} from '../src/components/chat/ChatConversationBridge'
 import {makeTranscriptReadyPayload} from '../test-utils/transcript-ready';
 import {
   clearMockWebViewPostMessages,
@@ -262,7 +262,8 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     // 与新类型契约保持一致：枚举统一为 'session'
     source: 'session',
@@ -273,7 +274,9 @@ jest.mock('../src/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
@@ -281,10 +284,13 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
-jest.mock('../src/storage/app-ui-pref-io', () => ({
+jest.mock('../src/storage/app-ui-pref-io', () => {
+  const legacy = {
   ...jest.requireActual('../src/storage/app-ui-pref-io'),
   readBoolPref: jest.fn(async () => false),
-}));
+};
+  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref}};
+});
 
 // `{virtual: true}`：`session-messages-loader` 已随「Wave D 死通道删净」退役删除
 // （6594b67c9），但本 mock 一直留着——不带 virtual 时 jest 解析不到模块，
@@ -673,7 +679,7 @@ describe('ChatTabScreen integration', () => {
     // 统一宿主的下行信封是 v:2——用它的宽松 decoder 取 type/payload
     // （旧的 decodeHostToTranscript 对 v !== 1 直接 throw，会把断言变成误判）。
     const decoded = mockWebViewPostMessages
-      .map(raw => decodeConversationUpstream(raw))
+      .map(raw => ChatConversationBridge.decodeConversationUpstream(raw))
       .filter(r => r.ok)
       .map(
         r =>

@@ -7,12 +7,7 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import React from 'react';
 import { chatAnnotateDraftStore } from '@novel-master/core/chat';
-import {
-  getSelectionOffsetsInElement,
-  collectAnnotateSelection,
-  reportRecogitoCreateFromSelection,
-  bindAnnotateCollectBridge,
-} from '../src/web/rich-document/webview/runtime/annotate-collect';
+import {AnnotateCollect} from '../src/web/rich-document/webview/runtime/annotate-collect';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -144,10 +139,10 @@ describe('T-SA8 plain 量测 → Range 半开 offset', () => {
     const selStart = source.indexOf('TARGET');
     const selEnd = selStart + 'TARGET'.length;
     const {body, selection} = installMiniDom(source, selStart, selEnd);
-    const offsets = getSelectionOffsetsInElement(body, selection);
+    const offsets = AnnotateCollect.getSelectionOffsetsInElement(body, selection);
     expect(offsets).toEqual({start: selStart, end: selEnd});
 
-    const collected = collectAnnotateSelection('plain');
+    const collected = AnnotateCollect.collectSelection('plain');
     expect(collected?.selectionStart).toBe(selStart);
     expect(collected?.selectionEnd).toBe(selEnd);
     expect(collected?.originalText).toBe('TARGET');
@@ -166,7 +161,7 @@ describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
     const selEnd = selStart + 'TARGET'.length;
     installMiniDom(source, selStart, selEnd);
     const posts = installPostCapture();
-    reportRecogitoCreateFromSelection();
+    AnnotateCollect.reportCreateFromSelection();
     expect(posts).toHaveLength(1);
     expect(posts[0]?.type).toBe('recogitoCreate');
     const p = posts[0]!.payload;
@@ -185,7 +180,7 @@ describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
     const selEnd = selStart + needle.length;
     installMiniDom(source, selStart, selEnd);
     const posts = installPostCapture();
-    reportRecogitoCreateFromSelection();
+    AnnotateCollect.reportCreateFromSelection();
     expect(posts).toHaveLength(1);
     const p = posts[0]!.payload;
     expect(p.quote).toBe('hello');
@@ -205,14 +200,14 @@ describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
     const selEnd = selStart + 5;
     installMiniDom(source, selStart, selEnd);
     const posts = installPostCapture();
-    reportRecogitoCreateFromSelection();
+    AnnotateCollect.reportCreateFromSelection();
     expect(posts).toHaveLength(0);
   });
 
   it('生产 bind 只挂 __nmCollectRecogitoSelection，不挂旧 collect', () => {
     installMiniDom('x', 0, 1);
     installPostCapture();
-    bindAnnotateCollectBridge();
+    AnnotateCollect.bindBridge();
     expect(typeof window.__nmCollectRecogitoSelection).toBe('function');
     expect(
       (window as {__nmCollectAnnotateSelection?: unknown})
@@ -278,7 +273,7 @@ describe('T-SA8b 原生菜单 + Recogito 投影', () => {
     const selStart = source.indexOf('SAME');
     const selEnd = selStart + 4;
     installMiniDom(source, selStart, selEnd);
-    const collected = collectAnnotateSelection('markdown');
+    const collected = AnnotateCollect.collectSelection('markdown');
     expect(collected?.originalText).toBe('SAME');
     expect(collected?.mode).toBe('markdown');
     expect(collected?.contextBefore).toContain('alpha');

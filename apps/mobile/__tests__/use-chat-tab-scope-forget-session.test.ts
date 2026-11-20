@@ -22,7 +22,8 @@ import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
 /** 本文件挂过的 renderer；统一在 afterEach 里于 act 内卸载。 */
 const mounted: TestRenderer.ReactTestRenderer[] = [];
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -32,7 +33,9 @@ jest.mock('../src/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},

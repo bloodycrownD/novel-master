@@ -7,12 +7,12 @@
  *
  * 参数：
  * - `bindChannel`（默认 true = 旧包现行为）：false 时不自绑宿主 message 通道，
- *   由合成入口统一 `bindHostMessageChannel(合成 dispatcher)` 单次注册。
+ *   由合成入口统一 `HostMessageChannel.bind(合成 dispatcher)` 单次注册。
  * - `emitReady`（默认 true = 旧包现行为）：false 时本 runtime 不上抛 ready，
  *   由合成入口在两 runtime 均 boot 完成后发单条 v2 ready。
  *
  * 无 `post` 参数：工厂内部与旧 main.ts 同款直接 import 模块级 post 单例
- * （bridge.ts 的 createBoundPost(BRIDGE_V)，消息头 v 恒为 1），不替换 runtime
+ * （bridge.ts 的 Post.bound(BRIDGE_V)，消息头 v 恒为 1），不替换 runtime
  * 内部任何东西。
  */
 import {h, render} from 'preact';

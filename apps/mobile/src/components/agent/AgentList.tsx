@@ -10,7 +10,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 import type {AgentDefinition} from '@novel-master/core/agent';
 import {Result, AppError} from '@novel-master/core/errors';
-import {agentModeMatchesTab, type AgentSettingsTab} from '@/config-forms/agent';
+import {AgentModeTab, type AgentSettingsTab} from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
@@ -22,13 +22,13 @@ import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
-import {resolveModelDisplayLabel} from '../../services/model-display-label';
+import {ModelDisplayLabel} from '../../services/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {pickEntityIcon} from '../../utils/entity-icon';
-import {agentDisplayNameFromWire} from './agent-editor/useAgentEditorFormState';
+import {ToastMessage} from '../../errors/toast-message';
+import {EntityIcon} from '../../utils/entity-icon';
+import {AgentEditorFormState} from './agent-editor/useAgentEditorFormState';
 import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -113,7 +113,7 @@ export function AgentList({onCreate}: Props) {
       let wsLabel = '—';
       if (workspaceModelId) {
         try {
-          const wsLabelResolved = await resolveModelDisplayLabel(runtime, workspaceModelId);
+          const wsLabelResolved = await ModelDisplayLabel.resolve(runtime, workspaceModelId);
           wsLabel = wsLabelResolved.ok ? wsLabelResolved.value : workspaceModelId;
         } catch {
           wsLabel = workspaceModelId;
@@ -135,7 +135,7 @@ export function AgentList({onCreate}: Props) {
           if (def.model) {
             let label = def.model;
             try {
-              const labelResolved = await resolveModelDisplayLabel(runtime, def.model);
+              const labelResolved = await ModelDisplayLabel.resolve(runtime, def.model);
               if (labelResolved.ok) label = labelResolved.value;
             } catch {
               /* 使用原始 model id */
@@ -153,7 +153,7 @@ export function AgentList({onCreate}: Props) {
         } else {
           enriched.push({
             id,
-            name: agentDisplayNameFromWire(raw, id),
+            name: AgentEditorFormState.agentDisplayNameFromWire(raw, id),
             configInvalid: true,
             meta: coreT(storedConfig.StoredConfigLabels.invalidReason(health.code)),
           });
@@ -171,10 +171,10 @@ export function AgentList({onCreate}: Props) {
     reload()
       .then(r => {
         if (!r.ok) {
-          showToast(toastMessage('加载智能体列表失败', r.error));
+          showToast(ToastMessage.toast('加载智能体列表失败', r.error));
         }
       })
-      .catch(err => showToast(toastMessage('加载智能体列表失败', err)));
+      .catch(err => showToast(ToastMessage.toast('加载智能体列表失败', err)));
   }, [reload, showToast]);
   useFocusEffect(onScreenFocus);
 
@@ -183,7 +183,7 @@ export function AgentList({onCreate}: Props) {
   // 天然只落在子侧）。
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const visibleRows = useMemo(() => {
-    const filtered = rows.filter(row => agentModeMatchesTab(row.def?.mode, tab));
+    const filtered = rows.filter(row => AgentModeTab.agentModeMatchesTab(row.def?.mode, tab));
     return tab === 'subagent' ? [GENERAL_ROW, ...filtered] : filtered;
   }, [rows, tab]);
 
@@ -207,9 +207,9 @@ export function AgentList({onCreate}: Props) {
             batch.exit();
             const lr = await reload();
             if (!lr.ok) {
-              showToast(toastMessage('删除失败', lr.error));
+              showToast(ToastMessage.toast('删除失败', lr.error));
             }
-          })().catch(err => showToast(toastMessage('删除失败', err)));
+          })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
         },
       },
     ]);
@@ -281,7 +281,7 @@ export function AgentList({onCreate}: Props) {
                 <BatchCheckbox checked={batch.isSelected(item.id)} onToggle={() => batch.toggle(item.id)} />
               ) : (
                 <View style={[styles.avatar, {backgroundColor: tokens.bgSecondary}]}>
-                  <Text style={styles.avatarIcon}>{item.builtin ? '🤖' : pickEntityIcon(item.id, AGENT_ICONS)}</Text>
+                  <Text style={styles.avatarIcon}>{item.builtin ? '🤖' : EntityIcon.pick(item.id, AGENT_ICONS)}</Text>
                 </View>
               )}
               <View style={styles.info}>
@@ -383,9 +383,9 @@ export function AgentList({onCreate}: Props) {
                     await runtime.agentRegistry.delete(id);
                     const lr = await reload();
                     if (!lr.ok) {
-                      showToast(toastMessage('删除失败', lr.error));
+                      showToast(ToastMessage.toast('删除失败', lr.error));
                     }
-                  })().catch(err => showToast(toastMessage('删除失败', err)));
+                  })().catch(err => showToast(ToastMessage.toast('删除失败', err)));
                 },
               },
             ]);

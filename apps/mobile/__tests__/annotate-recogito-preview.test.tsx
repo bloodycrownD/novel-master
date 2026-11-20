@@ -6,11 +6,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 import React from 'react';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {
-  draftToRecogitoAnnotation,
-  draftsToRecogitoAnnotations,
-  recogitoAnnotationToDraftFields,
-} from '@/web/rich-document/webview/runtime/annotate-recogito-map';
+import {AnnotateRecogitoMap} from '@/web/rich-document/webview/runtime/annotate-recogito-map';
 import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
@@ -19,10 +15,13 @@ jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: {get: jest.fn()}}),
 }));
 
-jest.mock('@/storage/vfs-markdown-preview-engine', () => ({
+jest.mock('@/storage/vfs-markdown-preview-engine', () => {
+  const legacy = {
   defaultVfsMarkdownPreviewEngine: () => 'webview',
   readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
-}));
+};
+  return {...legacy, VfsMarkdownPreviewEngine: {read: legacy.readVfsMarkdownPreviewEngine, default: legacy.defaultVfsMarkdownPreviewEngine}};
+});
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
@@ -48,13 +47,19 @@ jest.mock('@/components/vfs/AnnotatePickModal', () => ({
   AnnotatePickModal: () => null,
 }));
 
-jest.mock('@/components/rich-content/sanitize-rich-html', () => ({
+jest.mock('@/components/rich-content/sanitize-rich-html', () => {
+  const legacy = {
   sanitizeRichHtml: (html: string) => html,
-}));
+};
+  return {...legacy, SanitizeRichHtml: {sanitize: legacy.sanitizeRichHtml}};
+});
 
-jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => ({
+jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => {
+  const legacy = {
   prepareTranscriptRichHtml: (md: string) => `<div class="clean">${md}</div>`,
-}));
+};
+  return {...legacy, TranscriptRichHtml: {prepare: legacy.prepareTranscriptRichHtml}};
+});
 
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
@@ -145,10 +150,10 @@ describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
     expect(annotate).toMatch(/annotatingEnabled:\s*false/);
     expect(annotate).toContain('setAnnotations');
     expect(annotate).toContain('destroy');
-    expect(annotate).toContain('draftsToRecogitoAnnotations');
+    expect(annotate).toContain('draftsToAnnotations');
     expect(annotate).not.toMatch(/\.on\(\s*['"]createAnnotation['"]/);
-    expect(main).toContain('refreshAnnotateAfterDocument');
-    expect(main).toContain('destroyAnnotator');
+    expect(main).toContain('Annotate.refreshAfterDocument');
+    expect(main).toContain('Annotate.destroy');
   });
 
   it('setDocument 自增序号：连续刷新时旧异步链不按中间态重建 Recogito', () => {
@@ -156,7 +161,7 @@ describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
     // 每轮自增 + finally 里序号过期则放弃刷新（防 Recogito 按中间态建层）
     expect(main).toMatch(/\+\+setDocumentSeq/);
     expect(main).toMatch(
-      /seq !== setDocumentSeq[\s\S]*?refreshAnnotateAfterDocument/,
+      /seq !== setDocumentSeq[\s\S]*?Annotate\.refreshAfterDocument/,
     );
   });
 
@@ -272,7 +277,7 @@ describe('T-RG4 plain 无批注', () => {
 
 describe('T-RG5 Recogito ↔ draft 字段映射', () => {
   it('draftToRecogitoAnnotation 写出 quote/start/end', () => {
-    const ann = draftToRecogitoAnnotation({
+    const ann = AnnotateRecogitoMap.draftToAnnotation({
       id: 'd1',
       originalText: 'muse',
       renderStart: 48,
@@ -287,7 +292,7 @@ describe('T-RG5 Recogito ↔ draft 字段映射', () => {
   });
 
   it('recogitoAnnotationToDraftFields 读回一致', () => {
-    const fields = recogitoAnnotationToDraftFields({
+    const fields = AnnotateRecogitoMap.annotationToDraftFields({
       id: 'tmp-1',
       target: {
         selector: [{quote: 'Tell me', start: 10, end: 17}],
@@ -303,13 +308,13 @@ describe('T-RG5 Recogito ↔ draft 字段映射', () => {
 
   it('非法区间返回 null；缺 render 坐标的草稿不投影', () => {
     expect(
-      recogitoAnnotationToDraftFields({
+      AnnotateRecogitoMap.annotationToDraftFields({
         id: 'x',
         target: {selector: [{quote: 'a', start: 5, end: 5}]},
       }),
     ).toBeNull();
     expect(
-      draftsToRecogitoAnnotations([
+      AnnotateRecogitoMap.draftsToAnnotations([
         {
           id: 'old',
           originalText: 'a',
@@ -319,7 +324,7 @@ describe('T-RG5 Recogito ↔ draft 字段映射', () => {
         {id: 'ok', originalText: 'hi', renderStart: 0, renderEnd: 2},
       ]),
     ).toEqual([
-      draftToRecogitoAnnotation({
+      AnnotateRecogitoMap.draftToAnnotation({
         id: 'ok',
         originalText: 'hi',
         renderStart: 0,

@@ -12,7 +12,7 @@ import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import type {SessionUsageDetail} from '@novel-master/core/chat';
 import {TokenFormat} from '@novel-master/core/common';
 import {ModalShell} from '../ui/ModalShell';
-import {hitRate, formatHitRate} from '@/screens/stack/token-usage/format';
+import {UsageStats} from '@/screens/stack/token-usage/format';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -98,7 +98,7 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
               <Row label="输出" value={TokenFormat.count(last.completionTokens)} tokens={tokens} />
               <Row label="缓存读取" value={last.cacheReadTokens == null ? '—' : TokenFormat.count(last.cacheReadTokens)} tokens={tokens} />
               <Row label="缓存写入" value={last.cacheCreationTokens == null ? '—' : TokenFormat.count(last.cacheCreationTokens)} tokens={tokens} />
-              <Row label="缓存命中率" value={last.cacheReadTokens == null ? '—' : formatHitRate(hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
+              <Row label="缓存命中率" value={last.cacheReadTokens == null ? '—' : UsageStats.formatHitRate(UsageStats.hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
             </>
           )}
           <SectionLabel text="会话累计" tokens={tokens} />

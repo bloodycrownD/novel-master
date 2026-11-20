@@ -12,11 +12,11 @@ import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {PrimaryButton} from '../ui/Buttons';
 import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
-import {formatRelativeTimeMs} from '../../utils/format-relative-time';
+import {FormatRelativeTime} from '../../utils/format-relative-time';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {pickEntityIcon} from '../../utils/entity-icon';
+import {ToastMessage} from '../../errors/toast-message';
+import {EntityIcon} from '../../utils/entity-icon';
 
 const PROJECT_ICONS = ['📁', '📚', '✨', '🚀', '📝', '🎯'];
 
@@ -123,12 +123,12 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
                     }
                   }}
                 >
-                  {batch.active ? <BatchCheckbox checked={selected} onToggle={() => batch.toggle(project.id)} /> : <Text style={styles.projectIcon}>{pickEntityIcon(project.id, PROJECT_ICONS)}</Text>}
+                  {batch.active ? <BatchCheckbox checked={selected} onToggle={() => batch.toggle(project.id)} /> : <Text style={styles.projectIcon}>{EntityIcon.pick(project.id, PROJECT_ICONS)}</Text>}
                   <View style={styles.projectInfo}>
                     <Text style={[styles.projectName, {color: tokens.text}]} numberOfLines={1}>
                       {project.name}
                     </Text>
-                    <Text style={[styles.projectMeta, {color: tokens.textSecondary}]}>更新于 {formatRelativeTimeMs(project.updatedAtMs)}</Text>
+                    <Text style={[styles.projectMeta, {color: tokens.textSecondary}]}>更新于 {FormatRelativeTime.formatMs(project.updatedAtMs)}</Text>
                   </View>
                   {isCurrent && !batch.active ? (
                     <View style={[styles.currentBadge, {backgroundColor: tokens.primary}]}>
@@ -182,7 +182,7 @@ export function ProjectDrawer({visible, projects, currentProjectId, onClose, onS
                 text: '删除',
                 style: 'destructive',
                 onPress: () => {
-                  void Promise.resolve(onDeleteSelected([project.id])).catch(err => showToast(toastMessage('删除失败', err)));
+                  void Promise.resolve(onDeleteSelected([project.id])).catch(err => showToast(ToastMessage.toast('删除失败', err)));
                 },
               },
             ]);

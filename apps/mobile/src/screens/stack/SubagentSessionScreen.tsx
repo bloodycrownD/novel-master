@@ -29,31 +29,25 @@ import {
 import type {ChatMessageData} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import type {SkillToolRef} from '@novel-master/core/chat';
-import {
-  ChatStreamMetricsBarLive,
-  hasVisibleSettledMetrics,
-} from '../../components/chat/ChatStreamMetricsBarLive';
+import {ChatStreamMetricsBarLive, SettledMetrics} from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatConversationWebView} from '../../components/chat/ChatConversationWebView';
-import {showAppToast} from '@/services/app-toast';
+import {AppToast} from '@/services/app-toast';
 import {chatLinkResolver} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
 import {promptTurnDetailSlot} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {readBoolPref} from '@/storage/app-ui-pref-io';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
-import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
+import {ChatLinkNav} from '@/screens/tabs/chat-tab/chat-link-nav';
 import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
-import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
-import {
-  EMPTY_STREAM_ROW_IDS,
-  buildStreamingRows,
-} from '../../components/chat/transcript-stream-projection';
+import {SessionStreamWebviewAdapter} from '@/services/session-stream-webview-adapter';
+import {EMPTY_STREAM_ROW_IDS, TranscriptStreamProjection} from '../../components/chat/transcript-stream-projection';
 import {coreT} from '@/i18n/core';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
@@ -105,7 +99,7 @@ export function SubagentSessionScreen() {
             []
           );
         } catch (error) {
-          showToast(toastMessage('加载子会话失败', error));
+          showToast(ToastMessage.toast('加载子会话失败', error));
           return [];
         }
       }
@@ -116,7 +110,7 @@ export function SubagentSessionScreen() {
         if (read.kind !== 'completed') return [];
         return read.value;
       } catch (error) {
-        showToast(toastMessage('加载子会话失败', error));
+        showToast(ToastMessage.toast('加载子会话失败', error));
         return [];
       }
     })()
@@ -141,7 +135,7 @@ export function SubagentSessionScreen() {
     if (appUi == null) {
       return;
     }
-    const prefRead = readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false);
+    const prefRead = AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false);
     prefRead.then(setRichTextEnabled).catch(() => undefined);
   }, [appUi]);
 
@@ -162,7 +156,7 @@ export function SubagentSessionScreen() {
     const sid = sessionId;
     // 单元载荷/控制消息 → webview handle 适配（与主屏同一份哑引擎契约，
     // 映射细节见 services/session-stream-webview-adapter）。
-    const handle = createTranscriptStreamHandle(SUBAGENT_HANDLE_ID, web);
+    const handle = SessionStreamWebviewAdapter.create(SUBAGENT_HANDLE_ID, web);
     manager.attachWebview(sid, handle);
     return () => {
       manager.detachWebview(sid, handle.handleId);
@@ -208,7 +202,7 @@ export function SubagentSessionScreen() {
     (href: string) => {
       const sessionVfs = runtime.sessionVfs(projectId, parentSessionId);
       const projectVfs = runtime.projectVfs(projectId);
-      void resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
+      void ChatLinkNav.resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
         intent => {
           if (intent.kind === 'external') {
             void Linking.openURL(intent.url).catch(() => undefined);
@@ -216,7 +210,7 @@ export function SubagentSessionScreen() {
           }
           if (intent.kind === 'not-found') {
             // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-            showAppToast(coreT(chatLinkResolver.notFoundMessage(intent.path)));
+            AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
             return;
           }
           if (intent.kind === 'file') {
@@ -331,7 +325,7 @@ export function SubagentSessionScreen() {
   // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
   // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
   const interrupted = status === 'interrupted';
-  const hasMetrics = unitView != null && hasVisibleSettledMetrics(unitView);
+  const hasMetrics = unitView != null && SettledMetrics.hasVisible(unitView);
   const showInterrupted = interrupted && sessionId != null && !hasMetrics;
 
   return (
@@ -364,7 +358,7 @@ export function SubagentSessionScreen() {
           transcriptOnly
           sessionKey={sessionKey}
           messages={displayMessages}
-          streamingRows={buildStreamingRows(unitView)}
+          streamingRows={TranscriptStreamProjection.buildStreamingRows(unitView)}
           streamRowIds={streamRowIds}
           // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
           pendingSubagentSessions={unitView?.pendingChildrenByTitle}

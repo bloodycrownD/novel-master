@@ -3,8 +3,8 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {DEFAULT_CLOUD_SYNC_PATH_PREFIX} from '@/services/cloud-sync-config.store';
-import {getCloudSyncConfig, setCloudSyncConfig, testCloudSyncConnection, type CloudSyncConfigInput} from '@/services/cloud-sync.service';
+import {CloudSyncConfigStore, DEFAULT_CLOUD_SYNC_PATH_PREFIX} from '@/services/cloud-sync-config.store';
+import {CloudSyncService, type CloudSyncConfigInput} from '@/services/cloud-sync.service';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
 import {FormSwitchRow} from '@/components/form/FormSwitchRow';
@@ -15,7 +15,7 @@ import {SecondaryButton} from '@/components/ui/Buttons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 
 type FormState = {
   endpoint: string;
@@ -51,7 +51,7 @@ export function CloudSyncConfigScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const config = await getCloudSyncConfig(runtime);
+    const config = await CloudSyncConfigStore.get(runtime);
     if (config.ok) {
       setSecretKeySet(config.value.secretKeySet);
       setForm({
@@ -65,7 +65,7 @@ export function CloudSyncConfigScreen() {
         deviceLabel: config.value.deviceLabel ?? '',
       });
     } else {
-      showToast(toastMessage('加载云同步配置失败', config.error));
+      showToast(ToastMessage.toast('加载云同步配置失败', config.error));
     }
     setLoading(false);
   }, [runtime, showToast]);
@@ -91,14 +91,14 @@ export function CloudSyncConfigScreen() {
     }
     setTesting(true);
     try {
-      const tested = await testCloudSyncConnection(runtime, toInput());
+      const tested = await CloudSyncService.testConnection(runtime, toInput());
       if (!tested.ok) {
-        showToast(toastMessage('连接失败', tested.error));
+        showToast(ToastMessage.toast('连接失败', tested.error));
         return;
       }
       showToast('连接成功');
     } catch (error) {
-      showToast(toastMessage('连接失败', error));
+      showToast(ToastMessage.toast('连接失败', error));
     } finally {
       setTesting(false);
     }
@@ -123,16 +123,16 @@ export function CloudSyncConfigScreen() {
         }
         input.secretAccessKey = existing;
       }
-      const saved = await setCloudSyncConfig(runtime, input);
+      const saved = await CloudSyncConfigStore.set(runtime, input);
       if (!saved.ok) {
-        showToast(toastMessage('保存失败', saved.error));
+        showToast(ToastMessage.toast('保存失败', saved.error));
         return;
       }
       setSecretKeySet(true);
       setForm(prev => ({...prev, secretAccessKey: ''}));
       showToast('配置已保存');
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     } finally {
       setSaving(false);
     }

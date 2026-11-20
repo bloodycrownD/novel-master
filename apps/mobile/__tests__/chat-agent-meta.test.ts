@@ -1,13 +1,7 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 import {AppError} from '@novel-master/core/errors';
-import {
-  isAgentDeleted,
-  isAgentLocked,
-  isModelLocked,
-  loadChatAgentMeta,
-  type ChatAgentMeta,
-} from '@/services/chat-agent-meta';
+import {ChatAgentMeta} from '@/services/chat-agent-meta';
 
 const globalDefinition = DefaultAgentDefinition.build('全局助手');
 const sessionAgentDefinition = DefaultAgentDefinition.build('会话引用助手');
@@ -63,14 +57,17 @@ function mockRuntime(overrides: {
   };
 }
 
-jest.mock('@/services/model-display-label', () => ({
+jest.mock('@/services/model-display-label', () => {
+  const legacy = {
   // 错误通道迁移后显示名读口走 Result（生产侧 `label.ok` 解包）。
   resolveModelDisplayLabel: jest.fn(async () => ({ok: true, value: 'GPT-4'})),
-}));
+};
+  return {...legacy, ModelDisplayLabel: {resolve: legacy.resolveModelDisplayLabel}};
+});
 
 describe('loadChatAgentMeta', () => {
   it('project follow + session.agentId → session，展示会话引用 Agent 名称', async () => {
-    const loaded = await loadChatAgentMeta(
+    const loaded = await ChatAgentMeta.load(
       mockRuntime({
         agentConfig: {mode: 'follow'},
         sessionAgentConfig: {agentId: 'default'},
@@ -90,7 +87,7 @@ describe('loadChatAgentMeta', () => {
   it('modelSource=agent-pin：agent definition 自带 model 压制一切', async () => {
     const pinned = DefaultAgentDefinition.build('带 pin 助手');
     pinned.model = 'openai:pinned-model';
-    const loaded = await loadChatAgentMeta(
+    const loaded = await ChatAgentMeta.load(
       mockRuntime({
         agentConfig: {mode: 'follow'},
         currentAgentId: 'pinned-agent',
@@ -130,7 +127,7 @@ describe('loadChatAgentMeta', () => {
     });
     runtime.sessions.getSessionAgentConfig = jest.fn(() => configPromise);
 
-    const metaPromise = loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    const metaPromise = ChatAgentMeta.load(runtime, 'proj-1', 'sess-1');
     // flush microtask：让两路查询都推进到挂起的 await。
     await Promise.resolve();
     await Promise.resolve();
@@ -169,15 +166,15 @@ describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
       ok: false as const,
       error: new Error('AGENT_NOT_FOUND'),
     }));
-    const loaded = await loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    const loaded = await ChatAgentMeta.load(runtime, 'proj-1', 'sess-1');
     if (!loaded.ok) throw loaded.error;
     const meta = loaded.value;
     expect(meta.source).toBe('none');
     expect(meta.agentId).toBeUndefined();
     expect(meta.agentName).toBe('未配置 Agent');
     // 待重选判据：已加载且 none → 可弹 picker 重选
-    expect(isAgentDeleted(meta)).toBe(true);
-    expect(isAgentLocked(meta)).toBe(false);
+    expect(ChatAgentMeta.isDeleted(meta)).toBe(true);
+    expect(ChatAgentMeta.isLocked(meta)).toBe(false);
   });
 
   it('CHAT_INVALID_ARGUMENT（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
@@ -186,11 +183,11 @@ describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
       throw new AppError('CHAT_INVALID_ARGUMENT', {detail: 'session 配置缺失'});
     });
     await expect(
-      loadChatAgentMeta(runtime, 'proj-1', 'sess-1'),
+      ChatAgentMeta.load(runtime, 'proj-1', 'sess-1'),
     ).rejects.toBeInstanceOf(AppError);
     // 调用方 catch 后 meta 保持 undefined：未加载锁定态，绝无「已删待重选」语义。
-    expect(isAgentDeleted(undefined)).toBe(false);
-    expect(isAgentLocked(undefined)).toBe(true);
+    expect(ChatAgentMeta.isDeleted(undefined)).toBe(false);
+    expect(ChatAgentMeta.isLocked(undefined)).toBe(true);
   });
 });
 
@@ -225,24 +222,24 @@ describe('isAgentLocked / isModelLocked 拆分（none 态智能体卡放开待�
 
   it('isAgentLocked：仅 meta 未加载时锁定，none 态放开为待重选', () => {
     // meta 还没加载出来 → 锁定，避免加载中误触
-    expect(isAgentLocked(undefined)).toBe(true);
+    expect(ChatAgentMeta.isLocked(undefined)).toBe(true);
     // 智能体已被删除（none）→ 不再锁死，可点击弹 picker 重选
-    expect(isAgentLocked(noneMeta)).toBe(false);
-    expect(isAgentLocked(sessionMeta)).toBe(false);
+    expect(ChatAgentMeta.isLocked(noneMeta)).toBe(false);
+    expect(ChatAgentMeta.isLocked(sessionMeta)).toBe(false);
   });
 
   it('isModelLocked：维持原口径——meta 空或 none 态锁定，session 态看 agent-pin', () => {
-    expect(isModelLocked(undefined)).toBe(true);
+    expect(ChatAgentMeta.isModelLocked(undefined)).toBe(true);
     // 智能体没了，pin 的模型无从解析 → 模型卡仍锁，重选智能体后自然解锁
-    expect(isModelLocked(noneMeta)).toBe(true);
-    expect(isModelLocked(pinnedMeta)).toBe(true);
-    expect(isModelLocked(sessionMeta)).toBe(false);
+    expect(ChatAgentMeta.isModelLocked(noneMeta)).toBe(true);
+    expect(ChatAgentMeta.isModelLocked(pinnedMeta)).toBe(true);
+    expect(ChatAgentMeta.isModelLocked(sessionMeta)).toBe(false);
   });
 
   it('isAgentDeleted：仅已加载且 source=none 时为 true（待重选判据）', () => {
     // meta 未加载时不能断言「已删」，返回 false
-    expect(isAgentDeleted(undefined)).toBe(false);
-    expect(isAgentDeleted(noneMeta)).toBe(true);
-    expect(isAgentDeleted(sessionMeta)).toBe(false);
+    expect(ChatAgentMeta.isDeleted(undefined)).toBe(false);
+    expect(ChatAgentMeta.isDeleted(noneMeta)).toBe(true);
+    expect(ChatAgentMeta.isDeleted(sessionMeta)).toBe(false);
   });
 });

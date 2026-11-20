@@ -5,7 +5,7 @@ import React, {useState} from 'react';
 import {StyleSheet, Text} from 'react-native';
 import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
 import {RichContentBody} from '@/components/rich-content/RichContentBody';
-import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
+import {RichContentLimits} from '@/components/rich-content/rich-content-limits';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -41,7 +41,7 @@ export function ThinkingBlockCard({
     return null;
   }
 
-  const useRich = expanded && richTextEnabled && !isRichContentOverLimit(trimmed);
+  const useRich = expanded && richTextEnabled && !RichContentLimits.isOverLimit(trimmed);
 
   return (
     <CollapsibleCard

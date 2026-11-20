@@ -16,11 +16,14 @@ import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
-import {loadChatAgentMeta} from '../src/services/chat-agent-meta';
+import {ChatAgentMeta} from '../src/services/chat-agent-meta'
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   // 返回真标签而非 ''：空串是「中途弃权（保留旧标签）」哨兵（2026-09-30
@@ -36,7 +39,7 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
-const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
+const loadChatAgentMetaMock = ChatAgentMeta.load as jest.Mock;
 
 const MOCK_META = {
   source: 'session',

@@ -10,14 +10,14 @@ import {ABORT_KEY} from '@novel-master/core/abort';
 import {CloudSyncProgressPanel} from '@/components/chrome/CloudSyncProgressPanel';
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {settingsTranslator} from '@/i18n/settings';
 import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useNovelMaster} from '@/runtime/novel-master-context';
-import {initialCloudSyncProgressUi, pullCloudSync, pushCloudSync, type CloudSyncProgressUiState} from '@/services/cloud-sync.service';
-import {mapCloudSyncProgressEvent} from '@/services/cloud-sync-progress-ui';
+import {CloudSyncService, type CloudSyncProgressUiState} from '@/services/cloud-sync.service';
+import {CloudSyncProgressUi} from '@/services/cloud-sync-progress-ui';
 import {AppErrorOps} from '@novel-master/core/errors';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -37,7 +37,7 @@ export function CloudSyncProgressScreen() {
   const {op, forceOverwriteRemote = false} = route.params;
   const title = op === 'pull' ? '从云端拉取' : '推送到云端';
 
-  const [progress, setProgress] = useState<CloudSyncProgressUiState>(() => initialCloudSyncProgressUi(op));
+  const [progress, setProgress] = useState<CloudSyncProgressUiState>(() => CloudSyncProgressUi.initial(op));
   const [running, setRunning] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const runningRef = useRef(true);
@@ -105,7 +105,7 @@ export function CloudSyncProgressScreen() {
     runningRef.current = true;
     setRunning(true);
     setCancelling(false);
-    setProgress(initialCloudSyncProgressUi(op));
+    setProgress(CloudSyncProgressUi.initial(op));
 
     const run = async (): Promise<void> => {
       // 已知失败沿 Result.err 回来（错误通道迁移四期），与剩余异常共用同一
@@ -121,7 +121,7 @@ export function CloudSyncProgressScreen() {
           runningRef.current = false;
           setRunning(false);
           setCancelling(false);
-          setProgress(mapCloudSyncProgressEvent(op, `${op}_cancelled`) ?? initialCloudSyncProgressUi(op));
+          setProgress(CloudSyncProgressUi.mapEvent(op, `${op}_cancelled`) ?? CloudSyncProgressUi.initial(op));
           return;
         }
         if (op === 'push' && AppErrorOps.is(error, 'CLOUD_SYNC_NEED_PULL_FIRST') && !forceOverwriteRemote) {
@@ -129,7 +129,7 @@ export function CloudSyncProgressScreen() {
           handleNeedPullFirst();
           return;
         }
-        showToast(toastMessage(op === 'pull' ? '拉取失败' : '推送失败', error));
+        showToast(ToastMessage.toast(op === 'pull' ? '拉取失败' : '推送失败', error));
         runningRef.current = false;
         navigation.goBack();
       };
@@ -145,7 +145,7 @@ export function CloudSyncProgressScreen() {
               }
             },
           };
-          const result = await pullCloudSync(runtime, retryAndWait, pullOptions);
+          const result = await CloudSyncService.pull(runtime, retryAndWait, pullOptions);
           if (!result.ok) {
             handleFailure(result.error);
             return;
@@ -167,7 +167,7 @@ export function CloudSyncProgressScreen() {
               }
             },
           };
-          const pushed = await pushCloudSync(runtime, pushOptions);
+          const pushed = await CloudSyncService.push(runtime, pushOptions);
           if (!pushed.ok) {
             handleFailure(pushed.error);
             return;

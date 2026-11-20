@@ -10,19 +10,7 @@ import notifee, {
   createChannel,
   EventType,
 } from '@notifee/react-native';
-import {
-  notifyAgentRunFinished,
-  resetFailedNotifyMergeStateForTests,
-  resetAgentNotificationPermissionStateForTests,
-  resetKeepAliveStateForTests,
-  ensureAgentNotificationPermission,
-  getAgentNotificationPermissionStatus,
-  requestAgentNotificationPermissionManually,
-  setKeepAliveResidentEnabled,
-  startAgentKeepAliveService,
-  stopAgentKeepAliveService,
-  registerAgentNotificationTapHandling,
-} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 
 function setAppState(state: string): void {
   Object.defineProperty(AppState, 'currentState', {
@@ -49,9 +37,9 @@ const backgroundAppStateListener = (
 describe('agent-finished-notification', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    resetFailedNotifyMergeStateForTests();
-    resetAgentNotificationPermissionStateForTests();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetFailedNotifyMergeStateForTests();
+    AgentFinishedNotification.resetAgentNotificationPermissionStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   describe('T-P4: 通知触发条件', () => {
@@ -67,7 +55,7 @@ describe('agent-finished-notification', () => {
 
     it('app 在后台 + run 成功 → 发完成通知', async () => {
       setAppState('background');
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: '会话一',
         status: 'finished',
@@ -82,12 +70,12 @@ describe('agent-finished-notification', () => {
 
     it('app 在前台（任意页面，含停留生成中会话）→ 不发', async () => {
       setAppState('active');
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: '会话一',
         status: 'finished',
       });
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: '会话一',
         status: 'failed',
@@ -97,7 +85,7 @@ describe('agent-finished-notification', () => {
 
     it('app 在后台 + run 失败 → 发失败通知', async () => {
       setAppState('background');
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: '会话一',
         status: 'failed',
@@ -121,12 +109,12 @@ describe('agent-finished-notification', () => {
     });
 
     it('同会话 5 分钟内多次失败只发一条', async () => {
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
       });
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
@@ -135,12 +123,12 @@ describe('agent-finished-notification', () => {
     });
 
     it('不同会话的失败互不合并', async () => {
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
       });
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's2',
         sessionTitle: undefined,
         status: 'failed',
@@ -150,13 +138,13 @@ describe('agent-finished-notification', () => {
 
     it('超过 5 分钟窗口后同会话失败再次发送', async () => {
       const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
       });
       nowSpy.mockReturnValue(1_000_000 + 5 * 60 * 1000 + 1);
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
@@ -166,12 +154,12 @@ describe('agent-finished-notification', () => {
     });
 
     it('成功通知不占用失败合并窗口', async () => {
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
       });
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'finished',
@@ -198,17 +186,17 @@ describe('agent-finished-notification', () => {
       (notifee.requestPermission as jest.Mock).mockResolvedValueOnce({
         authorizationStatus: 1, // AUTHORIZED
       });
-      await expect(ensureAgentNotificationPermission()).resolves.toBe(true);
+      await expect(AgentFinishedNotification.ensurePermission()).resolves.toBe(true);
     });
 
     it('拒绝后降级：返回 false 且后续不再申请', async () => {
       (notifee.requestPermission as jest.Mock).mockResolvedValueOnce({
         authorizationStatus: 0, // DENIED（与真实枚举一致）
       });
-      await expect(ensureAgentNotificationPermission()).resolves.toBe(false);
+      await expect(AgentFinishedNotification.ensurePermission()).resolves.toBe(false);
       expect(notifee.requestPermission).toHaveBeenCalledTimes(1);
 
-      await expect(ensureAgentNotificationPermission()).resolves.toBe(false);
+      await expect(AgentFinishedNotification.ensurePermission()).resolves.toBe(false);
       expect(notifee.requestPermission).toHaveBeenCalledTimes(1); // 未重复申请
     });
 
@@ -218,13 +206,13 @@ describe('agent-finished-notification', () => {
           .mockResolvedValueOnce({authorizationStatus: 1}) // AUTHORIZED
           .mockResolvedValueOnce({authorizationStatus: 2}) // PROVISIONAL
           .mockResolvedValueOnce({authorizationStatus: 0}); // DENIED
-        await expect(getAgentNotificationPermissionStatus()).resolves.toBe(
+        await expect(AgentFinishedNotification.getPermissionStatus()).resolves.toBe(
           'authorized',
         );
-        await expect(getAgentNotificationPermissionStatus()).resolves.toBe(
+        await expect(AgentFinishedNotification.getPermissionStatus()).resolves.toBe(
           'authorized',
         );
-        await expect(getAgentNotificationPermissionStatus()).resolves.toBe(
+        await expect(AgentFinishedNotification.getPermissionStatus()).resolves.toBe(
           'denied',
         );
       });
@@ -242,7 +230,7 @@ describe('agent-finished-notification', () => {
           configurable: true,
         });
         try {
-          await expect(getAgentNotificationPermissionStatus()).resolves.toBe(
+          await expect(AgentFinishedNotification.getPermissionStatus()).resolves.toBe(
             'authorized',
           );
           expect(notifee.getNotificationSettings).not.toHaveBeenCalled();
@@ -256,7 +244,7 @@ describe('agent-finished-notification', () => {
           authorizationStatus: 1, // AUTHORIZED
         });
         await expect(
-          requestAgentNotificationPermissionManually(),
+          AgentFinishedNotification.requestPermissionManually(),
         ).resolves.toBe('authorized');
         expect(notifee.openNotificationSettings).not.toHaveBeenCalled();
       });
@@ -266,7 +254,7 @@ describe('agent-finished-notification', () => {
           authorizationStatus: 0, // DENIED
         });
         await expect(
-          requestAgentNotificationPermissionManually(),
+          AgentFinishedNotification.requestPermissionManually(),
         ).resolves.toBe('denied');
         expect(notifee.openNotificationSettings).toHaveBeenCalledTimes(1);
         expect(notifee.openNotificationSettings).toHaveBeenCalledWith();
@@ -277,14 +265,14 @@ describe('agent-finished-notification', () => {
         (notifee.requestPermission as jest.Mock).mockResolvedValueOnce({
           authorizationStatus: 0, // DENIED
         });
-        await expect(ensureAgentNotificationPermission()).resolves.toBe(false);
+        await expect(AgentFinishedNotification.ensurePermission()).resolves.toBe(false);
 
         // 手动路径绕过降级：仍直接调 requestPermission
         (notifee.requestPermission as jest.Mock).mockResolvedValueOnce({
           authorizationStatus: 1, // AUTHORIZED
         });
         await expect(
-          requestAgentNotificationPermissionManually(),
+          AgentFinishedNotification.requestPermissionManually(),
         ).resolves.toBe('authorized');
         expect(notifee.requestPermission).toHaveBeenCalledTimes(2);
       });
@@ -301,7 +289,7 @@ describe('agent-finished-notification', () => {
     it('iOS 上 notifyAgentRunFinished 不走到 Android-only API（createChannel / displayNotification 均不调用）', async () => {
       (Platform as {OS: string}).OS = 'ios';
       setAppState('background');
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: '会话一',
         status: 'failed',
@@ -313,13 +301,13 @@ describe('agent-finished-notification', () => {
     it('iOS 调用不消耗失败合并窗口：切回 android 后同会话失败仍发通知', async () => {
       (Platform as {OS: string}).OS = 'ios';
       setAppState('background');
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
       });
       (Platform as {OS: string}).OS = 'android';
-      await notifyAgentRunFinished({
+      await AgentFinishedNotification.notifyRunFinished({
         sessionId: 's1',
         sessionTitle: undefined,
         status: 'failed',
@@ -327,16 +315,16 @@ describe('agent-finished-notification', () => {
       expect(displayNotification).toHaveBeenCalledTimes(1);
     });
 
-    it('svc/B-1: iOS 上 setKeepAliveResidentEnabled(true) 零 display、零 stop（常驻链路门禁）', async () => {
+    it('svc/B-1: iOS 上 AgentFinishedNotification.setResidentEnabled(true) 零 display、零 stop（常驻链路门禁）', async () => {
       (Platform as {OS: string}).OS = 'ios';
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       expect(displayNotification).not.toHaveBeenCalled();
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();
 
       // resident 未被 iOS 调用污染为 true：切回 android 重新打开，
       // 空闲常驻通知正常拉起（而非因 desired/running 错位被 no-op 吞掉）
       (Platform as {OS: string}).OS = 'android';
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       expect(displayNotification).toHaveBeenCalledTimes(1);
       expect(displayNotification.mock.calls[0][0].title).toBe(
         'novel master · 空闲',
@@ -347,7 +335,7 @@ describe('agent-finished-notification', () => {
   describe('MF-3: 后台点按（onBackgroundEvent）', () => {
     it('PRESS 携带 sessionId 时触发 tapHandler（与前台共用同一入口）', async () => {
       const onTap = jest.fn();
-      registerAgentNotificationTapHandling(onTap);
+      AgentFinishedNotification.registerTapHandling(onTap);
 
       await backgroundObserver({
         type: EventType.PRESS,
@@ -358,7 +346,7 @@ describe('agent-finished-notification', () => {
 
     it('非 PRESS 事件与无 sessionId 的 PRESS 不触发 tapHandler', async () => {
       const onTap = jest.fn();
-      registerAgentNotificationTapHandling(onTap);
+      AgentFinishedNotification.registerTapHandling(onTap);
 
       await backgroundObserver({type: EventType.DISMISSED, detail: undefined});
       await backgroundObserver({
@@ -370,7 +358,7 @@ describe('agent-finished-notification', () => {
 
     it('后台点按记录待导航意图，回前台后消费一次', async () => {
       const onTap = jest.fn();
-      registerAgentNotificationTapHandling(onTap);
+      AgentFinishedNotification.registerTapHandling(onTap);
       await backgroundObserver({
         type: EventType.PRESS,
         detail: {notification: {data: {sessionId: 's9'}}},
@@ -396,7 +384,7 @@ describe('agent-finished-notification', () => {
     });
 
     it('stop 在途期间重新拉起仍生效：链收敛后前台服务回到运行', async () => {
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       expect(displayNotification).toHaveBeenCalledTimes(1);
 
       // 关开关的 stop 真正进入在途（stopForegroundService 已发出、挂起未决）
@@ -408,10 +396,10 @@ describe('agent-finished-notification', () => {
             resolveStop = resolve;
           }),
       );
-      const offPromise = setKeepAliveResidentEnabled(false);
+      const offPromise = AgentFinishedNotification.setResidentEnabled(false);
       // 让一个微任务 tick 过去：链尾 reconcile 已开始执行、stop 在途
       await Promise.resolve();
-      const onPromise = setKeepAliveResidentEnabled(true);
+      const onPromise = AgentFinishedNotification.setResidentEnabled(true);
       resolveStop();
       await Promise.all([offPromise, onPromise]);
 
@@ -424,24 +412,24 @@ describe('agent-finished-notification', () => {
     });
 
     it('stopForegroundService reject 后标记复位，后续重新拉起仍能发起', async () => {
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       (notifee.stopForegroundService as jest.Mock).mockRejectedValueOnce(
         new Error('stop failed'),
       );
-      await expect(setKeepAliveResidentEnabled(false)).rejects.toThrow(
+      await expect(AgentFinishedNotification.setResidentEnabled(false)).rejects.toThrow(
         'stop failed',
       );
 
       // 标记已随 finally 复位：重新开不被卡死，保活通知再次发出
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       expect(displayNotification).toHaveBeenCalledTimes(2);
     });
 
     it('stop 在途且期望又变回运行时，未执行的 stop 直接跳过（服务不停）', async () => {
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
       // 关开关尚未执行（排在链上），重新开先把期望态改回运行
-      const offPromise = setKeepAliveResidentEnabled(false);
-      const onPromise = setKeepAliveResidentEnabled(true);
+      const offPromise = AgentFinishedNotification.setResidentEnabled(false);
+      const onPromise = AgentFinishedNotification.setResidentEnabled(true);
       await Promise.all([offPromise, onPromise]);
 
       // 链上 reconcile 看到的期望态一直是运行：不 stop 也不重复 start
@@ -456,7 +444,7 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     (Platform as {OS: string}).OS = 'android';
   });
 
@@ -465,31 +453,31 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
   });
 
   it('T-K1: 开关启停——(true) 以 asForegroundService+ongoing 拉起空闲通知，(false) 停服务', async () => {
-    await setKeepAliveResidentEnabled(true);
+    await AgentFinishedNotification.setResidentEnabled(true);
     expect(displayNotification).toHaveBeenCalledTimes(1);
     const call = displayNotification.mock.calls[0][0];
     expect(call.title).toBe('novel master · 空闲');
     expect(call.android.asForegroundService).toBe(true);
     expect(call.android.ongoing).toBe(true);
 
-    await setKeepAliveResidentEnabled(false);
+    await AgentFinishedNotification.setResidentEnabled(false);
     expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
     expect(displayNotification).toHaveBeenCalledTimes(1); // 关停不刷新内容
   });
 
   it('T-K2: 空闲↔生成文案切换——labels 空闲无 body，登记标签切「正在生成」，摘标签回空闲', async () => {
-    await setKeepAliveResidentEnabled(true);
+    await AgentFinishedNotification.setResidentEnabled(true);
     // labels 空：空闲文案、无 body
     expect(displayNotification.mock.calls[0][0].title).toBe(
       'novel master · 空闲',
     );
     expect(displayNotification.mock.calls[0][0].body).toBeUndefined();
 
-    await startAgentKeepAliveService('s1', {sessionTitle: 'X'});
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'X'});
     expect(displayNotification).toHaveBeenCalledTimes(2);
     expect(displayNotification.mock.calls[1][0].title).toBe('正在生成 · X');
 
-    await stopAgentKeepAliveService('s1');
+    await AgentFinishedNotification.stopKeepAliveService('s1');
     // 摘回最后一个标签：常驻模式服务不停，内容刷回空闲文案
     expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     expect(displayNotification).toHaveBeenCalledTimes(3);
@@ -499,8 +487,8 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
   });
 
   it('带标签启动：标题/正文含会话名与项目名', async () => {
-    await setKeepAliveResidentEnabled(true); // calls[0]：空闲拉起
-    await startAgentKeepAliveService('s1', {
+    await AgentFinishedNotification.setResidentEnabled(true); // calls[0]：空闲拉起
+    await AgentFinishedNotification.startKeepAliveService('s1', {
       projectName: '长篇项目',
       sessionTitle: '第三章续写',
     });
@@ -512,12 +500,12 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
   });
 
   it('同 id 重发刷新内容：标签变化时运行中通知更新', async () => {
-    await setKeepAliveResidentEnabled(true); // calls[0]：空闲拉起
-    await startAgentKeepAliveService('s1', {
+    await AgentFinishedNotification.setResidentEnabled(true); // calls[0]：空闲拉起
+    await AgentFinishedNotification.startKeepAliveService('s1', {
       projectName: 'P1',
       sessionTitle: 'S1',
     });
-    await startAgentKeepAliveService('s2', {
+    await AgentFinishedNotification.startKeepAliveService('s2', {
       projectName: 'P2',
       sessionTitle: 'S2',
     });
@@ -530,12 +518,12 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
   });
 
   it('T-K3: 多会话最后一个收尾回空闲文案，服务不停（反转随 run 停服）', async () => {
-    await setKeepAliveResidentEnabled(true); // calls[0]：空闲拉起
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
-    await startAgentKeepAliveService('s2', {sessionTitle: 'S2'});
+    await AgentFinishedNotification.setResidentEnabled(true); // calls[0]：空闲拉起
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'S1'});
+    await AgentFinishedNotification.startKeepAliveService('s2', {sessionTitle: 'S2'});
     expect(displayNotification).toHaveBeenCalledTimes(3);
 
-    await stopAgentKeepAliveService('s2');
+    await AgentFinishedNotification.stopKeepAliveService('s2');
     // s1 仍在跑：内容回到 S1（无总数行）
     expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     expect(displayNotification).toHaveBeenCalledTimes(4);
@@ -544,7 +532,7 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
     expect(afterOne.body).not.toContain('共 ');
 
     // 最后一个收尾：常驻模式服务不停，刷新回空闲文案
-    await stopAgentKeepAliveService('s1');
+    await AgentFinishedNotification.stopKeepAliveService('s1');
     expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     expect(displayNotification).toHaveBeenCalledTimes(5);
     expect(displayNotification.mock.calls[4][0].title).toBe(
@@ -554,30 +542,30 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
 
   it('resident 关闭时的按会话收尾是安全 no-op（不真调 stop、零 display）', async () => {
     // 对应「消息通知开关关闭」路径的收尾调用：服务从未被开关拉起
-    await stopAgentKeepAliveService('s-any');
+    await AgentFinishedNotification.stopKeepAliveService('s-any');
     expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     expect(displayNotification).not.toHaveBeenCalled();
   });
 
   it('同标签重复登记不刷新（无谓重发抑制）', async () => {
-    await setKeepAliveResidentEnabled(true); // calls[0]：空闲拉起
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    await AgentFinishedNotification.setResidentEnabled(true); // calls[0]：空闲拉起
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'S1'});
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'S1'});
     expect(displayNotification).toHaveBeenCalledTimes(2); // 第二次同标签仍不刷新
   });
 
   it('T-K4: resident=false 时标签操作为 no-op；常驻关但服务在跑的兜底摘除停服务', async () => {
     // 前半：开关未开时标签登记/摘除均零副作用（display/stop 都不调用）
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
-    await stopAgentKeepAliveService('s1');
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'S1'});
+    await AgentFinishedNotification.stopKeepAliveService('s1');
     expect(displayNotification).not.toHaveBeenCalled();
     expect(notifee.stopForegroundService).not.toHaveBeenCalled();
 
     // 后半：兜底摘除路径——经 stopForegroundService 挂起窗口构造
     // 「resident=false + labels 非空 + 服务运行中」的在途瞬态，
     // 最后一个标签摘除（enqueue(false)）把残留服务停掉且不重复 stop
-    await setKeepAliveResidentEnabled(true); // calls[0]：空闲拉起
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'}); // calls[1]
+    await AgentFinishedNotification.setResidentEnabled(true); // calls[0]：空闲拉起
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'S1'}); // calls[1]
     let resolveStop: () => void = () => undefined;
     (notifee.stopForegroundService as jest.Mock).mockImplementationOnce(
       () =>
@@ -585,9 +573,9 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
           resolveStop = resolve;
         }),
     );
-    const offPromise = setKeepAliveResidentEnabled(false); // 关开关：停服在途挂起
+    const offPromise = AgentFinishedNotification.setResidentEnabled(false); // 关开关：停服在途挂起
     await Promise.resolve(); // 链尾 reconcile 已开始执行、stop 在途
-    const stopPromise = stopAgentKeepAliveService('s1'); // 兜底摘除最后一个标签
+    const stopPromise = AgentFinishedNotification.stopKeepAliveService('s1'); // 兜底摘除最后一个标签
     resolveStop();
     await Promise.all([offPromise, stopPromise]);
     expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
@@ -595,23 +583,23 @@ describe('保活通知内容与多会话（常驻 resident 模式）', () => {
   });
 
   it('T-K11: 生成中关开关——立即停服且标签保留；关开关状态标签操作零副作用；重开后带标签拉起', async () => {
-    await setKeepAliveResidentEnabled(true); // calls[0]：空闲拉起
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'}); // calls[1]
+    await AgentFinishedNotification.setResidentEnabled(true); // calls[0]：空闲拉起
+    await AgentFinishedNotification.startKeepAliveService('s1', {sessionTitle: 'S1'}); // calls[1]
     expect(displayNotification.mock.calls[1][0].title).toBe('正在生成 · S1');
 
     // 生成中关开关：立即停服（run 继续仅失去保活）
-    await setKeepAliveResidentEnabled(false);
+    await AgentFinishedNotification.setResidentEnabled(false);
     expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
 
     // 关开关状态下标签操作（再 start 新会话 / stop 既有会话）零 display、零新增 stop
-    await startAgentKeepAliveService('s2', {sessionTitle: 'S2'});
-    await stopAgentKeepAliveService('s2');
+    await AgentFinishedNotification.startKeepAliveService('s2', {sessionTitle: 'S2'});
+    await AgentFinishedNotification.stopKeepAliveService('s2');
     expect(displayNotification).toHaveBeenCalledTimes(2);
     expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
 
     // 标签保留：重开开关后内容为「正在生成 · S1」而非空闲文案
     // （证明关开关未清标签，服务带标签内容重新拉起）
-    await setKeepAliveResidentEnabled(true);
+    await AgentFinishedNotification.setResidentEnabled(true);
     expect(displayNotification).toHaveBeenCalledTimes(3);
     expect(displayNotification.mock.calls[2][0].title).toBe('正在生成 · S1');
   });

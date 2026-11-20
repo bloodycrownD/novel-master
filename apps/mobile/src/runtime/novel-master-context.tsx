@@ -16,12 +16,12 @@ import type {MobileNovelMasterRuntime} from './types';
 import {RebootWaiter} from './reboot-waiter';
 import {SessionStreamUnitManager, type SessionStreamPrefBridge} from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
-import {createSessionStreamTokenEstimator, primeStreamTokenModelHint} from '@/services/stream-token-estimator';
-import {showAppToast} from '@/services/app-toast';
-import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
+import {StreamTokenEstimator} from '@/services/stream-token-estimator';
+import {AppToast} from '@/services/app-toast';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification';
 import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
-import {tokensForMode} from '../theme/tokens';
+import {Tokens} from '../theme/tokens';
 
 type RuntimeStatus = 'loading' | 'ready' | 'error';
 
@@ -69,7 +69,7 @@ export const NovelMasterContextHelpers = {
    * 常驻保活启动挂点：按消息通知开关拉起常驻前台服务通知。
    *
    * 直读 storage 层 app-ui 偏好（不走 prefBridge，避免
-   * appUi 未就绪降级口径干扰），开则 setKeepAliveResidentEnabled(true)。
+   * appUi 未就绪降级口径干扰），开则 AgentFinishedNotification.setResidentEnabled(true)。
    * 签名显式接受 undefined：appUiRef.current 的声明类型就是
    * `AppUiPreferences | undefined`，而 AppUiPrefIo.readBoolPref 参数
    * 非空——守卫收在函数体内（typecheck 强制；时序上 effect 触发时 appUi
@@ -84,7 +84,7 @@ export const NovelMasterContextHelpers = {
       return;
     }
     try {
-      await setKeepAliveResidentEnabled(true);
+      await AgentFinishedNotification.setResidentEnabled(true);
     } catch (err) {
       console.error('keepalive: resident boot failed', err);
     }
@@ -250,7 +250,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
           // 实时 token 估算（stream-metrics-native ②）：这里只**装配工厂**；编码表
           // 在会话切换时空闲预热，估算器本体在单元 `begin()`（run 起手）同步兜底建
           // （正文/思考各一条，编码名按会话模型解析，未就绪按 cl100k 兜底）。
-          tokenEstimatorFactory: sessionId => createSessionStreamTokenEstimator(rt, sessionId),
+          tokenEstimatorFactory: sessionId => StreamTokenEstimator.createForSession(rt, sessionId),
         }),
       });
       const loaded = await MobileScope.load(runtime);
@@ -298,7 +298,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       return;
     }
     const manager = runtime.sessionStreamUnitManager;
-    manager.setUiBridge({onError: message => showAppToast(message)});
+    manager.setUiBridge({onError: message => AppToast.show(message)});
     // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
     // 口径取「关」（与开关默认关对齐），appUi 就绪后按存储真值。
     manager.setPrefBridge(NovelMasterContextHelpers.createNotificationPrefBridge(() => appUiRef.current));
@@ -342,7 +342,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     if (runtime == null || scope.sessionId == null) {
       return;
     }
-    primeStreamTokenModelHint(runtime, scope.sessionId);
+    StreamTokenEstimator.primeModelHint(runtime, scope.sessionId);
   }, [runtime, scope.sessionId]);
 
   const setCurrentProject = useCallback(
@@ -399,7 +399,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   }
 
   if (status === 'error') {
-    const errorMessageColor = tokensForMode(colorScheme === 'dark' ? 'dark' : 'light').textSecondary;
+    const errorMessageColor = Tokens.forMode(colorScheme === 'dark' ? 'dark' : 'light').textSecondary;
     return (
       <View style={styles.centered}>
         <Text style={styles.errorTitle}>启动失败</Text>

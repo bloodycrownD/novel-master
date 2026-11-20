@@ -38,10 +38,13 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 /** 取 Alert.alert 第 N 次调用的按钮数组。 */
 function alertButtons(callIndex = 0): Array<{

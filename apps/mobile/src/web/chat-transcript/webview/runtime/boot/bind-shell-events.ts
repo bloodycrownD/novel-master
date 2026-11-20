@@ -5,7 +5,7 @@
  */
 import {Scroll} from '../scroll/scroll';
 import {RowsClick} from '../render/rows-click';
-import {attachCodeCopyDelegation} from '@web/shared/code-copy';
+import {CodeCopy} from '@web/shared/code-copy';
 import {post} from '../bridge';
 
 /**
@@ -42,6 +42,6 @@ export const BindShellEvents = {
     if (!rows) return;
     rows.addEventListener('click', RowsClick.on);
     // 代码块复制按钮：document 捕获委托，先于 rows 冒泡委托拦截
-    attachCodeCopyDelegation(post);
+    CodeCopy.attach(post);
   },
 } as const;

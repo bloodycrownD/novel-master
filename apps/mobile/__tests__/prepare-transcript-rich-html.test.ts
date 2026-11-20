@@ -1,4 +1,4 @@
-import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
+import {TranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 /** 可执行形态：未转义的危险开标签。 */
 function hasExecutableOpenTag(html: string, tag: string): boolean {
@@ -7,21 +7,21 @@ function hasExecutableOpenTag(html: string, tag: string): boolean {
 
 describe('prepareTranscriptRichHtml', () => {
   it('renders markdown headings', () => {
-    const html = prepareTranscriptRichHtml('# Title\n\nBody');
+    const html = TranscriptRichHtml.prepare('# Title\n\nBody');
     expect(html.toLowerCase()).toMatch(/<h1[^>]*>/);
     expect(html).toContain('Title');
     expect(html).toContain('Body');
   });
 
   it('preserves sanitized inline style on div', () => {
-    const html = prepareTranscriptRichHtml('<div style="color:red">x</div>');
+    const html = TranscriptRichHtml.prepare('<div style="color:red">x</div>');
     // 白名单过滤后重新序列化为「property: value」格式，冒号后带空格（CSS 等价）
     expect(html).toMatch(/color:\s*red/);
     expect(html).toContain('x');
   });
 
   it('T-S1: 空伪标签以实体尖括号保留，不挖空', () => {
-    const html = prepareTranscriptRichHtml('表现为 <xxx></xxx> 之间没有文本');
+    const html = TranscriptRichHtml.prepare('表现为 <xxx></xxx> 之间没有文本');
     expect(html).toContain('&lt;xxx&gt;');
     expect(html).toContain('&lt;/xxx&gt;');
     expect(html).toContain('表现为');
@@ -31,14 +31,14 @@ describe('prepareTranscriptRichHtml', () => {
   });
 
   it('T-S2: file 伪标签名与内容均可辨认', () => {
-    const html = prepareTranscriptRichHtml('<file>notes.md</file>');
+    const html = TranscriptRichHtml.prepare('<file>notes.md</file>');
     expect(html).toContain('&lt;file&gt;');
     expect(html).toContain('notes.md');
     expect(html).toContain('&lt;/file&gt;');
   });
 
   it('T-S3: script 不可执行（允许实体字面量）', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '<script>alert(1)</script><p>safe</p>',
     );
     expect(html).toContain('safe');
@@ -46,13 +46,13 @@ describe('prepareTranscriptRichHtml', () => {
   });
 
   it('renders bold markdown', () => {
-    const html = prepareTranscriptRichHtml('**bold** text');
+    const html = TranscriptRichHtml.prepare('**bold** text');
     expect(html).toContain('<strong>');
     expect(html).toContain('bold');
   });
 
   it('MF-2: fence 语言首词含引号/尖括号/与号 → 默认路径无标签注入向量', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```ab"c onmouseover=x\ncode body\n```\n\n```a<b>&d\ncode body\n```',
     );
     expect(html).toContain('code body');
@@ -67,14 +67,14 @@ describe('prepareTranscriptRichHtml', () => {
     // .md 是摩尔多瓦 TLD：linkify 会把裸 test-quote.md 当无协议域名补 http://
     // 链接化，点击经聊天链接路由外跳浏览器——须维持纯文本（PRD 口径）。
     for (const bare of ['test-quote.md', '报告.zip', 'deploy.sh', 'main.py', 'main.rs', 'lib.so', 'main.tf', 'Makefile.in', 'x.cl']) {
-      const html = prepareTranscriptRichHtml(`参见 ${bare} 文件`);
+      const html = TranscriptRichHtml.prepare(`参见 ${bare} 文件`);
       expect(html).not.toMatch(/<a\b/i);
       expect(html).toContain(bare);
     }
   });
 
   it('真裸域名与显式 URL 链接化不回归', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '见 www.example.com 与 github.com 与 https://a.md/x 与 http://vercel.app',
     );
     // 无协议真裸域名照常自动链接化（schema 为空但 TLD 不在撞车清单）

@@ -136,7 +136,7 @@ export namespace MessageBlocks {
   // prettier-ignore
   export function turnToolResultsComplete(assistant: ChatMessageData, messages: readonly ChatMessageData[]): boolean {
     // prettier-ignore
-    return MessageBlocks.turnToolResultsCompleteWith(assistant, MessageBlocks.buildToolResultByUseId(messages));
+    return turnToolResultsCompleteWith(assistant, MessageBlocks.buildToolResultByUseId(messages));
   }
 
   /** O(1) 判定版本：tool_use id 全部命中预扫 map 即视为本轮工具结果齐备。 */
@@ -170,7 +170,7 @@ export namespace MessageBlocks {
     for (const message of messages) {
       if (
         message.role === 'assistant' &&
-        !MessageBlocks.turnToolResultsCompleteWith(message, results)
+        !turnToolResultsCompleteWith(message, results)
       ) {
         lastIncompleteAssistant = message;
       }
@@ -182,7 +182,7 @@ export namespace MessageBlocks {
   // prettier-ignore
   export function isTurnToolExecuting(assistant: ChatMessageData, messages: readonly ChatMessageData[], agentRunning: boolean): boolean {
     // prettier-ignore
-    return MessageBlocks.isTurnToolExecutingWith(assistant, MessageBlocks.buildToolPairingContext(messages), agentRunning);
+    return isTurnToolExecutingWith(assistant, MessageBlocks.buildToolPairingContext(messages), agentRunning);
   }
 
   /** O(1) 判定版本：agent 运行中且该消息正是预扫出的最后一条结果不齐备 assistant。 */
@@ -191,7 +191,7 @@ export namespace MessageBlocks {
     if (!agentRunning || !MessageBlocks.hasToolUse(assistant)) {
       return false;
     }
-    if (MessageBlocks.turnToolResultsCompleteWith(assistant, context.results)) {
+    if (turnToolResultsCompleteWith(assistant, context.results)) {
       return false;
     }
     return context.lastIncompleteAssistant?.id === assistant.id;
@@ -269,7 +269,7 @@ export namespace MessageBlocks {
   // prettier-ignore
   export function buildChatListItems(messages: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): ChatListItem[] {
     // prettier-ignore
-    return MessageBlocks.buildChatListItemsWithContext(messages, MessageBlocks.buildToolPairingContext(messages), options);
+    return buildChatListItemsWithContext(messages, MessageBlocks.buildToolPairingContext(messages), options);
   }
 
   /**
@@ -329,7 +329,7 @@ export namespace MessageBlocks {
       const hasAttachments = (message.attachments ?? []).some(MessageBlocks.isDisplayableAttachment);
       // 未配对 tool_use 的展示状态：runUiStopped 一律 error；仅「本轮执行消息」保留 pending。
       // prettier-ignore
-      const unpairedPending = hasToolUse && !runUiStopped && MessageBlocks.isTurnToolExecutingWith(message, context, agentRunning);
+      const unpairedPending = hasToolUse && !runUiStopped && isTurnToolExecutingWith(message, context, agentRunning);
       const tools = toolUses.map((use): ToolCallView => {
         const view = MessageBlocks.toolCallViewFromUse(use, context.results, options);
         return view.status === 'pending' && !unpairedPending
@@ -416,7 +416,7 @@ export namespace MessageBlocks {
     }
     const context = MessageBlocks.buildToolPairingContext(messages);
     // prettier-ignore
-    return MessageBlocks.buildChatListItemsWithContext(tail, context, options).map(MessageBlocks.transcriptRowFromItem);
+    return buildChatListItemsWithContext(tail, context, options).map(transcriptRowFromItem);
   }
 
   /**
@@ -428,7 +428,7 @@ export namespace MessageBlocks {
   // nm-style: keep-public — 生产单点在 ChatConversationWebView（本片禁改），测试直接 import 锁全量行构建。
   // prettier-ignore
   export function buildTranscriptRows(messages: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): TranscriptRow[] {
-    return MessageBlocks.buildChatListItems(messages, options).map(MessageBlocks.transcriptRowFromItem);
+    return MessageBlocks.buildChatListItems(messages, options).map(transcriptRowFromItem);
   }
 
   /**
@@ -440,6 +440,6 @@ export namespace MessageBlocks {
   // prettier-ignore
   export function buildTranscriptRowsWithContext(messages: readonly ChatMessageData[], context: ToolPairingContext, options: BuildChatListItemsOptions = {}): TranscriptRow[] {
     // prettier-ignore
-    return MessageBlocks.buildChatListItemsWithContext(messages, context, options).map(MessageBlocks.transcriptRowFromItem);
+    return buildChatListItemsWithContext(messages, context, options).map(transcriptRowFromItem);
   }
 }

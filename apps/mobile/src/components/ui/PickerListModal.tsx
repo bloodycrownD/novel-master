@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
-import {formatError} from '../../errors/format-error';
+import {FormatError} from '../../errors/format-error';
 import {useTheme} from '../../theme/ThemeProvider';
 import {ModalShell} from './ModalShell';
 
@@ -91,12 +91,12 @@ export function PickerListModal<T>({
         setSelectedId(result.value.selectedId);
       } else {
         setRows([]);
-        setError(formatError(result.error));
+        setError(FormatError.format(result.error));
       }
     } catch (cause) {
       // 未知异常仍走异常通道：渲染错误文案与「重试」，不吞错伪装成空列表。
       setRows([]);
-      setError(formatError(cause));
+      setError(FormatError.format(cause));
     } finally {
       setLoading(false);
     }

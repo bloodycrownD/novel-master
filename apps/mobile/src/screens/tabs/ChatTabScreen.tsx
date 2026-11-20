@@ -14,11 +14,11 @@ import {useAndroidChatBackHandler} from '@/hooks/useAndroidChatBackHandler';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useTheme} from '@/theme/ThemeProvider';
-import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
+import {MainTabBarStyle} from '@/navigation/main-tab-bar-style';
 import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
 import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
-import {remapTokenRanges} from '@/components/chat/native-composer/token-ranges';
-import {isValidTokenRangeText} from '@/components/chat/composer-highlight';
+import {TokenRanges} from '@/components/chat/native-composer/token-ranges';
+import {ComposerHighlight} from '@/components/chat/composer-highlight';
 import {ChatComposerDraft} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
@@ -61,7 +61,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      tabBarStyle: resolveChatTabBarStyle(ctx.chatSubview, tokens, insets),
+      tabBarStyle: MainTabBarStyle.resolveChat(ctx.chatSubview, tokens, insets),
     });
     // navigation 在 RN 中引用稳定；勿列入 deps，避免测试 mock 每次新建对象导致死循环
   }, [ctx.chatSubview, insets.bottom, tokens.borderLight, tokens.tabBarBackground]);
@@ -153,7 +153,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
       // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
       promptEditorOnSavedSlot.set(text => {
         const previous = ChatComposerDraft.readState(targetSessionId);
-        ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
+        ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? TokenRanges.remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
         setDraftRestoreToken(token => token + 1);
       });
       // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
@@ -165,9 +165,9 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
       // 水化自愈落点③：区间必须以 **remap 后的 payload.text** 为基准逐条校验
       //（entryDraft.text 与 payload.text 可能不同，用错基准会把合法区间判成越界）。
       // 不合法的（旧格式 / 半截 / 越界）就地丢弃，全屏侧无需额外改动。
-      let remappedRanges: ReturnType<typeof remapTokenRanges> | undefined;
+      let remappedRanges: ReturnType<typeof TokenRanges.remapTokenRanges> | undefined;
       if (entryDraft.tokenRanges !== undefined) {
-        remappedRanges = remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => isValidTokenRangeText(payload.text, range));
+        remappedRanges = TokenRanges.remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
       }
       navigation.navigate('PromptEditor', {
         title: '编辑消息',

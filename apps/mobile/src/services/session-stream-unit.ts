@@ -54,7 +54,7 @@ import type {TokenRateSampler} from '@novel-master/core/format';
 import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/tokenizer';
 import {LogFactory} from '@novel-master/core/log';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
-import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
+import {StreamWireQueue} from './stream-wire-queue';
 import {StreamApplyBuffer} from './stream-apply-buffer';
 import {SessionViewCache} from './chat-session-view-cache';
 import {MessagePaging} from './message-paging';
@@ -90,16 +90,6 @@ type SessionStreamUnitSettledStatus = 'interrupted' | 'finished' | 'failed';
 export type SessionStreamUnitStatus =
   | SessionStreamUnitActiveStatus
   | SessionStreamUnitSettledStatus;
-
-export namespace SessionStreamUnit {
-  /** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
-  // prettier-ignore
-  export function isSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
-    return (
-      status === 'interrupted' || status === 'finished' || status === 'failed'
-    );
-  }
-}
 
 /** 事件收尾驱动的 run 终态（interrupted 不经事件路径，故不在其列）。 */
 export type SessionStreamRunSettledStatus = 'finished' | 'failed';
@@ -347,6 +337,7 @@ export const STREAM_ROW_IDS_LIMIT = 200;
 export class SessionStreamUnit {
   readonly sessionId: string;
   readonly projectId: string;
+
 
   private status: SessionStreamUnitStatus = 'idle';
   private runIdValue: string | null = null;
@@ -1464,7 +1455,7 @@ export class SessionStreamUnit {
     const tokens = StreamTokenAnchor.composeTokens(this.baseTokens, increment);
     this.metricsAcc.completionTokens = tokens;
     this.sampleRate();
-    appendWireChunk(this.ingressQueue, {kind, delta: text});
+    StreamWireQueue.append(this.ingressQueue, {kind, delta: text});
     if (this.ingressTimer == null) {
       this.ingressTimer = setTimeout(() => {
         this.ingressTimer = null;
@@ -1479,7 +1470,7 @@ export class SessionStreamUnit {
     if (this.ingressQueue.length === 0) {
       return;
     }
-    const coalesced = coalesceWireQueue(this.ingressQueue);
+    const coalesced = StreamWireQueue.coalesce(this.ingressQueue);
     this.ingressQueue = [];
     this.applyBuffer.pushAll(coalesced);
   }
@@ -1667,6 +1658,16 @@ export class SessionStreamUnit {
       rows.push(projectStreamRecord({...current, text, thinking}));
     }
     return rows;
+  }
+}
+
+export namespace SessionStreamUnit {
+  /** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
+  // prettier-ignore
+  export function isSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
+    return (
+      status === 'interrupted' || status === 'finished' || status === 'failed'
+    );
   }
 }
 

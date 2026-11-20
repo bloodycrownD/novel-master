@@ -19,7 +19,7 @@ import {useVfsBackNavigation} from '@/hooks/useVfsBackNavigation';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SkillDetail'>;
@@ -53,7 +53,7 @@ export function SkillDetailScreen() {
         return;
       }
     } catch (error) {
-      showToast(toastMessage('加载技能失败', error));
+      showToast(ToastMessage.toast('加载技能失败', error));
     } finally {
       setLoading(false);
     }

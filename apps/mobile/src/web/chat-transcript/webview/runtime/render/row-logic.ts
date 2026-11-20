@@ -4,10 +4,10 @@
  * 流式壳已迁 ui/stream；不再保留 renderAssistantBubbleInner 拼串。
  */
 import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
-import {createViewSlot} from '@web/shared/view-slot';
+import {ViewSlot} from '@web/shared/view-slot';
 
 /** 行列表视图槽：由 main 注册 Preact（或其它）行列表刷新实现。 */
-export const rowsViewSlot = createViewSlot<void>();
+export const rowsViewSlot = ViewSlot.create<void>();
 
 export const RowLogic = {
   /**

@@ -166,8 +166,8 @@ export function PieChart({
                 );
               }
               // 单个扇区 path：a 从 12 点起顺时针的起止弧度（start < end）。
-              const from = PieChartVisual.arcPoint(start);
-              const to = PieChartVisual.arcPoint(end);
+              const from = {x: CENTER + RADIUS * Math.sin(start), y: CENTER - RADIUS * Math.cos(start)};
+              const to = {x: CENTER + RADIUS * Math.sin(end), y: CENTER - RADIUS * Math.cos(end)};
               const largeArc = end - start > Math.PI ? 1 : 0;
               const sectorD = [`M ${CENTER} ${CENTER}`, `L ${from.x.toFixed(2)} ${from.y.toFixed(2)}`, `A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${to.x.toFixed(2)} ${to.y.toFixed(2)}`, 'Z'].join(' ');
               return (

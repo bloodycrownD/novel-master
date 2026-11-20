@@ -11,11 +11,7 @@
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import {AppState} from 'react-native';
 import {EVENT_AGENT_RUN_STARTED, SimpleEventBus} from '@novel-master/core/events';
-import {
-  createRunFinishCalibrationProbe,
-  RUN_FINISH_CALIBRATION_INTERVAL_MS,
-  RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS,
-} from '@/services/run-finish-calibration-probe';
+import {RUN_FINISH_CALIBRATION_INTERVAL_MS, RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS, RunFinishCalibrationProbe} from '@/services/run-finish-calibration-probe'
 import {
   SessionStreamUnitManager,
 } from '@/services/session-stream-unit-manager.service';
@@ -38,7 +34,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
 
   it('calibrate：活跃会话未注册 → 复询后仍 false 触发 onRunLost', async () => {
     const onRunLost = jest.fn();
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => ['s1'],
       isRunRegistered: () => false,
       onRunLost,
@@ -55,7 +51,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
   it('第一次 false、复询时变 true 则不收尾（防抖避免误判）', async () => {
     const onRunLost = jest.fn();
     let registered = false;
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => ['s1'],
       isRunRegistered: () => {
         const v = registered;
@@ -73,7 +69,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
   it('已注册的会话不排复询（主路径健康时校准零动作）', async () => {
     const onRunLost = jest.fn();
     const isRunRegistered = jest.fn(() => true);
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => ['s1'],
       isRunRegistered,
       onRunLost,
@@ -87,7 +83,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
   it('复询前会话已正常收尾（activeSessionIds 不再包含）则不触发', async () => {
     const onRunLost = jest.fn();
     let active = true;
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => (active ? ['s1'] : []),
       isRunRegistered: () => false,
       onRunLost,
@@ -101,7 +97,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
 
   it('轮询路径：setPollingEnabled(true) 后按周期触发校准', async () => {
     const onRunLost = jest.fn();
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => ['s1'],
       isRunRegistered: () => false,
       onRunLost,
@@ -117,7 +113,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
 
   it('dispose 后复询不再触发 onRunLost（定时器随 dispose 清理）', async () => {
     const onRunLost = jest.fn();
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => ['s1'],
       isRunRegistered: () => false,
       onRunLost,
@@ -131,7 +127,7 @@ describe('run-finish-calibration-probe — 纯逻辑', () => {
 
   it('轮询关闭（默认/setPollingEnabled(false)）时不触发周期校准', async () => {
     const onRunLost = jest.fn();
-    const probe = createRunFinishCalibrationProbe({
+    const probe = RunFinishCalibrationProbe.create({
       activeSessionIds: () => ['s1'],
       isRunRegistered: () => false,
       onRunLost,

@@ -7,7 +7,7 @@ import React from 'react';
 import {Text, View} from 'react-native';
 
 import {DEFAULT_SKILLS_INDEX_PREFIX} from '@novel-master/core/prompt';
-import {PROMPT_REGION_LABELS, WORKPLACE_ASSISTANT_TEXT_LABEL, WORKPLACE_BLOCK_HINT, WORKPLACE_BLOCK_LABEL, WORKPLACE_DISABLED_HINT, withWorkplaceToggle} from '@/config-forms/agent';
+import {AgentEditorState, PROMPT_REGION_LABELS, WORKPLACE_ASSISTANT_TEXT_LABEL, WORKPLACE_BLOCK_HINT, WORKPLACE_BLOCK_LABEL, WORKPLACE_DISABLED_HINT} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormSectionCard} from '../../form/FormSectionCard';
@@ -143,7 +143,7 @@ export function PromptLayoutSection({
         disabled={readOnly}
         onSwitchChange={next => {
           // nm-style: keep-local — 调用在事件回调里，单行化超 80 列
-          const wp = withWorkplaceToggle(next, form.workplaceAssistantText);
+          const wp = AgentEditorState.withWorkplaceToggle(next, form.workplaceAssistantText);
           patch({
             workplaceEnabled: wp.workplaceEnabled,
             workplaceAssistantText: wp.workplaceAssistantText,

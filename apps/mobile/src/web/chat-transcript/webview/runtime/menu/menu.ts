@@ -1,8 +1,7 @@
 import {MENU_OPEN_GRACE_MS} from '@web/shared/constants';
-import {createViewSlot} from '@web/shared/view-slot';
+import {ViewSlot} from '@web/shared/view-slot';
 import {
-  computeAnchoredMenuWidth,
-  layoutAnchoredMenuForHeight,
+  AnchoredMenuPlacement,
   type AnchoredMenuLayout,
 } from '../../../../../webview-host/chat-transcript/anchored-menu-layout';
 import {state} from '../state/state';
@@ -37,7 +36,7 @@ type MenuProps = MenuOverlayViewProps | null;
  * 菜单视图槽：由 main 注册 Preact MenuOverlay 刷新/卸载实现，
  * runtime 门面只 `invoke`（未注册返回 false，调用方据此跳过后续副作用）。
  */
-export const contextMenuViewSlot = createViewSlot<MenuProps>();
+export const contextMenuViewSlot = ViewSlot.create<MenuProps>();
 
 export type ContextMenuLayout = AnchoredMenuLayout;
 
@@ -48,7 +47,7 @@ export type ContextMenuLayout = AnchoredMenuLayout;
  */
 export const Menu = {
   computeWidth: (items: MenuItem[]): number => {
-    return computeAnchoredMenuWidth(items, window.innerWidth);
+    return AnchoredMenuPlacement.computeAnchoredMenuWidth(items, window.innerWidth);
   },
 
   viewportHeight: (): number => {
@@ -62,7 +61,7 @@ export const Menu = {
   layout: (anchor: MenuAnchor, contentHeight: number, menuWidth: number): ContextMenuLayout => {
     const vw = window.innerWidth;
     const vh = Menu.viewportHeight();
-    return layoutAnchoredMenuForHeight(anchor, contentHeight, menuWidth, vw, vh);
+    return AnchoredMenuPlacement.layoutAnchoredMenuForHeight(anchor, contentHeight, menuWidth, vw, vh);
   },
 
   findMessageRow: (messageId: string): MessageRow | null => {

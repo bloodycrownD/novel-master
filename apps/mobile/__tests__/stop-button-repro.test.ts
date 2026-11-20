@@ -2,7 +2,7 @@
  * 停止按钮 P0 防回归（传输链集成）：mock-dead 挂死 + abort 传导。
  *
  * 链路（与真机一致）：AbortController.abort → postSse runNative 组合
- * controller → 真 wrapper（createNativeSseTransportFromBridge + mock bridge）
+ * controller → 真 wrapper（NativeSseTransport.create + mock bridge）
  * → sseAbort。挂死模拟：sseConnect 后不注入任何事件（等价 mock-dead 首字
  * 未达）。断言：连接被客户端主动中止（sseAbort 到达）+ postSse 以
  * AbortError 形态 reject（run 收敛而非悬死）。
@@ -21,7 +21,7 @@ jest.mock('react-native', () => ({
 }));
 
 import {LlmSseTransport} from '../../../packages/core/dist/infra/llm-protocol/logic/llm-sse-transport.js';
-import {createNativeSseTransportFromBridge} from '@novel-master/llm-sse-native';
+import {NativeSseTransport} from '@novel-master/llm-sse-native';
 
 interface Recorded {
   connects: string[];
@@ -63,7 +63,7 @@ describe('stop-button 复现：native 分支挂死 + abort 传导', () => {
   it('挂死中 abort → bridge.sseAbort 被调 + LlmSseTransport.post reject AbortError', async () => {
     const recorded: Recorded = {connects: [], aborts: []};
     const {bridge} = makeMockBridge(recorded);
-    LlmSseTransport.register(createNativeSseTransportFromBridge(bridge as never));
+    LlmSseTransport.register(NativeSseTransport.create(bridge as never));
 
     const controller = new AbortController();
     let rejection: unknown;

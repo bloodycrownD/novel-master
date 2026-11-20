@@ -26,9 +26,12 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('../src/services/message-rollback.service', () => ({
+jest.mock('../src/services/message-rollback.service', () => {
+  const legacy = {
   rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
-}));
+};
+  return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
+});
 
 jest.mock('react-native', () => ({
   Alert: {

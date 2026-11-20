@@ -11,7 +11,7 @@ import {
   type ProviderModelFilterValue,
   type ProviderModelOption,
   type RangeKind,
-  providerModelFilterOptionKey,
+  UsageStats,
 } from './format';
 import {ModelKey} from '../../../utils/model-key';
 import {styles} from './styles';
@@ -138,7 +138,7 @@ export function StatsFilterBar({
                 后面的模型滚不到也点不到。 */}
             <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent} keyboardShouldPersistTaps="handled">
               {pickerOptions.map(option => {
-                const selected = comboFilter !== undefined && option.id === providerModelFilterOptionKey(comboFilter);
+                const selected = comboFilter !== undefined && option.id === UsageStats.providerModelFilterOptionKey(comboFilter);
                 return (
                   <Pressable
                     key={option.id}

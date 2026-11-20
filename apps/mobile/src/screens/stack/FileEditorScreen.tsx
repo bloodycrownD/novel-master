@@ -9,14 +9,14 @@ import type {VfsService} from '@novel-master/core/vfs';
 import {Path} from '@novel-master/core/common';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
-import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
+import {VfsOperationsService} from '../../services/vfs-operations.service';
 import {fileEditorOnSessionVfsSavedSlot} from '../../components/agent/file-editor-saved-callback';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
-import {FileMarkdownPreview, isMarkdownPreviewPath} from '../../components/vfs/FileMarkdownPreview';
-import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
+import {FileMarkdownPreview, MarkdownPreview} from '../../components/vfs/FileMarkdownPreview';
+import {FileAnnotateGate} from '../../components/vfs/file-annotate-gate';
 import {CodeEditorWebView, type CodeEditorWebViewHandle} from '../../components/vfs/CodeEditorWebView';
 import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
 import {Number} from '@novel-master/core/common';
@@ -122,7 +122,7 @@ export function FileEditorScreen() {
         const result = await vfs.read(path);
         if (!result.ok) {
           if (!cancelled) {
-            showToast(toastMessage('读取失败', result.error));
+            showToast(ToastMessage.toast('读取失败', result.error));
           }
           return;
         }
@@ -134,7 +134,7 @@ export function FileEditorScreen() {
         setMtimeMs(result.value.mtimeMs);
       } catch (error) {
         if (!cancelled) {
-          showToast(toastMessage('读取失败', error));
+          showToast(ToastMessage.toast('读取失败', error));
         }
       } finally {
         if (!cancelled) {
@@ -149,7 +149,7 @@ export function FileEditorScreen() {
 
   // Reset preview tab default when opening a different file.
   useEffect(() => {
-    setPreviewRenderKind(isMarkdownPreviewPath(path) ? 'markdown' : 'txt');
+    setPreviewRenderKind(MarkdownPreview.isPath(path) ? 'markdown' : 'txt');
   }, [path]);
 
   // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
@@ -166,15 +166,15 @@ export function FileEditorScreen() {
     try {
       const vfs = resolveWritableVfs();
       if (scopeKind === 'session' && sessionId && userVfsUnifiedToolTurnFlag.isEnabled()) {
-        const saved = await sessionSaveVfsFile(runtime, sessionId, vfs, path, content, savedContent);
+        const saved = await VfsOperationsService.sessionSaveFile(runtime, sessionId, vfs, path, content, savedContent);
         if (!saved.ok) {
-          showToast(toastMessage('保存失败', saved.error));
+          showToast(ToastMessage.toast('保存失败', saved.error));
           return;
         }
         setSavedContent(content);
         const refreshed = await vfs.read(path);
         if (!refreshed.ok) {
-          showToast(toastMessage('保存失败', refreshed.error));
+          showToast(ToastMessage.toast('保存失败', refreshed.error));
           return;
         }
         setMtimeMs(refreshed.value.mtimeMs);
@@ -187,13 +187,13 @@ export function FileEditorScreen() {
       setSavedContent(content);
       const refreshed = await vfs.read(path);
       if (!refreshed.ok) {
-        showToast(toastMessage('保存失败', refreshed.error));
+        showToast(ToastMessage.toast('保存失败', refreshed.error));
         return;
       }
       setMtimeMs(refreshed.value.mtimeMs);
       showToast('已保存');
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -219,7 +219,7 @@ export function FileEditorScreen() {
     }
   }, [previewMode]);
 
-  const annotateEnabled = shouldEnableFileAnnotate({
+  const annotateEnabled = FileAnnotateGate.shouldEnable({
     previewMode,
     scopeKind,
     sessionId,

@@ -19,7 +19,7 @@
  * @module services/llm-native-fetch-shim
  */
 
-import {NativeSseAbortError, NativeSseTransportError, flattenRequestHeaders} from '@novel-master/llm-sse-native';
+import {NativeSseAbortError, NativeSseTransportError, NativeSseTransport} from '@novel-master/llm-sse-native';
 import type {LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
 
 /**
@@ -209,7 +209,7 @@ export namespace LlmNativeFetchShim {
       const cancelState = {userAborted: false};
       let result: NativeRequestResult;
       try {
-        const headers = flattenRequestHeaders(init?.headers as Parameters<typeof flattenRequestHeaders>[0]);
+        const headers = NativeSseTransport.flattenRequestHeaders(init?.headers as Parameters<typeof NativeSseTransport.flattenRequestHeaders>[0]);
         const nativeCall = request(requestId, method, url, headers, body, LLM_NATIVE_FETCH_CALL_TIMEOUT_MS) as Promise<NativeRequestResult>;
         result = signal == null ? await nativeCall : await raceWithAbort(nativeCall, signal, requestId, requestAbort, cancelState);
       } catch (err) {

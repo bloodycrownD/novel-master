@@ -10,8 +10,8 @@ import {useCallback} from 'react';
 import {Alert} from 'react-native';
 import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
-import {showAppToast} from '../services/app-toast';
-import {toastMessage} from '../errors/toast-message';
+import {AppToast} from '../services/app-toast';
+import {ToastMessage} from '../errors/toast-message';
 
 interface BatchDeleteConfirmOptions<T> {
   title: string;
@@ -44,12 +44,12 @@ export function useBatchDeleteConfirm<T>({
               for (const item of items) {
                 const outcome = await deleteOne(item);
                 if (!outcome.ok) {
-                  showAppToast(toastMessage('删除失败', outcome.error));
+                  AppToast.show(ToastMessage.toast('删除失败', outcome.error));
                   return;
                 }
               }
               await onDone();
-            })().catch(err => showAppToast(toastMessage('删除失败', err)));
+            })().catch(err => AppToast.show(ToastMessage.toast('删除失败', err)));
           },
         },
       ]);

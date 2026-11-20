@@ -12,15 +12,18 @@
  * 布局按「窗口行实际高 ROW_PX、占位高按渲染时的平均槽高估算」计算，
  * 估算误差场景（fallback avg ≠ 实际行高）由此可行为级验证。
  */
-jest.mock(
-  '../src/web/chat-transcript/webview/runtime/render/row-logic',
-  () => ({
+jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => {
+  const legacy = {
     renderRows: jest.fn(),
-  }),
-);
-jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
+  };
+  return {...legacy, RowLogic: {render: legacy.renderRows}};
+});
+jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => {
+  const legacy = {
   scheduleMermaidScan: jest.fn(),
-}));
+};
+  return {...legacy, Mermaid: {scheduleScan: legacy.scheduleMermaidScan}};
+});
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
   Menu: {close: jest.fn()},
 }));
@@ -363,7 +366,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
         snapshot,
         scroll,
         stream,
-        renderRows: rowLogic.renderRows,
+        renderRows: rowLogic.RowLogic.render,
         post: bridge.post,
       } as Modules;
     });
@@ -1020,7 +1023,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       // 贴底用户（距底 0）删行：窗口应继续贴尾
       layout.scrollTop = layout.scrollHeight - CLIENT_H;
       mods.state.streamCheckpoint = {id: 'r-499', seq: 1, status: 'streaming'};
-      mods.stream.applyStreamReset({streamIds: ['r-499']});
+      mods.stream.Stream.applyReset({streamIds: ['r-499']});
       expect(mods.state.rows).toHaveLength(499);
       // 删除后 win 不重定位会停在 {400,500}（clamp 后 99 行）；重定位到
       // 稳态尾部 {399,499}，与 RowList 实际渲染行数一致。
@@ -1051,7 +1054,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       mods.windowing.RowWindow.measure(); // avg: 120 → 110（窗口行真实 80）
       expect(mods.windowing.RowWindow.getAvgSlotPx()).toBe(110);
 
-      mods.snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
+      mods.snapshot.Snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
 
       // 差值 = 新进窗口行真实高 − 上占位估算高 = 220×80 − 180×110 = −2200；
       // 修复后采样 = (−2200 + 180×110) / (40+180) = 80（真实槽高），
@@ -1072,7 +1075,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       const scrollHeightBefore = layout.scrollHeight; // 56068
       layout.scrollTop = 60; // 视口顶：行 0 顶(48)之下 12px
 
-      mods.snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
+      mods.snapshot.Snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
 
       // 上占位清零（新行全进窗口）、下占位行数不变 → 差值 = 40 行真实高
       expect(layout.scrollHeight - scrollHeightBefore).toBe(40 * ROW_PX);
@@ -1100,7 +1103,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       mods.renderRows();
       layout.scrollTop = layout.clampScroll(layout.scrollHeight); // 贴底
 
-      mods.snapshot.applyAppendTailRows({rows: makeRows('a', 2) as never});
+      mods.snapshot.Snapshot.applyAppendTailRows({rows: makeRows('a', 2) as never});
 
       const win = mods.windowing.RowWindow.getRange(502);
       expect(win.end).toBe(502);
@@ -1113,7 +1116,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
 
   describe('applySnapshot stick 集成', () => {
     it('stick：窗口贴尾、scrollTop 贴底、scrollSnapshot 恰一次', () => {
-      mods.snapshot.handleSnapshotPayload({
+      mods.snapshot.Snapshot.handlePayload({
         generation: 1,
         chunkIndex: 0,
         chunkTotal: 1,
@@ -1145,7 +1148,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
         // hasMore=true → 按钮占 48px：windowTop = 48 + 400*120
         layout.scrollTop = 48 + 400 * FALLBACK_AVG - 200 * FALLBACK_AVG; // 估算行 200
 
-        mods.scroll.onScroll();
+        mods.scroll.Scroll.on();
 
         expect(mods.windowing.RowWindow.getRange(500)).toEqual({
           start: 180,

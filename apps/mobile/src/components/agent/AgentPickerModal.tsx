@@ -10,22 +10,14 @@ import {Text} from 'react-native';
 import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
 import {
   PickerListModal,
   type PickerListLoadResult,
 } from '../ui/PickerListModal';
-import {
-  AGENT_PICKER_EMPTY_MESSAGE,
-  isAgentPickerRowSelected,
-  loadAgentPickerRows,
-  loadSessionAgentPickerRows,
-  selectWorkspaceAgent,
-  selectSessionAgent,
-  type AgentPickerRow,
-} from '../../services/agent-picker';
+import {AGENT_PICKER_EMPTY_MESSAGE, AgentPicker, type AgentPickerRow} from '../../services/agent-picker';
 
 type Props = {
   visible: boolean;
@@ -53,8 +45,8 @@ export function AgentPickerModal({
   > => {
     // 有 sessionId 走会话级（绑定优先、缺失回退 workspace）；否则读 workspace 全局。
     return sessionId != null
-      ? loadSessionAgentPickerRows(runtime, sessionId)
-      : loadAgentPickerRows(runtime);
+      ? AgentPicker.loadSessionRows(runtime, sessionId)
+      : AgentPicker.loadRows(runtime);
   }, [runtime, sessionId]);
 
   const select = useCallback(
@@ -63,12 +55,12 @@ export function AgentPickerModal({
       // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
       try {
         if (sessionId != null) {
-          await selectSessionAgent(runtime, sessionId, agentId);
+          await AgentPicker.selectSession(runtime, sessionId, agentId);
         } else {
-          await selectWorkspaceAgent(runtime, agentId);
+          await AgentPicker.selectWorkspace(runtime, agentId);
         }
       } catch (cause) {
-        showToast(toastMessage('设置失败', cause));
+        showToast(ToastMessage.toast('设置失败', cause));
         return;
       }
       onSelected?.(agentId);
@@ -84,7 +76,7 @@ export function AgentPickerModal({
       load={load}
       keyExtractor={item => item.agentId}
       isSelected={(item, index, selectedId) =>
-        isAgentPickerRowSelected(item.agentId, index, selectedId)
+        AgentPicker.isRowSelected(item.agentId, index, selectedId)
       }
       renderRow={(item, selected) => (
         <>

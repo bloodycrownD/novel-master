@@ -24,8 +24,8 @@ import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
-import {exportYamlWithDialog, importYamlWithDialog} from '@/services/yaml-shared';
+import {ToastMessage} from '@/errors/toast-message';
+import {YamlShared} from '@/services/yaml-shared';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -48,7 +48,7 @@ export function SmartSortRulesScreen() {
     fallbackValue: EMPTY_RULES,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(toastMessage('加载失败', cause));
+        showToast(ToastMessage.toast('加载失败', cause));
       },
       [showToast],
     ),
@@ -66,7 +66,7 @@ export function SmartSortRulesScreen() {
         await runtime.smartSortRule.moveRule(ruleId, to);
         await reload({silent: true});
       } catch (error) {
-        showToast(toastMessage('调整失败', error));
+        showToast(ToastMessage.toast('调整失败', error));
       }
     },
     [runtime, reload, showToast],
@@ -83,7 +83,7 @@ export function SmartSortRulesScreen() {
             (async () => {
               await runtime.smartSortRule.deleteRule(rule.ruleId);
               await reload({silent: true});
-            })().catch(error => showToast(toastMessage('删除失败', error)));
+            })().catch(error => showToast(ToastMessage.toast('删除失败', error)));
           },
         },
       ]);
@@ -125,7 +125,7 @@ export function SmartSortRulesScreen() {
       setRows(prev => prev.map(r => (r.ruleId === rule.ruleId ? {...r, enabled: next} : r)));
       runtime.smartSortRule.setEnabled(rule.ruleId, next).catch(error => {
         setRows(prev => prev.map(r => (r.ruleId === rule.ruleId ? {...r, enabled: rule.enabled} : r)));
-        showToast(toastMessage('操作失败', error));
+        showToast(ToastMessage.toast('操作失败', error));
       });
     },
     [runtime, setRows, showToast],
@@ -170,7 +170,7 @@ export function SmartSortRulesScreen() {
           await reload({silent: true});
         })
         .catch(error => {
-          showToast(toastMessage('操作失败', error));
+          showToast(ToastMessage.toast('操作失败', error));
         });
     },
     [batch.selectedIds, runtime, reload, showToast],
@@ -193,7 +193,7 @@ export function SmartSortRulesScreen() {
                 // 「YAML 无效」前缀——判据与前缀都在 core 的
                 // `Errors.normalizeSmartSortImport` 里（desktop 侧调同一个函数）。
                 let importedCount: number | null = null;
-                importYamlWithDialog(async yaml => {
+                YamlShared.importWithDialog(async yaml => {
                   try {
                     const raw = SerializationParseText.parse(yaml, 'yaml');
                     const rules = await runtime.smartSortRule.importRules(raw);
@@ -207,7 +207,7 @@ export function SmartSortRulesScreen() {
                 })
                   .then(async imported => {
                     if (!imported.ok) {
-                      showToast(toastMessage('导入失败', imported.error));
+                      showToast(ToastMessage.toast('导入失败', imported.error));
                       return;
                     }
                     if (importedCount == null) {
@@ -216,7 +216,7 @@ export function SmartSortRulesScreen() {
                     await reload({silent: true});
                     showToast(`已导入 ${importedCount} 条规则`);
                   })
-                  .catch(error => showToast(toastMessage('导入失败', error)));
+                  .catch(error => showToast(ToastMessage.toast('导入失败', error)));
               },
             },
           ]);
@@ -225,13 +225,13 @@ export function SmartSortRulesScreen() {
           // YAML 导出（spec smart-filename-sort Step 13 / D10）；文本序列化单源在 core。
           runtime.smartSortRule
             .exportRules()
-            .then(doc => exportYamlWithDialog(SerializationStringifyText.stringify(doc, 'yaml'), 'smart-sort-rules.yaml'))
+            .then(doc => YamlShared.exportWithDialog(SerializationStringifyText.stringify(doc, 'yaml'), 'smart-sort-rules.yaml'))
             .then(result => {
               if (result === 'saved') {
                 showToast('已导出规则');
               }
             })
-            .catch(error => showToast(toastMessage('导出失败', error)));
+            .catch(error => showToast(ToastMessage.toast('导出失败', error)));
           break;
         case 'reset':
           Alert.alert('恢复默认', '将重灌全部内置规则（含删除后重建、恢复启用），用户自建规则不受影响。', [
@@ -245,7 +245,7 @@ export function SmartSortRulesScreen() {
                     await reload({silent: true});
                     showToast('已恢复默认规则');
                   })
-                  .catch(error => showToast(toastMessage('恢复失败', error)));
+                  .catch(error => showToast(ToastMessage.toast('恢复失败', error)));
               },
             },
           ]);

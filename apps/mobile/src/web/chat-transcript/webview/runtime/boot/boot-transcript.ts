@@ -3,7 +3,7 @@
  * 与 main 的 Preact 注册分离，避免入口文件混杂委托细节。
  */
 import {Bridge, post} from '../bridge';
-import {bindHostMessageChannel} from '@web/shared/host-message-channel';
+import {HostMessageChannel} from '@web/shared/host-message-channel';
 import {TRANSCRIPT_CAPABILITIES} from '../../../transcript-capabilities';
 import {BindShellEvents} from './bind-shell-events';
 
@@ -21,7 +21,7 @@ type TranscriptBootOptions = {
 export const BootTranscript = {
   /** 绑定 RN WebView / iframe 的 message 通道（document + window 双注册统一在 shared）。 */
   bindHostMessageEvents: (): void => {
-    bindHostMessageChannel(Bridge.handleHostMessage);
+    HostMessageChannel.bind(Bridge.handleHostMessage);
   },
 
   /**

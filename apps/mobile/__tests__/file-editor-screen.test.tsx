@@ -68,10 +68,13 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 // session 域保存那一支的两个开关。jest.mock 工厂被提升到 import 之前，
 // 不能引用后面声明的 const（TDZ）——所以只导出 jest.fn()，
@@ -80,9 +83,12 @@ jest.mock('@novel-master/core/feature-flags', () => ({
   userVfsUnifiedToolTurnFlag: {isEnabled: jest.fn(() => false)},
 }));
 
-jest.mock('@/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => {
+  const legacy = {
   sessionSaveVfsFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsOperationsService: {sessionSaveFile: legacy.sessionSaveVfsFile}};
+});
 
 jest.mock('@/components/vfs/FileMarkdownPreview', () => {
   const mockReact = require('react');
@@ -92,7 +98,7 @@ jest.mock('@/components/vfs/FileMarkdownPreview', () => {
         testID: 'file-markdown-preview',
         ...props,
       }),
-    isMarkdownPreviewPath: () => true,
+    MarkdownPreview: {isPath: () => true},
   };
 });
 

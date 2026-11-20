@@ -4,7 +4,7 @@
  * @module services/workplace-block.service
  */
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {refreshComposerStatusAfterSessionKkvCleared} from './project-composer-status.service';
+import {ProjectComposerStatusService} from './project-composer-status.service';
 
 interface SessionWorkplaceBlockScope {
   readonly projectId: string;
@@ -18,7 +18,7 @@ export namespace WorkplaceBlockService {
    */
   export async function clearSessionKkv(runtime: MobileNovelMasterRuntime, scope: SessionWorkplaceBlockScope) {
     await runtime.sessionKkv.clearSession(scope.sessionId);
-    await refreshComposerStatusAfterSessionKkvCleared(scope);
+    await ProjectComposerStatusService.refreshAfterSessionKkvCleared(scope);
     return {workplaceDisplay: '', capturedAtMs: Date.now()};
   }
 }

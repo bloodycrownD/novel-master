@@ -22,16 +22,16 @@ import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {runManualCompaction, type ManualCompactionHooks} from '../../services/manual-compaction.service';
+import {ManualCompactionService, type ManualCompactionHooks} from '../../services/manual-compaction.service';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
-import {AGENT_LOCK_TOAST_STATEMENT, AGENT_RESELECT_HINT, isAgentDeleted, isAgentLocked, isModelLocked, loadChatAgentMeta, MODEL_LOCK_TOAST, type ChatAgentMeta} from '../../services/chat-agent-meta';
+import {AGENT_LOCK_TOAST_STATEMENT, AGENT_RESELECT_HINT, ChatAgentMeta, MODEL_LOCK_TOAST} from '../../services/chat-agent-meta';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {agentActivity} from '../../runtime/agent-activity';
-import {refreshComposerStatusAfterFloorOrCompaction} from '../../services/project-composer-status.service';
+import {ProjectComposerStatusService} from '../../services/project-composer-status.service';
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
@@ -61,19 +61,19 @@ export function SessionDetailScreen() {
     try {
       const session = await runtime.sessions.get(sessionId);
       if (!session.ok) {
-        showToast(toastMessage('加载会话详情失败', session.error));
+        showToast(ToastMessage.toast('加载会话详情失败', session.error));
         return;
       }
       setSessionTitle(session.value.title ?? '');
-      const agentMeta = await loadChatAgentMeta(runtime, projectId, sessionId);
+      const agentMeta = await ChatAgentMeta.load(runtime, projectId, sessionId);
       // 非 agent 解析类失败（Result.err，错误通道迁移四期）与未知异常同终端。
       if (!agentMeta.ok) {
-        showToast(toastMessage('加载会话详情失败', agentMeta.error));
+        showToast(ToastMessage.toast('加载会话详情失败', agentMeta.error));
         return;
       }
       setMeta(agentMeta.value);
     } catch (error) {
-      showToast(toastMessage('加载会话详情失败', error));
+      showToast(ToastMessage.toast('加载会话详情失败', error));
     } finally {
       setLoading(false);
     }
@@ -86,8 +86,8 @@ export function SessionDetailScreen() {
   // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡看 isAgentLocked
   // （仅 meta 未加载时锁，none 态放开为待重选），model 卡看 isModelLocked
   // （none 态仍锁，重选智能体后自然解锁）。
-  const agentLocked = isAgentLocked(meta);
-  const modelLocked = isModelLocked(meta);
+  const agentLocked = ChatAgentMeta.isLocked(meta);
+  const modelLocked = ChatAgentMeta.isModelLocked(meta);
 
   // 提交 inline 重命名：空串或未改动直接收起，不调 rename。
   const commitTitle = useCallback(
@@ -104,7 +104,7 @@ export function SessionDetailScreen() {
         DeviceEventEmitter.emit('session-renamed', {sessionId, title: next});
         showToast('已重命名');
       } catch (error) {
-        showToast(toastMessage('重命名失败', error));
+        showToast(ToastMessage.toast('重命名失败', error));
       }
     },
     [runtime, sessionId, sessionTitle, showToast],
@@ -145,7 +145,7 @@ export function SessionDetailScreen() {
       return;
     }
     if (agentActivity.isActive()) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
+      showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法压缩'));
       return;
     }
     Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
@@ -160,10 +160,10 @@ export function SessionDetailScreen() {
           // 路径）：toast 即回，聊天页自己收到转录变更后按常规两阶段刷 chip。
           const compactionHooks: ManualCompactionHooks = {
             onFailed: error => {
-              showToast(error === undefined ? toastMessage('压缩失败') : toastMessage('压缩失败', error));
+              showToast(error === undefined ? ToastMessage.toast('压缩失败') : ToastMessage.toast('压缩失败', error));
             },
             onSucceeded: async () => {
-              await refreshComposerStatusAfterFloorOrCompaction({
+              await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
                 projectId,
                 sessionId,
               });
@@ -182,12 +182,12 @@ export function SessionDetailScreen() {
           // （不是错误 toast）。编排内部已自吞业务失败与尾巴抛错，这里的 catch
           // 只防御未来改动引入的意外异常，绝不重新抛出——调用方是 void，重抛
           // 就是 unhandled rejection。
-          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks)
+          void ManualCompactionService.run(runtime, {projectId, sessionId}, compactionHooks)
             .then(outcome => {
               if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast('已取消压缩');
             })
             .catch((error: unknown) => {
-              showToast(toastMessage('压缩失败', error));
+              showToast(ToastMessage.toast('压缩失败', error));
             })
             .finally(() => {
               setCompacting(false);
@@ -294,7 +294,7 @@ export function SessionDetailScreen() {
           <Text style={[styles.cardValue, {color: tokens.text}]} numberOfLines={1}>
             {meta.agentName}
           </Text>
-          {isAgentDeleted(meta) ? <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>{AGENT_RESELECT_HINT}</Text> : null}
+          {ChatAgentMeta.isDeleted(meta) ? <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>{AGENT_RESELECT_HINT}</Text> : null}
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>{agentLocked ? '🔒' : '›'}</Text>
       </Pressable>

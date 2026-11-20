@@ -10,7 +10,7 @@ import {FrontMatter, Text as CommonText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {defaultVfsMarkdownPreviewEngine, readVfsMarkdownPreviewEngine, type VfsMarkdownPreviewEngine} from '../../storage/vfs-markdown-preview-engine';
+import {VfsMarkdownPreviewEngine} from '../../storage/vfs-markdown-preview-engine';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 import {ChatComposerDraft} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
@@ -79,7 +79,7 @@ function PreviewScrollWrap({previewFill, children}: {previewFill: boolean; child
 
 export function FileMarkdownPreview({path, content, tokens, previewFill = false, renderKind = 'markdown', annotateEnabled = false, sessionId}: FileMarkdownPreviewProps) {
   const {appUi} = useNovelMaster();
-  const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(defaultVfsMarkdownPreviewEngine());
+  const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(VfsMarkdownPreviewEngine.default());
   /** store 变更时递增，驱动 pathDrafts 同步重算（禁止仅靠滞后 useEffect 派生）。 */
   const [draftTick, setDraftTick] = useState(0);
   const [clearAnnotateSelectionSignal, setClearAnnotateSelectionSignal] = useState(0);
@@ -93,7 +93,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
   const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
 
   const refreshPreviewEngine = useCallback(async () => {
-    setPreviewEngine(await readVfsMarkdownPreviewEngine(appUi));
+    setPreviewEngine(await VfsMarkdownPreviewEngine.read(appUi));
   }, [appUi]);
 
   useEffect(() => {

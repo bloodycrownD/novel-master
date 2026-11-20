@@ -5,7 +5,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useRuntime} from '../../hooks/useRuntime';
-import {formatError} from '../../errors/format-error';
+import {FormatError} from '../../errors/format-error';
 import {ModalShell} from '../ui/ModalShell';
 import {FormTextInput} from '../form/FormTextInput';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
@@ -74,7 +74,7 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
       setRows(suggestions.value.filter(s => !s.stale));
     } catch (cause) {
       setRows([]);
-      setError(formatError(cause));
+      setError(FormatError.format(cause));
     } finally {
       setLoading(false);
     }
@@ -109,7 +109,7 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
           if (!savedModel.ok) throw savedModel.error;
           savedNow.push(item.vendorModelId);
         } catch (cause) {
-          setSaveError(formatError(cause));
+          setSaveError(FormatError.format(cause));
           break;
         }
       }

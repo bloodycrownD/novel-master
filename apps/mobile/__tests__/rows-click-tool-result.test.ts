@@ -6,7 +6,7 @@
  * resultContent——本组用例钉住「DOM 属性 ↔ state 反查 ↔ post 载荷」三方
  * 约定（ucu 迭代 P0 事故即死在渲染键与读取键不一致）。
  */
-import {onRowsClick} from '../src/web/chat-transcript/webview/runtime/render/rows-click';
+import {RowsClick} from '../src/web/chat-transcript/webview/runtime/render/rows-click';
 import {state} from '../src/web/chat-transcript/webview/runtime/state/state';
 
 type FakeElement = {
@@ -82,7 +82,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
 
   it('T-TRW1: data-tool-use-id 命中 state 行 → 上抛 openToolResult（title=工具名，content=正文全文）', () => {
     seedToolRow('tu-1', {resultContent: '第 1 条结果\n第 2 条结果'});
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -101,7 +101,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
 
   it('T-TRW2: toolUseId 在 state 里找不到行 → 不上抛（静默无动作）', () => {
     seedToolRow('tu-1', {resultContent: '结果'});
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -114,7 +114,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
 
   it('T-TRW3: 反查到的 resultContent 非字符串/空串 → 不上抛', () => {
     seedToolRow('tu-1', {resultContent: ''});
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -123,7 +123,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
       ),
     );
     seedToolRow('tu-2', {resultContent: 42});
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -136,7 +136,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
 
   it('T-TRW4: data-tool-use-id 属性缺失 → 不上抛（防 undefined 当 key 误配）', () => {
     seedToolRow('tu-1', {resultContent: '结果'});
-    onRowsClick(makeEvent(makeEl('div', {'data-action': 'open-tool-result'})));
+    RowsClick.on(makeEvent(makeEl('div', {'data-action': 'open-tool-result'})));
     expect(postedEnvelopes()).toEqual([]);
   });
 
@@ -158,7 +158,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
         tools: [{toolUseId: 'tu-c', name: 'curl', resultContent: 'HTTP 200'}],
       },
     ];
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -191,7 +191,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
         ],
       },
     ];
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -226,7 +226,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
         ],
       },
     ];
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -252,7 +252,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
         tools: [{toolUseId: 'tu-1', name: 'curl', resultContent: '  '}],
       },
     ];
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -271,7 +271,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
       input: {url: 'https://example.com', method: 'POST', body: {a: 1}},
       resultContent: 'HTTP 200',
     });
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -301,7 +301,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
 
   it('T-TRW10: 行上无 input / input 为 null → 载荷不带 inputJson 字段（不是 undefined 值）', () => {
     seedToolRow('tu-1', {name: 'search', resultContent: '结果'});
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',
@@ -314,7 +314,7 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
       input: null,
       resultContent: '结果2',
     });
-    onRowsClick(
+    RowsClick.on(
       makeEvent(
         makeEl('div', {
           'data-action': 'open-tool-result',

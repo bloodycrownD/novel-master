@@ -10,7 +10,7 @@
  */
 import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import {toFileUri} from '@/services/rn-file-io';
+import {RnFileIo} from '@/services/rn-file-io';
 
 export type WebViewAssetPackageId = 'rich-document' | 'code-editor' | 'composer-input' | 'chat-transcript';
 
@@ -39,7 +39,7 @@ export const WebviewAssetUri = {
       return `file:///android_asset/webview/${pkg}/index.html`;
     }
     if (Platform.OS === 'ios') {
-      return toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/index.html`);
+      return RnFileIo.toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/index.html`);
     }
     // nm-throw: keep — 平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位
     throw new Error(`WebView 资产 URI 不支持平台: ${Platform.OS}`);
@@ -53,7 +53,7 @@ export const WebviewAssetUri = {
       return `file:///android_asset/webview/${pkg}/`;
     }
     if (Platform.OS === 'ios') {
-      return toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/`);
+      return RnFileIo.toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/`);
     }
     // nm-throw: keep — 平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位
     throw new Error(`WebView 资产目录 URI 不支持平台: ${Platform.OS}`);

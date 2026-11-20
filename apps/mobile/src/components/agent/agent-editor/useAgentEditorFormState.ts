@@ -12,18 +12,7 @@ import {type AgentDefinition} from '@novel-master/core/agent';
 import type {DynamicPromptBlock} from '@novel-master/core/prompt';
 import type {PersistPromptBlock} from '@novel-master/core/prompt';
 import {DEFAULT_SKILLS_INDEX_PREFIX} from '@novel-master/core/prompt';
-import {
-  countFormPromptSources,
-  createDefaultDynamicTextBlock,
-  createDefaultPersistTextBlock,
-  definitionToForm,
-  deletePersistTextBlock,
-  formSnapshotJson,
-  hasAnyPromptRegionEnabled,
-  movePersistTextBlock,
-  toolsSelectionFromDefinition,
-  type AgentEditorFormInput,
-} from '@/config-forms/agent';
+import {AgentEditorState, AgentToolCatalog, type AgentEditorFormInput} from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {type AppError, Result} from '@novel-master/core/errors';
@@ -100,8 +89,8 @@ export namespace AgentEditorFormState {
    * loadAgent 路径复用同一映射后再异步回填模型三件套，两路不漂移。
    */
   export function formStateFromDefinition(def: AgentDefinition): AgentEditorFormState {
-    const promptForm = definitionToForm(def);
-    const toolsWire = toolsSelectionFromDefinition(def);
+    const promptForm = AgentEditorState.definitionToForm(def);
+    const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
     return {
       ...AgentEditorFormState.createInitialFormState(),
       name: def.name,
@@ -187,7 +176,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
 
   // formSnapshotJson 只收一个 state 对象；mode 等全部字段纳入依赖
   // （原实现依赖数组漏了 mode，收敛后顺带修正）。
-  const snapshot = useMemo(() => formSnapshotJson(form), [form]);
+  const snapshot = useMemo(() => AgentEditorState.formSnapshotJson(form), [form]);
 
   // 渲染期同步派生：与 snapshot 同帧计算，外部「有未保存的更改」标记不依赖
   // effect 时序（全屏保存回填、表单保存后均与内容同帧刷新）；effect 仅向
@@ -232,8 +221,8 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
   const fillForm = async (def: AgentDefinition): Promise<Result<void, AppError>> => {
     // 字段映射与只读直填同源（formStateFromDefinition）；模型三件套
     // 在下方 savedModels 装载后精确覆盖（providerId 依赖查表）。
-    const promptForm = definitionToForm(def);
-    const toolsWire = toolsSelectionFromDefinition(def);
+    const promptForm = AgentEditorState.definitionToForm(def);
+    const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
     setForm(prev => ({...prev, ...AgentEditorFormState.formStateFromDefinition(def)}));
     // 扁平化：一次性加载全服务商 savedModels，下拉直接选模型，不再二级联动。
     await loadProviders();
@@ -256,7 +245,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
       providerId: baselineProviderId,
       savedModelId: baselineSavedModelId,
     }));
-    const baseline = formSnapshotJson({
+    const baseline = AgentEditorState.formSnapshotJson({
       name: def.name,
       maxSteps: String(def.runtime?.maxSteps ?? 20),
       modelEnabled: modelEnabledWire,
@@ -389,7 +378,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
     setPersist,
     setDynamic,
     // 块级操作
-    movePersist: (textIndex: number, dir: -1 | 1) => setPersist(prev => movePersistTextBlock(prev, textIndex, dir)),
+    movePersist: (textIndex: number, dir: -1 | 1) => setPersist(prev => AgentEditorState.movePersistTextBlock(prev, textIndex, dir)),
     moveDynamic: (index: number, dir: -1 | 1) => {
       setDynamic(prev => {
         const next = [...prev];
@@ -404,21 +393,21 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
       });
     },
     deletePersist: (textIndex: number) => {
-      const nextPersist = deletePersistTextBlock(form.persist, textIndex);
+      const nextPersist = AgentEditorState.deletePersistTextBlock(form.persist, textIndex);
       const nextForm = {...promptRegionForm(), persist: nextPersist};
-      if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
+      if (!AgentEditorState.hasAnyPromptRegionEnabled(promptRegionForm())) {
         setPersist(() => nextPersist);
         return;
       }
-      if (countFormPromptSources(nextForm) < 1) {
+      if (AgentEditorState.countFormPromptSources(nextForm) < 1) {
         showToast('至少保留一个 Prompt 块');
         return;
       }
       setPersist(() => nextPersist);
     },
     deleteDynamic: (index: number) => setDynamic(prev => prev.filter((_, i) => i !== index)),
-    addPersistTextBlock: () => setPersist(prev => [...prev, createDefaultPersistTextBlock(prev.length)]),
-    addDynamicBlock: () => setDynamic(prev => [...prev, createDefaultDynamicTextBlock(prev.length)]),
+    addPersistTextBlock: () => setPersist(prev => [...prev, AgentEditorState.createDefaultPersistTextBlock(prev.length)]),
+    addDynamicBlock: () => setDynamic(prev => [...prev, AgentEditorState.createDefaultDynamicTextBlock(prev.length)]),
     // 模型下拉
     handleModelSelect,
     modelSelectOptions,

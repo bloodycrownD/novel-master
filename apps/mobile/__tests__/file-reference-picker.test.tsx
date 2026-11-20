@@ -2,16 +2,19 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {WorkplaceListRow} from '@novel-master/core/workplace';
-import { composerAtPath, FileReferencePicker, listPickerChildRows } from '@/components/chat/FileReferencePicker';
+import {composerAtPath, FileReferencePicker, PickerRows} from '@/components/chat/FileReferencePicker';
 
 const mockBuildListRows = jest.fn(async () => ({
   ok: true as const,
   value: [] as WorkplaceListRow[],
 }));
 
-jest.mock('@/errors/format-error', () => ({
+jest.mock('@/errors/format-error', () => {
+  const legacy = {
   formatError: (err: unknown) => String(err),
-}));
+};
+  return {...legacy, FormatError: {format: legacy.formatError}};
+});
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
@@ -91,10 +94,10 @@ function findByTestId(root: TestRenderer.ReactTestInstance, testID: string) {
 
 describe('listPickerChildRows / atPathTokensFromPickerSelection', () => {
   it('只列出 cwd 直子（含隐藏文件，不含 cwd 自身）', () => {
-    const atRoot = listPickerChildRows(fixtureRows, '/');
+    const atRoot = PickerRows.listPickerChildRows(fixtureRows, '/');
     expect(atRoot.map(r => r.path)).toEqual(['/notes', '/a.md', '/hidden.md']);
 
-    const inNotes = listPickerChildRows(fixtureRows, '/notes');
+    const inNotes = PickerRows.listPickerChildRows(fixtureRows, '/notes');
     expect(inNotes.map(r => r.path)).toEqual(['/notes/b.md', '/notes/c.md']);
   });
 

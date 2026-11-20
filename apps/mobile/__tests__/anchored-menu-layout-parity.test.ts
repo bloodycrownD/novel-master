@@ -1,4 +1,5 @@
 import {describe, expect, it} from '@jest/globals';
+import {AnchoredMenuPlacement} from '@/webview-host/chat-transcript/anchored-menu-layout';
 /**
  * web/C-orch-4 布局口径的黄金值锁（Step 8 迁居）。
  *
@@ -23,18 +24,18 @@ describe('anchored-menu-layout 黄金值（单端口：web 真源）', () => {
   ];
 
   it('exports the layout math the web menu wrapper delegates to', () => {
-    expect(typeof shared.layoutAnchoredMenu).toBe('function');
-    expect(typeof shared.layoutAnchoredMenuForHeight).toBe('function');
-    expect(typeof shared.computeAnchoredMenuWidth).toBe('function');
+    expect(typeof shared.AnchoredMenuPlacement.layoutAnchoredMenu).toBe('function');
+    expect(typeof shared.AnchoredMenuPlacement.layoutAnchoredMenuForHeight).toBe('function');
+    expect(typeof shared.AnchoredMenuPlacement.computeAnchoredMenuWidth).toBe('function');
   });
 
   it('width matches the pre-refactor WebView formula (min width floor wins)', () => {
     // longest=2 → 2*14+32=60 < MIN_WIDTH 132；cap=360-24=336；min(336,200,132)=132
-    expect(shared.computeAnchoredMenuWidth(items, 360)).toBe(132);
+    expect(shared.AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360)).toBe(132);
   });
 
   it('flips above with pre-refactor WebView golden layout', () => {
-    const layout = shared.layoutAnchoredMenu(
+    const layout = shared.AnchoredMenuPlacement.layoutAnchoredMenu(
       {x: 40, y: 520, width: 200, height: 48},
       items.length,
       132,
@@ -52,7 +53,7 @@ describe('anchored-menu-layout 黄金值（单端口：web 真源）', () => {
 
   it('scrolls with height cap via layoutAnchoredMenuForHeight golden layout', () => {
     // WebView wrapper 走 layoutAnchoredMenuForHeight（measuredHeight 路径）
-    const layout = shared.layoutAnchoredMenuForHeight(
+    const layout = shared.AnchoredMenuPlacement.layoutAnchoredMenuForHeight(
       {x: 40, y: 200, width: 200, height: 48},
       480,
       132,

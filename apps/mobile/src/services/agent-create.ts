@@ -1,7 +1,7 @@
 /**
  * Creates a blank agent in the registry (shared by Agents settings screen).
  */
-import {allocateAgentDisplayName, createDefaultAgentEditorPrompts, layoutFromFormInput, type AgentMode} from '@/config-forms/agent';
+import {AgentEditorState, AllocateAgentDisplayName, type AgentMode} from '@/config-forms/agent';
 import {AppError, Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -21,8 +21,8 @@ export namespace AgentCreate {
       const def = await runtime.agentRegistry.get(id);
       slots.push(def.ok ? {id, name: def.value.name} : {id, name: id});
     }
-    const name = allocateAgentDisplayName(slots);
-    const definition = {name, ...(mode != null ? {mode} : {}), runtime: {maxSteps: 20}, prompts: layoutFromFormInput(createDefaultAgentEditorPrompts())};
+    const name = AllocateAgentDisplayName.allocate(slots);
+    const definition = {name, ...(mode != null ? {mode} : {}), runtime: {maxSteps: 20}, prompts: AgentEditorState.layoutFromFormInput(AgentEditorState.createDefaultAgentEditorPrompts())};
     const saved = await runtime.agentRegistry.upsert(id, definition);
     if (!saved.ok) return Result.err(saved.error);
     return Result.ok(id);

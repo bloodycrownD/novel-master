@@ -27,7 +27,7 @@ import {Result, AppError} from '@novel-master/core/errors';
 import {MobileSksp} from './mobile-sksp';
 import {LlmFetchSetup} from './setup-llm-fetch';
 import {rollbackTimingLog} from '../debug/run-timing';
-import {createQuantumYield} from '../services/yield-quantum';
+import {YieldQuantum} from '../services/yield-quantum';
 import type {MobileRuntimeCore} from './types';
 
 export const MobileRuntimeFactory = {
@@ -96,7 +96,7 @@ export const MobileRuntimeFactory = {
     // 列表行解析让步（rollback-large-jank Step 2）：mobile 两处装配缝（runtime
     // .messages 链 + 回滚 plan 拉取链）共用 16ms 量子让步——大结果集的
     // content_json JSON.parse 按片执行，JS 线程不再被单次全量解析独占。
-    const messageParseYield = createQuantumYield(16);
+    const messageParseYield = YieldQuantum.create(16);
     const chatDeps = {state, agentRegistry};
     const chatOptions = {yieldFn: messageParseYield};
     const chat = ChatServiceFactory.createBundle(conn, chatDeps, chatOptions);

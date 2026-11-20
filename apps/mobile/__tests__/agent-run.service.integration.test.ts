@@ -3,7 +3,7 @@ import {AppErrorOps} from '@novel-master/core/errors';
 import {ErrorMessage} from '@novel-master/core/i18n';
 
 import {coreT} from '@/i18n/core';
-import {runAgentTurnAdapter} from '@/services/agent-run.service';
+import {AgentRunService} from '@/services/agent-run.service'
 
 function baseRuntime(overrides: Partial<any> = {}) {
   return {
@@ -86,7 +86,7 @@ describe('runAgentTurnAdapter integration', () => {
       },
     });
     try {
-      await runAgentTurnAdapter(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
+      await AgentRunService.run(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
         allowResumeWithoutInput: true,
       });
     } catch {
@@ -108,7 +108,7 @@ describe('runAgentTurnAdapter integration', () => {
     });
     // 前奏期空输入拦截是业务失败：沿 Result.err（AppError AGENT_MESSAGE_EMPTY，
     // 自带 code + messageKey）交回，经 core translator 解析后再断言用户可见中文。
-    const result = await runAgentTurnAdapter(
+    const result = await AgentRunService.run(
       runtime as any,
       {projectId: 'p', sessionId: 's'},
       '',

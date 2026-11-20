@@ -7,31 +7,27 @@
  * v2 transcript 缓存与 session view 缓存。
  */
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/components/chat/ChatTranscriptBridge';
-import {
-  clearAllTranscriptScrollSnapshots,
-  scrollCacheKey as transcriptKey,
-  setTranscriptScrollSnapshot,
-  transcriptScrollSnapshotCacheSize,
-} from '@/services/chat-transcript-scroll-cache';
-import {SessionViewCache} from '@/services/chat-session-view-cache';
+import {ChatTranscriptScrollCache} from '@/services/chat-transcript-scroll-cache';
+import {SessionViewCache} from '@/services/chat-session-view-cache';
+const transcriptKey = ChatTranscriptScrollCache.key;
 
 const CAP = 500;
 
 describe('scope 缓存 LRU 上限启用', () => {
   beforeEach(() => {
-    clearAllTranscriptScrollSnapshots();
+    ChatTranscriptScrollCache.clearAll();
     SessionViewCache.clearAll();
   });
 
   it('chat-transcript-scroll-cache：插入超限后 size 封顶', () => {
     for (let i = 0; i <= CAP; i++) {
-      setTranscriptScrollSnapshot(transcriptKey('p', `s${i}`), {
+      ChatTranscriptScrollCache.set(transcriptKey('p', `s${i}`), {
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: i,
         nearBottom: false,
       });
     }
-    expect(transcriptScrollSnapshotCacheSize()).toBe(CAP);
+    expect(ChatTranscriptScrollCache.size()).toBe(CAP);
   });
 
   it('chat-session-view-cache：插入超限后 size 封顶且最旧淘汰', () => {

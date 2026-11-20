@@ -3,19 +3,12 @@
  * P0-3：本文件为唯一可同时触及 ui 与 runtime、并完成视图刷新注册的装配点。
  */
 import {h, render} from 'preact';
-import {post, handleHostMessage, documentViewSlot} from './runtime/bridge';
-import {
-  bindAnnotateUi,
-  destroyAnnotator,
-  refreshAnnotateAfterDocument,
-} from './runtime/annotate';
-import {renderMermaidBlocks} from './runtime/mermaid';
-import {
-  attachMermaidViewerDelegation,
-  mountMermaidViewerPortal,
-} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
-import {attachCodeCopyDelegation} from '@web/shared/code-copy';
-import {bindHostMessageChannel} from '@web/shared/host-message-channel';
+import {post, RichDocumentBridge, documentViewSlot} from './runtime/bridge';
+import {Annotate} from './runtime/annotate';
+import {Mermaid} from './runtime/mermaid';
+import {MermaidFullscreen} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import {CodeCopy} from '@web/shared/code-copy';
+import {HostMessageChannel} from '@web/shared/host-message-channel';
 import {DocumentApp} from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
@@ -26,27 +19,27 @@ let setDocumentSeq = 0;
 documentViewSlot.register(payload => {
   const seq = ++setDocumentSeq;
   // 换文档前先销毁 Recogito，避免挂在已卸载 DOM 上
-  destroyAnnotator();
+  Annotate.destroy();
   if (!docRoot) return;
   render(h(DocumentApp, {payload}), docRoot);
   // 先渲 mermaid（会移动源码 pre 进保留容器），再重建 Recogito，批注文本流按最终 DOM 计算；
   // 序号过期说明已有更新一轮 setDocument，按中间态重建 Recogito 会错乱
-  void renderMermaidBlocks(docRoot).finally(() => {
+  void Mermaid.render(docRoot).finally(() => {
     if (seq !== setDocumentSeq) {
       return;
     }
-    refreshAnnotateAfterDocument();
+    Annotate.refreshAfterDocument();
   });
 });
 
-bindAnnotateUi();
+Annotate.bindUi();
 
 // Mermaid 全屏查看器：模块刈处一行挂接（不进 setDocument 视图刷新链路）
-mountMermaidViewerPortal('overlay-portal');
-attachMermaidViewerDelegation(post);
+MermaidFullscreen.mountPortal('overlay-portal');
+MermaidFullscreen.attachDelegation(post);
 // 代码块复制按钮：document 捕获委托（一次挂接，不进 setDocument 视图刷新链路）
-attachCodeCopyDelegation(post);
+CodeCopy.attach(post);
 
-bindHostMessageChannel(handleHostMessage);
+HostMessageChannel.bind(RichDocumentBridge.handle);
 
 post('ready', {version: 1});

@@ -15,8 +15,7 @@
  */
 import {useCallback} from 'react';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
-import {scrollCacheKey} from '@/services/chat-list-scroll-cache';
-import {getTranscriptScrollSnapshot, normalizeScrollSnapshot, setTranscriptScrollSnapshot} from '@/services/chat-transcript-scroll-cache';
+import {ChatTranscriptScrollCache} from '@/services/chat-transcript-scroll-cache';
 
 type UseChatTabScrollCacheParams = {
   projectId: string | undefined;
@@ -24,10 +23,10 @@ type UseChatTabScrollCacheParams = {
 };
 
 export function useChatTabScrollCache({projectId, sessionId}: UseChatTabScrollCacheParams) {
-  const chatScrollKey = projectId != null && sessionId != null ? scrollCacheKey(projectId, sessionId) : null;
+  const chatScrollKey = projectId != null && sessionId != null ? ChatTranscriptScrollCache.key(projectId, sessionId) : null;
   // 唯一读源 = v2 transcript 缓存；normalize 是读侧最后一道 v2-only 闸门
   // （写入侧已按 schemaVersion 拦过一次，这里挡住的是「缓存被别处污染」的兜底）。
-  const restoredTranscriptScroll = chatScrollKey != null ? normalizeScrollSnapshot(getTranscriptScrollSnapshot(chatScrollKey)) : undefined;
+  const restoredTranscriptScroll = chatScrollKey != null ? ChatTranscriptScrollCache.normalize(ChatTranscriptScrollCache.get(chatScrollKey)) : undefined;
 
   const defaultChatScrollToBottom = chatScrollKey != null && restoredTranscriptScroll == null;
 
@@ -36,7 +35,7 @@ export function useChatTabScrollCache({projectId, sessionId}: UseChatTabScrollCa
       if (chatScrollKey == null) {
         return;
       }
-      setTranscriptScrollSnapshot(chatScrollKey, snap);
+      ChatTranscriptScrollCache.set(chatScrollKey, snap);
     },
     [chatScrollKey],
   );

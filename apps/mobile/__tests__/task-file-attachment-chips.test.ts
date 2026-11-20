@@ -21,7 +21,7 @@ import {
   type ChatMessageData,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import {buildTranscriptRows} from '@/components/chat/message-blocks';
+import {MessageBlocks} from '@/components/chat/message-blocks'
 import {MessageRow} from '@/web/chat-transcript/webview/ui/render/MessageRow';
 import {AttachGroup} from '@/web/chat-transcript/webview/ui/render/AttachGroup';
 import type {AttachmentChip} from '@/web/chat-transcript/webview/runtime/state/state';
@@ -143,7 +143,7 @@ function renderChipLabels(
 describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => {
   it('source:attach + action:userAttach → 行渲染出 `@path` chip 文案', () => {
     const path = '/notes/setting.md';
-    const rows = buildTranscriptRows([
+    const rows = MessageBlocks.buildTranscriptRows([
       childSessionUserMessage([userAttachAttachment(path)]),
     ]);
     const row = rows[0]!;

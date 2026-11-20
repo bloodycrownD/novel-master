@@ -1,8 +1,4 @@
-import {
-  readBoolPref,
-  readEnumPref,
-  writeBoolPref,
-} from '@/storage/app-ui-pref-io';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import type {AppUiPreferences} from '@/storage/app-ui-prefs';
 
 type GetResult = { ok: true; value: string | undefined } | { ok: false; error: unknown };
@@ -24,7 +20,7 @@ describe('app-ui-pref-io readEnumPref', () => {
   it('returns the stored value when it is in the allowed list', async () => {
     const get = jest.fn(async () => ({ok: true, value: 'legacy-rn'}));
     await expect(
-      readEnumPref(
+      AppUiPrefIo.readEnumPref(
         appUiWithGet(get),
         'chatTranscriptEngine',
         ALLOWED,
@@ -37,7 +33,7 @@ describe('app-ui-pref-io readEnumPref', () => {
   it('falls back to default on invalid stored value', async () => {
     const get = jest.fn(async () => ({ok: true, value: 'nope'}));
     await expect(
-      readEnumPref(
+      AppUiPrefIo.readEnumPref(
         appUiWithGet(get),
         'chatTranscriptEngine',
         ALLOWED,
@@ -52,7 +48,7 @@ describe('app-ui-pref-io readEnumPref', () => {
       error: new Error('kkv boom'),
     }));
     await expect(
-      readEnumPref(
+      AppUiPrefIo.readEnumPref(
         appUiWithGet(get),
         'chatTranscriptEngine',
         ALLOWED,
@@ -64,7 +60,7 @@ describe('app-ui-pref-io readEnumPref', () => {
   it('falls back to default without touching KKV when appUi is null', async () => {
     const get = jest.fn(async () => ({ok: true, value: 'legacy-rn'}));
     await expect(
-      readEnumPref(null, 'chatTranscriptEngine', ALLOWED, 'webview'),
+      AppUiPrefIo.readEnumPref(null, 'chatTranscriptEngine', ALLOWED, 'webview'),
     ).resolves.toBe('webview');
     expect(get).not.toHaveBeenCalled();
   });
@@ -77,14 +73,14 @@ describe('app-ui-pref-io readBoolPref', () => {
   ])('parses stored %s', async (raw, expected) => {
     const get = jest.fn(async () => ({ok: true, value: raw as string}));
     await expect(
-      readBoolPref(appUiWithGet(get), 'chatRichText', false),
+      AppUiPrefIo.readBoolPref(appUiWithGet(get), 'chatRichText', false),
     ).resolves.toBe(expected);
   });
 
   it('falls back to default on invalid stored value', async () => {
     const get = jest.fn(async () => ({ok: true, value: 'yes'}));
     await expect(
-      readBoolPref(appUiWithGet(get), 'chatRichText', false),
+      AppUiPrefIo.readBoolPref(appUiWithGet(get), 'chatRichText', false),
     ).resolves.toBe(false);
   });
 
@@ -94,13 +90,13 @@ describe('app-ui-pref-io readBoolPref', () => {
       error: new Error('kkv boom'),
     }));
     await expect(
-      readBoolPref(appUiWithGet(get), 'chatStreamBatchEnabled', true),
+      AppUiPrefIo.readBoolPref(appUiWithGet(get), 'chatStreamBatchEnabled', true),
     ).resolves.toBe(true);
   });
 
   it('falls back to default without touching KKV when appUi is null', async () => {
     await expect(
-      readBoolPref(undefined, 'chatStreamBatchEnabled', true),
+      AppUiPrefIo.readBoolPref(undefined, 'chatStreamBatchEnabled', true),
     ).resolves.toBe(true);
   });
 });
@@ -115,8 +111,8 @@ describe('app-ui-pref-io writeBoolPref', () => {
       listKeys: jest.fn(async () => []),
     } as unknown as AppUiPreferences;
 
-    await writeBoolPref(appUi, 'chatRichText', true);
-    await writeBoolPref(appUi, 'chatRichText', false);
+    await AppUiPrefIo.writeBoolPref(appUi, 'chatRichText', true);
+    await AppUiPrefIo.writeBoolPref(appUi, 'chatRichText', false);
     expect(set).toHaveBeenNthCalledWith(1, 'chatRichText', 'true');
     expect(set).toHaveBeenNthCalledWith(2, 'chatRichText', 'false');
   });
@@ -133,7 +129,7 @@ describe('app-ui-pref-io writeBoolPref', () => {
       listKeys: jest.fn(async () => []),
     } as unknown as AppUiPreferences;
 
-    await expect(writeBoolPref(appUi, 'chatRichText', true)).rejects.toThrow(
+    await expect(AppUiPrefIo.writeBoolPref(appUi, 'chatRichText', true)).rejects.toThrow(
       'disk full',
     );
     expect(warnSpy).toHaveBeenCalled();

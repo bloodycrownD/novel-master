@@ -14,7 +14,7 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {decodeConversationUpstream} from '@/components/chat/ChatConversationBridge';
+import {ChatConversationBridge} from '@/components/chat/ChatConversationBridge'
 import {
   ChatConversationWebView,
   type ChatConversationWebViewHandle,
@@ -58,16 +58,22 @@ jest.mock('sanitize-html', () => {
   return fn;
 });
 
-jest.mock('@/services/chat-transcript-telemetry', () => ({
+jest.mock('@/services/chat-transcript-telemetry', () => {
+  const legacy = {
   emitChatTranscriptTelemetry: jest.fn(),
-}));
+};
+  return {...legacy, ChatTranscriptTelemetry: {emit: legacy.emitChatTranscriptTelemetry}};
+});
 
-jest.mock('@/services/yield-quantum', () => ({
+jest.mock('@/services/yield-quantum', () => {
+  const legacy = {
   createQuantumYield: () => () =>
     new Promise<void>(resolve => {
       setTimeout(resolve, 0);
     }),
-}));
+};
+  return {...legacy, YieldQuantum: {create: legacy.createQuantumYield}};
+});
 
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
@@ -137,7 +143,7 @@ describe('onSnapshotComplete 回调（T-R5 组件半）', () => {
    */
   function snapshotPayloads(): Array<Record<string, number | string>> {
     return mockWebViewPostMessages.flatMap(raw => {
-      const decoded = decodeConversationUpstream(raw);
+      const decoded = ChatConversationBridge.decodeConversationUpstream(raw);
       if (!decoded.ok || decoded.message.type !== 'sessionSnapshot') {
         return [];
       }
@@ -303,7 +309,7 @@ describe('ready 版本门（T-SP20 宿主半）', () => {
 
   function sentTypes(): string[] {
     return mockWebViewPostMessages.flatMap(raw => {
-      const decoded = decodeConversationUpstream(raw);
+      const decoded = ChatConversationBridge.decodeConversationUpstream(raw);
       return decoded.ok ? [decoded.message.type] : [];
     });
   }

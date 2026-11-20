@@ -2,7 +2,7 @@
  * 64ms FIFO apply 缓冲：按 wire 到达序 flush，溢出时强制 flush 且不丢弃 thinking。
  */
 import type {StreamWireChunk} from './stream-wire-queue';
-import {wireQueueCharCount} from './stream-wire-queue';
+import {StreamWireQueue} from './stream-wire-queue';
 
 type StreamApplyBufferOptions = {
   readonly flushIntervalMs?: number;
@@ -50,7 +50,7 @@ export namespace StreamApplyBuffer {
     };
 
     const maybeForceFlushOnOverflow = () => {
-      if (wireQueueCharCount(queue) > maxCharsPerBuffer) {
+      if (StreamWireQueue.charCount(queue) > maxCharsPerBuffer) {
         flush();
       }
     };

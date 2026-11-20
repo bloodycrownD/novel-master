@@ -41,14 +41,14 @@ import {chatAnnotateDraftStore, composerSendPolicy, attachmentScanner, type Mess
 import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
-import {formatError} from '@/errors/format-error';
+import {FormatError} from '@/errors/format-error';
 import {ChatComposerDraft} from '@/storage/chat-composer-draft';
-import {projectComposerStatusForSession} from '@/services/project-composer-status.service';
+import {ProjectComposerStatusService} from '@/services/project-composer-status.service';
 import {composerAtPath} from './composer-at-path';
-import {buildTokenInsertion, queryWithinConfirmedRange, statusOnlyComposerAttachments} from './composer-token-insert';
-import {scanComposerTokenRangesForSend} from './composer-send-scan';
-import {isValidTokenRangeText} from './composer-highlight';
-import {remapTokenRanges, scanTokensToRanges, type TokenRange} from './native-composer/token-ranges';
+import {ComposerTokenInsert} from './composer-token-insert';
+import {ComposerSendScan} from './composer-send-scan';
+import {ComposerHighlight} from './composer-highlight';
+import {TokenRanges, type TokenRange} from './native-composer/token-ranges';
 import type {ComposerInputSelection} from './ComposerInputBridge';
 import type {ConversationDockAction} from './ChatConversationBridge';
 
@@ -57,7 +57,7 @@ import type {ConversationDockAction} from './ChatConversationBridge';
  * 全合法时原引用返回（保持 marker 稳定），有丢弃才换新数组。
  */
 function filterValidTokenRanges(plain: string, ranges: readonly TokenRange[]): readonly TokenRange[] {
-  const kept = ranges.filter(range => isValidTokenRangeText(plain, range));
+  const kept = ranges.filter(range => ComposerHighlight.isValidTokenRangeText(plain, range));
   return kept.length === ranges.length ? ranges : kept;
 }
 
@@ -205,7 +205,7 @@ export function useChatComposerController({
    * 那会把尾追内容重新吞进胶囊、把半截手输升格。
    */
   const [tokenRanges, setTokenRanges] = useState<readonly TokenRange[]>(() =>
-    initial.tokenRanges != null ? filterValidTokenRanges(initial.text, initial.tokenRanges) : scanTokensToRanges(initial.text),
+    initial.tokenRanges != null ? filterValidTokenRanges(initial.text, initial.tokenRanges) : TokenRanges.scanTokensToRanges(initial.text),
   );
   const [cursor, setCursor] = useState(0);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([...initial.attachments]);
@@ -248,7 +248,7 @@ export function useChatComposerController({
   const advanceTokenRanges = useCallback((prev: string, next: string, inserted?: readonly TokenRange[], nextCursor?: number, prevCursor?: number) => {
     // D11 删除锚：编辑前光标（打字路径由选区镜像带入；Picker 落文不带，
     // 走既有纯插入/差分口径）。
-    const remapped = remapTokenRanges(prev, next, tokenRangesRef.current, nextCursor, prevCursor);
+    const remapped = TokenRanges.remapTokenRanges(prev, next, tokenRangesRef.current, nextCursor, prevCursor);
     const merged = inserted != null && inserted.length > 0 ? [...remapped, ...inserted].sort((a, b) => a.start - b.start) : remapped;
     tokenRangesRef.current = merged;
     setTokenRanges(merged);
@@ -322,7 +322,7 @@ export function useChatComposerController({
     // 同一份文本但不同的确认状态（A 会话是确认胶囊、B 会话是同串手输），只按文本
     // 判断会让 B 继承 A 的区间（串台）。按内容比较而不是按数组引用比较：每次水化
     // 都重建数组，引用恒不相等会让每个广播都刷一次 state。
-    const nextRanges = draftRanges != null ? filterValidTokenRanges(draft.text, draftRanges) : scanTokensToRanges(draft.text);
+    const nextRanges = draftRanges != null ? filterValidTokenRanges(draft.text, draftRanges) : TokenRanges.scanTokensToRanges(draft.text);
     // 区间内容比较（长度 + 逐元素 start/end）。
     const previousRanges = tokenRangesRef.current;
     let rangesChanged = false;
@@ -383,7 +383,7 @@ export function useChatComposerController({
         // 「编辑前光标」就是这里落下的位置，不能沿用上一次打字的旧选区。
         prevCursorRef.current = nextCursor;
       }
-      persistDraft(next, statusOnlyComposerAttachments(attachments));
+      persistDraft(next, ComposerTokenInsert.statusOnlyComposerAttachments(attachments));
       setComposerTextRef.current?.(next, nextCursor);
     },
     [attachments, persistDraft, advanceTokenRanges],
@@ -402,7 +402,7 @@ export function useChatComposerController({
         return;
       }
       try {
-        const status = await projectComposerStatusForSession(sessionId);
+        const status = await ProjectComposerStatusService.forSession(sessionId);
         if (cancelled) {
           return;
         }
@@ -460,7 +460,7 @@ export function useChatComposerController({
       advanceTokenRanges(textRef.current, next, undefined, undefined, prevCursorRef.current ?? undefined);
       textRef.current = next;
       setText(next);
-      persistDraft(next, statusOnlyComposerAttachments(attachments));
+      persistDraft(next, ComposerTokenInsert.statusOnlyComposerAttachments(attachments));
     },
     [attachments, persistDraft, advanceTokenRanges],
   );
@@ -485,7 +485,7 @@ export function useChatComposerController({
       // 沿用历史口径 `content = text.trim()`）。先按区间 slice 单独扫描得到
       // rangeResults，再把同一批区间换算到正文坐标交给 core 掩码全量扫描；
       // 区间为空（旧草稿 / 手输无胶囊）时走下方的全量扫描直出（不掩码）。
-      const sendScan = scanComposerTokenRangesForSend(textRef.current, content, tokenRangesRef.current);
+      const sendScan = ComposerSendScan.scanComposerTokenRangesForSend(textRef.current, content, tokenRangesRef.current);
       // D9 ③ 无区间草稿（T-CA9 ③ 端到端）：不走掩码二段式，直接全量扫描
       // trim 后正文（与 core 的 scanText 同一份）产出 attachments，随 run
       // 下传占 existing 位。core 随后仍会全量扫描一次，但去重键相同的条目
@@ -519,7 +519,7 @@ export function useChatComposerController({
         if (!streamPref.ok) {
           // 偏好读取失败（错误通道迁移四期）：run 未受理，与本地异常同终端——
           // 反馈错误、不影响单元投影。
-          setError(formatError(streamPref.error));
+          setError(FormatError.format(streamPref.error));
           return;
         }
         const stream = streamPref.value;
@@ -554,7 +554,7 @@ export function useChatComposerController({
               clearComposerNow();
             }
             // 以投影为准刷新 chip（仅 annotate）
-            void projectComposerStatusForSession(sessionId)
+            void ProjectComposerStatusService.forSession(sessionId)
               .then(status => {
                 ChatComposerDraft.applyComposerStatusAttachmentsReplace({
                   sessionId,
@@ -584,7 +584,7 @@ export function useChatComposerController({
           }
           console.error('[novel-master/chat] run failed', detail);
         }
-        setError(formatError(err));
+        setError(FormatError.format(err));
       }
     },
     [runtime, scope, sessionId, hasAnnotateDrafts],
@@ -700,8 +700,8 @@ export function useChatComposerController({
       const tokens = pathTokens.map(token => `${token}@`);
       const current = textRef.current;
       const activeAt = composerAtPath.detectQuery(current, cursor);
-      const replaceStart = activeAt != null && !queryWithinConfirmedRange(tokenRangesRef.current, activeAt.start, cursor) ? activeAt.start : cursor;
-      const next = buildTokenInsertion(current, cursor, replaceStart, tokens);
+      const replaceStart = activeAt != null && !ComposerTokenInsert.queryWithinConfirmedRange(tokenRangesRef.current, activeAt.start, cursor) ? activeAt.start : cursor;
+      const next = ComposerTokenInsert.buildTokenInsertion(current, cursor, replaceStart, tokens);
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
     [cursor, commitComposerText],
@@ -713,8 +713,8 @@ export function useChatComposerController({
       // 明文带终止符：`$技能名$`，与 composer 高亮/发送扫描的 bounded 口径一致
       const token = `$${skillName}$`;
       const activeSkill = composerAtPath.detectQuery(current, cursor, '$');
-      const replaceStart = activeSkill != null && !queryWithinConfirmedRange(tokenRangesRef.current, activeSkill.start, cursor) ? activeSkill.start : cursor;
-      const next = buildTokenInsertion(current, cursor, replaceStart, token);
+      const replaceStart = activeSkill != null && !ComposerTokenInsert.queryWithinConfirmedRange(tokenRangesRef.current, activeSkill.start, cursor) ? activeSkill.start : cursor;
+      const next = ComposerTokenInsert.buildTokenInsertion(current, cursor, replaceStart, token);
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
     [cursor, commitComposerText],

@@ -18,11 +18,7 @@
  */
 
 import {NativeSseAbortError, NativeSseTransportError} from '@novel-master/llm-sse-native';
-import {
-  LLM_NATIVE_FETCH_CALL_TIMEOUT_MS,
-  createNativeRequestFetch,
-  type LlmNativeRequestFn,
-} from '../src/services/llm-native-fetch-shim';
+import {LLM_NATIVE_FETCH_CALL_TIMEOUT_MS, type LlmNativeRequestFn, LlmNativeFetchShim} from '../src/services/llm-native-fetch-shim'
 
 // core 不公开 LlmSseTransport.post / 分支强制位；Empty body 防御的集成断言必须经真实
 // post fetch 分支消费路径，这里 deep-import dist 产物（与 moduleNameMapper
@@ -73,7 +69,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
   describe('method 分发与参数转发', () => {
     it('GET 分发：不传 body（listModels 形态），headers 扁平化，callTimeout 透传', async () => {
       const request = createMockRequest();
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       const response = await shim('https://api.example.com/v1/models', {
         method: 'GET',
@@ -93,7 +89,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
 
     it('method 缺省按 GET 分发（fetch 语义默认值）', async () => {
       const request = createMockRequest();
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       await shim('https://api.example.com/v1/models', {headers: {}});
 
@@ -109,7 +105,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
 
     it('POST 分发：JSON string body 原样透传（chatNonStream 形态）', async () => {
       const request = createMockRequest();
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
       const body = JSON.stringify({model: 'gpt-test', messages: []});
 
       await shim('https://api.example.com/v1/chat/completions', {
@@ -133,7 +129,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
 
     it('非 GET/POST method 明确报错（shim 只承载非流式请求-响应）', async () => {
       const request = createMockRequest();
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       await expect(
         shim('https://api.example.com/put', {method: 'PUT'}),
@@ -149,7 +145,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'application/json',
         body: '{"data":[{"id":"m-1"}]}',
       });
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       const response = await shim('https://api.example.com/v1/models', {
         method: 'GET',
@@ -171,7 +167,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'text/plain',
         body: 'not-json',
       });
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       const response = await shim('https://api.example.com/v1/models', {
         method: 'GET',
@@ -191,7 +187,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'application/json',
         body: '{"error":"overloaded"}',
       });
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       const response = await shim('https://api.example.com/v1/chat', {
         method: 'POST',
@@ -217,7 +213,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         err.code = 'network';
         throw err;
       }) as unknown as LlmNativeRequestFn;
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       await expect(
         shim('https://dead.example.com/v1/models', {method: 'GET'}),
@@ -233,7 +229,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         err.code = 'timeout';
         throw err;
       }) as unknown as LlmNativeRequestFn;
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       const promise = shim('https://slow.example.com/v1/chat', {
         method: 'POST',
@@ -247,7 +243,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
       const request = jest.fn(async () => {
         throw new Error('bridge exploded');
       }) as unknown as LlmNativeRequestFn;
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       await expect(
         shim('https://api.example.com/v1/models', {method: 'GET'}),
@@ -259,7 +255,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
     it('signal 已 aborted：立刻 reject AbortError，native 请求不发出、也不调 requestAbort', async () => {
       const request = createMockRequest();
       const requestAbort = jest.fn();
-      const shim = createNativeRequestFetch({request, requestAbort});
+      const shim = LlmNativeFetchShim.create({request, requestAbort});
       const controller = new AbortController();
       controller.abort();
 
@@ -283,7 +279,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         () => deferred.promise,
       ) as unknown as jest.Mock & LlmNativeRequestFn;
       const requestAbort = jest.fn();
-      const shim = createNativeRequestFetch({request, requestAbort});
+      const shim = LlmNativeFetchShim.create({request, requestAbort});
       const controller = new AbortController();
 
       const promise = shim('https://api.example.com/v1/chat', {
@@ -325,7 +321,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         () => deferred.promise,
       ) as unknown as jest.Mock & LlmNativeRequestFn;
       const requestAbort = jest.fn();
-      const shim = createNativeRequestFetch({request, requestAbort});
+      const shim = LlmNativeFetchShim.create({request, requestAbort});
       const controller = new AbortController();
 
       const promise = shim('https://api.example.com/v1/chat', {
@@ -352,7 +348,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         throw Object.assign(new Error('aborted by user'), {code: 'abort'});
       }) as unknown as LlmNativeRequestFn;
       const requestAbort = jest.fn();
-      const shim = createNativeRequestFetch({request, requestAbort});
+      const shim = LlmNativeFetchShim.create({request, requestAbort});
 
       await expect(
         shim('https://api.example.com/v1/models', {method: 'GET'}),
@@ -363,7 +359,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
     it('native 先 settle、abort 后到：按请求结果返回（赛跑口径，不触发真断连）', async () => {
       const request = createMockRequest();
       const requestAbort = jest.fn();
-      const shim = createNativeRequestFetch({request, requestAbort});
+      const shim = LlmNativeFetchShim.create({request, requestAbort});
       const controller = new AbortController();
 
       const response = await shim('https://api.example.com/v1/models', {
@@ -381,7 +377,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
   describe('requestId 贯穿与契约错误（T-S20 的 JS 侧）', () => {
     it('每请求生成独立 requestId（llm-native-fetch 命名空间，不与流式 llm-sse 共用）', async () => {
       const request = createMockRequest();
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       await Promise.all([
         shim('https://api.example.com/v1/models', {method: 'GET'}),
@@ -405,7 +401,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
           code: 'invalid',
         });
       }) as unknown as LlmNativeRequestFn;
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       await expect(
         shim('https://api.example.com/v1/models', {method: 'GET'}),
@@ -423,7 +419,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         contentType: 'text/event-stream',
         body: 'data: {"choices":[]}\n\n',
       });
-      const shim = createNativeRequestFetch({request});
+      const shim = LlmNativeFetchShim.create({request});
 
       const chunks: string[] = [];
       await expect(
@@ -483,7 +479,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         body: '{"data":[]}',
       });
       const logged = DebugFetch.createLoggingFetch(
-        createNativeRequestFetch({request}) as unknown as typeof globalThis.fetch,
+        LlmNativeFetchShim.create({request}) as unknown as typeof globalThis.fetch,
       );
 
       await logged('https://api.example.com/v1/models', {
@@ -506,7 +502,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         body: 'data: {}\n\n',
       });
       const logged = DebugFetch.createLoggingFetch(
-        createNativeRequestFetch({request}) as unknown as typeof globalThis.fetch,
+        LlmNativeFetchShim.create({request}) as unknown as typeof globalThis.fetch,
       );
 
       await logged('https://api.example.com/v1/chat/completions', {
@@ -525,7 +521,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
         body: 'data: {}\n\n',
       });
       const logged = DebugFetch.createLoggingFetch(
-        createNativeRequestFetch({request}) as unknown as typeof globalThis.fetch,
+        LlmNativeFetchShim.create({request}) as unknown as typeof globalThis.fetch,
       );
 
       await logged(

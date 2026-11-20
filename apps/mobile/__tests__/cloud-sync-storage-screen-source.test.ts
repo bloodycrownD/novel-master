@@ -25,7 +25,7 @@ describe('CloudSyncStorageScreen 云端存储设置页', () => {
   });
 
   it('进入页面经 refreshCloudSyncStatus 拉取同步状态（getCloudSyncStatusView）', () => {
-    expect(source).toMatch(/getCloudSyncStatusView/);
+    expect(source).toMatch(/CloudSyncService\.getStatusView/);
     expect(source).toMatch(/refreshCloudSyncStatus/);
     expect(source).toMatch(/useFocusEffect/);
   });

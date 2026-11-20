@@ -10,6 +10,7 @@
  * ProfileSwitchItem mock 成可点击节点，文本里带 label 与当前值便于断言回滚。
  */
 import React from 'react';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification';
 import {Platform, Switch} from 'react-native';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
@@ -160,10 +161,13 @@ const mockWriteBoolPref = jest.fn();
 const mockAppUi = {get: jest.fn(), set: jest.fn()};
 
 // 富文本 / 消息通知两个布尔开关都经 app-ui-pref-io 的通用读写口。
-jest.mock('@/storage/app-ui-pref-io', () => ({
+jest.mock('@/storage/app-ui-pref-io', () => {
+  const legacy = {
   readBoolPref: (...args: unknown[]) => mockReadBoolPref(...args),
   writeBoolPref: (...args: unknown[]) => mockWriteBoolPref(...args),
-}));
+};
+  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref, writeBoolPref: legacy.writeBoolPref}};
+});
 
 // 消息通知开关的通知模块副作用（平台门禁在服务内部，屏幕侧只断言调用接线）。
 const mockSetKeepAliveResidentEnabled = jest.fn();
@@ -171,7 +175,8 @@ const mockEnsureAgentNotificationPermission = jest.fn();
 const mockGetAgentNotificationPermissionStatus = jest.fn();
 const mockRequestAgentNotificationPermissionManually = jest.fn();
 
-jest.mock('@/services/agent-finished-notification', () => ({
+jest.mock('@/services/agent-finished-notification', () => {
+  const legacy = {
   setKeepAliveResidentEnabled: (...args: unknown[]) =>
     mockSetKeepAliveResidentEnabled(...args),
   ensureAgentNotificationPermission: (...args: unknown[]) =>
@@ -180,7 +185,9 @@ jest.mock('@/services/agent-finished-notification', () => ({
     mockGetAgentNotificationPermissionStatus(...args),
   requestAgentNotificationPermissionManually: (...args: unknown[]) =>
     mockRequestAgentNotificationPermissionManually(...args),
-}));
+};
+  return {...legacy, AgentFinishedNotification: {setResidentEnabled: legacy.setKeepAliveResidentEnabled, ensurePermission: legacy.ensureAgentNotificationPermission, getPermissionStatus: legacy.getAgentNotificationPermissionStatus, requestPermissionManually: legacy.requestAgentNotificationPermissionManually}};
+});
 
 jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: mockAppUi, status: 'ready'}),
@@ -397,7 +404,7 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
     setPlatform('ios');
   });
 
-  it('T-K10: 开关开 persist 成功 → setKeepAliveResidentEnabled(true) 被调且不回滚；关→开附带 ensureAgentNotificationPermission', async () => {
+  it('T-K10: 开关开 persist 成功 → AgentFinishedNotification.setResidentEnabled(true) 被调且不回滚；关→开附带 ensureAgentNotificationPermission', async () => {
     // 开关行为与平台无关（resident 的平台门禁在服务内部，已 mock）。
     const {renderer} = await renderScreen();
     expect(json(renderer)).toContain('消息通知:关');

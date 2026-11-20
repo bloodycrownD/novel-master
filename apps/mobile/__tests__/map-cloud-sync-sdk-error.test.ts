@@ -1,5 +1,5 @@
 import {AppError} from '@novel-master/core';
-import {mapCloudSyncSdkError} from '@/services/map-cloud-sync-sdk-error';
+import {CloudSyncSdkErrorMapper} from '@/services/map-cloud-sync-sdk-error';
 
 type MappingCase = {
   name: string;
@@ -66,7 +66,7 @@ describe.each(cases)(
   'mapCloudSyncSdkError',
   ({name, error, key, message, messageNotContains}) => {
     it(name, () => {
-      const result = mapCloudSyncSdkError(error);
+      const result = CloudSyncSdkErrorMapper.map(error);
 
       expect(result).toBeInstanceOf(AppError);
       expect(result.key).toBe(key);

@@ -19,7 +19,7 @@ import {PromptTurnLeafCard} from '@/components/prompt/PromptTurnLeafCard';
 import {PromptWorkplaceCard} from '@/components/prompt/PromptWorkplaceCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
-import {buildRealPromptPreviewTurnsAdapter} from '@/services/prompt-preview.service';
+import {PromptPreviewService} from '@/services/prompt-preview.service';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {RootStackParamList} from '@/navigation/types';
 
@@ -107,7 +107,7 @@ export function RealPromptScreen() {
       }
       try {
         const previewScope = {projectId, sessionId};
-        const built = await buildRealPromptPreviewTurnsAdapter(runtime, previewScope);
+        const built = await PromptPreviewService.buildRealTurns(runtime, previewScope);
         if (requestId !== requestIdRef.current) {
           return; // 过期响应：新一轮取数已在途，丢弃本轮结果。
         }

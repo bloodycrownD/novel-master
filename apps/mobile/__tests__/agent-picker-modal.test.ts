@@ -1,10 +1,5 @@
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
-import {
-  AGENT_PICKER_EMPTY_MESSAGE,
-  isAgentPickerRowSelected,
-  loadAgentPickerRows,
-  selectWorkspaceAgent,
-} from '@/services/agent-picker';
+import {AGENT_PICKER_EMPTY_MESSAGE, AgentPicker} from '@/services/agent-picker'
 
 const mockSetCurrentAgentId = jest.fn(async () => undefined);
 const mockGetCurrentAgentId = jest.fn(
@@ -42,19 +37,19 @@ describe('AgentPickerModal (picker service)', () => {
   });
 
   it('T-P2: loadAgentPickerRows returns no rows when registry empty', async () => {
-    const loaded = await loadAgentPickerRows(mockRuntime() as never);
+    const loaded = await AgentPicker.loadRows(mockRuntime() as never);
     if (!loaded.ok) throw loaded.error;
     expect(loaded.value.rows).toEqual([]);
   });
 
   it('T-P1: selectWorkspaceAgent calls setCurrentAgentId', async () => {
-    await selectWorkspaceAgent(mockRuntime() as never, 'a2');
+    await AgentPicker.selectWorkspace(mockRuntime() as never, 'a2');
     expect(mockSetCurrentAgentId).toHaveBeenCalledWith('a2');
   });
 
   it('marks first row current when no explicit current agent id', () => {
-    expect(isAgentPickerRowSelected('a1', 0, undefined)).toBe(true);
-    expect(isAgentPickerRowSelected('a2', 1, undefined)).toBe(false);
+    expect(AgentPicker.isRowSelected('a1', 0, undefined)).toBe(true);
+    expect(AgentPicker.isRowSelected('a2', 1, undefined)).toBe(false);
   });
 
   it('loads agent display labels from registry', async () => {
@@ -64,7 +59,7 @@ describe('AgentPickerModal (picker service)', () => {
       value: {name: id === 'a1' ? 'Alpha' : 'Beta', mode: 'all'},
     }));
 
-    const labeled = await loadAgentPickerRows(mockRuntime() as never);
+    const labeled = await AgentPicker.loadRows(mockRuntime() as never);
     if (!labeled.ok) throw labeled.error;
     expect(labeled.value.rows).toEqual([
       {agentId: 'a1', label: 'Alpha'},
@@ -84,7 +79,7 @@ describe('AgentPickerModal (picker service)', () => {
       return {ok: true as const, value: {name: 'All', mode: 'all'}};
     });
 
-    const loaded = await loadAgentPickerRows(mockRuntime() as never);
+    const loaded = await AgentPicker.loadRows(mockRuntime() as never);
     if (!loaded.ok) throw loaded.error;
     expect(loaded.value.rows).toEqual([
       {agentId: 'primary', label: 'Primary'},

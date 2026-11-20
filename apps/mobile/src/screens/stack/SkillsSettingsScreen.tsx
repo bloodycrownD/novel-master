@@ -25,7 +25,7 @@ import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomShee
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {SkillInfoEditModal, type SkillInfoTarget} from '@/components/skills/SkillInfoEditModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/Buttons';
-import {exportVfsZip} from '@/services/vfs-zip.service';
+import {VfsZipService} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
@@ -35,7 +35,7 @@ import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -118,7 +118,7 @@ export function SkillsSettingsScreen() {
     fallbackValue: EMPTY_PAYLOAD,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(toastMessage('加载技能失败', cause));
+        showToast(ToastMessage.toast('加载技能失败', cause));
       },
       [showToast],
     ),
@@ -192,16 +192,16 @@ export function SkillsSettingsScreen() {
     setZipBusy(true);
     try {
       const exportOptions = {directoryPath: `/meta/skills/${skill.name}`, fileName: `${skill.name}.zip`};
-      const exported = await exportVfsZip(runtime, zipScopeFor(skill), exportOptions);
+      const exported = await VfsZipService.exportZip(runtime, zipScopeFor(skill), exportOptions);
       if (!exported.ok) {
-        showToast(toastMessage('导出失败', exported.error));
+        showToast(ToastMessage.toast('导出失败', exported.error));
         return;
       }
       if (exported.value === 'saved') {
         showToast('ZIP 已保存到所选位置');
       }
     } catch (error) {
-      showToast(toastMessage('导出失败', error));
+      showToast(ToastMessage.toast('导出失败', error));
     } finally {
       setZipBusy(false);
     }

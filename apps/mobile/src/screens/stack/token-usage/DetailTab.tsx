@@ -5,7 +5,7 @@ import {DateTime, TokenFormat} from '@novel-master/core/common';
 import {StackedBars} from '../../../components/charts/StackedBars';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
-import {formatFirstTokenMs, formatHitRate, formatTokensPerSecond, hitRate} from './format';
+import {UsageStats} from './format';
 import {styles} from './styles';
 
 /**
@@ -98,8 +98,8 @@ export function DetailTab({
           <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>{selectedDay} · 按小时分布</Text>
           <Text style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}>
             输入 {TokenFormat.count(selectedDayBucket.promptTokens)} · 输出 {TokenFormat.count(selectedDayBucket.completionTokens)} · 命中率{' '}
-            {formatHitRate(hitRate(selectedDayBucket.cacheReadTokens, selectedDayBucket.billedInputTokens))} · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
-            {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} · 平均首字延迟 {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
+            {UsageStats.formatHitRate(UsageStats.hitRate(selectedDayBucket.cacheReadTokens, selectedDayBucket.billedInputTokens))} · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
+            {UsageStats.formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} · 平均首字延迟 {UsageStats.formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
           </Text>
           <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
             <StackedBars testID="hourly-chart" data={hourlyData} onLongPress={onSetInspectedKey} tokens={tokens} formatLabel={key => `${Number(key)}时`} />

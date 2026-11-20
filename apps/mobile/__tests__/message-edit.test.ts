@@ -1,8 +1,5 @@
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {
-  applyTextEditToMessage,
-  editableTextFromMessage,
-} from '@/components/chat/message-edit';
+import {MessageEdit} from '@/components/chat/message-edit'
 
 function msg(
   role: string,
@@ -24,10 +21,10 @@ function msg(
 describe('message-edit', () => {
   it('allows editing plain text user and assistant messages', () => {
     expect(
-      editableTextFromMessage(msg('user', [{type: 'text', text: 'hello'}])),
+      MessageEdit.editableTextFromMessage(msg('user', [{type: 'text', text: 'hello'}])),
     ).toBe('hello');
     expect(
-      editableTextFromMessage(
+      MessageEdit.editableTextFromMessage(
         msg('assistant', [{type: 'text', text: 'reply'}]),
       ),
     ).toBe('reply');
@@ -35,7 +32,7 @@ describe('message-edit', () => {
 
   it('allows editing text when tool_use blocks are present', () => {
     expect(
-      editableTextFromMessage(
+      MessageEdit.editableTextFromMessage(
         msg('assistant', [
           {type: 'text', text: 'before tools'},
           {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
@@ -46,7 +43,7 @@ describe('message-edit', () => {
 
   it('returns null for pure tool_use assistant messages', () => {
     expect(
-      editableTextFromMessage(
+      MessageEdit.editableTextFromMessage(
         msg('assistant', [
           {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
         ]),
@@ -61,7 +58,7 @@ describe('message-edit', () => {
       {type: 'tool_use', id: 't1', name: 'vfs.read', input: {path: '/a'}},
       {type: 'text', text: 'tail'},
     ]);
-    const merged = applyTextEditToMessage(original, 'new body');
+    const merged = MessageEdit.applyTextEditToMessage(original, 'new body');
     expect(merged.blocks).toEqual([
       {type: 'thinking', text: 'hmm'},
       {type: 'text', text: 'new body'},

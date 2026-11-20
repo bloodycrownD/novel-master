@@ -7,7 +7,7 @@
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 
 import {ABORT_KEY, AbortRegistryFactory} from '@novel-master/core/abort';
-import {runManualCompaction} from '@/services/manual-compaction.service';
+import {ManualCompactionService} from '@/services/manual-compaction.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 const mockRunCompaction = jest.fn();
@@ -40,7 +40,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
 
   it('成功：onSucceeded 先于 onFinally，outcome 如实透传', async () => {
     const order: string[] = [];
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-ok'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-ok'}, {
       onSucceeded: () => {
         order.push('succeeded');
       },
@@ -60,7 +60,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     // （beforeEach 固定回 3），少传/误清该键时 core 会静默走默认深度。
     // `projectId` 不在 core 契约里：hide 已直连 `messages.hideRange`，
     // 压缩参数只剩 sessionId / 深度 / trigger 三项（多传会成为无效字段）。
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-manual'}, {});
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-manual'}, {});
     expect(mockRunCompaction).toHaveBeenCalledWith(expect.anything(), {
       sessionId: 's-manual',
       hideStartDepth: 3,
@@ -73,7 +73,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     const onSucceeded = jest.fn();
     const onFailed = jest.fn();
     const onFinally = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-fail'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-fail'}, {
       onSucceeded,
       onFailed,
       onFinally,
@@ -89,7 +89,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     mockRunCompaction.mockRejectedValue(boom);
     const onFailed = jest.fn();
     const onFinally = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-throw'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-throw'}, {
       onFailed,
       onFinally,
     });
@@ -101,7 +101,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     const boom = new Error('evaluator boom');
     mockGetHideStartDepth.mockRejectedValue(boom);
     const onFailed = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-depth'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-depth'}, {
       onFailed,
     });
     expect(mockRunCompaction).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     const boom = new Error('tail boom');
     const onFailed = jest.fn();
     const onFinally = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-tail'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-tail'}, {
       onSucceeded: () => {
         throw boom;
       },
@@ -130,7 +130,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
       throw new Error('toast boom');
     });
     const onFinally = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-tailfail'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-tailfail'}, {
       onFailed,
       onFinally,
     });
@@ -145,7 +145,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
       throw new Error('toast boom');
     });
     const onFinally = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-tailboom'}, {
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-tailboom'}, {
       onSucceeded: () => {
         throw tailBoom;
       },
@@ -168,7 +168,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     const onFailed = jest.fn();
     const onFinally = jest.fn();
 
-    const outcome = await runManualCompaction(runtime, {projectId: 'p', sessionId}, {onSucceeded, onFailed, onFinally});
+    const outcome = await ManualCompactionService.run(runtime, {projectId: 'p', sessionId}, {onSucceeded, onFailed, onFinally});
 
     expect(outcome).toEqual({kind: 'cancelled', reason: 'user-stop'});
     expect(mockRunCompaction).not.toHaveBeenCalled();
@@ -187,7 +187,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
       runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
       return {ok: true, value: 3};
     });
-    const outcome = await runManualCompaction(runtime, {projectId: 'p', sessionId});
+    const outcome = await ManualCompactionService.run(runtime, {projectId: 'p', sessionId});
     expect(outcome.kind).toBe('cancelled');
     expect(() => runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId))).not.toThrow();
   });
@@ -197,7 +197,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     mockGetHideStartDepth.mockResolvedValue({ok: false, error: depthError});
     const onFailed = jest.fn();
     const onFinally = jest.fn();
-    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-depth-result'}, {onFailed, onFinally});
+    await ManualCompactionService.run(stubRuntime(), {projectId: 'p', sessionId: 's-depth-result'}, {onFailed, onFinally});
     expect(onFailed).toHaveBeenCalledWith(depthError);
     expect(onFinally).toHaveBeenCalledWith({ok: false, error: depthError});
     expect(mockRunCompaction).not.toHaveBeenCalled();

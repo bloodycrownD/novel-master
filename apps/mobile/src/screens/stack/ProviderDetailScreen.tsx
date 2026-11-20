@@ -10,7 +10,7 @@ import {SavedModelDisplayName, SavedModelSettings} from '@novel-master/core/prov
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
-import {ProviderForm, providerFormToEditPatch, type ProviderFormValues} from '../../components/provider/ProviderForm';
+import {ProviderForm, ProviderFormMapper, type ProviderFormValues} from '../../components/provider/ProviderForm';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {PrimaryButton, SecondaryButton} from '../../components/ui/Buttons';
@@ -26,7 +26,7 @@ import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {ModelKey} from '../../utils/model-key';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -115,7 +115,7 @@ export function ProviderDetailScreen() {
 
   useEffect(() => {
     if (!providerId) {
-      showToast(toastMessage('错误', '缺少 providerId'));
+      showToast(ToastMessage.toast('错误', '缺少 providerId'));
       navigation.goBack();
     }
   }, [providerId, navigation, showToast]);
@@ -161,7 +161,7 @@ export function ProviderDetailScreen() {
         text: '删除',
         style: 'destructive',
         onPress: () => {
-          deleteModels([row.savedModelId]).catch(err => showToast(toastMessage('删除失败', err)));
+          deleteModels([row.savedModelId]).catch(err => showToast(ToastMessage.toast('删除失败', err)));
         },
       },
     ]);
@@ -178,7 +178,7 @@ export function ProviderDetailScreen() {
       showToast('已重命名模型');
       setMenuSavedModelId(undefined);
     } catch (error) {
-      showToast(toastMessage('重命名失败', error));
+      showToast(ToastMessage.toast('重命名失败', error));
       throw error;
     }
   };
@@ -357,7 +357,7 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
         apiKey: '',
       });
     } catch (error) {
-      showToast(toastMessage('加载失败', error));
+      showToast(ToastMessage.toast('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -387,18 +387,18 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
         onSubmit={async values => {
           setSaving(true);
           try {
-            const patch = providerFormToEditPatch(values);
+            const patch = ProviderFormMapper.toEditPatch(values);
             const editInput = !isBuiltin && values.protocol !== initial.protocol ? {...patch, protocol: values.protocol} : patch;
             const edited = await runtime.providers.edit(providerId, editInput);
             if (!edited.ok) {
-              showToast(toastMessage('保存失败', edited.error));
+              showToast(ToastMessage.toast('保存失败', edited.error));
               return;
             }
             showToast('已保存');
             // tab 内不 goBack，重新拉取以反映 protocol 等不可变字段的现状
             await load();
           } catch (err) {
-            showToast(toastMessage('保存失败', err));
+            showToast(ToastMessage.toast('保存失败', err));
           } finally {
             setSaving(false);
           }

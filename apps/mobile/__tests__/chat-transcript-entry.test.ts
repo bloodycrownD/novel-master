@@ -6,7 +6,7 @@
  * - ready v2 握手面：入口自包的 ready 带 `version:'t1'` 与转录域能力清单；
  * - 入口上行出口 v:2（src 源面：TRANSCRIPT_ENTRY_BRIDGE_V = 2 且绑定 createBoundPost）；
  * - 下行 v2→v1 翻译层接线（白屏根因层）：入口自行
- *   bindHostMessageChannel(rawDowntranslate)、runtime 以 bindChannel:false 装配，
+ *   HostMessageChannel.bind(rawDowntranslate)、runtime 以 bindChannel:false 装配，
  *   runtime 老桥 v1 常量单一来源（import state.BRIDGE_V，不手抄字面量）；
  * - composer/dock 域完全不在独立入口里（能力位字符串、dockAction/composerState
  *   协议 type、壳子树三重反面）；
@@ -18,6 +18,7 @@
  * 宽松丢弃是 runtime 既有纪律），此处不再重复行为跑。
  */
 import {readFileSync} from 'node:fs';
+import {HostMessageChannel} from '@web/shared/host-message-channel';
 import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
@@ -28,16 +29,14 @@ const mockHandleHostMessage = jest.fn();
 jest.mock(
   '../src/web/chat-transcript/webview/runtime/bridge',
   () => ({
-    handleHostMessage: (...args: unknown[]) =>
-      mockHandleHostMessage(...args),
+    Bridge: {
+      handleHostMessage: (...args: unknown[]) =>
+        mockHandleHostMessage(...args),
+    },
   }),
 );
 
-import {
-  rawDowntranslate,
-  TRANSCRIPT_ENTRY_BRIDGE_V,
-  TRANSCRIPT_RUNTIME_BRIDGE_V,
-} from '../src/web/chat-transcript/webview/host-downtranslate';
+import {TRANSCRIPT_ENTRY_BRIDGE_V, TRANSCRIPT_RUNTIME_BRIDGE_V, HostDowntranslate} from '../src/web/chat-transcript/webview/host-downtranslate';
 
 function bootScript(): string {
   return readWebViewDistFile('chat-transcript', 'app.js');
@@ -97,7 +96,7 @@ describe('chat-transcript 独立入口（T-TS1 · dist）', () => {
     const constant = downtranslateSource();
     const source = entrySource();
     expect(constant).toMatch(/const\s+TRANSCRIPT_ENTRY_BRIDGE_V\s*=\s*2\s*;/);
-    expect(source).toMatch(/createBoundPost\(\s*TRANSCRIPT_ENTRY_BRIDGE_V\s*\)/);
+    expect(source).toMatch(/Post\.bound\(\s*TRANSCRIPT_ENTRY_BRIDGE_V\s*\)/);
   });
 
   it('T-TS1f: 下行 v2→v1 翻译层接线——入口先绑宿主通道 + runtime 不自绑 + v1 常量单源', () => {
@@ -108,9 +107,9 @@ describe('chat-transcript 独立入口（T-TS1 · dist）', () => {
     // 直接 import（CR-fix-12：v1 契约单一语义，禁第二份手抄字面量）。
     const source = entrySource();
     const translate = downtranslateSource();
-    expect(source).toMatch(/bindHostMessageChannel\(\s*rawDowntranslate\s*\)/);
+    expect(source).toMatch(/HostMessageChannel\.bind\(\s*HostDowntranslate\.raw\s*\)/);
     expect(source).toMatch(
-      /createTranscriptRuntime\(\{\s*bindChannel:\s*false,\s*emitReady:\s*false,?\s*\}\)/,
+      /Factory\.create\(\{\s*bindChannel:\s*false,\s*emitReady:\s*false,?\s*\}\)/,
     );
     // runtime 老桥版本：直接 import state 的 BRIDGE_V（改回 `= 1` 手抄即红）。
     expect(translate).toMatch(/const\s+TRANSCRIPT_RUNTIME_BRIDGE_V\s*=\s*BRIDGE_V\s*;/);
@@ -197,7 +196,7 @@ describe('host-downtranslate · 下行 v2→v1 翻译（白屏根因锁定）', 
   });
 
   it('v2 string 信封（宿主未 parse）→ 拆包重打成 v1 喂给 runtime', () => {
-    rawDowntranslate(
+    HostDowntranslate.raw(
       JSON.stringify({v: 2, type: 'init', payload: {schemaV: 2}}),
     );
 
@@ -213,7 +212,7 @@ describe('host-downtranslate · 下行 v2→v1 翻译（白屏根因锁定）', 
   });
 
   it('v2 对象信封（宿主已 JSON.parse）→ 同样翻译，payload 原样透传', () => {
-    rawDowntranslate({
+    HostDowntranslate.raw({
       v: 2,
       type: 'snapshot',
       payload: {rows: [{kind: 'message', id: 'm1'}]},
@@ -229,17 +228,17 @@ describe('host-downtranslate · 下行 v2→v1 翻译（白屏根因锁定）', 
 
   it('非 v2 信封 / 缺字段 / 坏 JSON / 非对象 → 静默丢弃，不调 runtime', () => {
     // v ≠ 2：v1 信封（translator 重复接线才会见到）与漂移的 v3 都不喂
-    rawDowntranslate({v: 1, type: 'init', payload: {}});
-    rawDowntranslate({v: 3, type: 'init', payload: {}});
+    HostDowntranslate.raw({v: 1, type: 'init', payload: {}});
+    HostDowntranslate.raw({v: 3, type: 'init', payload: {}});
     // 缺 v / 缺 type
-    rawDowntranslate({type: 'init', payload: {}});
-    rawDowntranslate({v: 2, payload: {}});
+    HostDowntranslate.raw({type: 'init', payload: {}});
+    HostDowntranslate.raw({v: 2, payload: {}});
     // 坏 JSON string
-    rawDowntranslate('{not json');
+    HostDowntranslate.raw('{not json');
     // 非对象：null / 数字 / 裸字符串（parse 后仍是 string 的兜底）
-    rawDowntranslate(null);
-    rawDowntranslate(42);
-    rawDowntranslate('"v2 但整体只是字符串"');
+    HostDowntranslate.raw(null);
+    HostDowntranslate.raw(42);
+    HostDowntranslate.raw('"v2 但整体只是字符串"');
 
     expect(mockHandleHostMessage).not.toHaveBeenCalled();
   });

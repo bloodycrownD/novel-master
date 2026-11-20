@@ -1,4 +1,4 @@
-import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
+import {TrustedHtmlWriter} from '@web/shared/ui/TrustedHtml';
 import {HtmlEscape} from '../util/html-escape';
 import {state} from '../state/state';
 import type {MessageRow, ToolCallRow} from '../state/state';
@@ -305,7 +305,7 @@ export const Stream = {
         return;
       }
       if (state.flags.richText && row.thinkingHtml) {
-        applyTrustedHtml(body, row.thinkingHtml);
+        TrustedHtmlWriter.apply(body, row.thinkingHtml);
         Stream.setTailPlainClass(body, false);
         Stream.setBodyRichClass(body, true);
       } else {
@@ -321,7 +321,7 @@ export const Stream = {
     if (hasText || hasThinking) {
       const textBody = Stream.ensureTextBody(bubble);
       if (state.flags.richText && row.textHtml) {
-        applyTrustedHtml(textBody, row.textHtml);
+        TrustedHtmlWriter.apply(textBody, row.textHtml);
         Stream.setTailPlainClass(textBody, false);
         Stream.setBodyRichClass(textBody, true);
       } else if (hasText) {
@@ -449,7 +449,7 @@ export const Stream = {
       }
       if (html && state.flags.richText) {
         const target = Stream.renderTarget(body);
-        applyTrustedHtml(target, html);
+        TrustedHtmlWriter.apply(target, html);
         // HTML 替换成功：清纯文本降级标记（B-1），避免富文本被 pre-wrap 影响。
         Stream.setTailPlainClass(target, false);
         Stream.setBodyRichClass(body, true);
@@ -468,7 +468,7 @@ export const Stream = {
         // 有 html 且 rich 打开时直接信任边界替换（块级模式下 html 只覆盖
         // 活跃尾块，替换目标即尾块容器）；否则走 delta 增量追加，避免整泡重建。
         const target = Stream.renderTarget(textBody);
-        applyTrustedHtml(target, html);
+        TrustedHtmlWriter.apply(target, html);
         Stream.setTailPlainClass(target, false);
         Stream.setBodyRichClass(textBody, true);
         return true;
@@ -558,7 +558,7 @@ export const Stream = {
     // 尾块重置：tailHtml 有值走信任边界替换，否则按源文本降级纯文本
     if (hasTailPayload) {
       if (tailHtml) {
-        applyTrustedHtml(tailEl, tailHtml);
+        TrustedHtmlWriter.apply(tailEl, tailHtml);
         // HTML 分支成功：清纯文本降级标记（B-1）
         Stream.setTailPlainClass(tailEl, false);
         Stream.setBodyRichClass(body, true);
@@ -590,7 +590,7 @@ export const Stream = {
       return false;
     }
     if (write.html) {
-      applyTrustedHtml(body, write.html);
+      TrustedHtmlWriter.apply(body, write.html);
       Stream.setTailPlainClass(body, false);
       Stream.setBodyRichClass(body, true);
       return true;

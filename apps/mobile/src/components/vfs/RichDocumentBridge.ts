@@ -2,7 +2,7 @@
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
  * MD 批注：Recogito createAnnotation → recogitoCreate；草稿投影 → setAnnotations。
  */
-import {createMessageBridge} from '@/webview-host/typed-message-bridge';
+import {TypedMessageBridge} from '@/webview-host/typed-message-bridge';
 
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
@@ -102,4 +102,4 @@ type RichDocumentToHostMessage =
   /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
   | BridgeEnvelope<'copyCode', {code: string}>;
 
-export const richDocumentBridge = createMessageBridge<HostToRichDocumentMessage, RichDocumentToHostMessage>(RICH_DOCUMENT_BRIDGE_VERSION, 'rich-document');
+export const richDocumentBridge = TypedMessageBridge.create<HostToRichDocumentMessage, RichDocumentToHostMessage>(RICH_DOCUMENT_BRIDGE_VERSION, 'rich-document');

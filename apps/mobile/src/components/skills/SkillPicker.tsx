@@ -10,10 +10,7 @@ import {AppError, Result} from '@novel-master/core/errors';
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {
-  skillDomainBadgeColor,
-  skillDomainBadgeLabel,
-} from '@/components/skills/skill-ui';
+import {SkillUi} from '@/components/skills/skill-ui';
 import {
   PickerListModal,
   type PickerListLoadResult,
@@ -66,12 +63,12 @@ export function SkillPicker({
               style={[
                 styles.badge,
                 {
-                  color: skillDomainBadgeColor(item.domain, tokens),
+                  color: SkillUi.domainBadgeColor(item.domain, tokens),
                   borderColor: tokens.border,
                 },
               ]}
             >
-              {skillDomainBadgeLabel(item.domain, item.overridden)}
+              {SkillUi.domainBadgeLabel(item.domain, item.overridden)}
             </Text>
             {item.disabled ? (
               <Text

@@ -5,7 +5,7 @@ import {TokenFormat} from '@novel-master/core/common';
 import {PieChart} from '../../../components/charts/PieChart';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
-import {SUMMARY_EMPTY_TEXT, formatFirstTokenMs, formatHitRate, formatTokensPerSecond, hitRate} from './format';
+import {SUMMARY_EMPTY_TEXT, UsageStats} from './format';
 import {styles} from './styles';
 
 /** 汇总页签指标小卡：half 两列一行（默认），third 三列一行（输入/输出/命中率）。 */
@@ -85,8 +85,8 @@ export function SummaryTab({
         <SummaryTile testID="summary-metric-calls" label="调用次数" value={String(summary?.calls ?? 0)} tokens={tokens} />
         {/* 平均速率/首字延迟上移为第二行两卡（用户拍板 2026-09-28 重排）；
             无有效行为 null → 空态横杠而非 0 */}
-        <SummaryTile testID="summary-metric-avgTokensPerSecond" label="平均速率" value={formatTokensPerSecond(summary?.avgTokensPerSecond ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
-        <SummaryTile testID="summary-metric-avgFirstTokenMs" label="平均首字延迟" value={formatFirstTokenMs(summary?.avgFirstTokenMs ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-avgTokensPerSecond" label="平均速率" value={UsageStats.formatTokensPerSecond(summary?.avgTokensPerSecond ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-avgFirstTokenMs" label="平均首字延迟" value={UsageStats.formatFirstTokenMs(summary?.avgFirstTokenMs ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
       </View>
       {/* 输入/输出/命中率下移为第三行三卡一行（31% 列）；marginTop 补与
           上半卡行的垂直间距 */}
@@ -96,7 +96,7 @@ export function SummaryTab({
         <SummaryTile
           testID="summary-metric-hitRate"
           label="命中率"
-          value={formatHitRate(hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0))}
+          value={UsageStats.formatHitRate(UsageStats.hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0))}
           tone="success"
           layout="third"
           tokens={tokens}

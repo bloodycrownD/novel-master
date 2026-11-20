@@ -32,10 +32,13 @@ jest.mock('../src/debug/run-timing', () => ({
 }));
 
 const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
-jest.mock('../src/services/project-composer-status.service', () => ({
+jest.mock('../src/services/project-composer-status.service', () => {
+  const legacy = {
   projectComposerStatusForSession: (...args: unknown[]) =>
     mockProjectComposerStatus(...(args as [])),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {forSession: legacy.projectComposerStatusForSession}};
+});
 
 // token-ranges 探针：D1 水化优先的验收点是「持久化 ranges 生效时**不**扫描」，
 // 行为断言之外再用调用探针钉一次（spec T-CA2）。
@@ -46,7 +49,10 @@ jest.mock('../src/components/chat/native-composer/token-ranges', () => {
   >('../src/components/chat/native-composer/token-ranges');
   return {
     ...actual,
-    scanTokensToRanges: jest.fn(actual.scanTokensToRanges),
+    TokenRanges: {
+      ...actual.TokenRanges,
+      scanTokensToRanges: jest.fn(actual.TokenRanges.scanTokensToRanges),
+    },
   };
 });
 
@@ -68,12 +74,12 @@ type UseChatComposerControllerOptions = Parameters<
   typeof useChatComposerController
 >[0];
 import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
-import {scanTokensToRanges} from '../src/components/chat/native-composer/token-ranges';
+import {TokenRanges} from '../src/components/chat/native-composer/token-ranges';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
 
 /** 探针（模块被 jest.mock 包了一层计数，实现仍是 actual）。 */
-const mockScanTokensToRanges = jest.mocked(scanTokensToRanges);
+const mockScanTokensToRanges = jest.mocked(TokenRanges.scanTokensToRanges);
 
 type Mutable<T> = {-readonly [K in keyof T]: T[K]};
 

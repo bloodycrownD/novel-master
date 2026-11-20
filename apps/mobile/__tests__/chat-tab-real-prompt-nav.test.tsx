@@ -55,9 +55,12 @@ jest.mock('@/screens/tabs/chat-tab/useChatTabMessageActions', () => ({
   }),
 }));
 
-jest.mock('@/services/workplace-block.service', () => ({
+jest.mock('@/services/workplace-block.service', () => {
+  const legacy = {
   clearSessionWorkplaceKkv: jest.fn(),
-}));
+};
+  return {...legacy, WorkplaceBlockService: {clearSessionKkv: legacy.clearSessionWorkplaceKkv}};
+});
 
 describe('T-AM3-4 useChatTabController RealPrompt 入口', () => {
   beforeEach(() => {

@@ -27,15 +27,19 @@ const mockCountTextWithDefaultEncoding = jest.fn((text: string) => 2345);
 const mockCancelSessionNativeCounts = jest.fn();
 
 jest.mock('@novel-master/tokenizer-driver-rn/encoding', () => ({
-  countTextWithDefaultEncoding: (text: string) =>
-    mockCountTextWithDefaultEncoding(text),
+  EncodingCache: {
+    countText: (text: string) => mockCountTextWithDefaultEncoding(text),
+  },
 }));
 
 // 取消链路（tokenizer-native-cancel）：被测 service 从这个子路径导入
-// `cancelSessionNativeCounts` 与 `PromptCountCancelledError`。真身保留
+// `AndroidNativeBridge.cancelSessionCounts` 与 `PromptCountCancelledError`。真身保留
 // （requireActual，其余符号行为不变），只把「下发取消」换成可控桩——测试要
 // 观测它被调用，而真身的下发依赖 NativeModules。
 jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
+  const actual = jest.requireActual<Record<string, unknown>>(
+    '@novel-master/tokenizer-driver-rn/android-native-bridge',
+  );
   // 与桥真身同构的取消错误类：被测服务按 instanceof 识别「在途原生计数被取消」，
   // mock 工厂必须给同一个类（真身类在 jest.mock 下不可达）——做法逐字照抄
   // 上面 core/provider 的 PromptTokenResolveBailedError 先例。
@@ -46,14 +50,15 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
     }
   }
   return {
-    ...jest.requireActual<Record<string, unknown>>(
-      '@novel-master/tokenizer-driver-rn/android-native-bridge',
-    ),
+    ...actual,
     PromptCountCancelledError,
-    // 用箭头转发而非直接给桩：jest.mock 工厂被提升到 import 之前，直接引用
-    // 顶层 const 会踩 TDZ。
-    cancelSessionNativeCounts: (...args: unknown[]) =>
-      mockCancelSessionNativeCounts(...args),
+    AndroidNativeBridge: {
+      ...(actual.AndroidNativeBridge as Record<string, unknown>),
+      // 用箭头转发而非直接给桩：jest.mock 工厂被提升到 import 之前，直接引用
+      // 顶层 const 会踩 TDZ。
+      cancelSessionCounts: (...args: unknown[]) =>
+        mockCancelSessionNativeCounts(...args),
+    },
   };
 });
 
@@ -102,10 +107,13 @@ jest.mock('@novel-master/core/prompt', () => ({
   },
 }));
 
-jest.mock('@/services/session-prompt-input.service', () => ({
+jest.mock('@/services/session-prompt-input.service', () => {
+  const legacy = {
   buildSessionPromptInputAdapter: (...args: unknown[]) =>
     mockBuildSessionPromptInput(...args),
-}));
+};
+  return {...legacy, SessionPromptInputService: {build: legacy.buildSessionPromptInputAdapter}};
+});
 
 /** 错误通道迁移四期：label 读口已知失败沿 Result 上行；测试断言面保持裸值，err 直接炸出。 */
 async function loadLabelOrThrow(...args: Parameters<typeof ChatPromptTokenLabel.load>) {

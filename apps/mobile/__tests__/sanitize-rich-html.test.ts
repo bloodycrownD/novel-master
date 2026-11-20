@@ -15,10 +15,7 @@ jest.mock('sanitize-html', () => {
 });
 
 import sanitizeHtml from 'sanitize-html';
-import {
-  filterInlineStyle,
-  sanitizeRichHtml,
-} from '@/components/rich-content/sanitize-rich-html';
+import {SanitizeRichHtml} from '@/components/rich-content/sanitize-rich-html';
 
 const mockSanitizeHtml = sanitizeHtml as unknown as jest.Mock;
 // jest.mock 只接管配置断言用的替身；行为用例绕过 mock 直连真实库
@@ -34,7 +31,7 @@ describe('sanitizeRichHtml', () => {
   });
 
   it('调用 sanitize-html 时 disallowedTagsMode=escape', () => {
-    sanitizeRichHtml('<p>x</p>');
+    SanitizeRichHtml.sanitize('<p>x</p>');
     expect(mockSanitizeHtml).toHaveBeenCalledTimes(1);
     const opts = mockSanitizeHtml.mock.calls[0]![1] as Record<string, unknown>;
     expect(opts.disallowedTagsMode).toBe('escape');
@@ -42,7 +39,7 @@ describe('sanitizeRichHtml', () => {
   });
 
   it('T-SA6: allowedAttributes.span 显式含 data-annotate-id', () => {
-    sanitizeRichHtml(
+    SanitizeRichHtml.sanitize(
       '<span class="nm-annotate-anchor" data-annotate-id="ann-1">x</span>',
     );
     const opts = mockSanitizeHtml.mock.calls[0]![1] as {
@@ -55,7 +52,7 @@ describe('sanitizeRichHtml', () => {
 
   it('透传消毒结果（替身保留锚属性）', () => {
     mockSanitizeHtml.mockImplementation((html: string) => html);
-    const out = sanitizeRichHtml(
+    const out = SanitizeRichHtml.sanitize(
       '<span class="nm-annotate-anchor" data-annotate-id="a1">hello</span>',
     );
     expect(out).toContain('data-annotate-id="a1"');
@@ -63,7 +60,7 @@ describe('sanitizeRichHtml', () => {
   });
 
   it('T-CB7: allowedAttributes.pre 放行 data-lang（语言标签伪元素宿主）', () => {
-    sanitizeRichHtml('<pre data-lang="typescript"><code>x</code></pre>');
+    SanitizeRichHtml.sanitize('<pre data-lang="typescript"><code>x</code></pre>');
     const opts = mockSanitizeHtml.mock.calls[0]![1] as {
       allowedAttributes: Record<string, string[]>;
     };
@@ -73,7 +70,7 @@ describe('sanitizeRichHtml', () => {
   });
 
   it('T-CB7: 白名单不含事件属性，危险标签仍以 escape 处置（基线不放松）', () => {
-    sanitizeRichHtml('<p onclick="x">y</p>');
+    SanitizeRichHtml.sanitize('<p onclick="x">y</p>');
     const opts = mockSanitizeHtml.mock.calls[0]![1] as {
       allowedAttributes: Record<string, string[]>;
       disallowedTagsMode: string;
@@ -87,7 +84,7 @@ describe('sanitizeRichHtml', () => {
 
   it('T-CB7: 透传替身下 hljs span 与 pre data-lang 均保留', () => {
     mockSanitizeHtml.mockImplementation((html: string) => html);
-    const out = sanitizeRichHtml(
+    const out = SanitizeRichHtml.sanitize(
       '<pre data-lang="typescript"><code class="language-ts hljs"><span class="hljs-keyword">const</span> a = 1</code></pre>',
     );
     expect(out).toContain('data-lang="typescript"');
@@ -96,14 +93,14 @@ describe('sanitizeRichHtml', () => {
   });
   it('T-L6: data-lang="plain" 值形态经消毒保留（缩进块/表外语言统一 plain 标）', () => {
     mockSanitizeHtml.mockImplementation((html: string) => html);
-    const out = sanitizeRichHtml(
+    const out = SanitizeRichHtml.sanitize(
       '<pre data-lang="plain"><span class="code-copy"></span><code>plain body</code></pre>',
     );
     expect(out).toContain('data-lang="plain"');
     expect(out).toContain('<span class="code-copy"></span>');
   });
   it('代码块复制按钮 span.code-copy 经消毒保留（span+class 白名单内）', () => {
-    const out = sanitizeRichHtml(
+    const out = SanitizeRichHtml.sanitize(
       '<pre data-lang="ts"><span class="code-copy"></span><code class="language-ts hljs">hi</code></pre>',
     );
     expect(out).toContain('<span class="code-copy"></span>');
@@ -122,7 +119,7 @@ describe('sanitizeRichHtml（真实库行为）', () => {
         return input;
       },
     );
-    sanitizeRichHtml(html);
+    SanitizeRichHtml.sanitize(html);
     expect(captured).toBeDefined();
     return realSanitizeHtml(html, captured!);
   };
@@ -178,33 +175,33 @@ describe('sanitizeRichHtml（真实库行为）', () => {
 
 describe('filterInlineStyle（CSS 属性白名单）', () => {
   it('白名单内声明放行并规范化，名单外声明剥离', () => {
-    expect(filterInlineStyle('COLOR:red;  text-align : center')).toBe(
+    expect(SanitizeRichHtml.filterInlineStyle('COLOR:red;  text-align : center')).toBe(
       'color: red; text-align: center',
     );
     expect(
-      filterInlineStyle(
+      SanitizeRichHtml.filterInlineStyle(
         'position:fixed;inset:0;transform:translate(0,0);z-index:999',
       ),
     ).toBeUndefined();
-    expect(filterInlineStyle('width:100vw;height:100vh')).toBeUndefined();
+    expect(SanitizeRichHtml.filterInlineStyle('width:100vw;height:100vh')).toBeUndefined();
   });
 
   it('含 CSS 注释的声明整条丢弃（防 pos/**/ition 拼凑属性名）', () => {
-    expect(filterInlineStyle('pos/**/ition:fixed;color:red')).toBe(
+    expect(SanitizeRichHtml.filterInlineStyle('pos/**/ition:fixed;color:red')).toBe(
       'color: red',
     );
   });
 
   it('值内含 url() 的声明丢弃（background:url 可外联加载）', () => {
     expect(
-      filterInlineStyle('background:url(https://evil.example/x.png)'),
+      SanitizeRichHtml.filterInlineStyle('background:url(https://evil.example/x.png)'),
     ).toBeUndefined();
-    expect(filterInlineStyle('background:#fff')).toBe('background: #fff');
+    expect(SanitizeRichHtml.filterInlineStyle('background:#fff')).toBe('background: #fff');
   });
 
   it('url() 值内的分号/逗号/引号不会破坏声明切分', () => {
     // url("a;b") 内的分号被引号保护，不切分；整条因含 url( 被丢，但 color 完整保留
-    expect(filterInlineStyle('background:url("a;b,c");color:blue')).toBe(
+    expect(SanitizeRichHtml.filterInlineStyle('background:url("a;b,c");color:blue')).toBe(
       'color: blue',
     );
   });

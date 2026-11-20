@@ -1,4 +1,4 @@
-import {syncAppVersionForRichRender} from '../src/storage/app-version-guard';
+import {AppVersionGuard} from '../src/storage/app-version-guard';
 import type {AppUiPreferences} from '../src/storage/app-ui-prefs';
 import {
   APP_UI_KEY_LAST_RUN_VERSION,
@@ -31,7 +31,7 @@ describe('app-version-guard', () => {
       [APP_UI_KEY_LAST_RUN_VERSION]: '1.0.0',
       [APP_UI_KEY_RICH_RENDER_EPOCH]: '3',
     });
-    const syncResult = await syncAppVersionForRichRender(appUi, '1.0.0');
+    const syncResult = await AppVersionGuard.syncAppVersionForRichRender(appUi, '1.0.0');
     if (!syncResult.ok) throw syncResult.error;
     expect(syncResult.value).toBe(3);
     expect((await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH)).value).toBe('3');
@@ -42,7 +42,7 @@ describe('app-version-guard', () => {
       [APP_UI_KEY_LAST_RUN_VERSION]: '1.0.0',
       [APP_UI_KEY_RICH_RENDER_EPOCH]: '2',
     });
-    const syncResult = await syncAppVersionForRichRender(appUi, '1.0.1');
+    const syncResult = await AppVersionGuard.syncAppVersionForRichRender(appUi, '1.0.1');
     if (!syncResult.ok) throw syncResult.error;
     expect(syncResult.value).toBe(3);
     expect((await appUi.get(APP_UI_KEY_LAST_RUN_VERSION)).value).toBe('1.0.1');

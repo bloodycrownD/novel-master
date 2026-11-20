@@ -5,7 +5,7 @@
  * 在 push 前写入，PromptEditorScreen 挂载时读走（读后即清，防串台）。
  */
 
-import {createCallbackSlot} from '../../runtime/callback-slot';
+import {CallbackSlot} from '../../runtime/callback-slot';
 
 export type PromptEditorOnSaved = (text: string) => void;
 
@@ -13,4 +13,4 @@ export type PromptEditorOnSaved = (text: string) => void;
  * 模块级单槽：push 前 `set`（闭包捕获当次 setter；每次打开全屏都覆盖新回调）、
  * 挂载时 `take`（读后即清，取消路径不消费即丢弃，避免残留旧回调）。
  */
-export const promptEditorOnSavedSlot = createCallbackSlot<PromptEditorOnSaved>();
+export const promptEditorOnSavedSlot = CallbackSlot.create<PromptEditorOnSaved>();

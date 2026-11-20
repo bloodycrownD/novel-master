@@ -32,11 +32,11 @@ import {useFocusEffect} from '@react-navigation/native';
 import type {UsageStatsBucket, UsageStatsFilter, UsageStatsModelRow, UsageStatsRequestRow, UsageStatsSummary} from '@novel-master/core/chat';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {PageTab, ProviderModelFilterValue, ProviderModelOption, RangeKind} from './token-usage/format';
-import {REQUESTS_PAGE_SIZE, isCustomRangeValid, resolveRangeDays} from './token-usage/format';
+import {REQUESTS_PAGE_SIZE, UsageStats} from './token-usage/format';
 import {styles} from './token-usage/styles';
 import {StatsFilterBar} from './token-usage/StatsFilterBar';
 import {SummaryTab} from './token-usage/SummaryTab';
@@ -97,7 +97,7 @@ export function TokenUsageStatsScreen() {
   // 日历加法（DST 安全）。
   const filter = useMemo<UsageStatsFilter>(() => {
     return {
-      range: resolveRangeDays(rangeKind, customFrom, customTo),
+      range: UsageStats.resolveRangeDays(rangeKind, customFrom, customTo),
       model: comboModel,
       providerId: comboProviderId,
     };
@@ -115,7 +115,7 @@ export function TokenUsageStatsScreen() {
         if (seq !== reloadSeqRef.current) {
           return; // 过期请求的报错不覆盖新一轮状态。
         }
-        const message = toastMessage('加载统计失败', err);
+        const message = ToastMessage.toast('加载统计失败', err);
         setLoadError(message);
         showToast(message);
       };
@@ -150,7 +150,7 @@ export function TokenUsageStatsScreen() {
       if (seq !== reloadSeqRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。
       }
-      const message = toastMessage('加载统计失败', err);
+      const message = ToastMessage.toast('加载统计失败', err);
       setLoadError(message);
       showToast(message);
     } finally {
@@ -182,7 +182,7 @@ export function TokenUsageStatsScreen() {
             // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
             // 条件仍满足导致无限重试；重试交给用户切页签/改筛选触发（MF-1）。
             reqDirtyRef.current = false;
-            showToast(toastMessage('加载流水失败', result.error));
+            showToast(ToastMessage.toast('加载流水失败', result.error));
           }
           return;
         }
@@ -198,7 +198,7 @@ export function TokenUsageStatsScreen() {
           // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
           // 条件仍满足导致无限重试；重试交给用户切页签/改筛选触发（MF-1）。
           reqDirtyRef.current = false;
-          showToast(toastMessage('加载流水失败', err));
+          showToast(ToastMessage.toast('加载流水失败', err));
         }
       } finally {
         if (seq === reqSeqRef.current) {
@@ -284,13 +284,13 @@ export function TokenUsageStatsScreen() {
           if (buckets.ok) {
             setHourlyBuckets(buckets.value);
           } else {
-            showToast(toastMessage('加载小时分布失败', buckets.error));
+            showToast(ToastMessage.toast('加载小时分布失败', buckets.error));
           }
         }
       })
       .catch(err => {
         if (!cancelled) {
-          showToast(toastMessage('加载小时分布失败', err));
+          showToast(ToastMessage.toast('加载小时分布失败', err));
         }
       });
     return () => {
@@ -310,7 +310,7 @@ export function TokenUsageStatsScreen() {
   const onRangeConfirm = (from: Date, to: Date) => {
     // 跨度不设上限（PRD 明确不与查询成本耦合）；仅保 from ≤ to 兑底护栏
     //（sheet 点选自动排序，正常路径恒满足）。
-    if (!isCustomRangeValid(from, to)) {
+    if (!UsageStats.isCustomRangeValid(from, to)) {
       showToast('自定义区间起始日不能晚于结束日');
       return;
     }

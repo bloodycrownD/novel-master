@@ -13,8 +13,8 @@ jest.mock('@react-native-documents/picker', () => ({
 }));
 
 import {pick} from '@react-native-documents/picker';
-import {pickSingleDocument} from '@/services/document-pick';
-import {registerAppToastSink} from '@/services/app-toast';
+import {DocumentPick} from '@/services/document-pick';
+import {AppToast} from '@/services/app-toast'
 
 const pickMock = pick as unknown as jest.Mock;
 
@@ -24,17 +24,17 @@ describe('pickSingleDocument 用户取消归一', () => {
   beforeEach(() => {
     pickMock.mockReset();
     shown.length = 0;
-    registerAppToastSink((msg: string) => shown.push(msg));
+    AppToast.registerSink((msg: string) => shown.push(msg));
   });
 
   afterAll(() => {
-    registerAppToastSink(null);
+    AppToast.registerSink(null);
   });
 
   test('iOS reject OPERATION_CANCELED → 返回 null 并弹「已取消」', async () => {
     pickMock.mockRejectedValue({code: 'OPERATION_CANCELED'});
     await expect(
-      pickSingleDocument({type: ['public.zip']}),
+      DocumentPick.pickSingle({type: ['public.zip']}),
     ).resolves.toBeNull();
     expect(shown).toEqual(['已取消']);
   });
@@ -42,7 +42,7 @@ describe('pickSingleDocument 用户取消归一', () => {
   test('Android resolve 空数组 → 返回 null 并弹「已取消」', async () => {
     pickMock.mockResolvedValue([]);
     await expect(
-      pickSingleDocument({type: ['public.yaml']}),
+      DocumentPick.pickSingle({type: ['public.yaml']}),
     ).resolves.toBeNull();
     expect(shown).toEqual(['已取消']);
   });
@@ -51,14 +51,14 @@ describe('pickSingleDocument 用户取消归一', () => {
     const file = {uri: 'file:///tmp/a.zip', name: 'a.zip'};
     pickMock.mockResolvedValue([file]);
     await expect(
-      pickSingleDocument({type: ['public.zip']}),
+      DocumentPick.pickSingle({type: ['public.zip']}),
     ).resolves.toStrictEqual(file);
     expect(shown).toEqual([]);
   });
 
   test('非取消错误 → 原样抛出', async () => {
     pickMock.mockRejectedValue(new Error('boom'));
-    await expect(pickSingleDocument({type: ['public.zip']})).rejects.toThrow(
+    await expect(DocumentPick.pickSingle({type: ['public.zip']})).rejects.toThrow(
       'boom',
     );
     expect(shown).toEqual([]);

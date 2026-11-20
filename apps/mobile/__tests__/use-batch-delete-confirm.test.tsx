@@ -10,13 +10,19 @@ import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/services/app-toast', () => ({
+jest.mock('@/services/app-toast', () => {
+  const legacy = {
   showAppToast: (...args: unknown[]) => mockShowToast(...args),
-}));
+};
+  return {...legacy, AppToast: {show: legacy.showAppToast}};
+});
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (title: string, _err: unknown) => title,
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('react-native', () => ({
   Alert: {alert: jest.fn()},

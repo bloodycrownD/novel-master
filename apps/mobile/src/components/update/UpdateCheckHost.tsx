@@ -7,7 +7,7 @@ import React, {useCallback} from 'react';
 import {Alert, Linking} from 'react-native';
 import {useToast} from '../chrome/ToastHost';
 import {useAutoUpdateCheck} from '../../hooks/useAutoUpdateCheck';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import type {UpdateCheckData} from '@novel-master/core/common';
 import {UpdateCheckResultModal} from './UpdateCheckResultModal';
 
@@ -26,7 +26,7 @@ function showUpdateDetailAlert(data: UpdateCheckData, onLater: () => void, showT
       text: '前往下载',
       onPress: () => {
         // 对齐 AboutScreen openLink：外跳失败（无浏览器可处理等）toast 而非裸 rejection。
-        void Linking.openURL(data.releaseUrl).catch(err => showToast(toastMessage('无法打开链接', err)));
+        void Linking.openURL(data.releaseUrl).catch(err => showToast(ToastMessage.toast('无法打开链接', err)));
       },
     },
   ]);

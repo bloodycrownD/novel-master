@@ -22,8 +22,8 @@ import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 import type {ComposerInputMetrics, ComposerInputSelection, ComposerInputTheme} from '@/components/chat/ComposerInputBridge';
-import {ComposerInputWebView, themeFromTokens, toNativeSelectionEvent, type ComposerInputWebViewHandle} from '@/components/chat/ComposerInputWebView';
-import {PROMPT_INSERTABLE_MACROS, insertTextAtSelection} from './prompt-macro-input';
+import {ComposerInputTheme as ComposerInputThemeNs, ComposerInputWebView, type ComposerInputWebViewHandle} from '@/components/chat/ComposerInputWebView';
+import {PROMPT_INSERTABLE_MACROS, PromptMacroInput} from './prompt-macro-input';
 
 type Props = {
   tokens: ThemeTokens;
@@ -77,21 +77,21 @@ export function PromptMacroTextInput({tokens, value, onChangeText, placeholder, 
    * 主题走 props.tokens 通道（chat 壳用 useTheme；宏壳保持外部传入语义）。
    * 字段映射与 chat 壳共用 `themeFromTokens`（单一真源，勿再写内联字面量）。
    */
-  const theme = useMemo<ComposerInputTheme>(() => themeFromTokens(tokens), [tokens]);
+  const theme = useMemo<ComposerInputTheme>(() => ComposerInputThemeNs.fromTokens(tokens), [tokens]);
 
   /** web 上报选区 → 解除短暂受控 + 合成 RN 事件形状上抛。 */
   const handleSelectionChange = useCallback(
     (next: ComposerInputSelection) => {
       selectionRef.current = next;
       setPendingSelection(null);
-      onSelectionChange?.(toNativeSelectionEvent(next));
+      onSelectionChange?.(ComposerInputThemeNs.toNativeSelectionEvent(next));
     },
     [onSelectionChange],
   );
 
   const insertMacro = useCallback(
     (token: string) => {
-      const {next, selection: caret} = insertTextAtSelection(value, selectionRef.current, token);
+      const {next, selection: caret} = PromptMacroInput.insertTextAtSelection(value, selectionRef.current, token);
       selectionRef.current = caret;
       setPendingSelection(caret);
       // 命令式整段写入：web 侧 suppressChange 包裹，光标随 payload 一次落位；

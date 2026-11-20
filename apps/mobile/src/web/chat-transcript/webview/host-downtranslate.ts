@@ -3,7 +3,7 @@
  * 真机白屏根因层，3d206251e 修）。
  *
  * 宿主下行全是 v2 信封，而 runtime 的 `handleHostMessage` 用
- * `matchHostMessage(raw, BRIDGE_V)` 只认 v1——合成包时代这层拆包重打包由
+ * `HostMessageChannel.match(raw, BRIDGE_V)` 只认 v1——合成包时代这层拆包重打包由
  * dispatcher 承担，dispatcher 随包退役后若 runtime 直绑通道，init/快照会在
  * `if (!msg) return` 处被静默丢弃（白屏无错误页）。故入口（`main.ts`）承接
  * dispatcher 的 transcript 半边：**先**单次注册宿主通道，把 v2 拆包重打包成

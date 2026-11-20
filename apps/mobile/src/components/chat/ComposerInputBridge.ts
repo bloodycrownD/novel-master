@@ -6,7 +6,7 @@
  * 四函数编解码单源在 `webview-host/typed-message-bridge.ts`。
  * decode 走抛错口径（坏信封 = JSON 坏 / v 不符 / type 缺失），由宿主 try/catch 静默丢弃。
  */
-import {createMessageBridge} from '@/webview-host/typed-message-bridge';
+import {TypedMessageBridge} from '@/webview-host/typed-message-bridge';
 
 export const COMPOSER_INPUT_BRIDGE_VERSION = 1 as const;
 
@@ -83,4 +83,4 @@ export type ComposerInputToHostMessage =
   | BridgeEnvelope<'blur', Record<string, never>>
   | BridgeEnvelope<'heightChange', {height: number}>;
 
-export const composerInputBridge = createMessageBridge<HostToComposerInputMessage, ComposerInputToHostMessage>(COMPOSER_INPUT_BRIDGE_VERSION, 'composer-input');
+export const composerInputBridge = TypedMessageBridge.create<HostToComposerInputMessage, ComposerInputToHostMessage>(COMPOSER_INPUT_BRIDGE_VERSION, 'composer-input');

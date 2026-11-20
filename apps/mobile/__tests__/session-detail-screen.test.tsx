@@ -93,14 +93,18 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 const mockLoadChatAgentMeta = jest.fn();
 // isAgentLocked / isModelLocked / isAgentDeleted 的 mock 跟真实逻辑保持一致：
 // agent 卡仅 meta 未加载时锁（none 态放开为待重选）；model 卡 none 态仍锁。
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
   isAgentLocked: (meta: {source?: string} | undefined) => meta == null,
   isAgentDeleted: (meta: {source?: string} | undefined) =>
@@ -121,7 +125,9 @@ jest.mock('@/services/chat-agent-meta', () => ({
   AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
   AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
   MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta, isLocked: legacy.isAgentLocked, isModelLocked: legacy.isModelLocked, isDeleted: legacy.isAgentDeleted}};
+});
 
 jest.mock('@/components/agent/AgentPickerModal', () => {
   const React = require('react');
@@ -219,10 +225,7 @@ jest.mock('react-native', () => {
 });
 
 import {SessionDetailScreen} from '@/screens/stack/SessionDetailScreen';
-import {
-  selectSessionAgent,
-  selectWorkspaceAgent,
-} from '@/services/agent-picker';
+import {AgentPicker} from '@/services/agent-picker'
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 
 function flushPromises(): Promise<void> {
@@ -533,7 +536,7 @@ describe('T-M5 picker select 分流', () => {
   });
 
   it('会话内 agent 选择：selectSessionAgent 写 session agentId，不碰 workspace 全局', async () => {
-    await selectSessionAgent(mockRuntime as never, 's1', 'agent-a');
+    await AgentPicker.selectSession(mockRuntime as never, 's1', 'agent-a');
     expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
       agentId: 'agent-a',
     });
@@ -541,7 +544,7 @@ describe('T-M5 picker select 分流', () => {
   });
 
   it('全局 agent 选择：selectWorkspaceAgent 调 setCurrentAgentId，不写 session 绑定', async () => {
-    await selectWorkspaceAgent(mockRuntime as never, 'agent-a');
+    await AgentPicker.selectWorkspace(mockRuntime as never, 'agent-a');
     expect(mockStateSetCurrentAgentId).toHaveBeenCalledWith('agent-a');
     expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
   });

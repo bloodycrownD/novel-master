@@ -10,6 +10,7 @@
  * 消息菜单只剩 web 文档内这一张。
  */
 import {readFileSync} from 'node:fs';
+import {RowsClick} from '@web/chat-transcript/webview/runtime/render/rows-click';
 import {join} from 'node:path';
 import {Menu} from '../src/web/chat-transcript/webview/runtime/menu/menu';
 import {state} from '../src/web/chat-transcript/webview/runtime/state/state';
@@ -76,7 +77,7 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
     expect(menu).toContain('openFromAnchor: (messageId');
     expect(bindShell).not.toContain('onMessagePointerDown');
     expect(bindShell).not.toContain('touchstart');
-    expect(bindShell).toContain('onRowsClick');
+    expect(bindShell).toContain('RowsClick.on');
   });
 });
 

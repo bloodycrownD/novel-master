@@ -102,9 +102,12 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
@@ -181,15 +184,15 @@ jest.mock('@/components/provider/ModelPickerModal', () => {
   };
 });
 
-jest.mock('@/services/agent-display-label', () => ({
+jest.mock('@/services/agent-display-label', () => {
+  const legacy = {
   resolveCurrentAgentDisplayLabel: jest.fn(async () => 'Agent'),
-}));
+};
+  return {...legacy, AgentDisplayLabel: {resolveCurrent: legacy.resolveCurrentAgentDisplayLabel}};
+});
 
 import {TokenUsageStatsScreen} from '@/screens/stack/TokenUsageStatsScreen';
-import {
-  isCustomRangeValid,
-  localDayKeyOffset,
-} from '@/screens/stack/token-usage/format';
+import {UsageStats} from '@/screens/stack/token-usage/format'
 import {DateTime} from '@novel-master/core/common';
 import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
 import {PieChart} from '@/components/charts/PieChart';
@@ -305,7 +308,7 @@ function todayKey(): string {
   return DateTime.localDayKey(Date.now());
 }
 function dayKeyOffset(offsetDays: number): string {
-  return localDayKeyOffset(new Date(), offsetDays);
+  return UsageStats.localDayKeyOffset(new Date(), offsetDays);
 }
 
 function flushPromises(): Promise<void> {
@@ -1408,10 +1411,10 @@ describe('T-M7 PieChart 组件级', () => {
 describe('T-M6 自定义区间校验（无上限）', () => {
   it('366 天、十年均合法，仅倒序非法', () => {
     const from = new Date(2026, 0, 1);
-    expect(isCustomRangeValid(from, new Date(2027, 0, 1))).toBe(true); // 366 天
-    expect(isCustomRangeValid(from, new Date(2036, 0, 1))).toBe(true); // 十年
+    expect(UsageStats.isCustomRangeValid(from, new Date(2027, 0, 1))).toBe(true); // 366 天
+    expect(UsageStats.isCustomRangeValid(from, new Date(2036, 0, 1))).toBe(true); // 十年
     expect(
-      isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
+      UsageStats.isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
     ).toBe(false); // from > to
   });
 });

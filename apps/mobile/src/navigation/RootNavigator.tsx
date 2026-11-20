@@ -10,7 +10,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {navigationContainerRef} from './navigation-container-ref';
 import {ChatTabIcon, ProfileTabIcon} from '../components/icons/TabIcons';
 import {HeaderProvider} from './HeaderContext';
-import {buildMainTabBarStyle} from './main-tab-bar-style';
+import {MainTabBarStyle} from './main-tab-bar-style';
 import {StackScreenLayout} from './StackScreenLayout';
 import type {MainTabParamList, RootStackParamList} from './types';
 import {useTheme} from '../theme/ThemeProvider';
@@ -71,7 +71,7 @@ function MainTabs() {
         tabBarActiveTintColor: tokens.tabBarActive,
         tabBarInactiveTintColor: tokens.tabBarInactive,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarStyle: buildMainTabBarStyle(tokens, insets),
+        tabBarStyle: MainTabBarStyle.build(tokens, insets),
       }}
     >
       <Tab.Screen

@@ -1,6 +1,6 @@
 import {LogFactory} from '@novel-master/core/log';
 import type {LogRecord} from '@novel-master/core/log';
-import {installJsCrashHandler, installMobileLogSink} from '@/services/log-sink.mobile';
+import {LogSinkMobile} from '@/services/log-sink.mobile';
 import {fs as mockFs, MOCK_DIRS} from '../test-utils/react-native-blob-util-mock';
 
 const LOG_DIR = `${MOCK_DIRS.DocumentDir}/logs`;
@@ -36,7 +36,7 @@ describe('installMobileLogSink', () => {
   });
 
   it('把 logger 记录追加到 DocumentDir/logs/nm-<日期>.log', async () => {
-    remove = await installMobileLogSink();
+    remove = await LogSinkMobile.installFileSink();
 
     LogFactory.create('test.scope').info('hello', {tokenCount: 3});
     await flushWrites();
@@ -55,7 +55,7 @@ describe('installMobileLogSink', () => {
     const base = `nm-${todayKey()}.log`;
     (mockFs.ls as jest.Mock).mockResolvedValue([base]);
     (mockFs.stat as jest.Mock).mockResolvedValue({size: 2 * 1024 * 1024, lastModified: 1});
-    remove = await installMobileLogSink();
+    remove = await LogSinkMobile.installFileSink();
 
     LogFactory.create('test.scope').warn('rollover');
     await flushWrites();
@@ -68,7 +68,7 @@ describe('installMobileLogSink', () => {
     const mtimes = new Map(names.map((name, index) => [`${LOG_DIR}/${name}`, 1_000 + index]));
     (mockFs.ls as jest.Mock).mockResolvedValue(names);
     (mockFs.stat as jest.Mock).mockImplementation((path: string) => Promise.resolve({size: 10, lastModified: mtimes.get(path) ?? 0}));
-    remove = await installMobileLogSink();
+    remove = await LogSinkMobile.installFileSink();
 
     LogFactory.create('test.scope').info('prune');
     await flushWrites();
@@ -91,7 +91,7 @@ describe('installJsCrashHandler', () => {
     jest.spyOn(ErrorUtils, 'getGlobalHandler').mockReturnValue(previous);
     const setGlobalHandler = jest.spyOn(ErrorUtils, 'setGlobalHandler').mockImplementation(() => undefined);
 
-    installJsCrashHandler();
+    LogSinkMobile.installCrashHandler();
 
     expect(setGlobalHandler).toHaveBeenCalledTimes(1);
     const error = new Error('fatal-boom');

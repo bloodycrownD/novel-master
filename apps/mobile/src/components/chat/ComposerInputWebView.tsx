@@ -20,9 +20,9 @@ import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 're
 import type {ThemeTokens} from '@/theme/tokens';
 import {useTheme} from '@/theme/ThemeProvider';
 import {COMPOSER_INPUT_WEBVIEW_PACKAGE_ID} from '@/webview-host/composer-input/uri';
-import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
-import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
-import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge, type ComposerInputMetrics, type ComposerInputMode, type ComposerInputSelection, type ComposerInputTheme, type HostToComposerInputMessage} from './ComposerInputBridge';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
+import {WebviewAssetUri} from '@/webview-host/webview-asset-uri';
+import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge, type ComposerInputMetrics, type ComposerInputMode, type ComposerInputSelection, type ComposerInputTheme as ComposerInputThemeData, type HostToComposerInputMessage} from './ComposerInputBridge';
 
 /**
  * 高度台阶过渡时长：高度按行粒度跳（22px 一跳），80ms 的出缓动足够把「弹一下」
@@ -51,7 +51,7 @@ type ComposerInputWebViewProps = {
    * 主题覆盖（宏壳 props.tokens 通道）；缺省用 useTheme() tokens 组装
    * （`primaryMuted = ${primary}22`，web 不做颜色计算）。
    */
-  readonly theme?: ComposerInputTheme | null;
+  readonly theme?: ComposerInputThemeData | null;
   readonly testID?: string;
   /** 容器样式；高度由宿主按 metrics 与 heightChange 管理，勿在此覆盖。 */
   readonly style?: StyleProp<ViewStyle>;
@@ -75,8 +75,8 @@ export type ComposerInputWebViewHandle = {
 // toNativeSelectionEvent 语义上属选区事件包装，随文件级 namespace 收容。
 export namespace ComposerInputTheme {
   /** 主题组装：全量宿主主题（`hostThemeFromTokens`）取 composer 子集（胶囊 = primary 字 + primaryMuted 底）。 */
-  export function fromTokens(tokens: ThemeTokens): ComposerInputTheme {
-    const {background, text, textSecondary, primary, primaryMuted, selection} = hostThemeFromTokens(tokens);
+  export function fromTokens(tokens: ThemeTokens): ComposerInputThemeData {
+    const {background, text, textSecondary, primary, primaryMuted, selection} = HostThemeMapping.fromTokens(tokens);
     return {background, text, textSecondary, primary, primaryMuted, selection};
   }
 
@@ -200,15 +200,15 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
       }
       if (message.type === 'selectionChange') {
         const next = {
-          start: ComposerInputTheme.finiteOrNull(message.payload.start) ?? 0,
-          end: ComposerInputTheme.finiteOrNull(message.payload.end) ?? 0,
+          start: typeof message.payload.start === 'number' && Number.isFinite(message.payload.start) ? message.payload.start : 0,
+          end: typeof message.payload.end === 'number' && Number.isFinite(message.payload.end) ? message.payload.end : 0,
         };
         lastSelectionRef.current = next;
         onSelectionChangeRef.current?.(next);
         return;
       }
       if (message.type === 'heightChange') {
-        const height = ComposerInputTheme.finiteOrNull(message.payload.height);
+        const height = typeof message.payload.height === 'number' && Number.isFinite(message.payload.height) ? message.payload.height : null;
         if (height != null) {
           applyHeight(height);
         }
@@ -286,7 +286,7 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
     if (!webReady || selection == null) {
       return;
     }
-    if (ComposerInputTheme.sameSelection(lastSelectionRef.current, selection)) {
+    if (lastSelectionRef.current != null && lastSelectionRef.current.start === selection.start && lastSelectionRef.current.end === selection.end) {
       return;
     }
     const next = {start: selection.start, end: selection.end};
@@ -359,7 +359,7 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
    * 其余 scheme 一律拒绝。外部页面无法在 WebView 内落地，其伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID))) {
+    if (req.url.startsWith(WebviewAssetUri.getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -379,10 +379,10 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
         /* 背景透明：底色由 RN 容器给（web 侧 html/body 亦不上色）。 */
         style={styles.webview}
         originWhitelist={['file://']}
-        source={{uri: getWebViewPackageIndexUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}}
+        source={{uri: WebviewAssetUri.getWebViewPackageIndexUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}
+        allowingReadAccessToURL={WebviewAssetUri.getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onMessage={handleMessage}
         javaScriptEnabled

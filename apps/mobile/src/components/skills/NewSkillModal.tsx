@@ -16,7 +16,7 @@ import {VfsServiceFactory, type VfsScope} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {SkillFrontMatterValues} from './skill-ui';
-import {pickZipFileBytes} from '@/services/vfs-zip.service';
+import {VfsZipService} from '@/services/vfs-zip.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {coreT} from '@/i18n/core';
@@ -113,7 +113,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
     setImporting(true);
     setError(undefined);
     try {
-      const picked = await pickZipFileBytes();
+      const picked = await VfsZipService.pickBytes();
       if (!picked.ok) {
         setError(picked.error.message);
         return;

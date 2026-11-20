@@ -13,10 +13,13 @@ jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: {get: jest.fn()}}),
 }));
 
-jest.mock('@/storage/vfs-markdown-preview-engine', () => ({
+jest.mock('@/storage/vfs-markdown-preview-engine', () => {
+  const legacy = {
   defaultVfsMarkdownPreviewEngine: () => 'webview',
   readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
-}));
+};
+  return {...legacy, VfsMarkdownPreviewEngine: {read: legacy.readVfsMarkdownPreviewEngine, default: legacy.defaultVfsMarkdownPreviewEngine}};
+});
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
@@ -43,13 +46,19 @@ jest.mock('@/components/vfs/AnnotatePickModal', () => ({
   AnnotatePickModal: () => null,
 }));
 
-jest.mock('@/components/rich-content/sanitize-rich-html', () => ({
+jest.mock('@/components/rich-content/sanitize-rich-html', () => {
+  const legacy = {
   sanitizeRichHtml: (html: string) => html,
-}));
+};
+  return {...legacy, SanitizeRichHtml: {sanitize: legacy.sanitizeRichHtml}};
+});
 
-jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => ({
+jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => {
+  const legacy = {
   prepareTranscriptRichHtml: (md: string) => `<div>${md}</div>`,
-}));
+};
+  return {...legacy, TranscriptRichHtml: {prepare: legacy.prepareTranscriptRichHtml}};
+});
 
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';

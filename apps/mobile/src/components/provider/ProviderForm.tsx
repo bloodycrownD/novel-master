@@ -13,7 +13,7 @@ import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 
 const PROTOCOLS: LlmProtocolKind[] = ['openai', 'anthropic', 'gemini'];
 
@@ -97,7 +97,7 @@ export namespace ProviderFormMapper {
       baseUrl,
       displayName,
       apiKey,
-      headers: ProviderFormMapper.parseHeadersJson(values.headersJson),
+      headers: parseHeadersJson(values.headersJson),
       bodyParams: ProviderFormMapper.parseBodyParamsJson(values.bodyParamsJson),
     };
   }
@@ -123,7 +123,7 @@ export namespace ProviderFormMapper {
     if (apiKey) {
       patch.apiKey = apiKey;
     }
-    const headers = ProviderFormMapper.parseHeadersJson(values.headersJson);
+    const headers = parseHeadersJson(values.headersJson);
     if (headers) {
       patch.headers = headers;
     }
@@ -164,7 +164,7 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
     try {
       await onSubmit(values);
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     }
   };
 

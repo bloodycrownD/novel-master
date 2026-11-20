@@ -9,11 +9,8 @@
  * 跑的是**真 runtime**（editor + bridge + shared 通道全不 mock）——负面断言因此有牙：
  * 同一条测高序列在默认参数下确实会 post heightChange。
  */
-import {
-  applyInit,
-  destroyComposerEditor,
-} from '@web/composer-input/webview/runtime/editor';
-import {createComposerRuntime} from '@web/composer-input/webview/runtime/factory';
+import {ComposerEditor} from '@web/composer-input/webview/runtime/editor';
+import {ComposerFactory} from '@web/composer-input/webview/runtime/factory';
 
 type AnyFn = (event?: unknown) => void;
 
@@ -239,7 +236,7 @@ function driveHeightReport(height: number): void {
   flushRaf();
   const {highlight} = mountedEditor();
   highlight.scrollHeight = height;
-  applyInit({
+  ComposerEditor.applyInit({
     mode: 'composer-token',
     disabled: false,
     metrics: METRICS,
@@ -296,7 +293,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  destroyComposerEditor();
+  ComposerEditor.destroy();
   flushRaf();
   g.window = originalWindow;
   g.document = originalDocument;
@@ -320,7 +317,7 @@ function registerRoot(): FakeElement {
 describe('createComposerRuntime 默认参数（= 旧包现行为，宏链依赖零变化）', () => {
   it('T-CF1：挂载编辑器到 host 并透出 handle', () => {
     const root = registerRoot();
-    const handle = createComposerRuntime('#root');
+    const handle = ComposerFactory.create('#root');
 
     expect(handle.mounted).toBe(true);
     expect(handle.parent).toBe(root as unknown as HTMLElement);
@@ -337,7 +334,7 @@ describe('createComposerRuntime 默认参数（= 旧包现行为，宏链依赖�
 
   it('T-CF2：发 ready（v=1 单例 + version 载荷），且是第一条上行消息', () => {
     registerRoot();
-    createComposerRuntime('#root');
+    ComposerFactory.create('#root');
 
     expect(typesOfPost()).toEqual(['ready']);
     expect(posted[0]).toEqual({v: 1, type: 'ready', payload: {version: 1}});
@@ -345,7 +342,7 @@ describe('createComposerRuntime 默认参数（= 旧包现行为，宏链依赖�
 
   it('T-CF3：绑 host 消息通道（document + window 双注册，单次），下行 setText 生效', () => {
     registerRoot();
-    createComposerRuntime('#root');
+    ComposerFactory.create('#root');
 
     expect(fakeDocument.countListeners('message')).toBe(1);
     expect(fakeWindow.countListeners('message')).toBe(1);
@@ -360,7 +357,7 @@ describe('createComposerRuntime 默认参数（= 旧包现行为，宏链依赖�
 
   it('T-CF4：heightReport 默认开启——init 后测高发 heightChange（负面断言的对照组）', () => {
     registerRoot();
-    createComposerRuntime('#root');
+    ComposerFactory.create('#root');
 
     driveHeightReport(100);
 
@@ -371,13 +368,13 @@ describe('createComposerRuntime 默认参数（= 旧包现行为，宏链依赖�
 
   it('T-CF5：host 支持元素直通（合成包按元素挂载的用法）', () => {
     const root = registerRoot();
-    createComposerRuntime(root as unknown as HTMLElement);
+    ComposerFactory.create(root as unknown as HTMLElement);
     expect(mountedEditor().editorRoot.parent).toBe(root);
     expect(typesOfPost()).toEqual(['ready']);
   });
 
   it('T-CF6：host 未命中时跳过挂载，但仍绑通道 + 发 ready（旧 main.ts 的 null 守卫口径）', () => {
-    const handle = createComposerRuntime('#missing-root');
+    const handle = ComposerFactory.create('#missing-root');
 
     expect(handle.mounted).toBe(false);
     expect(handle.parent).toBeNull();
@@ -389,7 +386,7 @@ describe('createComposerRuntime 默认参数（= 旧包现行为，宏链依赖�
 describe('createComposerRuntime heightReport:false（合成包：高度文档内消化）', () => {
   it('T-CF7：同一条测高序列零 heightChange 上行', () => {
     registerRoot();
-    createComposerRuntime('#root', {heightReport: false});
+    ComposerFactory.create('#root', {heightReport: false});
 
     driveHeightReport(100);
     driveHeightReport(140);
@@ -401,10 +398,10 @@ describe('createComposerRuntime heightReport:false（合成包：高度文档内
 
   it('T-CF8：heightReport:false 下打字/选区等上行照常（只关高度链）', () => {
     registerRoot();
-    createComposerRuntime('#root', {heightReport: false});
+    ComposerFactory.create('#root', {heightReport: false});
 
     const {input} = mountedEditor();
-    applyInit({
+    ComposerEditor.applyInit({
       mode: 'composer-token',
       disabled: false,
       metrics: METRICS,
@@ -429,14 +426,14 @@ describe('createComposerRuntime heightReport:false（合成包：高度文档内
 describe('测高链闸门（r6-E-2）', () => {
   it('T-CF13：heightReport:false 时连续输入 N 次不产生 rAF 回调、RO 未 observe', () => {
     registerRoot();
-    createComposerRuntime('#root', {heightReport: false});
+    ComposerFactory.create('#root', {heightReport: false});
 
     // 装配收尾（applyMetrics 会调 scheduleMeasure）就已经零 rAF
     expect(rafScheduled).toBe(0);
     expect(resizeObservers.length).toBe(0);
 
     const {input, highlight} = mountedEditor();
-    applyInit({
+    ComposerEditor.applyInit({
       mode: 'composer-token',
       disabled: false,
       metrics: METRICS,
@@ -463,7 +460,7 @@ describe('测高链闸门（r6-E-2）', () => {
 
   it('T-CF14：默认参数对照组——RO 已 observe 高亮层且测高确实排 rAF', () => {
     registerRoot();
-    createComposerRuntime('#root');
+    ComposerFactory.create('#root');
 
     expect(resizeObservers.length).toBe(1);
     expect(resizeObservers[0].observed).toBe(1);
@@ -474,7 +471,7 @@ describe('测高链闸门（r6-E-2）', () => {
 describe('applyText 广播 composer:text-changed（cr1-P2-7 editor 半边）', () => {
   it('T-CF15：内容变化分支派发事件，内容相同短路时不派发', () => {
     registerRoot();
-    createComposerRuntime('#root');
+    ComposerFactory.create('#root');
 
     const seen: Array<{text: string; detail: unknown}> = [];
     fakeDocument.addEventListener('composer:text-changed', event => {
@@ -501,7 +498,7 @@ describe('applyText 广播 composer:text-changed（cr1-P2-7 editor 半边）', (
 describe('createComposerRuntime emitReady:false（合成包：单 ready 由入口统一发）', () => {
   it('T-CF9：零 ready 上行', () => {
     registerRoot();
-    createComposerRuntime('#root', {emitReady: false});
+    ComposerFactory.create('#root', {emitReady: false});
 
     expect(postsOfType('ready')).toEqual([]);
     expect(postsOfType('ready').length).toBe(0);
@@ -509,7 +506,7 @@ describe('createComposerRuntime emitReady:false（合成包：单 ready 由入�
 
   it('T-CF10：其余动作照旧（挂载 + 绑通道 + 高度上报）', () => {
     registerRoot();
-    const handle = createComposerRuntime('#root', {emitReady: false});
+    const handle = ComposerFactory.create('#root', {emitReady: false});
 
     expect(handle.emitReady).toBe(false);
     expect(fakeDocument.countListeners('message')).toBe(1);
@@ -521,7 +518,7 @@ describe('createComposerRuntime emitReady:false（合成包：单 ready 由入�
 describe('createComposerRuntime bindChannel:false（合成包：入口单次注册通道）', () => {
   it('T-CF11：不注册 document/window 双通道监听', () => {
     registerRoot();
-    createComposerRuntime('#root', {bindChannel: false});
+    ComposerFactory.create('#root', {bindChannel: false});
 
     expect(fakeDocument.countListeners('message')).toBe(0);
     expect(fakeWindow.countListeners('message')).toBe(0);
@@ -531,7 +528,7 @@ describe('createComposerRuntime bindChannel:false（合成包：入口单次注�
 
   it('T-CF12：宿主消息不再被处理（无监听即无副作用），但 ready 照发', () => {
     registerRoot();
-    createComposerRuntime('#root', {bindChannel: false});
+    ComposerFactory.create('#root', {bindChannel: false});
 
     sendHostMessage({v: 1, type: 'setText', payload: {text: '不该写入'}});
 

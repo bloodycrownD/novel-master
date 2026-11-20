@@ -33,7 +33,7 @@ import {
 } from '@/components/vfs/VfsFileManager';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {ThemeTokens} from '@/theme/tokens';
-import {formatRelativeTimeMs} from '@/utils/format-relative-time';
+import {FormatRelativeTime} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 
@@ -288,7 +288,7 @@ function ChatSessionListPanelInner({
                         {color: tokens.textSecondary},
                       ]}
                     >
-                      {formatRelativeTimeMs(item.updatedAtMs)}
+                      {FormatRelativeTime.formatMs(item.updatedAtMs)}
                       {showsActiveMeta ? ' · 活跃中' : ''}
                     </Text>
                   </View>

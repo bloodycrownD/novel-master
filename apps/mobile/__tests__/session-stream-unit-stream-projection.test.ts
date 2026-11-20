@@ -25,7 +25,7 @@ import {LogFactory} from '@novel-master/core/log';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 import type {ChatMessageData} from '@novel-master/core/chat';
 
 const CLOCK_START_MS = 2_000_000;
@@ -207,7 +207,7 @@ describe('SessionStreamUnit 流式 step 记录（T-SP15）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
   });
@@ -215,7 +215,7 @@ describe('SessionStreamUnit 流式 step 记录（T-SP15）', () => {
   afterEach(() => {
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('assistant STEP_COMMITTED 冻结旧记录（文本保留）并开新 streamId，不发 reset-stream', () => {
@@ -280,7 +280,7 @@ describe('tool-use 订阅与 tools-only stream-batch（T-SP16）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
     h = createHarness();
@@ -290,7 +290,7 @@ describe('tool-use 订阅与 tools-only stream-batch（T-SP16）', () => {
     h.manager.dispose();
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('生效即推 tools-only batch（带当前 streamId）；按 toolUseId 去重', () => {
@@ -342,7 +342,7 @@ describe('DB 接管映射（T-SP17）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
     h = createHarness();
@@ -352,7 +352,7 @@ describe('DB 接管映射（T-SP17）', () => {
     h.manager.dispose();
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   it('reload 后新增 assistant 一一配对：messageId + streamRowIds，行身份仍是 streamId', async () => {
@@ -705,7 +705,7 @@ describe('streamRowIds 生命周期（P1-3 / P2-18f）', () => {
   beforeEach(() => {
     agentActivity.setActive(false);
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
     jest.useFakeTimers();
     jest.setSystemTime(CLOCK_START_MS);
     h = createHarness({settledGraceMs: 1000});
@@ -715,7 +715,7 @@ describe('streamRowIds 生命周期（P1-3 / P2-18f）', () => {
     h.manager.dispose();
     jest.useRealTimers();
     agentActivity.setActive(false);
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   /** 跑一轮、接管 assistant、收尾并等宽限到期——单元出表、映射交接到 idle。 */

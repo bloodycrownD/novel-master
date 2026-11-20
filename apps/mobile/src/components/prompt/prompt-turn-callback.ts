@@ -10,7 +10,7 @@
  * 不走路由，标题这类可序列化的短文本仍走 params）。
  */
 
-import {createCallbackSlot} from '../../runtime/callback-slot';
+import {CallbackSlot} from '../../runtime/callback-slot';
 
 export type PromptTurnDetail = {
   /** 轮标题（首行摘要），供详情页 header 覆盖用。 */
@@ -29,4 +29,4 @@ export type PromptTurnDetail = {
  * 模块级单槽：navigate 前 `set`（每次打开详情都覆盖新载荷）、挂载时 `take`
  * （读后即清，未消费即离开则丢弃，避免残留旧正文）。
  */
-export const promptTurnDetailSlot = createCallbackSlot<PromptTurnDetail>();
+export const promptTurnDetailSlot = CallbackSlot.create<PromptTurnDetail>();

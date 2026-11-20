@@ -18,9 +18,9 @@
  * （见 session-stream-unit 的 rateSampler），本组件只读不采样。
  */
 import React, {useEffect, useState} from 'react';
-import {type AgentStreamMetricsView, toAgentStreamMetricsView} from '@/hooks/useAgentStreamMetrics';
+import {type AgentStreamMetricsView, AgentStreamMetrics} from '@/hooks/useAgentStreamMetrics';
 import {useRuntime} from '@/hooks/useRuntime';
-import {isSessionStreamUnitSettled, type SessionStreamUnitView} from '@/services/session-stream-unit';
+import {type SessionStreamUnitView, SessionStreamUnit} from '@/services/session-stream-unit';
 import {timingLog} from '@/debug/run-timing';
 import {MetricDetailSheet} from '../sheet/MetricDetailSheet';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
@@ -50,7 +50,7 @@ type Props = {
 // 按内容主体（settled 指标可见性）起名 SettledMetrics，成员剥词尾主体词。
 export namespace SettledMetrics {
   export function hasVisible(view: SessionStreamUnitView): boolean {
-    return isSessionStreamUnitSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
+    return SessionStreamUnit.isSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
   }
 }
 
@@ -102,20 +102,20 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId, contextTokenL
       const elapsedMs = view.elapsedMs != null ? view.elapsedMs : view.startedAtMs > 0 ? Math.max(0, (view.settledAtMs ?? Date.now()) - view.startedAtMs) : 0;
       // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
       const frozenSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
-      metrics = toAgentStreamMetricsView(false, frozenSample, manager.rateTokensPerSecond(sessionId, Date.now()));
+      metrics = AgentStreamMetrics.toView(false, frozenSample, manager.rateTokensPerSecond(sessionId, Date.now()));
     } else if (agentRunning && view != null && view.startedAtMs > 0) {
       // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
       // 即显示（计时在走、token 为零的「准备中」形态），不等 RUN_STARTED。
       const elapsedMs = Math.max(0, Date.now() - view.startedAtMs);
       const startingSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
-      metrics = toAgentStreamMetricsView(true, startingSample, manager.rateTokensPerSecond(sessionId, Date.now()));
+      metrics = AgentStreamMetrics.toView(true, startingSample, manager.rateTokensPerSecond(sessionId, Date.now()));
     }
   }
   if (metrics == null && sessionId != null) {
     const lastRun = manager.getSettledProjection(sessionId);
     if (lastRun != null) {
       const settledSample = {elapsedMs: lastRun.elapsedMs, completionTokens: lastRun.metrics.completionTokens, tokenSource: lastRun.metrics.tokenSource};
-      metrics = toAgentStreamMetricsView(false, settledSample, lastRun.rateTokensPerSecond);
+      metrics = AgentStreamMetrics.toView(false, settledSample, lastRun.rateTokensPerSecond);
     }
   }
 

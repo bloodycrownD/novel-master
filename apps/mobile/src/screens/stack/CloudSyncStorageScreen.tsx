@@ -9,7 +9,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useRuntime} from '../../hooks/useRuntime';
-import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
+import {CloudSyncService} from '../../services/cloud-sync.service';
 import {agentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -34,7 +34,7 @@ export function CloudSyncStorageScreen() {
   const refreshCloudSyncStatus = useCallback(async () => {
     setStatusLoading(true);
     try {
-      const status = await getCloudSyncStatusView(runtime);
+      const status = await CloudSyncService.getStatusView(runtime);
       const view = status.ok ? status.value : {configured: false, deviceId: '', lastSyncedRev: 0, remoteRev: 0, suggestPull: false};
       setCloudConfigured(view.configured);
       setCloudRemoteRev(view.remoteRev);

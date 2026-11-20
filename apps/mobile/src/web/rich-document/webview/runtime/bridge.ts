@@ -8,7 +8,7 @@
 import {BRIDGE_V, type DocumentPayload} from './document-model';
 import {post} from './post';
 import {Annotate, type AnnotateRenderMark} from './annotate';
-import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import {MermaidFullscreen} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {HostMessageChannel} from '@web/shared/host-message-channel';
 import {HostTheme} from '@web/shared/host-theme';
 import {ViewSlot} from '@web/shared/view-slot';
@@ -60,7 +60,7 @@ export namespace RichDocumentBridge {
     }
     // Android 返回键：RN 拦截后下发关闭；关闭后回发 mermaidViewerClosed 复位 RN 态
     if (msg.type === 'closeMermaidViewer') {
-      closeMermaidViewer(true);
+      MermaidFullscreen.close(true);
     }
   }
 }

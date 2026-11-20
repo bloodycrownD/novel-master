@@ -1,6 +1,6 @@
 /**
  * SearchEngineDetailScreen 保存语义（web-search-curl T-U3/T-U4，动态清单版）：
- * 详情页经 `getSearchConfigStore(runtime)` 直接消费 core store 方法，本套件锁：
+ * 详情页经 `SearchConfigStore.get(runtime)` 直接消费 core store 方法，本套件锁：
  *
  * - 标题 override 用配置读模型里的引擎名（FIX-23：读模型 name 优先）；
  * - 保存失败 toast 后立即回读（catch 内补 `await load()`），状态标签反映已生效
@@ -22,6 +22,7 @@
  * store mock 扩到 core `SearchConfigStore` 全方法。
  */
 import React from 'react';
+import {SearchConfigStore} from '@/services/search-config.store';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {SearchConfigPublic} from '@novel-master/core';

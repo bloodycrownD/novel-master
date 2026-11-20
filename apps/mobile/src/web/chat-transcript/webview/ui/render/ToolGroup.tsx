@@ -2,14 +2,9 @@
  * 工具调用组：可折叠 header + 卡片列表。
  */
 import type {ToolCallRow} from '../../runtime/state/state';
-import {
-  readableToolResult,
-  ToolSummary,
-  toolStatusClass,
-  toolStatusLabel,
-} from '../../runtime/render/tool-logic';
-import {vfsToolFilePath} from '../../runtime/util/vfs-tool-path';
-import {skillToolRef} from '../../runtime/util/skill-tool-ref';
+import {ToolLogic, ToolSummary} from '../../runtime/render/tool-logic';
+import {VfsToolPath} from '../../runtime/util/vfs-tool-path';
+import {SkillToolRef} from '../../runtime/util/skill-tool-ref';
 import {CollapsibleSection} from './CollapsibleSection';
 
 type ToolGroupProps = {
@@ -39,7 +34,7 @@ export function ToolGroup({
       dividedClass={expanded && showDividerBelow ? ' tool-group-divided' : ''}
     >
       {tools.map((tool, i) => {
-        const filePath = vfsToolFilePath(tool.name || '', tool.input || {});
+        const filePath = VfsToolPath.resolve(tool.name || '', tool.input || {});
         // Bug1 加固：write/edit 卡片点击跳不了时，这里是最可能的断点（input 字段名不标准）。
         // 当工具名属于「可打开文件」集合但 filePath 解析为 undefined 时，打 warn 打印 input 的 keys，
         // 方便真机复现时从 logcat 定位实际传的字段名（path / file_path / filename / ...）。
@@ -64,18 +59,18 @@ export function ToolGroup({
         const subagentSessionId = tool.subagentSessionId;
         const hasSubagent = subagentSessionId != null;
         // projectId 缺省时由宿主按会话上下文补齐（webview 无会话上下文）
-        const skillRef = skillToolRef(tool);
+        const skillRef = SkillToolRef.resolve(tool);
         const hasSkill = !hasSubagent && skillRef != null;
         // 结果阅读兜底：无专属跳转（文件/子会话/技能）而有可读结果时点击进
         // 阅读页——任何工具通用（fs/agent/search/…），点了至少有反应。
         // 可读结果判定/回落 summary 单源在 readableToolResult（与 rows-click 共用）。
         // prettier-ignore
-        const hasResult = filePath == null && !hasSkill && readableToolResult(tool) != null;
+        const hasResult = filePath == null && !hasSkill && ToolLogic.readableResult(tool) != null;
         // prettier-ignore
         const canOpen = filePath != null || hasSubagent || hasSkill || hasResult;
         const summary = ToolSummary.callSummary(tool);
-        const statusClass = toolStatusClass(tool.status);
-        const statusInner = toolStatusLabel(tool.status);
+        const statusClass = ToolLogic.statusClass(tool.status);
+        const statusInner = ToolLogic.statusLabel(tool.status);
         // prettier-ignore
         const openKind = hasSubagent ? '子会话' : hasSkill ? '技能' : hasResult ? '结果' : '聊天工作区';
         const openHint = '点击查看 · ' + openKind;

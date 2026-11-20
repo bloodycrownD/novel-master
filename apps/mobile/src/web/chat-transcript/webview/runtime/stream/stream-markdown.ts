@@ -1,19 +1,9 @@
-import {decodeLiteralHtmlEntities} from '@web/shared/decode-entities';
-import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
-import {escapeHtmlRaw} from '../util/html-escape';
+import {DecodeEntities} from '@web/shared/decode-entities';
+import {TrustedHtmlWriter} from '@web/shared/ui/TrustedHtml';
+import {HtmlEscape} from '../util/html-escape';
 import {state} from '../state/state';
-import {scheduleStickIfNearBottom} from '../scroll/scroll';
-import {
-  assistantBubbleExtraClasses,
-  currentStreamingRow,
-  ensureStreamTextBody,
-  getStreamActiveTailText,
-  getStreamThinkingBody,
-  setStreamBodyRichClass,
-  setStreamTailPlainClass,
-  streamRenderTarget,
-  type StreamKind,
-} from './stream';
+import {Scroll} from '../scroll/scroll';
+import {Stream, type StreamKind} from './stream';
 
 const STREAM_RICH_UPGRADE_MS = 350;
 
@@ -31,14 +21,14 @@ export const streamRichUpgrade: StreamRichUpgradeState = {
 
 export const StreamRichUpgrade = {
   renderStreamingInline: (s: string): string => {
-    const escaped = escapeHtmlRaw(s);
+    const escaped = HtmlEscape.escapeRaw(s);
     const bolded = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     const italic = bolded.replace(/\*(.+?)\*/g, '<em>$1</em>');
     return italic.replace(/`([^`]+)`/g, '<code>$1</code>');
   },
 
   renderStreamingMarkdown: (text: unknown): string => {
-    const normalized = decodeLiteralHtmlEntities(String(text || '').trim());
+    const normalized = DecodeEntities.literal(String(text || '').trim());
     if (!normalized) return '';
     const lines = normalized.split(/\n/);
     let html = '';
@@ -99,35 +89,35 @@ export const StreamRichUpgrade = {
   },
 
   paintKind: (tail: Element, kind: StreamKind): void => {
-    const row = currentStreamingRow();
+    const row = Stream.currentRow();
     if (row == null) return;
     const bubble = tail.querySelector('.bubble');
     if (!bubble) return;
     if (kind === 'thinking') {
-      const body = getStreamThinkingBody(bubble);
+      const body = Stream.getThinkingBody(bubble);
       if (!body) return;
       // 块级模式下只对活跃尾块做轻量升级（已提交块零重渲）；旧模式仍为
       // 全量显示态（回滚开关关闭时的形态）
-      const html = StreamRichUpgrade.renderStreamingMarkdown(getStreamActiveTailText('thinking'));
+      const html = StreamRichUpgrade.renderStreamingMarkdown(Stream.getActiveTailText('thinking'));
       if (!html) return;
-      const target = streamRenderTarget(body);
-      applyTrustedHtml(target, html);
+      const target = Stream.renderTarget(body);
+      TrustedHtmlWriter.apply(target, html);
       // 轻量升级落富文本：清纯文本降级标记（B-1）
-      setStreamTailPlainClass(target, false);
-      setStreamBodyRichClass(body, true);
+      Stream.setTailPlainClass(target, false);
+      Stream.setBodyRichClass(body, true);
       // 不写回 row.thinkingHtml：行上是全量 html（delta 携带），尾块 html 写回
       // 会把 full 截成 tail（C22）。
     } else {
-      const textBody = ensureStreamTextBody(bubble);
-      const html = StreamRichUpgrade.renderStreamingMarkdown(getStreamActiveTailText('text'));
+      const textBody = Stream.ensureTextBody(bubble);
+      const html = StreamRichUpgrade.renderStreamingMarkdown(Stream.getActiveTailText('text'));
       if (!html) return;
-      const target = streamRenderTarget(textBody);
-      applyTrustedHtml(target, html);
-      setStreamTailPlainClass(target, false);
-      setStreamBodyRichClass(textBody, true);
+      const target = Stream.renderTarget(textBody);
+      TrustedHtmlWriter.apply(target, html);
+      Stream.setTailPlainClass(target, false);
+      Stream.setBodyRichClass(textBody, true);
       // 同上：不写回 row.textHtml（全量真源在 delta）。
     }
-    bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(row);
+    bubble.className = 'bubble assistant' + Stream.assistantBubbleExtraClasses(row);
   },
 
   /**
@@ -159,7 +149,7 @@ export const StreamRichUpgrade = {
       streamRichUpgrade.kinds.thinking = false;
       streamRichUpgrade.plainMode.thinking = false;
     }
-    scheduleStickIfNearBottom();
+    Scroll.scheduleStickIfNearBottom();
   },
 
   schedule: (kind: StreamKind): void => {

@@ -15,23 +15,9 @@
  * 3. **坏 JSON 宽容**：坏信封返回 `malformed`，宿主静默丢弃、绝不 throw 到渲染树。
  */
 import {describe, expect, it} from '@jest/globals';
-import {
-  CONVERSATION_BRIDGE_V,
-  CONVERSATION_READY_VERSION,
-  CONVERSATION_THEME_KEYS,
-  decodeConversationUpstream,
-  parseConversationScrollSnapshot,
-  readReadyCapabilities,
-  type ConversationHostMessage,
-} from '@/components/chat/ChatConversationBridge';
+import {CONVERSATION_BRIDGE_V, CONVERSATION_READY_VERSION, CONVERSATION_THEME_KEYS, type ConversationHostMessage, ChatConversationBridge} from '@/components/chat/ChatConversationBridge'
 // ready 的 t2 标识与转录域能力清单真源（web 独立入口 / RN 桥同源常量）
-import {
-  TRANSCRIPT_READY_VERSION,
-  TRANSCRIPT_CAPABILITIES,
-  TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
-  TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
-  transcriptCapabilitiesInclude,
-} from '@/web/chat-transcript/transcript-capabilities';
+import {TRANSCRIPT_READY_VERSION, TRANSCRIPT_CAPABILITIES, TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT, TRANSCRIPT_CAPABILITY_STREAM_PROJECTION, TranscriptCapabilities} from '@/web/chat-transcript/transcript-capabilities'
 // 主题键集的唯一真源（web 侧 shared/host-theme；RN 与 web 两侧清单都从它派生）
 import {HOST_THEME_KEYS} from '@/web/shared/host-theme';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
@@ -138,30 +124,30 @@ describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
       TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
     );
     expect(
-      transcriptCapabilitiesInclude(
+      TranscriptCapabilities.include(
         TRANSCRIPT_CAPABILITIES,
         'streamBlockCommit',
       ),
     ).toBe(true);
     expect(
-      transcriptCapabilitiesInclude(
+      TranscriptCapabilities.include(
         TRANSCRIPT_CAPABILITIES,
         'streamProjection',
       ),
     ).toBe(true);
     // 「未声明 = 不支持」：空清单一律 false
-    expect(transcriptCapabilitiesInclude([], 'streamBlockCommit')).toBe(
+    expect(TranscriptCapabilities.include([], 'streamBlockCommit')).toBe(
       false,
     );
     expect(
-      transcriptCapabilitiesInclude(undefined, 'streamBlockCommit'),
+      TranscriptCapabilities.include(undefined, 'streamBlockCommit'),
     ).toBe(false);
   });
 });
 
 describe('chat-conversation 宽松 decoder', () => {
   it('ready 只认 v === 2', () => {
-    const ok = decodeConversationUpstream(
+    const ok = ChatConversationBridge.decodeConversationUpstream(
       JSON.stringify({
         v: 2,
         type: 'ready',
@@ -171,7 +157,7 @@ describe('chat-conversation 宽松 decoder', () => {
     expect(ok.ok).toBe(true);
 
     // 旧 dist 的 v:1 ready 被拒（不得置位 webReady → 走 8s 超时兜底）
-    const stale = decodeConversationUpstream(
+    const stale = ChatConversationBridge.decodeConversationUpstream(
       JSON.stringify({v: 1, type: 'ready', payload: {version: 'm4'}}),
     );
     expect(stale.ok).toBe(false);
@@ -181,7 +167,7 @@ describe('chat-conversation 宽松 decoder', () => {
   });
 
   it('ready 缺 v（undefined）同样按 stale 拒——不得「无 v 也放行」', () => {
-    const res = decodeConversationUpstream(
+    const res = ChatConversationBridge.decodeConversationUpstream(
       JSON.stringify({type: 'ready', payload: {}}),
     );
     expect(res.ok).toBe(false);
@@ -201,7 +187,7 @@ describe('chat-conversation 宽松 decoder', () => {
       'change',
       'selectionChange',
     ]) {
-      const res = decodeConversationUpstream(
+      const res = ChatConversationBridge.decodeConversationUpstream(
         JSON.stringify({v: 1, type, payload: {}}),
       );
       expect(res.ok).toBe(true);
@@ -210,14 +196,14 @@ describe('chat-conversation 宽松 decoder', () => {
       }
     }
     // 缺 v 的普通上行同样收
-    const noV = decodeConversationUpstream(
+    const noV = ChatConversationBridge.decodeConversationUpstream(
       JSON.stringify({type: 'visibility', payload: {hidden: false}}),
     );
     expect(noV.ok).toBe(true);
   });
 
   it('dockAction（v:2）宽松收下（宿主已不消费该上行，decoder 不做白名单过滤）', () => {
-    const res = decodeConversationUpstream(
+    const res = ChatConversationBridge.decodeConversationUpstream(
       JSON.stringify({v: 2, type: 'dockAction', payload: {action: 'send'}}),
     );
     expect(res.ok).toBe(true);
@@ -237,7 +223,7 @@ describe('chat-conversation 宽松 decoder', () => {
       JSON.stringify({v: 2, type: 42, payload: {}}),
       JSON.stringify({v: 2, type: '', payload: {}}),
     ]) {
-      const res = decodeConversationUpstream(raw);
+      const res = ChatConversationBridge.decodeConversationUpstream(raw);
       expect(res.ok).toBe(false);
       if (!res.ok) {
         expect(res.reason).toBe('malformed');
@@ -246,7 +232,7 @@ describe('chat-conversation 宽松 decoder', () => {
   });
 
   it('payload 缺省 / 非对象按空对象处理（不因载荷畸形丢整条消息）', () => {
-    const res = decodeConversationUpstream(
+    const res = ChatConversationBridge.decodeConversationUpstream(
       JSON.stringify({v: 1, type: 'visibility'}),
     );
     expect(res.ok).toBe(true);
@@ -256,29 +242,29 @@ describe('chat-conversation 宽松 decoder', () => {
   });
 
   it('已解析对象（非字符串）入参同样可解（测试与 RN 内部调用皆覆盖）', () => {
-    const res = decodeConversationUpstream({
+    const res = ChatConversationBridge.decodeConversationUpstream({
       v: 2,
       type: 'ready',
       payload: {capabilities: ['streamBlockCommit']},
     });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(readReadyCapabilities(res.message.payload)).toEqual([
+      expect(ChatConversationBridge.readReadyCapabilities(res.message.payload)).toEqual([
         'streamBlockCommit',
       ]);
     }
   });
 
   it('capabilities 缺省 / 非数组 → 空清单（「未声明 = 不支持」）', () => {
-    expect(readReadyCapabilities({})).toEqual([]);
-    expect(readReadyCapabilities({capabilities: 'nope'})).toEqual([]);
+    expect(ChatConversationBridge.readReadyCapabilities({})).toEqual([]);
+    expect(ChatConversationBridge.readReadyCapabilities({capabilities: 'nope'})).toEqual([]);
   });
 });
 
 describe('scrollSnapshot 解析（口径照旧宿主）', () => {
   it('schema 版本不符 → null；缺字段 → null；正常 → 快照', () => {
     expect(
-      parseConversationScrollSnapshot(
+      ChatConversationBridge.parseConversationScrollSnapshot(
         {
           v: 1,
           type: 'scrollSnapshot',
@@ -293,7 +279,7 @@ describe('scrollSnapshot 解析（口径照旧宿主）', () => {
     ).toBeNull();
 
     expect(
-      parseConversationScrollSnapshot(
+      ChatConversationBridge.parseConversationScrollSnapshot(
         {
           v: 1,
           type: 'scrollSnapshot',
@@ -308,7 +294,7 @@ describe('scrollSnapshot 解析（口径照旧宿主）', () => {
     ).toBeNull();
 
     expect(
-      parseConversationScrollSnapshot(
+      ChatConversationBridge.parseConversationScrollSnapshot(
         {
           v: 1,
           type: 'loadOlder',
@@ -319,7 +305,7 @@ describe('scrollSnapshot 解析（口径照旧宿主）', () => {
     ).toBeNull();
 
     expect(
-      parseConversationScrollSnapshot(
+      ChatConversationBridge.parseConversationScrollSnapshot(
         {
           v: 1,
           type: 'scrollSnapshot',

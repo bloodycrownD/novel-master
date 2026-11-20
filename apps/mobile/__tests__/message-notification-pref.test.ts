@@ -5,12 +5,9 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {AppError, Result} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
-import {readBoolPref, writeBoolPref} from '@/storage/app-ui-pref-io';
+import {AppUiPrefIo} from '@/storage/app-ui-pref-io'
 import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
-import {
-  createAppUiPreferences,
-  type AppUiPreferences,
-} from '@/storage/app-ui-prefs';
+import {type AppUiPreferences, AppUiPrefs} from '@/storage/app-ui-prefs';
 
 function appUiWith(raw: Record<string, string | undefined>): AppUiPreferences {
   return {
@@ -69,25 +66,25 @@ function createMemoryKkv(): KkvService {
 describe('message-notification-pref', () => {
   it('未配置时默认关闭', async () => {
     const appUi = appUiWith({});
-    await expect(readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
+    await expect(AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
   });
 
   it('读取已持久化的关闭状态', async () => {
     const appUi = appUiWith({messageNotification: 'false'});
-    await expect(readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
+    await expect(AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
   });
 
   it('写入按 true/false 字符串持久化', async () => {
     const appUi = appUiWith({});
-    await writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false);
+    await AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false);
     expect(appUi.set).toHaveBeenCalledWith('messageNotification', 'false');
-    await writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, true);
+    await AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, true);
     expect(appUi.set).toHaveBeenCalledWith('messageNotification', 'true');
   });
 
   it('非法值回退默认（关）', async () => {
     const appUi = appUiWith({messageNotification: 'bogus'});
-    await expect(readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
+    await expect(AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
   });
 
   it('读失败（KKV 异常）回退默认（关）', async () => {
@@ -100,13 +97,13 @@ describe('message-notification-pref', () => {
       delete: jest.fn(async () => undefined),
       listKeys: jest.fn(async () => []),
     };
-    await expect(readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
+    await expect(AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
   });
 
   it('appUi 非 null 且 KKV 未写值：get 走 NOT_FOUND 回退 APP_UI_DEFAULTS，默认关', async () => {
-    const appUi = createAppUiPreferences(createMemoryKkv());
+    const appUi = AppUiPrefs.create(createMemoryKkv());
     // 锁 defaults 表翻转：若 APP_UI_DEFAULTS 仍为 'true'，get 回退命中
     // readBoolPref 的 raw === 'true' 分支直返 true，本断言即挂。
-    await expect(readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
+    await expect(AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false)).resolves.toBe(false);
   });
 });

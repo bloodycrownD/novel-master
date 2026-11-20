@@ -8,7 +8,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {DEFAULT_WORKPLACE_DIR_RULE, type FillPolicy, type SetDirRuleInput, type SortField, type SortOrder} from '@novel-master/core/workplace';
 import {ModalShell} from '../ui/ModalShell';
 import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
-import {normalizeFillPolicyForMobile} from '../../services/fill-policy-mobile';
+import {FillPolicyMobile} from '../../services/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -64,7 +64,7 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
     setSortOrder(initial?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
     setHeadCount(String(initial?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount));
     setTailCount(String(initial?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount));
-    setFillPolicy(normalizeFillPolicyForMobile(initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy));
+    setFillPolicy(FillPolicyMobile.normalize(initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy));
     setRuleEnabled(rootRuleLocked ? true : initial?.ruleEnabled ?? false);
   }, [visible, initial, logicalPath, rootRuleLocked]);
 
@@ -77,7 +77,7 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
         sortOrder,
         headCount: clampCount(headCount),
         tailCount: clampCount(tailCount),
-        fillPolicy: normalizeFillPolicyForMobile(fillPolicy),
+        fillPolicy: FillPolicyMobile.normalize(fillPolicy),
         ruleEnabled: rootRuleLocked ? true : ruleEnabled,
       });
       onClose();

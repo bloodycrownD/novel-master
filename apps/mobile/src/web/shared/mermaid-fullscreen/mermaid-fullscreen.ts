@@ -17,7 +17,7 @@
 
 import {h, render} from 'preact';
 
-import {createViewSlot} from '@web/shared/view-slot';
+import {ViewSlot} from '@web/shared/view-slot';
 import {MermaidViewerOverlay} from './MermaidViewerOverlay';
 
 type MermaidViewerViewProps = {
@@ -30,7 +30,7 @@ type RenderMermaidViewerView = (props: MermaidViewerViewProps | null) => void;
 
 type MermaidViewerPost = (type: string, payload?: Record<string, unknown>) => void;
 
-const viewerSlot = createViewSlot<MermaidViewerViewProps | null>();
+const viewerSlot = ViewSlot.create<MermaidViewerViewProps | null>();
 let _post: MermaidViewerPost | null = null;
 let _open = false;
 let _delegationAttached = false;

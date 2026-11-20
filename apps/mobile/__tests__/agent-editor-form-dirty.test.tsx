@@ -64,9 +64,12 @@ jest.mock('@/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) => String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
 jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
@@ -149,10 +152,13 @@ jest.mock('@/components/agent/ToolPolicyPicker', () => ({
   ToolPolicyPicker: () => null,
 }));
 
-jest.mock('@/services/agent-yaml.service', () => ({
+jest.mock('@/services/agent-yaml.service', () => {
+  const legacy = {
   exportAgentYaml: jest.fn(),
   importAgentYaml: jest.fn(),
-}));
+};
+  return {...legacy, AgentYamlService: {exportYaml: legacy.exportAgentYaml, importYaml: legacy.importAgentYaml}};
+});
 
 // PromptEditor 的编辑器 stub：记录 onChange 供测试驱动（forwardRef：真组件接 codeEditorRef）。
 const mockEditorProps: {

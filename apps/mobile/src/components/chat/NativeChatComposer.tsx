@@ -60,9 +60,9 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {EnrichedMarkdownTextInput} from 'react-native-enriched-markdown';
 import type {ContextMenuItem, EnrichedMarkdownTextInputInstance, InputSelectionMenuConfig, MarkdownTextInputStyle} from 'react-native-enriched-markdown';
 import type {ConversationDockAction, ConversationTheme} from './ChatConversationBridge';
-import {attachmentDraftChipsStyles, composerDockStyles, composerInputMetrics, composerTokenCapsule, composerToolBtnStyle, resolveDockBottomPadding} from './native-composer/dock-style';
-import {resolveSendButtonState} from './native-composer/send-button';
-import {remapTokenRanges, scanTokensToRanges, synthesizeTokenMarkdown, synthesizeTokenMarkdownFromRanges, type TokenRange} from './native-composer/token-ranges';
+import {attachmentDraftChipsStyles, composerDockStyles, composerInputMetrics, composerTokenCapsule, composerToolBtnStyle, DockStyle} from './native-composer/dock-style';
+import {SendButton} from './native-composer/send-button';
+import {TokenRanges, type TokenRange} from './native-composer/token-ranges';
 
 /**
  * 高度上报死区：变化不超过该值不上抛（防亚像素抖动刷消息）。
@@ -243,7 +243,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
    * `useRef(表达式)` 每帧都会求值但只保留首帧结果——synthesize 是纯函数，
    * 草稿量级下重复求值可忽略。
    */
-  const initialMarkdownRef = useRef(confirmedRangesRef.current != null ? synthesizeTokenMarkdownFromRanges(value, confirmedRangesRef.current) : synthesizeTokenMarkdown(value));
+  const initialMarkdownRef = useRef(confirmedRangesRef.current != null ? TokenRanges.synthesizeTokenMarkdownFromRanges(value, confirmedRangesRef.current) : TokenRanges.synthesizeTokenMarkdown(value));
 
   // 回调可能逐帧重建：回调链与命令式通道统一读 ref，避免旧闭包差分。
   const changeTextRef = useRef(onComposerChangeText);
@@ -270,7 +270,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
    * （P2，Step 6/7 按触发条件延后），真机 QA 观察后再做。
    */
   const dispatchTokenRanges = useCallback((plain: string, ranges?: readonly TokenRange[] | null) => {
-    const payload = ranges ?? scanTokensToRanges(plain);
+    const payload = ranges ?? TokenRanges.scanTokensToRanges(plain);
     const rangesPayload = payload.map(range => ({start: range.start, end: range.end}));
     inputRef.current?.setTokenRanges(rangesPayload);
   }, []);
@@ -302,10 +302,10 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
         // 纯插入的光标锚（见 remapTokenRanges）：只信调用方显式给的
         // 光标（引用落文恒有）；兜底路径的 plain.length 不代表真实插入
         // 点，不传——对齐点兜底已是保守正确。
-        confirmedRangesRef.current = remapTokenRanges(baselineRef.current, plain, confirmedRangesRef.current, cursor);
+        confirmedRangesRef.current = TokenRanges.remapTokenRanges(baselineRef.current, plain, confirmedRangesRef.current, cursor);
       }
       baselineRef.current = plain;
-      instance.setValue(confirmedRangesRef.current != null ? synthesizeTokenMarkdownFromRanges(plain, confirmedRangesRef.current) : synthesizeTokenMarkdown(plain));
+      instance.setValue(confirmedRangesRef.current != null ? TokenRanges.synthesizeTokenMarkdownFromRanges(plain, confirmedRangesRef.current) : TokenRanges.synthesizeTokenMarkdown(plain));
       dispatchTokenRanges(plain, confirmedRangesRef.current);
       const resolvedCursor = cursor ?? plain.length;
       instance.setSelection(resolvedCursor, resolvedCursor);
@@ -327,7 +327,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
         // 删除段 `[光标 + delta, 光标)` 正好覆盖被删胶囊；选区整体删除时
         // 右缘同样贴着删除段（原生把光标落到选区起点）。打字路径没有
         // 「编辑后光标」的独立来源，nextCursor 留给派生的光标差。
-        confirmedRangesRef.current = remapTokenRanges(baselineRef.current, plain, confirmedRangesRef.current, undefined, selectionRef.current?.end);
+        confirmedRangesRef.current = TokenRanges.remapTokenRanges(baselineRef.current, plain, confirmedRangesRef.current, undefined, selectionRef.current?.end);
       }
       baselineRef.current = plain;
       changeTextRef.current(plain);
@@ -416,7 +416,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
    * 终止图标 / 正常→primary 底 + 发送图标。门闩（canSend/running）由上层
    * 算好传入，本组件不重复实现 controller 的发送决策。
    */
-  const sendState = resolveSendButtonState({canSend, running});
+  const sendState = SendButton.resolve({canSend, running});
 
   /* ------------------------------------------------------------------ *
    * 粘贴门控（D9 / F 组）
@@ -531,7 +531,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
         {
           backgroundColor: theme.background,
           // 键盘顶起归零 / 否则 max(8, safeAreaBottom)（DOCK_PADDING_BASE 语义）
-          paddingBottom: resolveDockBottomPadding(keyboardUp, safeAreaBottom),
+          paddingBottom: DockStyle.resolveDockBottomPadding(keyboardUp, safeAreaBottom),
         },
       ]}
     >

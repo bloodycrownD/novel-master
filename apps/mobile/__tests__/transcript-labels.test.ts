@@ -4,9 +4,9 @@
  * - core `LABEL_KEY_DOMAINS` 含 `transcript`，`LABEL_MESSAGE_KEYS` / zh-CN /
  *   en-US catalog 都含 4 个 `label.transcript.*`（域校验 blocking，key 缺失
  *   由 catalog.test / parse-core-catalog.test 兜底）；
- * - `buildTranscriptLabels(coreT)` 的取值与 web 缺省 `DEFAULT_LABELS` 一致——
+ * - `TranscriptLabelsFactory.build(coreT)` 的取值与 web 缺省 `DEFAULT_LABELS` 一致——
  *   `init.labels` 下发与旧宿主兜底不会静默漂移；
- * - 宿主 `init` 确实带 `labels: buildTranscriptLabels(coreT)`；
+ * - 宿主 `init` 确实带 `labels: TranscriptLabelsFactory.build(coreT)`；
  * - `RowList` / `StreamingMessageRow` / `ToolInvokingBar` 的源文件不再出现
  *   四个文案字面量（文件级原文扫描，注释也计入）。
  */
@@ -17,12 +17,9 @@ import {
   CORE_MESSAGE_KEYS,
   LABEL_KEY_DOMAINS,
 } from '@novel-master/core/i18n';
-import {buildTranscriptLabels} from '../src/components/chat/transcript-labels';
+import {TranscriptLabelsFactory} from '../src/components/chat/transcript-labels'
 import {coreT} from '../src/i18n/core';
-import {
-  DEFAULT_LABELS,
-  resolveLabels,
-} from '../src/web/chat-transcript/webview/ui/labels';
+import {DEFAULT_LABELS, Labels} from '../src/web/chat-transcript/webview/ui/labels';
 
 const TRANSCRIPT_KEYS = [
   'label.transcript.generating',
@@ -69,8 +66,8 @@ describe('transcript 4 key 的 core i18n 契约', () => {
 });
 
 describe('宿主 labels 装配（T-SP22）', () => {
-  it('buildTranscriptLabels(coreT) 取到 4 个中文文案', () => {
-    expect(buildTranscriptLabels(coreT)).toEqual({
+  it('TranscriptLabelsFactory.build(coreT) 取到 4 个中文文案', () => {
+    expect(TranscriptLabelsFactory.build(coreT)).toEqual({
       generating: ZH_VALUES[0],
       thinking: ZH_VALUES[1],
       empty: ZH_VALUES[2],
@@ -79,27 +76,27 @@ describe('宿主 labels 装配（T-SP22）', () => {
   });
 
   it('web 缺省 DEFAULT_LABELS 与 core catalog 逐字段一致（无漂移）', () => {
-    expect(DEFAULT_LABELS).toEqual(buildTranscriptLabels(coreT));
+    expect(DEFAULT_LABELS).toEqual(TranscriptLabelsFactory.build(coreT));
   });
 
-  it('ChatConversationWebView 的 init 带 labels: buildTranscriptLabels(coreT)', () => {
+  it('ChatConversationWebView 的 init 带 labels: TranscriptLabelsFactory.build(coreT)', () => {
     const host = readSource(
       '../src/components/chat/ChatConversationWebView.tsx',
     );
-    expect(host).toContain('labels: buildTranscriptLabels(coreT)');
+    expect(host).toContain('labels: TranscriptLabelsFactory.build(coreT)');
   });
 });
 
 describe('web 缺省回退 resolveLabels（C30）', () => {
   it('undefined / null / 非对象 → 四键全量默认', () => {
-    expect(resolveLabels(undefined)).toEqual(DEFAULT_LABELS);
-    expect(resolveLabels(null)).toEqual(DEFAULT_LABELS);
-    expect(resolveLabels('not-an-object')).toEqual(DEFAULT_LABELS);
+    expect(Labels.resolve(undefined)).toEqual(DEFAULT_LABELS);
+    expect(Labels.resolve(null)).toEqual(DEFAULT_LABELS);
+    expect(Labels.resolve('not-an-object')).toEqual(DEFAULT_LABELS);
   });
 
   it('缺键 / 空串 / 非字符串逐键回退默认，其余合法键原样保留', () => {
     expect(
-      resolveLabels({
+      Labels.resolve({
         generating: '自定义生成文案',
         thinking: '',
         empty: 42,
@@ -115,7 +112,7 @@ describe('web 缺省回退 resolveLabels（C30）', () => {
 
   it('合法四键原样透传，未知字段忽略', () => {
     expect(
-      resolveLabels({
+      Labels.resolve({
         generating: 'G',
         thinking: 'T',
         empty: 'E',

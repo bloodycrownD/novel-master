@@ -5,7 +5,7 @@
  *   `Registry.configureLlmFetch(shim)`），native 底座可用时非流式流量走 native request
  * - `__DEV__` 下组合顺序写死 logging 最外层包 shim（`DebugFetch.createLoggingFetch(shim)`）；
  *   生产构建 logging 不参与
- * - runtime 初始化处注册 native transport：`registerNativeSseTransportWith(
+ * - runtime 初始化处注册 native transport：`NativeSse.registerWith(
  *   LlmSseTransport.register)`，native 缺位返回 false 不炸启动
  * - native 缺位（iOS / Jest）时 shim 工厂回落 `globalThis.fetch`，装配仍成立
  */
@@ -25,7 +25,7 @@ jest.mock('@novel-master/core/llm-protocol', () => ({
 }));
 
 jest.mock('@novel-master/llm-sse-native/native', () => ({
-  registerNativeSseTransportWith: mockRegisterNativeSseTransportWith,
+  NativeSse: {registerWith: mockRegisterNativeSseTransportWith},
 }));
 
 // LlmSseNative 模块的可控占位：request 存在与否决定 shim 走 native 底座还是回落。
@@ -89,8 +89,8 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
   });
 
   it('__DEV__：logging 最外层包 shim——configureLlmFetch 收到 logging 包装，base 打到 native request', async () => {
-    const {ensureLlmFetchConfigured} = loadSetupModule(true);
-    ensureLlmFetchConfigured();
+    const {LlmFetchSetup} = loadSetupModule(true);
+    LlmFetchSetup.ensureConfigured();
 
     expect(mockCreateLoggingFetch).toHaveBeenCalledTimes(1);
     const registered = mockConfigureLlmFetch.mock.calls[0]![0] as {
@@ -114,8 +114,8 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
   });
 
   it('生产（__DEV__=false）：无条件直接注册 shim，logging 不参与', async () => {
-    const {ensureLlmFetchConfigured} = loadSetupModule(false);
-    ensureLlmFetchConfigured();
+    const {LlmFetchSetup} = loadSetupModule(false);
+    LlmFetchSetup.ensureConfigured();
 
     expect(mockCreateLoggingFetch).not.toHaveBeenCalled();
     expect(mockConfigureLlmFetch).toHaveBeenCalledTimes(1);
@@ -139,9 +139,9 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
     );
   });
 
-  it('runtime 注册 native transport：registerNativeSseTransportWith 收到 core 的 LlmSseTransport.register', () => {
-    const {ensureLlmFetchConfigured} = loadSetupModule(true);
-    ensureLlmFetchConfigured();
+  it('runtime 注册 native transport：NativeSse.registerWith 收到 core 的 LlmSseTransport.register', () => {
+    const {LlmFetchSetup} = loadSetupModule(true);
+    LlmFetchSetup.ensureConfigured();
 
     expect(mockRegisterNativeSseTransportWith).toHaveBeenCalledTimes(1);
     expect(mockRegisterNativeSseTransportWith).toHaveBeenCalledWith(
@@ -151,9 +151,9 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
 
   it('native transport 缺位（返回 false）时装配不炸，fetch 侧照常注册', () => {
     mockRegisterNativeSseTransportWith.mockReturnValue(false);
-    const {ensureLlmFetchConfigured} = loadSetupModule(true);
+    const {LlmFetchSetup} = loadSetupModule(true);
 
-    expect(() => ensureLlmFetchConfigured()).not.toThrow();
+    expect(() => LlmFetchSetup.ensureConfigured()).not.toThrow();
     expect(mockConfigureLlmFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -162,17 +162,17 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
     const fetchMock = jest.fn(async () => ({status: 200, ok: true}));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const {ensureLlmFetchConfigured} = loadSetupModule(false);
-    ensureLlmFetchConfigured();
+    const {LlmFetchSetup} = loadSetupModule(false);
+    LlmFetchSetup.ensureConfigured();
 
     expect(mockConfigureLlmFetch).toHaveBeenCalledTimes(1);
     expect(mockConfigureLlmFetch.mock.calls[0]![0]).toBe(fetchMock);
   });
 
   it('进程内幂等：二次调用不重复注册', () => {
-    const {ensureLlmFetchConfigured} = loadSetupModule(true);
-    ensureLlmFetchConfigured();
-    ensureLlmFetchConfigured();
+    const {LlmFetchSetup} = loadSetupModule(true);
+    LlmFetchSetup.ensureConfigured();
+    LlmFetchSetup.ensureConfigured();
 
     expect(mockConfigureLlmFetch).toHaveBeenCalledTimes(1);
     expect(mockRegisterNativeSseTransportWith).toHaveBeenCalledTimes(1);

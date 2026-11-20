@@ -14,7 +14,7 @@
  * 本模块在 runtime 层，可读 state（ui/ 侧经函数调用拿窗口，不直读内部状态）。
  */
 import {state} from '../state/state';
-import {renderRows} from './row-logic';
+import {RowLogic} from './row-logic';
 
 /** 稳态窗口行数（视口行起向下覆盖）。 */
 const ROW_WINDOW_ROWS = 60;
@@ -217,7 +217,7 @@ export const RowWindow = {
       }
       const nextStart = clamp(win.start + move.startDelta, 0, win.end);
       win = {start: nextStart, end: win.end};
-      renderRows();
+      RowLogic.render();
       if (rowBefore != null && isFinite(rowBefore)) {
         const topAfter = RowWindow.windowTopPxInDocument();
         if (topAfter != null) {
@@ -229,7 +229,7 @@ export const RowWindow = {
       const nextEnd = clamp(win.end + move.endDelta, win.start, total);
       if (nextEnd !== win.end) {
         win = {start: win.start, end: nextEnd};
-        renderRows();
+        RowLogic.render();
       }
     }
     return true;

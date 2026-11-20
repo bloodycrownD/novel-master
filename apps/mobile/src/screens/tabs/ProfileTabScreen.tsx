@@ -12,8 +12,8 @@ import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '@/components/profile/ProfileMenuItem';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '@/hooks/useRuntime';
-import {resolveModelDisplayLabel} from '@/services/model-display-label';
-import {resolveCurrentAgentDisplayLabel} from '@/services/agent-display-label';
+import {ModelDisplayLabel} from '@/services/model-display-label';
+import {AgentDisplayLabel} from '@/services/agent-display-label';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -68,7 +68,7 @@ export function ProfileTabScreen() {
 
   const refreshAgentLabel = useCallback(async () => {
     try {
-      setAgentLabel(await resolveCurrentAgentDisplayLabel(runtime));
+      setAgentLabel(await AgentDisplayLabel.resolveCurrent(runtime));
     } catch {
       setAgentLabel('—');
     }
@@ -87,7 +87,7 @@ export function ProfileTabScreen() {
       return;
     }
     try {
-      const label = await resolveModelDisplayLabel(runtime, currentId);
+      const label = await ModelDisplayLabel.resolve(runtime, currentId);
       setModelLabel(label.ok ? label.value : currentId);
     } catch {
       setModelLabel(currentId);

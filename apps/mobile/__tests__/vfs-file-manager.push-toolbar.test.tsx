@@ -41,12 +41,16 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
-jest.mock('@/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => {
+  const legacy = {
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
@@ -56,7 +60,9 @@ jest.mock('@/services/vfs-operations.service', () => ({
   sessionCreateVfsFile: jest.fn(),
   sessionRenameVfsDirectory: jest.fn(),
   sessionRenameVfsFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
+});
 
 // 轻量标记组件：testID 直接断言并排渲染与 readOnly 隐藏
 jest.mock('@/components/prompt/TemplatePullButton', () => {
@@ -83,22 +89,34 @@ jest.mock('@/components/sheet/DirectoryRuleSheet', () => ({
   DirectoryRuleSheet: () => null,
 }));
 
-jest.mock('@/services/vfs-zip.service', () => ({
+jest.mock('@/services/vfs-zip.service', () => {
+  const legacy = {
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
-}));
+};
+  return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
+});
 
-jest.mock('@/services/vfs-character-card.service', () => ({
+jest.mock('@/services/vfs-character-card.service', () => {
+  const legacy = {
   importCharacterCard: jest.fn(),
-}));
+};
+  return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
+});
 
-jest.mock('@/services/user-vfs-turn-execute.service', () => ({
+jest.mock('@/services/user-vfs-turn-execute.service', () => {
+  const legacy = {
   refreshComposerStatusAfterUserVfsOps: jest.fn(),
-}));
+};
+  return {...legacy, UserVfsTurnExecuteService: {refreshComposerStatus: legacy.refreshComposerStatusAfterUserVfsOps}};
+});
 
-jest.mock('@/services/workplace-rule-delta-draft.service', () => ({
+jest.mock('@/services/workplace-rule-delta-draft.service', () => {
+  const legacy = {
   refreshRuleSnapshotAfterRuleChange: jest.fn(),
-}));
+};
+  return {...legacy, WorkplaceRuleDeltaDraftService: {refreshRuleSnapshot: legacy.refreshRuleSnapshotAfterRuleChange}};
+});
 
 jest.mock('@/hooks/useAndroidModalKeyboardAvoid', () => ({
   useAndroidModalKeyboardAvoid: () => ({}),

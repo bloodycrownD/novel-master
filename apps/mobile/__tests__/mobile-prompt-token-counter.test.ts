@@ -28,11 +28,14 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
   );
   return {
     ...actual,
-    isNativeTokenizerAvailable: () => nativeBridgeState.available,
-    // countPromptViaNative 用**真实实现**：Kotlin 契约变更（fa Step 4）后原生
-    // 失败一律 promise.reject，本文件靠真实桥现成的 catch→null 分支承接
-    // reject、断言 JS 侧兜底路径；底层调用经 react-native mock 落到
-    // mockCountPrompt（三参同序，与既有断言兼容）。
+    AndroidNativeBridge: {
+      ...actual.AndroidNativeBridge,
+      isTokenizerAvailable: () => nativeBridgeState.available,
+      // countPrompt（原 countPromptViaNative）用**真实实现**：Kotlin 契约变更
+      // （fa Step 4）后原生失败一律 promise.reject，本文件靠真实桥现成的
+      // catch→null 分支承接 reject、断言 JS 侧兜底路径；底层调用经 react-native
+      // mock 落到 mockCountPrompt（三参同序，与既有断言兼容）。
+    },
   };
 });
 
@@ -57,8 +60,8 @@ const cl100kCount = (text: string): number => realCl100k.encode(text).length;
 
 /** 驱动入口已改 Result（错误通道迁移四期）：测试面按裸值断言，err 直接炸出。 */
 async function countOk(params: unknown) {
-  const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
-  const counted = await countPromptLlmInputRn(params);
+  const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
+  const counted = await PromptLlmInputCounter.count(params);
   if (!counted.ok) throw counted.error;
   return counted.value;
 }
@@ -67,7 +70,7 @@ async function countOk(params: unknown) {
 const ZH_TEXT =
   '夜色如水，林间小径上落满了枯叶，风一吹便沙沙作响。她停下脚步，抬头望向灯火。';
 
-describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
+describe('tokenizer-driver-rn PromptLlmInputCounter.count', () => {
   beforeEach(() => {
     mockCountPrompt.mockReset();
     mockCountPromptCancelable.mockReset();
@@ -79,15 +82,11 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   afterEach(() => {
     // 编码表单例是模块级缓存：故障注入用例改了构造器，必须还原，
     // 否则会把「构造失败不再重试」的 null 缓存漏给后续用例。
-    const {
-      __test__,
-      __resetRnEncodingCacheForTests,
-      __setRnEncodingFactoryForTests,
-    } = require('@novel-master/tokenizer-driver-rn');
-    __setRnEncodingFactoryForTests(null);
-    __resetRnEncodingCacheForTests();
+    const {PromptLlmInputCounter, EncodingCache} = require('@novel-master/tokenizer-driver-rn');
+    EncodingCache.__setFactoryForTests(null);
+    EncodingCache.__resetForTests();
     // countTiktoken 的表源注入钩子同样要还原（表源注入用例用过它）。
-    __test__.setEncodingSourceForTests(null);
+    PromptLlmInputCounter.__test__.setEncodingSourceForTests(null);
   });
 
   it('calls native bridge for claude family', async () => {
@@ -96,9 +95,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       counterKind: 'claude',
       estimated: false,
     });
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'claude',
       'system prompt body',
       'anthropic/claude-3-5-sonnet',
@@ -127,9 +126,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       counterKind: 'gemma',
       estimated: false,
     });
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'gemma',
       'You are helpful.\n\nuser: Hello',
       'gemini-2.0-flash',
@@ -146,14 +145,14 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('GPT 家族 o200k 表域：原生优先过桥（vendorModelId 槽=编码名），桥回 null 落 js 档同口径真值', async () => {
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     // 原生优先（token-count-perf-r2）：tiktoken 家族先过桥，第三参（vendorModelId
     // 槽）承载 JS 已解析的**编码名**——Kotlin 侧 family=="tiktoken" 时据此选词表。
     // mock 未设返回值 = 桥 resolve undefined → 驱动按「原生无结果」落回 js 档
     // （三层回退链：原生 → js-tiktoken → 其内部 cl100k 兜底）。
     // vendor 前缀形态（openai/gpt-4o）：直查不认识 → 走 core 映射第二跳 → o200k。
-    const en = await __test__.countSerialized(
+    const en = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       'system prompt for gpt',
       'openai/gpt-4o',
@@ -173,7 +172,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // 中文双字节同表复核。期望值来源：node 精确档（WASM tiktoken o200k 表 +
     // 同一段 core countOpenAiStyleMessages）在 worktree 现跑取得——同算法同表，
     // 容差 0（T-FA6 对拍口径）。
-    const zh = await __test__.countSerialized('tiktoken', ZH_TEXT, 'openai/gpt-4o');
+    const zh = await PromptLlmInputCounter.__test__.countSerialized('tiktoken', ZH_TEXT, 'openai/gpt-4o');
     expect(zh).toEqual({
       count: 47,
       counterKind: 'tiktoken',
@@ -188,9 +187,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       counterKind: 'tiktoken',
       estimated: false,
     });
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       'system prompt for gpt',
       'openai/gpt-4o',
@@ -211,11 +210,11 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('GPT 家族 cl100k 表域（裸模型名直查命中）：同口径真值；连续两次计数第二次不炸（无 free）', async () => {
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     // 裸标准 id（gpt-4）直查即命中 cl100k，不走映射第二跳。期望值同上：node
     // 精确档现跑（WASM cl100k 表 + core countOpenAiStyleMessages）。
-    const first = await __test__.countSerialized('tiktoken', ZH_TEXT, 'gpt-4');
+    const first = await PromptLlmInputCounter.__test__.countSerialized('tiktoken', ZH_TEXT, 'gpt-4');
     expect(first).toEqual({
       count: 63,
       counterKind: 'tiktoken',
@@ -226,7 +225,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // 同一句柄且仍报精确档。真 js-tiktoken 句柄**没有** free 方法——若实现误调
     // free 会 TypeError 落进 catch 变 heuristic；断言第二次仍 tiktoken/false/同值
     // 即钉住「绝不 free」。
-    const second = await __test__.countSerialized('tiktoken', ZH_TEXT, 'gpt-4');
+    const second = await PromptLlmInputCounter.__test__.countSerialized('tiktoken', ZH_TEXT, 'gpt-4');
     expect(second).toEqual(first);
     expect(second.counterKind).toBe('tiktoken');
     expect(second.estimated).toBe(false);
@@ -237,9 +236,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // 非取消分支是不可达防御），本用例钉住「桥失败→三层回退链落 js 档」的
     // 端到端行为——读数与纯 js 档逐字节一致。
     mockCountPrompt.mockRejectedValue(new Error('TOKENIZER_COUNT_FAILED'));
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       'system prompt for gpt',
       'openai/gpt-4o',
@@ -256,9 +255,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // overhead 公式需要真表（公式单源在 TS）——表建不起来时即便原生词表在
     // 包里也进不去精确档：原生→null，countTiktoken 同样建不起表→折算。
     const rnDriver = require('@novel-master/tokenizer-driver-rn');
-    rnDriver.__setRnEncodingFactoryForTests(() => null);
+    rnDriver.EncodingCache.__setFactoryForTests(() => null);
     try {
-      const result = await rnDriver.__test__.countSerialized(
+      const result = await rnDriver.PromptLlmInputCounter.__test__.countSerialized(
         'tiktoken',
         ZH_TEXT,
         'openai/gpt-4o',
@@ -272,19 +271,19 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       expect(mockCountPrompt).not.toHaveBeenCalled();
       expect(mockCountPromptCancelable).not.toHaveBeenCalled();
     } finally {
-      rnDriver.__setRnEncodingFactoryForTests(null);
+      rnDriver.EncodingCache.__setFactoryForTests(null);
     }
   });
 
   it('p50k / gpt2 家族出界：走 cl100k 兜底报 heuristic（边界声明，不冒充精确）', async () => {
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     // 真 p50k 域代表是 text-davinci-003（completion 系，tiktoken 官方映射
     // p50k_base）。注意 gpt-3.5-turbo-0301 **不是** p50k——官方映射里 chat 系
     // 0301 就是 cl100k_base，那条路径走的是精确档（与 node 同口径），不是兜底。
     // 另外出界判定必须发生在 core 模型名映射**之前**：core 会把 text-davinci-003
     // 改写成 gpt-3.5-turbo（cl100k），映射后再判就把 p50k 模型冒充成精确读数了。
-    const p50k = await __test__.countSerialized(
+    const p50k = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       ZH_TEXT,
       'text-davinci-003',
@@ -296,7 +295,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     });
 
     // gpt2 家族同样路由进 countTiktoken：编码名 gpt2 不在两表域 → 兜底。
-    const gpt2 = await __test__.countSerialized('gpt2', ZH_TEXT, 'gpt2');
+    const gpt2 = await PromptLlmInputCounter.__test__.countSerialized('gpt2', ZH_TEXT, 'gpt2');
     expect(gpt2).toEqual(p50k);
     // 出界模型根本不发起过桥（cr2-B-08③）：一旦有人把 resolveRnEncodingName
     // 的 null 判定挪到过桥之后，读数仍可能对、这里必红。
@@ -305,15 +304,15 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('表源注入钩子：setEncodingSourceForTests 可控 countTiktoken 的表源分支', async () => {
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
-    __test__.setEncodingSourceForTests(() => ({
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
+    PromptLlmInputCounter.__test__.setEncodingSourceForTests(() => ({
       encode: (text: string) => ({length: text.length}),
     }));
 
     // 假表按「字符数」计：precise 档包装 = 3 (perMessage) + encode('system') +
     // encode(content) + 3 (尾部) = 3 + 6 + 6 + 3 = 18。验证 countTiktoken 的
     // 表取用口确实被注入源接管（原 setTiktokenModuleForTests 钩子的替代形态）。
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       'abcdef',
       'openai/gpt-4o',
@@ -327,9 +326,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
 
   it('原生不可用时改走 cl100k 真分词器（不再折算），counterKind 诚实标 heuristic', async () => {
     nativeBridgeState.available = false;
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'claude',
       'abcdefghij',
       'claude-3-5-sonnet',
@@ -348,9 +347,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
 
   it('对照：原生不可用时中文读数远大于字符折算（钉住本次改造真的生效）', async () => {
     nativeBridgeState.available = false;
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'claude',
       ZH_TEXT,
       'claude-3-5-sonnet',
@@ -367,15 +366,15 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('family=heuristic 与未知家族也走 cl100k 真计数（无折算落点）', async () => {
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     // 原生优先（Part C）：mock 未设返回值 = 桥 null → 落 JS 分块兜底（既有口径）。
-    const heuristicFamily = await __test__.countSerialized(
+    const heuristicFamily = await PromptLlmInputCounter.__test__.countSerialized(
       'heuristic',
       ZH_TEXT,
       'local/any',
     );
-    const unknownFamily = await __test__.countSerialized(
+    const unknownFamily = await PromptLlmInputCounter.__test__.countSerialized(
       'brand-new-family' as never,
       ZH_TEXT,
       'vendor/whatever',
@@ -397,9 +396,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       counterKind: 'tiktoken',
       estimated: false,
     });
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized('heuristic', ZH_TEXT, 'local/any');
+    const result = await PromptLlmInputCounter.__test__.countSerialized('heuristic', ZH_TEXT, 'local/any');
     // 不加 overhead（兜底口径是裸文本近似，非 OpenAI 消息包装）；estimated
     // 保持 true——对未知家族这依然是近似读数，压缩阈值 0.85 系数照吃。
     expect(result).toEqual({
@@ -410,26 +409,22 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('编码表建不起来时降级到字符折算，且失败不重试（缓存 null）', async () => {
-    const {
-      __test__,
-      __setRnEncodingFactoryForTests,
-      __resetRnEncodingCacheForTests,
-    } = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter, EncodingCache} = require('@novel-master/tokenizer-driver-rn');
     let attempts = 0;
-    __setRnEncodingFactoryForTests(() => {
+    EncodingCache.__setFactoryForTests(() => {
       attempts += 1;
       throw new Error('ranks unavailable');
     });
-    __resetRnEncodingCacheForTests();
+    EncodingCache.__resetForTests();
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     try {
-      const first = await __test__.countSerialized(
+      const first = await PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         'abcdefghij',
         'claude-3-5-sonnet',
       );
-      const second = await __test__.countSerialized(
+      const second = await PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         'abcdefghij',
         'claude-3-5-sonnet',
@@ -455,9 +450,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // 「原生返回 estimated:true 半失败读数」不再有产生源；JS 侧由
     // countPromptViaNative 现成的 catch→null 分支承接，落兜底计数（T-FA5）。
     mockCountPrompt.mockRejectedValue(new Error('TOKENIZER_COUNT_FAILED'));
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'gemma',
       'short prompt',
       'gemini-2.0-flash',
@@ -479,10 +474,10 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     mockCountPrompt
       .mockRejectedValueOnce(new Error('TOKENIZER_COUNT_FAILED'))
       .mockResolvedValueOnce({tokenCount: nativeApprox, counterKind: 'tiktoken'});
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     // 不带 sessionId：带了会走 countPromptCancelable，mockCountPrompt 恒 0。
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'gemma',
       'short prompt',
       'gemini-2.0-flash',
@@ -502,8 +497,8 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('字符折算仅剩最后一降级：3.35 口径本身不变（编码表建不起来时才用）', () => {
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
-    expect(__test__.heuristicCount('abcdefghij')).toBe(Math.ceil(10 / 3.35));
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
+    expect(PromptLlmInputCounter.__test__.heuristicCount('abcdefghij')).toBe(Math.ceil(10 / 3.35));
   });
 
   it('tools 段计入计数：非空变大，空数组与缺省一致', async () => {
@@ -555,14 +550,10 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
   });
 
   afterEach(() => {
-    const {
-      __test__,
-      __resetRnEncodingCacheForTests,
-      __setRnEncodingFactoryForTests,
-    } = require('@novel-master/tokenizer-driver-rn');
-    __setRnEncodingFactoryForTests(null);
-    __resetRnEncodingCacheForTests();
-    __test__.setEncodingSourceForTests(null);
+    const {PromptLlmInputCounter, EncodingCache} = require('@novel-master/tokenizer-driver-rn');
+    EncodingCache.__setFactoryForTests(null);
+    EncodingCache.__resetForTests();
+    PromptLlmInputCounter.__test__.setEncodingSourceForTests(null);
   });
 
   it('native 档：同输入两次计数，第二次原生桥调用 0 次（L1 命中不过桥）', async () => {
@@ -597,8 +588,8 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
 
   it('JS 档：同输入两次计数，第二次编码表 encode 调用 0 次（L1 命中）', async () => {
     let encodeCalls = 0;
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
-    __test__.setEncodingSourceForTests(() => ({
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
+    PromptLlmInputCounter.__test__.setEncodingSourceForTests(() => ({
       encode: (text: string) => {
         encodeCalls += 1;
         return {length: text.length};
@@ -632,8 +623,8 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
 
   it('JS 档：改一处正文后仅变化块重算（新增 encode 调用 = 变化块数 + 1 次 role encode）', async () => {
     let encodeCalls = 0;
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
-    __test__.setEncodingSourceForTests(() => ({
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
+    PromptLlmInputCounter.__test__.setEncodingSourceForTests(() => ({
       encode: (text: string) => {
         encodeCalls += 1;
         return {length: text.length};
@@ -644,7 +635,7 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
     // （夹具控制，见 describe 头注记）。
     const baseText =
       '这是一段完全没有标点与空白的连续中文正文用来验证编辑局部性'.repeat(6);
-    const first = await __test__.countSerialized(
+    const first = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       baseText,
       'openai/gpt-4o',
@@ -655,7 +646,7 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
 
     const editedText = baseText.replace('连续', '衔接');
     expect(editedText).not.toBe(baseText);
-    const second = await __test__.countSerialized(
+    const second = await PromptLlmInputCounter.__test__.countSerialized(
       'tiktoken',
       editedText,
       'openai/gpt-4o',
@@ -708,9 +699,9 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       counterKind: 'claude',
       estimated: false,
     });
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
-    const result = await __test__.countSerialized(
+    const result = await PromptLlmInputCounter.__test__.countSerialized(
       'claude',
       'system prompt body',
       'anthropic/claude-3-5-sonnet',
@@ -743,10 +734,10 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       counterKind: 'claude',
       estimated: false,
     });
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     for (let i = 0; i < 2; i += 1) {
-      await __test__.countSerialized(
+      await PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         'body',
         'anthropic/claude-3-5-sonnet',
@@ -770,7 +761,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       message: 'cancelled',
     });
     const {
-      __test__,
+      PromptLlmInputCounter,
       PromptCountCancelledError,
     } = require('@novel-master/tokenizer-driver-rn');
 
@@ -778,7 +769,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     // JS 线程，比不取消更贵。这是 T-TC1 的驱动面断言（bridge 侧识别由真
     // countPromptViaNative 完成，缝在本套件是通的）。
     await expect(
-      __test__.countSerialized(
+      PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         ZH_TEXT,
         'anthropic/claude-3-5-sonnet',
@@ -795,14 +786,14 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       message: 'cancelled',
     });
     const {
-      __test__,
+      PromptLlmInputCounter,
       PromptCountCancelledError,
     } = require('@novel-master/tokenizer-driver-rn');
 
     // gpt 家族（token-count-perf-r2）首次获得可取消能力：sessionId 在场 →
     // 走四参可取消方法，第三参（vendorModelId 槽）= 编码名。
     await expect(
-      __test__.countSerialized(
+      PromptLlmInputCounter.__test__.countSerialized(
         'tiktoken',
         ZH_TEXT,
         'openai/gpt-4o',
@@ -827,12 +818,12 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       message: 'cancelled',
     });
     const {
-      __test__,
+      PromptLlmInputCounter,
       PromptCountCancelledError,
     } = require('@novel-master/tokenizer-driver-rn');
 
     await expect(
-      __test__.countSerialized('heuristic', ZH_TEXT, 'local/any', undefined, 's-10'),
+      PromptLlmInputCounter.__test__.countSerialized('heuristic', ZH_TEXT, 'local/any', undefined, 's-10'),
     ).rejects.toBeInstanceOf(PromptCountCancelledError);
 
     expect(mockCountPromptCancelable).toHaveBeenCalledTimes(1);
@@ -859,11 +850,11 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       counterKind: 'claude',
       estimated: false,
     }));
-    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
 
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
     try {
-      const roundA = __test__.countSerialized(
+      const roundA = PromptLlmInputCounter.__test__.countSerialized(
         'tiktoken',
         ZH_TEXT,
         'openai/gpt-4o',
@@ -872,7 +863,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       );
       // 让 A 停在过桥在途，B 完整跑完并打出收尾日志。
       await Promise.resolve();
-      const roundB = __test__.countSerialized(
+      const roundB = PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         'body b',
         'anthropic/claude-3-5-sonnet',
@@ -898,7 +889,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
   });
 
   it('取消轮不写 L1：同输入下一轮重新过桥（取消不污染缓存）', async () => {
-    const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+    const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
     const params = {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
@@ -913,7 +904,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       code: 'TOKENIZER_COUNT_CANCELLED',
       message: 'cancelled',
     });
-    await expect(countPromptLlmInputRn(params)).rejects.toMatchObject({
+    await expect(PromptLlmInputCounter.count(params)).rejects.toMatchObject({
       name: 'PromptCountCancelledError',
     });
 
@@ -932,8 +923,8 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
 
   it('T-TC3：在途轮 cancel → cancelCount 收到该轮 requestId（驱动→桥→Kotlin 接力）', async () => {
     const {
-      __test__,
-      cancelSessionNativeCounts,
+      PromptLlmInputCounter,
+      AndroidNativeBridge,
     } = require('@novel-master/tokenizer-driver-rn');
     // 挂起轮：原生 promise 不 resolve，模拟「计数在途」窗口。
     let resolveCount!: (v: {
@@ -947,7 +938,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
           resolveCount = resolve;
         }),
     );
-    const pending = __test__.countSerialized(
+    const pending = PromptLlmInputCounter.__test__.countSerialized(
       'claude',
       'body',
       'anthropic/claude-3-5-sonnet',
@@ -957,7 +948,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     // 过桥同步段（登记 in-flight）在首拍内完成。
     await Promise.resolve();
 
-    cancelSessionNativeCounts('s-1');
+    AndroidNativeBridge.cancelSessionCounts('s-1');
     expect(mockCancelCount).toHaveBeenCalledTimes(1);
     expect(mockCancelCount.mock.calls[0][0]).toMatch(/^s-1:\d+$/);
 
@@ -969,15 +960,15 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     });
     // finally 注销后同会话再 cancel：无在途记录，零指令。
     mockCancelCount.mockClear();
-    cancelSessionNativeCounts('s-1');
+    AndroidNativeBridge.cancelSessionCounts('s-1');
     expect(mockCancelCount).not.toHaveBeenCalled();
   });
 
   it('T-TC3：无在途记录（含 null/undefined）→ cancelSessionNativeCounts no-op 不抛', async () => {
-    const {cancelSessionNativeCounts} = require('@novel-master/tokenizer-driver-rn');
-    expect(() => cancelSessionNativeCounts('s-none')).not.toThrow();
-    expect(() => cancelSessionNativeCounts(null)).not.toThrow();
-    expect(() => cancelSessionNativeCounts(undefined)).not.toThrow();
+    const {AndroidNativeBridge} = require('@novel-master/tokenizer-driver-rn');
+    expect(() => AndroidNativeBridge.cancelSessionCounts('s-none')).not.toThrow();
+    expect(() => AndroidNativeBridge.cancelSessionCounts(null)).not.toThrow();
+    expect(() => AndroidNativeBridge.cancelSessionCounts(undefined)).not.toThrow();
     expect(mockCancelCount).not.toHaveBeenCalled();
   });
 
@@ -992,8 +983,8 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
         counterKind: 'claude',
         estimated: false,
       });
-      const {__test__} = require('@novel-master/tokenizer-driver-rn');
-      const result = await __test__.countSerialized(
+      const {PromptLlmInputCounter} = require('@novel-master/tokenizer-driver-rn');
+      const result = await PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         'body',
         'anthropic/claude-3-5-sonnet',
@@ -1015,8 +1006,8 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     delete token.cancelCount;
     try {
       const {
-        __test__,
-        cancelSessionNativeCounts,
+        PromptLlmInputCounter,
+        AndroidNativeBridge,
       } = require('@novel-master/tokenizer-driver-rn');
       let resolveCount!: (v: {
         tokenCount: number;
@@ -1029,7 +1020,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
             resolveCount = resolve;
           }),
       );
-      const pending = __test__.countSerialized(
+      const pending = PromptLlmInputCounter.__test__.countSerialized(
         'claude',
         'body',
         'anthropic/claude-3-5-sonnet',
@@ -1038,7 +1029,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       );
       await Promise.resolve();
       // cancelCountAvailable() 为假：只发不出的指令必须静默吞掉，不炸取消链路。
-      expect(() => cancelSessionNativeCounts('s-1')).not.toThrow();
+      expect(() => AndroidNativeBridge.cancelSessionCounts('s-1')).not.toThrow();
       resolveCount({tokenCount: 1, counterKind: 'claude', estimated: false});
       await expect(pending).resolves.toMatchObject({count: 1});
     } finally {

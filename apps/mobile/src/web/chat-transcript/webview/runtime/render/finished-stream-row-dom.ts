@@ -5,7 +5,7 @@
  * snapshot.ts 又需要 stream.ts 的 Stream.requestResync；两边互相 import 会成环
  * （spec §3.6）。本模块只依赖 state 与 TrustedHtml，两个方向都向下。
  */
-import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
+import {TrustedHtmlWriter} from '@web/shared/ui/TrustedHtml';
 import {state} from '../state/state';
 import type {MessageRow} from '../state/state';
 
@@ -35,7 +35,7 @@ export const FinishedStreamRowDom = {
   /** 全量写 body 自身（不是 .stream-active-tail）：rich 用 html，plain 用纯文本。 */
   writeBodyFull: (body: Element, seed: BodySeed): void => {
     if (state.flags.richText && seed.html) {
-      applyTrustedHtml(body, seed.html);
+      TrustedHtmlWriter.apply(body, seed.html);
       body.classList.remove('stream-tail-plain');
       body.classList.add('rich');
       return;

@@ -99,7 +99,7 @@ export namespace TranscriptStreamProjection {
       status: message.status,
       text: message.text,
       thinking: message.thinking,
-      tools: message.tools.map(TranscriptStreamProjection.toBridgeTool),
+      tools: message.tools.map(toBridgeTool),
       messageId: message.messageId,
     }));
     streamingRowsCache.set(input, output);
@@ -155,7 +155,7 @@ export namespace TranscriptStreamProjection {
       text,
       thinking,
       ...(message.tools.length > 0
-        ? {tools: message.tools.map(TranscriptStreamProjection.toBridgeTool)}
+        ? {tools: message.tools.map(toBridgeTool)}
         : {}),
       ...(textHtml != null ? {textHtml} : {}),
       ...(thinkingHtml != null ? {thinkingHtml} : {}),

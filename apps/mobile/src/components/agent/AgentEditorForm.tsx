@@ -12,8 +12,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 // nm-style: keep-local — 本文件的具名导入（core/config-forms 名称较长）单行化后均超 80 列，
 // prettier 必拆回；按可读性保留拆行。
-import {buildAgentDefinitionFromForm} from '@/config-forms/agent';
-import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
+import {AgentEditorState, PROMPT_REGION_LABELS} from '@/config-forms/agent';
 import {DefaultAgentDefinition, STORED_CONFIG_LABELS, StoredConfigLabels} from '@novel-master/core/stored-config-validity';
 import {BuiltinTools, ToolRegistry} from '@novel-master/core';
 
@@ -26,9 +25,8 @@ import {promptEditorOnSavedSlot} from './prompt-editor-callback';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {exportAgentYaml} from '../../services/agent-yaml.service';
-import {importAgentYaml} from '../../services/agent-yaml.service';
+import {ToastMessage} from '../../errors/toast-message';
+import {AgentYamlService} from '../../services/agent-yaml.service';
 import type {AgentDefinition} from '@novel-master/core/agent';
 import type {RootStackParamList} from '../../navigation/types';
 
@@ -38,7 +36,7 @@ import {AgentEditorModelSection} from './agent-editor/AgentEditorModelSection';
 import {AgentEditorToolsSection} from './agent-editor/AgentEditorToolsSection';
 import {PromptLayoutSection} from './agent-editor/PromptLayoutSection';
 import {styles} from './agent-editor/agent-editor-form.styles';
-import {agentDisplayNameFromWire, useAgentEditorFormState} from './agent-editor/useAgentEditorFormState';
+import {AgentEditorFormState, useAgentEditorFormState} from './agent-editor/useAgentEditorFormState';
 import {coreT} from '@/i18n/core';
 
 type StackNav = NativeStackNavigationProp<RootStackParamList>;
@@ -100,7 +98,7 @@ export function AgentEditorForm(props: Props) {
     if (readOnly) {
       return;
     }
-    loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
+    loadAgent().catch(err => showToast(ToastMessage.toast('加载失败', err)));
   }, [loadAgent, showToast, readOnly]);
 
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
@@ -121,7 +119,7 @@ export function AgentEditorForm(props: Props) {
               await runtime.agentRegistry.delete(agentId);
               navigation.goBack();
             } catch (error) {
-              showToast(toastMessage('删除失败', error));
+              showToast(ToastMessage.toast('删除失败', error));
             }
           })();
         },
@@ -141,7 +139,7 @@ export function AgentEditorForm(props: Props) {
             setRecovering(true);
             try {
               const raw = await runtime.agentRegistry.getRawWire(agentId);
-              const displayName = agentDisplayNameFromWire(raw, agentId);
+              const displayName = AgentEditorFormState.agentDisplayNameFromWire(raw, agentId);
               const baseName = displayName.trim() || agentId;
               const def = DefaultAgentDefinition.build(baseName);
               const probe = new ToolRegistry();
@@ -153,7 +151,7 @@ export function AgentEditorForm(props: Props) {
               await onSaved?.();
               showToast('已用默认模板覆盖并保存');
             } catch (error) {
-              showToast(toastMessage('覆盖默认失败', error));
+              showToast(ToastMessage.toast('覆盖默认失败', error));
             } finally {
               setRecovering(false);
             }
@@ -166,7 +164,7 @@ export function AgentEditorForm(props: Props) {
   // nm-style: keep-local — 保存编排（构建 → 模型校验 → upsert → 基线/回调收尾）逾 20 行，
   // 内联进 StickyFormFooter 的 onPress 会把保存生命周期塞进 prop。
   const handleSave = async () => {
-    const built = buildAgentDefinitionFromForm(form);
+    const built = AgentEditorState.buildAgentDefinitionFromForm(form);
     if (!built.ok) {
       showToast(built.message);
       return;
@@ -190,7 +188,7 @@ export function AgentEditorForm(props: Props) {
       await onSaved?.();
       showToast('已保存智能体配置');
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -199,12 +197,12 @@ export function AgentEditorForm(props: Props) {
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleExportYaml = useCallback(async () => {
     try {
-      const result = await exportAgentYaml(runtime, agentId);
+      const result = await AgentYamlService.exportYaml(runtime, agentId);
       if (result === 'saved') {
         showToast('已导出 Agent YAML');
       }
     } catch (error) {
-      showToast(toastMessage('导出 YAML 失败', error));
+      showToast(ToastMessage.toast('导出 YAML 失败', error));
     }
   }, [runtime, agentId, showToast]);
 
@@ -217,15 +215,15 @@ export function AgentEditorForm(props: Props) {
         onPress: () => {
           void (async () => {
             try {
-              const imported = await importAgentYaml(runtime, agentId);
+              const imported = await AgentYamlService.importYaml(runtime, agentId);
               if (!imported.ok) {
-                showToast(toastMessage('导入 YAML 失败', imported.error));
+                showToast(ToastMessage.toast('导入 YAML 失败', imported.error));
                 return;
               }
               await loadAgent();
               showToast('已导入 Agent YAML');
             } catch (error) {
-              showToast(toastMessage('导入 YAML 失败', error));
+              showToast(ToastMessage.toast('导入 YAML 失败', error));
             }
           })();
         },

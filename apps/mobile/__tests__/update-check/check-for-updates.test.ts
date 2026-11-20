@@ -1,4 +1,4 @@
-import {checkForUpdates} from '@/update-check/check-for-updates';
+import {CheckForUpdates} from '@/update-check/check-for-updates'
 
 describe('checkForUpdates', () => {
   it('reports update-available when local is older', async () => {
@@ -13,7 +13,7 @@ describe('checkForUpdates', () => {
       }),
     });
 
-    const checked = await checkForUpdates('0.0.1', mockFetch as typeof fetch);
+    const checked = await CheckForUpdates.check('0.0.1', mockFetch as typeof fetch);
     expect(checked.ok).toBe(true);
     if (!checked.ok) {
       throw new Error('合法版本号比较不应失败');

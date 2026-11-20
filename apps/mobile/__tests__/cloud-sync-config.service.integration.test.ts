@@ -5,12 +5,8 @@
  * 验证 service 真实消费 store 从 KKV + SKSP 装载的状态。
  */
 import {AppError, Result} from '@novel-master/core/errors';
-import {
-  getCloudSyncStatusView,
-  pullCloudSync,
-  pushCloudSync,
-  setCloudSyncConfig,
-} from '@/services/cloud-sync.service';
+import {CloudSyncConfigStore} from '@/services/cloud-sync-config.store';
+import {setCloudSyncConfig, CloudSyncService} from '@/services/cloud-sync.service'
 import {CLOUD_SYNC_SECRET_REF} from '@/services/cloud-sync-config.store';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -72,7 +68,7 @@ function makeRuntime() {
 
 /** 错误通道迁移四期：status view 已知失败沿 Result 上行；测试只走成功路径。 */
 async function getStatusViewOrThrow(rt: MobileNovelMasterRuntime) {
-  const r = await getCloudSyncStatusView(rt);
+  const r = await CloudSyncService.getStatusView(rt);
   if (!r.ok) throw r.error;
   return r.value;
 }
@@ -89,12 +85,12 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
 
   it('未配置时 pullCloudSync / pushCloudSync 抛 NOT_CONFIGURED', async () => {
     const {runtime} = makeRuntime();
-    const pullDenied = await pullCloudSync(runtime, async () => runtime);
+    const pullDenied = await CloudSyncService.pull(runtime, async () => runtime);
     expect(pullDenied.ok).toBe(false);
     if (!pullDenied.ok) {
       expect(pullDenied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
     }
-    const pushDenied = await pushCloudSync(runtime, undefined);
+    const pushDenied = await CloudSyncService.push(runtime, undefined);
     expect(pushDenied.ok).toBe(false);
     if (!pushDenied.ok) {
       expect(pushDenied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
@@ -103,7 +99,7 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
 
   it('service 真实消费 store 写入的配置：SK 缺失即视为未配置', async () => {
     const {runtime, secretStore} = makeRuntime();
-    await setCloudSyncConfig(runtime, {
+    await CloudSyncConfigStore.set(runtime, {
       endpoint: 'https://s3.example.com',
       bucket: 'my-bucket',
       region: '',

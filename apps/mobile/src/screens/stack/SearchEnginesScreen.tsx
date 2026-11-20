@@ -3,7 +3,7 @@
  * `readConfig().engines` 动态渲染 + 行内启用开关 + 行菜单（上移/下移/
  * 删除自定义实例）+ 底部「新建自定义引擎」入口；点击行进详情页。
  *
- * 读写直接经 `getSearchConfigStore(runtime)`（core `createSearchConfigStore`
+ * 读写直接经 `SearchConfigStore.get(runtime)`（core `createSearchConfigStore`
  * 装配）：对外状态只读配置读模型，不回显 key 明文。列表页不留长说明文案，
  * 开关语义 / 串行降级 / 模板说明 / 密钥安全收进标题栏「?」帮助弹窗（四段；
  * v3 起「测试消耗配额」段随测试搜索按钮退役删除）。
@@ -29,10 +29,10 @@ import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {settingsTranslator} from '@/i18n/settings';
-import {getSearchConfigStore} from '@/services/search-config.store';
-import {engineHint, engineTitle} from './search-engine-meta';
+import {SearchConfigStore} from '@/services/search-config.store';
+import {SearchEngineMeta} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SearchEngineEntry = SearchConfigPublic['engines'][number];
@@ -43,7 +43,7 @@ export function SearchEnginesScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const searchStore = getSearchConfigStore(runtime);
+  const searchStore = SearchConfigStore.get(runtime);
   const navigation = useNavigation<Nav>();
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
@@ -111,7 +111,7 @@ export function SearchEnginesScreen() {
       // 重读刷新：顺序与各引擎状态以库内新值为准。
       await reload({silent: true});
     } catch (cause) {
-      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.order_failed.mobile'}), cause));
+      showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.order_failed.mobile'}), cause));
     } finally {
       setMoving(false);
     }
@@ -124,7 +124,7 @@ export function SearchEnginesScreen() {
   let deleteNotice = '';
   if (pendingDelete != null) {
     // FIX-23：读模型 name 优先（拍板 5），静态表仅未知 id 兜底。
-    const label = engineTitle(pendingDelete, deleteRow?.name);
+    const label = SearchEngineMeta.engineTitle(pendingDelete, deleteRow?.name);
     deleteNotice = settingsTranslator({key: 'settings.search.detail.delete_notice.mobile', params: {name: label}});
   }
 
@@ -146,7 +146,7 @@ export function SearchEnginesScreen() {
           contentContainerStyle={listScreenStyles.listContent}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
           renderItem={({item}) => {
-            const hint = engineHint(item.id);
+            const hint = SearchEngineMeta.engineHint(item.id);
             // 开关本身已表达启停态，副标题只说「还缺什么才能用」。
             const issues = [
               ...(item.needsKey && !item.hasKey ? [settingsTranslator({key: 'settings.search.list.issue.key_missing.mobile'})] : []),
@@ -164,7 +164,7 @@ export function SearchEnginesScreen() {
                     engineId: item.id,
                   });
                 }}
-                title={engineTitle(item.id, item.name)}
+                title={SearchEngineMeta.engineTitle(item.id, item.name)}
                 subtitle={issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`}
                 trailingMeta={
                   <View style={styles.rowMeta}>
@@ -189,7 +189,7 @@ export function SearchEnginesScreen() {
                           await searchStore.setEnabled(item.id, next);
                         } catch (cause) {
                           setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: !next} : row)));
-                          showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
+                          showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
                         } finally {
                           togglingRef.current = undefined;
                         }
@@ -216,7 +216,7 @@ export function SearchEnginesScreen() {
       </View>
       <BottomSheetMenu
         visible={menuEngineId != null}
-        title={menuRow && engineTitle(menuRow.id, menuRow.name)}
+        title={menuRow && SearchEngineMeta.engineTitle(menuRow.id, menuRow.name)}
         items={[
           {label: settingsTranslator({key: 'settings.search.list.menu.move_up'}), action: 'up', disabled: menuIndex <= 0 || moving},
           {
@@ -276,7 +276,7 @@ export function SearchEnginesScreen() {
                   setPendingDelete(undefined);
                   await reload({silent: true});
                 } catch (cause) {
-                  showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}), cause));
+                  showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}), cause));
                 } finally {
                   setDeleting(false);
                 }

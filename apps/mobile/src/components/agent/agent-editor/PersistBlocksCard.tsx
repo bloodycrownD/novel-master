@@ -9,7 +9,7 @@ import type {PersistPromptBlock} from '@novel-master/core/prompt';
 import type {PersistTextPromptBlock} from '@novel-master/core/prompt';
 import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
 import {ROLE_OPTIONS} from '@/config-forms/agent';
-import {mapPersistTextBlocks} from '@/config-forms/agent';
+import {AgentEditorState} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';
@@ -119,7 +119,7 @@ export function PersistBlocksCard({
                       disabled={readOnly}
                       onChangeText={v =>
                         setPersist(prev =>
-                          mapPersistTextBlocks(prev, (b, i) =>
+                          AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
                             i === index ? {...b, name: v} : b,
                           ),
                         )
@@ -132,7 +132,7 @@ export function PersistBlocksCard({
                       value={block.role}
                       onChange={role =>
                         setPersist(prev =>
-                          mapPersistTextBlocks(prev, (b, i) =>
+                          AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
                             i === index
                               ? {
                                   ...b,
@@ -159,7 +159,7 @@ export function PersistBlocksCard({
                     openEditor={() =>
                       openPromptEditor(block.name, block.content, v =>
                         setPersist(prev =>
-                          mapPersistTextBlocks(prev, (b, i) =>
+                          AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
                             i === index ? {...b, content: v} : b,
                           ),
                         ),
@@ -171,7 +171,7 @@ export function PersistBlocksCard({
                         value={block.content}
                         onChangeText={v =>
                           setPersist(prev =>
-                            mapPersistTextBlocks(prev, (b, i) =>
+                            AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
                               i === index ? {...b, content: v} : b,
                             ),
                           )

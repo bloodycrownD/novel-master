@@ -7,7 +7,7 @@
  *   极大 intervalMs 恒直通（等价使用方注入同步 resolve mock 的场景）。
  */
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
-import {createQuantumYield} from '@/services/yield-quantum';
+import {YieldQuantum} from '@/services/yield-quantum'
 
 const BASE = 1_000_000;
 
@@ -21,7 +21,7 @@ describe('yield-quantum — T-Y1', () => {
   });
 
   it('窗内连调不 await：Date.now 前进 <16ms 时同步直通（不安排定时器）', async () => {
-    const yieldToEventLoop = createQuantumYield();
+    const yieldToEventLoop = YieldQuantum.create();
     // 构造时刻即首个窗口起点：+10ms 仍在窗内
     jest.setSystemTime(BASE + 10);
     await expect(yieldToEventLoop()).resolves.toBeUndefined();
@@ -34,7 +34,7 @@ describe('yield-quantum — T-Y1', () => {
   });
 
   it('跨窗 setTimeout(0) 让步：距上次让步 >=16ms 时安排一次 0ms 定时器', async () => {
-    const yieldToEventLoop = createQuantumYield();
+    const yieldToEventLoop = YieldQuantum.create();
     jest.setSystemTime(BASE + 16); // 距构造 16ms → 跨窗
     let resolved = false;
     const pending = yieldToEventLoop().then(() => {
@@ -54,7 +54,7 @@ describe('yield-quantum — T-Y1', () => {
   });
 
   it('intervalMs=0 注入：时间不前进也逐次跨窗、每次调用都让步', async () => {
-    const yieldToEventLoop = createQuantumYield(0);
+    const yieldToEventLoop = YieldQuantum.create(0);
     const first = yieldToEventLoop();
     expect(jest.getTimerCount()).toBe(1);
     jest.advanceTimersByTime(0);
@@ -68,7 +68,7 @@ describe('yield-quantum — T-Y1', () => {
   });
 
   it('极大 intervalMs 注入：任意推进时间都同步直通（等价注入同步 resolve mock）', async () => {
-    const yieldToEventLoop = createQuantumYield(Number.MAX_SAFE_INTEGER);
+    const yieldToEventLoop = YieldQuantum.create(Number.MAX_SAFE_INTEGER);
     jest.setSystemTime(BASE + 1_000_000);
     for (let i = 0; i < 3; i++) {
       await expect(yieldToEventLoop()).resolves.toBeUndefined();

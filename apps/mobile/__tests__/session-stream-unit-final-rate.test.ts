@@ -32,7 +32,7 @@ import type {
   SessionRunStatus,
 } from '@novel-master/core/session-run-state';
 import {agentActivity} from '@/runtime/agent-activity';
-import {buildChatStreamMetricsLine} from '@/hooks/useAgentStreamMetrics';
+import {AgentStreamMetrics} from '@/hooks/useAgentStreamMetrics'
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 const TEST_SETTLED_GRACE_MS = 5_000;
@@ -203,7 +203,7 @@ function buildLineFrom(
   sessionId: string,
 ): string {
   const projection = manager.getSettledProjection(sessionId)!;
-  return buildChatStreamMetricsLine({
+  return AgentStreamMetrics.buildChatLine({
     running: false,
     elapsedMs: projection.elapsedMs,
     completionTokens: projection.metrics.completionTokens,
@@ -478,7 +478,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     // 文案省略速率段（缺值即省略，不把上一轮的速度拼到本轮「上次生成」上）。
     expect(hydrated!.metrics.completionTokens).toBe(0);
     expect(
-      buildChatStreamMetricsLine({
+      AgentStreamMetrics.buildChatLine({
         running: false,
         elapsedMs: hydrated!.elapsedMs,
         completionTokens: hydrated!.metrics.completionTokens,

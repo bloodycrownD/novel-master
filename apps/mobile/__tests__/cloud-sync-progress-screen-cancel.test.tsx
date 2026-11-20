@@ -83,7 +83,8 @@ jest.mock('@/components/chrome/CloudSyncProgressPanel', () => {
   };
 });
 
-jest.mock('@/services/cloud-sync.service', () => ({
+jest.mock('@/services/cloud-sync.service', () => {
+  const legacy = {
   initialCloudSyncProgressUi: (op: 'pull' | 'push') => ({
     op,
     event: 'start',
@@ -99,7 +100,9 @@ jest.mock('@/services/cloud-sync.service', () => ({
     new Promise<never>((_resolve, reject) => {
       mockRejectRun = reject;
     }),
-}));
+};
+  return {...legacy, CloudSyncService: {pull: legacy.pullCloudSync, push: legacy.pushCloudSync}};
+});
 
 beforeEach(() => {
   jest.clearAllMocks();

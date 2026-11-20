@@ -74,7 +74,7 @@ export namespace SanitizeRichHtml {
    */
   export function filterInlineStyle(style: string): string | undefined {
     const kept: string[] = [];
-    for (const declaration of SanitizeRichHtml.splitStyleDeclarations(style)) {
+    for (const declaration of splitStyleDeclarations(style)) {
       if (declaration.includes('/*')) {
         continue;
       }

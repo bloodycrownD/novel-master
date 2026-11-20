@@ -38,12 +38,16 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('../src/errors/toast-message', () => {
+  const legacy = {
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
-}));
+};
+  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+});
 
-jest.mock('../src/services/vfs-operations.service', () => ({
+jest.mock('../src/services/vfs-operations.service', () => {
+  const legacy = {
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
@@ -53,7 +57,9 @@ jest.mock('../src/services/vfs-operations.service', () => ({
   sessionCreateVfsFile: jest.fn(),
   sessionRenameVfsDirectory: jest.fn(),
   sessionRenameVfsFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
+});
 
 jest.mock('../src/services/workplace-operations.service', () => {
   const actual = jest.requireActual(
@@ -95,28 +101,43 @@ jest.mock('../src/components/prompt/TemplatePullButton', () => ({
   TemplatePullButton: () => null,
 }));
 
-jest.mock('../src/services/vfs-zip.service', () => ({
+jest.mock('../src/services/vfs-zip.service', () => {
+  const legacy = {
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
-}));
+};
+  return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
+});
 
-jest.mock('../src/services/vfs-character-card.service', () => ({
+jest.mock('../src/services/vfs-character-card.service', () => {
+  const legacy = {
   importCharacterCard: jest.fn(),
-}));
+};
+  return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
+});
 
 // Step 5 起组件直接 import 单文件导入导出服务（picker / 另存面板，测试里 mock）。
-jest.mock('../src/services/vfs-single-file.service', () => ({
+jest.mock('../src/services/vfs-single-file.service', () => {
+  const legacy = {
   exportVfsSingleFile: jest.fn(),
   importVfsSingleFile: jest.fn(),
-}));
+};
+  return {...legacy, VfsSingleFileService: {exportFile: legacy.exportVfsSingleFile, importFile: legacy.importVfsSingleFile}};
+});
 
-jest.mock('../src/services/user-vfs-turn-execute.service', () => ({
+jest.mock('../src/services/user-vfs-turn-execute.service', () => {
+  const legacy = {
   refreshComposerStatusAfterUserVfsOps: jest.fn(),
-}));
+};
+  return {...legacy, UserVfsTurnExecuteService: {refreshComposerStatus: legacy.refreshComposerStatusAfterUserVfsOps}};
+});
 
-jest.mock('../src/services/workplace-rule-delta-draft.service', () => ({
+jest.mock('../src/services/workplace-rule-delta-draft.service', () => {
+  const legacy = {
   refreshRuleSnapshotAfterRuleChange: jest.fn(),
-}));
+};
+  return {...legacy, WorkplaceRuleDeltaDraftService: {refreshRuleSnapshot: legacy.refreshRuleSnapshotAfterRuleChange}};
+});
 
 jest.mock('../src/hooks/useAndroidModalKeyboardAvoid', () => ({
   useAndroidModalKeyboardAvoid: () => ({}),

@@ -239,23 +239,35 @@ jest.mock('@/services/chat-prompt-tokens.service', () => ({
   PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
-jest.mock('@/storage/app-ui-pref-io', () => ({
+jest.mock('@/storage/app-ui-pref-io', () => {
+  const legacy = {
   ...jest.requireActual('@/storage/app-ui-pref-io'),
   readBoolPref: jest.fn(async () => false),
-}));
+};
+  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref}};
+});
 
-jest.mock('@/storage/chat-transcript-engine', () => ({
+jest.mock('@/storage/chat-transcript-engine', () => {
+  const legacy = {
   defaultChatTranscriptEngine: () => 'webview',
   readChatTranscriptEngine: jest.fn(async () => 'webview'),
-}));
+};
+  return {...legacy, ChatTranscriptEngine: {read: legacy.readChatTranscriptEngine}};
+});
 
-jest.mock('@/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => {
+  const legacy = {
   projectComposerStatusForSession: jest.fn(async () => []),
-}));
+};
+  return {...legacy, ProjectComposerStatusService: {forSession: legacy.projectComposerStatusForSession}};
+});
 
-jest.mock('@/errors/format-error', () => ({
+jest.mock('@/errors/format-error', () => {
+  const legacy = {
   formatError: (err: unknown) => String(err),
-}));
+};
+  return {...legacy, FormatError: {format: legacy.formatError}};
+});
 
 jest.mock('@/components/chrome/AppHeader', () => ({AppHeader: () => null}));
 jest.mock('@/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));

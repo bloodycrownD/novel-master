@@ -28,7 +28,7 @@ jest.mock('@novel-master/core/workplace', () => {
 });
 
 import {ChatPromptBuildBailedError} from '@novel-master/core';
-import {buildSessionPromptInputAdapter} from '@/services/session-prompt-input.service';
+import {SessionPromptInputService} from '@/services/session-prompt-input.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 function makeStubRuntime(): MobileNovelMasterRuntime {
@@ -83,7 +83,7 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
     // 中止沿 Outcome.cancelled/replaced 返回，由 build 转抛统一哨兵。
     mockAssemble.mockResolvedValue({kind: 'replaced'});
     await expect(
-      buildSessionPromptInputAdapter(
+      SessionPromptInputService.build(
         makeStubRuntime(),
         {projectId: 'p', sessionId: 's'},
         workplaceDefinition(),
@@ -103,7 +103,7 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
       },
     });
     let stopRequested = false;
-    await buildSessionPromptInputAdapter(
+    await SessionPromptInputService.build(
       makeStubRuntime(),
       {projectId: 'p', sessionId: 's'},
       workplaceDefinition(),
@@ -132,7 +132,7 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
         fingerprint: 'fp-abc',
       },
     });
-    const bundleResult = await buildSessionPromptInputAdapter(
+    const bundleResult = await SessionPromptInputService.build(
       makeStubRuntime(),
       {projectId: 'p', sessionId: 's'},
       workplaceDefinition(),

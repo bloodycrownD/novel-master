@@ -41,7 +41,8 @@ jest.mock('@/components/ui/AppModal', () => {
 
 const EMPTY_MESSAGE = '暂无可用智能体，请先在智能体配置中添加。';
 
-jest.mock('@/services/agent-picker', () => ({
+jest.mock('@/services/agent-picker', () => {
+  const legacy = {
   AGENT_PICKER_EMPTY_MESSAGE: EMPTY_MESSAGE,
   isAgentPickerRowSelected: (
     agentId: string,
@@ -52,7 +53,9 @@ jest.mock('@/services/agent-picker', () => ({
   loadSessionAgentPickerRows: jest.fn(),
   selectWorkspaceAgent: jest.fn(),
   selectSessionAgent: jest.fn(),
-}));
+};
+  return {...legacy, AgentPicker: {loadRows: legacy.loadAgentPickerRows, loadSessionRows: legacy.loadSessionAgentPickerRows, isRowSelected: legacy.isAgentPickerRowSelected, selectWorkspace: legacy.selectWorkspaceAgent, selectSession: legacy.selectSessionAgent}};
+});
 
 const mockShowToast = jest.fn();
 
@@ -68,13 +71,10 @@ jest.mock('@/hooks/useRuntime', () => ({
 }));
 
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
-import {
-  loadAgentPickerRows,
-  selectWorkspaceAgent,
-} from '@/services/agent-picker';
+import {AgentPicker} from '@/services/agent-picker'
 
-const mockLoad = loadAgentPickerRows as jest.Mock;
-const mockSelect = selectWorkspaceAgent as jest.Mock;
+const mockLoad = AgentPicker.loadRows as jest.Mock;
+const mockSelect = AgentPicker.selectWorkspace as jest.Mock;
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
 function treeText(

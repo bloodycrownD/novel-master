@@ -36,11 +36,11 @@ import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
-import {getSearchConfigStore} from '@/services/search-config.store';
-import {PRESET_TEMPLATES, engineTitle} from './search-engine-meta';
+import {SearchConfigStore} from '@/services/search-config.store';
+import {PRESET_TEMPLATES, SearchEngineMeta} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SearchEngineDetail'>;
@@ -94,7 +94,7 @@ export function SearchEngineDetailScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const searchStore = getSearchConfigStore(runtime);
+  const searchStore = SearchConfigStore.get(runtime);
   const navigation = useNavigation<Nav>();
   const route = useRoute<DetailRoute>();
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
@@ -121,7 +121,7 @@ export function SearchEngineDetailScreen() {
   let title = settingsTranslator({key: 'settings.search.list.create_custom'});
   if (engineId != null) {
     // FIX-23：读模型 name 优先（拍板 5），静态表仅未加载 / 未知 id 兜底。
-    title = engineTitle(engineId, entry?.name);
+    title = SearchEngineMeta.engineTitle(engineId, entry?.name);
   }
   // prettier-ignore
   const draftNeedsBaseUrl = draft.url.includes('{{baseUrl}}') || Object.values(draft.headers).some(value => value.includes('{{baseUrl}}'));
@@ -205,7 +205,7 @@ export function SearchEngineDetailScreen() {
         setApiKeyDraft('');
       } catch (cause) {
         if (!silent) {
-          showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.load_failed.mobile'}), cause));
+          showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.load_failed.mobile'}), cause));
         }
       } finally {
         setLoading(false);
@@ -339,7 +339,7 @@ export function SearchEngineDetailScreen() {
       showToast(settingsTranslator({key: 'settings.search.toast.config_saved.mobile'}));
       await load({silent: true});
     } catch (cause) {
-      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}), cause));
+      showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}), cause));
       // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）；静默回读
       // 不闪全屏 loading（FIX-24），失败时保存失败的 toast 已在，不再叠加。
       await load({silent: true});
@@ -364,7 +364,7 @@ export function SearchEngineDetailScreen() {
         reset: 'settings.search.toast.reset_failed.mobile',
         delete: 'settings.search.toast.delete_failed.mobile',
       };
-      showToast(toastMessage(settingsTranslator({key: failKeys[op]}), cause));
+      showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
     } finally {
       setWriteOp(null);
     }

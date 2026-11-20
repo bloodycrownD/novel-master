@@ -34,7 +34,7 @@ import {type VfsScope} from '@novel-master/core/vfs';
 import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
-import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
+import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
 import {
   NativeChatComposer,
   type NativeChatComposerInstance,
@@ -56,12 +56,7 @@ import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
 import {useToast} from '@/components/chrome/ToastHost';
 import {useTheme} from '@/theme/ThemeProvider';
-import {
-  AGENT_LOCK_TOAST_GUIDE,
-  isAgentLocked,
-  isModelLocked,
-  MODEL_LOCK_TOAST,
-} from '@/services/chat-agent-meta';
+import {AGENT_LOCK_TOAST_GUIDE, ChatAgentMeta, MODEL_LOCK_TOAST} from '@/services/chat-agent-meta';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
@@ -183,7 +178,7 @@ function ChatConversationWebSurface(props: {
    */
   const {tokens: themeTokens} = useTheme();
   const composerTheme = useMemo(
-    () => hostThemeFromTokens(themeTokens),
+    () => HostThemeMapping.fromTokens(themeTokens),
     [themeTokens],
   );
 
@@ -361,7 +356,7 @@ export function ChatConversationPanel({
   // 点击直接弹 picker 重选（meta 条已带已删标识，不再额外弹 toast）。
   // model 卡：none / agent-pin 态维持锁定。
   const openAgentPicker = useCallback(() => {
-    if (isAgentLocked(agentMeta)) {
+    if (ChatAgentMeta.isLocked(agentMeta)) {
       showToast(AGENT_LOCK_TOAST_GUIDE);
       return;
     }
@@ -369,7 +364,7 @@ export function ChatConversationPanel({
   }, [agentMeta, showToast, setAgentPickerOpen]);
 
   const openModelPicker = useCallback(() => {
-    if (isModelLocked(agentMeta)) {
+    if (ChatAgentMeta.isModelLocked(agentMeta)) {
       showToast(MODEL_LOCK_TOAST);
       return;
     }

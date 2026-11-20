@@ -14,7 +14,7 @@
  * 是普通文本，不该被胶囊化。
  */
 import {Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate} from '@codemirror/view';
-import {composerTokenRanges} from '@/components/chat/composer-highlight';
+import {ComposerHighlight} from '@/components/chat/composer-highlight';
 
 /**
  * composer 变体伪路径：激活胶囊扩展（语言仍按 .md → markdown 高亮）。
@@ -26,7 +26,7 @@ const tokenMark = Decoration.mark({class: 'cm-composer-token'});
 
 function buildTokenDecorations(view: EditorView): DecorationSet {
   const text = view.state.doc.toString();
-  const ranges = composerTokenRanges(text);
+  const ranges = ComposerHighlight.tokenRanges(text);
   if (ranges.length === 0) {
     return Decoration.none;
   }

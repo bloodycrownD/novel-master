@@ -3,9 +3,9 @@
  */
 import {AppState} from 'react-native';
 import {NovelMasterBootstrap, TdbcOpen, type TdbcConnection} from '@novel-master/core';
-import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
-import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
-import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
+import {OpSqliteNativeRegister} from '@novel-master/tdbc-driver-op-sqlite/native';
+import {SkspAndroidRegister} from '@novel-master/sksp-android';
+import {TokenizerRnRegister} from '@novel-master/tokenizer-driver-rn/native';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
 import {MobileDatabaseFilePath} from './db-file-path';
 
@@ -37,12 +37,12 @@ export const MobileDb = {
    * 自动恢复。探测函数在 app 层注入，驱动包保持零依赖。
    *
    * 驱动注册表是 last-wins：任何其它地方再调一次无参的
-   * `registerOpSqliteDriver()` 都会把这里的带参版本覆盖掉、静默丢掉
+   * `OpSqliteNativeRegister.register()` 都会把这里的带参版本覆盖掉、静默丢掉
    * 后台探测。因此 app 层所有需要打开 op-sqlite 连接的入口
    * （如 db-backup 的服务商表恢复短连接）都必须调本函数。
    */
   registerMobileOpSqliteDriver: (): void => {
-    registerOpSqliteDriver(undefined, () => AppState.currentState === 'background');
+    OpSqliteNativeRegister.register(undefined, () => AppState.currentState === 'background');
   },
 
   /** Opens (once) the app DB with core bootstrap and SKSP Android driver. */
@@ -53,8 +53,8 @@ export const MobileDb = {
     if (!initPromise) {
       initPromise = (async () => {
         MobileDb.registerMobileOpSqliteDriver();
-        registerSkspAndroidDriver();
-        registerTokenizerRnDriver();
+        SkspAndroidRegister.register();
+        TokenizerRnRegister.register();
         let c: TdbcConnection;
         try {
           c = await TdbcOpen.open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});

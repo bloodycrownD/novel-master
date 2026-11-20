@@ -14,8 +14,8 @@
  */
 import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
-import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
-import {createSnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
+import {WorkplaceBlockService} from '@/services/workplace-block.service';
+import {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabMessageActions} from './useChatTabMessageActions';
 
@@ -25,7 +25,7 @@ export function useChatTabController() {
   // 快照完成信号盒（rollback-large-jank Step 5）：webview 组件侧 notify
   // （末片 post + deferred 排空后），回滚链 consumeNext 错峰 token 重算。
   // useRef 持有——跨回滚轮次复用，每次 consumeNext 重置等待态。
-  const snapshotSignalRef = useRef(createSnapshotCompleteSignal());
+  const snapshotSignalRef = useRef(SnapshotCompleteSignal.create());
   const notifySnapshotComplete = useCallback(() => {
     snapshotSignalRef.current.notify();
   }, []);
@@ -75,7 +75,7 @@ export function useChatTabController() {
     }
     void (async () => {
       try {
-        await clearSessionWorkplaceKkv(ctx.runtime, {
+        await WorkplaceBlockService.clearSessionKkv(ctx.runtime, {
           projectId: ctx.projectId!,
           sessionId: ctx.sessionId!,
         });

@@ -8,11 +8,8 @@
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import notifee from '@notifee/react-native';
 import {Platform} from 'react-native';
-import {
-  ensureKeepAliveResidentBoot,
-  createNotificationPrefBridge,
-} from '@/runtime/novel-master-context';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {NovelMasterContextHelpers} from '@/runtime/novel-master-context';
+import {AgentFinishedNotification} from '@/services/agent-finished-notification'
 import type {AppUiPreferences} from '@/storage/app-ui-prefs';
 
 /** 内存 KKV 形状的 appUi（照 message-notification-pref.test.ts 的模式）。 */
@@ -31,12 +28,12 @@ function appUiWith(raw: Record<string, string | undefined>): AppUiPreferences {
 describe('keepalive-resident-boot', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   afterEach(() => {
     // 退出前复位保活模块级状态，防 resident 态泄漏到其它测试文件。
-    resetKeepAliveStateForTests();
+    AgentFinishedNotification.resetKeepAliveStateForTests();
   });
 
   describe('T-K8 ensureKeepAliveResidentBoot', () => {
@@ -54,7 +51,7 @@ describe('keepalive-resident-boot', () => {
 
     it('开关开：拉起常驻空闲通知（asForegroundService + ongoing）', async () => {
       const appUi = appUiWith({messageNotification: 'true'});
-      await ensureKeepAliveResidentBoot(appUi);
+      await NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUi);
       expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
       expect(notifee.displayNotification).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -70,14 +67,14 @@ describe('keepalive-resident-boot', () => {
 
     it('开关关：零拉起', async () => {
       const appUi = appUiWith({messageNotification: 'false'});
-      await ensureKeepAliveResidentBoot(appUi);
+      await NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUi);
       expect(notifee.displayNotification).not.toHaveBeenCalled();
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     });
 
     it('appUi 未就绪（undefined）：守卫分支直接返回，不抛错零拉起', async () => {
       await expect(
-        ensureKeepAliveResidentBoot(undefined),
+        NovelMasterContextHelpers.ensureKeepAliveResidentBoot(undefined),
       ).resolves.toBeUndefined();
       expect(notifee.displayNotification).not.toHaveBeenCalled();
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();
@@ -86,16 +83,16 @@ describe('keepalive-resident-boot', () => {
 
   describe('T-K9 createNotificationPrefBridge', () => {
     it('getAppUi 未就绪：降级口径为 false', async () => {
-      const bridge = createNotificationPrefBridge(() => undefined);
+      const bridge = NovelMasterContextHelpers.createNotificationPrefBridge(() => undefined);
       await expect(bridge.isNotificationEnabled()).resolves.toBe(false);
     });
 
     it('appUi 就绪：按存储值读取（开 → true，关 → false）', async () => {
-      const on = createNotificationPrefBridge(() =>
+      const on = NovelMasterContextHelpers.createNotificationPrefBridge(() =>
         appUiWith({messageNotification: 'true'}),
       );
       await expect(on.isNotificationEnabled()).resolves.toBe(true);
-      const off = createNotificationPrefBridge(() =>
+      const off = NovelMasterContextHelpers.createNotificationPrefBridge(() =>
         appUiWith({messageNotification: 'false'}),
       );
       await expect(off.isNotificationEnabled()).resolves.toBe(false);

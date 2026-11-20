@@ -12,7 +12,7 @@ import {Result} from '@novel-master/core/errors';
 import {CloudSyncSdkErrorMapper} from './map-cloud-sync-sdk-error';
 import {CloudSyncProgressLog} from './cloud-sync-progress-log';
 import type {CloudSyncProgressListener} from './cloud-sync-progress-ui';
-import {createS3ObjectStorage} from '@novel-master/cloud-sync-driver-s3';
+import {S3ObjectStorage} from '@novel-master/cloud-sync-driver-s3';
 import {HeadBucketCommand, ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {AwsRnS3Client} from '@/shims/aws-rn-s3-client';
 import ReactNativeBlobUtil from 'react-native-blob-util';
@@ -76,7 +76,7 @@ export namespace CloudSyncService {
     const configResult = s3Config != null ? Result.ok(s3Config) : await CloudSyncConfigStore.buildS3StorageConfig(runtime);
     if (!configResult.ok) return Result.err(configResult.error);
     const config = configResult.value;
-    const storage = createS3ObjectStorage(config, {
+    const storage = S3ObjectStorage.create(config, {
       client: AwsRnS3Client.create(config),
     });
     const publicConfig = await CloudSyncConfigStore.get(runtime);
@@ -111,7 +111,7 @@ export namespace CloudSyncService {
     const storageConfigResult = s3Config != null ? Result.ok(s3Config) : await CloudSyncConfigStore.buildS3StorageConfig(runtime);
     if (!storageConfigResult.ok) return Result.err(storageConfigResult.error);
     const storageConfig = storageConfigResult.value;
-    const baseStorage = createS3ObjectStorage(storageConfig, {
+    const baseStorage = S3ObjectStorage.create(storageConfig, {
       client: AwsRnS3Client.create(storageConfig),
       // mobile 端注入基于 react-native-blob-util 的 FileSystemPort（对应 A-26）。
       fileSystem: {

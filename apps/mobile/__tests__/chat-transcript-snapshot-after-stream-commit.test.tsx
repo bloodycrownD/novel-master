@@ -17,7 +17,7 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {decodeConversationUpstream} from '@/components/chat/ChatConversationBridge';
+import {ChatConversationBridge} from '@/components/chat/ChatConversationBridge'
 import type {TranscriptStreamingMessage} from '@/components/chat/ChatTranscriptBridge';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {
@@ -56,16 +56,22 @@ jest.mock('sanitize-html', () => {
   return fn;
 });
 
-jest.mock('@/services/chat-transcript-telemetry', () => ({
+jest.mock('@/services/chat-transcript-telemetry', () => {
+  const legacy = {
   emitChatTranscriptTelemetry: jest.fn(),
-}));
+};
+  return {...legacy, ChatTranscriptTelemetry: {emit: legacy.emitChatTranscriptTelemetry}};
+});
 
-jest.mock('@/services/yield-quantum', () => ({
+jest.mock('@/services/yield-quantum', () => {
+  const legacy = {
   createQuantumYield: () => () =>
     new Promise<void>(resolve => {
       setTimeout(resolve, 0);
     }),
-}));
+};
+  return {...legacy, YieldQuantum: {create: legacy.createQuantumYield}};
+});
 
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
@@ -144,7 +150,7 @@ describe('中断 partial 快照与回滚刷新（T-SP19）', () => {
   /** 全部 sessionSnapshot 载荷（v:2 信封走宽松 decoder，字段名未变）。 */
   function snapshotPayloads(): Array<Record<string, unknown>> {
     return mockWebViewPostMessages.flatMap(raw => {
-      const decoded = decodeConversationUpstream(raw);
+      const decoded = ChatConversationBridge.decodeConversationUpstream(raw);
       if (!decoded.ok || decoded.message.type !== 'sessionSnapshot') {
         return [];
       }

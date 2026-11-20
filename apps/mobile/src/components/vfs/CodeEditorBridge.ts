@@ -2,7 +2,7 @@
  * RN ↔ Web code editor bridge: typed JSON envelopes ({ v, type, payload }).
  * 四函数编解码单源在 `webview-host/typed-message-bridge.ts`。
  */
-import {createMessageBridge} from '@/webview-host/typed-message-bridge';
+import {TypedMessageBridge} from '@/webview-host/typed-message-bridge';
 
 export const CODE_EDITOR_BRIDGE_VERSION = 1 as const;
 
@@ -58,4 +58,4 @@ export type CodeEditorSelection = {
   readonly end: number;
 };
 
-export const codeEditorBridge = createMessageBridge<HostToCodeEditorMessage, CodeEditorToHostMessage>(CODE_EDITOR_BRIDGE_VERSION, 'code-editor');
+export const codeEditorBridge = TypedMessageBridge.create<HostToCodeEditorMessage, CodeEditorToHostMessage>(CODE_EDITOR_BRIDGE_VERSION, 'code-editor');

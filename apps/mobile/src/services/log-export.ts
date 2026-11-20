@@ -6,8 +6,8 @@
  * 从最旧的文件开始丢弃，并在头部写明丢了几个。
  */
 import {Encoding, Number} from '@novel-master/core/common';
-import {exportBytesViaDocumentPicker} from './document-io';
-import {blobFs} from './rn-file-io';
+import {DocumentIo} from './document-io';
+import {RnFileIo} from './rn-file-io';
 
 /** 导出内容总字节上限；超出时从最旧的文件开始丢。 */
 const MAX_EXPORT_BYTES = 8 * 1024 * 1024;
@@ -16,7 +16,7 @@ export const LogExport = {
   /** 导出全部日志文件；返回 'saved' / 'cancelled'（用户取消保存框）。 */
   // nm-style: keep-public — 独立 IO 管线（读日志目录 + 8MB 截断 + 系统保存框），屏幕只负责按钮状态。
   async export(): Promise<'saved' | 'cancelled'> {
-    const fs = blobFs();
+    const fs = RnFileIo.blobFs();
     const dir = `${fs.dirs.DocumentDir}/logs`;
     const files: {name: string; text: string; bytes: number; mtimeMs: number}[] = [];
     for (const name of (await fs.ls(dir).catch(() => [])) ?? []) {
@@ -49,7 +49,7 @@ export const LogExport = {
     const body = header + sections.join('');
     const now = new Date();
     const fileName = `nm-logs-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}-${Number.pad2(now.getHours())}${Number.pad2(now.getMinutes())}${Number.pad2(now.getSeconds())}.txt`;
-    return exportBytesViaDocumentPicker({
+    return DocumentIo.exportBytes({
       fileName,
       mimeType: 'text/plain',
       write: async tmpPath => {

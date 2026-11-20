@@ -11,7 +11,7 @@ import {StyleSheet, Text, View} from 'react-native';
 import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {Result, AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
 import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
@@ -101,23 +101,23 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
         if (sessionId != null) {
           const current = await runtime.sessions.getSessionAgentConfig(sessionId);
           if (!current.ok) {
-            showToast(toastMessage('设置失败', current.error));
+            showToast(ToastMessage.toast('设置失败', current.error));
             return;
           }
           const updated = await runtime.sessions.updateSessionAgentConfig(sessionId, {agentId: current.value.agentId, modelId: savedModelId});
           if (!updated.ok) {
-            showToast(toastMessage('设置失败', updated.error));
+            showToast(ToastMessage.toast('设置失败', updated.error));
             return;
           }
         } else {
           const updated = await runtime.state.setCurrentModelId(savedModelId);
           if (!updated.ok) {
-            showToast(toastMessage('设置失败', updated.error));
+            showToast(ToastMessage.toast('设置失败', updated.error));
             return;
           }
         }
       } catch (cause) {
-        showToast(toastMessage('设置失败', cause));
+        showToast(ToastMessage.toast('设置失败', cause));
         return;
       }
       onSelected?.(savedModelId);

@@ -1,9 +1,9 @@
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {TranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
-import {createScopeKeyCache} from '@/services/scope-key-cache';
+import {ScopeKeyCache} from '@/services/scope-key-cache';
 
 // 有界 LRU：空串编码「已算过但无 html」，命中时按 miss 返回 undefined。
-const richHtmlCache = createScopeKeyCache<string>({maxEntries: 500});
+const richHtmlCache = ScopeKeyCache.create<string>({maxEntries: 500});
 
 export namespace EnrichTranscriptRows {
   function richHtmlCached(cacheKey: string, content: string): string | undefined {
@@ -27,8 +27,8 @@ export namespace EnrichTranscriptRows {
       }
       return {
         ...row,
-        textHtml: row.text ? EnrichTranscriptRows.richHtmlCached(`${row.id}:text:${row.text}`, row.text) : undefined,
-        thinkingHtml: row.thinking ? EnrichTranscriptRows.richHtmlCached(`${row.id}:thinking:${row.thinking}`, row.thinking) : undefined,
+        textHtml: row.text ? richHtmlCached(`${row.id}:text:${row.text}`, row.text) : undefined,
+        thinkingHtml: row.thinking ? richHtmlCached(`${row.id}:thinking:${row.thinking}`, row.thinking) : undefined,
       };
     });
   }

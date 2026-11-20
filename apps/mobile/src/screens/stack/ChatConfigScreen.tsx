@@ -13,17 +13,12 @@ import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {readBoolPref, writeBoolPref} from '../../storage/app-ui-pref-io';
+import {AppUiPrefIo} from '../../storage/app-ui-pref-io';
 import {APP_UI_KEY_CHAT_RICH_TEXT, APP_UI_KEY_MESSAGE_NOTIFICATION} from '../../storage/app-ui-keys';
-import {
-  ensureAgentNotificationPermission,
-  getAgentNotificationPermissionStatus,
-  requestAgentNotificationPermissionManually,
-  setKeepAliveResidentEnabled,
-} from '../../services/agent-finished-notification';
+import {AgentFinishedNotification} from '../../services/agent-finished-notification';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ToastMessage} from '../../errors/toast-message';
 
 const DEFAULT_CONDITIONS: CompactionConditions = {
   schemaVersion: 4,
@@ -80,14 +75,14 @@ export function ChatConfigScreen() {
     if (appUi == null) {
       return;
     }
-    setChatRichTextEnabled(await readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false));
+    setChatRichTextEnabled(await AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false));
   }, [appUi]);
 
   const refreshMessageNotificationPref = useCallback(async () => {
     if (appUi == null) {
       return;
     }
-    setMessageNotificationEnabled(await readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false));
+    setMessageNotificationEnabled(await AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false));
   }, [appUi]);
 
   const refreshNotificationPermission = useCallback(async () => {
@@ -96,7 +91,7 @@ export function ChatConfigScreen() {
       return;
     }
     try {
-      setNotificationPermission(await getAgentNotificationPermissionStatus());
+      setNotificationPermission(await AgentFinishedNotification.getPermissionStatus());
     } catch {
       // 查询失败按未授权展示：权限行的点击出口始终可用（手动申请路径）。
       setNotificationPermission('denied');
@@ -133,7 +128,7 @@ export function ChatConfigScreen() {
     }
     setNotificationPermission('checking');
     // 权限弹窗关闭不触发 navigation focus，回执是状态更新的可靠源。
-    const permissionRequest = requestAgentNotificationPermissionManually();
+    const permissionRequest = AgentFinishedNotification.requestPermissionManually();
     permissionRequest.then(setNotificationPermission).catch(() => setNotificationPermission('denied'));
   }, [notificationPermission]);
 
@@ -146,7 +141,7 @@ export function ChatConfigScreen() {
         await persist();
       } catch (cause) {
         rollback();
-        showToast(toastMessage('保存失败', cause));
+        showToast(ToastMessage.toast('保存失败', cause));
       }
     },
     [showToast],
@@ -184,7 +179,7 @@ export function ChatConfigScreen() {
         await runtime.compactionConditions.setConditions(conditions);
         return true;
       } catch (error) {
-        showToast(toastMessage('保存失败', error));
+        showToast(ToastMessage.toast('保存失败', error));
         return false;
       }
     },
@@ -245,7 +240,7 @@ export function ChatConfigScreen() {
           setChatRichTextEnabled(enabled);
           if (appUi) {
             void persistSwitchWithRollback(
-              () => writeBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, enabled),
+              () => AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, enabled),
               () => setChatRichTextEnabled(!enabled),
             );
           }
@@ -263,16 +258,16 @@ export function ChatConfigScreen() {
           if (appUi) {
             void persistSwitchWithRollback(
               async () => {
-                await writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, enabled);
+                await AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, enabled);
                 // 存储已持久化，通知模块的进程级副作用失败只 toast 不回滚
                 //（不易回滚，下次启动按存储态收敛）。
-                setKeepAliveResidentEnabled(enabled).catch(cause => {
-                  showToast(toastMessage('常驻保活切换失败', cause));
+                AgentFinishedNotification.setResidentEnabled(enabled).catch(cause => {
+                  showToast(ToastMessage.toast('常驻保活切换失败', cause));
                 });
                 if (enabled) {
                   // 关→开：权限申请前移到开关切换（拒绝过一次后不再自动弹）。
-                  ensureAgentNotificationPermission().catch(cause => {
-                    showToast(toastMessage('通知权限申请失败', cause));
+                  AgentFinishedNotification.ensurePermission().catch(cause => {
+                    showToast(ToastMessage.toast('通知权限申请失败', cause));
                   });
                 }
               },

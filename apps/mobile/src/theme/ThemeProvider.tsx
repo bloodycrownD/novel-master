@@ -5,7 +5,7 @@ import React, {createContext, useCallback, useContext, useEffect, useMemo, useSt
 import {useColorScheme} from 'react-native';
 import {useNovelMaster} from '../runtime/novel-master-context';
 import {APP_UI_KEY_THEME} from '../storage/app-ui-keys';
-import {tokensForMode, type ThemeMode, type ThemeTokens} from './tokens';
+import {Tokens, type ThemeMode, type ThemeTokens} from './tokens';
 
 interface ThemeContextValue {
   mode: ThemeMode;
@@ -79,7 +79,7 @@ export function ThemeProvider({children}: {children: ReactNode}) {
   const value = useMemo<ThemeContextValue>(
     () => ({
       mode,
-      tokens: tokensForMode(mode),
+      tokens: Tokens.forMode(mode),
       loaded,
       setMode,
       toggleMode,

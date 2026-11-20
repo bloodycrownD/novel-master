@@ -4,18 +4,14 @@
  * 消毒管线、主题推断与按源码去重为真实单测。
  */
 import {readFileSync} from 'node:fs';
+import {ThemeMode} from '@web/shared/theme-mode';
 import {join} from 'node:path';
 import {
   CHAT_TRANSCRIPT_RICH_CSS,
   RICH_DOCUMENT_RICH_CSS,
 } from '../src/web/shared/rich-content-styles';
-import {
-  createMermaidSourceCache,
-  extractMermaidErrorMessage,
-  inferMermaidThemeFromBg,
-  parseColorToRgb,
-} from '../src/web/shared/mermaid-core';
-import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
+import {MermaidCore} from '../src/web/shared/mermaid-core';
+import {TranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 const webSrc = (rel: string) =>
@@ -23,36 +19,38 @@ const webSrc = (rel: string) =>
 
 /**
  * 截取函数源码切片（G-1：脆断言改按函数切片，避免整源误报/漏报）。
- * 函数名找不到时 fail-fast：静默返回空串会让 not.toContain 恒真。
+ * 源码 namespace 化后 stream.ts 的函数是 `Stream` 对象成员
+ * （`  name: (...) => {` … `\n  },`），切片按成员形态取。
+ * 成员名找不到时 fail-fast：静默返回空串会让 not.toContain 恒真。
  */
 const fnSlice = (src: string, name: string): string => {
-  const slice = src.split(`function ${name}(`)[1]?.split('\nfunction ')[0];
-  if (slice == null) {
-    throw new Error(`fnSlice: 源码里找不到函数 ${name}（锚点契约失效）`);
+  const start = src.indexOf(`\n  ${name}: (`);
+  if (start < 0) {
+    throw new Error(`fnSlice: 源码里找不到成员 ${name}（锚点契约失效）`);
   }
-  return slice;
+  return src.slice(start).split('\n  },')[0];
 };
 
 describe('mermaid shared core (T-MV2 纯逻辑)', () => {
   it('parseColorToRgb 支持 hex 缩写/全写与 rgb()', () => {
-    expect(parseColorToRgb('#abc')).toEqual([170, 187, 204]);
-    expect(parseColorToRgb('#0e0f12')).toEqual([14, 15, 18]);
-    expect(parseColorToRgb('rgb(255, 255, 240)')).toEqual([255, 255, 240]);
-    expect(parseColorToRgb('var(--x)')).toBeNull();
-    expect(parseColorToRgb('')).toBeNull();
+    expect(ThemeMode.parseColorToRgb('#abc')).toEqual([170, 187, 204]);
+    expect(ThemeMode.parseColorToRgb('#0e0f12')).toEqual([14, 15, 18]);
+    expect(ThemeMode.parseColorToRgb('rgb(255, 255, 240)')).toEqual([255, 255, 240]);
+    expect(ThemeMode.parseColorToRgb('var(--x)')).toBeNull();
+    expect(ThemeMode.parseColorToRgb('')).toBeNull();
   });
 
   it('inferMermaidThemeFromBg：暗底 dark / 亮底 default / 未知 default', () => {
-    expect(inferMermaidThemeFromBg('#0e0f12')).toBe('dark');
-    expect(inferMermaidThemeFromBg('rgb(10,10,10)')).toBe('dark');
-    expect(inferMermaidThemeFromBg('#e4eaf3')).toBe('default');
-    expect(inferMermaidThemeFromBg('#ffffff')).toBe('default');
-    expect(inferMermaidThemeFromBg(null)).toBe('default');
-    expect(inferMermaidThemeFromBg('')).toBe('default');
+    expect(MermaidCore.inferThemeFromBg('#0e0f12')).toBe('dark');
+    expect(MermaidCore.inferThemeFromBg('rgb(10,10,10)')).toBe('dark');
+    expect(MermaidCore.inferThemeFromBg('#e4eaf3')).toBe('default');
+    expect(MermaidCore.inferThemeFromBg('#ffffff')).toBe('default');
+    expect(MermaidCore.inferThemeFromBg(null)).toBe('default');
+    expect(MermaidCore.inferThemeFromBg('')).toBe('default');
   });
 
   it('T-MT3: 同一源码多次触发只渲染一次；失败缓存不重跑且可查', async () => {
-    const cache = createMermaidSourceCache();
+    const cache = MermaidCore.createSourceCache();
     let okCalls = 0;
     const renderOk = async () => {
       okCalls += 1;
@@ -85,11 +83,11 @@ describe('mermaid shared core (T-MV2 纯逻辑)', () => {
     const reason = await cache
       .getOrCreate('default', 'broken', renderFail)
       .catch((e: unknown) => e);
-    expect(extractMermaidErrorMessage(reason)).toBe('parse error');
-    expect(extractMermaidErrorMessage({str: 'Parse error on line 2'})).toBe(
+    expect(MermaidCore.extractErrorMessage(reason)).toBe('parse error');
+    expect(MermaidCore.extractErrorMessage({str: 'Parse error on line 2'})).toBe(
       'Parse error on line 2',
     );
-    expect(extractMermaidErrorMessage('boom')).toBe('boom');
+    expect(MermaidCore.extractErrorMessage('boom')).toBe('boom');
 
     // 主题不同 → key 不同，须重跑
     await expect(
@@ -103,10 +101,10 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
   it('T-MV1: main.ts 在 setDocument 视图刷新后挂接 mermaid runtime', () => {
     const main = webSrc('rich-document/webview/main.ts');
     expect(main).toContain("from './runtime/mermaid'");
-    expect(main).toContain('renderMermaidBlocks');
+    expect(main).toContain('Mermaid.render');
     // mermaid 渲染完成后再重建 Recogito（批注按最终 DOM 文本流计算）
     expect(main).toMatch(
-      /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
+      /Mermaid\.render\(docRoot\)[\s\S]*Annotate\.refreshAfterDocument/,
     );
   });
 
@@ -133,16 +131,16 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     // 失败原因：catch 接住 err，提取消息写入 data-mermaid-error
     expect(core).toContain('} catch (err) {');
     expect(core).toContain("setAttribute('data-mermaid-error'");
-    expect(core).toContain('extractMermaidErrorMessage');
+    expect(core).toContain('extractErrorMessage');
     // 只操作 mermaid 节点自身：源码 pre 移入新建容器，文本流顺序不变
     expect(core).toContain('insertBefore(block, pre)');
     expect(core).toContain('block.appendChild(pre)');
 
     const runtime = webSrc('rich-document/webview/runtime/mermaid.ts');
-    expect(runtime).toContain('renderMermaidCodeBlocks');
+    expect(runtime).toContain('MermaidCore.renderCodeBlocks');
 
     const dist = readWebViewDistFile('rich-document', 'app.js');
-    // minify 重命名 renderMermaidBlocks / renderMermaidCodeBlocks 等函数标识符，
+    // minify 重命名 Mermaid.render / MermaidCore.renderCodeBlocks 等函数标识符，
     // 断言换该扫描器写进 DOM 的**稳定面**（选择器字面量 + 容器/失败类名）：
     // 三样都由「扫 code.language-mermaid → 造 mermaid-block 容器」这一条路径
     // 独家产出，谁把扫描器删了/断链了三样一起归零。
@@ -169,7 +167,7 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
 
 describe('mermaid 消毒管线 (T-MV3)', () => {
   it('sanitizeRichHtml 输出保留 language-mermaid class（消毒零改动）', () => {
-    const html = prepareTranscriptRichHtml(
+    const html = TranscriptRichHtml.prepare(
       '```mermaid\nflowchart TD\nA-->B\n```',
     );
     expect(html).toContain('language-mermaid');
@@ -189,7 +187,7 @@ describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
     const src = snapshot();
     // 3 处：applySnapshot / applyAppendTailRows / applyPrependPage
     // （streamCommit 路径已随协议删除，spec Step 6）
-    expect(src.match(/scheduleMermaidScan\(\)/g)).toHaveLength(3);
+    expect(src.match(/Mermaid\.scheduleScan\(\)/g)).toHaveLength(3);
     expect(src).toContain("from '../mermaid'");
 
     // 源码真源仍在 chat-transcript/webview/runtime 下，
@@ -208,18 +206,14 @@ describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
     // 改按函数切片——只钉流式增量 / 块提交入口不触发图表扫描；收尾补扫由
     // chat-transcript-stream-projection 的 P2-10 直测覆盖。
     const src = stream();
-    for (const name of [
-      'applyStreamDelta',
-      'appendStreamDeltaIncremental',
-      'applyStreamBlockCommit',
-    ]) {
+    for (const name of ['applyDelta', 'appendDeltaIncremental', 'applyBlockCommit']) {
       const slice = fnSlice(src, name);
       expect(slice).not.toContain('mermaid');
       expect(slice).not.toContain('Mermaid');
-      expect(slice).not.toContain('scheduleMermaidScan');
+      expect(slice).not.toContain('scheduleScan');
     }
     // 收尾路径补扫（P2-10）：delta/batch 不碰，finished 才触发。
-    expect(fnSlice(src, 'applyStreamStatus')).toContain('scheduleMermaidScan');
+    expect(fnSlice(src, 'applyStatus')).toContain('Mermaid.scheduleScan');
 
     const bridgeSrc = bridge();
     expect(bridgeSrc).not.toContain('scheduleMermaidScan');

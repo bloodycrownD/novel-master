@@ -92,21 +92,21 @@ describe('copyCode 双宿主 RN 源码契约 (T-CB22)', () => {
 });
 
 describe('copyCode 两管线挂接契约 (T-CB23)', () => {
-  it('chat-transcript bind-shell-events 与 rich-document main 均挂接 attachCodeCopyDelegation', () => {
+  it('chat-transcript bind-shell-events 与 rich-document main 均挂接 CodeCopy.attach', () => {
     const bind = webSrc(
       'chat-transcript/webview/runtime/boot/bind-shell-events.ts',
     );
     // chat：壳级绑定处挂接，传 bridge 的 post（空白容忍，锁语义 token）
     expect(bind).toMatch(
-      /import\s*\{\s*attachCodeCopyDelegation\s*\}\s*from\s*'@web\/shared\/code-copy'/,
+      /import\s*\{\s*CodeCopy\s*\}\s*from\s*'@web\/shared\/code-copy'/,
     );
-    expect(bind).toContain('attachCodeCopyDelegation(post)');
+    expect(bind).toContain('CodeCopy.attach(post)');
 
     // rich：模块初始化处挂接，不进 setDocument 视图刷新链路
     const main = webSrc('rich-document/webview/main.ts');
     expect(main).toMatch(
-      /import\s*\{\s*attachCodeCopyDelegation\s*\}\s*from\s*'@web\/shared\/code-copy'/,
+      /import\s*\{\s*CodeCopy\s*\}\s*from\s*'@web\/shared\/code-copy'/,
     );
-    expect(main).toContain('attachCodeCopyDelegation(post)');
+    expect(main).toContain('CodeCopy.attach(post)');
   });
 });

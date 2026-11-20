@@ -14,7 +14,8 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '@/screens/tabs/chat-tab/useChatTabScope';
 import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -24,7 +25,9 @@ jest.mock('@/services/chat-agent-meta', () => ({
     hasDedicatedModel: false,
     modelSource: 'session',
   })),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('@/services/chat-prompt-tokens.service', () => ({
   ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},

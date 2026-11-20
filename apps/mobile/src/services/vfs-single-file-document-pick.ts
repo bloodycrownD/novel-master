@@ -8,7 +8,7 @@
  */
 import {types} from '@react-native-documents/picker';
 
-import {knownTypesForExtension} from './document-io';
+import {DocumentIo} from './document-io';
 
 /** VFS 里常见的文本类扩展名（把系统已知的 MIME 也一并放进白名单）。 */
 const TEXTUAL_EXTENSIONS = [
@@ -25,7 +25,7 @@ const TEXTUAL_EXTENSIONS = [
 export namespace VfsSingleFileDocumentPick {
   /** MIME / UTType filters for single-file VFS import（文本类白名单 + octet-stream 兜底）。 */
   export function pickTypes(): string[] {
-    const fromExtensions = TEXTUAL_EXTENSIONS.flatMap(knownTypesForExtension);
+    const fromExtensions = TEXTUAL_EXTENSIONS.flatMap(DocumentIo.knownTypesForExtension);
     return [
       types.plainText,
       types.json,

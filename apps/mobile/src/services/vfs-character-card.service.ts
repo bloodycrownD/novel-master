@@ -4,9 +4,9 @@
  */
 import {AppError} from '@novel-master/core/errors';
 import {VfsServiceFactory, CHARACTER_CARD_MAX_INPUT_BYTES, type CharacterCardImportOptions, type VfsScope} from '@novel-master/core/vfs';
-import {pickAndReadBytes, type PickAndReadOptions} from './document-io';
+import {DocumentIo, type PickAndReadOptions} from './document-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {assertCharacterCardFileName, characterCardImportPickTypes} from './character-card-document-pick';
+import {CharacterCardDocumentPick} from './character-card-document-pick';
 
 type CharacterCardImportRequest = Pick<CharacterCardImportOptions, 'confirmed'> & {
   readonly directoryPath?: string;
@@ -15,11 +15,11 @@ type CharacterCardImportRequest = Pick<CharacterCardImportOptions, 'confirmed'> 
 export const VfsCharacterCardService = {
   async import(runtime: MobileNovelMasterRuntime, scope: VfsScope, options: CharacterCardImportRequest): Promise<void> {
     const pickOptions: PickAndReadOptions = {
-      mimeTypes: characterCardImportPickTypes(),
+      mimeTypes: CharacterCardDocumentPick.importPickTypes(),
       fallbackLocalFileName: 'character-card.json',
       // assertFileName 槽位只认 throw：校验失败从 Result 原样解包成 throw 中止导入。
       assertFileName: name => {
-        const check = assertCharacterCardFileName(name);
+        const check = CharacterCardDocumentPick.assertFileName(name);
         if (!check.ok) {
           throw check.error;
         }
@@ -32,7 +32,7 @@ export const VfsCharacterCardService = {
       buildCopyError: copyError => new AppError('VFS_CHARACTER_CARD_UNRECOGNIZED', {detail: copyError ?? '无法读取所选角色卡文件'}),
       buildMissingError: fsPath => new AppError('VFS_CHARACTER_CARD_UNRECOGNIZED', {detail: `角色卡文件不存在：${fsPath}`}),
     };
-    const bytes = await pickAndReadBytes(pickOptions);
+    const bytes = await DocumentIo.pickAndReadBytes(pickOptions);
     if (bytes == null) {
       return;
     }

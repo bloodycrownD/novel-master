@@ -50,7 +50,7 @@ import {ModalShell} from '@/components/ui/ModalShell';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import {ToastMessage} from '@/errors/toast-message';
 import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
 import type {RootStackParamList} from '@/navigation/types';
 
@@ -221,7 +221,7 @@ export function SmartSortRuleEditorScreen() {
       setDraft(loaded);
       setBaseline(JSON.stringify(loaded));
     } catch (error) {
-      showToast(toastMessage('加载失败', error));
+      showToast(ToastMessage.toast('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -288,7 +288,7 @@ export function SmartSortRuleEditorScreen() {
       captureKind: fields.captureKind,
     });
     if (!draftCheck.ok) {
-      showToast(toastMessage('无法保存', draftCheck.error));
+      showToast(ToastMessage.toast('无法保存', draftCheck.error));
       return;
     }
     setSaving(true);
@@ -311,7 +311,7 @@ export function SmartSortRuleEditorScreen() {
       allowLeaveWithoutPrompt();
       navigation.goBack();
     } catch (error) {
-      showToast(toastMessage('保存失败', error));
+      showToast(ToastMessage.toast('保存失败', error));
     } finally {
       setSaving(false);
     }

@@ -29,7 +29,7 @@ import {TextBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
 import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 
 import {ChatPromptBuildBailedError} from '@novel-master/core';
-import {buildSessionPromptInputAdapter} from '@/services/session-prompt-input.service';
+import {SessionPromptInputService} from '@/services/session-prompt-input.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /** 从消息 content（{ blocks: [...] }）里拼出纯文本，供断言关键字。 */
@@ -158,7 +158,7 @@ describe('buildSessionPromptInputAdapter (T-CA5 mobile)', () => {
       customAttach: '这是常驻附加信息：优先级最高',
     };
 
-    const bundleResult = await buildSessionPromptInputAdapter(
+    const bundleResult = await SessionPromptInputService.build(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -221,7 +221,7 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
       calls += 1;
       return calls === bailAtCall;
     };
-    const promise = buildSessionPromptInputAdapter(
+    const promise = SessionPromptInputService.build(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -234,7 +234,7 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
     const runtime = makeBailRuntime();
     const definition = makeBailDefinition();
     const shouldBail = jest.fn(() => false);
-    const bundleResult = await buildSessionPromptInputAdapter(
+    const bundleResult = await SessionPromptInputService.build(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -294,7 +294,7 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
   it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {
     const runtime = makeStubRuntime();
     const definition = DefaultAgentDefinition.build('plain-agent');
-    const bundleResult = await buildSessionPromptInputAdapter(
+    const bundleResult = await SessionPromptInputService.build(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -365,7 +365,7 @@ describe('buildSessionPromptInputAdapter 附件预算降级 parity（T-A8）', (
     });
     const definition = DefaultAgentDefinition.build('budget-agent');
 
-    const bundleResult = await buildSessionPromptInputAdapter(
+    const bundleResult = await SessionPromptInputService.build(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -436,7 +436,7 @@ describe('buildSessionPromptInputAdapter S0 双读接线（d-s0/G-1）', () => {
     // 显式开 workplace 块：不开则组装短路，两集合恒为 []，本用例没有牙齿。
     definition.prompts = {...definition.prompts, workplace: '【工作区】'};
 
-    const bundleResult = await buildSessionPromptInputAdapter(
+    const bundleResult = await SessionPromptInputService.build(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,

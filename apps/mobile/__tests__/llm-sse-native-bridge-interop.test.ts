@@ -50,11 +50,7 @@ jest.mock('react-native', () => {
 });
 
 import {NativeModules, Platform} from 'react-native';
-import {
-  createNativeSseTransport,
-  isNativeSseAvailable,
-  resetNativeSseTransportForTests,
-} from '@novel-master/llm-sse-native/native';
+import {NativeSse} from '@novel-master/llm-sse-native/native';
 
 describe('stop-button P0 防回归：lazy interop bridge 方法完整性', () => {
   it('模拟环境自检：own keys 为空但原型方法可访问（interop 形态）', () => {
@@ -66,14 +62,14 @@ describe('stop-button P0 防回归：lazy interop bridge 方法完整性', () =>
   });
 
   it('挂起流中 abort → 原型上的 sseAbort 被调用 + postSse 形态 reject', async () => {
-    resetNativeSseTransportForTests();
-    expect(isNativeSseAvailable()).toBe(true);
+    NativeSse.resetTransportForTests();
+    expect(NativeSse.isAvailable()).toBe(true);
 
     const nm = NativeModules.LlmSseNative as unknown as {
       sseConnect: jest.Mock;
       sseAbort: jest.Mock;
     };
-    const transport = createNativeSseTransport();
+    const transport = NativeSse.createTransport();
 
     const controller = new AbortController();
     let rejection: unknown;
@@ -99,6 +95,6 @@ describe('stop-button P0 防回归：lazy interop bridge 方法完整性', () =>
     expect(nm.sseAbort).toHaveBeenCalledWith(nm.sseConnect.mock.calls[0][0]);
     await p;
     expect((rejection as {name?: string})?.name).toBe('AbortError');
-    resetNativeSseTransportForTests();
+    NativeSse.resetTransportForTests();
   });
 });

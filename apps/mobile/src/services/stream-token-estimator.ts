@@ -44,7 +44,7 @@ import {getEncodingNameForModel} from 'js-tiktoken/lite';
 // 逐条一致，故这里直接复用，语义不变、重复内存消失。
 // 走 `./encoding` 子路径而非主入口：主入口会连带拉进 `react-native` 与原生
 // bridge，而本服务只是纯逻辑。
-import {getRnEncoding, type RnEncodingName} from '@novel-master/tokenizer-driver-rn/encoding';
+import {EncodingCache, type RnEncodingName} from '@novel-master/tokenizer-driver-rn/encoding';
 
 /** 支持的编码名（本模块只区分这两张表）。 */
 type StreamTokenEncodingName = RnEncodingName;
@@ -122,7 +122,7 @@ export namespace StreamTokenEstimator {
   // nm-style: keep-public — stream-token-estimator.test.ts 直接 import 多用例断言（null 回退/计数口径），测试锁名
   export function create(options?: {readonly vendorModelId?: string | null | undefined}): IncrementalTokenCounter | null {
     const encodingName = resolveEncodingName(options?.vendorModelId ?? null);
-    const encoding = getRnEncoding(encodingName);
+    const encoding = EncodingCache.get(encodingName);
     if (encoding == null) {
       return null;
     }
@@ -189,8 +189,8 @@ export namespace StreamTokenEstimator {
         // 没赶上」的首 run（此时 `begin()` 会按 cl100k 起算并同步构造，不热就
         // 白付一次）。`setTimeout(..., 0)` 只是挪到下一个宏任务，不等于不卡。
         setTimeout(() => {
-          getRnEncoding(resolveEncodingName(vendorModelId));
-          getRnEncoding('cl100k_base');
+          EncodingCache.get(resolveEncodingName(vendorModelId));
+          EncodingCache.get('cl100k_base');
         }, 0);
       })
       .catch(() => undefined)

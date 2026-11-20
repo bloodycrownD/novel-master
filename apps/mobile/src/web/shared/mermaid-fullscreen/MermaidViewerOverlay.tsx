@@ -18,11 +18,7 @@ import type {JSX} from 'preact';
 import {
   MERMAID_VIEWER_MIN_SCALE,
   MERMAID_VIEWER_TAP_SLOP_PX,
-  clampMermaidViewerPan,
-  computeBakedSvgSize,
-  computeMermaidViewerPinch,
-  rebasePanAfterBake,
-  resolveMermaidViewerDoubleTap,
+  MermaidViewerGestures,
   type MermaidViewerPan,
   type MermaidViewerSize,
 } from './mermaid-viewer-gestures';
@@ -142,14 +138,14 @@ export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayPr
     if (total <= MERMAID_VIEWER_MIN_SCALE) {
       return;
     }
-    const size = computeBakedSvgSize(base, total);
+    const size = MermaidViewerGestures.computeBakedSvgSize(base, total);
     svg.style.maxWidth = 'none';
     svg.style.maxHeight = 'none';
     svg.style.flexShrink = '0';
     svg.setAttribute('width', String(size.width));
     svg.setAttribute('height', String(size.height));
     bakedTotalRef.current = total;
-    const pan = rebasePanAfterBake(gesture.current.pan, gesture.current.scale);
+    const pan = MermaidViewerGestures.rebasePanAfterBake(gesture.current.pan, gesture.current.scale);
     gesture.current = {scale: 1, pan};
     viewport.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
   };
@@ -295,7 +291,7 @@ export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayPr
       const pinchStart = {scale: session.baseScale, pan: session.basePan};
       const pointerDistance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
       const pinchFocus = {x: (a.clientX + b.clientX) / 2 - cx, y: (a.clientY + b.clientY) / 2 - cy};
-      gesture.current = computeMermaidViewerPinch(pinchStart, session.startDist, pointerDistance, pinchFocus, layout, {width: w, height: h});
+      gesture.current = MermaidViewerGestures.computePinch(pinchStart, session.startDist, pointerDistance, pinchFocus, layout, {width: w, height: h});
       applyTransform();
       moved.current = true;
       return;
@@ -310,7 +306,7 @@ export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayPr
       }
       const {w, h} = stageMetrics();
       const layout = layoutSize();
-      gesture.current.pan = clampMermaidViewerPan({x: session.basePan.x + dx, y: session.basePan.y + dy}, layout.width * gesture.current.scale, layout.height * gesture.current.scale, w, h);
+      gesture.current.pan = MermaidViewerGestures.clampPan({x: session.basePan.x + dx, y: session.basePan.y + dy}, layout.width * gesture.current.scale, layout.height * gesture.current.scale, w, h);
       applyTransform();
     }
   };
@@ -347,7 +343,7 @@ export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayPr
     }
     const now = Date.now();
     // 档位判断用绝对总倍率：烘焙态 gesture.scale=1 不代表回到 fit 档
-    const decision = resolveMermaidViewerDoubleTap(lastTapAt.current, now, bakedTotalRef.current * gesture.current.scale);
+    const decision = MermaidViewerGestures.resolveDoubleTap(lastTapAt.current, now, bakedTotalRef.current * gesture.current.scale);
     lastTapAt.current = now;
     if (decision.kind !== 'toggle') {
       return;
@@ -357,7 +353,7 @@ export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayPr
     const layout = layoutSize();
     gesture.current = {
       scale: decision.scale,
-      pan: clampMermaidViewerPan({x: 0, y: 0}, layout.width * decision.scale, layout.height * decision.scale, w, h),
+      pan: MermaidViewerGestures.clampPan({x: 0, y: 0}, layout.width * decision.scale, layout.height * decision.scale, w, h),
     };
     const viewport = viewportRef.current;
     if (viewport) {

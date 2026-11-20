@@ -2,7 +2,7 @@ import {describe, expect, it, jest} from '@jest/globals';
 
 jest.mock('@novel-master/core', () => ({}));
 
-import {prependOlderMessages} from '@/services/message-paging';
+import {MessagePaging} from '@/services/message-paging'
 
 describe('message-paging', () => {
   it('prepends older messages before current', () => {
@@ -11,7 +11,7 @@ describe('message-paging', () => {
       {id: '2', seq: 2},
     ] as any;
     const current = [{id: '3', seq: 3}] as any;
-    expect(prependOlderMessages(current, older).map(m => m.id)).toEqual([
+    expect(MessagePaging.prependOlder(current, older).map(m => m.id)).toEqual([
       '1',
       '2',
       '3',
@@ -20,6 +20,6 @@ describe('message-paging', () => {
 
   it('returns current when older empty', () => {
     const current = [{id: '3', seq: 3}] as any;
-    expect(prependOlderMessages(current, []).map(m => m.id)).toEqual(['3']);
+    expect(MessagePaging.prependOlder(current, []).map(m => m.id)).toEqual(['3']);
   });
 });

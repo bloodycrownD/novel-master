@@ -10,17 +10,17 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {rollbackConfirm} from '@novel-master/core/presentation/chat/rollback-confirm.js';
 import {type ChatMessageData, ChatMessage, attachmentXmlCodec} from '@novel-master/core/chat';
 
-import {formatError} from '@/errors/format-error';
+import {FormatError} from '@/errors/format-error';
 import {chatTranslator} from '@/i18n/chat';
-import {toastMessage} from '@/errors/toast-message';
-import {applyTextEditToMessage, editableTextFromMessage} from '@/components/chat/message-edit';
+import {ToastMessage} from '@/errors/toast-message';
+import {MessageEdit} from '@/components/chat/message-edit';
 import {RollbackErrorGuards} from '@novel-master/core/message-checkpoint';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 import {ChatComposerDraft} from '@/storage/chat-composer-draft';
-import {projectComposerStatusForSession, refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared} from '@/services/project-composer-status.service';
+import {ProjectComposerStatusService} from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
-import {rollbackToMessage} from '@/services/message-rollback.service';
-import {runManualCompaction, type ManualCompactionHooks} from '@/services/manual-compaction.service';
+import {MessageRollbackService} from '@/services/message-rollback.service';
+import {ManualCompactionService, type ManualCompactionHooks} from '@/services/manual-compaction.service';
 import {resetRollbackTiming, rollbackTimingLog} from '@/debug/run-timing';
 import type {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
@@ -82,7 +82,7 @@ export function useChatTabMessageActions({
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
+      showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法压缩'));
       return;
     }
     if (projectId == null || sessionId == null) {
@@ -121,15 +121,15 @@ export function useChatTabMessageActions({
               if (error === undefined) {
                 void reloadMessages(true);
                 void refreshChatTokenLabel();
-                showToast(toastMessage('压缩失败'));
+                showToast(ToastMessage.toast('压缩失败'));
                 return;
               }
-              showToast(toastMessage('压缩失败', error));
+              showToast(ToastMessage.toast('压缩失败', error));
             },
             onSucceeded: async () => {
               await reloadMessages(true);
               void refreshChatTokenLabel();
-              await refreshComposerStatusAfterFloorOrCompaction({
+              await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
                 projectId,
                 sessionId,
               });
@@ -140,12 +140,12 @@ export function useChatTabMessageActions({
           // （不是错误 toast）。编排内部已自吞业务失败与尾巴抛错，这里的 catch
           // 只防御未来改动引入的意外异常，绝不重新抛出——调用方是 void，重抛
           // 就是 unhandled rejection。
-          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks)
+          void ManualCompactionService.run(runtime, {projectId, sessionId}, compactionHooks)
             .then(outcome => {
               if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast('已取消压缩');
             })
             .catch((error: unknown) => {
-              showToast(toastMessage('压缩失败', error));
+              showToast(ToastMessage.toast('压缩失败', error));
             })
             .finally(() => {
               compactionInFlightRef.current = false;
@@ -161,18 +161,18 @@ export function useChatTabMessageActions({
         return;
       }
       if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法分叉'));
+        showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法分叉'));
         return;
       }
       try {
         const forked = await runtime.messages.fork(sessionId, messageId);
         if (!forked.ok) {
-          showToast(toastMessage('分叉失败', forked.error));
+          showToast(ToastMessage.toast('分叉失败', forked.error));
           return;
         }
         const lr = await reloadLists();
         if (!lr.ok) {
-          showToast(toastMessage('分叉失败', lr.error));
+          showToast(ToastMessage.toast('分叉失败', lr.error));
           return;
         }
         await setCurrentSession(forked.value.id);
@@ -181,7 +181,7 @@ export function useChatTabMessageActions({
         resetStreamingDisplay();
         showToast(`已分叉：${forked.value.title ?? forked.value.id}`);
       } catch (error) {
-        showToast(toastMessage('分叉失败', error));
+        showToast(ToastMessage.toast('分叉失败', error));
       }
     },
     [sessionId, agentRunning, runtime, reloadLists, setCurrentSession, setChatSubview, setConversationPanel, resetStreamingDisplay, showToast],
@@ -201,7 +201,7 @@ export function useChatTabMessageActions({
 
       const target = chatMessages.find(m => m.id === messageId);
       if (target == null) {
-        showToast(toastMessage('回滚失败', '消息不存在'));
+        showToast(ToastMessage.toast('回滚失败', '消息不存在'));
         return;
       }
 
@@ -209,7 +209,7 @@ export function useChatTabMessageActions({
       // - undo_send ↔ user 锚点：保留未发送草稿，在下方 applyComposerRestore 里从附件反投影
       // - rewind ↔ assistant 锚点：tail 里没有 user 消息，清空全部批注草稿（含未发送）
       const mode = ChatMessage.from(target).isUndoSendEligible() ? 'undo_send' : 'rewind';
-      const restoreText = editableTextFromMessage(target);
+      const restoreText = MessageEdit.editableTextFromMessage(target);
       // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
       const attachmentsSnapshot = mode === 'undo_send' ? target.attachments ?? [] : null;
 
@@ -234,7 +234,7 @@ export function useChatTabMessageActions({
             chatAnnotateDraftStore.add(sessionId, draft);
           }
         }
-        const status = await projectComposerStatusForSession(sessionId);
+        const status = await ProjectComposerStatusService.forSession(sessionId);
         ChatComposerDraft.applyComposerStatusAttachmentsReplace({
           sessionId,
           attachments: status,
@@ -258,7 +258,7 @@ export function useChatTabMessageActions({
                   void runRollback(targetMessageId, {
                     revisionHeadBackfill: true,
                   }).catch(err => {
-                    showToast(toastMessage('回滚失败', err));
+                    showToast(ToastMessage.toast('回滚失败', err));
                   });
                 },
               },
@@ -266,7 +266,7 @@ export function useChatTabMessageActions({
             return;
           }
           if (!options?.skipVfsReconcile && RollbackErrorGuards.isVfsDegradable(error)) {
-            const errorMessage = formatError(error);
+            const errorMessage = FormatError.format(error);
             const confirmMessage = chatTranslator(rollbackConfirm.descriptor(mode, 'degraded'));
             Alert.alert('无法恢复工作区', `${errorMessage}\n\n${confirmMessage}`, [
               {text: '取消', style: 'cancel'},
@@ -277,14 +277,14 @@ export function useChatTabMessageActions({
                   void runRollback(targetMessageId, {
                     skipVfsReconcile: true,
                   }).catch(err => {
-                    showToast(toastMessage('回滚失败', err));
+                    showToast(ToastMessage.toast('回滚失败', err));
                   });
                 },
               },
             ]);
             return;
           }
-          showToast(toastMessage('回滚失败', error));
+          showToast(ToastMessage.toast('回滚失败', error));
         };
         try {
           // 回滚链分段打点（rollback-large-jank Step 1）：t0 定在确认回滚、
@@ -292,7 +292,7 @@ export function useChatTabMessageActions({
           // 生产 no-op）。core 事务内部子步由 runtime 注入的 probe 同轴输出。
           resetRollbackTiming();
           rollbackTimingLog('core rollback begin');
-          const rollbackResult = await rollbackToMessage(runtime, {projectId, sessionId}, targetMessageId, options);
+          const rollbackResult = await MessageRollbackService.rollback(runtime, {projectId, sessionId}, targetMessageId, options);
           // 已知失败沿 Result 分流（错误通道迁移四期）：不再还原异常通道。
           if (!rollbackResult.ok) {
             onRollbackFailure(rollbackResult.error);
@@ -311,7 +311,7 @@ export function useChatTabMessageActions({
           // reload、composer 恢复、toast）不允许被 composer 状态刷新
           // 失败阻断——失败只记日志，列表照常刷新。
           try {
-            await refreshComposerStatusAfterSessionKkvCleared({
+            await ProjectComposerStatusService.refreshAfterSessionKkvCleared({
               projectId,
               sessionId,
             });
@@ -350,7 +350,7 @@ export function useChatTabMessageActions({
           style: 'destructive',
           onPress: () => {
             void runRollback(messageId).catch(err => {
-              showToast(toastMessage('回滚失败', err));
+              showToast(ToastMessage.toast('回滚失败', err));
             });
           },
         },
@@ -365,7 +365,7 @@ export function useChatTabMessageActions({
         return;
       }
       if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法置位'));
+        showToast(ToastMessage.toast('请稍候', 'Agent 运行中无法置位'));
         return;
       }
 
@@ -374,20 +374,20 @@ export function useChatTabMessageActions({
           // clear rule_snapshot + file_cache 由 Core setMessageFloorAtMessage 完成
           const result = await runtime.messageTranscriptEffects.setMessageFloorAtMessage(projectId, sessionId, messageId);
           if (!result.ok) {
-            showToast(toastMessage('置位失败', result.error));
+            showToast(ToastMessage.toast('置位失败', result.error));
             return;
           }
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();
-          await refreshComposerStatusAfterFloorOrCompaction({
+          await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
             projectId,
             sessionId,
           });
           const changed = result.value.hiddenCount + result.value.shownCount;
           showToast(changed > 0 ? '已置位' : '上下文已是最新状态');
         } catch (error) {
-          showToast(toastMessage('置位失败', error));
+          showToast(ToastMessage.toast('置位失败', error));
         }
       };
 
@@ -407,9 +407,9 @@ export function useChatTabMessageActions({
   const handleMessageMenuAction = useCallback(
     (target: ChatMessageData, action: string) => {
       if (action === 'edit') {
-        const initial = editableTextFromMessage(target);
+        const initial = MessageEdit.editableTextFromMessage(target);
         if (initial == null) {
-          showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
+          showToast(ToastMessage.toast('无法编辑', '该消息没有可编辑的文本'));
           return;
         }
         // 编辑走 MessageEditModal，不写 Composer draft；否则取消后输入框会残留消息正文。
@@ -418,9 +418,9 @@ export function useChatTabMessageActions({
           initialText: initial,
         });
       } else if (action === 'copy') {
-        const text = editableTextFromMessage(target);
+        const text = MessageEdit.editableTextFromMessage(target);
         if (text == null) {
-          showToast(toastMessage('无法复制', '该消息没有可复制的文本'));
+          showToast(ToastMessage.toast('无法复制', '该消息没有可复制的文本'));
           return;
         }
         Clipboard.setString(text);
@@ -440,19 +440,19 @@ export function useChatTabMessageActions({
     async (messageId: string, text: string) => {
       const trimmed = text.trim();
       if (trimmed === '') {
-        showToast(toastMessage('无法保存', '消息内容不能为空'));
+        showToast(ToastMessage.toast('无法保存', '消息内容不能为空'));
         return;
       }
       const original = chatMessages.find(m => m.id === messageId);
       if (original == null) {
-        showToast(toastMessage('保存失败', '消息不存在'));
+        showToast(ToastMessage.toast('保存失败', '消息不存在'));
         return;
       }
       try {
-        await runtime.messages.updateContent(messageId, applyTextEditToMessage(original, trimmed));
+        await runtime.messages.updateContent(messageId, MessageEdit.applyTextEditToMessage(original, trimmed));
         await reloadMessages(true);
       } catch (error) {
-        showToast(toastMessage('保存失败', error));
+        showToast(ToastMessage.toast('保存失败', error));
       }
     },
     [runtime, chatMessages, reloadMessages, showToast],

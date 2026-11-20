@@ -10,10 +10,7 @@
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {
-  resolveChatLinkIntent,
-  type ChatLinkProbeVfs,
-} from '@/screens/tabs/chat-tab/chat-link-nav';
+import {type ChatLinkProbeVfs, ChatLinkNav} from '@/screens/tabs/chat-tab/chat-link-nav'
 
 const rnSrc = (rel: string) =>
   readFileSync(join(__dirname, '../src', rel), 'utf8');
@@ -47,7 +44,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   it('session 工作区命中 → file/session 意图，且不探测 project', async () => {
     const sessionVfs = makeVfs([{path: '/续写/chapter.md', kind: 'file'}]);
     const projectVfs = makeVfs([{path: '/续写/chapter.md', kind: 'file'}]);
-    const intent = await resolveChatLinkIntent('%E7%BB%AD%E5%86%99/chapter.md', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('%E7%BB%AD%E5%86%99/chapter.md', {
       sessionVfs,
       projectVfs,
     });
@@ -65,7 +62,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   it('仅 project 工作区命中 → file/project 意图', async () => {
     const sessionVfs = makeVfs([]);
     const projectVfs = makeVfs([{path: '/notes/a.md', kind: 'file'}]);
-    const intent = await resolveChatLinkIntent('notes/a.md', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('notes/a.md', {
       sessionVfs,
       projectVfs,
     });
@@ -73,7 +70,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   });
 
   it('双未命中 → not-found（调用方弹「路径不存在」提示）', async () => {
-    const intent = await resolveChatLinkIntent('missing.md', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('missing.md', {
       sessionVfs: makeVfs([]),
       projectVfs: makeVfs([]),
     });
@@ -83,12 +80,12 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   it('http(s) → external，不触发任何 vfs 探测', async () => {
     const sessionVfs = makeVfs([]);
     const projectVfs = makeVfs([]);
-    const http = await resolveChatLinkIntent('http://example.com/x', {
+    const http = await ChatLinkNav.resolveChatLinkIntent('http://example.com/x', {
       sessionVfs,
       projectVfs,
     });
     expect(http).toEqual({kind: 'external', url: 'http://example.com/x'});
-    const https = await resolveChatLinkIntent('https://example.com/y', {
+    const https = await ChatLinkNav.resolveChatLinkIntent('https://example.com/y', {
       sessionVfs,
       projectVfs,
     });
@@ -98,7 +95,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   });
 
   it('HTTP:// 大写与带空白的外链均外跳', async () => {
-    const intent = await resolveChatLinkIntent('  HTTP://Example.com  ', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('  HTTP://Example.com  ', {
       sessionVfs: null,
       projectVfs: null,
     });
@@ -106,7 +103,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   });
 
   it('mailto 及其它 scheme → none（维持现状）', async () => {
-    const intent = await resolveChatLinkIntent('mailto:a@b.com', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('mailto:a@b.com', {
       sessionVfs: makeVfs([]),
       projectVfs: makeVfs([]),
     });
@@ -114,7 +111,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   });
 
   it('目标存在但是目录 → 不命中 → not-found', async () => {
-    const intent = await resolveChatLinkIntent('notes', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('notes', {
       sessionVfs: makeVfs([{path: '/notes', kind: 'directory'}]),
       projectVfs: makeVfs([{path: '/notes', kind: 'directory'}]),
     });
@@ -124,7 +121,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   it('父目录 NOT_FOUND（list 抛错）按未命中，继续探 project', async () => {
     const sessionVfs = makeVfs([], ['/notes']);
     const projectVfs = makeVfs([{path: '/notes/a.md', kind: 'file'}]);
-    const intent = await resolveChatLinkIntent('/notes/a.md', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('/notes/a.md', {
       sessionVfs,
       projectVfs,
     });
@@ -132,7 +129,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   });
 
   it('vfs 为 null（无会话上下文）不炸，直接落下一级', async () => {
-    const intent = await resolveChatLinkIntent('notes/a.md', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('notes/a.md', {
       sessionVfs: null,
       projectVfs: makeVfs([{path: '/notes/a.md', kind: 'file'}]),
     });
@@ -141,7 +138,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
 
   it('根下文件（无目录段）探测父目录 /', async () => {
     const sessionVfs = makeVfs([{path: '/a.md', kind: 'file'}]);
-    const intent = await resolveChatLinkIntent('a.md', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('a.md', {
       sessionVfs,
       projectVfs: makeVfs([]),
     });
@@ -150,7 +147,7 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
   });
 
   it('锚点 + 路径混合 href：剥锚点后命中', async () => {
-    const intent = await resolveChatLinkIntent('notes/a.md#heading', {
+    const intent = await ChatLinkNav.resolveChatLinkIntent('notes/a.md#heading', {
       sessionVfs: makeVfs([{path: '/notes/a.md', kind: 'file'}]),
       projectVfs: makeVfs([]),
     });
@@ -167,7 +164,7 @@ describe('openChatLink 接线源码契约 (T-L5)', () => {
     // 路径型链接双域未命中：弹提示（用户拍板，不再静默无动作）。
     // 迁移后 notFoundMessage 返回 descriptor，经 coreT 解析成中文再弹。
     expect(src).toMatch(
-      /showAppToast\(coreT\(chatLinkResolver\.notFoundMessage\(intent\.path\)\)\)/,
+      /AppToast\.show\(coreT\(chatLinkResolver\.notFoundMessage\(intent\.path\)\)\)/,
     );
     // 外跳失败静默兜底（与原导航守卫语义一致）
     expect(src).toMatch(/Linking\.openURL\(intent\.url\)\.catch\(\(\) => undefined\)/);
@@ -192,7 +189,7 @@ describe('openChatLink 接线源码契约 (T-L5)', () => {
     );
     // 未命中提示与主会话同源（showAppToast + coreT 解析 descriptor）
     expect(src).toMatch(
-      /showAppToast\(coreT\(chatLinkResolver\.notFoundMessage\(intent\.path\)\)\)/,
+      /AppToast\.show\(coreT\(chatLinkResolver\.notFoundMessage\(intent\.path\)\)\)/,
     );
     // 打开口径：session 域 FileEditor 也用 parentSessionId
     expect(src).toMatch(

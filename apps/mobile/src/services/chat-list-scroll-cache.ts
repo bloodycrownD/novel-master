@@ -13,4 +13,4 @@
  * （no-op）；改为指向 v2 清理后，唯一调用点 `useChatTabScope` 本就紧接着调
  * `clearTranscriptScrollSnapshotsByProject`，项目删除后的终态不变。
  */
-export {scrollCacheKey, clearTranscriptScrollSnapshotsByProject as clearScrollSnapshotsByProject} from './chat-transcript-scroll-cache';
+export {ChatTranscriptScrollCache} from './chat-transcript-scroll-cache';

@@ -5,30 +5,26 @@
  */
 
 import {
-  createNativeSseTransportFromBridge,
+  NativeSseTransport,
   NativeSseTransportError,
-  flattenRequestHeaders,
 } from '@novel-master/llm-sse-native';
-import {
-  isNativeSseAvailable,
-  registerNativeSseTransportWith,
-} from '@novel-master/llm-sse-native/native';
+import {NativeSse} from '@novel-master/llm-sse-native/native';
 
 describe('llm-sse-native smoke (RN jest environment)', () => {
   it('native 入口在 Jest（无 LlmSseNative 模块）下安全加载且不可用', () => {
     // RN jest-preset 的 NativeModules 是空 mock：LlmSseNative 未注册 → 不可用
-    expect(isNativeSseAvailable()).toBe(false);
+    expect(NativeSse.isAvailable()).toBe(false);
   });
 
-  it('native 不可用时 registerNativeSseTransportWith 返回 false（装配点据此回落 XHR）', () => {
+  it('native 不可用时 NativeSse.registerWith 返回 false（装配点据此回落 XHR）', () => {
     const register = jest.fn();
-    expect(registerNativeSseTransportWith(register)).toBe(false);
+    expect(NativeSse.registerWith(register)).toBe(false);
     expect(register).not.toHaveBeenCalled();
   });
 
   it('环境无关入口可正常使用纯逻辑（dist 解析健康）', () => {
-    expect(flattenRequestHeaders({A: '1'})).toEqual(['A', '1']);
+    expect(NativeSseTransport.flattenRequestHeaders({A: '1'})).toEqual(['A', '1']);
     expect(NativeSseTransportError).toBeDefined();
-    expect(typeof createNativeSseTransportFromBridge).toBe('function');
+    expect(typeof NativeSseTransport.create).toBe('function');
   });
 });

@@ -77,7 +77,7 @@ type StreamingMessageRowProps = {
 export function StreamingMessageRow({row}: StreamingMessageRowProps) {
   const {text, thinking, textHtml, thinkingHtml, tools} = row;
   const streaming = row.status === 'streaming';
-  const phase = streamRuntime.getStreamingPhase(row);
+  const phase = streamRuntime.Stream.getPhase(row);
   const hiddenCls = row.hidden ? 'hidden ' : '';
   const waitCls = phase === 'waiting-first' ? ' stream--waiting-first' : '';
   // `assistant` 行类与普通 assistant 行同面（P2-9）：`.row.assistant .bubble
@@ -147,7 +147,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
   const menuAllowed = !state.flags.menuDisabled;
   const showMenu = !streaming && row.messageId != null && menuAllowed;
 
-  const bubbleExtra = streamRuntime.assistantBubbleExtraClasses(row);
+  const bubbleExtra = streamRuntime.Stream.assistantBubbleExtraClasses(row);
   const bubbleClass = 'bubble assistant' + bubbleExtra;
   // 正文播种：rich 用全量 html，否则用明文（首次 mount 生效）。
   const textRich = !!(state.flags.richText && textHtml);

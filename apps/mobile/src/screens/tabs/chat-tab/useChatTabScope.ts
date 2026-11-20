@@ -3,26 +3,25 @@
  */
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
-import {showAppToast} from '@/services/app-toast';
+import {AppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject} from '@novel-master/core/chat';
 import type {ChatSession} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
-import {toastMessage} from '@/errors/toast-message';
-import {loadChatAgentMeta} from '@/services/chat-agent-meta';
+import {ToastMessage} from '@/errors/toast-message';
+import {ChatAgentMeta as ChatAgentMetaService} from '@/services/chat-agent-meta';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 import * as promptTokens from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // nm-style: keep-local — 三具名 + service 路径单行化超 80 列
 import {SessionViewCache} from '@/services/chat-session-view-cache';
-import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
-import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
+import {ChatTranscriptScrollCache} from '@/services/chat-transcript-scroll-cache';
 import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
-import {nextDefaultSessionTitle} from '@/utils/session-default-title';
-import {resolveChatLinkIntent} from './chat-link-nav';
+import {SessionDefaultTitle} from '@/utils/session-default-title';
+import {ChatLinkNav} from './chat-link-nav';
 import {chatLinkResolver} from '@novel-master/core/chat';
 import {Result, AppError} from '@novel-master/core/errors';
 import {coreT} from '@/i18n/core';
@@ -383,7 +382,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       // （先 hasWorkspaceModel 后 agentMeta），失败语义不变。
       let metaPromise;
       if (projectId != null && sessionId != null) {
-        metaPromise = loadChatAgentMeta(runtime, projectId, sessionId);
+        metaPromise = ChatAgentMetaService.load(runtime, projectId, sessionId);
       }
       // 兜底挂接：getCurrentModelId 先失败提前退出时，在途 meta 查询的
       // 拒绝不会变成 unhandled rejection（其结果本就不会再被消费）。
@@ -417,7 +416,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         // 终端：保持未加载（锁定）态并提示错误，绝不冒充「已删待重选」。
         if (!meta.ok) {
           setAgentMeta(undefined);
-          showToastRef.current(toastMessage('智能体信息加载失败', meta.error));
+          showToastRef.current(ToastMessage.toast('智能体信息加载失败', meta.error));
           return;
         }
         setAgentMeta(prev => ({
@@ -435,7 +434,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
           return;
         }
         setAgentMeta(undefined);
-        showToastRef.current(toastMessage('智能体信息加载失败', error));
+        showToastRef.current(ToastMessage.toast('智能体信息加载失败', error));
       }
     })();
     refreshChatMetaInflightRef.current = {key, round, promise};
@@ -506,14 +505,14 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (name: string) => {
       const created = await runtime.projects.create(name);
       if (!created.ok) {
-        showToast(toastMessage('创建失败', created.error));
+        showToast(ToastMessage.toast('创建失败', created.error));
         return;
       }
       await setCurrentProject(created.value.id);
       await refreshScope();
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(toastMessage('创建失败', lr.error));
+        showToast(ToastMessage.toast('创建失败', lr.error));
       }
     },
     [runtime, setCurrentProject, refreshScope, reloadLists, showToast],
@@ -523,12 +522,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (targetProjectId: string, name: string) => {
       const renamed = await runtime.projects.rename(targetProjectId, name);
       if (!renamed.ok) {
-        showToast(toastMessage('重命名失败', renamed.error));
+        showToast(ToastMessage.toast('重命名失败', renamed.error));
         return;
       }
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(toastMessage('重命名失败', lr.error));
+        showToast(ToastMessage.toast('重命名失败', lr.error));
       }
     },
     [runtime, reloadLists, showToast],
@@ -541,18 +540,18 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     }
     const list = await runtime.sessions.listByProject(projectId);
     if (!list.ok) {
-      showToast(toastMessage('创建失败', list.error));
+      showToast(ToastMessage.toast('创建失败', list.error));
       return;
     }
-    const title = nextDefaultSessionTitle(list.value.map(s => s.title));
+    const title = SessionDefaultTitle.next(list.value.map(s => s.title));
     const created = await runtime.sessions.create(projectId, title);
     if (!created.ok) {
-      showToast(toastMessage('创建失败', created.error));
+      showToast(ToastMessage.toast('创建失败', created.error));
       return;
     }
     const lr = await reloadLists();
     if (!lr.ok) {
-      showToast(toastMessage('创建失败', lr.error));
+      showToast(ToastMessage.toast('创建失败', lr.error));
     }
   }, [runtime, projectId, reloadLists, showToast]);
 
@@ -560,12 +559,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (targetSessionId: string, title: string) => {
       const renamed = await runtime.sessions.rename(targetSessionId, title);
       if (!renamed.ok) {
-        showToast(toastMessage('重命名失败', renamed.error));
+        showToast(ToastMessage.toast('重命名失败', renamed.error));
         return;
       }
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(toastMessage('重命名失败', lr.error));
+        showToast(ToastMessage.toast('重命名失败', lr.error));
       }
     },
     [runtime, reloadLists, showToast],
@@ -586,12 +585,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (sourceSessionId: string) => {
       const copy = await runtime.sessions.copy(sourceSessionId);
       if (!copy.ok) {
-        showToast(toastMessage('复制失败', copy.error));
+        showToast(ToastMessage.toast('复制失败', copy.error));
         return;
       }
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(toastMessage('复制失败', lr.error));
+        showToast(ToastMessage.toast('复制失败', lr.error));
         return;
       }
       showToast(`已复制会话：${copy.value.title ?? copy.value.id}`);
@@ -604,7 +603,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     async (targetSessionId: string) => {
       const deleted = await runtime.sessions.delete(targetSessionId);
       if (!deleted.ok) {
-        showToast(toastMessage('删除失败', deleted.error));
+        showToast(ToastMessage.toast('删除失败', deleted.error));
         return;
       }
       // 会话已从库里消失：同步遗忘 manager 里该会话的四张常驻表与活跃 refcount
@@ -620,7 +619,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       await refreshScope();
       const lr = await reloadLists();
       if (!lr.ok) {
-        showToast(toastMessage('删除失败', lr.error));
+        showToast(ToastMessage.toast('删除失败', lr.error));
         return;
       }
       showToast('已删除会话');
@@ -652,7 +651,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       for (const id of ids) {
         const deleted = await runtime.sessions.delete(id);
         if (!deleted.ok) {
-          showToast(toastMessage('删除失败', deleted.error));
+          showToast(ToastMessage.toast('删除失败', deleted.error));
           break;
         }
         // 部分成功语义：每个 delete 成功就立刻 forget 一次，不能攒到最后统一做
@@ -693,12 +692,12 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
       const doomedSessions = await runtime.sessions.listByProject(id);
       if (!doomedSessions.ok) {
-        showToast(toastMessage('删除失败', doomedSessions.error));
+        showToast(ToastMessage.toast('删除失败', doomedSessions.error));
         break;
       }
       const deleted = await runtime.projects.delete(id);
       if (!deleted.ok) {
-        showToast(toastMessage('删除失败', deleted.error));
+        showToast(ToastMessage.toast('删除失败', deleted.error));
         break;
       }
       for (const s of doomedSessions.value) {
@@ -706,8 +705,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       }
       // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
       SessionViewCache.clearByProject(id);
-      clearScrollSnapshotsByProject(id);
-      clearTranscriptScrollSnapshotsByProject(id);
+      ChatTranscriptScrollCache.clearByProject(id);
     }
     await refreshScope();
     await reloadLists();
@@ -832,7 +830,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
   // session 打开需 projectId+sessionId 齐全，缺参由 openFileEditor 内部降级 no-op。
   const openChatLink = useCallback(
     (href: string) => {
-      void resolveChatLinkIntent(href, {
+      void ChatLinkNav.resolveChatLinkIntent(href, {
         sessionVfs,
         projectVfs,
       }).then(intent => {
@@ -846,7 +844,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         }
         if (intent.kind === 'not-found') {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showAppToast(coreT(chatLinkResolver.notFoundMessage(intent.path)));
+          AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
         }
       });
     },

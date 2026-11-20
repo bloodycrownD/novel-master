@@ -26,10 +26,7 @@ import {beforeEach, afterEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
-import {
-  loadChatAgentMeta,
-  type ChatAgentMeta,
-} from '../src/services/chat-agent-meta';
+import {ChatAgentMeta} from '../src/services/chat-agent-meta';
 import {
   ChatPromptTokenLabel,
   PreciseUpgrade,
@@ -40,9 +37,12 @@ const HOOK_PATH = join(
   '../src/screens/tabs/chat-tab/useChatTabScope.ts',
 );
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => {
+  const legacy = {
   loadChatAgentMeta: jest.fn(),
-}));
+};
+  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+});
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   // 错误通道迁移四期：读口走 Result（hook 按 `!ok` 清标签），桩按线上结构配置。
@@ -56,7 +56,7 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   PreciseUpgrade: {cancelDelay: jest.fn(), cancel: jest.fn()},
 }));
 
-const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
+const loadChatAgentMetaMock = ChatAgentMeta.load as jest.Mock;
 const loadLabelMock = ChatPromptTokenLabel.loadResilient as jest.Mock;
 const cancelDelayMock = PreciseUpgrade.cancelDelay as jest.Mock;
 const cancelMock = PreciseUpgrade.cancel as jest.Mock;

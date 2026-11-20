@@ -7,7 +7,7 @@
  * 上抛通道经 window.ReactNativeWebView.postMessage（@web/shared/post 出口）
  * 捕获断言。
  */
-import {onRowsClick} from '../src/web/chat-transcript/webview/runtime/render/rows-click';
+import {RowsClick} from '../src/web/chat-transcript/webview/runtime/render/rows-click';
 
 type FakeElement = {
   tagName: string;
@@ -82,7 +82,7 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
     const anchor = makeEl('a', {href: 'x.md'});
     const inner = makeEl('span', {}, [anchor]);
     const event = makeEvent(inner);
-    onRowsClick(event);
+    RowsClick.on(event);
     expect(
       (event as unknown as {preventDefault: jest.Mock}).preventDefault,
     ).toHaveBeenCalledTimes(1);
@@ -94,7 +94,7 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
   it('纯锚点 <a href="#foo">：不拦（放行 webview 默认滚动）、不上抛', () => {
     const anchor = makeEl('a', {href: '#foo'});
     const event = makeEvent(anchor);
-    onRowsClick(event);
+    RowsClick.on(event);
     expect(
       (event as unknown as {preventDefault: jest.Mock}).preventDefault,
     ).not.toHaveBeenCalled();
@@ -103,9 +103,9 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
 
   it('中文路径与 URL 编码 href 原样上抛（识别归宿主侧，不在 webview 解码）', () => {
     const encoded = makeEl('a', {href: '%E7%AC%94%E8%AE%B0/a.md'});
-    onRowsClick(makeEvent(encoded));
+    RowsClick.on(makeEvent(encoded));
     const plain = makeEl('a', {href: '笔记/大纲.md'});
-    onRowsClick(makeEvent(plain));
+    RowsClick.on(makeEvent(plain));
     expect(postedEnvelopes()).toEqual([
       {v: 1, type: 'linkClick', payload: {href: '%E7%AC%94%E8%AE%B0/a.md'}},
       {v: 1, type: 'linkClick', payload: {href: '笔记/大纲.md'}},
@@ -120,7 +120,7 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
     });
     const wrappedInAnchor = makeEl('span', {}, [actionEl, makeEl('a', {href: 'x.md'})]);
     const event = makeEvent(wrappedInAnchor);
-    onRowsClick(event);
+    RowsClick.on(event);
     expect(
       (event as unknown as {preventDefault: jest.Mock}).preventDefault,
     ).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
   it('无 href 的 <a>：不拦不上抛（无目标可路由）', () => {
     const anchor = makeEl('a');
     const event = makeEvent(anchor);
-    onRowsClick(event);
+    RowsClick.on(event);
     expect(
       (event as unknown as {preventDefault: jest.Mock}).preventDefault,
     ).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
     // 不得拦截默认行为、也不得上抛 RN（与无 href 用例并列钉住分支）
     const anchor = makeEl('a', {href: ''});
     const event = makeEvent(anchor);
-    onRowsClick(event);
+    RowsClick.on(event);
     expect(
       (event as unknown as {preventDefault: jest.Mock}).preventDefault,
     ).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
   it('非链接非 data-action 的普通点击：无动作', () => {
     const plain = makeEl('div');
     const event = makeEvent(plain);
-    onRowsClick(event);
+    RowsClick.on(event);
     expect(
       (event as unknown as {preventDefault: jest.Mock}).preventDefault,
     ).not.toHaveBeenCalled();

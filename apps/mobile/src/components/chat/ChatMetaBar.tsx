@@ -8,11 +8,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {
-  isAgentLocked,
-  isModelLocked,
-  type ChatAgentMeta,
-} from '@/services/chat-agent-meta';
+import {ChatAgentMeta} from '@/services/chat-agent-meta';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -31,8 +27,8 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
   const showTokens = tokenLabel.length > 0;
   // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡仅 meta 未加载时锁
   // （none 态放开待重选）；model 卡在 none / agent-pin 态锁定。
-  const agentLocked = isAgentLocked(meta);
-  const modelLocked = isModelLocked(meta);
+  const agentLocked = ChatAgentMeta.isLocked(meta);
+  const modelLocked = ChatAgentMeta.isModelLocked(meta);
   return (
     <View style={[styles.bar, {borderBottomColor: tokens.border}]}>
       <Pressable

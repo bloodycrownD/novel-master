@@ -5,7 +5,7 @@
  * 1. `bindChannel:false` → 不调 bindHostMessageChannel（单次注册归合成入口）；
  * 2. `emitReady:false`  → 不 post ready（单 ready 归合成入口），且该参数经
  *    DOMContentLoaded 闭包透传（禁模块级可变 flag：同文档两实例参数互不污染）；
- * 3. runtime 内部上行 post 仍是 bridge.ts 的模块级单例（createBoundPost(BRIDGE_V)），
+ * 3. runtime 内部上行 post 仍是 bridge.ts 的模块级单例（Post.bound(BRIDGE_V)），
  *    消息头 v 恒为 1 —— 工厂不注入 post。
  *
  * 环境：Jest 为 RN 环境（无 jsdom），照 rows-click-anchor.test.ts 先例注入最小
@@ -21,19 +21,20 @@ jest.mock('../src/web/chat-transcript/webview/ui/render/RowList', () => ({
   RowList: () => null,
 }));
 jest.mock('@web/shared/mermaid-fullscreen/mermaid-fullscreen', () => ({
-  mountMermaidViewerPortal: jest.fn(),
-  attachMermaidViewerDelegation: jest.fn(),
-  registerMermaidViewerView: jest.fn(),
-  openMermaidViewer: jest.fn(),
-  closeMermaidViewer: jest.fn(),
-  isMermaidViewerOpen: jest.fn(() => false),
+  MermaidFullscreen: {
+    mountPortal: jest.fn(),
+    attachDelegation: jest.fn(),
+    registerView: jest.fn(),
+    open: jest.fn(),
+    close: jest.fn(),
+  },
 }));
 jest.mock('@web/shared/host-message-channel', () => {
   const actual = jest.requireActual('@web/shared/host-message-channel');
-  return {
-    ...actual,
-    bindHostMessageChannel: jest.fn(actual.bindHostMessageChannel),
-  };
+  // 源码经 namespace 成员 HostMessageChannel.bind 调用：spy 挂在实际对象的
+  // 成员上（保留真实 document+window 双注册行为，只加调用计数）。
+  actual.HostMessageChannel.bind = jest.fn(actual.HostMessageChannel.bind);
+  return actual;
 });
 
 type Listener = (event: unknown) => void;
@@ -126,8 +127,8 @@ type PostedEnvelope = {v: number; type: string; payload: Record<string, unknown>
 type Loaded = {
   create: (options?: {bindChannel?: boolean; emitReady?: boolean}) => void;
   bindHostMessageChannel: jest.Mock;
-  mountMermaidViewerPortal: jest.Mock;
-  attachMermaidViewerDelegation: jest.Mock;
+  mountPortal: jest.Mock;
+  attachDelegation: jest.Mock;
   post: (type: string, payload?: Record<string, unknown>) => void;
   invokeContextMenu(): boolean;
   invokeRows(): boolean;
@@ -145,14 +146,14 @@ function loadRuntime(): Loaded {
     const menu = require('../src/web/chat-transcript/webview/runtime/menu/menu');
     const rowLogic = require('../src/web/chat-transcript/webview/runtime/render/row-logic');
     const rowsClick = require('../src/web/chat-transcript/webview/runtime/render/rows-click');
-    out.create = factory.createTranscriptRuntime;
-    out.bindHostMessageChannel = channel.bindHostMessageChannel;
-    out.mountMermaidViewerPortal = mermaid.mountMermaidViewerPortal;
-    out.attachMermaidViewerDelegation = mermaid.attachMermaidViewerDelegation;
+    out.create = factory.Factory.create;
+    out.bindHostMessageChannel = channel.HostMessageChannel.bind;
+    out.mountPortal = mermaid.MermaidFullscreen.mountPortal;
+    out.attachDelegation = mermaid.MermaidFullscreen.attachDelegation;
     out.post = bridge.post;
     out.invokeContextMenu = () => menu.contextMenuViewSlot.invoke(null);
     out.invokeRows = () => rowLogic.rowsViewSlot.invoke();
-    out.onRowsClick = rowsClick.onRowsClick;
+    out.onRowsClick = rowsClick.RowsClick.on;
   });
   return out;
 }
@@ -231,7 +232,7 @@ describe('createTranscriptRuntime 工厂参数 (T-CF1)', () => {
     ]);
   });
 
-  it('bindChannel:false → 不调 bindHostMessageChannel（通道归合成入口单次注册）', () => {
+  it('bindChannel:false → 不调 HostMessageChannel.bind（通道归合成入口单次注册）', () => {
     const rt = loadRuntime();
     rt.create({bindChannel: false});
 
@@ -250,10 +251,8 @@ describe('createTranscriptRuntime 工厂参数 (T-CF1)', () => {
     // 装配四件仍发生（视图注册 / mermaid 挂接）
     expect(rt.invokeContextMenu()).toBe(true);
     expect(rt.invokeRows()).toBe(true);
-    expect(rt.mountMermaidViewerPortal).toHaveBeenCalledWith(
-      'mermaid-viewer-portal',
-    );
-    expect(rt.attachMermaidViewerDelegation).toHaveBeenCalledTimes(1);
+    expect(rt.mountPortal).toHaveBeenCalledWith('mermaid-viewer-portal');
+    expect(rt.attachDelegation).toHaveBeenCalledTimes(1);
   });
 
   it('emitReady 经 DOMContentLoaded 闭包透传：loading 期两实例参数互不污染（禁模块级 flag）', () => {
@@ -279,7 +278,7 @@ describe('createTranscriptRuntime 工厂参数 (T-CF1)', () => {
     rt.create();
 
     // 工厂把 bridge.post 原样交给 mermaid 委托（身份相等 → 未被替换）
-    expect(rt.attachMermaidViewerDelegation).toHaveBeenCalledWith(rt.post);
+    expect(rt.attachDelegation).toHaveBeenCalledWith(rt.post);
 
     // ready 自身（create 时即发，readyState 非 loading）
     expect(readyEnvelopes()).toEqual([

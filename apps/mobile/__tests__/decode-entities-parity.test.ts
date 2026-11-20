@@ -13,13 +13,13 @@
  * 别名时，必须同步更新另一端与本夹具，三处保持同一张表（T-CB13 契约）。
  */
 import {Text} from '@novel-master/core/common';
-import {decodeAfterSanitize as rnDecodeAfterSanitize} from '@/components/rich-content/decode-literal-html-entities';
-import {
-  decodeAfterSanitize as webDecodeAfterSanitize,
-  decodeForMarkdownInput as webDecodeForMarkdown,
-  decodeLiteralHtmlEntities as webDecode,
-} from '@/web/shared/decode-entities';
+import {LiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import {DecodeEntities} from '@/web/shared/decode-entities';
 import {LANG_ALIAS} from '@/components/rich-content/highlight-code';
+const rnDecodeAfterSanitize = LiteralHtmlEntities.decodeAfterSanitize;
+const webDecodeAfterSanitize = DecodeEntities.afterSanitize;
+const webDecodeForMarkdown = DecodeEntities.forMarkdownInput;
+const webDecode = DecodeEntities.literal;
 
 /** desktop `apps/desktop/renderer/components/code-block.tsx` 的 FENCE_LANG_ALIAS 双写副本。 */
 const FENCE_LANG_ALIAS_FIXTURE: Record<string, string> = {

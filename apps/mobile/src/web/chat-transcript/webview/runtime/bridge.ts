@@ -4,20 +4,19 @@ import {Stream, type StreamDeltaPayload, type StreamStatusPayload} from './strea
 import {StreamRichUpgrade} from './stream/stream-markdown';
 import {Menu} from './menu/menu';
 import {MermaidFullscreen} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
-import {createBoundPost} from '@web/shared/post';
-import {matchHostMessage} from '@web/shared/host-message-channel';
-import {applyHostTheme} from '@web/shared/host-theme';
+import {Post} from '@web/shared/post';
+import {HostMessageChannel} from '@web/shared/host-message-channel';
+import {HostTheme} from '@web/shared/host-theme';
 import {RowLogic} from './render/row-logic';
-import {resolveLabels} from '../ui/labels';
+import {Labels} from '../ui/labels';
 
 // HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
 export type {HostTheme} from '@web/shared/host-theme';
-export {applyHostTheme};
 
 /**
  * RN 桥：postMessage 经 shared 工厂绑定 BRIDGE_V（消息头 v:1 不变）。
  */
-export const post = createBoundPost(BRIDGE_V);
+export const post = Post.bound(BRIDGE_V);
 
 // 可见性上报：RN 侧据此在「隐藏期间有改画推送」时强制重挂 WebView，
 // 规避 Android WebView 恢复显示后仍渲染摘除前的旧帧（生成中残留的根因）。
@@ -29,12 +28,12 @@ if (typeof document !== 'undefined') {
 
 export const Bridge = {
   handleHostMessage: (raw: unknown): void => {
-    const msg = matchHostMessage(raw, BRIDGE_V);
+    const msg = HostMessageChannel.match(raw, BRIDGE_V);
     if (!msg) return;
     const p = (msg.payload || {}) as Record<string, any>;
     switch (msg.type) {
       case 'init':
-        applyHostTheme(p.theme);
+        HostTheme.apply(p.theme);
         if (p.flags) {
           state.flags = {
             richText: !!p.flags.richText,
@@ -42,7 +41,7 @@ export const Bridge = {
           };
         }
         // labels：宿主经 core i18n 下发；旧宿主/缺省/非法值回退默认中文（C30）。
-        state.labels = resolveLabels(p.labels);
+        state.labels = Labels.resolve(p.labels);
         break;
       case 'sessionSnapshot':
         // 分片协议统一入口：单片等价旧 applySnapshot 直发；多片按代次拼装，
@@ -106,7 +105,7 @@ export const Bridge = {
         }
         break;
       case 'themeUpdate':
-        applyHostTheme(p.theme);
+        HostTheme.apply(p.theme);
         break;
       case 'closeMenu':
         Menu.close(true);

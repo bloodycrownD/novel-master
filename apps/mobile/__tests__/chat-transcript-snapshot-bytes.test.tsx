@@ -24,9 +24,9 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {decodeConversationUpstream} from '@/components/chat/ChatConversationBridge';
+import {ChatConversationBridge} from '@/components/chat/ChatConversationBridge'
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
-import {planSnapshotChunkBounds} from '@/components/chat/snapshot-chunk-bounds';
+import {SnapshotChunkBounds} from '@/components/chat/snapshot-chunk-bounds'
 import {resetRollbackTiming} from '@/debug/run-timing';
 import {
   clearMockWebViewPostMessages,
@@ -64,18 +64,24 @@ jest.mock('sanitize-html', () => {
   return fn;
 });
 
-jest.mock('@/services/chat-transcript-telemetry', () => ({
+jest.mock('@/services/chat-transcript-telemetry', () => {
+  const legacy = {
   emitChatTranscriptTelemetry: jest.fn(),
-}));
+};
+  return {...legacy, ChatTranscriptTelemetry: {emit: legacy.emitChatTranscriptTelemetry}};
+});
 
 // 与 chat-conversation-webview.test.tsx 同款：让步真实排队 setTimeout(0)，
 // 测试可控观察到多片在途窗口。
-jest.mock('@/services/yield-quantum', () => ({
+jest.mock('@/services/yield-quantum', () => {
+  const legacy = {
   createQuantumYield: () => () =>
     new Promise<void>(resolve => {
       setTimeout(resolve, 0);
     }),
-}));
+};
+  return {...legacy, YieldQuantum: {create: legacy.createQuantumYield}};
+});
 
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
@@ -131,7 +137,7 @@ function chineseMessages(count: number): ChatMessageData[] {
 describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半）', () => {
   it('40 条 × ~10KB 大消息按源尺寸贪心切多桶，单桶不超预算且桶界连续', () => {
     const messages = bigMessages(40);
-    const bounds = planSnapshotChunkBounds(messages);
+    const bounds = SnapshotChunkBounds.planSnapshotChunkBounds(messages);
     expect(bounds.length).toBeGreaterThan(1);
 
     // 桶界连续覆盖：[0,b1)+[b1,b2)+...+[bk,40) 无缝衔接全部消息。
@@ -164,14 +170,14 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
     const messages = Array.from({length: 40}, (_, i) =>
       textMessage(`s${i}`, i + 1, `small ${i}`),
     );
-    expect(planSnapshotChunkBounds(messages)).toEqual([[0, 40]]);
+    expect(SnapshotChunkBounds.planSnapshotChunkBounds(messages)).toEqual([[0, 40]]);
   });
 
   it('条数上限并存：51 条小消息按 50 条上限切 2 桶', () => {
     const messages = Array.from({length: 51}, (_, i) =>
       textMessage(`s${i}`, i + 1, `small ${i}`),
     );
-    expect(planSnapshotChunkBounds(messages)).toEqual([
+    expect(SnapshotChunkBounds.planSnapshotChunkBounds(messages)).toEqual([
       [0, 50],
       [50, 51],
     ]);
@@ -184,7 +190,7 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
       textMessage('b', 2, huge),
       textMessage('c', 3, 'small'),
     ];
-    const bounds = planSnapshotChunkBounds(messages);
+    const bounds = SnapshotChunkBounds.planSnapshotChunkBounds(messages);
     // a 与 b 分桶（a+b 超预算）；b 独占（单条超预算后 c 另起桶）。
     expect(bounds).toEqual([
       [0, 1],
@@ -194,7 +200,7 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
   });
 
   it('空列表返回单空桶——空快照仍发单包（等价旧行为）', () => {
-    expect(planSnapshotChunkBounds([])).toEqual([[0, 0]]);
+    expect(SnapshotChunkBounds.planSnapshotChunkBounds([])).toEqual([[0, 0]]);
   });
 
   it('C-02: 中文正文按 UTF-8 真字节分桶——每条 8 万汉字（≈240KB）各占一桶', () => {
@@ -207,7 +213,7 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
     expect(JSON.stringify(messages[0]!.content).length).toBeLessThan(90 * 1024);
 
     // 256KB 预算放不下两条 → 7 条切 7 桶（旧口径会切 3 桶，故本断言对口径敏感）。
-    const bounds = planSnapshotChunkBounds(messages);
+    const bounds = SnapshotChunkBounds.planSnapshotChunkBounds(messages);
     expect(bounds).toEqual([
       [0, 1],
       [1, 2],
@@ -246,7 +252,7 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
   /** 全部 sessionSnapshot 载荷（v:2 信封走宽松 decoder，字段名未变）。 */
   function snapshotChunks() {
     return mockWebViewPostMessages.flatMap(raw => {
-      const decoded = decodeConversationUpstream(raw);
+      const decoded = ChatConversationBridge.decodeConversationUpstream(raw);
       if (!decoded.ok || decoded.message.type !== 'sessionSnapshot') {
         return [];
       }

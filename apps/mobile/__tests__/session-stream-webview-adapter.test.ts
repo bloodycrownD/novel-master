@@ -9,7 +9,7 @@
  * 另断言旧 stream-delta 分支已删、未知载荷被忽略。
  */
 import {describe, expect, it, jest} from '@jest/globals';
-import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
+import {SessionStreamWebviewAdapter} from '@/services/session-stream-webview-adapter'
 
 function createWebHandle() {
   const pushStream = jest.fn();
@@ -26,7 +26,7 @@ function createWebHandle() {
 describe('session-stream-webview-adapter 三映射（T-SP21）', () => {
   it('stream-batch → pushStream：streamId 与 segments/tools 原样透传', () => {
     const w = createWebHandle();
-    const handle = createTranscriptStreamHandle('h', w.web);
+    const handle = SessionStreamWebviewAdapter.create('h', w.web);
     const tools = [
       {toolUseId: 't1', name: 'read', input: {}, status: 'pending'},
     ];
@@ -48,7 +48,7 @@ describe('session-stream-webview-adapter 三映射（T-SP21）', () => {
 
   it('streamId 原样透传：适配器不使用宿主当前 id 猜测', () => {
     const w = createWebHandle();
-    const handle = createTranscriptStreamHandle('h', w.web);
+    const handle = SessionStreamWebviewAdapter.create('h', w.web);
 
     handle.onStreamPayload?.({
       type: 'stream-batch',
@@ -65,7 +65,7 @@ describe('session-stream-webview-adapter 三映射（T-SP21）', () => {
 
   it('已删除的 stream-delta 旧载荷被忽略（不再有第二条通道）', () => {
     const w = createWebHandle();
-    const handle = createTranscriptStreamHandle('h', w.web);
+    const handle = SessionStreamWebviewAdapter.create('h', w.web);
 
     handle.onStreamPayload?.({type: 'stream-delta', kind: 'text', delta: 'x'});
     handle.onStreamPayload?.({type: 'stream-batch'});
@@ -76,7 +76,7 @@ describe('session-stream-webview-adapter 三映射（T-SP21）', () => {
 
   it('reset-stream → resetStream(streamIds) 透传', () => {
     const w = createWebHandle();
-    const handle = createTranscriptStreamHandle('h', w.web);
+    const handle = SessionStreamWebviewAdapter.create('h', w.web);
 
     handle.onControlMessage?.({
       type: 'reset-stream',
@@ -88,7 +88,7 @@ describe('session-stream-webview-adapter 三映射（T-SP21）', () => {
 
   it('force-snapshot → forceSnapshot；未知控制消息忽略', () => {
     const w = createWebHandle();
-    const handle = createTranscriptStreamHandle('h', w.web);
+    const handle = SessionStreamWebviewAdapter.create('h', w.web);
 
     handle.onControlMessage?.({type: 'force-snapshot'});
     handle.onControlMessage?.({type: 'unknown'});
