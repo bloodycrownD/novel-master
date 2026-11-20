@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { AutoUpdateCheckHost } from "../hooks/useAutoUpdateCheck";
 import { getBootstrapStatus, rebootstrap } from "../ipc/client";
 import type { BootstrapStatusResponse } from "@shared/ipc-types";
@@ -127,10 +128,10 @@ export function NovelMasterProvider({ children }: { children: ReactNode }) {
           textAlign: "center",
         }}
       >
-        <h1 style={{ fontSize: "1.125rem", margin: 0 }}>启动失败</h1>
+        <h1 style={{ fontSize: "1.125rem", margin: 0 }}>{coreT({key: "ui.runtime.boot_failed"})}</h1>
         <p style={{ color: "#666", margin: 0 }}>{error}</p>
         <button type="button" onClick={retry}>
-          重试
+          {coreT({key: "ui.common.retry"})}
         </button>
       </div>
     );

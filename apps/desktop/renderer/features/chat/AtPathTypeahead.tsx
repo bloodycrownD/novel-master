@@ -1,6 +1,7 @@
 /**
  * 手输 `@` typeahead：最多 5 条；点选插入完整 `@path`。
  */
+import { coreT } from "@shared/logic/core-i18n";
 import { composerAtPath, type AtPathRef } from "./composer-at-path";
 
 type AtPathTypeaheadProps = {
@@ -21,7 +22,7 @@ export function AtPathTypeahead({
     <ul
       className="chat-composer__typeahead"
       role="listbox"
-      aria-label="文件路径建议"
+      aria-label={coreT({key: "ui.chat.file_path_suggest_aria"})}
     >
       {candidates.map((ref) => {
         const token = composerAtPath.formatToken(ref.path, ref.kind === "dir");

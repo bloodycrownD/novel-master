@@ -16,6 +16,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 // X1 门禁：renderer 不 import core，formatTokenCount 走 shared 镜像。
 import { formatTokenCount } from "@shared/logic/format-token-count";
+import { coreT } from "@shared/logic/core-i18n";
 import { formatHitRate, hitRate } from "@shared/logic/hit-rate";
 import { ipcUsageStatsQuery } from "@/ipc/client";
 import type { SessionUsageDetailDto } from "@shared/ipc-types";
@@ -124,7 +125,7 @@ export function MetricsDetailPanel({
   if (loading) {
     return (
       <div className="metrics-detail-popover__loading" data-state="loading">
-        加载中…
+        {coreT({key: "ui.common.loading"})}
       </div>
     );
   }
@@ -138,32 +139,32 @@ export function MetricsDetailPanel({
   const last = detail?.last ?? null;
   return (
     <div className="metrics-detail-popover__content" data-state="ready">
-      <div className="metrics-detail-popover__title">用量详情</div>
-      <SectionTitle>最近请求</SectionTitle>
+      <div className="metrics-detail-popover__title">{coreT({key: "ui.stats.detail_title"})}</div>
+      <SectionTitle>{coreT({key: "ui.stats.recent_requests"})}</SectionTitle>
       {last == null ? (
         <div className="metrics-detail-popover__empty" data-row="last-empty">
-          暂无请求记录
+          {coreT({key: "ui.stats.recent_empty"})}
         </div>
       ) : (
         <>
           <Row
             testKey="last-model"
-            label="模型"
+            label={coreT({key: "ui.common.model"})}
             value={last.modelName ?? "—"}
           />
           <Row
             testKey="last-input"
-            label="输入"
+            label={coreT({key: "ui.stats.input_label"})}
             value={formatTokenCount(last.promptTokens)}
           />
           <Row
             testKey="last-output"
-            label="输出"
+            label={coreT({key: "ui.stats.output_label"})}
             value={formatTokenCount(last.completionTokens)}
           />
           <Row
             testKey="last-cache-read"
-            label="缓存读取"
+            label={coreT({key: "ui.stats.cache_read"})}
             value={
               last.cacheReadTokens == null
                 ? "—"
@@ -172,7 +173,7 @@ export function MetricsDetailPanel({
           />
           <Row
             testKey="last-cache-creation"
-            label="缓存写入"
+            label={coreT({key: "ui.stats.cache_write"})}
             value={
               last.cacheCreationTokens == null
                 ? "—"
@@ -181,7 +182,7 @@ export function MetricsDetailPanel({
           />
           <Row
             testKey="last-hit-rate"
-            label="缓存命中率"
+            label={coreT({key: "ui.stats.cache_hit_rate"})}
             value={formatHitRate(
               hitRate(last.cacheReadTokens, lastRowBilledInput(last))
             )}
@@ -191,23 +192,23 @@ export function MetricsDetailPanel({
       <SectionTitle>会话累计</SectionTitle>
       <Row
         testKey="totals-visible-messages"
-        label="消息数（可见）"
+        label={coreT({key: "ui.stats.visible_messages"})}
         value={String(detail?.visibleMessageCount ?? 0)}
       />
       <Row
         testKey="totals-tool-use"
-        label="工具调用"
+        label={coreT({key: "ui.stats.tool_calls"})}
         value={String(detail?.toolUseCount ?? 0)}
       />
       <Row
         testKey="context-usage"
-        label="上下文占用"
+        label={coreT({key: "ui.session.context_usage"})}
         value={contextUsageLabel ?? "—"}
       />
       <div className="metrics-detail-popover__footnote">
-        消息数为可见口径 · 工具调用含已隐藏消息
+        {coreT({key: "ui.stats.footnote_visible"})}
         <br />
-        最近请求为单步真值，与指标条整轮读数不同源
+        {coreT({key: "ui.stats.footnote_recent"})}
       </div>
     </div>
   );
@@ -273,7 +274,7 @@ export function MetricsDetailPopover({
       ref={panelRef}
       className="metrics-detail-popover"
       role="dialog"
-      aria-label="用量详情"
+      aria-label={coreT({key: "ui.stats.detail_title"})}
       style={{ top: position.top, left: position.left }}
     >
       <MetricsDetailPanel

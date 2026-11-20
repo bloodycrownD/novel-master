@@ -7,6 +7,7 @@
  * 点行（开关区域外）跳设置·技能详情页。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type { EffectiveSkillDto, ProjectDto } from "@shared/ipc-types";
 import {
   ipcProjectsList,
@@ -104,7 +105,7 @@ export function SessionSkillPanel({ projectId, onClose }: SessionSkillPanelProps
             type="button"
             className="session-skill-panel__back"
             data-session-detail-action="skill-panel-back"
-            aria-label="返回会话详情"
+            aria-label={coreT({key: "ui.skills.session_panel_back"})}
             onClick={onClose}
           >
             ‹
@@ -118,11 +119,11 @@ export function SessionSkillPanel({ projectId, onClose }: SessionSkillPanelProps
               dispatchOpenSettingsView({ view: "skillsManage" });
             }}
           >
-            整理
+            {coreT({key: "ui.skills.session_organize"})}
           </button>
         </div>
         <span className="session-skill-panel__summary">
-          {summary.enabledCount}/{summary.validCount} 启用
+          {coreT({key: "ui.skills.session_enabled_stat", params: {enabled: summary.enabledCount, valid: summary.validCount}})}
         </span>
         <button
           type="button"
@@ -130,14 +131,14 @@ export function SessionSkillPanel({ projectId, onClose }: SessionSkillPanelProps
           data-session-skill-action="create"
           onClick={() => setCreateOpen(true)}
         >
-          新建
+          {coreT({key: "ui.common.new"})}
         </button>
       </div>
       {error ? <p className="session-skill-panel__error">{error}</p> : null}
       <ul className="session-skill-panel__list">
         {rows.length === 0 ? (
           <li className="session-skill-panel__empty">
-            暂无技能。点击「新建」创建项目技能，或在设置·技能管理页维护全局技能。
+            {coreT({key: "ui.skills.session_empty"})}
           </li>
         ) : null}
         {rows.map((row) => (
@@ -159,7 +160,7 @@ export function SessionSkillPanel({ projectId, onClose }: SessionSkillPanelProps
                   {skillDomainLabel(row.domain, row.overridden)}
                 </span>
                 {!row.valid ? (
-                  <span className="skill-invalid-tag">{`无效 · ${row.invalidReason ?? "front matter 不可解析"}`}</span>
+                  <span className="skill-invalid-tag">{coreT({key: "ui.skills.invalid_tag", params: {reason: row.invalidReason ?? coreT({key: "ui.skills.invalid_default_reason"})}})}</span>
                 ) : null}
                 {row.description ?? ""}
               </span>
@@ -167,7 +168,7 @@ export function SessionSkillPanel({ projectId, onClose }: SessionSkillPanelProps
             <Switch
               checked={!row.disabled}
               disabled={busyNames.has(row.name) || !row.valid}
-              aria-label={`${row.disabled ? "启用" : "关闭"}技能 ${row.name}（仅当前项目）`}
+              aria-label={coreT({key: "ui.skills.session_toggle_aria", params: {action: row.disabled ? coreT({key: "ui.common.enable"}) : coreT({key: "ui.common.turn_off"}), name: row.name}})}
               onChange={(next) => void toggle(row, next)}
             />
           </li>

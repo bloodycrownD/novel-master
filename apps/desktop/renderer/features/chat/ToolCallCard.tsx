@@ -1,4 +1,5 @@
 import { ToolSummary } from "@shared/logic/chat";
+import { coreT } from "@shared/logic/core-i18n";
 import type { ToolCallView } from "./message-blocks";
 import { skillToolRef, vfsToolFilePath } from "./message-blocks";
 import { dispatchOpenSettingsView } from "@/features/skills/skill-ui";
@@ -24,13 +25,13 @@ type ToolCallCardProps = {
 function statusLabel(status: ToolCallView["status"]): string {
   switch (status) {
     case "success":
-      return "成功";
+      return coreT({key: "ui.transcript.tool_status.success"});
     case "error":
-      return "失败";
+      return coreT({key: "ui.transcript.tool_status.error"});
     case "pending":
-      return "执行中";
+      return coreT({key: "ui.transcript.tool_status.pending"});
     case "interrupted":
-      return "已中断";
+      return coreT({key: "ui.transcript.tool_status.interrupted"});
     default:
       return "";
   }
@@ -75,7 +76,7 @@ export function ToolCallCard({
   })();
   const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : summary;
 
-  const openHint = canOpenSubagent ? "点击查看 · 子智能体会话" : canOpenSkill ? "点击查看 · 技能" : resultView != null ? "点击查看 · 结果" : "点击查看 · 聊天工作区";
+  const openHint = canOpenSubagent ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.subagent"})}}) : canOpenSkill ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.skill"})}}) : resultView != null ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.result"})}}) : coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.workspace"})}});
 
   const handleClick = () => {
     // 文件路径优先（同一张卡理论上不会同时具备多种入口，仍以文件优先兜底）
@@ -97,7 +98,7 @@ export function ToolCallCard({
     }
   };
 
-  const ariaLabel = canOpenFile ? `打开文件 ${filePath}` : canOpenSubagent ? `查看子智能体会话 ${subagentSessionId}` : canOpenSkill ? `查看技能 ${skillRef?.name}` : resultView != null ? `查看工具结果 ${tool.name}` : "";
+  const ariaLabel = canOpenFile ? coreT({key: "ui.chat.open_file_aria", params: {path: filePath}}) : canOpenSubagent ? coreT({key: "ui.chat.view_subagent_aria", params: {id: subagentSessionId}}) : canOpenSkill ? coreT({key: "ui.chat.view_skill_aria", params: {name: skillRef?.name}}) : resultView != null ? coreT({key: "ui.chat.view_result_aria", params: {name: tool.name}}) : "";
 
   const content = (
     <>

@@ -2,6 +2,7 @@
  * 消息附件组：样式对齐 ToolCallGroupCard（可折叠 summary + 卡片列表）。
  */
 import { AttachmentChip } from '@shared/logic/chat';
+import { coreT } from '@shared/logic/core-i18n';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 type MessageAttachmentGroupCardProps = {
@@ -11,12 +12,12 @@ type MessageAttachmentGroupCardProps = {
 
 function sourceLabel(a: MessageAttachmentDto): string {
   if (a.source === 'workplace') {
-    return '工作区';
+    return coreT({key: "ui.transcript.attach_src.workspace"});
   }
   if (a.source === 'user_ops') {
     return '';
   }
-  return a.type === 'dir' ? '目录' : '文件';
+  return a.type === 'dir' ? coreT({key: "ui.transcript.attach_src.dir"}) : coreT({key: "ui.transcript.attach_src.file"});
 }
 
 /**
@@ -47,7 +48,7 @@ export function MessageAttachmentGroupCard({
         dimmed ? ' chat-message__tool-group--dimmed' : ''
       }`}
     >
-      <summary>消息附件 ({attachments.length})</summary>
+      <summary>{coreT({key: "ui.transcript.attach_group_title", params: {count: attachments.length}})}</summary>
       <div className="chat-message__tool-group-items">
         {attachments.map((a, index) => (
           <div

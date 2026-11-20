@@ -9,6 +9,7 @@
  * metric-detail-sheet：根节点 button 化（语义点击入口 + aria-live 保留），
  * onClick 由父层 ConversationPanel 传入（弹 MetricsDetailPopover）。
  */
+import { coreT } from "@shared/logic/core-i18n";
 import { buildAgentStreamMetricsLabel, type AgentStreamMetricsView } from "@/hooks/useAgentStreamMetrics";
 
 type Props = {
@@ -28,7 +29,7 @@ export function AgentStreamMetricsBar({ metrics, onClick, buttonRef }: Props) {
       ref={buttonRef}
       className="agent-stream-metrics-bar"
       aria-live="polite"
-      aria-label={`流式指标：${line}`}
+      aria-label={coreT({key: "ui.stats.metrics_bar_aria_desktop", params: {line}})}
       onClick={onClick}
     >
       <span className="agent-stream-metrics-bar__line">{line}</span>

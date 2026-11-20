@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { coreT } from "@shared/logic/core-i18n";
 import { validateVfsEntryName } from "@shared/logic/vfs";
 import { useColumnSplitters } from './hooks/useColumnSplitters';
 import { SessionDetailDrawer } from './features/chat/SessionDetailDrawer';
@@ -240,11 +241,11 @@ function DesktopOverlays() {
             showToast( exportFilePathForTarget(target) == null ? '已导出 ZIP' : '已导出文件' );
           }
         } catch (err) {
-          showToast(err instanceof Error ? err.message : '导出失败');
+          showToast(err instanceof Error ? err.message : coreT({key: "ui.common.export_failed"}));
         }
         return;
       }
-      showToast('未知操作');
+      showToast(coreT({key: "ui.common.unknown_action"}));
     },
     [projectId, workspaceSessionId],
   );
@@ -312,7 +313,7 @@ function DesktopOverlays() {
       const result = await ipcVfsZipImport(req);
       if (result.ok && result.data === 'imported') {
         notifyWorkspaceMutated();
-        showToast('已导入 ZIP');
+        showToast(coreT({key: "ui.vfs.imported_zip"}));
       } else if (!result.ok) {
         showToast(result.error.message);
       }
@@ -327,7 +328,7 @@ function DesktopOverlays() {
       const result = await ipcVfsCharacterCardImport(req);
       if (result.ok && result.data === 'imported') {
         notifyWorkspaceMutated();
-        showToast('已导入角色卡');
+        showToast(coreT({key: "ui.vfs.card_import_done"}));
       } else if (!result.ok) {
         showToast(result.error.message);
       }
@@ -387,7 +388,7 @@ function DesktopOverlays() {
           notifyWorkspaceMutated();
           showBatchIngestAppliedToast(result.report, result.skippedBinary);
         } catch (err) {
-          showToast(err instanceof Error ? err.message : '导入失败');
+          showToast(err instanceof Error ? err.message : coreT({key: "ui.common.import_failed"}));
         }
       } finally {
         importFormBusyRef.current = false;
@@ -411,7 +412,7 @@ function DesktopOverlays() {
       notifyWorkspaceMutated();
       showBatchIngestAppliedToast(applied.report, applied.skippedBinary);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '导入失败');
+      showToast(err instanceof Error ? err.message : coreT({key: "ui.common.import_failed"}));
     } finally {
       ingestFileBusyRef.current = false;
       setIngestFileBusy(false);
@@ -471,7 +472,7 @@ function DesktopOverlays() {
         id="workspace-context-menu"
         className={`workspace-context-menu${workspaceMenu ? '' : ' hidden'}`}
         role="menu"
-        aria-label="工作区操作"
+        aria-label={coreT({key: "ui.vfs.workplace_ops_title"})}
         hidden={!workspaceMenu}
         style={
           workspaceMenu
@@ -507,13 +508,13 @@ function DesktopOverlays() {
         open={workspacePrompt != null}
         title={
           workspacePrompt?.kind === 'create-file'
-            ? '新建文件'
+            ? coreT({key: "ui.vfs.create_file"})
             : workspacePrompt?.kind === 'create-folder'
-            ? '新建文件夹'
-            : '重命名'
+            ? coreT({key: "ui.vfs.menu_create_folder"})
+            : coreT({key: "ui.common.rename"})
         }
         placeholder={
-          workspacePrompt?.kind === 'create-folder' ? '文件夹名称' : '名称'
+          workspacePrompt?.kind === 'create-folder' ? coreT({key: "ui.vfs.folder_name_label"}) : coreT({key: "ui.common.name"})
         }
         initialValue={
           workspacePrompt?.kind === 'rename' ? workspacePrompt.initialName : ''
@@ -528,12 +529,12 @@ function DesktopOverlays() {
 
       <ConfirmModal
         open={workspaceConfirm?.kind === 'delete'}
-        title="确认删除"
-        message={`确定删除「${
+        title={coreT({key: "ui.common.confirm_delete"})}
+        message={
           workspaceConfirm?.kind === 'delete'
-            ? entryLabelForTarget(workspaceConfirm.target)
+            ? coreT({key: "ui.common.delete_named_confirm", params: {name: entryLabelForTarget(workspaceConfirm.target)}})
             : ''
-        }」？`}
+        }
         danger
         onConfirm={handleWorkspaceConfirm}
         onCancel={() => setWorkspaceConfirm(null)}
@@ -541,7 +542,7 @@ function DesktopOverlays() {
 
       <ConfirmModal
         open={workspaceConfirm?.kind === 'import-zip'}
-        title="导入 ZIP"
+        title={coreT({key: "ui.vfs.import_zip_title"})}
         message={
           workspaceConfirm?.kind === 'import-zip'
             ? zipImportConfirmMessage(workspaceConfirm.directoryPath)
@@ -554,7 +555,7 @@ function DesktopOverlays() {
 
       <ConfirmModal
         open={workspaceConfirm?.kind === 'import-character-card'}
-        title="导入角色卡"
+        title={coreT({key: "ui.vfs.import_card_title"})}
         message={
           workspaceConfirm?.kind === 'import-character-card'
             ? characterCardImportConfirmMessage(workspaceConfirm.directoryPath)
@@ -567,13 +568,13 @@ function DesktopOverlays() {
 
       <ConfirmModal
         open={workspaceConfirm?.kind === 'ingest-file'}
-        title="覆盖确认"
+        title={coreT({key: "ui.common.overwrite_confirm_title"})}
         message={
           workspaceConfirm?.kind === 'ingest-file'
             ? batchIngestOverwriteMessage(workspaceConfirm.conflictCount)
             : ''
         }
-        confirmLabel="覆盖"
+        confirmLabel={coreT({key: "ui.common.overwrite"})}
         danger
         busy={ingestFileBusy}
         onConfirm={handleIngestFileConfirm}
@@ -588,7 +589,7 @@ function DesktopOverlays() {
         onClose={() => setDirRuleTarget(null)}
         onSaved={() => {
           notifyWorkspaceMutated();
-          showToast('目录规则已保存');
+          showToast(coreT({key: "ui.vfs.rule_saved_done"}));
         }}
       />
 

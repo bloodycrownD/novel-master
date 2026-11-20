@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { coreT } from '@shared/logic/core-i18n';
 import type { WorkspaceContextTarget } from '../features/workspace/WorkspaceTree';
 import { ChatRail } from './ChatRail';
 import { ExplorerPane } from './ExplorerPane';
@@ -31,7 +32,7 @@ export function MainShell({
         data-splitter="preview-explorer"
         role="separator"
         aria-orientation="vertical"
-        aria-label="调整预览区与工作区宽度"
+        aria-label={coreT({key: "ui.nav.resize_left_aria"})}
         tabIndex={0}
       />
 
@@ -46,7 +47,7 @@ export function MainShell({
         data-splitter="explorer-chat"
         role="separator"
         aria-orientation="vertical"
-        aria-label="调整工作区与聊天区宽度"
+        aria-label={coreT({key: "ui.nav.resize_right_aria"})}
         tabIndex={0}
       />
 

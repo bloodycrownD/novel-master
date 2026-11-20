@@ -19,6 +19,7 @@
  * 长会话一次只留需要看的展开区，重渲染不丢态。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type {
   PromptPreviewTurnDto,
   PromptTextCardDto,
@@ -46,7 +47,7 @@ const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
 };
 
 /** 空正文在全屏里的占位文案。 */
-const EMPTY_TEXT_PLACEHOLDER = "（空）";
+const EMPTY_TEXT_PLACEHOLDER = coreT({key: "ui.prompt.empty_value"});
 
 /** 全屏 Modal 的内容来源：某个叶子（单份正文）。 */
 interface FullscreenTarget {
@@ -217,7 +218,7 @@ export function RealPromptPanel({
                 type="button"
                 className="prompt-turn-card__toggle"
                 aria-expanded={open}
-                aria-label={`${open ? "收起" : "展开"}${roleLabel}轮，${turn.summaryText.slice(0, 20)}`}
+                aria-label={coreT({key: "ui.prompt.turn_aria", params: {action: open ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), role: roleLabel, summary: turn.summaryText.slice(0, 20)}})}
                 onClick={() => toggleExpanded(turn.id)}
               >
                 <span
@@ -250,7 +251,7 @@ export function RealPromptPanel({
         );
       })}
       <p className="real-prompt-hint">
-        在会话工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
+        {coreT({key: "ui.prompt.viewer_hint_desktop"})}
       </p>
       {fullscreen != null ? (
         <div className="text-prompt-overlay" onClick={closeFullscreen}>
@@ -258,7 +259,7 @@ export function RealPromptPanel({
             className="prompt-editor-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={`${fullscreen.title}详情`}
+            aria-label={coreT({key: "ui.prompt.fullscreen_aria", params: {title: fullscreen.title}})}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="prompt-fullscreen__title">{fullscreen.title}</div>
@@ -279,7 +280,7 @@ export function RealPromptPanel({
             </div>
             <div className="prompt-editor-modal__footer">
               <Button variant="secondary" onClick={closeFullscreen}>
-                关闭
+                {coreT({key: "ui.common.close"})}
               </Button>
             </div>
           </div>

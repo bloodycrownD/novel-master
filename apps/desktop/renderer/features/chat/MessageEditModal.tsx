@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
@@ -75,14 +76,14 @@ export function MessageEditModal({
         />
         <div className="text-prompt-modal__actions">
           <Button variant="secondary" disabled={saving} onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           <Button
             variant="primary"
             disabled={!canSubmit}
             onClick={() => void handleConfirm()}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </Button>
         </div>
       </div>

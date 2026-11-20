@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { coreT } from '@shared/logic/core-i18n';
 import type { ProjectDto, SessionDto } from '@shared/ipc-types';
 import { BatchCheckbox } from '../components/batch/BatchCheckbox';
 import { ManageHeader } from '../components/batch/ManageHeader';
@@ -382,7 +383,7 @@ export function ChatRail({
         setConfirmState({
           kind: 'delete-session',
           sessionId: session.id,
-          label: session.title?.trim() || '该会话',
+          label: session.title?.trim() || coreT({key: "ui.nav.this_session"}),
         });
       }
     },
@@ -405,11 +406,11 @@ export function ChatRail({
     }
     switch (namePrompt.mode) {
       case 'create-project':
-        return '新建项目';
+        return coreT({key: "ui.project.new_title"});
       case 'rename-project':
-        return '重命名项目';
+        return coreT({key: "ui.project.rename_title"});
       case 'rename-session':
-        return '重命名会话';
+        return coreT({key: "ui.project.rename_session"});
       default:
         return '';
     }
@@ -419,7 +420,7 @@ export function ChatRail({
 
   return (
     <>
-      <header className="column-header" id="rail-header" aria-label="Chat 导航">
+      <header className="column-header" id="rail-header" aria-label={coreT({key: "ui.nav.chat_nav_aria"})}>
         <div className="column-header__nav" id="rail-pane-nav">
           {showBack ? (
             <button
@@ -432,7 +433,7 @@ export function ChatRail({
                     ? 'back-to-conversation'
                     : 'back-to-sessions'
               }
-              aria-label="返回"
+              aria-label={coreT({key: "ui.common.back"})}
               onClick={
                 viewId === 'sessions'
                   ? goBackToProjects
@@ -454,7 +455,7 @@ export function ChatRail({
             </span>
           ) : viewId === 'subagent-conversation' ? (
             <span className="column-header__title column-header__title--truncate">
-              {navSubagentSessionName || '子智能体会话'}
+              {navSubagentSessionName || coreT({key: "ui.nav.subagent_session_view"})}
             </span>
           ) : (
             <span className="column-header__title">
@@ -463,7 +464,7 @@ export function ChatRail({
           )}
         </div>
       </header>
-      <section id="chat-rail" aria-label="Chat 内容">
+      <section id="chat-rail" aria-label={coreT({key: "ui.nav.chat_content_aria"})}>
         <div
           className={`chat-nav-view${
             viewId === 'projects' ? ' is-visible' : ''
@@ -472,37 +473,37 @@ export function ChatRail({
           hidden={viewId !== 'projects'}
         >
           <ManageHeader
-            title="项目"
+            title={coreT({key: "ui.project.title"})}
             batchMode={projectBatchActive}
             selectedCount={projectSelectedCount}
             onEnterBatch={enterProjectBatch}
             onCancelBatch={exitProjectBatch}
             onDelete={confirmProjectBatchDelete}
-            hint="选择要删除的项目（将同时移除其下所有会话）"
+            hint={coreT({key: "ui.project.delete_select_hint"})}
             normalActions={
               <button
                 type="button"
                 className="list-manage-header__btn list-manage-header__btn--primary"
                 onClick={() => setNamePrompt({ mode: 'create-project' })}
               >
-                新建
+                {coreT({key: "ui.common.new"})}
               </button>
             }
           />
           <ul className="chat-list" id="project-list">
             {loadingProjects ? (
               <li className="chat-list__item">
-                <span className="chat-list__label">加载中…</span>
+                <span className="chat-list__label">{coreT({key: "ui.common.loading"})}</span>
               </li>
             ) : projects.length === 0 ? (
               <li className="chat-list__item chat-list__item--empty">
-                <span className="chat-list__label">暂无项目</span>
+                <span className="chat-list__label">{coreT({key: "ui.project.empty_desktop"})}</span>
                 <button
                   type="button"
                   className="chat-list__create-btn"
                   onClick={() => setNamePrompt({ mode: 'create-project' })}
                 >
-                  新建项目
+                  {coreT({key: "ui.project.new_title"})}
                 </button>
               </li>
             ) : (
@@ -548,7 +549,7 @@ export function ChatRail({
                       <button
                         type="button"
                         className="chat-list__menu-btn"
-                        aria-label="项目操作"
+                        aria-label={coreT({key: "ui.nav.project_actions"})}
                         onClick={e => openProjectMenu(project, e)}
                       >
                         ⋮
@@ -570,37 +571,37 @@ export function ChatRail({
           hidden={viewId !== 'sessions'}
         >
           <ManageHeader
-            title="会话"
+            title={coreT({key: "ui.nav.chat"})}
             batchMode={sessionBatchActive}
             selectedCount={sessionSelectedCount}
             onEnterBatch={enterSessionBatch}
             onCancelBatch={exitSessionBatch}
             onDelete={confirmSessionBatchDelete}
-            hint="选择要删除的会话"
+            hint={coreT({key: "ui.project.select_sessions_hint"})}
             normalActions={
               <button
                 type="button"
                 className="list-manage-header__btn list-manage-header__btn--primary"
                 onClick={() => void createSession()}
               >
-                新建
+                {coreT({key: "ui.common.new"})}
               </button>
             }
           />
           <ul className="chat-list" id="session-list">
             {loadingSessions ? (
               <li className="chat-list__item">
-                <span className="chat-list__label">加载中…</span>
+                <span className="chat-list__label">{coreT({key: "ui.common.loading"})}</span>
               </li>
             ) : sessions.length === 0 ? (
               <li className="chat-list__item chat-list__item--empty">
-                <span className="chat-list__label">暂无会话</span>
+                <span className="chat-list__label">{coreT({key: "ui.project.empty_sessions"})}</span>
                 <button
                   type="button"
                   className="chat-list__create-btn"
                   onClick={() => void createSession()}
                 >
-                  新建会话
+                  {coreT({key: "ui.project.new_session"})}
                 </button>
               </li>
             ) : (
@@ -639,14 +640,14 @@ export function ChatRail({
                     />
                   ) : null}
                   <span className="chat-list__label">
-                    {session.title ?? '未命名会话'}
+                    {session.title ?? coreT({key: "ui.nav.untitled_session"})}
                   </span>
                   {!sessionBatchActive ? (
                     <>
                       <button
                         type="button"
                         className="chat-list__menu-btn"
-                        aria-label="会话操作"
+                        aria-label={coreT({key: "ui.nav.session_actions"})}
                         onClick={e => openSessionMenu(session, e)}
                       >
                         ⋮
@@ -677,7 +678,7 @@ export function ChatRail({
               }
             />
           ) : (
-            <p className="preview-empty">请选择会话</p>
+            <p className="preview-empty">{coreT({key: "ui.chat.select_session"})}</p>
           )}
         </div>
 
@@ -693,7 +694,7 @@ export function ChatRail({
               {subagentRunning ? (
                 <div className="subagent-stop-bar" role="toolbar">
                   <span className="subagent-stop-bar__label">
-                    子智能体运行中…
+                    {coreT({key: "ui.chat.subagent_running_empty"})}
                   </span>
                   <button
                     type="button"
@@ -702,7 +703,7 @@ export function ChatRail({
                       void stopSubagentRun();
                     }}
                   >
-                    停止
+                    {coreT({key: "ui.common.stop"})}
                   </button>
                 </div>
               ) : null}
@@ -718,7 +719,7 @@ export function ChatRail({
               />
             </>
           ) : (
-            <p className="preview-empty">请返回父会话并重新点击子智能体卡片</p>
+            <p className="preview-empty">{coreT({key: "ui.chat.subagent_pick_parent_hint"})}</p>
           )}
         </div>
       </section>
@@ -733,7 +734,7 @@ export function ChatRail({
             ? namePrompt.initialName
             : ''
         }
-        placeholder="请输入名称"
+        placeholder={coreT({key: "ui.chat.rename_prompt"})}
         onClose={() => setNamePrompt(null)}
         onConfirm={handleNamePromptConfirm}
       />
@@ -743,8 +744,8 @@ export function ChatRail({
         x={listMenu?.x ?? 0}
         y={listMenu?.y ?? 0}
         items={[
-          { label: '重命名', action: 'rename' },
-          { label: '删除', action: 'delete', danger: true },
+          { label: coreT({key: "ui.common.rename"}), action: 'rename' },
+          { label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true },
         ]}
         onSelect={handleListMenuSelect}
         onClose={() => setListMenu(null)}
@@ -752,18 +753,18 @@ export function ChatRail({
 
       <ConfirmModal
         open={confirmState != null}
-        title="确认删除"
+        title={coreT({key: "ui.common.confirm_delete"})}
         message={(() => {
           if (!confirmState) return '';
           switch (confirmState.kind) {
             case 'delete-projects-batch':
-              return `确定删除选中的 ${confirmState.count} 个项目？将同时移除其下所有会话。`;
+              return coreT({key: "ui.project.delete_batch_confirm", params: {count: confirmState.count}});
             case 'delete-sessions-batch':
-              return `确定删除选中的 ${confirmState.count} 个会话？`;
+              return coreT({key: "ui.chat.delete_sessions_confirm", params: {count: confirmState.count}});
             case 'delete-project':
-              return `确定删除项目「${confirmState.name}」？将同时移除其下所有会话。`;
+              return coreT({key: "ui.project.delete_confirm_named", params: {name: confirmState.name}});
             case 'delete-session':
-              return `确定删除会话「${confirmState.label}」？`;
+              return coreT({key: "ui.chat.delete_session_confirm", params: {name: confirmState.label}});
             default:
               return '';
           }

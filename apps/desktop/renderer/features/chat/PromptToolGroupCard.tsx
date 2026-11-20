@@ -15,13 +15,14 @@
  * `turn.id + 组卡 id`）下发，全屏也只回抛 `onOpenLeaf`，不接任何跳转。
  * 刻意不复用聊天页 `ToolCallGroupCard` ——后者绑死聊天消息 DTO。
  */
+import { coreT } from "@shared/logic/core-i18n";
 import type {
   PromptToolGroupDto,
   PromptToolGroupStatusDto,
 } from "@shared/ipc-types";
 
 /** 悬挂 tool_use（`result === null`）的占位文案，槽位保留不隐藏。 */
-const LOST_RESULT_PLACEHOLDER = "未返回结果";
+const LOST_RESULT_PLACEHOLDER = coreT({key: "ui.prompt.lost_result"});
 
 /**
  * 状态点配色走主题 CSS 变量（success/danger/中性，深浅主题自动跟随；
@@ -42,9 +43,9 @@ const TOOL_GROUP_STATUS_LABELS: Record<
   PromptToolGroupStatusDto,
   string
 > = {
-  ok: "成功",
-  error: "失败",
-  lost: "丢失",
+  ok: coreT({key: "ui.transcript.tool_status.success"}),
+  error: coreT({key: "ui.transcript.tool_status.error"}),
+  lost: coreT({key: "ui.prompt.status_lost"}),
 };
 
 /** 组卡里的叶子格：一格 = 一份可全屏的正文（use 入参 / result 正文）。 */
@@ -110,7 +111,7 @@ export function PromptToolGroupCard({
         type="button"
         className="prompt-tool-group__head"
         aria-expanded={expanded}
-        aria-label={`${expanded ? "收起" : "展开"}工具调用 ${card.toolName}`}
+        aria-label={coreT({key: "ui.prompt.tool_group_aria", params: {action: expanded ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), name: card.toolName}})}
         onClick={() => onToggle(card.id)}
       >
         <span
@@ -121,7 +122,7 @@ export function PromptToolGroupCard({
         />
         <span className="prompt-tool-group__name">{card.toolName}</span>
         {card.parallel ? (
-          <span className="prompt-tool-group__parallel">并行</span>
+          <span className="prompt-tool-group__parallel">{coreT({key: "ui.prompt.parallel_tag"})}</span>
         ) : null}
         <span
           className="prompt-tool-group__status"
@@ -141,7 +142,7 @@ export function PromptToolGroupCard({
               type="button"
               className={`prompt-group-cell${leaf.lost ? " is-lost" : ""}`}
               data-leaf-id={leaf.id}
-              aria-label={`查看${leaf.label}，${card.toolName}`}
+              aria-label={coreT({key: "ui.prompt.leaf_view_aria", params: {leaf: leaf.label, name: card.toolName}})}
               onClick={() => onOpenLeaf(card.id, leaf)}
             >
               <span className="prompt-group-cell__tag">{leaf.label}</span>

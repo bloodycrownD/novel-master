@@ -39,6 +39,7 @@ import type {
 } from "@shared/ipc-types";
 import { PickerModal } from "@/components/ui/PickerModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { coreT } from "@shared/logic/core-i18n";
 import { showToast } from "@/components/ui/show-toast";
 import {
   ipcAgentListPicker,
@@ -266,7 +267,7 @@ export function SessionDetailDrawer({
     // 点击直接弹 picker 重选，不再额外弹 toast。
     const result = await ipcAgentListPicker();
     if (!result.ok || result.data.rows.length === 0) {
-      showToast("暂无 Agent，请先在设置中配置。");
+      showToast(coreT({key: "ui.session.no_agents"}));
       return;
     }
     setAgentRows(result.data.rows);
@@ -280,7 +281,7 @@ export function SessionDetailDrawer({
     }
     const result = await ipcModelListPicker();
     if (!result.ok || result.data.rows.length === 0) {
-      showToast("暂无模型，请先在设置中配置 Provider。");
+      showToast(coreT({key: "ui.session.no_models"}));
       return;
     }
     setModelRows(result.data.rows);
@@ -339,13 +340,13 @@ export function SessionDetailDrawer({
       >
         <div className="session-detail-drawer__head">
           <h3 id="session-detail-drawer__title" className="session-detail-drawer__title">
-            会话详情
+            {coreT({key: "ui.nav.session_detail"})}
           </h3>
           <button
             type="button"
             className="session-detail-drawer__close"
             data-session-detail-action="close"
-            aria-label="关闭"
+            aria-label={coreT({key: "ui.common.close"})}
             onClick={onClose}
           >
             ×
@@ -367,8 +368,8 @@ export function SessionDetailDrawer({
                 className="session-detail-drawer__name-input"
                 data-session-detail-action="rename-input"
                 value={draftName}
-                placeholder="会话名称"
-                aria-label="编辑会话名称"
+                placeholder={coreT({key: "ui.session.name_label"})}
+                aria-label={coreT({key: "ui.session.rename_title"})}
                 onChange={(e) => setDraftName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -410,9 +411,9 @@ export function SessionDetailDrawer({
                 ⚡
               </span>
               <span className="session-detail-pick__body">
-                <span className="session-detail-pick__label">技能</span>
+                <span className="session-detail-pick__label">{coreT({key: "ui.nav.skills"})}</span>
                 <span className="session-detail-pick__value">
-                  查看与管理
+                  {coreT({key: "ui.session.skills_value"})}
                 </span>
               </span>
               <span
@@ -433,11 +434,11 @@ export function SessionDetailDrawer({
               aria-label={
                 agentLocked
                   ? metaLoadFailed
-                    ? "切换智能体（加载失败）"
-                    : "切换智能体（加载中）"
+                    ? coreT({key: "ui.session.switch_agent_error"})
+                    : coreT({key: "ui.session.switch_agent_loading"})
                   : agentDeleted
-                    ? "切换智能体（待重选）"
-                    : "切换智能体"
+                    ? coreT({key: "ui.session.switch_agent_pending"})
+                    : coreT({key: "ui.session.switch_agent"})
               }
               aria-disabled={agentLocked}
               onClick={() => void openAgentPicker()}
@@ -490,7 +491,7 @@ export function SessionDetailDrawer({
                 modelLocked ? " session-detail-pick--locked" : ""
               }`}
               data-session-detail-action="switch-model"
-              aria-label={modelLocked ? "切换大模型（已锁定）" : "切换大模型"}
+              aria-label={modelLocked ? "切换大模型（已锁定）" : coreT({key: "ui.session.switch_model"})}
               aria-disabled={modelLocked}
               onClick={() => void openModelPicker()}
             >
@@ -501,7 +502,7 @@ export function SessionDetailDrawer({
                 M
               </span>
               <span className="session-detail-pick__body">
-                <span className="session-detail-pick__label">模型</span>
+                <span className="session-detail-pick__label">{coreT({key: "ui.common.model"})}</span>
                 <span className="session-detail-pick__value">
                   {meta?.modelLabel ?? "—"}
                 </span>
@@ -532,7 +533,7 @@ export function SessionDetailDrawer({
                   直接渲染，头部不再单独拼 pct，底部拼装行已随旧标签体系删除。 */}
               <div className="session-detail-drawer__tokens-head">
                 <span className="session-detail-drawer__tokens-title">
-                  上下文占用
+                  {coreT({key: "ui.session.context_usage"})}
                 </span>
                 <span className="session-detail-drawer__tokens-label">
                   {tokenStats.label}
@@ -544,7 +545,7 @@ export function SessionDetailDrawer({
                 aria-valuenow={tokenStats.pct ?? undefined}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="上下文占用"
+                aria-label={coreT({key: "ui.session.context_usage"})}
               >
                 <div
                   className="session-detail-drawer__tokens-bar-fill"
@@ -585,7 +586,7 @@ export function SessionDetailDrawer({
         {/* 会话必须持有 agentId，agent picker 不允许 none */}
         <PickerModal
           open={agentPickerOpen}
-          title={`选择 Agent（当前：${meta?.agentName ?? "—"}）`}
+          title={coreT({key: "ui.session.agent_picker_title_aria", params: {name: meta?.agentName ?? "—"}})}
           rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
           currentId={meta?.agentId}
           onClose={() => setAgentPickerOpen(false)}
@@ -602,7 +603,7 @@ export function SessionDetailDrawer({
         {/* model 可清除会话覆盖 → 回退到 agent pin 指定的模型 */}
         <PickerModal
           open={modelPickerOpen}
-          title={`选择模型（当前：${meta?.modelLabel ?? "—"}）`}
+          title={coreT({key: "ui.session.model_picker_title_aria", params: {name: meta?.modelLabel ?? "—"}})}
           rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
           allowNone
           noneLabel="清除会话覆盖（使用智能体锁定模型）"
@@ -621,7 +622,7 @@ export function SessionDetailDrawer({
         <ConfirmModal
           open={compactOpen}
           title="压缩上下文"
-          message="将按照事件配置压缩上下文。是否继续？"
+          message={coreT({key: "ui.session.compact_confirm_msg_desktop"})}
           onConfirm={() => {
             setCompactOpen(false);
             void runCompaction(projectId, sessionId);

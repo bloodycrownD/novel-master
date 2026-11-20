@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { useTheme } from "../providers/ThemeProvider";
 import type { UseColumnSplittersResult } from "../hooks/useColumnSplitters";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -58,7 +59,7 @@ export function AppChrome({
     <header
       id="app-chrome"
       className={customTitleBar ? "app-chrome--custom-titlebar" : undefined}
-      aria-label="全局操作"
+      aria-label={coreT({key: "ui.nav.global_actions"})}
     >
       <div className="app-chrome__leading">
         <img
@@ -75,13 +76,13 @@ export function AppChrome({
           <div
             className="app-chrome__column-toggles"
             role="group"
-            aria-label="栏位显示"
+            aria-label={coreT({key: "ui.nav.pane_visibility"})}
           >
             {(["preview", "explorer", "chat"] as const).map((key) => {
               const labels = {
-                preview: "左侧栏（文件预览）",
-                explorer: "中间栏（工作区）",
-                chat: "右侧栏（聊天）",
+                preview: coreT({key: "ui.nav.pane_left"}),
+                explorer: coreT({key: "ui.nav.pane_center"}),
+                chat: coreT({key: "ui.nav.pane_right"}),
               };
               const icons = { preview: "◧", explorer: "▥", chat: "◨" };
               return (
@@ -91,7 +92,7 @@ export function AppChrome({
                     className={`icon-btn column-toggle${columnVisibility[key] ? " is-active" : ""}`}
                     id={`toggle-column-${key}`}
                     data-column={key}
-                    aria-label={`显示或隐藏${labels[key]}`}
+                    aria-label={coreT({key: "ui.nav.pane_toggle_aria", params: {label: labels[key]}})}
                     onClick={() => toggleColumn(key)}
                   >
                     {icons[key]}
@@ -100,12 +101,12 @@ export function AppChrome({
               );
             })}
           </div>
-          <Tooltip content={mode === "dark" ? "切换浅色主题" : "切换深色主题"}>
+          <Tooltip content={mode === "dark" ? coreT({key: "ui.nav.toggle_light_theme"}) : coreT({key: "ui.nav.toggle_dark_theme"})}>
             <button
               type="button"
               className="icon-btn theme-toggle"
               id="theme-toggle"
-              aria-label="切换主题"
+              aria-label={coreT({key: "ui.nav.toggle_theme"})}
               onClick={() => void toggleMode()}
             >
               {mode === "dark" ? "☾" : "☀"}
@@ -115,7 +116,7 @@ export function AppChrome({
             type="button"
             className={`icon-btn${settingsOpen ? " is-active" : ""}`}
             id="settings-open"
-            aria-label={settingsOpen ? "关闭设置" : "打开设置"}
+            aria-label={settingsOpen ? coreT({key: "ui.nav.close_settings"}) : coreT({key: "ui.nav.open_settings"})}
             onClick={onToggleSettings}
           >
             ⚙

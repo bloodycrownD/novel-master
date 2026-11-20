@@ -14,6 +14,7 @@
  * ConversationPanel → MessageList → ToolCallCard 的长 props 链。
  */
 import { useCallback, useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 
 // nm-style: keep-public — 测试契约：apps/desktop/test/tool-result-viewer-modal.test.tsx:23 动态 import 解构直引
@@ -84,7 +85,7 @@ export function ToolResultViewOverlay({
         className="prompt-editor-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`${target.title}结果`}
+        aria-label={`${target.title}${coreT({key: "ui.common.result"})}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="prompt-fullscreen__title">{target.title}</div>
@@ -93,16 +94,16 @@ export function ToolResultViewOverlay({
               复用 prompt-fullscreen__block/__raw 的 pre 形态，不新造样式类。 */}
           {target.inputJson != null && target.inputJson !== "" ? (
             <div className="prompt-fullscreen__block">
-              <div className="prompt-fullscreen__label">入参</div>
+              <div className="prompt-fullscreen__label">{coreT({key: "ui.prompt.input_label"})}</div>
               <pre className="prompt-fullscreen__raw">{target.inputJson}</pre>
             </div>
           ) : null}
           {target.content === "" ? (
-            <p className="prompt-fullscreen__empty">（空）</p>
+            <p className="prompt-fullscreen__empty">{coreT({key: "ui.prompt.empty_value"})}</p>
           ) : (
             <div className="prompt-fullscreen__block">
               {target.inputJson != null && target.inputJson !== "" ? (
-                <div className="prompt-fullscreen__label">结果</div>
+                <div className="prompt-fullscreen__label">{coreT({key: "ui.common.result"})}</div>
               ) : null}
               <pre className="prompt-fullscreen__raw">{target.content}</pre>
             </div>
@@ -110,7 +111,7 @@ export function ToolResultViewOverlay({
         </div>
         <div className="prompt-editor-modal__footer">
           <Button variant="secondary" onClick={onClose}>
-            关闭
+            {coreT({key: "ui.common.close"})}
           </Button>
         </div>
       </div>

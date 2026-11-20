@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type {
   EffectiveSkillDto,
   MessageAttachmentDto,
@@ -329,7 +330,7 @@ export function ChatComposer({
         (modelCheck.data.modelLabel === "未选择模型" ||
           modelCheck.data.modelLabel === "—")
       ) {
-        reportError("请先配置模型");
+        reportError(coreT({key: "ui.chat.configure_model_first"}));
         return false;
       }
 
@@ -430,7 +431,7 @@ export function ChatComposer({
   });
   const sendDisabled = sendIntent.sendDisabled;
 
-  const inputPlaceholder = hasModel ? "输入消息…（Ctrl+Enter 发送）" : "请先配置模型（设置 → Provider）";
+  const inputPlaceholder = hasModel ? coreT({key: "ui.chat.placeholder_desktop"}) : coreT({key: "ui.chat.composer_disabled_hint"});
 
   return (
     <>
@@ -462,7 +463,7 @@ export function ChatComposer({
               onSelectChange={setCursor}
               disabled={inputDisabled}
               placeholder={inputPlaceholder}
-              aria-label="消息输入"
+              aria-label={coreT({key: "ui.chat.message_input_aria"})}
               onKeyDown={(e) => {
                 handleMultilineSubmitKeyDown(
                   e,
@@ -473,12 +474,12 @@ export function ChatComposer({
             />
           </div>
           <div className="chat-composer__toolbar">
-            <Tooltip content="更多选项">
+            <Tooltip content={coreT({key: "ui.chat.more_options"})}>
               <button
                 type="button"
                 className="chat-composer__more"
                 data-action="open-session-actions"
-                aria-label="更多选项"
+                aria-label={coreT({key: "ui.chat.more_options"})}
                 aria-haspopup="menu"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -489,34 +490,34 @@ export function ChatComposer({
               </button>
             </Tooltip>
             <div className="chat-composer__toolbar-spacer" />
-            <Tooltip content="引用文件">
+            <Tooltip content={coreT({key: "ui.chat.reference_files"})}>
               <button
                 type="button"
                 className="chat-composer__at"
-                aria-label="引用文件"
+                aria-label={coreT({key: "ui.chat.reference_files"})}
                 disabled={inputDisabled}
                 onClick={() => setPickerOpen(true)}
               >
                 @
               </button>
             </Tooltip>
-            <Tooltip content="引用技能">
+            <Tooltip content={coreT({key: "ui.chat.reference_skills"})}>
               <button
                 type="button"
                 className="chat-composer__at"
-                aria-label="引用技能"
+                aria-label={coreT({key: "ui.chat.reference_skills"})}
                 disabled={inputDisabled}
                 onClick={() => setSkillPickerOpen(true)}
               >
                 $
               </button>
             </Tooltip>
-            <Tooltip content={running ? "停止" : "发送"}>
+            <Tooltip content={running ? coreT({key: "ui.common.stop"}) : coreT({key: "ui.common.send"})}>
               <button
                 type="button"
                 className="chat-composer__send"
                 disabled={sendDisabled}
-                aria-label={running ? "停止" : "发送"}
+                aria-label={running ? coreT({key: "ui.common.stop"}) : coreT({key: "ui.common.send"})}
                 onClick={() => void send()}
               >
                 {running ? "■" : "↑"}

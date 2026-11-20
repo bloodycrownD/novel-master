@@ -1,5 +1,7 @@
 /** SETTINGS_NAV / SETTINGS_VIEWS — aligned with examples/desktop/shell.js */
 
+import { coreT } from "@shared/logic/core-i18n";
+
 export type SettingsViewId =
   | "workspace"
   | "about"
@@ -20,47 +22,47 @@ export type SettingsViewId =
 
 export const SETTINGS_NAV = [
   {
-    label: "工作区",
-    items: [{ id: "workspace" as const, label: "常规", icon: "🏠" }],
+    label: coreT({key: "ui.nav.workspace"}),
+    items: [{ id: "workspace" as const, label: coreT({key: "ui.nav.settings_general"}), icon: "🏠" }],
   },
   {
     label: "AI",
     items: [
-      { id: "agentsSettings" as const, label: "智能体配置", icon: "🧠" },
-      { id: "searchEngines" as const, label: "搜索配置", icon: "🔍" },
-      { id: "providers" as const, label: "服务商配置", icon: "🔌" },
+      { id: "agentsSettings" as const, label: coreT({key: "ui.nav.agent_settings"}), icon: "🧠" },
+      { id: "searchEngines" as const, label: coreT({key: "ui.nav.search_engines"}), icon: "🔍" },
+      { id: "providers" as const, label: coreT({key: "ui.nav.providers"}), icon: "🔌" },
     ],
   },
   {
-    label: "高级",
+    label: coreT({key: "ui.nav.settings_advanced"}),
     items: [
-      { id: "smartSortRules" as const, label: "智能排序", icon: "🔢" },
-      { id: "skillsManage" as const, label: "技能管理", icon: "⚡" },
+      { id: "smartSortRules" as const, label: coreT({key: "ui.nav.settings_smart_sort"}), icon: "🔢" },
+      { id: "skillsManage" as const, label: coreT({key: "ui.nav.skills_manage"}), icon: "⚡" },
     ],
   },
   {
-    label: "数据",
+    label: coreT({key: "ui.nav.settings_data"}),
     items: [
-      { id: "dataManagement" as const, label: "备份与恢复", icon: "💾" },
-      { id: "tokenUsageStats" as const, label: "数据统计", icon: "📊" },
+      { id: "dataManagement" as const, label: coreT({key: "ui.nav.settings_backup"}), icon: "💾" },
+      { id: "tokenUsageStats" as const, label: coreT({key: "ui.nav.token_stats"}), icon: "📊" },
     ],
   },
   {
-    label: "应用",
+    label: coreT({key: "ui.nav.settings_app"}),
     items: [{ id: "about" as const, label: "关于", icon: "ℹ️" }],
   },
 ];
 
 export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
-  workspace: "常规",
+  workspace: coreT({key: "ui.nav.settings_general"}),
   about: "关于",
-  dataManagement: "备份与恢复",
-  tokenUsageStats: "数据统计",
-  agentsSettings: "智能体配置",
-  searchEngines: "搜索配置",
-  providers: "服务商配置",
-  smartSortRules: "智能排序",
-  skillsManage: "技能管理",
+  dataManagement: coreT({key: "ui.nav.settings_backup"}),
+  tokenUsageStats: coreT({key: "ui.nav.token_stats"}),
+  agentsSettings: coreT({key: "ui.nav.agent_settings"}),
+  searchEngines: coreT({key: "ui.nav.search_engines"}),
+  providers: coreT({key: "ui.nav.providers"}),
+  smartSortRules: coreT({key: "ui.nav.settings_smart_sort"}),
+  skillsManage: coreT({key: "ui.nav.skills_manage"}),
 };
 
 export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewId {

@@ -9,6 +9,7 @@
  * ——那两个绑死聊天消息 DTO（`ToolCallBlock` 形态），与预览侧 DTO
  * 不是同一套数据。
  */
+import { coreT } from "@shared/logic/core-i18n";
 import type { PromptTextCardDto } from "@shared/ipc-types";
 
 /** 详情标题：thinking 卡单独叫「thinking」，其余读 core 给的 role 展示标签（空则「文本」）。 */
@@ -16,7 +17,7 @@ export function promptLeafKindLabel(card: PromptTextCardDto): string {
   if (card.type === "thinking") {
     return "thinking";
   }
-  return card.role === "" ? "文本" : card.role;
+  return card.role === "" ? coreT({key: "ui.common.text"}) : card.role;
 }
 
 interface PromptLeafCardProps {

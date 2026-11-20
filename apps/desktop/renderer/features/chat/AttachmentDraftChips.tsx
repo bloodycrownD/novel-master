@@ -4,6 +4,7 @@
  * 判定 / partition 单点：`@shared/logic/chat`。
  */
 import { AttachmentChip, composerChips } from '@shared/logic/chat';
+import { coreT } from '@shared/logic/core-i18n';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 type AttachmentDraftChipsProps = {
@@ -53,7 +54,7 @@ function AttachmentDraftChips({
           : 'chat-composer__chips'
       }
       role="list"
-      aria-label={ariaLabel ?? (showRemove ? '待发送附件' : '状态附件')}
+      aria-label={ariaLabel ?? (showRemove ? coreT({key: "ui.chat.attachment_draft_aria"}) : coreT({key: "ui.chat.attachment_status_aria"}))}
     >
       {attachments.map((a, index) => {
         const label = formatAttachmentChipLabel(a);
@@ -70,7 +71,7 @@ function AttachmentDraftChips({
               <button
                 type="button"
                 className="chat-composer__chip-remove"
-                aria-label={`移除 ${label}`}
+                aria-label={coreT({key: "ui.chat.remove_attachment_aria", params: {label}})}
                 disabled={disabled}
                 onClick={() => onRemove?.(index)}
               >
@@ -99,7 +100,7 @@ export function ComposerStatusChips({
       showRemove={false}
       disabled={disabled}
       transparentRow
-      aria-label="状态附件"
+      aria-label={coreT({key: "ui.chat.attachment_status_aria"})}
     />
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { coreT } from '@shared/logic/core-i18n';
 import { MermaidMarkdown } from '../../components/MermaidMarkdown';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { buildChatListItems } from './message-blocks';
@@ -6,9 +7,9 @@ import { ToolCallGroupCard } from './ToolCallGroupCard';
 import { MessageAttachmentGroupCard } from './MessageAttachmentGroupCard';
 
 const ROLE_LABELS: Record<string, string> = {
-  user: '用户',
-  assistant: '助手',
-  system: '系统',
+  user: coreT({key: "ui.transcript.role.user"}),
+  assistant: coreT({key: "ui.transcript.role.assistant"}),
+  system: coreT({key: "ui.chat.role_system"}),
 };
 
 interface MessageListProps {
@@ -122,7 +123,7 @@ export function MessageList({
   const hasStreaming = uiRunning;
 
   if (messages.length === 0 && !hasStreaming) {
-    return <p className="chat-messages__empty">暂无消息</p>;
+    return <p className="chat-messages__empty">{coreT({key: "label.transcript.empty"})}</p>;
   }
 
   const openMenu = (message: ChatMessageDto, event: React.MouseEvent | MouseEvent) => {
@@ -160,13 +161,13 @@ export function MessageList({
               <span className="chat-message__role">
                 {ROLE_LABELS[msg.role] ?? msg.role}
                 {msg.hidden ? (
-                  <span className="chat-message__hidden-tag">已隐藏</span>
+                  <span className="chat-message__hidden-tag">{coreT({key: "ui.chat.hidden_tag"})}</span>
                 ) : null}
                 {onOpenMessageMenu ? (
                   <button
                     type="button"
                     className="chat-message__menu-btn"
-                    aria-label="消息操作"
+                    aria-label={coreT({key: "ui.transcript.message_actions"})}
                     aria-haspopup="menu"
                     onClick={e => openMenu(msg, e)}
                   >
@@ -176,7 +177,7 @@ export function MessageList({
               </span>
               {item.thinkingParts.length > 0 ? (
                 <details className="chat-message__thinking">
-                  <summary>思考过程</summary>
+                  <summary>{coreT({key: "label.transcript.thinking_header"})}</summary>
                   <p>{item.thinkingParts.join('\n')}</p>
                 </details>
               ) : null}
@@ -220,10 +221,10 @@ export function MessageList({
       {hasStreaming ? (
         <div className="chat-message chat-message--assistant chat-message--streaming">
           <div className="chat-message__body">
-            <span className="chat-message__role">助手</span>
+            <span className="chat-message__role">{coreT({key: "ui.transcript.role.assistant"})}</span>
             {streamingThinking ? (
               <details className="chat-message__thinking" open>
-                <summary>思考过程</summary>
+                <summary>{coreT({key: "label.transcript.thinking_header"})}</summary>
                 <p>{streamingThinking}</p>
               </details>
             ) : null}
@@ -233,7 +234,7 @@ export function MessageList({
               </div>
             ) : null}
             {uiRunning ? (
-              <p className="chat-message__stream-tail">生成中</p>
+              <p className="chat-message__stream-tail">{coreT({key: "label.transcript.generating"})}</p>
             ) : null}
           </div>
         </div>

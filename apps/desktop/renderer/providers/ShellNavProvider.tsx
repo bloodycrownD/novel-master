@@ -558,7 +558,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   const openSubagentSession = useCallback(
     (childSessionId: string, label?: string) => {
       setSubagentSessionId(childSessionId);
-      setSubagentSessionName(label ?? "子智能体会话");
+      setSubagentSessionName(label ?? coreT({key: "ui.nav.subagent_session_view"}));
       showNavView("subagent-conversation");
     },
     [showNavView],
@@ -608,7 +608,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       setSessionId(session.id);
 
-      setSessionName(session.title ?? "未命名会话");
+      setSessionName(session.title ?? coreT({key: "ui.nav.untitled_session"}));
 
       await setDesktopSession(session.projectId, session.id);
 
@@ -746,7 +746,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
         } else {
 
-          nextSessionName = session.title ?? "未命名会话";
+          nextSessionName = session.title ?? coreT({key: "ui.nav.untitled_session"});
 
         }
 

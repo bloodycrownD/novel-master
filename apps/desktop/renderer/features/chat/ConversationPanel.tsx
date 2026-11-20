@@ -4,6 +4,7 @@ import {
   RollbackConfirmView,
   type RollbackMode,
 } from '@shared/logic/chat';
+import { coreT } from '@shared/logic/core-i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessageDto, MessageAttachmentDto } from '@shared/ipc-types';
 import type {
@@ -642,14 +643,14 @@ export function ConversationPanel({
   const copyMessage = useCallback(async (message: ChatMessageDto) => {
     const text = editableTextFromMessage(message) ?? message.bodyText?.trim();
     if (!text) {
-      showToast('该消息没有可复制的文本');
+      showToast(coreT({key: "ui.chat.message_no_copyable_text"}));
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      showToast('已复制');
+      showToast(coreT({key: "ui.common.copied"}));
     } catch {
-      showToast('复制失败');
+      showToast(coreT({key: "ui.common.copy_failed"}));
     }
   }, []);
 
@@ -678,7 +679,7 @@ export function ConversationPanel({
   const rollbackToMessage = useCallback(
     async (messageId: string) => {
       if (running) {
-        showToast('Agent 运行中无法回滚');
+        showToast(coreT({key: "ui.chat.agent_running_rollback_blocked"}));
         return;
       }
       setConfirmState({
@@ -748,7 +749,7 @@ export function ConversationPanel({
         setComposerAttachments(restored);
         return next.text;
       });
-      showToast(options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功');
+      showToast(options?.skipVfsReconcile ? coreT({key: "ui.chat.rollback_truncated"}) : coreT({key: "ui.chat.rollback_success"}));
     },
     [projectId, sessionId, reloadMessages, notifyWorkspaceMutated, onStreamReset],
   );
@@ -758,7 +759,7 @@ export function ConversationPanel({
       if (action === 'edit') {
         const initial = editableTextFromMessage(message);
         if (initial == null) {
-          showToast('该消息没有可编辑的文本');
+          showToast(coreT({key: "ui.chat.message_no_editable_text"}));
           return;
         }
         // 编辑走 MessageEditModal，不写 Composer；否则取消后输入框会残留消息正文。
@@ -772,7 +773,7 @@ export function ConversationPanel({
       }
       if (action === 'set-floor') {
         if (running) {
-          showToast('Agent 运行中无法置位');
+          showToast(coreT({key: "ui.chat.agent_running_set_floor_blocked"}));
           return;
         }
         setConfirmState({ kind: 'set-floor', messageId: message.id });
@@ -780,7 +781,7 @@ export function ConversationPanel({
       }
       if (action === 'fork') {
         if (running) {
-          showToast('Agent 运行中无法分叉');
+          showToast(coreT({key: "ui.chat.agent_running_fork_blocked"}));
           return;
         }
         const result = await ipcMessagesFork({
@@ -859,7 +860,7 @@ export function ConversationPanel({
       const changed = result.data.hiddenCount + result.data.shownCount > 0;
       await reloadMessages();
       notifyWorkspaceMutated();
-      showToast(changed ? '已置位' : '上下文已是最新状态');
+      showToast(changed ? coreT({key: "ui.chat.set_floor_done"}) : coreT({key: "ui.chat.context_up_to_date"}));
       // 置位改变了上下文范围，token 计数随之变化。派发 context-changed 让
       // SessionDetailDrawer 这类订阅方按 sessionId 过滤后刷新自己的统计（回滚仍走 messages-rollback，不复用同一事件以免语义混淆）。
       window.dispatchEvent( new CustomEvent('context-changed', { detail: { sessionId } }) );
@@ -876,7 +877,7 @@ export function ConversationPanel({
   const confirmMessage = (() => {
     if (!confirmState) return '';
     if (confirmState.kind === 'set-floor') {
-      return '此消息之前将不参与提示词，此消息及之后将恢复可见。';
+      return coreT({key: "ui.chat.set_floor_confirm_msg"});
     }
     if (confirmState.kind === 'rollback-degraded') {
       const message = chatTranslator(RollbackConfirmView.descriptor(confirmState.rollbackMode, 'degraded'));
@@ -891,13 +892,13 @@ export function ConversationPanel({
     return '';
   })();
 
-  const confirmTitle = confirmState?.kind === 'set-floor' ? '置位到此消息？' : confirmState?.kind === 'rollback-degraded' ? '无法恢复工作区' : confirmState?.kind === 'rollback-backfill' ? '快照丢失' : '确认操作';
+  const confirmTitle = confirmState?.kind === 'set-floor' ? coreT({key: "ui.chat.set_floor_confirm_title"}) : confirmState?.kind === 'rollback-degraded' ? coreT({key: "ui.chat.workspace_restore_fail_title"}) : confirmState?.kind === 'rollback-backfill' ? coreT({key: "ui.chat.snapshot_missing"}) : coreT({key: "ui.common.confirm_op"});
 
-  const confirmLabel = confirmState?.kind === 'set-floor' ? '置位' : confirmState?.kind === 'rollback-degraded' ? '仅删除后续对话' : confirmState?.kind === 'rollback-backfill' ? '继续回滚' : '确定';
+  const confirmLabel = confirmState?.kind === 'set-floor' ? coreT({key: "ui.transcript.menu.set_floor"}) : confirmState?.kind === 'rollback-degraded' ? coreT({key: "ui.chat.rollback_degraded_title"}) : confirmState?.kind === 'rollback-backfill' ? coreT({key: "ui.chat.rollback_continue"}) : coreT({key: "ui.common.confirm"});
 
   return (
     <>
-      <div className="conversation-tabs" role="tablist" aria-label="会话内容">
+      <div className="conversation-tabs" role="tablist" aria-label={coreT({key: "ui.chat.tab_conversation"})}>
         <button
           type="button"
           className={`conversation-tab${tab === 'chat' ? ' is-active' : ''}`}
@@ -906,7 +907,7 @@ export function ConversationPanel({
           aria-selected={tab === 'chat'}
           onClick={() => setTab('chat')}
         >
-          聊天
+          {coreT({key: "ui.chat.tab_chat"})}
         </button>
         <button
           type="button"
@@ -918,7 +919,7 @@ export function ConversationPanel({
           aria-selected={tab === 'realPrompt'}
           onClick={() => setTab('realPrompt')}
         >
-          提示词
+          {coreT({key: "ui.chat.tab_prompt"})}
         </button>
       </div>
       <div
@@ -961,7 +962,7 @@ export function ConversationPanel({
           id="message-actions-menu"
           className={`message-actions-menu${messageMenu ? '' : ' hidden'}`}
           role="menu"
-          aria-label="消息操作"
+          aria-label={coreT({key: "ui.transcript.message_actions"})}
           hidden={!messageMenu}
           style={
             messageMenu
@@ -990,7 +991,7 @@ export function ConversationPanel({
         </div>
         <MessageEditModal
           open={messageEdit != null}
-          title="编辑消息"
+          title={coreT({key: "ui.chat.edit_message_title"})}
           initialValue={messageEdit?.initialText ?? ''}
           onClose={() => setMessageEdit(null)}
           onConfirm={async value => {
@@ -1063,10 +1064,10 @@ export async function runCompaction( projectId: string, sessionId: string ): Pro
     return;
   }
   if (!result.data.ok) {
-    showToast('压缩部分失败');
+    showToast(coreT({key: "ui.chat.compact_partial_failed"}));
     return;
   }
-  showToast('已压缩');
+  showToast(coreT({key: "ui.chat.compact_done"}));
   // 压缩成功后 DB 里旧消息的 hidden 已置 true，但前端内存里的消息列表不会自动刷新。
   // session-compacted：让 ConversationPanel 重新拉取消息列表，使隐藏样式即时生效。
   window.dispatchEvent( new CustomEvent('session-compacted', { detail: { sessionId } }) );

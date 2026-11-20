@@ -3,6 +3,7 @@
  * 复用 worktree listRows IPC，不嵌 VfsFileManager。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { coreT } from '@shared/logic/core-i18n';
 import type { WorkplaceListRowDto } from '@shared/ipc-types';
 import { ipcWorkplaceBuildListRows, vfsScope } from '@/ipc/client';
 import {
@@ -117,8 +118,8 @@ export function FileReferencePicker({
       <div className="file-ref-picker__backdrop" onClick={onClose} />
       <div className="file-ref-picker__panel">
         <header className="file-ref-picker__head">
-          <h3>引用文件</h3>
-          <p className="file-ref-picker__hint">可多选文件与目录</p>
+          <h3>{coreT({key: "ui.chat.reference_files"})}</h3>
+          <p className="file-ref-picker__hint">{coreT({key: "ui.chat.file_ref_hint"})}</p>
           <div className="file-ref-picker__nav">
             <span className="file-ref-picker__cwd" title={currentPath}>
               {currentPath}
@@ -133,22 +134,22 @@ export function FileReferencePicker({
                 }
               }}
             >
-              上一级
+              {coreT({key: "ui.chat.parent_dir"})}
             </button>
             <button
               type="button"
               className="file-ref-picker__nav-btn"
               onClick={selectCurrentDir}
             >
-              {currentDirSelected ? '取消选用' : '选择当前文件夹'}
+              {currentDirSelected ? coreT({key: "ui.chat.deselect_current_folder"}) : coreT({key: "ui.chat.select_current_folder"})}
             </button>
           </div>
         </header>
         {error ? <p className="file-ref-picker__error">{error}</p> : null}
         <ul className="file-ref-picker__list">
-          {loading ? <li className="file-ref-picker__empty">加载中…</li> : null}
+          {loading ? <li className="file-ref-picker__empty">{coreT({key: "ui.common.loading"})}</li> : null}
           {!loading && visibleRows.length === 0 ? (
-            <li className="file-ref-picker__empty">暂无文件</li>
+            <li className="file-ref-picker__empty">{coreT({key: "ui.chat.pick_file_empty"})}</li>
           ) : null}
           {visibleRows.map(row => {
             const label = basename(row.path) || row.path;
@@ -162,7 +163,7 @@ export function FileReferencePicker({
                     <button
                       type="button"
                       className="file-ref-picker__check"
-                      aria-label={`选用目录 ${label}`}
+                      aria-label={coreT({key: "ui.chat.pick_dir_aria", params: {label}})}
                       aria-pressed={checked}
                       onClick={() => toggleDirSelect(row.path)}
                     >
@@ -171,7 +172,7 @@ export function FileReferencePicker({
                     <button
                       type="button"
                       className="file-ref-picker__enter"
-                      aria-label={`进入目录 ${label}`}
+                      aria-label={coreT({key: "ui.chat.enter_dir_aria", params: {label}})}
                       onClick={() => navigateInto(row.path)}
                     >
                       <span aria-hidden>📁</span>
@@ -193,7 +194,7 @@ export function FileReferencePicker({
                   <button
                     type="button"
                     className="file-ref-picker__check"
-                    aria-label={`选用文件 ${label}`}
+                    aria-label={coreT({key: "ui.chat.pick_file_aria", params: {label}})}
                     aria-pressed={checked}
                     onClick={() => toggleFile(row.path)}
                   >
@@ -202,7 +203,7 @@ export function FileReferencePicker({
                   <button
                     type="button"
                     className="file-ref-picker__enter"
-                    aria-label={`选用文件 ${label}`}
+                    aria-label={coreT({key: "ui.chat.pick_file_aria", params: {label}})}
                     onClick={() => toggleFile(row.path)}
                   >
                     <span aria-hidden>📄</span>
@@ -215,7 +216,7 @@ export function FileReferencePicker({
         </ul>
         <footer className="file-ref-picker__foot">
           <button type="button" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -230,7 +231,7 @@ export function FileReferencePicker({
               onClose();
             }}
           >
-            确认
+            {coreT({key: "ui.common.confirm_alt"})}
           </button>
         </footer>
       </div>
