@@ -102,7 +102,7 @@ export namespace CloudSyncService {
       if (!parsedStatus.ok) return Result.err(parsedStatus.error);
       return Result.ok(parsedStatus.value.rev);
     } catch (error) {
-      return Result.err(new AppError('CLOUD_SYNC_INVALID_STATUS', {detail: '云端状态文件无法解析'}, {cause: error}));
+      return Result.err(new AppError('CLOUD_SYNC_INVALID_STATUS', {descriptor: {key: 'error.cloud_sync.invalid_status.unparseable' as const}}, {cause: error}));
     }
   }
 

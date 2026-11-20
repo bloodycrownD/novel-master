@@ -28,7 +28,7 @@ export const VfsCharacterCardService = {
       // 与 core 层 importFromBytes 的 bytes.length 闸门同阈值双保险。
       maxBytes: CHARACTER_CARD_MAX_INPUT_BYTES,
       buildTooLargeError: sizeBytes =>
-        new AppError('VFS_CHARACTER_CARD_TOO_LARGE', {detail: `角色卡文件过大：${sizeBytes} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`}),
+        new AppError('VFS_CHARACTER_CARD_TOO_LARGE', {descriptor: {key: 'error.vfs.character_card_too_large.input' as const, params: {size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}}}),
       buildCopyError: copyError => new AppError('VFS_CHARACTER_CARD_UNRECOGNIZED', {detail: copyError ?? '无法读取所选角色卡文件'}),
       buildMissingError: fsPath => new AppError('VFS_CHARACTER_CARD_UNRECOGNIZED', {detail: `角色卡文件不存在：${fsPath}`}),
     };
