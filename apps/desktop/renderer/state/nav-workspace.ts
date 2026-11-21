@@ -4,6 +4,8 @@
  * @module state/nav-workspace
  */
 
+import { coreT } from "@shared/logic/core-i18n";
+
 export type NavViewId =
   | "projects"
   | "sessions"
@@ -23,9 +25,9 @@ const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
 };
 
 const WORKSPACE_TITLES: Record<WorkspaceScope, string> = {
-  session: "会话工作区",
-  chat: "聊天工作区",
-  physical: "文件浏览器",
+  session: coreT({key: "ui.nav.workspace_session"}),
+  chat: coreT({key: "ui.nav.workspace_chat"}),
+  physical: coreT({key: "ui.nav.file_browser"}),
 };
 
 /** Sync explorer title/panel with current chat nav view. */
@@ -34,11 +36,11 @@ export function syncWorkspaceWithNav(viewId: NavViewId): WorkspaceScope {
 }
 
 export function workspaceTitleForScope(scope: WorkspaceScope): string {
-  return WORKSPACE_TITLES[scope] ?? "工作区";
+  return WORKSPACE_TITLES[scope] ?? coreT({key: "ui.nav.workspace"});
 }
 
 export function railPaneNavTitle(viewId: NavViewId): string {
-  if (viewId === "projects") return "项目";
-  if (viewId === "subagent-conversation") return "子智能体会话";
+  if (viewId === "projects") return coreT({key: "ui.project.title"});
+  if (viewId === "subagent-conversation") return coreT({key: "ui.nav.subagent_session_view"});
   return "—";
 }

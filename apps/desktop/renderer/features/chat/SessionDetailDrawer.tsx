@@ -310,7 +310,7 @@ export function SessionDetailDrawer({
     setEditingName(false);
     if (result.ok) {
       onRenamed?.(trimmed);
-      showToast("已重命名会话");
+      showToast(coreT({key: "ui.common.renamed"}));
     } else {
       showToast(result.error.message);
       setDraftName(sessionName);
@@ -401,7 +401,7 @@ export function SessionDetailDrawer({
               type="button"
               className="session-detail-pick"
               data-session-detail-action="open-skills"
-              aria-label="查看会话技能"
+              aria-label={coreT({key: "ui.session.view_skills_aria"})}
               onClick={() => setSkillsPanelOpen(true)}
             >
               <span
@@ -491,7 +491,7 @@ export function SessionDetailDrawer({
                 modelLocked ? " session-detail-pick--locked" : ""
               }`}
               data-session-detail-action="switch-model"
-              aria-label={modelLocked ? "切换大模型（已锁定）" : coreT({key: "ui.session.switch_model"})}
+              aria-label={modelLocked ? coreT({key: "ui.session.switch_model_locked_aria"}) : coreT({key: "ui.session.switch_model"})}
               aria-disabled={modelLocked}
               onClick={() => void openModelPicker()}
             >

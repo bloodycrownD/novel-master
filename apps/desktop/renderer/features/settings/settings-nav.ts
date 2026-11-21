@@ -49,13 +49,13 @@ export const SETTINGS_NAV = [
   },
   {
     label: coreT({key: "ui.nav.settings_app"}),
-    items: [{ id: "about" as const, label: "关于", icon: "ℹ️" }],
+    items: [{ id: "about" as const, label: coreT({key: "ui.about.title"}), icon: "ℹ️" }],
   },
 ];
 
 export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   workspace: coreT({key: "ui.nav.settings_general"}),
-  about: "关于",
+  about: coreT({key: "ui.about.title"}),
   dataManagement: coreT({key: "ui.nav.settings_backup"}),
   tokenUsageStats: coreT({key: "ui.nav.token_stats"}),
   agentsSettings: coreT({key: "ui.nav.agent_settings"}),

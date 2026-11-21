@@ -189,8 +189,7 @@ export function MetricsDetailPanel({
           />
         </>
       )}
-      {/* 「会话累计」键面无对应键（漏键待波 3c），保留原字面量。 */}
-      <SectionTitle>会话累计</SectionTitle>
+      <SectionTitle>{coreT({key: "ui.stats.session_total"})}</SectionTitle>
       <Row
         testKey="totals-visible-messages"
         label={coreT({key: "ui.stats.visible_messages"})}
