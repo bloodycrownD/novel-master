@@ -62,3 +62,11 @@ CSS `::before` / `::after` 的 `content` 由样式表渲染，translator 无法�
 ## 桥接面盘点对账收口（波 3 终态）
 
 上文「桥接面盘点备注」中两处「未立键」已收口：rich-document 管线第二桥（`RichDocumentBridge` labels 通道 + `rich-document-labels.ts` 宿主装配，波 3-1）与 mermaid 全屏关闭（两桥随发 `ui.common.close`，波 3-1 立键、波 3-2d 接线消费）。web 层用户可见中文按本文件豁免口径清零。
+
+## 会话默认标题前缀（数据协议，波 4a D 线登记）
+
+`apps/desktop/renderer/utils/session-default-title.ts` 的「会话」前缀与 `/^会话(\d+)$/` 正则是**数据协议**：正则匹配已落库的存量会话标题做编号延续（`会话1`、`会话2`…），改文案即破坏存量匹配、产生重复编号（同 `map-cloud-sync-sdk-error` 口径）。i18n 化须随「生成侧 + 匹配侧 + 存量数据迁移」专项处理，p27 不动。
+
+## desktop 原生菜单（波 4a D 线接线收口）
+
+`shell-menu.ts` 原生菜单文案 18 处已接 `ui.menu.*`（新域，波 4a 补键）+ 现键四处；`zod` 格式化 7 处接 `ui.smart_sort.zod_*`（`zod_nonneg_or_empty` 带 `{field}` 占位）；SettingsOverlay 自定义引擎新建标题接 `ui.provider.custom_engine_create_title`。
