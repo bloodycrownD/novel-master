@@ -16,6 +16,7 @@ import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {settingsTranslator} from '../../i18n/settings';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -31,9 +32,9 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type BackupTask = 'export' | 'import';
 
 // prettier-ignore
-const CLEANUP_CONFIRM_TEXT = '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？';
+const CLEANUP_CONFIRM_TEXT = coreT({key: "ui.storage.cleanup_confirm"});
 // prettier-ignore
-const IMPORT_CONFIRM_TEXT = '将用所选备份完全替换当前应用数据（项目、会话、消息等）。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。此操作不可撤销，是否继续？';
+const IMPORT_CONFIRM_TEXT = coreT({key: "ui.storage.import_confirm_mobile"});
 
 export function StorageConfigScreen() {
   const {tokens} = useTheme();
@@ -96,42 +97,42 @@ export function StorageConfigScreen() {
   return (
     <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <ProfileStatusCard
-        title="存储空间"
-        hint="数据库文件体积与清理可回收的空间"
+        title={coreT({key: "ui.storage.space_section"})}
+        hint={coreT({key: "ui.storage.space_desc"})}
         metrics={[
-          {label: '库体积', value: formatStorageBytes(dbFileBytes)},
-          {label: '可回收', value: formatStorageBytes(dbReclaimBytes)},
+          {label: coreT({key: "ui.storage.db_size"}), value: formatStorageBytes(dbFileBytes)},
+          {label: coreT({key: "ui.storage.reclaimable"}), value: formatStorageBytes(dbReclaimBytes)},
         ]}
         tokens={tokens}
       />
-      <ProfileMenuItem icon="☁️" label="云端配置" value={cloudConfigured ? '已配置' : '未配置'} tokens={tokens} onPress={() => navigation.navigate('CloudSyncStorage')} />
+      <ProfileMenuItem icon="☁️" label={coreT({key: "ui.storage.cloud_entry"})} value={cloudConfigured ? coreT({key: "ui.cloud_sync.configured"}) : coreT({key: "ui.cloud_sync.not_configured"})} tokens={tokens} onPress={() => navigation.navigate('CloudSyncStorage')} />
       <ProfileMenuItem
         icon="🧹"
-        label="数据清理"
-        value={dbBusy ? '处理中…' : agentActive ? 'Agent 运行中' : '清理数据库空间'}
+        label={coreT({key: "ui.storage.cleanup_section"})}
+        value={dbBusy ? coreT({key: "ui.common.processing"}) : agentActive ? coreT({key: "ui.cloud_sync.agent_busy_value"}) : coreT({key: "ui.storage.cleanup_action"})}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
             return;
           }
-          Alert.alert('数据清理', CLEANUP_CONFIRM_TEXT, [
-            {text: '取消', style: 'cancel'},
+          Alert.alert(coreT({key: "ui.storage.cleanup_section"}), CLEANUP_CONFIRM_TEXT, [
+            {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
             {
-              text: '开始清理',
+              text: coreT({key: "ui.storage.cleanup_start"}),
               onPress: () => {
                 setDbBusy(true);
                 DbMaintenanceService.run(runtime)
                   .then(result => {
                     if (!result.ok) {
-                      showToast(ToastMessage.toast('清理失败', result.error));
+                      showToast(ToastMessage.toast(coreT({key: "ui.common.cleanup_failed"}), result.error));
                       return;
                     }
                     const before = formatStorageBytes(result.value.beforeBytes);
                     const after = formatStorageBytes(result.value.afterBytes);
-                    showToast(`清理完成：${before} → ${after}`);
+                    showToast(coreT({key: "ui.storage.cleanup_done", params: {before, after}}));
                     refreshMaintenanceStats().catch(() => undefined);
                   })
-                  .catch(err => showToast(ToastMessage.toast('清理失败', err)))
+                  .catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.cleanup_failed"}), err)))
                   .finally(() => setDbBusy(false));
               },
             },
@@ -140,8 +141,8 @@ export function StorageConfigScreen() {
       />
       <ProfileMenuItem
         icon="💾"
-        label="导出数据库"
-        value={dbBusy ? '处理中…' : '分享备份文件'}
+        label={coreT({key: "ui.storage.export_db"})}
+        value={dbBusy ? coreT({key: "ui.common.processing"}) : coreT({key: "ui.storage.share_backup"})}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
@@ -153,7 +154,7 @@ export function StorageConfigScreen() {
           DbBackupService.exportViaPicker(runtime)
             .then(result => {
               if (result.ok && result.value === 'saved') {
-                showToast('数据库已导出；备份文件包含聊天记录明文，请妥善保管');
+                showToast(coreT({key: "ui.storage.export_db_done"}));
               }
             })
             .catch(err => {
@@ -161,7 +162,7 @@ export function StorageConfigScreen() {
               if (RequestAbort.isAbortLikeError(err)) {
                 return;
               }
-              showToast(ToastMessage.toast('导出失败', err));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), err));
             })
             .finally(() => {
               setBackupBusy(null);
@@ -172,8 +173,8 @@ export function StorageConfigScreen() {
       />
       <ProfileMenuItem
         icon="📝"
-        label="导出日志"
-        value={dbBusy ? '处理中…' : '分享日志文件'}
+        label={coreT({key: "ui.storage.export_logs"})}
+        value={dbBusy ? coreT({key: "ui.common.processing"}) : coreT({key: "ui.storage.share_logs"})}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
@@ -183,26 +184,26 @@ export function StorageConfigScreen() {
           LogExport.export()
             .then(result => {
               if (result === 'saved') {
-                showToast('日志已导出');
+                showToast(coreT({key: "ui.storage.logs_exported"}));
               }
             })
-            .catch(err => showToast(ToastMessage.toast('导出失败', err)))
+            .catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), err)))
             .finally(() => setDbBusy(false));
         }}
       />
       <ProfileMenuItem
         icon="📥"
-        label="导入数据库"
-        value={dbBusy ? '处理中…' : '完全替换'}
+        label={coreT({key: "ui.storage.import_db"})}
+        value={dbBusy ? coreT({key: "ui.common.processing"}) : coreT({key: "ui.storage.replace_all"})}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
             return;
           }
-          Alert.alert('导入数据库', IMPORT_CONFIRM_TEXT, [
-            {text: '取消', style: 'cancel'},
+          Alert.alert(coreT({key: "ui.storage.import_db"}), IMPORT_CONFIRM_TEXT, [
+            {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
             {
-              text: '继续选择文件',
+              text: coreT({key: "ui.storage.continue_pick"}),
               onPress: () => {
                 setDbBusy(true);
                 setBackupBusy('import');
@@ -210,9 +211,9 @@ export function StorageConfigScreen() {
                 DbBackupService.importViaPicker(runtime, retry)
                   .then(result => {
                     if (result.ok) {
-                      showToast('正在重新加载，请稍候…');
+                      showToast(coreT({key: "ui.storage.reloading"}));
                     } else {
-                      showToast(ToastMessage.toast('导入失败', result.error));
+                      showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), result.error));
                     }
                   })
                   .catch(err => {
@@ -220,7 +221,7 @@ export function StorageConfigScreen() {
                     if (RequestAbort.isAbortLikeError(err)) {
                       return;
                     }
-                    showToast(ToastMessage.toast('导入失败', err));
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), err));
                   })
                   .finally(() => {
                     setBackupBusy(null);
@@ -236,7 +237,7 @@ export function StorageConfigScreen() {
         <ProfileMenuItem
           icon="✖️"
           label={settingsTranslator({key: 'settings.long_task.cancel'})}
-          value={backupBusy === 'export' ? '导出数据库' : '导入数据库'}
+          value={backupBusy === 'export' ? coreT({key: "ui.storage.export_db"}) : coreT({key: "ui.storage.import_db"})}
           tokens={tokens}
           onPress={handleCancelBackup}
         />
