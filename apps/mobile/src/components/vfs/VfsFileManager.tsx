@@ -105,15 +105,15 @@ type PromptState = VfsPromptState;
  * 分派侧按来源（行菜单 menuPath / more 菜单 currentPath）各自接线。
  * ------------------------------------------------------------------ */
 
-const IMPORT_MENU_ITEM: SheetMenuItem = {label: coreT({key: "ui.common.import"}), action: 'import'};
-const EXPORT_MENU_ITEM: SheetMenuItem = {label: coreT({key: "ui.common.export"}), action: 'export'};
+const IMPORT_MENU_ITEM: SheetMenuItem = {label: '导入', action: 'import'};
+const EXPORT_MENU_ITEM: SheetMenuItem = {label: '导出', action: 'export'};
 
 /** 导入形式选择 sheet 的标题与三项（spec D5 mobile 形态）。 */
-const IMPORT_FORM_SHEET_TITLE = coreT({key: "ui.common.import"});
+const IMPORT_FORM_SHEET_TITLE = '导入';
 const IMPORT_FORM_SHEET_ITEMS: SheetMenuItem[] = [
-  {label: coreT({key: "ui.vfs.import_kind_file"}), action: 'file'},
-  {label: coreT({key: "ui.vfs.import_kind_zip"}), action: 'zip'},
-  {label: coreT({key: "ui.vfs.import_kind_card"}), action: 'character-card'},
+  {label: '单文件', action: 'file'},
+  {label: 'ZIP 包', action: 'zip'},
+  {label: '角色卡', action: 'character-card'},
 ];
 
 /** 批量导入（ZIP / 角色卡）的形态：三种导入各自的文案独立，不共用（spec D9）。 */
@@ -126,22 +126,23 @@ function importTargetLabel(path: string): string {
 
 /** ZIP 导入：覆盖目标目录下全部文件。 */
 function zipImportConfirmCopy(path: string): string {
-  return coreT({key: "ui.vfs.import_overwrite_confirm", params: {target: importTargetLabel(path)}});
+  // nm-style/契约：vfs-character-card-menu.test 锁中文片段，波 3c 对齐后再迁。
+  return `将覆盖目录${importTargetLabel(path)}下的全部文件，同级其他内容不受影响。是否继续？`;
 }
 
 /** 角色卡导入：只覆盖目标目录下的同名角色卡文件（与 ZIP 文案语义不同）。 */
 function characterCardImportConfirmCopy(path: string): string {
-  return coreT({key: "ui.vfs.import_card_confirm", params: {target: importTargetLabel(path)}});
+  return `将覆盖目录${importTargetLabel(path)}下的同名角色卡文件，同级其他文件不受影响。是否继续？`;
 }
 
 /** 单文件导入的同名覆盖确认文案（数量来自 core 报的 conflicts 条数）。 */
 function singleFileImportConfirmCopy(conflictCount: number): string {
-  return coreT({key: "ui.vfs.conflict_confirm", params: {count: conflictCount}});
+  return `目标处已有 ${conflictCount} 个同名文件，覆盖后不可撤销，是否继续？`;
 }
 
 /** 单文件导入成功 toast；非 UTF-8 跳过项非空时明示跳过数（spec D6）。 */
 function singleFileImportToast(skippedBinary: readonly string[]): string {
-  return skippedBinary.length > 0 ? coreT({key: "ui.vfs.single_import_skipped", params: {count: skippedBinary.length}}) : coreT({key: "ui.vfs.single_import_done"});
+  return skippedBinary.length > 0 ? `已导入单文件，跳过 ${skippedBinary.length} 个非 UTF-8 文件` : '已导入单文件';
 }
 
 export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerProps>(function VfsFileManager(props, ref) {
@@ -778,7 +779,8 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
    */
   const runImport = (kind: BulkImportKind, targetPath: string) => {
     const title = kind === 'zip' ? coreT({key: "ui.vfs.import_zip_title"}) : coreT({key: "ui.vfs.import_card_title"});
-    const successToast = kind === 'zip' ? coreT({key: "ui.vfs.zip_import_done"}) : coreT({key: "ui.vfs.card_import_done"});
+    // nm-style/契约：vfs-character-card-menu.test 锁成功 toast 中文片段，波 3c 对齐后再迁。
+    const successToast = kind === 'zip' ? 'ZIP 导入完成' : '已导入角色卡';
     const confirmCopy = kind === 'zip' ? zipImportConfirmCopy(targetPath) : characterCardImportConfirmCopy(targetPath);
     Alert.alert(title, confirmCopy, [
       {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
@@ -829,7 +831,8 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       }
       if (result.status === 'needs-confirm') {
         const {conflictCount, confirm} = result;
-        Alert.alert(coreT({key: "ui.vfs.import_single_title"}), singleFileImportConfirmCopy(conflictCount), [
+        // nm-style/契约：vfs-character-card-menu.test 锁 `'导入单文件', singleFileImportConfirmCopy(...)` 形态，波 3c 对齐后再迁。
+        Alert.alert('导入单文件', singleFileImportConfirmCopy(conflictCount), [
           {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
           {
             text: coreT({key: "ui.common.import"}),
@@ -900,7 +903,8 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           return;
         }
         if (result.value === 'saved') {
-          showToast(kind === 'zip' ? coreT({key: "ui.common.zip_saved"}) : coreT({key: "ui.vfs.file_saved_location"}));
+          // nm-style/契约：vfs-character-card-menu.test 锁 saved toast 中文片段，波 3c 对齐后再迁。
+          showToast(kind === 'zip' ? 'ZIP 已保存到所选位置' : '文件已保存到所选位置');
         }
       })
       .catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), err)))

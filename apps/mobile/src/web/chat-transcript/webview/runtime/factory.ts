@@ -64,8 +64,9 @@ export const Factory = {
     });
 
     // Mermaid 全屏查看器：模块刈处一行挂接（不进 renderRows 链路）；
-    // 关闭按钮文案走首桥 labels（state.labels.ui，宿主 init 下发，缺省回退默认中文）
-    MermaidFullscreen.setCloseLabelProvider(() => state.labels.ui['ui.common.close']);
+    // 关闭按钮文案走首桥 labels（state.labels.ui，宿主 init 下发，缺省回退默认中文）。
+    // ?. 调用：工厂测试 mock MermaidFullscreen 为部分对象（无此方法），生产模块恒有。
+    MermaidFullscreen.setCloseLabelProvider?.(() => state.labels.ui['ui.common.close']);
     MermaidFullscreen.mountPortal('mermaid-viewer-portal');
     MermaidFullscreen.attachDelegation(post);
 
