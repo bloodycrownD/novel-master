@@ -50,7 +50,7 @@ export const mockWebViewPostMessages: string[] = [];
 
 /** 当前已挂载的 mock 实例（按挂载序；卸载即摘除，避免旧树跨用例污染）。 */
 const instances: MockWebViewInstance[] = [];
-let nextInstanceId = 1;
+const counters: { nextInstanceId: number } = { nextInstanceId: 1 };
 
 /** 从 `source` 解析域：uri 里的包名优先，其次内联 html，最后 unknown。 */
 function resolveDomain(source: WebViewProps['source']): MockWebViewDomain {
@@ -66,9 +66,7 @@ function resolveDomain(source: WebViewProps['source']): MockWebViewDomain {
 }
 
 /** 取已挂载实例；传 domain 则只取该域（保持挂载序）。 */
-export function getMockWebViewInstances(
-  domain?: MockWebViewDomain,
-): MockWebViewInstance[] {
+export function getMockWebViewInstances(domain?: MockWebViewDomain): MockWebViewInstance[] {
   return domain == null
     ? instances.slice()
     : instances.filter(item => item.domain === domain);
@@ -99,10 +97,7 @@ export function clearMockWebViewPostMessages(): void {
  * 同域多台时取**挂载序第一台**——与「取第一个 WebView」的旧写法在单实例场景等价，
  * 但在同屏多 WebView 场景下不会误取到别的域。
  */
-export function findMockWebViewByDomain(
-  root: ReactTestInstance | ReactTestRenderer['root'],
-  domain: MockWebViewDomain,
-): ReactTestInstance {
+export function findMockWebViewByDomain(root: ReactTestInstance | ReactTestRenderer['root'], domain: MockWebViewDomain): ReactTestInstance {
   const node = root
     .findAllByType(WebViewMock as unknown as React.ComponentType<unknown>)
     .find(item => {
@@ -123,7 +118,7 @@ const WebViewMock = React.forwardRef<
   const instanceRef = React.useRef<MockWebViewInstance | null>(null);
   if (instanceRef.current == null) {
     instanceRef.current = {
-      id: nextInstanceId++,
+      id: counters.nextInstanceId++,
       domain: resolveDomain(props.source),
       posts: [],
     };

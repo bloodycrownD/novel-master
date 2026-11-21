@@ -94,9 +94,7 @@ export const EnrichedMarkdownTextInput = React.forwardRef<
   MockEnrichedMarkdownTextInputInstance,
   Record<string, unknown>
 >((props, ref) => {
-  React.useImperativeHandle(
-    ref,
-    () => ({
+  React.useImperativeHandle(ref, () => ({
       focus: () => {
         mockCalls.focus++;
       },
@@ -168,16 +166,11 @@ export const EnrichedMarkdownTextInput = React.forwardRef<
       },
       getMarkdown: () => Promise.resolve(''),
       getCaretRect: () => Promise.resolve({ x: 0, y: 0, width: 0, height: 0 }),
-    }),
-    []
-  );
+    }), []);
 
   // 渲染成可序列化的 View 节点（而非 null）：测试里 tree.toJSON() 需要
   // 拿到真实节点断言"组件可渲染"，props 原样透传供 wrapper 测试检查。
-  return React.createElement(
-    View,
-    { testID: 'enriched-markdown-text-input-mock', ...(props as object) },
-  );
+  return React.createElement(View, { testID: 'enriched-markdown-text-input-mock', ...(props as object) });
 });
 
 EnrichedMarkdownTextInput.displayName = 'EnrichedMarkdownTextInput';

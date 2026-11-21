@@ -9,10 +9,7 @@
  * 命中率（0-1）；计费口径分母无数据（≤0）或 cacheRead 缺失（null，
  * 单行请求可能无 cache 列）时返回 null。
  */
-export function hitRate(
-  cacheRead: number | null,
-  billed: number,
-): number | null {
+export function hitRate(cacheRead: number | null, billed: number): number | null {
   if (cacheRead == null || billed <= 0) {
     return null;
   }

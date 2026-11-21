@@ -19,8 +19,6 @@ import {Labels, DEFAULT_RICH_DOCUMENT_LABELS, type RichDocumentLabels} from '../
  */
 export const documentViewSlot = ViewSlot.create<DocumentPayload>();
 
-/** 渲染层文案 holder（init.labels 下发；旧宿主/缺省回退默认中文，镜像 chat-transcript state.labels）。 */
-let resolvedLabels: RichDocumentLabels = DEFAULT_RICH_DOCUMENT_LABELS;
 
 export {post};
 
@@ -28,6 +26,8 @@ export {post};
 export type {HostTheme};
 
 export namespace RichDocumentBridge {
+  /** 渲染层文案 holder（init.labels 下发；旧宿主/缺省回退默认中文，镜像 chat-transcript state.labels）。 */
+  const labels: { current: RichDocumentLabels } = { current: DEFAULT_RICH_DOCUMENT_LABELS };
   /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
   export function setDocument(payload: DocumentPayload | null | undefined): void {
     documentViewSlot.invoke(payload ?? {});
@@ -37,7 +37,7 @@ export namespace RichDocumentBridge {
    * 渲染层文案读取口（波 3-2 接线消费：over-limit 提示 / mermaid 全屏关闭）。
    */
   export function currentLabels(): RichDocumentLabels {
-    return resolvedLabels;
+    return labels.current;
   }
 
   export function handle(raw: unknown): void {
@@ -46,7 +46,7 @@ export namespace RichDocumentBridge {
     if (msg.type === 'init') {
       HostTheme.apply(msg.payload && (msg.payload.theme as HostTheme | undefined));
       // labels：宿主经 core i18n 下发；旧宿主/缺省/非法值回退默认中文（第二桥镜像 C30）。
-      resolvedLabels = Labels.resolve(msg.payload?.labels);
+      labels.current = Labels.resolve(msg.payload?.labels);
       return;
     }
     if (msg.type === 'setDocument') {

@@ -40,11 +40,7 @@ export function useSharedValue<T>(value: T) {
  * 首帧只记录基线不回调（对齐真 reanimated：首帧 previous 为 null，reaction 收到
  * null 后由业务自己决定要不要上报——controller 正是这么判的）。
  */
-export function useAnimatedReaction<T>(
-  prepare: () => T,
-  react: (current: T, previous: T | null) => void,
-  _deps?: readonly unknown[],
-): void {
+export function useAnimatedReaction<T>(prepare: () => T, react: (current: T, previous: T | null) => void, _deps?: readonly unknown[]): void {
   const prevRef = React.useRef<{value: T; seeded: boolean} | null>(null);
   const reactRef = React.useRef(react);
   reactRef.current = react;

@@ -229,9 +229,9 @@ function indentOf(sourceFile: ts.SourceFile, line: number): number {
   return match == null ? 0 : match[0].length;
 }
 
-/** E1：`useXxx` hook 调用（useState/useRef/useMemo/... 及一切 use* 大写开头形态）。 */
+/** E1：`useXxx` hook 调用（useState/useRef/useMemo/... 及 `React.useXxx` 成员形态——RN 替身惯用）。 */
 function isHookCallText(text: string): boolean {
-  return /^use[A-Z]/.test(text);
+  return /^use[A-Z]/.test(text) || /^React\.use[A-Z]/.test(text);
 }
 
 function checkOneLineValue(state: ScanState, node: ts.Node, value: ts.Expression, startLine: number, verdict: string, symbol: string, detail: string): void {
