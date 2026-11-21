@@ -17,14 +17,13 @@
  * @module domain/skills/logic/with-skill-front-matter-values
  */
 
+import { FrontMatter } from "@/common/front-matter.js";
+
 /** front matter 重写值：只提交要改的字段，未提交字段不动。 */
 interface SkillFrontMatterValues {
   readonly name?: string;
   readonly description?: string;
 }
-
-/** front matter 一行：YAML 双引号标量（JSON 字符串即合法 double-quoted scalar），零捕获纯格式化。 */
-const fmLine = (key: string, value: string): string => `${key}: ${JSON.stringify(value)}`;
 
 export const SkillFrontMatterValues = {
   /**
@@ -46,7 +45,7 @@ export const SkillFrontMatterValues = {
 
     const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
     if (match == null) {
-      const fm = entries.map(([key, value]) => fmLine(key, value)).join("\n");
+      const fm = entries.map(([key, value]) => FrontMatter.formatField(key, value)).join("\n");
       return `---\n${fm}\n---\n\n${source}`;
     }
     let fm = match[1]!;
@@ -54,7 +53,7 @@ export const SkillFrontMatterValues = {
       const re = new RegExp(`^${key}:.*$`, "m");
       // replacement 必须用函数形式：字符串形式会展开 $$ / $& / $' / $` 等
       // $ 序列（描述值或保留的原键值行含这些序列时会静默损坏 front matter）
-      fm = re.test(fm) ? fm.replace(re, () => fmLine(key, value)) : `${fm}\n${fmLine(key, value)}`;
+      fm = re.test(fm) ? fm.replace(re, () => FrontMatter.formatField(key, value)) : `${fm}\n${FrontMatter.formatField(key, value)}`;
     }
     // 同上：replacement 里嵌着保留下来的原键值行，函数形式不做 $ 序列展开
     return source.replace(match[0], () => `---\n${fm}\n---\n`);

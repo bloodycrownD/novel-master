@@ -13,6 +13,7 @@
  * @module domain/tool/builtin/search/curl-import
  */
 
+import { Arrays } from "@/common/arrays.js";
 import type { MessageDescriptor } from "@/common/i18n.js";
 import { Result } from "@/errors/either.js";
 import type { CoreMessageKey } from "@/i18n/keys.js";
@@ -46,11 +47,6 @@ const BEARER_TOKEN_PATTERN = /\bBearer\s+([A-Za-z0-9._~+/=-]{20,})/gi;
 /** 鉴权头 / 参数赋值形态：`Authorization`、`X-API-KEY`、`X-Subscription-Token`、`api_key` 等。 */
 const ASSIGNMENT_SECRET_PATTERN = /(?:Authorization|X-API-Key|X-Subscription-Token|api[-_]?key|subscription-token)["']?\s*[:=]\s*["']?(?:Bearer\s+)?([A-Za-z0-9._~+/=-]{20,})/gi;
 
-/** 去重追加一个疑似密钥值（null / 空串跳过）：findPlaintextSecrets 与 parseCommand 的密钥累加共用。 */
-const pushUnique = (list: string[], value: string | undefined): void => {
-  if (value != null && value.length > 0 && !list.includes(value)) list.push(value);
-};
-
 /** curl 解析失败的统一错误载荷（key `error.tool.search_curl_parse_failed`，params 带英文 reason）。 */
 const parseFail = (reason: string): Result<CurlCommandDraft, CurlParseError> =>
   Result.err({
@@ -68,9 +64,9 @@ export const CurlImport = {
    */
   findPlaintextSecrets(text: string): readonly string[] {
     const secrets: string[] = [];
-    for (const match of text.matchAll(SK_TOKEN_PATTERN)) pushUnique(secrets, match[0]);
-    for (const match of text.matchAll(BEARER_TOKEN_PATTERN)) pushUnique(secrets, match[1]);
-    for (const match of text.matchAll(ASSIGNMENT_SECRET_PATTERN)) pushUnique(secrets, match[1]);
+    for (const match of text.matchAll(SK_TOKEN_PATTERN)) Arrays.pushIfAbsent(secrets, match[0]);
+    for (const match of text.matchAll(BEARER_TOKEN_PATTERN)) Arrays.pushIfAbsent(secrets, match[1]);
+    for (const match of text.matchAll(ASSIGNMENT_SECRET_PATTERN)) Arrays.pushIfAbsent(secrets, match[1]);
     return secrets;
   },
 
@@ -239,12 +235,12 @@ export const CurlImport = {
     if (normalizedMethod === "GET" && data != null) return parseFail("GET requests cannot carry a body (use -G to convert -d into query parameters)");
 
     const secrets: string[] = [];
-    for (const secret of CurlImport.findPlaintextSecrets(url)) pushUnique(secrets, secret);
+    for (const secret of CurlImport.findPlaintextSecrets(url)) Arrays.pushIfAbsent(secrets, secret);
     for (const header of headerPairs) {
-      for (const secret of CurlImport.findPlaintextSecrets(`${header.name}: ${header.value}`)) pushUnique(secrets, secret);
+      for (const secret of CurlImport.findPlaintextSecrets(`${header.name}: ${header.value}`)) Arrays.pushIfAbsent(secrets, secret);
     }
     if (data != null) {
-      for (const secret of CurlImport.findPlaintextSecrets(data)) pushUnique(secrets, secret);
+      for (const secret of CurlImport.findPlaintextSecrets(data)) Arrays.pushIfAbsent(secrets, secret);
     }
     if (secrets.length > 1) return parseFail("multiple distinct plaintext secrets detected; import them one at a time");
 

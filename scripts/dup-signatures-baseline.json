@@ -1,9 +1,9 @@
 {
   "note": "签名重复基线 v2。新增重复组会让 gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。judged 段=人工裁决的有意保留组，键消失时由下次 write 警告丢弃。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-21T14:51:00.316Z",
-  "namedGroups": 101,
-  "shapedGroups": 138,
+  "generatedAt": "2026-11-21T18:34:50.939Z",
+  "namedGroups": 95,
+  "shapedGroups": 141,
   "named": {
     "list": [
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:55",
@@ -33,7 +33,7 @@
       "apps/desktop/src/main/ipc/handlers/sessions.ts:77",
       "apps/desktop/src/main/ipc/handlers/skills.ts:123",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:80",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:215"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:217"
     ],
     "createBlank": [
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:172",
@@ -62,7 +62,7 @@
       "apps/mobile/src/services/agent-run.service.ts:23",
       "apps/mobile/src/services/db-maintenance.service.ts:55",
       "apps/mobile/src/services/manual-compaction.service.ts:71",
-      "apps/mobile/src/services/update-check-flow.ts:26",
+      "apps/mobile/src/services/update-check-flow.ts:39",
       "packages/tdbc-conformance/src/suite.ts:39"
     ],
     "getConfig": [
@@ -85,12 +85,12 @@
     ],
     "pull": [
       "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:97",
-      "apps/mobile/src/services/cloud-sync.service.ts:288"
+      "apps/mobile/src/services/cloud-sync.service.ts:296"
     ],
     "push": [
       "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:183",
-      "apps/mobile/src/services/cloud-sync.service.ts:435",
-      "apps/mobile/src/services/stream-apply-buffer.ts:58"
+      "apps/mobile/src/services/cloud-sync.service.ts:437",
+      "apps/mobile/src/services/stream-apply-buffer.ts:62"
     ],
     "handle": [
       "apps/desktop/src/main/ipc/handlers/db-maintenance.ts:36",
@@ -112,7 +112,7 @@
     ],
     "fork": [
       "apps/desktop/src/main/ipc/handlers/messages.ts:208",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:221"
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:273"
     ],
     "rollback": [
       "apps/desktop/src/main/ipc/handlers/messages.ts:226",
@@ -122,17 +122,17 @@
       "apps/desktop/src/main/ipc/handlers/sessions.ts:57",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:50",
       "apps/desktop/src/main/runtime/create-desktop-runtime.ts:40",
-      "apps/desktop/src/main/services/cloud-sync-config.store.ts:102",
+      "apps/desktop/src/main/services/cloud-sync-config.store.ts:147",
       "apps/desktop/src/main/storage/app-ui-prefs.ts:33",
-      "apps/mobile/src/services/cloud-sync-progress-log.ts:37",
-      "apps/mobile/src/services/llm-native-fetch-shim.ts:178",
-      "apps/mobile/src/services/run-finish-calibration-probe.ts:71",
-      "apps/mobile/src/services/run-state-writethrough.ts:62",
+      "apps/mobile/src/services/cloud-sync-progress-log.ts:80",
+      "apps/mobile/src/services/llm-native-fetch-shim.ts:180",
+      "apps/mobile/src/services/run-finish-calibration-probe.ts:97",
+      "apps/mobile/src/services/run-state-writethrough.ts:93",
       "apps/mobile/src/services/scope-key-cache.ts:20",
       "apps/mobile/src/services/session-stream-webview-adapter.ts:27",
       "apps/mobile/src/services/snapshot-complete-signal.ts:33",
-      "apps/mobile/src/services/stream-apply-buffer.ts:23",
-      "apps/mobile/src/services/stream-token-estimator.ts:123",
+      "apps/mobile/src/services/stream-apply-buffer.ts:87",
+      "apps/mobile/src/services/stream-token-estimator.ts:125",
       "apps/mobile/src/services/yield-quantum.ts:21",
       "apps/mobile/src/shims/aws-rn-s3-client.ts:31",
       "apps/mobile/src/web/composer-input/webview/runtime/factory.ts:67",
@@ -146,27 +146,27 @@
     ],
     "rename": [
       "apps/desktop/src/main/ipc/handlers/sessions.ts:67",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:247"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:249"
     ],
     "read": [
       "apps/desktop/src/main/ipc/handlers/skills.ts:86",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:119",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:121",
       "apps/mobile/src/errors/format-error.ts:20"
     ],
     "write": [
       "apps/desktop/src/main/ipc/handlers/skills.ts:103",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:144"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:146"
     ],
     "match": [
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:161",
       "apps/mobile/src/web/shared/host-message-channel.ts:33"
     ],
     "exportZip": [
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:297",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:299",
       "apps/mobile/src/services/vfs-zip.service.ts:60"
     ],
     "importZip": [
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:348",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:350",
       "apps/mobile/src/services/vfs-zip.service.ts:99"
     ],
     "from": [
@@ -180,8 +180,7 @@
     ],
     "checkpoint": [
       "apps/desktop/src/main/runtime/connection.ts:68",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:187",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:413"
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:236"
     ],
     "resetForTest": [
       "apps/desktop/src/main/runtime/desktop-runtime-singleton.ts:67",
@@ -197,21 +196,17 @@
       "apps/mobile/src/web/rich-document/webview/ui/labels.ts:44",
       "packages/core/src/domain/chat/logic/resolve-chat-link-target.ts:44"
     ],
-    "shouldBail": [
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:378",
-      "apps/mobile/src/services/chat-prompt-tokens.service.ts:594"
-    ],
     "scheduleTrailing": [
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:472",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:473",
       "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:279"
     ],
     "settle": [
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:488",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:490",
       "apps/mobile/src/screens/tabs/chat-tab/useChatTabScope.ts:302",
-      "apps/mobile/src/services/llm-native-fetch-shim.ts:137"
+      "apps/mobile/src/services/llm-native-fetch-shim.ts:139"
     ],
     "load": [
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:519",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:521",
       "apps/mobile/src/services/chat-agent-meta.ts:68"
     ],
     "exportToPath": [
@@ -244,10 +239,6 @@
     "forSession": [
       "apps/desktop/src/main/services/project-composer-status.service.ts:17",
       "apps/mobile/src/services/project-composer-status.service.ts:13"
-    ],
-    "bailed": [
-      "apps/desktop/src/main/services/session-prompt-input.service.ts:51",
-      "apps/mobile/src/services/session-prompt-input.service.ts:49"
     ],
     "executeSessionOp": [
       "apps/desktop/src/main/services/user-vfs-turn-execute.service.ts:26",
@@ -298,7 +289,7 @@
       "apps/mobile/src/components/vfs/build-front-matter-document-html.ts:16",
       "apps/mobile/src/components/vfs/rich-document-labels.ts:27",
       "apps/mobile/src/navigation/main-tab-bar-style.ts:13",
-      "apps/mobile/src/services/session-prompt-input.service.ts:44"
+      "apps/mobile/src/services/session-prompt-input.service.ts:45"
     ],
     "confirmMessage": [
       "apps/mobile/src/components/prompt/TemplatePullButton.tsx:28",
@@ -307,10 +298,6 @@
     "themeFromTokens": [
       "apps/mobile/src/components/vfs/CodeEditorWebView.tsx:39",
       "apps/mobile/src/components/vfs/RichDocumentWebView.tsx:61"
-    ],
-    "enabled": [
-      "apps/mobile/src/debug/run-timing.ts:36",
-      "apps/mobile/src/web/code-editor/webview/runtime/composer-tokens.ts:57"
     ],
     "handleDelete": [
       "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx:162",
@@ -334,7 +321,7 @@
     ],
     "set": [
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:38",
-      "apps/mobile/src/services/cloud-sync-config.store.ts:158",
+      "apps/mobile/src/services/cloud-sync-config.store.ts:157",
       "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:41"
     ],
     "normalize": [
@@ -342,35 +329,23 @@
       "apps/mobile/src/services/fill-policy-mobile.ts:8",
       "packages/tdbc-driver-op-sqlite/src/bindings.ts:21"
     ],
-    "fail": [
-      "apps/mobile/src/services/cloud-sync-progress-log.ts:66",
-      "apps/mobile/src/services/update-check-flow.ts:32",
-      "packages/core/src/domain/tool/builtin/search/curl-import.ts:92"
-    ],
     "onAbort": [
-      "apps/mobile/src/services/llm-native-fetch-shim.ts:123",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:178",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:401",
-      "packages/core/src/service/provider/impl/model-request.service.ts:111"
+      "apps/mobile/src/services/llm-native-fetch-shim.ts:124",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:226",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:60",
+      "packages/core/src/service/provider/impl/model-request.service.ts:112"
     ],
     "map": [
       "apps/mobile/src/services/map-cloud-sync-sdk-error.ts:34",
       "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:31"
     ],
     "clearTimer": [
-      "apps/mobile/src/services/run-state-writethrough.ts:73",
-      "apps/mobile/src/services/stream-apply-buffer.ts:29"
+      "apps/mobile/src/services/run-state-writethrough.ts:71",
+      "apps/mobile/src/services/stream-apply-buffer.ts:32"
     ],
     "flush": [
-      "apps/mobile/src/services/stream-apply-buffer.ts:36",
-      "packages/core/src/domain/vfs/logic/user-vfs-save-mapping.ts:75"
-    ],
-    "apply": [
-      "apps/mobile/src/services/vfs-single-file.service.ts:98",
-      "apps/mobile/src/web/code-editor/webview/runtime/editor.ts:144",
-      "apps/mobile/src/web/code-editor/webview/runtime/theme.ts:82",
-      "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:528",
-      "apps/mobile/src/web/shared/ui/TrustedHtml.tsx:36"
+      "apps/mobile/src/services/stream-apply-buffer.ts:40",
+      "packages/core/src/domain/vfs/logic/user-vfs-save-mapping.ts:60"
     ],
     "split": [
       "apps/mobile/src/web/chat-transcript/stream/block-split.ts:101",
@@ -383,6 +358,12 @@
     "labelOr": [
       "apps/mobile/src/web/chat-transcript/webview/ui/labels.ts:74",
       "apps/mobile/src/web/rich-document/webview/ui/labels.ts:33"
+    ],
+    "apply": [
+      "apps/mobile/src/web/code-editor/webview/runtime/editor.ts:144",
+      "apps/mobile/src/web/code-editor/webview/runtime/theme.ts:82",
+      "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:528",
+      "apps/mobile/src/web/shared/ui/TrustedHtml.tsx:36"
     ],
     "mount": [
       "apps/mobile/src/web/code-editor/webview/runtime/editor.ts:181",
@@ -407,37 +388,29 @@
     ],
     "finish": [
       "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:184",
-      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:272",
-      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:209",
-      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:79",
-      "packages/llm-sse-native/src/transport.ts:159"
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:274",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:211",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:81",
+      "packages/llm-sse-native/src/transport.ts:160"
     ],
     "onCancel": [
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:195",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:392"
-    ],
-    "flushText": [
-      "packages/core/src/domain/chat/content/message-body-text.ts:55",
-      "packages/core/src/service/prompt/render-prompt.ts:519"
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:245",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:446"
     ],
     "onParentAbort": [
-      "packages/core/src/domain/tool/builtin/curl-tool.ts:272",
-      "packages/core/src/domain/tool/builtin/search/engines/duckduckgo.ts:89",
-      "packages/core/src/domain/tool/builtin/search/engines/template-engine.ts:175"
-    ],
-    "invalid": [
-      "packages/core/src/domain/tool/builtin/search/types.ts:238",
-      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:19"
+      "packages/core/src/domain/tool/builtin/curl-tool.ts:286",
+      "packages/core/src/domain/tool/builtin/search/engines/duckduckgo.ts:90",
+      "packages/core/src/domain/tool/builtin/search/engines/template-engine.ts:177"
     ],
     "feed": [
-      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:205",
-      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:118",
-      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:61"
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:206",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:119",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:62"
     ],
     "finishPartial": [
-      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:286",
-      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:269",
-      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:94"
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:289",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:272",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:97"
     ],
     "registerWith": [
       "packages/llm-sse-native/src/native.ts:108",
@@ -456,41 +429,45 @@
     ],
     "TransactionalConnection.execute": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:160",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:232"
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:233"
     ],
     "TransactionalConnection.query": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:164",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:236"
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:237"
     ],
     "TransactionalConnection.batch": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:168",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:240"
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:241"
     ],
     "TransactionalConnection.transaction": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:172",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:244"
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:245"
     ],
     "TransactionalConnection.close": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:176",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:248"
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:249"
     ],
     "mapValue": [
       "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:11",
       "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:15"
     ],
+    "encodedLength": [
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:59",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:141"
+    ],
     "countChunksWithL2": [
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:66",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:145"
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:72",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:150"
     ],
     "fallbackCount": [
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:92",
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:98",
       "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:39",
       "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:43",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:185"
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:190"
     ],
     "count": [
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:101",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:587"
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:107",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:585"
     ],
     "getDefault": [
       "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:96",
@@ -508,15 +485,11 @@
       "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:44",
       "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:54",
       "packages/tokenizer-driver-rn/src/android-native-bridge.ts:123"
-    ],
-    "encodeText": [
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:193",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:289"
     ]
   },
   "shaped": {
     "()": [
-      "apps/desktop/src/main/ipc/event-forwarder.ts:40",
+      "apps/desktop/src/main/ipc/event-forwarder.ts:41",
       "apps/desktop/src/main/ipc/handlers/agent-registry.ts:55",
       "apps/desktop/src/main/ipc/handlers/agent.ts:121",
       "apps/desktop/src/main/ipc/handlers/agent.ts:155",
@@ -533,12 +506,11 @@
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:172",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:185",
       "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:40",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:378",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:431",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:95",
-      "apps/desktop/src/main/main.ts:106",
-      "apps/desktop/src/main/main.ts:148",
-      "apps/desktop/src/main/main.ts:38",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:380",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:433",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:97",
+      "apps/desktop/src/main/main.ts:147",
+      "apps/desktop/src/main/main.ts:44",
       "apps/desktop/src/main/runtime/connection.ts:28",
       "apps/desktop/src/main/runtime/connection.ts:61",
       "apps/desktop/src/main/runtime/create-desktop-runtime.ts:40",
@@ -553,18 +525,14 @@
       "apps/desktop/src/main/runtime/resolve-db-path.ts:12",
       "apps/desktop/src/main/runtime/resolve-tokenizer-assets-root.ts:13",
       "apps/desktop/src/main/runtime/setup-llm-fetch.ts:23",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:378",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:381",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:488",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:544",
-      "apps/desktop/src/main/services/cloud-sync-config.store.ts:104",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:490",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:546",
       "apps/desktop/src/main/services/cloud-sync.service.ts:135",
       "apps/desktop/src/main/services/cloud-sync.service.ts:492",
       "apps/desktop/src/main/services/cloud-sync.service.ts:504",
       "apps/desktop/src/main/services/cloud-sync.service.ts:66",
       "apps/desktop/src/main/services/cloud-sync.service.ts:89",
       "apps/desktop/src/main/services/db-maintenance.service.ts:18",
-      "apps/desktop/src/main/services/session-prompt-input.service.ts:51",
       "apps/desktop/src/main/services/update-check.service.ts:12",
       "apps/desktop/src/main/services/vfs-batch.service.ts:117",
       "apps/desktop/src/main/services/vfs-batch.service.ts:62",
@@ -623,8 +591,8 @@
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:404",
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:740",
       "apps/mobile/src/components/vfs/vfs-file-manager/VfsPromptModal.tsx:37",
-      "apps/mobile/src/debug/run-timing.ts:36",
-      "apps/mobile/src/debug/run-timing.ts:37",
+      "apps/mobile/src/debug/run-timing.ts:34",
+      "apps/mobile/src/debug/run-timing.ts:42",
       "apps/mobile/src/hooks/useBatchSelection.ts:6",
       "apps/mobile/src/hooks/useMobileScope.ts:7",
       "apps/mobile/src/hooks/useRuntime.ts:8",
@@ -634,8 +602,7 @@
       "apps/mobile/src/navigation/HeaderContext.tsx:63",
       "apps/mobile/src/navigation/RootNavigator.tsx:138",
       "apps/mobile/src/navigation/RootNavigator.tsx:57",
-      "apps/mobile/src/runtime/create-mobile-runtime.ts:110",
-      "apps/mobile/src/runtime/novel-master-context.tsx:416",
+      "apps/mobile/src/runtime/novel-master-context.tsx:420",
       "apps/mobile/src/screens/stack/AboutScreen.tsx:42",
       "apps/mobile/src/screens/stack/AgentEditorScreen.tsx:17",
       "apps/mobile/src/screens/stack/AgentsSettingsScreen.tsx:19",
@@ -712,22 +679,15 @@
       "apps/mobile/src/services/agent-finished-notification.ts:452",
       "apps/mobile/src/services/agent-finished-notification.ts:94",
       "apps/mobile/src/services/character-card-document-pick.ts:11",
-      "apps/mobile/src/services/chat-prompt-tokens.service.ts:116",
-      "apps/mobile/src/services/chat-prompt-tokens.service.ts:594",
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:69",
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:74",
       "apps/mobile/src/services/cloud-sync-config.store.ts:79",
-      "apps/mobile/src/services/cloud-sync.service.ts:311",
       "apps/mobile/src/services/db-maintenance.service.ts:28",
-      "apps/mobile/src/services/llm-native-fetch-shim.ts:123",
-      "apps/mobile/src/services/llm-native-fetch-shim.ts:137",
+      "apps/mobile/src/services/llm-native-fetch-shim.ts:124",
+      "apps/mobile/src/services/llm-native-fetch-shim.ts:139",
       "apps/mobile/src/services/log-sink.mobile.ts:33",
       "apps/mobile/src/services/log-sink.mobile.ts:92",
       "apps/mobile/src/services/rn-file-io.ts:40",
-      "apps/mobile/src/services/run-finish-calibration-probe.ts:78",
-      "apps/mobile/src/services/run-state-writethrough.ts:73",
-      "apps/mobile/src/services/run-state-writethrough.ts:82",
-      "apps/mobile/src/services/session-prompt-input.service.ts:49",
       "apps/mobile/src/services/session-stream-unit-manager.service.ts:1002",
       "apps/mobile/src/services/session-stream-unit-manager.service.ts:1724",
       "apps/mobile/src/services/session-stream-unit-manager.service.ts:1895",
@@ -768,13 +728,7 @@
       "apps/mobile/src/services/session-stream-unit.ts:978",
       "apps/mobile/src/services/session-stream-unit.ts:990",
       "apps/mobile/src/services/snapshot-complete-signal.ts:33",
-      "apps/mobile/src/services/stream-apply-buffer.ts:29",
-      "apps/mobile/src/services/stream-apply-buffer.ts:36",
-      "apps/mobile/src/services/stream-apply-buffer.ts:45",
-      "apps/mobile/src/services/stream-apply-buffer.ts:52",
-      "apps/mobile/src/services/update-check-flow.ts:32",
       "apps/mobile/src/services/vfs-single-file-document-pick.ts:27",
-      "apps/mobile/src/services/vfs-single-file.service.ts:98",
       "apps/mobile/src/services/vfs-zip.service.ts:82",
       "apps/mobile/src/services/yaml-document-pick.ts:11",
       "apps/mobile/src/theme/ThemeProvider.tsx:93",
@@ -817,22 +771,20 @@
       "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:71",
       "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:80",
       "apps/mobile/src/web/shared/mermaid-fullscreen/MermaidViewerOverlay.tsx:91",
-      "packages/core/src/common/concurrency.ts:41",
-      "packages/core/src/common/concurrency.ts:44",
+      "packages/core/src/common/concurrency.ts:42",
+      "packages/core/src/common/concurrency.ts:46",
       "packages/core/src/common/update-check.ts:53",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:170",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:178",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:187",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:231",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:216",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:226",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:236",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:284",
       "packages/core/src/domain/abort/logic/create-abort-scope.ts:37",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:401",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:413",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:60",
       "packages/core/src/domain/agent/logic/doom-loop.ts:106",
-      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:30",
-      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:66",
+      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:29",
+      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:74",
       "packages/core/src/domain/agent/session/impl/in-memory-agent-session.ts:24",
       "packages/core/src/domain/agent/session/impl/in-memory-agent-session.ts:79",
-      "packages/core/src/domain/chat/content/message-body-text.ts:55",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:155",
       "packages/core/src/domain/chat/logic/message/chat-message.ts:54",
       "packages/core/src/domain/chat/logic/message/chat-message.ts:59",
@@ -841,25 +793,21 @@
       "packages/core/src/domain/chat/logic/message/chat-message.ts:76",
       "packages/core/src/domain/chat/logic/message/chat-message.ts:87",
       "packages/core/src/domain/chat/logic/message/chat-message.ts:94",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:42",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:41",
       "packages/core/src/domain/feature-flags/user-vfs-unified-tool-turn.ts:28",
-      "packages/core/src/domain/format/sliding-token-rate.ts:131",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:75",
-      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:119",
-      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:124",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:66",
+      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:133",
+      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:138",
       "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:38",
-      "packages/core/src/domain/tool/builtin/curl-tool.ts:272",
-      "packages/core/src/domain/tool/builtin/search/engines/duckduckgo.ts:89",
-      "packages/core/src/domain/tool/builtin/search/engines/template-engine.ts:175",
+      "packages/core/src/domain/tool/builtin/curl-tool.ts:286",
+      "packages/core/src/domain/tool/builtin/search/engines/duckduckgo.ts:90",
+      "packages/core/src/domain/tool/builtin/search/engines/template-engine.ts:177",
       "packages/core/src/domain/tool/builtin/subagent-tool.ts:99",
       "packages/core/src/domain/tool/logic/tool-registry.ts:42",
       "packages/core/src/domain/tool/logic/tool-registry.ts:50",
-      "packages/core/src/domain/tool/logic/tool-runner.ts:148",
-      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:291",
-      "packages/core/src/domain/vfs/logic/vfs-move.ts:65",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:448",
-      "packages/core/src/domain/workplace/logic/load-or-fill-file-cache.ts:195",
-      "packages/core/src/errors/app-error.ts:201",
+      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:299",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:452",
+      "packages/core/src/errors/app-error.ts:200",
       "packages/core/src/errors/either.ts:122",
       "packages/core/src/errors/either.ts:54",
       "packages/core/src/infra/cloud-sync/impl/cloud-sync-coordinator.ts:425",
@@ -870,22 +818,17 @@
       "packages/core/src/infra/content-cache/logic/decoded-content-cache.ts:142",
       "packages/core/src/infra/content-cache/logic/decoded-content-cache.ts:150",
       "packages/core/src/infra/events/simple-event-bus.ts:66",
-      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:272",
-      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:286",
-      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:209",
-      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:269",
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:274",
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:289",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:211",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:272",
       "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:135",
-      "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:229",
-      "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:240",
-      "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:383",
-      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:79",
-      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:94",
-      "packages/core/src/infra/llm-protocol/logic/sse-chunk-emitter.ts:64",
-      "packages/core/src/infra/llm-protocol/logic/sse-chunk-emitter.ts:78",
-      "packages/core/src/infra/llm-protocol/logic/stream-watchdog.ts:52",
-      "packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts:227",
-      "packages/core/src/infra/tokenizer/logic/resolve-current-prompt-tokens.ts:205",
-      "packages/core/src/infra/tokenizer/logic/resolve-current-prompt-tokens.ts:242",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:81",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:97",
+      "packages/core/src/infra/llm-protocol/logic/sse-chunk-emitter.ts:65",
+      "packages/core/src/infra/llm-protocol/logic/sse-chunk-emitter.ts:80",
+      "packages/core/src/infra/llm-protocol/logic/stream-watchdog.ts:53",
+      "packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts:229",
       "packages/core/src/service/agent/impl/agent-registry.service.ts:65",
       "packages/core/src/service/agent/impl/agent-registry.service.ts:69",
       "packages/core/src/service/agent/impl/chat-agent-session.ts:39",
@@ -893,13 +836,11 @@
       "packages/core/src/service/agent/logic/agent-activity-tracker.ts:25",
       "packages/core/src/service/agent/logic/agent-activity-tracker.ts:34",
       "packages/core/src/service/agent/logic/agent-activity-tracker.ts:54",
-      "packages/core/src/service/agent/logic/run-agent-turn.ts:1282",
-      "packages/core/src/service/agent/logic/run-agent-turn.ts:567",
       "packages/core/src/service/chat/impl/project.service.ts:48",
-      "packages/core/src/service/chat/impl/usage-stats.service.ts:315",
+      "packages/core/src/service/chat/impl/usage-stats.service.ts:305",
       "packages/core/src/service/compaction-conditions/impl/compaction-conditions-store.service.ts:31",
       "packages/core/src/service/compaction-conditions/impl/compaction-conditions-store.service.ts:89",
-      "packages/core/src/service/coordinated-write.ts:95",
+      "packages/core/src/service/coordinated-write.ts:130",
       "packages/core/src/service/integrity-repair.ts:112",
       "packages/core/src/service/integrity-repair.ts:121",
       "packages/core/src/service/integrity-repair.ts:139",
@@ -922,26 +863,25 @@
       "packages/core/src/service/persistent-state/impl/persistent-state.service.ts:86",
       "packages/core/src/service/persistent-state/impl/persistent-state.service.ts:90",
       "packages/core/src/service/persistent-state/impl/persistent-state.service.ts:99",
-      "packages/core/src/service/prompt/render-prompt.ts:519",
-      "packages/core/src/service/provider/impl/model-request.service.ts:111",
-      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:43",
-      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:85",
+      "packages/core/src/service/provider/impl/model-request.service.ts:112",
+      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:45",
+      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:87",
       "packages/core/src/service/provider/impl/provider.service.ts:49",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:284",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:314",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:401",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:85",
       "packages/core/src/service/vfs/impl/physical-vfs.service.ts:345",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:131",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:142",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:150",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:160",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:166",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:173",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:179",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:195",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:248",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:88",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:134",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:145",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:153",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:163",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:169",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:176",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:182",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:198",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:250",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:91",
       "packages/llm-sse-native/src/native.ts:38",
       "packages/llm-sse-native/src/native.ts:54",
       "packages/llm-sse-native/src/native.ts:84",
@@ -956,9 +896,8 @@
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:176",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:70",
       "packages/tdbc-driver-better-sqlite3/src/index.ts:21",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:126",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:183",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:248",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:184",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:249",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:85",
       "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite-dynamic.adapter.ts:16",
       "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite-dynamic.adapter.ts:46",
@@ -991,9 +930,9 @@
       "packages/core/src/common/assert.ts:16"
     ],
     "(: string)": [
-      "apps/desktop/src/main/ipc/handlers/agent-registry.ts:237",
-      "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:193",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:555",
+      "apps/desktop/src/main/ipc/handlers/agent-registry.ts:238",
+      "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts:194",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:557",
       "apps/desktop/src/main/services/db-backup.service.ts:197",
       "apps/desktop/src/main/services/project-composer-status.service.ts:17",
       "apps/desktop/src/main/services/vfs-batch.service.ts:92",
@@ -1029,7 +968,7 @@
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:864",
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:910",
       "apps/mobile/src/components/vfs/vfs-row-mapper.ts:160",
-      "apps/mobile/src/debug/run-timing.ts:44",
+      "apps/mobile/src/debug/run-timing.ts:50",
       "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx:175",
       "apps/mobile/src/screens/stack/ProvidersScreen.tsx:126",
       "apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx:230",
@@ -1037,8 +976,7 @@
       "apps/mobile/src/services/app-toast.ts:18",
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:34",
       "apps/mobile/src/services/chat-transcript-scroll-cache.ts:46",
-      "apps/mobile/src/services/cloud-sync-config.store.ts:140",
-      "apps/mobile/src/services/cloud-sync-progress-log.ts:28",
+      "apps/mobile/src/services/cloud-sync-progress-log.ts:71",
       "apps/mobile/src/services/cloud-sync.service.ts:65",
       "apps/mobile/src/services/cloud-sync.service.ts:70",
       "apps/mobile/src/services/db-backup.service.ts:82",
@@ -1060,7 +998,7 @@
       "apps/mobile/src/services/session-stream-unit.ts:1108",
       "apps/mobile/src/services/session-stream-unit.ts:536",
       "apps/mobile/src/services/snapshot-file-hash.ts:20",
-      "apps/mobile/src/services/stream-token-estimator.ts:96",
+      "apps/mobile/src/services/stream-token-estimator.ts:85",
       "apps/mobile/src/services/user-vfs-turn-execute.service.ts:41",
       "apps/mobile/src/services/workplace-operations.service.ts:85",
       "apps/mobile/src/services/workplace-operations.service.ts:99",
@@ -1080,10 +1018,10 @@
       "packages/core/src/common/release.ts:68",
       "packages/core/src/common/token-format.ts:58",
       "packages/core/src/common/update-check.ts:58",
-      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:35",
-      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:43",
-      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:49",
-      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:62",
+      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:36",
+      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:44",
+      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:52",
+      "packages/core/src/domain/agent/repositories/impl/sqlite-agent-definition.repository.ts:68",
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:25",
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:49",
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:54",
@@ -1095,79 +1033,75 @@
       "packages/core/src/domain/chat/logic/resolve-chat-link-target.ts:92",
       "packages/core/src/domain/chat/logic/vfs-turn/user-vfs-turn-view.ts:53",
       "packages/core/src/domain/chat/repositories/impl/base-sqlite-chat-repository.ts:42",
-      "packages/core/src/domain/chat/repositories/impl/base-sqlite-chat-repository.ts:51",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:248",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:260",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:269",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:301",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:372",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:55",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:44",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:50",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:63",
+      "packages/core/src/domain/chat/repositories/impl/base-sqlite-chat-repository.ts:53",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:262",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:274",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:283",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:331",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:404",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:54",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:43",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:52",
       "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:68",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:83",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:73",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:88",
       "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:21",
       "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:100",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:243",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:253",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:260",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:323",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:244",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:254",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:261",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:325",
       "packages/core/src/domain/provider/repositories/impl/kkv-model-suggestion.repository.ts:23",
       "packages/core/src/domain/provider/repositories/impl/kkv-model-suggestion.repository.ts:64",
       "packages/core/src/domain/provider/repositories/impl/kkv-model-suggestion.repository.ts:71",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:121",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:40",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:86",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:102",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:58",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:69",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:97",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:248",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:112",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:31",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:77",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:52",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:63",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:91",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:96",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:264",
       "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:45",
-      "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:76",
-      "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:81",
-      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:30",
-      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:44",
+      "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:92",
+      "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:99",
+      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:35",
       "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:49",
-      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:114",
-      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:43",
-      "packages/core/src/domain/tool/builtin/search/curl-import.ts:92",
-      "packages/core/src/domain/tool/builtin/search/engines/template-engine.ts:100",
-      "packages/core/src/domain/tool/builtin/search/search-config.ts:382",
-      "packages/core/src/domain/tool/builtin/search/types.ts:238",
+      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:54",
+      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:126",
+      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:45",
+      "packages/core/src/domain/tool/builtin/search/curl-import.ts:51",
+      "packages/core/src/domain/tool/builtin/search/types.ts:168",
       "packages/core/src/domain/tool/builtin/skill-tool.ts:160",
       "packages/core/src/domain/tool/logic/tool-registry.ts:32",
       "packages/core/src/domain/tool/logic/tool-registry.ts:37",
-      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:314",
+      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:322",
       "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:43",
-      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:89",
+      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:91",
+      "packages/core/src/domain/vfs/logic/vfs-move.ts:17",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:30",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:388",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:438",
-      "packages/core/src/domain/workplace/logic/workplace-rule-engine.ts:55",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:151",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:156",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:164",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:390",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:440",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:137",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:146",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:154",
       "packages/core/src/infra/content-cache/logic/decoded-content-cache.ts:132",
       "packages/core/src/infra/content-cache/logic/decoded-content-cache.ts:96",
-      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:205",
-      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:118",
-      "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:339",
-      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:61",
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:206",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:119",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:62",
       "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:30",
-      "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:43",
-      "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:68",
+      "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:45",
+      "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:73",
       "packages/core/src/infra/sksp/impl/sksp-factory.ts:24",
       "packages/core/src/infra/sksp/impl/sksp-factory.ts:33",
       "packages/core/src/infra/sql-template/parser.ts:321",
       "packages/core/src/infra/tokenizer/impl/heuristic-token-counter.ts:21",
-      "packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts:202",
       "packages/core/src/infra/tokenizer/logic/prompt-whole-cache.ts:100",
       "packages/core/src/service/agent/impl/agent-registry.service.ts:138",
       "packages/core/src/service/agent/impl/agent-registry.service.ts:80",
       "packages/core/src/service/agent/impl/agent-registry.service.ts:84",
-      "packages/core/src/service/agent/impl/agent-runner.ts:229",
+      "packages/core/src/service/agent/impl/agent-runner.ts:230",
       "packages/core/src/service/chat/impl/message.service.ts:101",
       "packages/core/src/service/chat/impl/message.service.ts:121",
       "packages/core/src/service/chat/impl/message.service.ts:189",
@@ -1180,14 +1114,14 @@
       "packages/core/src/service/chat/impl/project.service.ts:52",
       "packages/core/src/service/chat/impl/project.service.ts:60",
       "packages/core/src/service/chat/impl/project.service.ts:91",
-      "packages/core/src/service/chat/impl/session.service.ts:163",
-      "packages/core/src/service/chat/impl/session.service.ts:226",
-      "packages/core/src/service/chat/impl/session.service.ts:231",
-      "packages/core/src/service/chat/impl/session.service.ts:235",
-      "packages/core/src/service/chat/impl/session.service.ts:247",
-      "packages/core/src/service/chat/impl/session.service.ts:65",
-      "packages/core/src/service/chat/impl/session.service.ts:73",
-      "packages/core/src/service/chat/impl/usage-stats.service.ts:322",
+      "packages/core/src/service/chat/impl/session.service.ts:164",
+      "packages/core/src/service/chat/impl/session.service.ts:227",
+      "packages/core/src/service/chat/impl/session.service.ts:232",
+      "packages/core/src/service/chat/impl/session.service.ts:236",
+      "packages/core/src/service/chat/impl/session.service.ts:248",
+      "packages/core/src/service/chat/impl/session.service.ts:66",
+      "packages/core/src/service/chat/impl/session.service.ts:74",
+      "packages/core/src/service/chat/impl/usage-stats.service.ts:312",
       "packages/core/src/service/kkv/impl/kkv.service.ts:18",
       "packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:98",
       "packages/core/src/service/persistent-state/impl/persistent-state.service.ts:42",
@@ -1220,9 +1154,9 @@
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:42",
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:51",
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:60",
-      "packages/core/src/service/vfs/logic/ensure-import-dir-rules.ts:111",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:103",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:77",
+      "packages/core/src/service/vfs/logic/ensure-import-dir-rules.ts:112",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:106",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:80",
       "packages/tokenizer-driver-node/src/impl/encoding-cache.ts:107",
       "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:105",
       "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts:39",
@@ -1234,9 +1168,7 @@
       "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:43",
       "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts:26",
       "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:133",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:193",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:210",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:289",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:214",
       "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:46",
       "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:89"
     ],
@@ -1249,7 +1181,6 @@
     "(: string, : string)": [
       "apps/desktop/src/main/ipc/handlers/agent.ts:212",
       "apps/desktop/src/main/ipc/handlers/agent.ts:382",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:522",
       "apps/desktop/src/main/services/cloud-sync-config.store.ts:97",
       "apps/mobile/src/components/agent/prompt-macro-input.ts:112",
       "apps/mobile/src/components/chat/ChatConversationWebView.tsx:328",
@@ -1276,37 +1207,36 @@
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:144",
       "packages/core/src/domain/chat/logic/attachment/attachment-xml-codec.ts:34",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:122",
-      "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:26",
-      "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:41",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:198",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:210",
+      "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:29",
+      "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:47",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:199",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:211",
       "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:93",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:234",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:255",
-      "packages/core/src/domain/skills/logic/with-skill-front-matter-values.ts:45",
-      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:35",
-      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:39",
-      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:66",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:250",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:275",
+      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:40",
+      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:44",
+      "packages/core/src/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.ts:75",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:117",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:176",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:256",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:369",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:394",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:403",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:414",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:426",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:447",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:371",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:396",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:405",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:416",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:428",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:449",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:92",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:213",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:226",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:171",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:186",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:223",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:218",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:231",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:162",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:176",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:213",
       "packages/core/src/infra/content-cache/logic/decoded-content-cache.ts:108",
-      "packages/core/src/infra/llm-protocol/logic/debug-fetch.ts:54",
-      "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:49",
+      "packages/core/src/infra/llm-protocol/logic/debug-fetch.ts:18",
+      "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts:54",
       "packages/core/src/service/chat/impl/project.service.ts:76",
-      "packages/core/src/service/chat/impl/session.service.ts:148",
+      "packages/core/src/service/chat/impl/session.service.ts:149",
       "packages/core/src/service/kkv/impl/kkv.service.ts:22",
       "packages/core/src/service/kkv/impl/kkv.service.ts:34",
       "packages/core/src/service/message-checkpoint/impl/message-checkpoint.service.ts:130",
@@ -1314,18 +1244,18 @@
       "packages/core/src/service/provider/impl/provider-model.service.ts:114",
       "packages/core/src/service/vfs/impl/physical-vfs.service.ts:264",
       "packages/core/src/service/vfs/impl/physical-vfs.service.ts:386",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:58",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:62",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:66",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:49",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:53",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:57",
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:157",
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:69",
       "packages/core/src/service/vfs/impl/vfs.service.ts:107",
       "packages/core/src/service/vfs/impl/vfs.service.ts:52",
       "packages/core/src/service/vfs/impl/vfs.service.ts:90",
-      "packages/core/src/service/workplace/impl/workplace.service.ts:114",
+      "packages/core/src/service/workplace/impl/workplace.service.ts:117",
       "packages/sksp-windows/src/dpapi.ts:29",
-      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:92",
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:236"
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:98",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:240"
     ],
     "(: boolean)": [
       "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:51",
@@ -1346,6 +1276,10 @@
       "packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:71",
       "packages/sksp-windows/src/dpapi.ts:17"
     ],
+    "(: AbortScope)": [
+      "apps/desktop/src/main/ipc/handlers/cloud-sync.ts:126",
+      "packages/core/src/service/agent/logic/run-agent-turn.ts:293"
+    ],
     "(: ChatMessageData)": [
       "apps/desktop/src/main/ipc/handlers/messages.ts:38",
       "apps/mobile/src/components/chat/message-blocks.ts:59",
@@ -1353,16 +1287,16 @@
       "apps/mobile/src/components/chat/message-blocks.ts:80",
       "apps/mobile/src/components/chat/message-blocks.ts:91",
       "apps/mobile/src/components/chat/message-edit.ts:10",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:48",
-      "packages/core/src/service/prompt/render-prompt.ts:595"
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:47",
+      "packages/core/src/service/prompt/render-prompt.ts:587"
     ],
     "(: ProviderModelsSavedListRequest)": [
       "apps/desktop/src/main/ipc/handlers/provider-models.ts:101",
       "apps/desktop/src/main/ipc/handlers/provider-models.ts:48"
     ],
     "(: VfsZipRequest)": [
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:297",
-      "apps/desktop/src/main/ipc/handlers/vfs.ts:348"
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:299",
+      "apps/desktop/src/main/ipc/handlers/vfs.ts:350"
     ],
     "(: unknown)": [
       "apps/desktop/src/main/ipc/ipc-result.ts:34",
@@ -1371,8 +1305,6 @@
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:489",
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:679",
       "apps/mobile/src/errors/format-error.ts:25",
-      "apps/mobile/src/runtime/novel-master-context.tsx:210",
-      "apps/mobile/src/runtime/novel-master-context.tsx:218",
       "apps/mobile/src/runtime/novel-master-context.tsx:61",
       "apps/mobile/src/screens/stack/CloudSyncProgressScreen.tsx:114",
       "apps/mobile/src/screens/stack/TokenUsageStatsScreen.tsx:115",
@@ -1395,21 +1327,19 @@
       "apps/mobile/src/web/shared/host-message-channel.ts:19",
       "packages/core/src/domain/chat/logic/skill-tool-ref.ts:23",
       "packages/core/src/domain/chat/logic/skill-tool-ref.ts:27",
-      "packages/core/src/domain/tool/builtin/curl-tool.ts:281",
-      "packages/core/src/domain/tool/logic/tool-runner.ts:145",
-      "packages/core/src/service/agent/logic/run-agent-turn.ts:531",
+      "packages/core/src/domain/tool/logic/tool-runner.ts:52",
+      "packages/core/src/service/agent/logic/run-agent-turn.ts:535",
       "packages/core/src/service/provider/impl/model-request.service.ts:63",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:288",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:37",
-      "packages/llm-sse-native/src/transport.ts:225",
-      "packages/llm-sse-native/src/transport.ts:237",
-      "packages/llm-sse-native/src/transport.ts:251",
-      "packages/llm-sse-native/src/transport.ts:264",
-      "packages/llm-sse-native/src/transport.ts:273",
+      "packages/llm-sse-native/src/transport.ts:226",
+      "packages/llm-sse-native/src/transport.ts:238",
+      "packages/llm-sse-native/src/transport.ts:252",
+      "packages/llm-sse-native/src/transport.ts:265",
+      "packages/llm-sse-native/src/transport.ts:274",
       "packages/sksp-android/src/android-secret-store.ts:62",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:142",
       "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts:11",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:224",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:225",
       "packages/tdbc-driver-op-sqlite/src/row-mapper.ts:15",
       "packages/tokenizer-driver-rn/src/android-native-bridge.ts:105",
       "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:59"
@@ -1431,9 +1361,14 @@
       "apps/desktop/src/main/services/cloud-sync.service.ts:76"
     ],
     "(: DesktopNovelMasterRuntime, : SessionPromptScope)": [
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:519",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:566",
-      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:598"
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:354",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:521",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:568",
+      "apps/desktop/src/main/services/chat-prompt-tokens.service.ts:600"
+    ],
+    "(: KkvService)": [
+      "apps/desktop/src/main/services/cloud-sync-config.store.ts:102",
+      "apps/desktop/src/main/storage/app-ui-prefs.ts:33"
     ],
     "(options?: { readonly checkpoint?: () => Interrupt | null })": [
       "apps/desktop/src/main/services/cloud-sync.service.ts:215",
@@ -1455,8 +1390,7 @@
       "packages/core/src/common/text.ts:21",
       "packages/core/src/common/token-format.ts:54",
       "packages/core/src/domain/chat/logic/attachment/attach-budget.ts:52",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:57",
-      "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:269"
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:57"
     ],
     "(: Uint8Array)": [
       "apps/desktop/src/main/services/db-backup.service.ts:233",
@@ -1534,8 +1468,7 @@
     ],
     "(: string, : boolean)": [
       "apps/mobile/src/components/chat/prepare-stream-tail-html.ts:6",
-      "apps/mobile/src/webview-host/typed-message-bridge.ts:34",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:389",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:421",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:186"
     ],
     "(: Translator)": [
@@ -1546,7 +1479,7 @@
       "apps/mobile/src/components/chrome/ToastHost.tsx:48",
       "apps/mobile/src/components/form/FormOverlayHost.tsx:22",
       "apps/mobile/src/navigation/HeaderContext.tsx:34",
-      "apps/mobile/src/runtime/novel-master-context.tsx:113",
+      "apps/mobile/src/runtime/novel-master-context.tsx:140",
       "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx:187",
       "apps/mobile/src/theme/ThemeProvider.tsx:20"
     ],
@@ -1576,7 +1509,7 @@
     "(: string | null | undefined)": [
       "apps/mobile/src/components/rich-content/highlight-code.ts:70",
       "apps/mobile/src/services/character-card-document-pick.ts:32",
-      "apps/mobile/src/services/stream-token-estimator.ts:91",
+      "apps/mobile/src/services/stream-token-estimator.ts:102",
       "apps/mobile/src/services/yaml-document-pick.ts:32",
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:368",
       "packages/core/src/infra/tokenizer/logic/prompt-whole-cache.ts:125",
@@ -1595,11 +1528,10 @@
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:418",
       "apps/mobile/src/web/shared/clamp-index.ts:8",
       "packages/core/src/domain/agent/session/impl/in-memory-agent-session.ts:51",
-      "packages/core/src/domain/vfs/logic/revision-ref-count.ts:97",
-      "packages/core/src/domain/vfs/logic/user-vfs-save-mapping.ts:75",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:110",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:116",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:89",
+      "packages/core/src/domain/vfs/logic/user-vfs-save-mapping.ts:60",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:112",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:118",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:91",
       "packages/core/src/service/agent/impl/chat-agent-session.ts:60",
       "packages/core/src/service/agent/impl/ephemeral-overlay-agent-session.ts:74"
     ],
@@ -1607,8 +1539,7 @@
       "apps/mobile/src/components/vfs/VfsFileManager.tsx:143",
       "apps/mobile/src/web/shared/rich-content-styles.ts:8",
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:112",
-      "packages/core/src/domain/tool/builtin/search/curl-import.ts:238",
-      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:132",
+      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:136",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:163",
       "packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:266"
     ],
@@ -1616,28 +1547,11 @@
       "apps/mobile/src/components/vfs/vfs-move-path.ts:33",
       "apps/mobile/src/utils/entity-icon.ts:3"
     ],
-    "(: Error)": [
-      "apps/mobile/src/errors/format-error.ts:20",
-      "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts:254"
-    ],
     "(: () => void)": [
       "apps/mobile/src/hooks/useDismissOverlaysOnBlur.ts:5",
       "apps/mobile/src/services/session-stream-unit-manager.service.ts:990",
-      "packages/core/src/service/agent/impl/agent-runner.ts:944",
-      "packages/llm-sse-native/src/transport.ts:159"
-    ],
-    "(: MobileNovelMasterRuntime)": [
-      "apps/mobile/src/runtime/novel-master-context.tsx:204",
-      "apps/mobile/src/services/agent-display-label.ts:10",
-      "apps/mobile/src/services/agent-picker.ts:21",
-      "apps/mobile/src/services/agent-picker.ts:39",
-      "apps/mobile/src/services/cloud-sync-config.store.ts:128",
-      "apps/mobile/src/services/cloud-sync-config.store.ts:99",
-      "apps/mobile/src/services/cloud-sync.service.ts:209",
-      "apps/mobile/src/services/db-backup.service.ts:197",
-      "apps/mobile/src/services/db-maintenance.service.ts:39",
-      "apps/mobile/src/services/db-maintenance.service.ts:55",
-      "apps/mobile/src/services/search-config.store.ts:25"
+      "packages/core/src/service/agent/impl/agent-runner.ts:948",
+      "packages/llm-sse-native/src/transport.ts:160"
     ],
     "(: string, modelName?: string)": [
       "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx:126",
@@ -1657,8 +1571,20 @@
     ],
     "(: SmartSortRule)": [
       "apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:495",
-      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:51",
-      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:66"
+      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:55",
+      "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:73"
+    ],
+    "(: MobileNovelMasterRuntime)": [
+      "apps/mobile/src/services/agent-display-label.ts:10",
+      "apps/mobile/src/services/agent-picker.ts:21",
+      "apps/mobile/src/services/agent-picker.ts:39",
+      "apps/mobile/src/services/cloud-sync-config.store.ts:128",
+      "apps/mobile/src/services/cloud-sync-config.store.ts:99",
+      "apps/mobile/src/services/cloud-sync.service.ts:209",
+      "apps/mobile/src/services/db-backup.service.ts:197",
+      "apps/mobile/src/services/db-maintenance.service.ts:39",
+      "apps/mobile/src/services/db-maintenance.service.ts:55",
+      "apps/mobile/src/services/search-config.store.ts:25"
     ],
     "(: MobileNovelMasterRuntime, : string)": [
       "apps/mobile/src/services/agent-picker.ts:52",
@@ -1687,11 +1613,11 @@
     "(: string, : number)": [
       "apps/mobile/src/services/session-stream-unit-manager.service.ts:847",
       "apps/mobile/src/services/session-stream-unit.ts:867",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:277",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:377",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:383",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:236",
-      "packages/core/src/service/prompt/render-prompt.ts:619",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:291",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:409",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:415",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:237",
+      "packages/core/src/service/prompt/render-prompt.ts:611",
       "packages/core/src/service/vfs/impl/scoped-vfs.service.ts:125"
     ],
     "(: string, : SessionStreamUnit)": [
@@ -1707,7 +1633,7 @@
     ],
     "(: SessionRunState)": [
       "apps/mobile/src/services/session-stream-unit-manager.service.ts:1819",
-      "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:54"
+      "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:57"
     ],
     "(: SessionStreamRunSettledStatus)": [
       "apps/mobile/src/services/session-stream-unit.ts:559",
@@ -1719,7 +1645,6 @@
     ],
     "(: readonly StreamWireChunk[])": [
       "apps/mobile/src/services/session-stream-unit.ts:1508",
-      "apps/mobile/src/services/stream-apply-buffer.ts:69",
       "apps/mobile/src/services/stream-wire-queue.ts:30",
       "apps/mobile/src/services/stream-wire-queue.ts:51"
     ],
@@ -1727,10 +1652,14 @@
       "apps/mobile/src/services/session-stream-unit.ts:1679",
       "apps/mobile/src/services/session-stream-unit.ts:1691"
     ],
+    "(: StreamApplyBufferSlot, : StreamApplyFlushFn, : number)": [
+      "apps/mobile/src/services/stream-apply-buffer.ts:49",
+      "apps/mobile/src/services/stream-apply-buffer.ts:56"
+    ],
     "(: StreamTokenModelHintRuntime, : string)": [
-      "apps/mobile/src/services/stream-token-estimator.ts:136",
-      "apps/mobile/src/services/stream-token-estimator.ts:168",
-      "apps/mobile/src/services/stream-token-estimator.ts:211"
+      "apps/mobile/src/services/stream-token-estimator.ts:138",
+      "apps/mobile/src/services/stream-token-estimator.ts:170",
+      "apps/mobile/src/services/stream-token-estimator.ts:213"
     ],
     "(: WorkplaceService, : string, : boolean)": [
       "apps/mobile/src/services/workplace-operations.service.ts:22",
@@ -1746,8 +1675,8 @@
     ],
     "(: number, : number, : number)": [
       "apps/mobile/src/web/chat-transcript/webview/runtime/render/row-windowing.ts:48",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:263",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:328"
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:268",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:335"
     ],
     "(: string, : ComposerMode)": [
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:120",
@@ -1756,20 +1685,20 @@
     ],
     "(: string, : string, : string)": [
       "apps/mobile/src/web/composer-input/webview/runtime/editor.ts:178",
-      "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:36",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:219",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:270",
+      "packages/core/src/domain/kkv/repositories/impl/sqlite-kkv.repository.ts:39",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:231",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:298",
       "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:46",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:229",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:234",
-      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:240",
+      "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:230",
       "packages/core/src/infra/tokenizer/logic/prompt-whole-cache.ts:95",
       "packages/core/src/service/chat/impl/message-transcript-effects.service.ts:48",
       "packages/core/src/service/kkv/impl/kkv.service.ts:30",
       "packages/core/src/service/message-checkpoint/impl/message-checkpoint.service.ts:31",
-      "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts:321",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:277",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:70",
+      "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts:314",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:268",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:61",
       "packages/core/src/service/vfs/impl/vfs.service.ts:111",
       "packages/core/src/service/vfs/impl/vfs.service.ts:197"
     ],
@@ -1805,12 +1734,11 @@
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:143",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:34",
       "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:42",
-      "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:53",
-      "packages/core/src/domain/tool/builtin/search/curl-import.ts:57"
+      "packages/core/src/domain/chat/logic/chat-annotate-draft-store.ts:53"
     ],
     "(: (: AbortReason) => void)": [
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:195",
-      "packages/core/src/domain/abort/logic/create-abort-scope.ts:392"
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:245",
+      "packages/core/src/domain/abort/logic/create-abort-scope.ts:446"
     ],
     "(: string | null)": [
       "packages/core/src/domain/agent/session/impl/in-memory-agent-session.ts:63",
@@ -1822,48 +1750,48 @@
       "packages/core/src/domain/chat/logic/attachment/attachment-scanner.ts:90"
     ],
     "(: Row)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:125",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:82",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:21",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:21",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:124",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:81",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:20",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:20",
       "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:20",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:45",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:38",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:36",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:32",
       "packages/core/src/domain/session-run-state/repositories/impl/sqlite-session-run-state.repository.ts:15",
       "packages/core/src/domain/smart-sort-rule/repositories/impl/sqlite-smart-sort-rule.repository.ts:14",
       "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:19",
       "packages/core/src/domain/workplace/repositories/impl/sqlite-workplace.repository.ts:32"
     ],
     "(: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:211",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:210",
       "packages/core/src/service/chat/impl/message.service.ts:97"
     ],
     "(: string, : number, hooks?: LongTaskHooks)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:222",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:229",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:287",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:224",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:234",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:305",
       "packages/core/src/service/chat/impl/message.service.ts:105"
     ],
     "(: string, : MessageContent)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:308",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts:338",
       "packages/core/src/service/chat/impl/message.service.ts:222"
     ],
     "(: string, : string, : number)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:49",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:57",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:156",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:48",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:62",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:147",
       "packages/core/src/service/vfs/impl/vfs-batch-io.service.ts:47",
       "packages/core/src/service/vfs/impl/vfs.service.ts:180"
     ],
     "(: string, : string | null, : number)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:64",
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:92"
+      "packages/core/src/domain/chat/repositories/impl/sqlite-project.repository.ts:63",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:97"
     ],
     "(: string, : string | null)": [
-      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:77",
-      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:264",
+      "packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts:82",
+      "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts:272",
       "packages/core/src/service/chat/impl/message.service.ts:394",
-      "packages/core/src/service/chat/impl/session.service.ts:241"
+      "packages/core/src/service/chat/impl/session.service.ts:242"
     ],
     "(: AgentSession, : CompactionEvaluationContext)": [
       "packages/core/src/domain/compaction-conditions/triggers/composite-trigger.ts:16",
@@ -1872,27 +1800,27 @@
     ],
     "(: string, : ReadonlyArray<string>)": [
       "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:107",
-      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:270",
+      "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:271",
       "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:289",
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:133",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:531",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:581"
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:533",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:585"
     ],
     "(: LlmProvider)": [
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:108",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:92"
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:83",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-provider.repository.ts:99"
     ],
     "(: SavedModel)": [
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:75",
-      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:87"
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:69",
+      "packages/core/src/domain/provider/repositories/impl/sqlite-saved-model.repository.ts:81"
     ],
     "(: string, : string, : readonly string[])": [
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:174",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:91"
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:180",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:93"
     ],
     "(: string, : string, : string, : string)": [
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:188",
-      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:281"
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:196",
+      "packages/core/src/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.ts:311"
     ],
     "(: string, : string, : string, : number)": [
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:245",
@@ -1900,16 +1828,16 @@
       "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:288"
     ],
     "(: string, pathPrefix?: string)": [
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:467",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:492"
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:469",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:494"
     ],
     "(: TdbcConnection, : string, : string, : string)": [
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:640",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:657"
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:645",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts:662"
     ],
     "(: ReadonlyArray<{ readonly : number; readonly : number }>)": [
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:129",
-      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:157"
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:131",
+      "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts:159"
     ],
     "(: (: T) => U)": [
       "packages/core/src/errors/either.ts:135",
@@ -1948,8 +1876,8 @@
       "packages/core/src/errors/either.ts:179"
     ],
     "(e)": [
-      "packages/core/src/errors/guards.ts:58",
-      "packages/core/src/errors/guards.ts:68"
+      "packages/core/src/errors/guards.ts:76",
+      "packages/core/src/errors/guards.ts:86"
     ],
     "(: \"pull\" | \"push\")": [
       "packages/core/src/infra/cloud-sync/impl/cloud-sync-coordinator.ts:242",
@@ -1970,6 +1898,10 @@
       "packages/core/src/infra/tokenizer/logic/create-default-registry.ts:37",
       "packages/core/src/infra/tokenizer/logic/create-default-registry.ts:47"
     ],
+    "(: CountPromptLlmInputParams)": [
+      "packages/core/src/infra/tokenizer/logic/resolve-current-prompt-tokens.ts:113",
+      "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts:107"
+    ],
     "(: string, : number, : number)": [
       "packages/core/src/service/chat/impl/message.service.ts:367",
       "packages/core/src/service/chat/impl/message.service.ts:380"
@@ -1977,10 +1909,10 @@
     "(: UsageStatsFilter)": [
       "packages/core/src/service/chat/impl/usage-stats.service.ts:137",
       "packages/core/src/service/chat/impl/usage-stats.service.ts:155",
-      "packages/core/src/service/chat/impl/usage-stats.service.ts:211"
+      "packages/core/src/service/chat/impl/usage-stats.service.ts:206"
     ],
     "(: string, : string, : string, options?: RollbackOptions)": [
-      "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts:117",
+      "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts:116",
       "packages/core/src/service/session-fs/impl/session-fs.service.ts:25"
     ],
     "(: BooleanPrefName)": [
@@ -1996,11 +1928,11 @@
       "packages/core/src/service/prompt/render-prompt.ts:232",
       "packages/core/src/service/prompt/render-prompt.ts:270",
       "packages/core/src/service/prompt/render-prompt.ts:284",
-      "packages/core/src/service/prompt/render-prompt.ts:661"
+      "packages/core/src/service/prompt/render-prompt.ts:668"
     ],
     "(: ModelRetryPolicy)": [
-      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:18",
-      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:72"
+      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:21",
+      "packages/core/src/service/provider/impl/model-retry-policy.service.ts:74"
     ],
     "(: string, : string | undefined)": [
       "packages/core/src/service/skills/impl/skills.service.ts:60",
@@ -2011,37 +1943,37 @@
       "packages/core/src/service/skills/impl/skills.service.ts:73"
     ],
     "(: SqliteVfsEntryRepository, : string, : string)": [
-      "packages/core/src/service/skills/impl/skills.service.ts:525",
-      "packages/core/src/service/skills/impl/skills.service.ts:531"
+      "packages/core/src/service/skills/impl/skills.service.ts:522",
+      "packages/core/src/service/skills/impl/skills.service.ts:528"
     ],
     "(: VfsScope, : string)": [
       "packages/core/src/service/vfs/impl/physical-vfs.service.ts:279",
       "packages/core/src/service/vfs/impl/physical-vfs.service.ts:311"
     ],
     "(: string, : string, options?: { recursive?: boolean; maxDepth?: number })": [
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:54",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:45",
       "packages/core/src/service/vfs/impl/vfs.service.ts:31"
     ],
     "(: string, : string, : string, : string, options?: { replaceAll?: boolean })": [
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:78",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:69",
       "packages/core/src/service/vfs/impl/vfs.service.ts:131"
     ],
     "(: string, : string, options?: { cwd?: string })": [
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:90",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:81",
       "packages/core/src/service/vfs/impl/vfs.service.ts:143"
     ],
     "(: string, : string, options?: VfsGrepOptions)": [
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:94",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:85",
       "packages/core/src/service/vfs/impl/vfs.service.ts:158"
     ],
     "(: string, : string, options?: { recursive?: boolean })": [
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:208",
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:98",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:199",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:89",
       "packages/core/src/service/vfs/impl/vfs.service.ts:167",
       "packages/core/src/service/vfs/impl/vfs.service.ts:186"
     ],
     "(: string, : string, : string, _options?: { overwrite?: boolean })": [
-      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:252",
+      "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts:243",
       "packages/core/src/service/vfs/impl/vfs.service.ts:191"
     ],
     "(: string, options?: { recursive?: boolean })": [
@@ -2068,20 +2000,21 @@
     "(: (: TdbcConnection) => Promise<T>)": [
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:172",
       "packages/tdbc-driver-better-sqlite3/src/connection.ts:42",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:244",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:245",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:42"
     ],
     "(: string, parameters?: readonly unknown[])": [
       "packages/tdbc-driver-op-sqlite/src/connection.ts:106",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:232",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:236",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:233",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:237",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:30",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:34",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:95"
     ],
     "(: string, : readonly (readonly unknown[])[])": [
       "packages/tdbc-driver-op-sqlite/src/connection.ts:120",
-      "packages/tdbc-driver-op-sqlite/src/connection.ts:240",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:175",
+      "packages/tdbc-driver-op-sqlite/src/connection.ts:241",
       "packages/tdbc-driver-op-sqlite/src/connection.ts:38"
     ],
     "(: { : string; location?: string; failOnCreate?: boolean; })": [
@@ -2108,7 +2041,7 @@
       "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts:115"
     ],
     "(: RnEncodingName)": [
-      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:259",
+      "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:263",
       "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:65"
     ]
   },
@@ -2158,7 +2091,6 @@
       "format": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "prepare": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "build": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
-      "enabled": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "importPickTypes": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "assertFileName": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",
       "set": "p25 裸函数收口：各域 namespace 化后通用动词成员跨域同名（各域独立语义面，合并无意义），判定保留。",

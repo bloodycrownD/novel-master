@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { CloudSyncConfigInput } from "@novel-master/core";
 import { AppError } from "@novel-master/core/errors";
-import { Kkv, Path } from "@novel-master/core/common";
+import { Coerce, Kkv, Path } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
@@ -180,7 +180,7 @@ export namespace CloudSyncConfigStore {
           return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "Secret Key 不能为空" }));
         }
 
-        const deviceId = existing.value.deviceId.trim().length > 0 ? existing.value.deviceId : randomUUID();
+        const deviceId = (Coerce.nonEmptyText(existing.value.deviceId) ?? randomUUID());
 
         const normalizedPrefix = Path.ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 

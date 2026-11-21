@@ -69,26 +69,38 @@ function collectBindingNames(pattern: ts.Node, out: Set<string> | Map<string, ts
   visitBindingPattern(pattern, out, source);
 }
 
+
+/**
+ * 声明名收集的唯一 walker（自声明与外层声明两个收集器共用一条递归骨架）：
+ * 变量声明（解构展开）/ 嵌套函数形参 / function / class / interface / type alias 的名字
+ * 交给 onDecl；`stopAt` 命中的子树跳过（外层收集器用它排除闭包自身）。
+ */
+function walkDeclaredNames(node: ts.Node, onDecl: (name: string, decl: ts.Node) => void, stopAt: ts.FunctionLikeDeclaration | null): void {
+  if (stopAt != null && node === stopAt) return; // 自己内部的自声明不算外层
+  if (ts.isVariableDeclaration(node)) {
+    const names = new Set<string>();
+    collectBindingNames(node.name, names);
+    for (const name of names) onDecl(name, node);
+  } else if (ts.isFunctionLike(node)) {
+    // 嵌套函数的形参也是所在作用域的自声明（内层箭头参数不该被计成捕获）。
+    for (const param of node.parameters) {
+      const names = new Set<string>();
+      collectBindingNames(param.name, names);
+      for (const name of names) onDecl(name, node);
+    }
+  } else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) && node.name != null) {
+    onDecl(node.name.text, node);
+  }
+  ts.forEachChild(node, (child) => walkDeclaredNames(child, onDecl, stopAt));
+}
+
 /** 闭包体内自声明的全部名字（参数、var/let/const、class、function，含嵌套块与嵌套函数自己的声明）。 */
-function ownDeclaredNames(fn: ts.FunctionLikeDeclaration): Set<string> {
+function collectDeclaredNames(fn: ts.FunctionLikeDeclaration): Set<string> {
   const names = new Set<string>();
   for (const param of fn.parameters) collectBindingNames(param.name, names);
   const body = bodyOf(fn);
-  if (body != null) collectDeclaredNames(body, names, fn);
+  if (body != null) walkDeclaredNames(body, (name) => names.add(name), null);
   return names;
-}
-
-function collectDeclaredNames(node: ts.Node, names: Set<string>, fn: ts.FunctionLikeDeclaration): void {
-  if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, names);
-  else if (ts.isFunctionLike(node) && node !== fn) {
-    // 嵌套函数的形参也是本闭包的自声明（内层箭头参数不该被计成捕获）。
-    for (const param of node.parameters) collectBindingNames(param.name, names);
-  }
-  else if (ts.isFunctionDeclaration(node) && node.name != null) names.add(node.name.text);
-  else if (ts.isClassDeclaration(node) && node.name != null) names.add(node.name.text);
-  else if (ts.isInterfaceDeclaration(node) && node.name != null) names.add(node.name.text);
-  else if (ts.isTypeAliasDeclaration(node) && node.name != null) names.add(node.name.text);
-  ts.forEachChild(node, (child) => collectDeclaredNames(child, names, fn));
 }
 
 /** 沿函数祖先链收集所有外层函数的局部声明名（参数 + 局部声明），不含模块顶层与 import。 */
@@ -99,20 +111,9 @@ function outerDeclaredNames(fn: ts.FunctionLikeDeclaration): Map<string, ts.Node
     for (const param of current.parameters) collectBindingNames(param.name, out, param);
     const outerBody = bodyOf(current);
     if (outerBody == null) continue;
-    collectOuterDeclaredNames(outerBody, fn, out);
+    walkDeclaredNames(outerBody, (name, decl) => out.set(name, decl), fn);
   }
   return out;
-}
-
-function collectOuterDeclaredNames(node: ts.Node, fn: ts.FunctionLikeDeclaration, out: Map<string, ts.Node>): void {
-  if (node === fn) return; // 自己内部的自声明不算外层
-  if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, out, node);
-  else if (ts.isFunctionLike(node) && node !== fn) {
-    for (const param of node.parameters) collectBindingNames(param.name, out, node);
-  }
-  else if (ts.isFunctionDeclaration(node) && node.name != null) out.set(node.name.text, node);
-  else if (ts.isClassDeclaration(node) && node.name != null) out.set(node.name.text, node);
-  ts.forEachChild(node, (child) => collectOuterDeclaredNames(child, fn, out));
 }
 
 /** 最近函数祖先的显示名（方法名 / 函数名 / "<anonymous>"）。 */
@@ -249,7 +250,7 @@ function collectCapturedRefs(node: ts.Node, own: Set<string>, outer: Map<string,
 
 function buildClosure(rel: string, sourceFile: ts.SourceFile, name: string, fn: ts.FunctionLikeDeclaration, stmt: ts.Node): NestedClosure {
   const outer = outerDeclaredNames(fn);
-  const own = ownDeclaredNames(fn);
+  const own = collectDeclaredNames(fn);
   const captured = new Map<string, ts.Node>();
   const body = bodyOf(fn);
   if (body != null) collectCapturedRefs(body, own, outer, captured);

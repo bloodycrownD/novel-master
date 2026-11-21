@@ -21,6 +21,7 @@
  * @module domain/tool/builtin/search/search-config
  */
 
+import { Arrays } from "@/common/arrays.js";
 import { Guards } from "@/common/guards.js";
 import { Json } from "@/common/json.js";
 import { Kkv } from "@/common/kkv.js";
@@ -198,7 +199,7 @@ const resolveOneEngine = async (state: SearchEngineState, deps: SearchConfigDeps
 };
 
 /** KKV 写入句柄（模块名固定 `nm-search`，值 JSON 序列化）。 */
-const writeSearchKkv = (kkv: KkvService, key: string, value: object): Promise<void> => kkv.set(SEARCH_KKV_MODULE, key, JSON.stringify(value));
+const writeSearchKkv = (kkv: KkvService, key: string, value: object): Promise<void> => Kkv.setJson(kkv, SEARCH_KKV_MODULE, key, value);
 
 /** 实例地址表写入：空 Map 走 deleteIfPresent 清键，否则整体覆盖。 */
 const writeEngineBaseUrls = async (kkv: KkvService, baseUrls: Readonly<Record<string, string>>): Promise<Result<void, AppError>> => {
@@ -281,7 +282,7 @@ export const SearchConfig = {
       if (knownIds.has(engineId) && !order.includes(engineId)) order.push(engineId);
     }
     for (const engineId of knownIds) {
-      if (!order.includes(engineId)) order.push(engineId);
+      Arrays.pushIfAbsent(order, engineId);
     }
 
     // enabledEngines：dangling id 丢弃；键缺失 / 损坏回缺省（仅 DDG 启用）。

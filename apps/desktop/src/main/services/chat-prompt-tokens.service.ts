@@ -10,7 +10,7 @@
  * r3-dt-align（对齐 mobile 四层防护）：本文件的整串级重活（build 装配、resolve
  * 计数）与发送链共享 main 进程的单事件循环与单 SQLite 连接，mobile 真机实锤过
  * 它把 POST 派发从 +1.2s 拖到 +19.6s。desktop 侧四层落点：
- * ① 判活源 {@link isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
+ * ① 判活源 {@link Agent.isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
  * ② run 在途抑制（读口入口 + 后台暖机排程两处判活）+ **null 哨兵**返回契约；
  * ③ build 分段弃权（SessionPromptInputService.buildAdapter 的 shouldBail）与 resolve 段
  *   弃权（core 读口沿 Outcome.cancelled/replaced 返回）——两类都沿 **null 哨兵返回值**
@@ -350,14 +350,9 @@ export namespace ChatPromptTokensService {
     });
   }
 
-  /** 判活源（r3-dt-align ①，与 mobile 同款口径）：build 分段检查点、build/resolve 边界、resolve 整串级检查点、后台暖机排程判断共用这一条。 */
-  function isDesktopSessionRunInFlight(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): boolean {
-    return Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId);
-  }
-
   /** resolve 读口的弃权判据（错误通道迁移二期）：run 在途即本轮读数被在途 run 取代，收成 replaced。 */
   function bailInterrupt(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Interrupt | null {
-    return isDesktopSessionRunInFlight(runtime, scope) ? { kind: "replaced" } : null;
+    return Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId) ? { kind: "replaced" } : null;
   }
 
   /** 「完整口径」resolve 一跳：首帧 resolve 与紧随其后的后台暖机复用同一份 params（口径漂移会让暖过的缓存没人命中）。 */
@@ -395,7 +390,7 @@ export namespace ChatPromptTokensService {
       // run 在途不排暖机：后台暖机是整串级重活（家族真分词器 + L1 写入），
       // 与发送链抢同一条 SQLite 连接。run 结束后那次补推（agent.ts 终态钩子）
       // 会把这一轮补上，彼时无竞争。
-      !isDesktopSessionRunInFlight(runtime, scope)
+      !Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId)
     ) {
       readWarmInflight.add(scope.sessionId);
       void PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: () => bailInterrupt(runtime, scope) })
@@ -467,12 +462,12 @@ export namespace ChatPromptTokensService {
    */
   async function loadNow(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, options?: { readonly armPreciseWarm?: boolean }): Promise<NullableStatsResult> {
     const armPreciseWarm = options?.armPreciseWarm ?? true;
-    if (isDesktopSessionRunInFlight(runtime, scope)) {
+    if (Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId)) {
       // 在途即跳过本轮：进得去也停不下才是真问题（mobile 实锤过 build 把
       // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
       return Result.ok(null);
     }
-    return computeStats(runtime, scope, (args) => countWithWarm(runtime, scope, armPreciseWarm, args), () => isDesktopSessionRunInFlight(runtime, scope));
+    return computeStats(runtime, scope, (args) => countWithWarm(runtime, scope, armPreciseWarm, args), () => Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId));
   }
 
   function scheduleTrailing(runtime: DesktopNovelMasterRuntime, key: string, slot: ChatPromptTokenDebounceSlot): void {

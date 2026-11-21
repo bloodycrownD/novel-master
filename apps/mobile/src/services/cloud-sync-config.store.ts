@@ -4,7 +4,7 @@
  * @module services/cloud-sync-config.store
  */
 import type {CloudSyncConfigInput} from '@novel-master/core';
-import {Kkv, Path} from '@novel-master/core/common';
+import {Coerce, Kkv, Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
 import {type SecretStore} from '@novel-master/core/sksp';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
@@ -124,11 +124,6 @@ export namespace CloudSyncConfigStore {
     });
   }
 
-  /** 非空文本判定：trim 后仍有内容。 */
-  function hasText(value: string): boolean {
-    return value.trim().length > 0;
-  }
-
   /** 读取本机同步状态字段。失败沿 `Result.err` 接力。 */
   export async function getLocalStatus(runtime: MobileNovelMasterRuntime): Promise<Result<CloudSyncLocalStatus, AppError>> {
     const config = await get(runtime);
@@ -142,7 +137,7 @@ export namespace CloudSyncConfigStore {
     if (!lastPullResult.ok) return Result.err(lastPullResult.error);
     if (!lastPushResult.ok) return Result.err(lastPushResult.error);
 
-    const configured = hasText(config.value.endpoint) && hasText(config.value.bucket) && hasText(config.value.accessKeyId) && config.value.secretKeySet && hasText(config.value.deviceId);
+    const configured = Coerce.nonEmptyText(config.value.endpoint) != null && Coerce.nonEmptyText(config.value.bucket) != null && Coerce.nonEmptyText(config.value.accessKeyId) != null && config.value.secretKeySet && Coerce.nonEmptyText(config.value.deviceId) != null;
 
     const rawRev = lastSyncedRev.value;
     const parsedRevNum = rawRev == null || rawRev === '' ? 0 : Number.parseInt(rawRev, 10);

@@ -36,39 +36,51 @@ const controllerScopes = new WeakMap<AbortController, AbortScope>();
 
 const noop = (): void => {};
 
-/** abort 事件回调体：try/catch 包裹调 `fn("user-stop")`（清理钩子失败不反向打断调用方）。 */
-const signalViewOnAbort = (fn: (reason: AbortReason) => void): void => {
-  try {
-    fn("user-stop");
-  } catch {
-    // 清理钩子失败不反向打断调用方。
-  }
-};
-
-/** 裸 signal 订阅取消回调：已 aborted 直调 `fn("user-stop")`，否则挂 abort 监听（add/remove 同引用）并返回解绑函数。 */
-const signalViewOnCancel = (signal: AbortSignal, fn: (reason: AbortReason) => void): (() => void) => {
-  if (signal.aborted) {
+/**
+ * 裸 `AbortSignal` 只读视图的私有件（无定时器、无 dispose，reason 恒为 user-stop 语义）：
+ * 订阅回调 / 取消订阅 / 中断检查三个操作收在同一 namespace（「裸 signal 视图」概念拥有其操作）。
+ */
+const SignalView = {
+  /** abort 事件回调体：try/catch 包裹调 `fn("user-stop")`（清理钩子失败不反向打断调用方）。 */
+  fireAbort(fn: (reason: AbortReason) => void): void {
     try {
       fn("user-stop");
     } catch {
       // 清理钩子失败不反向打断调用方。
     }
-    return noop;
-  }
-  // nm-style: keep-closure — add/removeEventListener 必须同一 listener 引用（身份不变量），包装不可消除。
-  const onAbort = (): void => {
-    signalViewOnAbort(fn);
-  };
-  signal.addEventListener("abort", onAbort);
-  return () => {
-    signal.removeEventListener("abort", onAbort);
-  };
-};
+  },
 
-/** 裸 signal 视图的中断检查：已 aborted 即 user-stop 中断，否则 null。 */
-const signalViewCheckpoint = (signal: AbortSignal): Interrupt | null => (signal.aborted ? { kind: "cancelled", reason: "user-stop" } : null);
+  /** 订阅取消回调：已 aborted 直调 `fn("user-stop")`，否则挂 abort 监听（add/remove 同引用）并返回解绑函数。 */
+  onCancel(signal: AbortSignal, fn: (reason: AbortReason) => void): () => void {
+    if (signal.aborted) {
+      SignalView.fireAbort(fn);
+      return noop;
+    }
+    // nm-style: keep-closure — add/removeEventListener 必须同一 listener 引用（身份不变量），包装不可消除。
+    const onAbort = (): void => {
+      SignalView.fireAbort(fn);
+    };
+    signal.addEventListener("abort", onAbort);
+    return () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+  },
+
+  /** 中断检查：已 aborted 即 user-stop 中断，否则 null。 */
+  checkpoint(signal: AbortSignal): Interrupt | null {
+    return signal.aborted ? { kind: "cancelled", reason: "user-stop" } : null;
+  },
+} as const;
 
 export const AbortScopeFactory = {
+  /**
+   * 分段弃权判据（error-matrix-final R3）：判据命中即 replaced 让路（弃权走返回值不走异常），
+   * 无判据/未命中 → null（不中断）。build 分段检查点与 checkpoint 位共用（desktop/mobile 双端收敛点）。
+   */
+  bailedInterrupt(shouldBail?: () => boolean): Interrupt | null {
+    return shouldBail?.() === true ? { kind: "replaced" } : null;
+  },
+
   isDevEnvironment(): boolean {
     const g = globalThis as { __DEV__?: boolean; process?: { env?: Record<string, string | undefined> } };
     if (g.__DEV__ === true) {
@@ -431,12 +443,12 @@ export const AbortScopeFactory = {
   /** 裸 `AbortSignal` 只读适配：无定时器、无 dispose，reason 恒为 null。 */
   signalView(signal: AbortSignal): AbortSignalView {
     // nm-style: keep-closure — AbortSignalView.onCancel 实现位：绑定本视图的 signal 参数，race 与属性位两处共用同一引用。
-    const onCancel = (fn: (reason: AbortReason) => void): (() => void) => signalViewOnCancel(signal, fn);
+    const onCancel = (fn: (reason: AbortReason) => void): (() => void) => SignalView.onCancel(signal, fn);
     return {
       signal,
       reason: null,
-      checkpoint: () => signalViewCheckpoint(signal),
-      yieldToUi: () => AbortScopeFactory.yieldToUiAfter(() => signalViewCheckpoint(signal)),
+      checkpoint: () => SignalView.checkpoint(signal),
+      yieldToUi: () => AbortScopeFactory.yieldToUiAfter(() => SignalView.checkpoint(signal)),
       race: (work, rejectWith) => AbortScopeFactory.raceWithCancel(work, () => signal.aborted, onCancel, rejectWith),
       onCancel,
     };

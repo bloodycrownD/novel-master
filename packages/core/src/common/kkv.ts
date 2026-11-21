@@ -26,6 +26,9 @@ export const Kkv = {
         return deleted.ok || AppErrorOps.is(deleted.error, "KKV_NOT_FOUND") ? Result.ok(undefined) : deleted;
     },
 
+    /** 写值：值 JSON 序列化（domain 侧「KKV + JSON 写」把手的通用内核，读侧配 getOptional 后自行 parse）。 */
+    setJson: (kkv: KkvService, module: string, key: string, value: object): Promise<void> => kkv.set(module, key, JSON.stringify(value)),
+
     /** 解析 KKV 布尔线格式 `"true"` / `"false"`；其余 → `null`（调用方自带错误码与文案）。 */
     parseBoolean: (value: string): boolean | null => {
         if (value === "true") return true;

@@ -1,6 +1,7 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
+import {AbortScopeFactory} from '@novel-master/core/abort';
 import {type AgentDefinition, AgentProjectResolver} from '@novel-master/core/agent';
 
 import {PromptAssembler, type ChatMessageData} from '@novel-master/core/chat';
@@ -17,11 +18,6 @@ export interface SessionPromptScope {
 interface BuildSessionPromptInputOptions {
   /** 分段间防御性退出判定；真值即返回 null 哨兵（弃权，error-matrix-final R3）。 */
   readonly shouldBail?: () => boolean;
-}
-
-/** 分段弃权判定：判据命中即让路（无判据恒 false）。 */
-function isBailed(shouldBail?: () => boolean): boolean {
-  return shouldBail?.() === true;
 }
 
 export interface SessionPromptInputBundle {
@@ -62,7 +58,7 @@ export namespace SessionPromptInputService {
       if (!r.ok) return Result.err(r.error);
       resolved = r.value.definition;
     }
-    if (isBailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] agent +${Date.now() - diagT0}ms`);
     }
@@ -78,7 +74,7 @@ export namespace SessionPromptInputService {
     if (visibleRead.kind === 'failed') return Result.err(visibleRead.error);
     if (visibleRead.kind !== 'completed') return Result.ok(null);
     const visibleMessages = visibleRead.value;
-    if (isBailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] messages(n=${visibleMessages.length}) +${Date.now() - diagT0}ms`);
     }
@@ -95,7 +91,7 @@ export namespace SessionPromptInputService {
     // replaced 返回，此处映射 null 哨兵，读口判 null 的口径不变。
     // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉重复序列化/计数。
     const workplaceContext = {sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts};
-    const stopOptions = {checkpoint: (): Interrupt | null => (shouldBail?.() === true ? {kind: 'replaced'} : null)};
+    const stopOptions = {checkpoint: (): Interrupt | null => AbortScopeFactory.bailedInterrupt(shouldBail)};
     const assembled = await WorkplaceDisplayAssembler.assemble(wtScope, workplaceContext, stopOptions);
     if (assembled.kind === 'failed') {
       // 组装内的已知失败（如路径解析）：沿 Result 通道接力，不吞成弃权。
@@ -105,7 +101,7 @@ export namespace SessionPromptInputService {
       return Result.ok(null);
     }
     const {workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint} = assembled.value;
-    if (isBailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] workplace +${Date.now() - diagT0}ms`);
     }
@@ -126,7 +122,7 @@ export namespace SessionPromptInputService {
     const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
-    if (isBailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] prepare +${Date.now() - diagT0}ms`);
     }

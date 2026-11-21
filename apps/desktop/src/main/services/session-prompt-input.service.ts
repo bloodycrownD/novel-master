@@ -1,6 +1,7 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
+import { AbortScopeFactory } from "@novel-master/core/abort";
 import { AgentProjectResolver, type AgentDefinition } from "@novel-master/core/agent";
 import { type AppError } from "@novel-master/core/errors";
 import { Result, type Interrupt } from "@novel-master/core/errors";
@@ -37,11 +38,6 @@ export interface SessionPromptInputBundle {
 type PromptInputResult = Promise<Result<SessionPromptInputBundle | null, AppError>>;
 
 export namespace SessionPromptInputService {
-  /** 分段弃权判据单一出处：传入判据为真即弃权（error-matrix-final R3，弃权沿 null 哨兵返回）。 */
-  function bailed(shouldBail?: () => boolean): boolean {
-    return shouldBail?.() === true;
-  }
-
   /**
    * Desktop prompt-input adapter：把 desktop runtime（messages / workplace / sessionKkv /
    * skills）适配到 core 的 assemble + PromptAssembler + PromptBuilder。已知失败沿
@@ -64,19 +60,19 @@ export namespace SessionPromptInputService {
       if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
       resolved = resolvedAgent.value.definition;
     }
-    if (bailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
 
     // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
     // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
     // 在大会话上是秒级卡顿（与 mobile 同款修法）。
     // 分片判停复用 build 的弃权判据（shouldBail）：run 起步后读口在第一个分片
     // 边界就死，不必等整份可见历史 parse 完；中断返回 null 哨兵。
-    const readOptions = shouldBail == null ? undefined : { checkpoint: (): Interrupt | null => (shouldBail() === true ? { kind: "replaced" } : null) };
+    const readOptions = shouldBail == null ? undefined : { checkpoint: (): Interrupt | null => AbortScopeFactory.bailedInterrupt(shouldBail) };
     const visibleRead = await runtime.messages.listBySession(scope.sessionId, { includeHidden: false }, readOptions);
     if (visibleRead.kind === "failed") return Result.err(visibleRead.error);
     if (visibleRead.kind !== "completed") return Result.ok(null);
     const visibleMessages = visibleRead.value;
-    if (bailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     const wtScope = {
       kind: "session" as const,
       projectId: scope.projectId,
@@ -91,7 +87,7 @@ export namespace SessionPromptInputService {
     // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉
     // 重复序列化/计数。
     const workplaceArgs = { sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts };
-    const assembleOptions = { checkpoint: (): Interrupt | null => (shouldBail?.() === true ? { kind: "replaced" } : null) };
+    const assembleOptions = { checkpoint: (): Interrupt | null => AbortScopeFactory.bailedInterrupt(shouldBail) };
     const assembled = await WorkplaceDisplayAssembler.assemble(wtScope, workplaceArgs, assembleOptions);
     if (assembled.kind === "failed") {
       // 组装内的已知失败（如路径解析）沿 Result 返回（错误通道迁移四期），
@@ -103,7 +99,7 @@ export namespace SessionPromptInputService {
       return Result.ok(null);
     }
     const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled.value;
-    if (bailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     const prepareRuntime = {
       sessionId: scope.sessionId,
       sessionKkv: runtime.sessionKkv,
@@ -121,7 +117,7 @@ export namespace SessionPromptInputService {
     const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
-    if (bailed(shouldBail)) return Result.ok(null);
+    if (AbortScopeFactory.bailedInterrupt(shouldBail) != null) return Result.ok(null);
     const ctx: PromptRenderContext = {
       workplaceDisplay,
       messages,
