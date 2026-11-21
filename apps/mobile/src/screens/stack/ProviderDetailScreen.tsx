@@ -193,8 +193,8 @@ export function ProviderDetailScreen() {
         value={activeTab}
         onChange={value => setActiveTab(value)}
         options={[
-          {value: 'config', label: '服务商配置'},
-          {value: 'models', label: '模型管理'},
+          {value: 'config', label: coreT({key: "ui.nav.providers"})},
+          {value: 'models', label: coreT({key: "ui.nav.model_management"})},
         ]}
       />
       {activeTab === 'config' ? (

@@ -26,8 +26,9 @@ const listSource = readFileSync(listPath, 'utf8');
 describe('ProviderDetailScreen (mobile) — T-T1', () => {
   it('顶部有 SegmentedControl，两个 tab（服务商配置 + 模型管理）', () => {
     expect(detailSource).toMatch(/import.*SegmentedControl/);
-    expect(detailSource).toMatch(/\{value: 'config', label: '服务商配置'\}/);
-    expect(detailSource).toMatch(/\{value: 'models', label: '模型管理'\}/);
+    // i18n 迁移后锁 coreT descriptor 调用形态与键名（文案由 catalog 保证）。
+    expect(detailSource).toMatch(/\{value: 'config', label: coreT\(\{key: "ui\.nav\.providers"\}\)\}/);
+    expect(detailSource).toMatch(/\{value: 'models', label: coreT\(\{key: "ui\.nav\.model_management"\}\)\}/);
   });
 
   it('默认 tab 是「服务商配置」（create 后直接可编辑）', () => {
