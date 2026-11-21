@@ -115,6 +115,7 @@ export const GeminiSseParser = {
       lastEmittedCompletionTokens: undefined,
     };
 
+    // nm-style: keep-closure — 与 anthropic feed 同构：per-stream handle 动词 + 资源生命周期，feed 经 drain 以值引用；重逻辑已归位 functionCallsToToolUses/InlineThinkingParser/SseJsonEvents。
     const feed = (chunk: string): void => {
       SseJsonEvents.feed(state, chunk, (event) => {
         state.streamRaw = event;
@@ -206,6 +207,7 @@ export const GeminiSseParser = {
       });
     };
 
+    // nm-style: keep-closure — 同族 handle 动词，抽取无复用收益。
     const finish = (): SseFinishResult => {
       SseLineBuffer.drain(state, feed);
 
@@ -266,6 +268,7 @@ export const GeminiSseParser = {
       return { blocks, streamRaw: state.streamRaw, degradedToolCalls };
     };
 
+    // nm-style: keep-closure — 同族 handle 动词，捕获集与 finish 高度重叠（state,feed,onStream）；同族一次性同构抽取才可动。
     const finishPartial = (): SseFinishResult => {
       SseLineBuffer.drain(state, feed);
 

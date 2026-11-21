@@ -86,6 +86,7 @@ export const Duckduckgo = {
     // parentAborted 标志：在途取消判据走监听器置位（与 template-engine 同口径），
     // 精确区分父级取消与 30s 计时器 abort。
     let parentAborted = false;
+    // nm-style: keep-closure — add/removeEventListener 同引用不变量 + parentAborted 在途取消标志由监听器置位（与 template-engine 同构），改对象槽只是搬家且丢 let+闭包写值的属性收窄技巧。
     const onParentAbort = () => {
       parentAborted = true;
       controller.abort();

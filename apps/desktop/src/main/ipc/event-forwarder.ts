@@ -37,6 +37,7 @@ export const EventForwarder = {
     let getTarget: ForwardTargetResolver | undefined;
     let detach: (() => void) | undefined;
 
+    // nm-style: keep-closure — detach 是 attach 重绑定的单槽句柄且闭包逃逸（attach 返回的 cleanup 被进程级长持）；对象槽需污染公开接口或引 WeakMap，闭包槽即正解。
     const detachCurrent = (): void => {
       detach?.();
       detach = undefined;

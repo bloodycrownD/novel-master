@@ -81,6 +81,9 @@ type FileMetaProbe = {
   readonly mtimeMs: number | undefined;
 };
 
+/** file_cache 写回（延迟 / 立即两分支共用）：sessionKkv 按 RuleSnapshotCodec 序列化写入。 */
+const writeFileCache = (deps: LoadOrFillFileCacheDeps, key: string, payload: FileCachePayload): Promise<void> => deps.sessionKkv.set(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload(payload));
+
 export const FileCache = {
   /**
    * filename 不读盘；缺失用 `(missing)` 占位。
@@ -192,11 +195,10 @@ export const FileCache = {
     if (filled.degraded === true) {
       return filled.payload;
     }
-    const writeBack = (): Promise<void> => deps.sessionKkv.set(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload(filled.payload));
     if (options?.deferBackfillWrite === true) {
-      FileCache.scheduleBackfill(writeBack);
+      FileCache.scheduleBackfill(() => writeFileCache(deps, key, filled.payload));
     } else {
-      await writeBack();
+      await writeFileCache(deps, key, filled.payload);
     }
     return filled.payload;
   },

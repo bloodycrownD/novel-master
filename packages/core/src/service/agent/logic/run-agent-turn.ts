@@ -289,6 +289,9 @@ interface AgentTurnRunnerHelpers {
     }): Promise<Result<AgentRunResult, AppError>>;
 }
 
+/** 前奏停止检查点：scope 已带 reason（用户停止 / 父级级联已兑现）→ 合成 cancelled 结果，否则 undefined（主 run 与子 run 前奏检查点共用）。 */
+const preludeAbortResult = (scope: AbortScope): AgentRunResult | undefined => (scope.reason !== null ? AgentTurnRunner.syntheticCancelledResult() : undefined);
+
 /**
  * 聊天发送编排 namespace（编排 + runner 装配 + 子代理派生 + 前奏收口）。
  */
@@ -522,6 +525,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
              * 永远是本 run 窗口内的事实。
              */
             let runnerEmittedTerminal = false;
+            // nm-style: keep-closure — 注册给事件总线的终态观测回调（bus 同步分发时序 + 订阅窗口由 finally 收口）：变异捕获 runnerEmittedTerminal 是 catch「是否补发 FAILED」的唯一哨兵 flag，listener 引用需保持用于退订。
             /**
              * 终态观测回调：命中本 session 的终态事件就把 `runnerEmittedTerminal` 置真。
              *
@@ -564,7 +568,6 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             //   ⓪ backfill 之前 —— 这次发送**根本没发生**（用户消息未落库），见下；
             //   ① append+capture 之后 —— 消息已落库，停止不改变「本次发送已发生」；
             //   ② agentRegistry.list() 之后 / skills 装配之后 / runner.run 之前。
-            const preludeAbortResult = (): AgentRunResult | undefined => (rootScope.reason !== null ? AgentTurnRunner.syntheticCancelledResult() : undefined);
 
             // 收口 try（r3-run-1 步骤 2）：从 backfill 到 `runner.run` 全程包起来。
             //
@@ -596,7 +599,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 // 库里本来就没有本轮消息，reload 自然看不到新的。①② 之所以需要
                 // 「runId==='' 强制 reload」是因为它们的用户消息已落库而面板未必已拿到；
                 // ⓪ 不需要那条规则，也绝不能借它凭空显示一条消息。
-                const entryCancelled = preludeAbortResult();
+                const entryCancelled = preludeAbortResult(rootScope);
                 if (entryCancelled != null) {
                     AgentTurnRunner.publishPreludeRunFinished(runtime, scope);
                     return Result.ok(entryCancelled);
@@ -827,7 +830,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 
                 // 检查点①：append+capture 已完成（用户消息已落库）——此后的停止不再需要
                 // 跑完剩余前奏（校验 / 子代理名单 / 技能装配）才兑现。
-                const afterAppendCancelled = preludeAbortResult();
+                const afterAppendCancelled = preludeAbortResult(rootScope);
                 if (afterAppendCancelled != null) {
                     // 同检查点②：先发 FINISHED('') 再返回合成 cancelled（r3-run-1 步骤 1）。
                     // 此处用户消息已落库，但本次 run 没跑过任何 step，delta 一条都没有——
@@ -873,7 +876,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 // 第一件真 IO 活（拉全部 agent 定义），大会话上窗口不小。停在这里比跑完
                 // 后续的 registry resolve + 技能预算装配再兑现快一大截。
                 // 语义与①相同（用户消息早已 append 落库），终态同款 FINISHED('')。
-                const afterListCancelled = preludeAbortResult();
+                const afterListCancelled = preludeAbortResult(rootScope);
                 if (afterListCancelled != null) {
                     AgentTurnRunner.publishPreludeRunFinished(runtime, scope);
                     return Result.ok(afterListCancelled);
@@ -898,7 +901,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 // 与上面的 list() 之间是真实的秒级窗口——真机上「发送后立刻停止」的停止
                 // 意图多半就落在这两步里，必须在这里就被兑现，而不是等 runner 起步后由
                 // `loop_start` 拦下。语义与①相同，终态同款 FINISHED('')。
-                const afterSkillsCancelled = preludeAbortResult();
+                const afterSkillsCancelled = preludeAbortResult(rootScope);
                 if (afterSkillsCancelled != null) {
                     AgentTurnRunner.publishPreludeRunFinished(runtime, scope);
                     return Result.ok(afterSkillsCancelled);
@@ -1006,7 +1009,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 
                 // 检查点②：runner 起步前的最后一道——校验 / 名单 / 技能装配这段尾部也有
                 // 秒级窗口（大会话），命中即在此收尾、不注册 streamRegistry（零清理负担）。
-                const preRunnerCancelled = preludeAbortResult();
+                const preRunnerCancelled = preludeAbortResult(rootScope);
                 if (preRunnerCancelled != null) {
                     // 先发 FINISHED('') 再返回合成 cancelled——双端据此收口（r3-run-1
                     // 步骤 1）。顺序不能反：事件同步分发，返回前事件必须已落到订阅方。
@@ -1279,7 +1282,6 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
          * 两道命中时子会话里连 task prompt 都还没写，语义比主 run ①②更接近主 run ⓪
          * （「这次派发根本没发生」）。这也正是它们必须**早于** append 的原因。
          */
-        const childPreludeAbortResult = (): AgentRunResult | undefined => (childAbortScope.reason !== null ? AgentTurnRunner.syntheticCancelledResult() : undefined);
 
         // 子 run controller 挂进 registry，让外部（子会话页停止按钮）能按 childSessionId
         // 中断子 run。r3-run-3 前移：register 从「装配全部完成之后」提到所有前奏 IO
@@ -1315,7 +1317,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             //
             // 为什么要先发事件再返回（r3-run-1 规则）：子会话页的 in-flight 计数、
             // 停止按钮状态、只读态都靠事件收口，不发 = 子会话页永久卡在「运行中」。
-            const childPreListCancelled = childPreludeAbortResult();
+            const childPreListCancelled = preludeAbortResult(childAbortScope);
             if (childPreListCancelled != null) {
                 AgentTurnRunner.publishPreludeRunFinished(runtime, childScope);
                 return Result.ok(childPreListCancelled);
@@ -1350,7 +1352,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             // `runner.run` 之前。与①同款：命中即发 FINISHED('') 再返回合成 cancelled。
             // 插在这里是因为它是子 run 前奏最后一段实打实的 IO（effectiveSkills 读
             // KKV + 解析技能目录），真机上「子会话页点停止」多半就落在这段窗口。
-            const childPostSkillsCancelled = childPreludeAbortResult();
+            const childPostSkillsCancelled = preludeAbortResult(childAbortScope);
             if (childPostSkillsCancelled != null) {
                 AgentTurnRunner.publishPreludeRunFinished(runtime, childScope);
                 return Result.ok(childPostSkillsCancelled);

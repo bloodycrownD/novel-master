@@ -1,7 +1,7 @@
 /**
  * Electron main process: window lifecycle, Vite renderer load, IPC, runtime teardown.
  */
-import { app, BrowserWindow, nativeImage, shell } from "electron";
+import { app, BrowserWindow, nativeImage, shell, type WebContents } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ChatLinkResolver } from "@novel-master/core/chat";
@@ -34,6 +34,12 @@ const forwarderSlots = {
   agentActivity: undefined as (() => void) | undefined,
   agentRunLifecycle: undefined as (() => void) | undefined,
 };
+
+/** 推送目标的现行解析：优先聚焦窗口、退回主窗口，每次发送现取（零参 resolver 契约由调用点包一层箭头）。 */
+function resolvePushWebContents(window: BrowserWindow): WebContents {
+  const focused = BrowserWindow.getFocusedWindow();
+  return (focused ?? window).webContents;
+}
 
 function createMainWindow(): BrowserWindow {
   const iconPath = AppIcon.resolvePath();
@@ -99,19 +105,12 @@ function createMainWindow(): BrowserWindow {
     clearTimeout(showFallback);
   });
 
-  EventBusForwarder.setTarget(() => {
-    const focused = BrowserWindow.getFocusedWindow();
-    return (focused ?? window).webContents;
-  });
-  const resolvePushWebContents = () => {
-    const focused = BrowserWindow.getFocusedWindow();
-    return (focused ?? window).webContents;
-  };
-  WorkspaceMutatedForwarder.setTarget(resolvePushWebContents);
-  ComposerAttachmentsSuggestForwarder.setTarget(resolvePushWebContents);
-  PromptChatTokenUpdatedForwarder.setTarget(resolvePushWebContents);
-  UserMessageAppendedForwarder.setTarget(resolvePushWebContents);
-  AgentActivityForwarder.setTarget(resolvePushWebContents);
+  EventBusForwarder.setTarget(() => resolvePushWebContents(window));
+  WorkspaceMutatedForwarder.setTarget(() => resolvePushWebContents(window));
+  ComposerAttachmentsSuggestForwarder.setTarget(() => resolvePushWebContents(window));
+  PromptChatTokenUpdatedForwarder.setTarget(() => resolvePushWebContents(window));
+  UserMessageAppendedForwarder.setTarget(() => resolvePushWebContents(window));
+  AgentActivityForwarder.setTarget(() => resolvePushWebContents(window));
 
   // 链接导航拦截（chat-link-file-nav）：renderer 内链接点击已在组件层拦截
   // 路由（MermaidMarkdown onLinkClick），但 PreviewPane 等未接链路的 <a>

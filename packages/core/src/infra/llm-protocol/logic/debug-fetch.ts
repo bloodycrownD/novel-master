@@ -14,6 +14,12 @@ import type { FetchFn } from "../ports/adapter.port.js";
 
 const log = LogFactory.create("llm.fetch");
 
+/** 单个请求头的日志脱敏：authorization / x-api-key 一律打码。 */
+const redactHeaderValue = (key: string, value: string): string => {
+  const lower = key.toLowerCase();
+  return lower === "authorization" || lower === "x-api-key" ? "***" : value;
+};
+
 export const DebugFetch = {
   /** Whether LLM fetch logging is active. */
   // nm-style note: 剥 Fetch 主体得 isLlmDebugEnabled（语义保留）；createLoggingFetch 剥后不成词，保留原名。
@@ -51,21 +57,17 @@ export const DebugFetch = {
       // headers 脱敏：authorization / x-api-key 一律打码。
       const headers = init?.headers;
       const loggedHeaders: Record<string, string> = {};
-      const redact = (key: string, value: string): string => {
-        const lower = key.toLowerCase();
-        return lower === "authorization" || lower === "x-api-key" ? "***" : value;
-      };
       if (headers instanceof Headers) {
         headers.forEach((value, key) => {
-          loggedHeaders[key] = redact(key, value);
+          loggedHeaders[key] = redactHeaderValue(key, value);
         });
       } else if (Array.isArray(headers)) {
         for (const [key, value] of headers) {
-          loggedHeaders[key] = redact(key, value);
+          loggedHeaders[key] = redactHeaderValue(key, value);
         }
       } else if (headers != null) {
         for (const [key, value] of Object.entries(headers)) {
-          loggedHeaders[key] = redact(key, String(value));
+          loggedHeaders[key] = redactHeaderValue(key, String(value));
         }
       }
 

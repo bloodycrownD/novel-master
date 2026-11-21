@@ -124,7 +124,12 @@ function appendTo(map: Map<string, DupRecord[]>, key: string, value: DupRecord):
   else map.set(key, [value]);
 }
 
-/** 只把 /src/ 侧的重复计入：测试 helper 的自包含重复是刻意设计，不参与门禁（旧 collectDupGroups 同判据）。 */
+/** /src/ 侧判定：测试 helper 的自包含重复是刻意设计，不参与门禁（旧 collectDupGroups 同判据）。 */
+function isSrc(r: DupRecord): boolean {
+  return r.file.includes("/src/");
+}
+
+/** 只把 /src/ 侧的重复计入。 */
 export function groupDupRecords(records: readonly DupRecord[]): DupGroups {
   const byName = new Map<string, DupRecord[]>();
   const byShape = new Map<string, DupRecord[]>();
@@ -132,7 +137,6 @@ export function groupDupRecords(records: readonly DupRecord[]): DupGroups {
     appendTo(byName, r.name, r);
     appendTo(byShape, r.shapeKey, r);
   }
-  const isSrc = (r: DupRecord): boolean => r.file.includes("/src/");
   return {
     named: Object.fromEntries([...byName.entries()].filter(([, v]) => v.length > 1 && v.every(isSrc)).map(([k, v]) => [k, v.map((r) => `${r.file}:${r.line}`).sort()])),
     shaped: Object.fromEntries([...byShape.entries()].filter(([, v]) => v.length > 1 && v.every(isSrc)).map(([k, v]) => [k, v.map((r) => `${r.file}:${r.line}`).sort()])),

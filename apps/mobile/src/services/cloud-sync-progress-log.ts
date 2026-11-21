@@ -23,6 +23,49 @@ type CloudSyncProgress = {
   fail: (error: unknown, detail?: Record<string, unknown>) => void;
 };
 
+/** 进度追踪器的状态槽：lastAt 是被重绑的时间游标（每步推进，供 msStep 计算）。 */
+type ProgressLogState = {
+  op: CloudSyncProgressOp;
+  startedAt: number;
+  lastAt: number;
+  onUiProgress?: CloudSyncProgressListener;
+};
+
+/** 推进一站进度：UI 映射（push/pull）+ dev 日志（msTotal/msStep，lastAt 推进）。 */
+function step(state: ProgressLogState, event: string, detail?: Record<string, unknown>): void {
+  if (state.onUiProgress != null && (state.op === 'push' || state.op === 'pull')) {
+    const uiState = CloudSyncProgressUi.mapEvent(state.op, event, detail);
+    if (uiState != null) {
+      state.onUiProgress(uiState);
+    }
+  }
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
+  }
+  const now = Date.now();
+  console.warn(LOG_TAG, event, {
+    op: state.op,
+    msTotal: now - state.startedAt,
+    msStep: now - state.lastAt,
+    ...detail,
+  });
+  state.lastAt = now;
+}
+
+/** 收尾站：`step(`${op}_done`)`（名称保留——CloudSyncProgress 接口契约）。 */
+function done(state: ProgressLogState, detail?: Record<string, unknown>): void {
+  step(state, `${state.op}_done`, detail);
+}
+
+/** 失败站：错误名抽取（CLOUD_SYNC 域错误带 key）+ `step(`${op}_failed`)`。 */
+function fail(state: ProgressLogState, error: unknown, detail?: Record<string, unknown>): void {
+  step(state, `${state.op}_failed`, {
+    error: error instanceof Error ? error.message : String(error),
+    key: AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC' ? error.key : undefined,
+    ...detail,
+  });
+}
+
 export namespace CloudSyncProgressLog {
   /** 日志用 key 缩写（避免路径过长）。 */
   export function shortStorageKey(key: string): string {
@@ -36,42 +79,12 @@ export namespace CloudSyncProgressLog {
   /** 创建带耗时的进度追踪器（`msTotal` / `msStep` + 可选 UI 回调）。 */
   export function create(op: CloudSyncProgressOp, options?: CloudSyncProgressOptions): CloudSyncProgress {
     const startedAt = Date.now();
-    let lastAt = startedAt;
-    const onUiProgress = options?.onUiProgress;
-
-    const step = (event: string, detail?: Record<string, unknown>): void => {
-      if (onUiProgress != null && (op === 'push' || op === 'pull')) {
-        const uiState = CloudSyncProgressUi.mapEvent(op, event, detail);
-        if (uiState != null) {
-          onUiProgress(uiState);
-        }
-      }
-      if (typeof __DEV__ === 'undefined' || !__DEV__) {
-        return;
-      }
-      const now = Date.now();
-      console.warn(LOG_TAG, event, {
-        op,
-        msTotal: now - startedAt,
-        msStep: now - lastAt,
-        ...detail,
-      });
-      lastAt = now;
+    const state: ProgressLogState = {op, startedAt, lastAt: startedAt, onUiProgress: options?.onUiProgress};
+    return {
+      step: (event, detail) => step(state, event, detail),
+      done: detail => done(state, detail),
+      fail: (error, detail) => fail(state, error, detail),
     };
-
-    const done = (detail?: Record<string, unknown>): void => {
-      step(`${op}_done`, detail);
-    };
-
-    const fail = (error: unknown, detail?: Record<string, unknown>): void => {
-      step(`${op}_failed`, {
-        error: error instanceof Error ? error.message : String(error),
-        key: AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC' ? error.key : undefined,
-        ...detail,
-      });
-    };
-
-    return {step, done, fail};
   }
 
   /** 包装 ObjectStoragePort，记录 head/get/put/putFile/getToPath 各阶段。 */

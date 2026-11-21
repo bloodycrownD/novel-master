@@ -156,6 +156,7 @@ export namespace NativeSseTransport {
             let settled = false;
             let onAbort: (() => void) | null = null;
 
+            // nm-style: keep-closure — settled/onAbort/signal 是 per-promise 可变状态，闭包生命周期=单次流，且处于原生 SSE settle 协议路径（与 routes 表和 abort 解绑联动），对象槽重构零复用收益。
             const finish = (settle: () => void): void => {
               if (settled) {
                 return;

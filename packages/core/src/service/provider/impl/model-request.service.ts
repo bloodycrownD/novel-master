@@ -108,6 +108,7 @@ async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> 
       signal?.removeEventListener("abort", onAbort);
       resolve();
     }, ms);
+    // nm-style: keep-closure — 注册给 AbortSignal 的回调且强时序：timer 到点先 removeEventListener 再 resolve，abort 路径 clearTimeout+reject，已 aborted 时同步直调；timer/reject 的配对生命周期由闭包承载（拆散即泄漏 timer 或已 settle 后 reject）。
     const onAbort = () => {
       clearTimeout(timer);
       reject(AbortError.create());

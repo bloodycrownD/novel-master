@@ -39,6 +39,9 @@ interface WorkplaceServiceDeps {
 /**
  * Workplace service backed by vfs_entry and workplace tables.
  */
+/** 规则表按 logicalPath 的确定性排序比较器（读时校验签名采样用，零捕获纯函数）。 */
+const byLogicalPath = (a: { logicalPath: string }, b: { logicalPath: string }): number => (a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0);
+
 export class DefaultWorkplaceService implements WorkplaceService {
   readonly scope: WorkplaceScopeType;
 
@@ -199,7 +202,6 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const vfs = await this.deps.vfs.computeEntrySignature(vfsKey);
     const dirRules = await this.deps.workplace.listDirRules(cacheKey);
     const fileRules = await this.deps.workplace.listFileRules(cacheKey);
-    const byLogicalPath = (a: { logicalPath: string }, b: { logicalPath: string }) => (a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0);
     dirRules.sort(byLogicalPath);
     fileRules.sort(byLogicalPath);
     // 无条件采样（表小成本可忽略，管理页改规则低频，过度失效可接受）；

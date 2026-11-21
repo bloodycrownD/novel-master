@@ -123,15 +123,6 @@ export class OpSqliteConnection implements TdbcConnection {
       return { totalChanges: 0, count: 0 };
     }
 
-    const runStatements = async (): Promise<BatchResult> => {
-      let totalChanges = 0;
-      for (const params of parametersList) {
-        const result = await this.runAdapter(sql, OpSqliteBindings.normalize(params),);
-        totalChanges += result.rowsAffected ?? 0;
-      }
-      return { totalChanges, count: parametersList.length };
-    };
-
     if (this.inTransaction) {
       // --- 外层事务内的 batch：SAVEPOINT 作用域的嵌套事务 ---
       // 失败只回滚这一个 batch（ROLLBACK TO sp）；外层事务保持打开、
@@ -139,7 +130,7 @@ export class OpSqliteConnection implements TdbcConnection {
       const sp = `tdbc_sp_${++this.savepointDepth}`;
       await this.runAdapter(`SAVEPOINT ${sp}`, undefined);
       try {
-        const result = await runStatements();
+        const result = await this.runBatchStatements(sql, parametersList);
         await this.runAdapter(`RELEASE ${sp}`, undefined);
         return result;
       } catch (cause) {
@@ -163,7 +154,7 @@ export class OpSqliteConnection implements TdbcConnection {
     // --- batch 边界：经 adapter 的独立事务 ---
     await this.runAdapter("BEGIN", undefined);
     try {
-      const result = await runStatements();
+      const result = await this.runBatchStatements(sql, parametersList);
       await this.runAdapter("COMMIT", undefined);
       return result;
     } catch (cause) {
@@ -178,6 +169,16 @@ export class OpSqliteConnection implements TdbcConnection {
         cause,
       });
     }
+  }
+
+  /** 逐条 normalize+runAdapter 累计 totalChanges（JS 侧批量编排，SAVEPOINT 与独立事务两分支共用）。 */
+  private async runBatchStatements(sql: string, parametersList: readonly (readonly unknown[])[]): Promise<BatchResult> {
+    let totalChanges = 0;
+    for (const params of parametersList) {
+      const result = await this.runAdapter(sql, OpSqliteBindings.normalize(params),);
+      totalChanges += result.rowsAffected ?? 0;
+    }
+    return { totalChanges, count: parametersList.length };
   }
 
   private assertOpen(): void {

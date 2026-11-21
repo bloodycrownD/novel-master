@@ -22,6 +22,20 @@ export interface TypedMessageBridge<ToClient, ToHost> {
   readonly decodeToClient: (raw: string) => ToClient;
 }
 
+/** 解析并校验信封：v 不符 → versionError，type 缺失 / payload 非对象（requirePayload）→ shapeError。 */
+function decodeEnvelope(raw: string, requirePayload: boolean, version: number, versionError: string, shapeError: string): unknown {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Guards.isRecord(parsed) || parsed.v !== version) {
+    // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
+    throw new Error(versionError);
+  }
+  if (typeof parsed.type !== 'string' || (requirePayload && !Guards.isRecord(parsed.payload))) {
+    // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
+    throw new Error(shapeError);
+  }
+  return parsed;
+}
+
 export const TypedMessageBridge = {
   /**
    * @param version 信封版本（各桥自己的 BRIDGE_V，web 侧同值）
@@ -31,24 +45,11 @@ export const TypedMessageBridge = {
     const versionError = `Invalid ${label} bridge envelope version`;
     const shapeError = `Invalid ${label} bridge envelope shape`;
 
-    function decodeEnvelope(raw: string, requirePayload: boolean): unknown {
-      const parsed: unknown = JSON.parse(raw);
-      if (!Guards.isRecord(parsed) || parsed.v !== version) {
-        // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
-        throw new Error(versionError);
-      }
-      if (typeof parsed.type !== 'string' || (requirePayload && !Guards.isRecord(parsed.payload))) {
-        // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
-        throw new Error(shapeError);
-      }
-      return parsed;
-    }
-
     return {
       encodeToClient: message => JSON.stringify(message),
       encodeToHost: message => JSON.stringify(message),
-      decodeToHost: raw => decodeEnvelope(raw, true) as ToHost,
-      decodeToClient: raw => decodeEnvelope(raw, false) as ToClient,
+      decodeToHost: raw => decodeEnvelope(raw, true, version, versionError, shapeError) as ToHost,
+      decodeToClient: raw => decodeEnvelope(raw, false, version, versionError, shapeError) as ToClient,
     };
   },
 } as const;

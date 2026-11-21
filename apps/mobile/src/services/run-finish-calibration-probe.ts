@@ -63,6 +63,32 @@ export interface RunFinishCalibrationProbe {
  * 同一会话在复询未决期间不重复排入。
  */
 export namespace RunFinishCalibrationProbe {
+  /** 一轮校准：未注册的活跃会话排一次防抖复询，复询仍查无注册即走 onRunLost。 */
+  function runCalibration(params: RunFinishCalibrationProbeParams, reconfirmTimers: Map<string, ReturnType<typeof setTimeout>>, reconfirmDelayMs: number): void {
+    for (const sessionId of params.activeSessionIds()) {
+      if (params.isRunRegistered(sessionId)) {
+        continue;
+      }
+      // 第一次查到未注册：已排复询则等待，否则排入。
+      if (reconfirmTimers.has(sessionId)) {
+        continue;
+      }
+      const timer = setTimeout(() => {
+        reconfirmTimers.delete(sessionId);
+        // 复询仍要过活跃 + 注册两道关：期间 run 可能正常结束（事件路径
+        // 已收尾、activeSessionIds 不再包含）或 registry 已补注册。
+        if (!params.activeSessionIds().includes(sessionId)) {
+          return;
+        }
+        if (params.isRunRegistered(sessionId)) {
+          return;
+        }
+        params.onRunLost(sessionId);
+      }, reconfirmDelayMs);
+      reconfirmTimers.set(sessionId, timer);
+    }
+  }
+
   /**
    * 创建收尾校准探针。轮询 interval 惰性启停（setPollingEnabled）——
    * 无待校准会话时不占任何常驻定时器；per-session 复询定时器去重排程，
@@ -75,36 +101,11 @@ export namespace RunFinishCalibrationProbe {
     const reconfirmTimers = new Map<string, ReturnType<typeof setTimeout>>();
     let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
-    const calibrate = (): void => {
-      for (const sessionId of params.activeSessionIds()) {
-        if (params.isRunRegistered(sessionId)) {
-          continue;
-        }
-        // 第一次查到未注册：已排复询则等待，否则排入。
-        if (reconfirmTimers.has(sessionId)) {
-          continue;
-        }
-        const timer = setTimeout(() => {
-          reconfirmTimers.delete(sessionId);
-          // 复询仍要过活跃 + 注册两道关：期间 run 可能正常结束（事件路径
-          // 已收尾、activeSessionIds 不再包含）或 registry 已补注册。
-          if (!params.activeSessionIds().includes(sessionId)) {
-            return;
-          }
-          if (params.isRunRegistered(sessionId)) {
-            return;
-          }
-          params.onRunLost(sessionId);
-        }, reconfirmDelayMs);
-        reconfirmTimers.set(sessionId, timer);
-      }
-    };
-
     return {
-      calibrate,
+      calibrate: () => runCalibration(params, reconfirmTimers, reconfirmDelayMs),
       setPollingEnabled(enabled: boolean): void {
         if (enabled && pollingInterval == null) {
-          pollingInterval = setInterval(calibrate, intervalMs);
+          pollingInterval = setInterval(() => runCalibration(params, reconfirmTimers, reconfirmDelayMs), intervalMs);
         } else if (!enabled && pollingInterval != null) {
           clearInterval(pollingInterval);
           pollingInterval = null;

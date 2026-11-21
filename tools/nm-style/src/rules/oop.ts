@@ -59,17 +59,18 @@ function stateNames(sourceFile: ts.SourceFile): Set<string> {
 
 function usedStates(body: ts.Node, names: Set<string>): Set<string> {
   const used = new Set<string>();
-  const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && names.has(node.text)) {
-      const parent = node.parent;
-      const isPropertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node) || (ts.isPropertyAssignment(parent) && parent.name === node);
-      const isDeclarationName = (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isParameter(parent)) && parent.name === node;
-      if (!isPropertyName && !isDeclarationName) used.add(node.text);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(body);
+  collectUsedStates(body, names, used);
   return used;
+}
+
+function collectUsedStates(node: ts.Node, names: Set<string>, used: Set<string>): void {
+  if (ts.isIdentifier(node) && names.has(node.text)) {
+    const parent = node.parent;
+    const isPropertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node) || (ts.isPropertyAssignment(parent) && parent.name === node);
+    const isDeclarationName = (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isParameter(parent)) && parent.name === node;
+    if (!isPropertyName && !isDeclarationName) used.add(node.text);
+  }
+  ts.forEachChild(node, (child) => collectUsedStates(child, names, used));
 }
 
 /** 逐文件裁决（行=首条语句），verdict × location 排序与旧脚本一致；KEEP 文件不产出行。 */

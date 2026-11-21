@@ -119,35 +119,37 @@ function hasStaticModifier(node: ts.Node): boolean {
  * 覆盖面与 symbol-index 的定义收集一一对应（spec §3.2）：函数声明、变量声明、方法/访问器、
  * 属性赋值、简写属性、`X.y = fn`、namespace。
  */
+function recordDeclAnchor(anchors: Map<string, DeclAnchor>, sourceFile: ts.SourceFile, name: string, node: ts.Node, fnNode: ts.Node | null, isStatic = false): void {
+  anchors.set(`${name}#${lineOf(sourceFile, node)}`, { fnNode, declNode: node, isStatic, lines: fnNode == null ? 0 : lineOf(sourceFile, fnNode.getEnd()) - lineOf(sourceFile, fnNode) + 1 });
+}
+
+function visitDeclNodes(node: ts.Node, anchors: Map<string, DeclAnchor>, sourceFile: ts.SourceFile): void {
+  if (ts.isFunctionDeclaration(node) && node.name != null) recordDeclAnchor(anchors, sourceFile, node.name.text, node, node);
+  else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer != null) {
+    const init = node.initializer;
+    recordDeclAnchor(anchors, sourceFile, node.name.text, node, ts.isArrowFunction(init) || ts.isFunctionExpression(init) ? init : null);
+  } else if (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) {
+    const name = memberNameText(node.name);
+    if (name != null) recordDeclAnchor(anchors, sourceFile, name, node, node, hasStaticModifier(node));
+  } else if (ts.isPropertyAssignment(node)) {
+    const name = memberNameText(node.name);
+    if (name != null) {
+      const init = node.initializer;
+      recordDeclAnchor(anchors, sourceFile, name, node, ts.isArrowFunction(init) || ts.isFunctionExpression(init) ? init : null);
+    }
+  } else if (ts.isShorthandPropertyAssignment(node)) recordDeclAnchor(anchors, sourceFile, node.name.text, node, null);
+  else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(node.left) && ts.isIdentifier(node.left.name)) {
+    recordDeclAnchor(anchors, sourceFile, node.left.name.text, node, ts.isArrowFunction(node.right) || ts.isFunctionExpression(node.right) ? node.right : null);
+  } else if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name) && node.body != null) recordDeclAnchor(anchors, sourceFile, node.name.text, node, null);
+  ts.forEachChild(node, (child) => visitDeclNodes(child, anchors, sourceFile));
+}
+
 function buildDeclAnchors(entries: readonly ScanEntry[]): Map<string, Map<string, DeclAnchor>> {
   const byFile = new Map<string, Map<string, DeclAnchor>>();
   for (const entry of entries) {
     const sourceFile = entry.text == null ? parseSource(entry.file) : parseText(entry.file, entry.text);
     const anchors = new Map<string, DeclAnchor>();
-    const record = (name: string, node: ts.Node, fnNode: ts.Node | null, isStatic = false): void => {
-      anchors.set(`${name}#${lineOf(sourceFile, node)}`, { fnNode, declNode: node, isStatic, lines: fnNode == null ? 0 : lineOf(sourceFile, fnNode.getEnd()) - lineOf(sourceFile, fnNode) + 1 });
-    };
-    const visit = (node: ts.Node): void => {
-      if (ts.isFunctionDeclaration(node) && node.name != null) record(node.name.text, node, node);
-      else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer != null) {
-        const init = node.initializer;
-        record(node.name.text, node, ts.isArrowFunction(init) || ts.isFunctionExpression(init) ? init : null);
-      } else if (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) {
-        const name = memberNameText(node.name);
-        if (name != null) record(name, node, node, hasStaticModifier(node));
-      } else if (ts.isPropertyAssignment(node)) {
-        const name = memberNameText(node.name);
-        if (name != null) {
-          const init = node.initializer;
-          record(name, node, ts.isArrowFunction(init) || ts.isFunctionExpression(init) ? init : null);
-        }
-      } else if (ts.isShorthandPropertyAssignment(node)) record(node.name.text, node, null);
-      else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(node.left) && ts.isIdentifier(node.left.name)) {
-        record(node.left.name.text, node, ts.isArrowFunction(node.right) || ts.isFunctionExpression(node.right) ? node.right : null);
-      } else if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name) && node.body != null) record(node.name.text, node, null);
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
+    visitDeclNodes(sourceFile, anchors, sourceFile);
     byFile.set(toPosix(entry.file), anchors);
   }
   return byFile;

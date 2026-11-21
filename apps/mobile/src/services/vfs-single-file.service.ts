@@ -13,7 +13,7 @@
  *   session scope 下 core 会顺带清该会话的提示词缓存（R5）。
  */
 import {AppError} from '@novel-master/core/errors';
-import {VfsServiceFactory, type BatchApplyReport, type BatchIngestPlan, type VfsScope} from '@novel-master/core/vfs';
+import {VfsServiceFactory, type BatchApplyReport, type BatchIngestPlan, type VfsBatchIoService, type VfsScope} from '@novel-master/core/vfs';
 import {Result} from '@novel-master/core/errors';
 import {DocumentIo, type PickAndReadOptions} from './document-io';
 import {RnFileIo} from './rn-file-io';
@@ -67,6 +67,13 @@ interface VfsSingleFileImportOptions {
 }
 
 export namespace VfsSingleFileService {
+  /** 用已选字节执行覆盖落库（overwriteConfirmed: true；plan 已在手）。 */
+  async function applySingleFileImport(batchIo: VfsBatchIoService, scope: VfsScope, targetDir: string, plan: BatchIngestPlan): Promise<Result<VfsSingleFileAppliedResult, AppError>> {
+    const applied = await batchIo.applyBatchIngest(scope, targetDir, plan, {overwriteConfirmed: true});
+    if (!applied.ok) return Result.err(applied.error);
+    return Result.ok({status: 'applied', report: applied.value, skippedBinary: [...plan.skippedBinary]});
+  }
+
   /**
    * 导入单个文件到 VFS。
    *
@@ -95,21 +102,16 @@ export namespace VfsSingleFileService {
     if (!planned.ok) return Result.err(planned.error);
     const plan = planned.value;
 
-    const apply = async (): Promise<Result<VfsSingleFileAppliedResult, AppError>> => {
-      const applied = await batchIo.applyBatchIngest(scope, targetDir, plan, {overwriteConfirmed: true});
-      if (!applied.ok) return Result.err(applied.error);
-      return Result.ok({status: 'applied', report: applied.value, skippedBinary: [...plan.skippedBinary]});
-    };
-
     if (plan.conflicts.length > 0) {
       return Result.ok({
         status: 'needs-confirm',
         conflictCount: plan.conflicts.length,
         fileName: picked.fileName,
-        confirm: apply,
+        // confirm 契约必须是回调：picker 字节与确认写入是同一份（见接口注释）。
+        confirm: () => applySingleFileImport(batchIo, scope, targetDir, plan),
       });
     }
-    return apply();
+    return applySingleFileImport(batchIo, scope, targetDir, plan);
   }
 
   /**

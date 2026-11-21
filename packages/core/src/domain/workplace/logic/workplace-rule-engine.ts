@@ -28,6 +28,12 @@ interface DirSortPlan {
   readonly sortedFiles: readonly string[];
 }
 
+/** 单文件排序元组（auto 名单与全量名单两处排序共用；mtime 缺省 0）。 */
+const fileSortMeta = (ctx: WorkplaceRuleContext, p: string): WorkplaceFileSortMeta => ({
+  logicalPath: p,
+  mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
+});
+
 export const WorkplaceRuleEngine = {
   /**
    * 评估工作区规则视图：纯规则 DFS，不算文件正文。
@@ -52,11 +58,6 @@ export const WorkplaceRuleEngine = {
       }
     }
 
-    const metaOf = (p: string): WorkplaceFileSortMeta => ({
-      logicalPath: p,
-      mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
-    });
-
     const planByDir = new Map<string, DirSortPlan>();
     for (const [dir, files] of filesByDir) {
       const dirRule = ctx.dirRuleMap.get(dir) ?? null;
@@ -65,7 +66,7 @@ export const WorkplaceRuleEngine = {
       const autoMetas: WorkplaceFileSortMeta[] = [];
       for (const p of files) {
         if (WorkplaceRuleEngine.resolveInclusion(p, ctx) === "auto") {
-          autoMetas.push(metaOf(p));
+          autoMetas.push(fileSortMeta(ctx, p));
         }
       }
       const sortedAuto = WorkplaceEval.sortFilesForDir(autoMetas, dirRule, {
@@ -76,7 +77,7 @@ export const WorkplaceRuleEngine = {
         autoIndexByFile.set(sortedAuto[i]!.logicalPath, i);
       }
       // 全量名单排序：列表行顺序（旧 walkDir 的 sortedFiles 语义）
-      const sortedFiles = WorkplaceEval.sortFilesForDir(files.map(metaOf), dirRule, {
+      const sortedFiles = WorkplaceEval.sortFilesForDir(files.map((p) => fileSortMeta(ctx, p)), dirRule, {
         smartRules: ctx.smartRules,
       }).map((m) => m.logicalPath);
       planByDir.set(dir, { autoIndexByFile, autoCount, sortedFiles });

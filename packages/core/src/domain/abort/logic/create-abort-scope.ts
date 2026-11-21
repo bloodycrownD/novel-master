@@ -36,6 +36,37 @@ const controllerScopes = new WeakMap<AbortController, AbortScope>();
 
 const noop = (): void => {};
 
+/** abort 事件回调体：try/catch 包裹调 `fn("user-stop")`（清理钩子失败不反向打断调用方）。 */
+const signalViewOnAbort = (fn: (reason: AbortReason) => void): void => {
+  try {
+    fn("user-stop");
+  } catch {
+    // 清理钩子失败不反向打断调用方。
+  }
+};
+
+/** 裸 signal 订阅取消回调：已 aborted 直调 `fn("user-stop")`，否则挂 abort 监听（add/remove 同引用）并返回解绑函数。 */
+const signalViewOnCancel = (signal: AbortSignal, fn: (reason: AbortReason) => void): (() => void) => {
+  if (signal.aborted) {
+    try {
+      fn("user-stop");
+    } catch {
+      // 清理钩子失败不反向打断调用方。
+    }
+    return noop;
+  }
+  const onAbort = (): void => {
+    signalViewOnAbort(fn);
+  };
+  signal.addEventListener("abort", onAbort);
+  return () => {
+    signal.removeEventListener("abort", onAbort);
+  };
+};
+
+/** 裸 signal 视图的中断检查：已 aborted 即 user-stop 中断，否则 null。 */
+const signalViewCheckpoint = (signal: AbortSignal): Interrupt | null => (signal.aborted ? { kind: "cancelled", reason: "user-stop" } : null);
+
 export const AbortScopeFactory = {
   isDevEnvironment(): boolean {
     const g = globalThis as { __DEV__?: boolean; process?: { env?: Record<string, string | undefined> } };
@@ -142,6 +173,7 @@ export const AbortScopeFactory = {
     const attachedParents = new Set<AbortSignalView>();
     let scope: AbortScope;
 
+    // nm-style: keep-closure — buildScope 簇状态机核心：reason/timer/disposed/listeners/children 是单 scope 私有可变状态，参数化需发明 7 槽 holder 改写全簇引用，零复用收益。
     const abortInternal = (nextReason: AbortReason): void => {
       if (disposed || reason !== null) {
         return;
@@ -166,6 +198,7 @@ export const AbortScopeFactory = {
       }
     };
 
+    // nm-style: keep-closure — 同 buildScope 簇：读写 disposed/reason 并调 abortInternal（keep 簇核心），提不出去。
     /** 外部 controller / 裸 signal 已 aborted 但事件没补发时，补一次协作中断。 */
     const reconcileSignal = (): void => {
       if (!disposed && reason === null && signal.aborted) {
@@ -173,8 +206,10 @@ export const AbortScopeFactory = {
       }
     };
 
+    // nm-style: keep-closure — 同 buildScope 簇：捕获 abortInternal 且内嵌 onAbort，拆法须先拆外层而外层属 keep 簇。
     /** 已判定未 aborted 的 signal 挂取消监听；返回解绑函数（controller / 裸 signal 共用同一形状）。 */
     const watchAbort = (target: AbortSignal): (() => void) => {
+      // nm-style: keep-closure — add/removeEventListener 必须同一 listener 引用（生命周期不变量）。
       const onAbort = (): void => {
         abortInternal("user-stop");
       };
@@ -184,6 +219,7 @@ export const AbortScopeFactory = {
       };
     };
 
+    // nm-style: keep-closure — buildScope 簇：scope 公开方法本体，读 disposed/reason 并调 reconcileSignal。
     const checkpoint = (): Interrupt | null => {
       if (disposed) {
         return null;
@@ -192,6 +228,7 @@ export const AbortScopeFactory = {
       return reason === null ? null : { kind: "cancelled", reason };
     };
 
+    // nm-style: keep-closure — buildScope 簇：scope 公开方法本体，写 listeners 集合、读 disposed/reason。
     const onCancel = (fn: (reason: AbortReason) => void): (() => void) => {
       if (disposed) {
         return noop;
@@ -211,6 +248,7 @@ export const AbortScopeFactory = {
       };
     };
 
+    // nm-style: keep-closure — buildScope 簇：组合 checkpoint/onCancel 的公开方法；Promise reject 属平台协议例外通道。
     const race = <T>(work: Promise<T>, rejectWith?: () => unknown): Promise<T> => {
       if (disposed) {
         return work;
@@ -218,6 +256,7 @@ export const AbortScopeFactory = {
       return AbortScopeFactory.raceWithCancel(work, () => checkpoint() != null, (fn) => onCancel(fn), rejectWith);
     };
 
+    // nm-style: keep-closure — buildScope 簇：捕获后赋值的自引用 scope 与 dispose，子 scope 创建绑定本实例。
     const fork = (forkOpts?: { timeoutMs?: number }): AbortScope => {
       if (disposed) {
         const dead = AbortScopeFactory.buildScope({});
@@ -228,6 +267,7 @@ export const AbortScopeFactory = {
       return AbortScopeFactory.create({ parent: scope, ...(timeoutMs !== undefined ? { timeoutMs } : {}) });
     };
 
+    // nm-style: keep-closure — buildScope 簇：重绑定 disposed/timer/两个 removeListener 四变量，全簇参数化成本最高；释放逻辑与实例状态生命周期等长。
     const dispose = (): void => {
       if (disposed) {
         return;
@@ -389,33 +429,12 @@ export const AbortScopeFactory = {
 
   /** 裸 `AbortSignal` 只读适配：无定时器、无 dispose，reason 恒为 null。 */
   signalView(signal: AbortSignal): AbortSignalView {
-    const onCancel = (fn: (reason: AbortReason) => void): (() => void) => {
-      if (signal.aborted) {
-        try {
-          fn("user-stop");
-        } catch {
-          // 清理钩子失败不反向打断调用方。
-        }
-        return noop;
-      }
-      const onAbort = (): void => {
-        try {
-          fn("user-stop");
-        } catch {
-          // 同上。
-        }
-      };
-      signal.addEventListener("abort", onAbort);
-      return () => {
-        signal.removeEventListener("abort", onAbort);
-      };
-    };
-    const checkpoint = (): Interrupt | null => (signal.aborted ? { kind: "cancelled", reason: "user-stop" } : null);
+    const onCancel = (fn: (reason: AbortReason) => void): (() => void) => signalViewOnCancel(signal, fn);
     return {
       signal,
       reason: null,
-      checkpoint,
-      yieldToUi: () => AbortScopeFactory.yieldToUiAfter(checkpoint),
+      checkpoint: () => signalViewCheckpoint(signal),
+      yieldToUi: () => AbortScopeFactory.yieldToUiAfter(() => signalViewCheckpoint(signal)),
       race: (work, rejectWith) => AbortScopeFactory.raceWithCancel(work, () => signal.aborted, onCancel, rejectWith),
       onCancel,
     };

@@ -48,6 +48,12 @@ type RepairReport = {
   readonly overExpected: ReadonlyArray<OverExpectedRefRow>;
 };
 
+/** repair 期望值累加：按 (entryId, version) 键 +1（checkpoint 指针与 live head 两类持有者共用）。 */
+const bumpExpected = (expected: Map<string, number>, entryId: number, version: number): void => {
+  const key = `${entryId}:${version}`;
+  expected.set(key, (expected.get(key) ?? 0) + 1);
+};
+
 export const RevisionRefCount = {
   /** 单条 (entryId, version) ±1。 */
   async adjust(revisionRepo: VfsRevisionRepository, entryId: number, version: number, delta: 1 | -1): Promise<void> {
@@ -94,21 +100,16 @@ export const RevisionRefCount = {
   async repair(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, checkpoints: MessageCheckpointRepository, scopeKey: string, pathPrefix: string, sessionId: string): Promise<RepairReport> {
     const expected = new Map<string, number>();
 
-    const bump = (entryId: number, version: number): void => {
-      const key = `${entryId}:${version}`;
-      expected.set(key, (expected.get(key) ?? 0) + 1);
-    };
-
     // 持有者一：checkpoint 文件指针。
     const pointers = await checkpoints.listFilePointersForSession(sessionId);
     for (const pointer of pointers) {
-      bump(pointer.entryId, pointer.revisionVersion);
+      bumpExpected(expected, pointer.entryId, pointer.revisionVersion);
     }
 
     // 持有者二：live head。
     const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
     for (const head of liveHeads) {
-      bump(head.entryId, head.headVersion);
+      bumpExpected(expected, head.entryId, head.headVersion);
     }
 
     // 带回当前 ref_count 一次取齐：偏低走 floor 上调，偏高只报告。

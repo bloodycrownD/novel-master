@@ -49,6 +49,7 @@ export const StreamWatchdog = {
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let fired = false;
 
+    // nm-style: keep-closure — idleTimer 是 handle 私有定时器槽（闭包生命周期=watchdog 生命周期）；本文件已退役零生产接入方且 STREAM_IDLE_TIMEOUT_MS 在 allowlist 冻结面，抽取零收益。
     const clearIdleTimer = (): void => {
       if (idleTimer != null) {
         clearTimeout(idleTimer);

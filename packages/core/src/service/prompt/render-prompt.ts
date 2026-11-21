@@ -12,7 +12,7 @@ import type { ChatMessageData } from "../../domain/chat/model/message.js";
 import type { MessageLike } from "../../common/i18n.js";
 import { Text } from "../../common/text.js";
 import { TextBlocks } from "../../domain/chat/content/text-blocks.js";
-import { MessageBodyText } from "../../domain/chat/content/message-body-text.js";
+import { MessageBodyText, flushTextCard } from "../../domain/chat/content/message-body-text.js";
 import type { ContentBlock, ToolResultBlock as ChatToolResultBlock } from "../../domain/chat/model/content-block.js";
 import { AgentPromptLayout, DEFAULT_SKILLS_INDEX_PREFIX } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { DynamicMacrosExpansion } from "../../domain/prompt/logic/expand-dynamic-macros.js";
@@ -516,27 +516,15 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
   const cards: PromptTurnCardData[] = [];
   let textBuffer: Array<{ index: number; text: string }> = [];
 
-  const flushText = () => {
-    if (textBuffer.length === 0) {
-      return;
-    }
-    const first = textBuffer[0]!;
-    cards.push({
-      type: "text",
-      id: cardId(message.id, first.index),
-      role: message.role,
-      body: textBuffer.map((part) => part.text).join("\n\n"),
-    });
-    textBuffer = [];
-  };
-
   blocks.forEach((block, index) => {
     if (block.type === "tool_result") {
       // 结果不单独成卡：按 toolUseId 收进对应工具组卡的 result 格。
       return;
     }
     if (block.type === "tool_use") {
-      flushText();
+      const flushedCard = flushTextCard(textBuffer, (joined, first): PromptTurnCardData => ({ type: "text", id: cardId(message.id, first.index), role: message.role, body: joined }));
+      if (flushedCard != null) cards.push(flushedCard);
+      textBuffer = [];
       const resultBlock = results.get(block.id);
       const ok = resultBlock !== undefined && ToolResultBlock.resolveOk(resultBlock);
       const inputJson = JSON.stringify(block.input, null, 2);
@@ -564,7 +552,9 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
       if (!includeThinking) {
         return;
       }
-      flushText();
+      const flushedCard = flushTextCard(textBuffer, (joined, first): PromptTurnCardData => ({ type: "text", id: cardId(message.id, first.index), role: message.role, body: joined }));
+      if (flushedCard != null) cards.push(flushedCard);
+      textBuffer = [];
       cards.push({
         type: "thinking",
         id: cardId(message.id, index),
@@ -578,7 +568,9 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
       textBuffer.push({ index, text });
     }
   });
-  flushText();
+  const tailCard = flushTextCard(textBuffer, (joined, first): PromptTurnCardData => ({ type: "text", id: cardId(message.id, first.index), role: message.role, body: joined }));
+  if (tailCard != null) cards.push(tailCard);
+  textBuffer = [];
 
   return cards;
 }
@@ -649,6 +641,21 @@ interface TurnGroup {
   attachmentCount: number;
 }
 
+/** 新开一轮分组并 push 进 groups（current 组复用 vs 新开组的判据留在调用点）。 */
+const pushTurnGroup = (groups: TurnGroup[], kind: TurnGroup["kind"], messageId?: string, seq?: number): TurnGroup => {
+  const group: TurnGroup = {
+    kind,
+    messageId,
+    seq,
+    items: [],
+    cards: [],
+    consumedMessageIds: new Set<string>(),
+    attachmentCount: 0,
+  };
+  groups.push(group);
+  return group;
+};
+
 /**
  * 按「模板段各自独立 / 真用户输入开新轮 / 其余归当前 assistant 轮」聚合提示词段。
  *
@@ -684,26 +691,12 @@ async function buildPromptPreviewTurnsFromLayout(layout: AgentPromptLayout, ctx:
   const groups: TurnGroup[] = [];
   let current: TurnGroup | null = null;
 
-  const pushGroup = (kind: TurnGroup["kind"], messageId: string | undefined = undefined, seq: number | undefined = undefined): TurnGroup => {
-    const group: TurnGroup = {
-      kind,
-      messageId,
-      seq,
-      items: [],
-      cards: [],
-      consumedMessageIds: new Set<string>(),
-      attachmentCount: 0,
-    };
-    groups.push(group);
-    return group;
-  };
-
   for (const segment of segments) {
     const item: PromptPreviewSegment = { id: segment.id, role: segment.role, title: segment.title, body: segment.body };
     if (segment.source !== "message") {
       // 合成段轮：不在 ctx.messages 里，由该轮唯一段的 items 直转卡；
       // kind 取该段的真实消息 role（见接口注释——不设 template 特殊分类，非三值兜底归 system）。
-      const group = pushGroup(segment.role === "user" || segment.role === "assistant" ? segment.role : "system");
+      const group = pushTurnGroup(groups, segment.role === "user" || segment.role === "assistant" ? segment.role : "system");
       group.items.push(item);
       // workplace 段拆文件级组卡（数据源 = ctx.workplaceFiles，kkv 规则快照
       // 源头直通）；无结构化数据（旧调用方/空快照）退普通 text 卡。
@@ -736,10 +729,10 @@ async function buildPromptPreviewTurnsFromLayout(layout: AgentPromptLayout, ctx:
     let target: TurnGroup;
     if (isUserInput) {
       // 同一条消息的多个段合成一轮；换一条真用户输入即开新轮。
-      target = current !== null && current.kind === "user" && current.messageId === segment.messageId ? current : pushGroup("user", segment.messageId, segment.seq);
+      target = current !== null && current.kind === "user" && current.messageId === segment.messageId ? current : pushTurnGroup(groups, "user", segment.messageId, segment.seq);
     } else {
       // 会话开头无 user 前缀时，assistant 段自成首个 assistant 轮。
-      target = current !== null && current.kind === "assistant" ? current : pushGroup("assistant", undefined, segment.seq);
+      target = current !== null && current.kind === "assistant" ? current : pushTurnGroup(groups, "assistant", undefined, segment.seq);
     }
     current = target;
     target.items.push(item);

@@ -350,6 +350,100 @@ export namespace ChatPromptTokensService {
     });
   }
 
+  /** 判活源（r3-dt-align ①，与 mobile 同款口径）：build 分段检查点、build/resolve 边界、resolve 整串级检查点、后台暖机排程判断共用这一条。 */
+  function isDesktopSessionRunInFlight(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): boolean {
+    return Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId);
+  }
+
+  /** resolve 读口的弃权判据（错误通道迁移二期）：run 在途即本轮读数被在途 run 取代，收成 replaced。 */
+  function bailInterrupt(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Interrupt | null {
+    return isDesktopSessionRunInFlight(runtime, scope) ? { kind: "replaced" } : null;
+  }
+
+  /** 「完整口径」resolve 一跳：首帧 resolve 与紧随其后的后台暖机复用同一份 params（口径漂移会让暖过的缓存没人命中）。 */
+  async function countWithWarm(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, armPreciseWarm: boolean, args: CountArgs): Promise<Result<CountResult | null, AppError>> {
+    const { layout, ctx, savedModelId } = args;
+    // 一次「完整口径」resolve 所需的 params 组装（tokenizerOverride / registry /
+    // savedModels 三件套）：首帧 resolve 与紧随其后的后台暖机**复用同一份 params**
+    // （暖机不重新组装）——口径漂移（比如漏传 `tokenizerOverride`）会让 L1 写入的
+    // scope 键对不上，暖过的缓存没人命中，升级推送「偶发失效」。
+    const mode = await TokenCounterMode.resolveForModel(runtime.providerModels, savedModelId);
+    // 已知失败沿 Result 上行（错误通道迁移七期），由 countFn 的 Result 通道收口。
+    if (!mode.ok) return Result.err(mode.error);
+    const params = { layout, ctx, savedModelId, registry: runtime.tokenCounters, tokenizerOverride: mode.value, savedModels: runtime.savedModelRepo };
+    // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
+    // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
+    // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
+    // 与压缩评估同一读口、同一口径。
+    const outcome = await PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: () => bailInterrupt(runtime, scope) });
+    if (outcome.kind === "failed") {
+      // core 读口的已知失败（现无产出路径）：沿 Result 上行（错误通道迁移
+      // 四期），不吞成弃权，由 resilient 收口降级。
+      return Result.err(outcome.error);
+    }
+    if (outcome.kind !== "completed") {
+      // 中途弃权（run 起步）：沿 countFn 的 null 通道收口（error-matrix-final R3），
+      // computeStats 返回 null，绝不进 fallback。
+      return Result.ok(null);
+    }
+    const result = outcome.value;
+    if (
+      armPreciseWarm &&
+      result.source === "local" &&
+      result.estimated &&
+      !readWarmInflight.has(scope.sessionId) &&
+      // run 在途不排暖机：后台暖机是整串级重活（家族真分词器 + L1 写入），
+      // 与发送链抢同一条 SQLite 连接。run 结束后那次补推（agent.ts 终态钩子）
+      // 会把这一轮补上，彼时无竞争。
+      !isDesktopSessionRunInFlight(runtime, scope)
+    ) {
+      readWarmInflight.add(scope.sessionId);
+      void PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: () => bailInterrupt(runtime, scope) })
+        .then(async (precise) => {
+          if (precise.kind !== "completed") {
+            // 中途弃权（run 起步，错误通道迁移二期沿返回值到达）：没有更
+            // 准的读数可推，静默收场。
+            return;
+          }
+          // 暖机没拿到比估算更好的档（该家族只有近似档 / 编码表建不起来）
+          // → 没有更准的读数可推，chip 停在 `gpt ≈` 才是如实。
+          if (precise.value.estimated) {
+            return;
+          }
+          // r3-cache-3：直接推这份精确档（不补读、不重跑 build）；
+          // 只有「暖机期间模型已变」才在 push 内部补读一次。
+          await pushPreciseStatsIfReady(runtime, scope, {
+            savedModelId,
+            tokenCount: precise.value.tokenCount,
+            estimated: precise.value.estimated,
+            counterKind: precise.value.counterKind,
+            source: precise.value.source,
+          });
+        })
+        .catch((error: unknown) => {
+          // 暖机/推送失败只丢「这次升级」，不影响正确性；但完全静默会让
+          // chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——开发期
+          // 留痕与首帧失败同款。
+          if (!app.isPackaged) {
+            log.warn("prompt token precise warm-up failed", { error });
+          }
+        })
+        .finally(() => readWarmInflight.delete(scope.sessionId));
+    }
+    const cw = await runtime.providerModels.getContextWindow(savedModelId);
+    // 已知失败沿 countFn 的 Result 通道上行（错误通道迁移七期）：resilient
+    // 收到 Err 仍走 fallback，与旧「throw → catch → fallback」同一终点。
+    if (!cw.ok) return Result.err(cw.error);
+    const contextWindow = cw.value;
+    return Result.ok({
+      tokenCount: result.tokenCount,
+      estimated: result.estimated,
+      counterKind: result.counterKind,
+      contextWindow: contextWindow ?? undefined,
+      source: result.source,
+    });
+  }
+
   /**
    * 真正执行底层计算的一跳（原 `loadChatPromptTokenStats` 函数体）。
    *
@@ -373,100 +467,12 @@ export namespace ChatPromptTokensService {
    */
   async function loadNow(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, options?: { readonly armPreciseWarm?: boolean }): Promise<NullableStatsResult> {
     const armPreciseWarm = options?.armPreciseWarm ?? true;
-    // 一次成型、整条链共用：build 分段检查点、build/resolve 边界、resolve 内部
-    // 整串级检查点、后台暖机的排程判断，全看这一条判据（与 mobile 同款口径）。
-    const shouldBail = (): boolean => Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId);
-    // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
-    // Interrupt——run 在途即本轮读数被在途 run 取代，收成 replaced。
-    const bailInterrupt = (): Interrupt | null => (shouldBail() ? { kind: "replaced" } : null);
-    if (shouldBail()) {
+    if (isDesktopSessionRunInFlight(runtime, scope)) {
       // 在途即跳过本轮：进得去也停不下才是真问题（mobile 实锤过 build 把
       // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
       return Result.ok(null);
     }
-    const countFn = async (args: CountArgs): Promise<Result<CountResult | null, AppError>> => {
-      const { layout, ctx, savedModelId } = args;
-      // 一次「完整口径」resolve 所需的 params 组装（tokenizerOverride / registry /
-      // savedModels 三件套）：首帧 resolve 与紧随其后的后台暖机**复用同一份 params**
-      // （暖机不重新组装）——口径漂移（比如漏传 `tokenizerOverride`）会让 L1 写入的
-      // scope 键对不上，暖过的缓存没人命中，升级推送「偶发失效」。
-      const mode = await TokenCounterMode.resolveForModel(runtime.providerModels, savedModelId);
-      // 已知失败沿 Result 上行（错误通道迁移七期），由 countFn 的 Result 通道收口。
-      if (!mode.ok) return Result.err(mode.error);
-      const params = { layout, ctx, savedModelId, registry: runtime.tokenCounters, tokenizerOverride: mode.value, savedModels: runtime.savedModelRepo };
-      // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
-      // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
-      // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
-      // 与压缩评估同一读口、同一口径。
-      const outcome = await PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: bailInterrupt });
-      if (outcome.kind === "failed") {
-        // core 读口的已知失败（现无产出路径）：沿 Result 上行（错误通道迁移
-        // 四期），不吞成弃权，由 resilient 收口降级。
-        return Result.err(outcome.error);
-      }
-      if (outcome.kind !== "completed") {
-        // 中途弃权（run 起步）：沿 countFn 的 null 通道收口（error-matrix-final R3），
-        // computeStats 返回 null，绝不进 fallback。
-        return Result.ok(null);
-      }
-      const result = outcome.value;
-      if (
-        armPreciseWarm &&
-        result.source === "local" &&
-        result.estimated &&
-        !readWarmInflight.has(scope.sessionId) &&
-        // run 在途不排暖机：后台暖机是整串级重活（家族真分词器 + L1 写入），
-        // 与发送链抢同一条 SQLite 连接。run 结束后那次补推（agent.ts 终态钩子）
-        // 会把这一轮补上，彼时无竞争。
-        !shouldBail()
-      ) {
-        readWarmInflight.add(scope.sessionId);
-        void PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: bailInterrupt })
-          .then(async (precise) => {
-            if (precise.kind !== "completed") {
-              // 中途弃权（run 起步，错误通道迁移二期沿返回值到达）：没有更
-              // 准的读数可推，静默收场。
-              return;
-            }
-            // 暖机没拿到比估算更好的档（该家族只有近似档 / 编码表建不起来）
-            // → 没有更准的读数可推，chip 停在 `gpt ≈` 才是如实。
-            if (precise.value.estimated) {
-              return;
-            }
-            // r3-cache-3：直接推这份精确档（不补读、不重跑 build）；
-            // 只有「暖机期间模型已变」才在 push 内部补读一次。
-            await pushPreciseStatsIfReady(runtime, scope, {
-              savedModelId,
-              tokenCount: precise.value.tokenCount,
-              estimated: precise.value.estimated,
-              counterKind: precise.value.counterKind,
-              source: precise.value.source,
-            });
-          })
-          .catch((error: unknown) => {
-            // 暖机/推送失败只丢「这次升级」，不影响正确性；但完全静默会让
-            // chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——开发期
-            // 留痕与首帧失败同款。
-            if (!app.isPackaged) {
-              log.warn("prompt token precise warm-up failed", { error });
-            }
-          })
-          .finally(() => readWarmInflight.delete(scope.sessionId));
-      }
-      const cw = await runtime.providerModels.getContextWindow(savedModelId);
-      // 已知失败沿 countFn 的 Result 通道上行（错误通道迁移七期）：resilient
-      // 收到 Err 仍走 fallback，与旧「throw → catch → fallback」同一终点。
-      if (!cw.ok) return Result.err(cw.error);
-      const contextWindow = cw.value;
-      return Result.ok({
-        tokenCount: result.tokenCount,
-        estimated: result.estimated,
-        counterKind: result.counterKind,
-        contextWindow: contextWindow ?? undefined,
-        source: result.source,
-      });
-    };
-    return computeStats(runtime, scope, countFn, shouldBail);
+    return computeStats(runtime, scope, (args) => countWithWarm(runtime, scope, armPreciseWarm, args), () => isDesktopSessionRunInFlight(runtime, scope));
   }
 
   function scheduleTrailing(runtime: DesktopNovelMasterRuntime, key: string, slot: ChatPromptTokenDebounceSlot): void {
@@ -485,6 +491,7 @@ export namespace ChatPromptTokensService {
         return loadNow(runtime, slot.scope);
       });
       slot.running = run;
+      // nm-style: keep-closure — slot 已是对象槽（timer/deferred/running），settle 只做 running===run 才清的 CAS；4 行单调用点，提升后 run.then 需双 wrapper，净收益为负。
       const settle = () => {
         if (slot.running === run) {
           slot.running = null;

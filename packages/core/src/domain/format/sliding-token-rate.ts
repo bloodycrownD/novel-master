@@ -76,6 +76,12 @@ export interface TokenRateSampler {
   reset(): void;
 }
 
+/** 末值：窗口以最后一个样本时刻收尾（停顿不拉低；无样本返回 null）。 */
+const tailRate = (samples: readonly TokenRateSample[]): number | null => {
+  const last = samples[samples.length - 1];
+  return last == null ? null : SlidingTokenRate.rate(samples, last.tMs);
+};
+
 export const SlidingTokenRate = {
   /**
    * 计算滑窗 token 速率（token/秒）；样本不足或时长非正时返回 null。
@@ -127,16 +133,11 @@ export const SlidingTokenRate = {
      * 写入点即校正点（source 翻转 / 窗口折叠）；reset 清空。
      */
     let lastSettledRate: number | null = null;
-    /** 末值：窗口以最后一个样本时刻收尾（停顿不拉低）。 */
-    const tailRate = (): number | null => {
-      const last = samples[samples.length - 1];
-      return last == null ? null : SlidingTokenRate.rate(samples, last.tMs);
-    };
     return {
       sample(tokens, source, nowMs) {
         if (lastSource !== source) {
           // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
-          lastSettledRate = tailRate() ?? lastSettledRate;
+          lastSettledRate = tailRate(samples) ?? lastSettledRate;
           samples = [{ tMs: nowMs, tokens }];
           lastSampleMs = nowMs;
           lastSource = source;
@@ -146,7 +147,7 @@ export const SlidingTokenRate = {
               // 窗口折叠：与上个样本相隔 ≥ 窗口时长，旧样本再也不会进任何未来
               // 窗口（多步 run 的 step 间静默即此形态）。先把当前窗口末值刷进
               // 回落值，再清空重 seed——freeze() 才能给出最后一段稳定速率。
-              lastSettledRate = tailRate() ?? lastSettledRate;
+              lastSettledRate = tailRate(samples) ?? lastSettledRate;
               samples = [];
             }
             samples.push({ tMs: nowMs, tokens });
@@ -167,7 +168,7 @@ export const SlidingTokenRate = {
         return SlidingTokenRate.rate(samples, nowMs);
       },
       freeze() {
-        return tailRate() ?? lastSettledRate;
+        return tailRate(samples) ?? lastSettledRate;
       },
       reset() {
         samples = [];

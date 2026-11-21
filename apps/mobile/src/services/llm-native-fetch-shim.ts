@@ -120,6 +120,7 @@ export namespace LlmNativeFetchShim {
   function raceWithAbort<T>(call: Promise<T>, signal: AbortSignal, requestId: string, requestAbort: LlmNativeRequestAbortFn | undefined, cancelState: {userAborted: boolean}): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       let settled = false;
+      // nm-style: keep-closure — settled 竞态互斥 + reject 仅存于 Promise executor 作用域，拆出需槽+透传、破坏取消赛跑内聚
       const onAbort = (): void => {
         if (settled) {
           return;
@@ -134,6 +135,7 @@ export namespace LlmNativeFetchShim {
         }
         reject(new NativeSseAbortError(requestId));
       };
+      // nm-style: keep-closure — 与 onAbort 共享同一 settled 重绑互斥，拆出需槽+透传，竞态协议风险大于收益
       const settle = (): boolean => {
         if (settled) {
           return false;
@@ -177,6 +179,7 @@ export namespace LlmNativeFetchShim {
    */
   export function create(deps: LlmNativeRequestDeps): FetchLike {
     const {request, requestAbort} = deps;
+    // nm-style: keep-closure — fetch 形状 API 契约要求返回闭包：工厂产物本体，捕获注入依赖 request/requestAbort（注入式工厂既定形态）
     const fetchLike = async (input: Parameters<FetchLike>[0], init?: Parameters<FetchLike>[1]): Promise<ShimResponse> => {
       const signal = init?.signal ?? undefined;
       // 本次请求的取消路由键（实例前缀 + 独立计数器）：abort 时用它调 requestAbort。

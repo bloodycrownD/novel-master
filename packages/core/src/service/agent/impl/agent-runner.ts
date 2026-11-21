@@ -220,6 +220,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
     // 校验失败，取值仅占位）。
     const requestThinkingEnabled = savedModelForAppend == null || savedModelForAppend.settings.generation.thinkingLevel !== "off";
 
+    // nm-style: keep-closure — 变异捕获 stopReason 是 run() 局部 let（收尾装进 Result，另有 completed / max_steps 两处直接赋值）：该闭包唯一职责是给 11 个取消检查点统一写哨兵值（_branch 参数纯文档），参数化需 {current} 槽或把赋值穿透 11 个 await 点，收益为零且丢检查点标签。
     /**
      * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
      *
@@ -230,39 +231,8 @@ export class DefaultAgentRunner implements AgentRunnerPort {
       stopReason = "cancelled";
     };
 
-    /**
-     * 每 step usage 回锚（统计优先口径，2026-09-29 用户拍板「有哪个统计用
-     * 哪个」）：请求完成的 usage 带着精确 promptTokens，落进热层/KKV 后，
-     * 下一步的压缩评估与 chip 刷新直接命中 api 档——run 内不再为读数付
-     * 本地整串计数（glm 原生大上下文单次 ~5.8s）。
-     *
-     * 写入点必须在**本 step 全部消息落库之后**（完成/空回复分支与
-     * tool_results 落库后，共两个 chokepoint）：`anchorSeq` 是提示词末条
-     * 消息的 seq，必须与 usage 对应**同一批可见消息**——锚点后追加的消息
-     * 由读口的增量估算覆盖（纯追加不失效基线，2026-09-29 拍板），锚定
-     * 早了会把已计入基线的消息再算一遍增量。`lastAnchorSeq` 镜像最后一次
-     * 写入携带的锚点（含 undefined），供 run 收尾的终值写沿用——picked
-     * 与锚点出自同一步，不会错位。
-     */
+    // 每 step usage 回锚的镜像：「最后一次写入携带的锚点」（含 undefined），run 收尾终值写沿用；写入点必须在本 step 全部消息落库之后（见 anchorStepUsage 注释）。
     let lastAnchorSeq: number | undefined;
-    const anchorStepUsage = (usage: { readonly promptTokens?: number } | undefined, anchorSeq: number | undefined): void => {
-      // overlay 内存会话（persistMessages=false）的 usage 不落持久层：
-      // append 不落库也不触发失效，写进 KKV 会与 overlay 语义错位。
-      if (!persistMessages) {
-        return;
-      }
-      const promptTokens = usage?.promptTokens;
-      if (typeof promptTokens !== "number" || !Number.isFinite(promptTokens)) {
-        return;
-      }
-      lastAnchorSeq = anchorSeq;
-      SessionApiPromptTokenEntry.write(this.deps.sessionKkv, sessionId, {
-        promptTokens,
-        atMs: Date.now(),
-        savedModelId: options.savedModelId,
-        ...(anchorSeq != null ? { anchorSeq } : {}),
-      });
-    };
 
     // STARTED 下移落点（r3-run-2）：紧贴主 try 之前，与主 try 的 FAILED /
     // FINISHED 构成「要么都发、要么都不发」的配对（细因见上方 runId 生成
@@ -678,7 +648,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
         if (toolUses.length === 0) {
           // chokepoint ①：完成/空回复路径的全部落库已结束，回锚本 step 的
           // usage（下一步评估与 chip 刷新命中 api 档；见 anchorStepUsage 注释）。
-          anchorStepUsage(result.usage, stepAnchorSeq);
+          lastAnchorSeq = this.anchorStepUsage({persistMessages, sessionId, savedModelId: options.savedModelId, usage: result.usage, anchorSeq: stepAnchorSeq, prevAnchorSeq: lastAnchorSeq});
           finished = true;
           stopReason = "completed";
           rounds.push({
@@ -777,7 +747,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
         // chokepoint ②：tool_results 落库后回锚本 step 的 usage（锚点与
         // usage 对齐到同一批可见消息——纯追加不失效基线，下一步评估走
         // api 档零计数、锚点后增量由读口覆盖）。
-        anchorStepUsage(result.usage, stepAnchorSeq);
+        lastAnchorSeq = this.anchorStepUsage({persistMessages, sessionId, savedModelId: options.savedModelId, usage: result.usage, anchorSeq: stepAnchorSeq, prevAnchorSeq: lastAnchorSeq});
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -881,6 +851,39 @@ export class DefaultAgentRunner implements AgentRunnerPort {
       rounds,
     });
   }
+
+  /**
+   * 每 step usage 回锚（统计优先口径，2026-09-29 用户拍板「有哪个统计用
+   * 哪个」）：请求完成的 usage 带着精确 promptTokens，落进热层/KKV 后，
+   * 下一步的压缩评估与 chip 刷新直接命中 api 档——run 内不再为读数付
+   * 本地整串计数（glm 原生大上下文单次 ~5.8s）。
+   *
+   * 写入点必须在**本 step 全部消息落库之后**（完成/空回复分支与
+   * tool_results 落库后，共两个 chokepoint）：`anchorSeq` 是提示词末条
+   * 消息的 seq，必须与 usage 对应**同一批可见消息**——锚点后追加的消息
+   * 由读口的增量估算覆盖（纯追加不失效基线，2026-09-29 拍板），锚定
+   * 早了会把已计入基线的消息再算一遍增量。返回值是「本次写入携带的锚点」
+   * 镜像，调用点写回 `lastAnchorSeq`；无效 usage / overlay 会话返回 prev
+   * 原值（镜像保持上一次写入的锚点）——picked 与锚点出自同一步，不会错位。
+   */
+  private anchorStepUsage(args: {persistMessages: boolean; sessionId: string; savedModelId?: string; usage?: {promptTokens?: number}; anchorSeq?: number; prevAnchorSeq?: number}): number | undefined {
+    // overlay 内存会话（persistMessages=false）的 usage 不落持久层：
+    // append 不落库也不触发失效，写进 KKV 会与 overlay 语义错位。
+    if (!args.persistMessages) {
+      return args.prevAnchorSeq;
+    }
+    const promptTokens = args.usage?.promptTokens;
+    if (typeof promptTokens !== "number" || !Number.isFinite(promptTokens)) {
+      return args.prevAnchorSeq;
+    }
+    SessionApiPromptTokenEntry.write(this.deps.sessionKkv, args.sessionId, {
+      promptTokens,
+      atMs: Date.now(),
+      savedModelId: args.savedModelId,
+      ...(args.anchorSeq != null ? { anchorSeq: args.anchorSeq } : {}),
+    });
+    return args.anchorSeq;
+  }
 }
 
 /** {@link wrapStreamForBus} 的依赖切片。 */
@@ -941,6 +944,7 @@ export const AgentRunner: AgentRunnerHelpers = {
   const pendingQueue: Array<() => void> = [];
   let flushScheduled = false;
 
+  // nm-style: keep-closure — 单 microtask 合批状态机的调度核心：flushScheduled/pendingQueue 双槽可变状态 + 回调内先重置标志再 drain（微任务时序即语义：批内 FIFO、批间单槽位），参数化需 holder 且仍内嵌 microtask 闭包，纯搬家。
   const enqueuePublish = (publish: () => void): void => {
     pendingQueue.push(publish);
     if (flushScheduled) {
@@ -957,6 +961,7 @@ export const AgentRunner: AgentRunnerHelpers = {
     });
   };
 
+  // nm-style: keep-closure — 逃逸闭包：它就是 wrapStreamForBus 返回的 StreamEventListener（API 契约要求闭包形态），拆成模块函数后返回点仍需一层包装闭包，闭包只是换位置。
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
     if (ev.type === "text-delta") {
       deps.streamRegistry?.append(sessionId, { text: ev.text });

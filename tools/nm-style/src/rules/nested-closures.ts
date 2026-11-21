@@ -69,21 +69,22 @@ function collectBindingNames(pattern: ts.Node, out: Set<string> | Map<string, ts
 function ownDeclaredNames(fn: ts.FunctionLikeDeclaration): Set<string> {
   const names = new Set<string>();
   for (const param of fn.parameters) collectBindingNames(param.name, names);
-  const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, names);
-    else if (ts.isFunctionLike(node) && node !== fn) {
-      // 嵌套函数的形参也是本闭包的自声明（内层箭头参数不该被计成捕获）。
-      for (const param of node.parameters) collectBindingNames(param.name, names);
-    }
-    else if (ts.isFunctionDeclaration(node) && node.name != null) names.add(node.name.text);
-    else if (ts.isClassDeclaration(node) && node.name != null) names.add(node.name.text);
-    else if (ts.isInterfaceDeclaration(node) && node.name != null) names.add(node.name.text);
-    else if (ts.isTypeAliasDeclaration(node) && node.name != null) names.add(node.name.text);
-    ts.forEachChild(node, visit);
-  };
   const body = bodyOf(fn);
-  if (body != null) visit(body);
+  if (body != null) collectDeclaredNames(body, names, fn);
   return names;
+}
+
+function collectDeclaredNames(node: ts.Node, names: Set<string>, fn: ts.FunctionLikeDeclaration): void {
+  if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, names);
+  else if (ts.isFunctionLike(node) && node !== fn) {
+    // 嵌套函数的形参也是本闭包的自声明（内层箭头参数不该被计成捕获）。
+    for (const param of node.parameters) collectBindingNames(param.name, names);
+  }
+  else if (ts.isFunctionDeclaration(node) && node.name != null) names.add(node.name.text);
+  else if (ts.isClassDeclaration(node) && node.name != null) names.add(node.name.text);
+  else if (ts.isInterfaceDeclaration(node) && node.name != null) names.add(node.name.text);
+  else if (ts.isTypeAliasDeclaration(node) && node.name != null) names.add(node.name.text);
+  ts.forEachChild(node, (child) => collectDeclaredNames(child, names, fn));
 }
 
 /** 沿函数祖先链收集所有外层函数的局部声明名（参数 + 局部声明），不含模块顶层与 import。 */
@@ -94,19 +95,20 @@ function outerDeclaredNames(fn: ts.FunctionLikeDeclaration): Map<string, ts.Node
     for (const param of current.parameters) collectBindingNames(param.name, out, param);
     const outerBody = bodyOf(current);
     if (outerBody == null) continue;
-    const visit = (node: ts.Node): void => {
-      if (node === fn) return; // 自己内部的自声明不算外层
-      if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, out, node);
-      else if (ts.isFunctionLike(node) && node !== fn) {
-        for (const param of node.parameters) collectBindingNames(param.name, out, node);
-      }
-      else if (ts.isFunctionDeclaration(node) && node.name != null) out.set(node.name.text, node);
-      else if (ts.isClassDeclaration(node) && node.name != null) out.set(node.name.text, node);
-      ts.forEachChild(node, visit);
-    };
-    visit(outerBody);
+    collectOuterDeclaredNames(outerBody, fn, out);
   }
   return out;
+}
+
+function collectOuterDeclaredNames(node: ts.Node, fn: ts.FunctionLikeDeclaration, out: Map<string, ts.Node>): void {
+  if (node === fn) return; // 自己内部的自声明不算外层
+  if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, out, node);
+  else if (ts.isFunctionLike(node) && node !== fn) {
+    for (const param of node.parameters) collectBindingNames(param.name, out, node);
+  }
+  else if (ts.isFunctionDeclaration(node) && node.name != null) out.set(node.name.text, node);
+  else if (ts.isClassDeclaration(node) && node.name != null) out.set(node.name.text, node);
+  ts.forEachChild(node, (child) => collectOuterDeclaredNames(child, fn, out));
 }
 
 /** 最近函数祖先的显示名（方法名 / 函数名 / "<anonymous>"）。 */
@@ -129,109 +131,124 @@ const ASSIGN_TOKENS = new Set<ts.SyntaxKind>([ts.SyntaxKind.EqualsToken, ts.Synt
 /** 体内对名字的重绑定形态（x = / x += / ++x / x--）。 */
 function mutatedNames(fn: ts.FunctionLikeDeclaration, candidates: ReadonlySet<string>): Set<string> {
   const mutated = new Set<string>();
-  const visit = (node: ts.Node): void => {
-    if (ts.isBinaryExpression(node) && ASSIGN_TOKENS.has(node.operatorToken.kind) && ts.isIdentifier(node.left) && candidates.has(node.left.text)) mutated.add(node.left.text);
-    else if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) && ts.isIdentifier(node.operand) && candidates.has(node.operand.text)) mutated.add(node.operand.text);
-    else if (ts.isPostfixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) && ts.isIdentifier(node.operand) && candidates.has(node.operand.text)) mutated.add(node.operand.text);
-    ts.forEachChild(node, visit);
-  };
   const body = bodyOf(fn);
-  if (body != null) visit(body);
+  if (body != null) collectMutatedNames(body, candidates, mutated);
   return mutated;
 }
 
+function collectMutatedNames(node: ts.Node, candidates: ReadonlySet<string>, mutated: Set<string>): void {
+  if (ts.isBinaryExpression(node) && ASSIGN_TOKENS.has(node.operatorToken.kind) && ts.isIdentifier(node.left) && candidates.has(node.left.text)) mutated.add(node.left.text);
+  else if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) && ts.isIdentifier(node.operand) && candidates.has(node.operand.text)) mutated.add(node.operand.text);
+  else if (ts.isPostfixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) && ts.isIdentifier(node.operand) && candidates.has(node.operand.text)) mutated.add(node.operand.text);
+  ts.forEachChild(node, (child) => collectMutatedNames(child, candidates, mutated));
+}
+
 function hasThisReference(fn: ts.FunctionLikeDeclaration): boolean {
-  let found = false;
-  const visit = (node: ts.Node): void => {
-    if (found) return;
-    if (node.kind === ts.SyntaxKind.ThisKeyword) { found = true; return; }
-    ts.forEachChild(node, visit);
-  };
   const body = bodyOf(fn);
-  if (body != null) visit(body);
-  return found;
+  return body != null && containsThis(body);
+}
+
+/** 体内是否引用 this（命中即短路，替代原 found 布尔标志的返回值递归形态）。 */
+function containsThis(node: ts.Node): boolean {
+  if (node.kind === ts.SyntaxKind.ThisKeyword) return true;
+  let hit = false;
+  ts.forEachChild(node, (child) => {
+    if (!hit) hit = containsThis(child);
+  });
+  return hit;
 }
 
 function escapesFromOwner(fn: ts.FunctionLikeDeclaration, name: string): boolean {
   for (let current: ts.Node | undefined = fn.parent; current != null; current = current.parent) {
     if (ts.isFunctionLike(current) && bodyOf(current) != null) {
-      let escaped = false;
-      const visit = (node: ts.Node): void => {
-        if (escaped) return;
-        if (ts.isReturnStatement(node) && node.expression != null && ts.isIdentifier(node.expression) && node.expression.text === name) { escaped = true; return; }
-        ts.forEachChild(node, visit);
-      };
-      visit(bodyOf(current)!);
-      if (escaped) return true;
-      return false; // 只看最近一层
+      return returnsIdentifier(bodyOf(current)!, name); // 只看最近一层
     }
   }
   return false;
+}
+
+/** 体内是否有 return <name>（命中即短路，替代原 escaped 布尔标志的返回值递归形态）。 */
+function returnsIdentifier(body: ts.Node, name: string): boolean {
+  if (ts.isReturnStatement(body) && body.expression != null && ts.isIdentifier(body.expression) && body.expression.text === name) return true;
+  let hit = false;
+  ts.forEachChild(body, (child) => {
+    if (!hit) hit = returnsIdentifier(child, name);
+  });
+  return hit;
+}
+
+/** nestedClosuresOfText 的 per-file 遍历上下文（原 visit 闭包的捕获集）。 */
+interface ClosureScanCtx {
+  rel: string;
+  sourceFile: ts.SourceFile;
+  out: NestedClosure[];
+}
+
+/** 节点 leading trivia 是否带 nm-style: keep-closure 豁免标记。 */
+function hasKeepDirectiveAt(sourceFile: ts.SourceFile, node: ts.Node): boolean {
+  const ranges = ts.getLeadingCommentRanges(sourceFile.text, node.getFullStart()) ?? [];
+  return ranges.some((range) => sourceFile.text.slice(range.pos, range.end).includes("nm-style: keep-closure"));
+}
+
+function isInsideFunction(node: ts.Node): boolean {
+  for (let current: ts.Node | undefined = node.parent; current != null; current = current.parent) {
+    if (ts.isFunctionLike(current)) return true;
+    if (ts.isModuleBlock(current)) return false;
+  }
+  return false;
+}
+
+function visitClosureDecls(node: ts.Node, ctx: ClosureScanCtx): void {
+  // 形态一：const/let f = () => {...} / function f() {...}，声明在函数体内。
+  if (ts.isVariableStatement(node) && !hasKeepDirectiveAt(ctx.sourceFile, node)) {
+    for (const decl of node.declarationList.declarations) {
+      if (!ts.isIdentifier(decl.name) || decl.initializer == null) continue;
+      const init = decl.initializer;
+      const isFn = ts.isArrowFunction(init) || ts.isFunctionExpression(init);
+      if (!isFn) continue;
+      if (!isInsideFunction(node)) continue;
+      ctx.out.push(buildClosure(ctx.rel, ctx.sourceFile, decl.name.text, init as ts.FunctionLikeDeclaration, node));
+    }
+  }
+  // 形态二：function f() {...} 函数声明嵌在函数体内。
+  if (ts.isFunctionDeclaration(node) && node.name != null && node.body != null && !hasKeepDirectiveAt(ctx.sourceFile, node) && isInsideFunction(node)) {
+    ctx.out.push(buildClosure(ctx.rel, ctx.sourceFile, node.name.text, node, node));
+  }
+  ts.forEachChild(node, (child) => visitClosureDecls(child, ctx));
 }
 
 /** 单文件扫描：函数体内定义的命名函数 + 捕获分类。 */
 export function nestedClosuresOfText(rel: string, text: string): NestedClosure[] {
   const sourceFile = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true, rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const out: NestedClosure[] = [];
-
-  const hasKeepDirective = (node: ts.Node): boolean => {
-    const ranges = ts.getLeadingCommentRanges(sourceFile.text, node.getFullStart()) ?? [];
-    return ranges.some((range) => sourceFile.text.slice(range.pos, range.end).includes("nm-style: keep-closure"));
-  };
-
-  const isInsideFunction = (node: ts.Node): boolean => {
-    for (let current: ts.Node | undefined = node.parent; current != null; current = current.parent) {
-      if (ts.isFunctionLike(current)) return true;
-      if (ts.isModuleBlock(current)) return false;
-    }
-    return false;
-  };
-
-  const visit = (node: ts.Node): void => {
-    // 形态一：const/let f = () => {...} / function f() {...}，声明在函数体内。
-    if (ts.isVariableStatement(node) && !hasKeepDirective(node)) {
-      for (const decl of node.declarationList.declarations) {
-        if (!ts.isIdentifier(decl.name) || decl.initializer == null) continue;
-        const init = decl.initializer;
-        const isFn = ts.isArrowFunction(init) || ts.isFunctionExpression(init);
-        if (!isFn) continue;
-        if (!isInsideFunction(node)) continue;
-        out.push(buildClosure(rel, sourceFile, decl.name.text, init as ts.FunctionLikeDeclaration, node));
-      }
-    }
-    // 形态二：function f() {...} 函数声明嵌在函数体内。
-    if (ts.isFunctionDeclaration(node) && node.name != null && node.body != null && !hasKeepDirective(node) && isInsideFunction(node)) {
-      out.push(buildClosure(rel, sourceFile, node.name.text, node, node));
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  visitClosureDecls(sourceFile, { rel, sourceFile, out });
   return out;
+}
+
+function collectCapturedRefs(node: ts.Node, own: Set<string>, outer: Map<string, ts.Node>, captured: Map<string, ts.Node>): void {
+  if (ts.isIdentifier(node)) {
+    const parent: ts.Node | undefined = node.parent;
+    const isNamePosition = (parent != null && (
+      (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+      (ts.isPropertyAssignment(parent) && parent.name === node) ||
+      (ts.isMethodDeclaration(parent) && parent.name === node) ||
+      (ts.isGetAccessorDeclaration(parent) && parent.name === node) ||
+      (ts.isSetAccessorDeclaration(parent) && parent.name === node) ||
+      (ts.isPropertyDeclaration(parent) && parent.name === node) ||
+      (ts.isBindingElement(parent) && parent.propertyName === node) ||
+      (ts.isQualifiedName(parent) && parent.left === node)
+    ));
+    if (!isNamePosition && !own.has(node.text) && outer.has(node.text)) captured.set(node.text, outer.get(node.text)!);
+  }
+  ts.forEachChild(node, (child) => collectCapturedRefs(child, own, outer, captured));
 }
 
 function buildClosure(rel: string, sourceFile: ts.SourceFile, name: string, fn: ts.FunctionLikeDeclaration, stmt: ts.Node): NestedClosure {
   const outer = outerDeclaredNames(fn);
   const own = ownDeclaredNames(fn);
   const captured = new Map<string, ts.Node>();
-  const visitRefs = (node: ts.Node): void => {
-    if (ts.isIdentifier(node)) {
-      const parent: ts.Node | undefined = node.parent;
-      const isNamePosition = (parent != null && (
-        (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
-        (ts.isPropertyAssignment(parent) && parent.name === node) ||
-        (ts.isMethodDeclaration(parent) && parent.name === node) ||
-        (ts.isGetAccessorDeclaration(parent) && parent.name === node) ||
-        (ts.isSetAccessorDeclaration(parent) && parent.name === node) ||
-        (ts.isPropertyDeclaration(parent) && parent.name === node) ||
-        (ts.isBindingElement(parent) && parent.propertyName === node) ||
-        (ts.isQualifiedName(parent) && parent.left === node)
-      ));
-      if (!isNamePosition && !own.has(node.text) && outer.has(node.text)) captured.set(node.text, outer.get(node.text)!);
-    }
-    ts.forEachChild(node, visitRefs);
-  };
   const body = bodyOf(fn);
-  if (body != null) visitRefs(body);
+  if (body != null) collectCapturedRefs(body, own, outer, captured);
   const captures = [...captured.keys()];
   const mutated = [...mutatedNames(fn, new Set(captured.keys()))];
   const usesThis = hasThisReference(fn);

@@ -234,6 +234,7 @@ export namespace AgentRegistry {
       // 原 importAgentYamlWithDialog 内联：consume 回调与 mobile 同通道（Result），
       // 已知失败过 Errors.normalizeYaml 贴标签回传。
       // nm-style: keep-local — 具名回调是 importYamlWithDialog 多行实参拆 VARDECL 的唯一出路；内联回调用点会让 consume 回调与窗口实参跨行（check-signatures ARGS），规则互斥（同 llm-sse-transport 先例）。
+      // nm-style: keep-closure — 单调用点 + importWithDialog consume 契约要求 yaml 末参回调形态，提升后一行 wrapper 不可免，收益为负。
       const importAgentFromYaml = async (yaml: string) => {
         try {
           const defR = AgentYamlCodec.decode(yaml);

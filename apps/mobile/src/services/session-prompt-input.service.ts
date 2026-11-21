@@ -19,6 +19,11 @@ interface BuildSessionPromptInputOptions {
   readonly shouldBail?: () => boolean;
 }
 
+/** 分段弃权判定：判据命中即让路（无判据恒 false）。 */
+function isBailed(shouldBail?: () => boolean): boolean {
+  return shouldBail?.() === true;
+}
+
 export interface SessionPromptInputBundle {
   readonly definition: AgentDefinition;
   readonly layout: AgentPromptLayout;
@@ -46,7 +51,6 @@ export namespace SessionPromptInputService {
     // 2026-09-30 回滚竞态里一次 build 墙钟 18.9s，靠分段读数定位被谁拖住。
     const shouldBail = options?.shouldBail;
     const diagT0 = __DEV__ ? Date.now() : 0;
-    const bailed = (): boolean => shouldBail?.() === true;
 
     // 未预传入 definition 时才走 resolver（与 desktop 同款的短路逻辑），
     // 透传 scope.sessionId 让 core 解析链读到会话级绑定。
@@ -58,7 +62,7 @@ export namespace SessionPromptInputService {
       if (!r.ok) return Result.err(r.error);
       resolved = r.value.definition;
     }
-    if (bailed()) return Result.ok(null);
+    if (isBailed(shouldBail)) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] agent +${Date.now() - diagT0}ms`);
     }
@@ -74,7 +78,7 @@ export namespace SessionPromptInputService {
     if (visibleRead.kind === 'failed') return Result.err(visibleRead.error);
     if (visibleRead.kind !== 'completed') return Result.ok(null);
     const visibleMessages = visibleRead.value;
-    if (bailed()) return Result.ok(null);
+    if (isBailed(shouldBail)) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] messages(n=${visibleMessages.length}) +${Date.now() - diagT0}ms`);
     }
@@ -101,7 +105,7 @@ export namespace SessionPromptInputService {
       return Result.ok(null);
     }
     const {workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint} = assembled.value;
-    if (bailed()) return Result.ok(null);
+    if (isBailed(shouldBail)) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] workplace +${Date.now() - diagT0}ms`);
     }
@@ -122,7 +126,7 @@ export namespace SessionPromptInputService {
     const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
-    if (bailed()) return Result.ok(null);
+    if (isBailed(shouldBail)) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] prepare +${Date.now() - diagT0}ms`);
     }

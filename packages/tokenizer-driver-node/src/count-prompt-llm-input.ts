@@ -37,6 +37,7 @@ import {
   type TokenizerFamily,
 } from "@novel-master/core/tokenizer";
 import { Result, type AppError } from "@novel-master/core/errors";
+import type { Tiktoken } from "tiktoken";
 import { EncodingCache } from "./impl/encoding-cache.js";
 import { SentencePieceFamilyCount } from "./impl/sentencepiece-token-counter.js";
 import { WebFamilyCount } from "./impl/web-tokenizer-counter.js";
@@ -54,6 +55,11 @@ const charRatioCounter = new HeuristicTokenCounter();
 
 // nm-style 注记：文件名 count- 动词前缀，按内容主体起名（PromptLlmInputCounter）。
 export namespace PromptLlmInputCounter {
+  /** 单次 encode 求长（与 rn 驱动 encodedLength 同名同形收口；encoding 为共享单例只读句柄）。 */
+  function encodedLength(encoding: Tiktoken, text: string): number {
+    return encoding.encode(text).length;
+  }
+
   /**
    * 块级 L2 计数：`splitTextIntoChunks(整串)` → 逐块查 L2（命中任意一代即提升）
    * → miss 块经 `countTextWithIncrementalTokenizer` 现算并写回 → 求和。
@@ -94,7 +100,7 @@ export namespace PromptLlmInputCounter {
     if (encoding == null) {
       return charRatioCounter.countText(text);
     }
-    return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length);
+    return countChunksWithL2(text, scope, (chunk) => encodedLength(encoding, chunk));
   }
 
   /** Full model-aware count using Node tokenizer libraries. */
@@ -167,7 +173,7 @@ export namespace PromptLlmInputCounter {
           // core 公式变这里自动跟）；content 部分从 `w(serialized)` 换成块求和，正是
           // spec 计数流程第 3 步。数值与整串口径差 ≤1%（T-TC5 对拍）。
           const overhead = OpenAiStyleMessageCount.count(encoding, [OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage("")], tiktokenModel);
-          tokenCount = overhead + countChunksWithL2(serialized, scope, (chunk) => encoding.encode(chunk).length);
+          tokenCount = overhead + countChunksWithL2(serialized, scope, (chunk) => encodedLength(encoding, chunk));
           // 精确档：真 tiktoken 家族读数，counterKind 如实报 `tiktoken`。
           counterKind = "tiktoken";
           // cr-tok-1：强制档必须如实标 estimated。当 tiktoken 身份来自 override

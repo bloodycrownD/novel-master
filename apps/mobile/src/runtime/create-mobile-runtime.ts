@@ -6,13 +6,13 @@
 
 import {ABORT_KEY, AbortRegistryFactory, AbortScopeFactory} from '@novel-master/core/abort';
 import {AgentServiceFactory, type AgentAbortRegistry} from '@novel-master/core/agent';
-import {CompactionFactory, type CompactionConditionEvaluator} from '@novel-master/core/compaction';
+import {CompactionFactory, type CompactionConditionEvaluator, type CompactionConditionsStore} from '@novel-master/core/compaction';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {ChatServiceFactory} from '@novel-master/core/chat';
 import {createPersistentPreferences, PersistentStateFactory, SearchConfig} from '@novel-master/core';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
-import {DefaultTokenCounterRegistry} from '@novel-master/core/tokenizer';
-import {ProviderServiceFactory} from '@novel-master/core/provider';
+import {DefaultTokenCounterRegistry, type TokenCounterRegistry} from '@novel-master/core/tokenizer';
+import {ProviderServiceFactory, type ProviderModelService} from '@novel-master/core/provider';
 import {SmartSortRuleServiceFactory} from '@novel-master/core/smart-sort-rule';
 import {MessageCheckpointFactory} from '@novel-master/core/message-checkpoint';
 import {SessionFsServiceFactory} from '@novel-master/core/session-fs';
@@ -29,6 +29,17 @@ import {LlmFetchSetup} from './setup-llm-fetch';
 import {rollbackTimingLog} from '../debug/run-timing';
 import {YieldQuantum} from '../services/yield-quantum';
 import type {MobileRuntimeCore} from './types';
+
+/** lazy evaluator 单槽：首调创建并写回，后续复用（惰性初始化 memo）。 */
+type LazyEvaluatorSlot = {evaluator?: CompactionConditionEvaluator};
+
+/** 惰性取 compaction 条件求值器：槽内未建时经 CompactionFactory 创建并回写。 */
+function getOrCreateEvaluator(slot: LazyEvaluatorSlot, conditionsStore: CompactionConditionsStore, tokenCounters: TokenCounterRegistry, providerModels: ProviderModelService): CompactionConditionEvaluator {
+  if (slot.evaluator == null) {
+    slot.evaluator = CompactionFactory.createEvaluator({conditionsStore, tokenCounters, providerModels});
+  }
+  return slot.evaluator;
+}
 
 export const MobileRuntimeFactory = {
   /**
@@ -106,23 +117,13 @@ export const MobileRuntimeFactory = {
     const sessionKkv = SessionKkvServiceFactory.create(conn);
     const {userVfsTurn} = ChatServiceFactory.createUserVfsTurnBundle(conn);
 
-    let compactionConditionEvaluator: CompactionConditionEvaluator | undefined;
-    const getOrCreateEvaluator = (): CompactionConditionEvaluator => {
-      if (compactionConditionEvaluator == null) {
-        compactionConditionEvaluator = CompactionFactory.createEvaluator({
-          conditionsStore: compactionConditions,
-          tokenCounters,
-          providerModels: providerBundle.providerModels,
-        });
-      }
-      return compactionConditionEvaluator;
-    };
+    const evaluatorSlot: LazyEvaluatorSlot = {};
     const lazyCompactionConditionEvaluator: CompactionConditionEvaluator = {
       shouldRequestCompaction(session, evaluation) {
-        return getOrCreateEvaluator().shouldRequestCompaction(session, evaluation);
+        return getOrCreateEvaluator(evaluatorSlot, compactionConditions, tokenCounters, providerBundle.providerModels).shouldRequestCompaction(session, evaluation);
       },
       getHideStartDepth() {
-        return getOrCreateEvaluator().getHideStartDepth();
+        return getOrCreateEvaluator(evaluatorSlot, compactionConditions, tokenCounters, providerBundle.providerModels).getHideStartDepth();
       },
     };
 

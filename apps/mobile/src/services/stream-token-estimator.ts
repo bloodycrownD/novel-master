@@ -81,6 +81,17 @@ export interface StreamTokenModelHintRuntime {
 }
 
 export namespace StreamTokenEstimator {
+  /** 模型名 → 编码名（只区分 o200k/cl100k；try/catch 兜底未知模型抛错）。 */
+  function encodingForModel(model: string): StreamTokenEncodingName | null {
+    try {
+      // getEncodingNameForModel 的入参类型是字面量模型名联合，vendor 侧是任意
+      // 字符串（未知模型会抛错）——按 unknown 传入、异常兜底。
+      return getEncodingNameForModel(model as never) === 'o200k_base' ? 'o200k_base' : 'cl100k_base';
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * vendorModelId → 编码名（best-effort，解析不出/非 tiktoken 家族落 cl100k）。
    *
@@ -93,21 +104,12 @@ export namespace StreamTokenEstimator {
     if (id.length === 0) {
       return 'cl100k_base';
     }
-    const asO200k = (model: string): StreamTokenEncodingName | null => {
-      try {
-        // getEncodingNameForModel 的入参类型是字面量模型名联合，vendor 侧是任意
-        // 字符串（未知模型会抛错）——按 unknown 传入、异常兜底。
-        return getEncodingNameForModel(model as never) === 'o200k_base' ? 'o200k_base' : 'cl100k_base';
-      } catch {
-        return null;
-      }
-    };
-    const direct = asO200k(id);
+    const direct = encodingForModel(id);
     if (direct != null) {
       return direct;
     }
     if (TokenizerFamilyResolver.resolve(id, 'auto') === 'tiktoken') {
-      const mapped = asO200k(TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(id));
+      const mapped = encodingForModel(TokenizerFamilyResolver.mapVendorModelIdToTiktokenModel(id));
       if (mapped != null) {
         return mapped;
       }

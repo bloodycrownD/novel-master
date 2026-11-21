@@ -40,11 +40,13 @@ import {
   type BatchApplyReport,
   type BatchIngestRawEntry,
   type BatchIngestWriter,
+  type VfsScope,
 } from "@novel-master/core/vfs";
 import { BrowserWindow, dialog } from "electron";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
+import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { VfsEntryOps, VfsMove } from "../../services/vfs-operations.service.js";
 import {
   UserVfsTurnExecuteService,
@@ -486,6 +488,121 @@ export namespace Vfs {
     }
   }
 
+  type IngestOptions = {
+    targetDir: string;
+    hostPaths: readonly string[];
+    overwriteConfirmed: boolean;
+  };
+  type IngestResult = Result<BatchIngestFromPathsOutcome, AppError>;
+
+  /** 单棵目录树递归展开进 entries：只 push 不重绑，数组引用传参即保共享；空目录显式记 directory。 */
+  async function walkDir(entries: BatchIngestRawEntry[], absDir: string, relativePrefix: string): Promise<void> {
+    const children = await readdir(absDir, { withFileTypes: true });
+    if (children.length === 0) {
+      entries.push({ relativePath: relativePrefix, kind: "directory" });
+      return;
+    }
+    let hasFileOrNonEmpty = false;
+    for (const child of children) {
+      const childAbs = join(absDir, child.name);
+      const childRel = relativePrefix ? `${relativePrefix}/${child.name}` : child.name;
+      if (child.isDirectory()) {
+        await walkDir(entries, childAbs, childRel);
+        hasFileOrNonEmpty = true;
+      } else if (child.isFile()) {
+        const bytes = new Uint8Array(await readFile(childAbs));
+        entries.push({ relativePath: childRel, kind: "file", bytes });
+        hasFileOrNonEmpty = true;
+      }
+    }
+    if (!hasFileOrNonEmpty) {
+      entries.push({ relativePath: relativePrefix, kind: "directory" });
+    }
+  }
+
+  /** 批量摄取完整一跳：本机路径树展开（顶层文件→basename、顶层目录→以目录名为根保留相对结构）→ core plan（两段式 needs_confirm 协议）→ apply（session 域统一 tool turn 时走 writer 适配器）。 */
+  async function ingestBatch(rt: DesktopNovelMasterRuntime, scope: VfsScope, options: IngestOptions): Promise<IngestResult> {
+    const targetDir = options.targetDir == null || options.targetDir.trim() === "" ? "/" : options.targetDir;
+    if (options.hostPaths.length === 0) {
+      return Result.ok({
+        status: "applied",
+        report: { written: [], skipped: [], failed: [] },
+        skippedBinary: [],
+      });
+    }
+
+    const entries: BatchIngestRawEntry[] = [];
+    for (const hostPath of options.hostPaths) {
+      const info = await stat(hostPath);
+      const topName = basename(hostPath);
+      if (info.isDirectory()) {
+        await walkDir(entries, hostPath, topName);
+      } else if (info.isFile()) {
+        const bytes = new Uint8Array(await readFile(hostPath));
+        entries.push({ relativePath: topName, kind: "file", bytes });
+      }
+    }
+
+    const rawEntries = entries;
+    const batch = VfsServiceFactory.createBatchIo(rt.conn);
+    const planned = await batch.planBatchIngest(scope, targetDir, rawEntries);
+    // 失败沿 Result 返回，由本 handler 就地转码。
+    if (!planned.ok) return Result.err(planned.error);
+    const plan = planned.value;
+
+    if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
+      return Result.ok({
+        status: "needs_confirm",
+        conflicts: plan.conflicts.map((c) => ({
+          logicalPath: c.logicalPath,
+          reason: c.reason,
+        })),
+        skippedBinary: [...plan.skippedBinary],
+      });
+    }
+
+    const applyOptions = { overwriteConfirmed: options.overwriteConfirmed };
+    let report: BatchApplyReport;
+
+    if (
+      LogicalPath.isSessionVfsScope(scope) &&
+      userVfsUnifiedToolTurnFlag.isEnabled()
+    ) {
+      const vfs = rt.sessionVfs(scope.projectId, scope.sessionId);
+      // BatchIngestWriter 适配器（core port，`domain/vfs/ports/vfs-batch-io.port.ts`）：
+      // writer 端口已知失败沿 `Result.err` 回传，由 `applyBatchIngestWithWriter` 逐项聚合进
+      // `Report.failed`（Result 契约之外的未知异常仍按 catch 落表，不整批 err）。
+      const writer: BatchIngestWriter = {
+        async mkdir(logicalPath: string): Promise<Result<void, AppError>> {
+          return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, UserVfsTurnOps.buildMkdir(logicalPath)));
+        },
+        async writeFile(logicalPath: string, content: string): Promise<Result<void, AppError>> {
+          const baselineResult = await UserVfsSaveBaseline.read(vfs, logicalPath);
+          if (!baselineResult.ok) return Result.err(baselineResult.error);
+          const baseline = baselineResult.value;
+          if (baseline == null)
+            return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, UserVfsTurnOps.buildCreateFile(logicalPath, content)));
+          const op = UserVfsTurnOps.buildSave(baseline, content, logicalPath, content);
+          if (op == null) return Result.ok(undefined);
+          return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, op));
+        },
+      };
+      const appliedWithWriter = await batch.applyBatchIngestWithWriter(scope, targetDir, plan, applyOptions, writer);
+      if (!appliedWithWriter.ok) return Result.err(appliedWithWriter.error);
+      report = appliedWithWriter.value;
+    } else {
+      const applied = await batch.applyBatchIngest(scope, targetDir, plan, applyOptions);
+      if (!applied.ok) return Result.err(applied.error);
+      report = applied.value;
+    }
+
+    return Result.ok({
+      status: "applied",
+      report,
+      skippedBinary: [...plan.skippedBinary],
+    });
+  }
+
   export async function batchIngestFromPaths(req: VfsBatchIngestFromPathsRequest): Promise<IpcResult<VfsBatchIngestFromPathsResult>> {
     try {
       const built = await DesktopRuntimeSingleton.get();
@@ -495,130 +612,12 @@ export namespace Vfs {
       const scopeRes = ResolveVfsScope.fromRequest(req);
       if (!scopeRes.ok) return scopeRes;
       const scope = scopeRes.data;
-      // 原 ingestVfsFromHostPaths + collectHostPathEntries 内联：本机路径树展开 →
-      // core plan（两段式 needs_confirm 协议）→ apply（session 域统一 tool turn 时走
-      // writer 适配器）。顶层文件 → basename；顶层目录 → 以目录名为根保留相对结构；
-      // 空目录显式 directory。
-      type IngestOptions = {
-        targetDir: string;
-        hostPaths: readonly string[];
-        overwriteConfirmed: boolean;
-      };
-      type IngestResult = Result<BatchIngestFromPathsOutcome, AppError>;
-      // nm-style: keep-local — IIFE 拆具名函数是收 const RHS 拆行（VARDECL）与长类型注解行（PARAMS）的唯一出路；内联回调用点让 100+ 行批量摄取体直接塞进 await 表达式，规则互斥。
-      async function ingestBatch(options: IngestOptions): Promise<IngestResult> {
-        const targetDir = options.targetDir == null || options.targetDir.trim() === "" ? "/" : options.targetDir;
-        if (options.hostPaths.length === 0) {
-          return Result.ok({
-            status: "applied",
-            report: { written: [], skipped: [], failed: [] },
-            skippedBinary: [],
-          });
-        }
-
-        const entries: BatchIngestRawEntry[] = [];
-
-        /** nm-style: keep-local — entries 是整棵树遍历共享的累积状态；自递归调用是必需的第二调用点，内联消除不掉递归结构。 */
-        async function walkDir(absDir: string, relativePrefix: string): Promise<void> {
-          const children = await readdir(absDir, { withFileTypes: true });
-          if (children.length === 0) {
-            entries.push({ relativePath: relativePrefix, kind: "directory" });
-            return;
-          }
-          let hasFileOrNonEmpty = false;
-          for (const child of children) {
-            const childAbs = join(absDir, child.name);
-            const childRel = relativePrefix ? `${relativePrefix}/${child.name}` : child.name;
-            if (child.isDirectory()) {
-              await walkDir(childAbs, childRel);
-              hasFileOrNonEmpty = true;
-            } else if (child.isFile()) {
-              const bytes = new Uint8Array(await readFile(childAbs));
-              entries.push({ relativePath: childRel, kind: "file", bytes });
-              hasFileOrNonEmpty = true;
-            }
-          }
-          if (!hasFileOrNonEmpty) {
-            entries.push({ relativePath: relativePrefix, kind: "directory" });
-          }
-        }
-
-        for (const hostPath of options.hostPaths) {
-          const info = await stat(hostPath);
-          const topName = basename(hostPath);
-          if (info.isDirectory()) {
-            await walkDir(hostPath, topName);
-          } else if (info.isFile()) {
-            const bytes = new Uint8Array(await readFile(hostPath));
-            entries.push({ relativePath: topName, kind: "file", bytes });
-          }
-        }
-
-        const rawEntries = entries;
-        const batch = VfsServiceFactory.createBatchIo(rt.conn);
-        const planned = await batch.planBatchIngest(scope, targetDir, rawEntries);
-        // 失败沿 Result 返回，由本 handler 就地转码。
-        if (!planned.ok) return Result.err(planned.error);
-        const plan = planned.value;
-
-        if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
-          return Result.ok({
-            status: "needs_confirm",
-            conflicts: plan.conflicts.map((c) => ({
-              logicalPath: c.logicalPath,
-              reason: c.reason,
-            })),
-            skippedBinary: [...plan.skippedBinary],
-          });
-        }
-
-        const applyOptions = { overwriteConfirmed: options.overwriteConfirmed };
-        let report: BatchApplyReport;
-
-        if (
-          LogicalPath.isSessionVfsScope(scope) &&
-          userVfsUnifiedToolTurnFlag.isEnabled()
-        ) {
-          const vfs = rt.sessionVfs(scope.projectId, scope.sessionId);
-          // BatchIngestWriter 适配器（core port，`domain/vfs/ports/vfs-batch-io.port.ts`）：
-          // writer 端口已知失败沿 `Result.err` 回传，由 `applyBatchIngestWithWriter` 逐项聚合进
-          // `Report.failed`（Result 契约之外的未知异常仍按 catch 落表，不整批 err）。
-          const writer: BatchIngestWriter = {
-            async mkdir(logicalPath: string): Promise<Result<void, AppError>> {
-              return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, UserVfsTurnOps.buildMkdir(logicalPath)));
-            },
-            async writeFile(logicalPath: string, content: string): Promise<Result<void, AppError>> {
-              const baselineResult = await UserVfsSaveBaseline.read(vfs, logicalPath);
-              if (!baselineResult.ok) return Result.err(baselineResult.error);
-              const baseline = baselineResult.value;
-              if (baseline == null)
-                return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, UserVfsTurnOps.buildCreateFile(logicalPath, content)));
-              const op = UserVfsTurnOps.buildSave(baseline, content, logicalPath, content);
-              if (op == null) return Result.ok(undefined);
-              return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, op));
-            },
-          };
-          const appliedWithWriter = await batch.applyBatchIngestWithWriter(scope, targetDir, plan, applyOptions, writer);
-          if (!appliedWithWriter.ok) return Result.err(appliedWithWriter.error);
-          report = appliedWithWriter.value;
-        } else {
-          const applied = await batch.applyBatchIngest(scope, targetDir, plan, applyOptions);
-          if (!applied.ok) return Result.err(applied.error);
-          report = applied.value;
-        }
-
-        return Result.ok({
-          status: "applied",
-          report,
-          skippedBinary: [...plan.skippedBinary],
-        });
-      }
       const ingestOptions = {
         targetDir: req.targetDir,
         hostPaths: req.hostPaths,
         overwriteConfirmed: req.overwriteConfirmed === true,
       };
-      const ingested = await ingestBatch(ingestOptions);
+      const ingested = await ingestBatch(rt, scope, ingestOptions);
       // plan/apply 的已知失败沿 Result 到达，就地转码（错误通道迁移四期）；
       // writer 协议内的部分失败不落 err（core 聚合进 report.failed）。
       if (!ingested.ok) return IpcResults.err(FormatIpcError.format(ingested.error));

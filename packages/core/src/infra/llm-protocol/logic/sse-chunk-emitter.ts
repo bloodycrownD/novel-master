@@ -61,6 +61,7 @@ export const SseChunkEmitter = {
     // 终态标志：`flush()` / `dispose()` 之后置位，`append()` 不再有任何效果。
     let stopped = false;
 
+    // nm-style: keep-closure — 变异 buffer/lastFlushAt（emitter 核心私有缓冲），注册给 interval tick 与 append 闸门竞争同一缓冲（时序敏感）；闭包生命周期=XHR 单次请求，转 this-方法会把缓冲暴露在公共 handle 破坏封装。
     const emitBuffer = (): void => {
       if (buffer.length === 0) {
         return;
@@ -75,6 +76,7 @@ export const SseChunkEmitter = {
       emitBuffer();
     }, tickMs);
 
+    // nm-style: keep-closure — 变异 stopped 终态标志与 timer，「flush/dispose 后 append no-op」是文档化终态不变量；与 emitBuffer 同一 handle 状态单元，不可单独抽取。
     const stopTimer = (): void => {
       // 停表的同时进入终态：`flush()` / `dispose()` 是两条终态路径，
       // 走完之后 `append()` 一律 no-op。

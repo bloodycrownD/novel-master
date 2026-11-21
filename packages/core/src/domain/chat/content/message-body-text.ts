@@ -8,6 +8,18 @@ import { ToolOutput } from "@/domain/tool/logic/format-tool-output.js";
 import type { ContentBlock } from "../model/content-block.js";
 import type { ChatMessageData } from "../model/message.js";
 
+/**
+ * 文本缓冲刷成一张卡（本文件 CLI 预览与 service/prompt 卡片投影的 flushText 同构收敛）：
+ * 空缓冲返回 null（无卡可建）；非空把全部 `text` 按 `\n\n` 连接交给 build，
+ * `first` 是缓冲首元素（render-prompt 的卡 id 挂首段 index 用）。
+ */
+export const flushTextCard = <E extends { readonly text: string }, T>(buffer: ReadonlyArray<E>, build: (joined: string, first: E) => T): T | null => {
+  if (buffer.length === 0) {
+    return null;
+  }
+  return build(buffer.map((entry) => entry.text).join("\n\n"), buffer[0]!);
+};
+
 export const MessageBodyText = {
   blockBodyText(block: ContentBlock): string | null {
     switch (block.type) {
@@ -51,14 +63,7 @@ export const MessageBodyText = {
   formatForCliPreview(message: ChatMessageData, options?: { readonly includeThinking?: boolean }): ReadonlyArray<{ readonly role: string; readonly body: string }> {
     const segments: Array<{ role: string; body: string }> = [];
     const toolResultBodies: string[] = [];
-    let textBuffer: string[] = [];
-    const flushText = () => {
-      if (textBuffer.length === 0) {
-        return;
-      }
-      segments.push({ role: message.role, body: textBuffer.join("\n\n") });
-      textBuffer = [];
-    };
+    let textBuffer: Array<{ text: string }> = [];
 
     for (const block of message.content.blocks) {
       if (block.type === "tool_result") {
@@ -74,7 +79,9 @@ export const MessageBodyText = {
         if (options?.includeThinking !== true) {
           continue;
         }
-        flushText();
+        const flushed = flushTextCard(textBuffer, (joined) => ({ role: message.role, body: joined }));
+        if (flushed != null) segments.push(flushed);
+        textBuffer = [];
         segments.push({
           role: "thinking",
           body: block.type === "thinking" ? block.text : "[redacted thinking]",
@@ -82,7 +89,9 @@ export const MessageBodyText = {
         continue;
       }
       if (block.type === "tool_use") {
-        flushText();
+        const flushed = flushTextCard(textBuffer, (joined) => ({ role: message.role, body: joined }));
+        if (flushed != null) segments.push(flushed);
+        textBuffer = [];
         const body = MessageBodyText.blockBodyText(block);
         if (body != null) {
           segments.push({ role: "tool_call", body });
@@ -91,10 +100,12 @@ export const MessageBodyText = {
       }
       const text = MessageBodyText.blockBodyText(block);
       if (text != null) {
-        textBuffer.push(text);
+        textBuffer.push({ text });
       }
     }
-    flushText();
+    const flushed = flushTextCard(textBuffer, (joined) => ({ role: message.role, body: joined }));
+    if (flushed != null) segments.push(flushed);
+    textBuffer = [];
 
     if (toolResultBodies.length > 0) {
       segments.unshift({ role: "tool", body: toolResultBodies.join("\n\n") });

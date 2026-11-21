@@ -23,6 +23,9 @@ interface SkillFrontMatterValues {
   readonly description?: string;
 }
 
+/** front matter 一行：YAML 双引号标量（JSON 字符串即合法 double-quoted scalar），零捕获纯格式化。 */
+const fmLine = (key: string, value: string): string => `${key}: ${JSON.stringify(value)}`;
+
 export const SkillFrontMatterValues = {
   /**
    * 重写 SKILL.md 的 front matter name / description（保留其余键与正文）。
@@ -42,7 +45,6 @@ export const SkillFrontMatterValues = {
     }
 
     const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-    const fmLine = (key: string, value: string) => `${key}: ${JSON.stringify(value)}`;
     if (match == null) {
       const fm = entries.map(([key, value]) => fmLine(key, value)).join("\n");
       return `---\n${fm}\n---\n\n${source}`;

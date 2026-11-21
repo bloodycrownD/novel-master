@@ -108,6 +108,7 @@ export const ImportDirRules = {
         }
         existing.add(normalized.value);
       }
+      // nm-style: keep-closure — API 契约要求闭包形态：匹配具名回调类型 WriteDefaultDirRule 注入 ImportDirRules.backfillMissing；绑定的 targetScopeKey/workplaceRepo 是每次 ensure 的逐调用配置，提升模块级后调用点仍要包一层适配闭包，纯搬家。
       const writeDefaultRule = async (logicalPath: string): Promise<Result<void, AppError>> => {
         const rule = ImportDirRules.buildDefault(targetScopeKey, logicalPath);
         if (!rule.ok) {

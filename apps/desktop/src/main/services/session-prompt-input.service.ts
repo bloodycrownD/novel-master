@@ -37,6 +37,11 @@ export interface SessionPromptInputBundle {
 type PromptInputResult = Promise<Result<SessionPromptInputBundle | null, AppError>>;
 
 export namespace SessionPromptInputService {
+  /** 分段弃权判据单一出处：传入判据为真即弃权（error-matrix-final R3，弃权沿 null 哨兵返回）。 */
+  function bailed(shouldBail?: () => boolean): boolean {
+    return shouldBail?.() === true;
+  }
+
   /**
    * Desktop prompt-input adapter：把 desktop runtime（messages / workplace / sessionKkv /
    * skills）适配到 core 的 assemble + PromptAssembler + PromptBuilder。已知失败沿
@@ -48,7 +53,6 @@ export namespace SessionPromptInputService {
     // 这条链会把 POST 派发从 +1.2s 拖到 +19.6s（build 与发送链抢同一条 SQLite
     // 连接），desktop main 是同进程同连接，问题一模一样。
     const shouldBail = options?.shouldBail;
-    const bailed = (): boolean => shouldBail?.() === true;
 
     // 错误通道迁移四期：AgentProjectResolver.resolve 沿 Result 回传，Err 直接并进本
     // 函数的 Result 通道（token 读口已有 resilient 降级、预览侧有 ipcErr 收口）。
@@ -60,7 +64,7 @@ export namespace SessionPromptInputService {
       if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
       resolved = resolvedAgent.value.definition;
     }
-    if (bailed()) return Result.ok(null);
+    if (bailed(shouldBail)) return Result.ok(null);
 
     // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
     // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
@@ -72,7 +76,7 @@ export namespace SessionPromptInputService {
     if (visibleRead.kind === "failed") return Result.err(visibleRead.error);
     if (visibleRead.kind !== "completed") return Result.ok(null);
     const visibleMessages = visibleRead.value;
-    if (bailed()) return Result.ok(null);
+    if (bailed(shouldBail)) return Result.ok(null);
     const wtScope = {
       kind: "session" as const,
       projectId: scope.projectId,
@@ -99,7 +103,7 @@ export namespace SessionPromptInputService {
       return Result.ok(null);
     }
     const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled.value;
-    if (bailed()) return Result.ok(null);
+    if (bailed(shouldBail)) return Result.ok(null);
     const prepareRuntime = {
       sessionId: scope.sessionId,
       sessionKkv: runtime.sessionKkv,
@@ -117,7 +121,7 @@ export namespace SessionPromptInputService {
     const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
-    if (bailed()) return Result.ok(null);
+    if (bailed(shouldBail)) return Result.ok(null);
     const ctx: PromptRenderContext = {
       workplaceDisplay,
       messages,

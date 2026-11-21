@@ -44,6 +44,15 @@ type SessionId = string | null | undefined;
 type BailCheck = () => boolean;
 
 /**
+ * resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
+ * Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
+ * 恒 null（与不传同义，core 恒不弃权）。
+ */
+function resolveBailInterrupt(shouldBail?: BailCheck): Interrupt | null {
+  return shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null;
+}
+
+/**
  * 占用标签（源记号 + =/≈ 连接符 + pct + 占比）由 core 的
  * `TokenFormat.sourceBadge` + `TokenFormat.contextUsageLabel` 统一给出，
  * 本文件不再自备一份映射（与 desktop main 的 buildTokenStats 同源同形）。
@@ -110,10 +119,6 @@ export const ChatPromptTokenLabel = {
     // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
     const t0 = Date.now();
     const opt = shouldBail != null ? {shouldBail} : undefined;
-    // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
-    // Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
-    // 恒 null（与不传同义，core 恒不弃权）。
-    const resolveBail = (): Interrupt | null => (shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null);
     const bundle = await SessionPromptInputService.build(runtime, scope, undefined, opt);
     if (!bundle.ok) {
       // build 链已知失败（错误通道迁移四期）：沿 Result 通道上抛，调用方
@@ -198,7 +203,7 @@ export const ChatPromptTokenLabel = {
         // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
         // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查
         // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
-        shouldBail: resolveBail,
+        shouldBail: () => resolveBailInterrupt(shouldBail),
       };
       const resultPromise = PromptTokens.resolve(scope.sessionId, rawMessages, resolveRequest, resolveOptions);
       const outcome = await resultPromise;
@@ -455,6 +460,16 @@ const preciseUpgradeQueued = new Map<string, UpgradeRequest>();
 const sessionRefreshGen = new Map<string, number>();
 
 /**
+ * 升级轮的弃权判据：发起方的 shouldBail 命中，或代数已变（期间已有更新的
+ * 首帧——切模型/新消息，本轮读数必被新鲜度闸丢弃）。gen 在轮次起步取定是
+ * 刻意的时序约束，签名化把该约束显性化（真机实证：白跑轮 `settle gen=4
+ * current=5` 烧掉 1004ms）。
+ */
+function upgradeBailCheck(request: UpgradeRequest, sessionId: string, gen: number): boolean {
+  return request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
+}
+
+/**
  * 后台精确升级的生命周期收口（延迟计时 / 在途原生计数 / 轮次跑动）。
  */
 export const PreciseUpgrade = {
@@ -587,20 +602,17 @@ export const PreciseUpgrade = {
     }
     // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
     const gen = sessionRefreshGen.get(sessionId) ?? 0;
-    // 代数已变 = 期间已有更新的首帧（切模型/新消息）：本轮读数必被下面的新鲜度闸
-    // 丢弃，于是在 build 分段与整串计数之前就弃权，切模型的旧轮不再白跑一整轮
-    // 装配（真机实证：白跑轮 `settle gen=4 current=5` 烧掉 1004ms）。这是纯增量
-    // 判据，run 在途与视图切走的既有弃权照旧。
-    const shouldBail = () => request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
+    // 代数已变 = 期间已有更新的首帧：在 build 分段与整串计数之前就弃权，
+    // 切模型的旧轮不再白跑一整轮装配（判据本体见 upgradeBailCheck）。
     try {
-      if (shouldBail()) {
+      if (upgradeBailCheck(request, sessionId, gen)) {
         if (__DEV__) {
           console.log('[nm-chip] precise upgrade bailed before start');
         }
         return;
       }
       // nm-style: keep-local — 四实参（request 深字段）无法单行；单实参调用 + 多行拆分
-      const precisePromise = ChatPromptTokenLabel.loadWithFlag(request.runtime, request.scope, false, shouldBail);
+      const precisePromise = ChatPromptTokenLabel.loadWithFlag(request.runtime, request.scope, false, () => upgradeBailCheck(request, sessionId, gen));
       const precise = await precisePromise;
       if (!precise.ok) {
         // 升级失败保持首帧估算标签（错误通道迁移四期：与旧 catch 同款留痕，

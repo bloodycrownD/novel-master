@@ -42,6 +42,41 @@ interface WriteStep {
 }
 
 /**
+ * 逆序回滚已执行步骤：单步回滚失败不中断后续回滚、错误聚合；回滚阶段有失败时
+ * 返回 `INFRA_ROLLBACK_DEGRADED`（根因挂 `cause`、清单进 details）；未知根因
+ * （非 AppError）返回 `INFRA_UNEXPECTED_ERROR`（cause 透传）。
+ */
+const rollbackExecuted = async (executed: readonly WriteStep[], from: number, rootCause: unknown): Promise<Result<void, AppError>> => {
+    const rollbackErrors: { step: string; error: unknown }[] = [];
+    // 按注册逆序回滚已经成功执行的步骤。
+    for (let i = from; i >= 0; i--) {
+        const step = executed[i];
+        if (!step) continue;
+        try {
+            const back = await step.rollback();
+            if (!back.ok) {
+                // 单步回滚失败不中断后续回滚，聚合起来统一上报。
+                rollbackErrors.push({step: step.name, error: back.error});
+            }
+        } catch (err) {
+            rollbackErrors.push({step: step.name, error: err});
+        }
+    }
+    // 回滚完成后系统状态已变（部分步骤已撤销），此时转 Result 是对现状的诚实
+    // 标记而非吞并（error-matrix-final §一.2）。
+    if (rollbackErrors.length > 0) {
+        const causeText = rootCause instanceof Error ? rootCause.message : String(rootCause);
+        const steps = rollbackErrors.map((entry) => entry.step).join(", ") || "<无>";
+        return Result.err(new AppError("INFRA_ROLLBACK_DEGRADED", {causeText, steps, rollbackErrors}, {cause: rootCause}));
+    }
+    // 未知异常（非 AppError）：不塞业务 key，以 INFRA_UNEXPECTED_ERROR + cause 显式标记未知。
+    if (!(rootCause instanceof AppError)) {
+        return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", {}, {cause: rootCause}));
+    }
+    return Result.err(rootCause);
+};
+
+/**
  * 协调式写：注册步骤 + 失败时按逆序回滚。
  *
  * 典型用法：
@@ -94,46 +129,16 @@ export class CoordinatedWrite {
      */
     async run(): Promise<Result<void, AppError>> {
         const executed: WriteStep[] = [];
-        const rollbackExecuted = async (from: number, rootCause: unknown): Promise<Result<void, AppError>> => {
-            const rollbackErrors: { step: string; error: unknown }[] = [];
-            // 按注册逆序回滚已经成功执行的步骤。
-            for (let i = from; i >= 0; i--) {
-                const step = executed[i];
-                if (!step) continue;
-                try {
-                    const back = await step.rollback();
-                    if (!back.ok) {
-                        // 单步回滚失败不中断后续回滚，聚合起来统一上报。
-                        rollbackErrors.push({step: step.name, error: back.error});
-                    }
-                } catch (err) {
-                    rollbackErrors.push({step: step.name, error: err});
-                }
-            }
-            // 回滚完成后系统状态已变（部分步骤已撤销），此时转 Result 是对现状的诚实
-            // 标记而非吞并（error-matrix-final §一.2）。
-            if (rollbackErrors.length > 0) {
-                const causeText = rootCause instanceof Error ? rootCause.message : String(rootCause);
-                const steps = rollbackErrors.map((entry) => entry.step).join(", ") || "<无>";
-                return Result.err(new AppError("INFRA_ROLLBACK_DEGRADED", {causeText, steps, rollbackErrors}, {cause: rootCause}));
-            }
-            // 未知异常（非 AppError）：不塞业务 key，以 INFRA_UNEXPECTED_ERROR + cause 显式标记未知。
-            if (!(rootCause instanceof AppError)) {
-                return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", {}, {cause: rootCause}));
-            }
-            return Result.err(rootCause);
-        };
-
         try {
             for (const step of this.steps) {
                 const outcome = await step.execute();
                 if (!outcome.ok) {
-                    return rollbackExecuted(executed.length - 1, outcome.error);
+                    return rollbackExecuted(executed, executed.length - 1, outcome.error);
                 }
                 executed.push(step);
             }
         } catch (rootCause) {
-            return rollbackExecuted(executed.length - 1, rootCause);
+            return rollbackExecuted(executed, executed.length - 1, rootCause);
         }
         return Result.ok(undefined);
     }

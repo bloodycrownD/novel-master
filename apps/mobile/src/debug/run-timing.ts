@@ -30,19 +30,25 @@ type TimingAxisOptions = {
   readonly startAtModuleEval?: boolean;
 };
 
+/** dev 环境判定：__DEV__ 未定义（生产/测试）时恒 false。 */
+function isDevEnabled(): boolean {
+  return typeof __DEV__ !== 'undefined' && __DEV__;
+}
+
 /** 造一条打点轴；t0 与窗口状态收在闭包里，不散成模块级 let。 */
 function createTimingAxis(label: string, options: TimingAxisOptions = {}): TimingAxis {
   let t0 = options.startAtModuleEval === true ? Date.now() : 0;
-  const enabled = (): boolean => typeof __DEV__ !== 'undefined' && __DEV__;
+  // nm-style: keep-closure — t0 是可重绑时间游标且三条轴多实例各自持游标，槽化产出与现有 TimingAxis 同构、无复用收益
   const reset = (): void => {
-    if (!enabled()) {
+    if (!isDevEnabled()) {
       return;
     }
     t0 = Date.now();
     console.log(`[${label}] t0 ${options.resetMessage ?? ''}`);
   };
+  // nm-style: keep-closure — t0 重绑 + 超窗自愈（置 0 后续 no-op）是三实例各自的状态机，闭包是既定设计
   const log = (message: string): void => {
-    if (!enabled() || t0 === 0) {
+    if (!isDevEnabled() || t0 === 0) {
       return;
     }
     if (options.windowMs != null && Date.now() - t0 > options.windowMs) {

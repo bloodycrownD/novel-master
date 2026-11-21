@@ -97,6 +97,17 @@ function buildChainErrorMessage(failureLines: readonly string[], untried: number
   return parts.join("\n");
 }
 
+/** 单引擎失败摘要收编（已知 Err 与未知异常同口；脱敏 + 截断 + 错误码提取，failureLines / attemptParts 由调用方聚合）。 */
+function recordEngineFailure(entry: ResolvedEngineConfig, e: unknown, failureLines: string[], attemptParts: string[]): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  const safe = SearchEngine.redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
+  const code = msg.match(/error (\d{3})/i)?.[1];
+  const timeout = msg.match(/timed out after (\d+)ms/);
+  const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
+  failureLines.push(`${entry.engine}: ${safe}`);
+  attemptParts.push(`${entry.engine} 失败(${brief})`);
+}
+
 /**
  * 静态 `search` 工具实例。
  *
@@ -191,16 +202,6 @@ ${engineSection}
     // attempts 轨迹分段（「bocha 失败(401)」…，成功引擎由返回处拼接）。
     const attemptParts: string[] = [];
     let success: SearchChainOutput | null = null;
-    // 单引擎失败摘要收编（已知 Err 与未知异常同口；脱敏 + 截断口径不变）。
-    const recordEngineFailure = (entry: ResolvedEngineConfig, e: unknown): void => {
-      const msg = e instanceof Error ? e.message : String(e);
-      const safe = SearchEngine.redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
-      const code = msg.match(/error (\d{3})/i)?.[1];
-      const timeout = msg.match(/timed out after (\d+)ms/);
-      const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
-      failureLines.push(`${entry.engine}: ${safe}`);
-      attemptParts.push(`${entry.engine} 失败(${brief})`);
-    };
 
     for (const [i, entry] of candidates.entries()) {
       // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
@@ -216,7 +217,7 @@ ${engineSection}
           // 引擎已知失败（四期门⑦沿 Result 回来）：取消重判后记降级行，
           // 尝试链中下一个引擎（钉死时仅一员，自然止）；取消沿 Result.err 返回。
           if (ctx.signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
-          recordEngineFailure(entry, response.error);
+          recordEngineFailure(entry, response.error, failureLines, attemptParts);
           continue;
         }
         // 降级后成功：输出携带 attempts 轨迹；链首首发成功省略该字段。
@@ -227,7 +228,7 @@ ${engineSection}
         // 未知异常（非 abort 的 fetch 错误 / 编程错误）：取消重判 + 同口收编为降级行；
         // 取消沿 Result.err 返回，不再 throw。
         if (ctx.signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
-        recordEngineFailure(entry, e);
+        recordEngineFailure(entry, e, failureLines, attemptParts);
         // 循环继续：尝试链中下一个引擎（钉死时仅一员，自然止）。
       }
     }

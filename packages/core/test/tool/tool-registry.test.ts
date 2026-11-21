@@ -1,5 +1,5 @@
-import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
+import { AssertionError } from "../../src/common/assert.js";
 import {  describe, it  } from "node:test";
 import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
 import {  z  } from "zod";
@@ -41,7 +41,7 @@ describe("ToolRegistry", () => {
             return null;
           },
         }),
-      (e) => AppErrorOps.is(e, "TOOL_CONFLICT") && e.details?.toolName === "dup",
+      (e) => e instanceof AssertionError && e.message.includes("Tool already registered: dup"),
     );
   });
 

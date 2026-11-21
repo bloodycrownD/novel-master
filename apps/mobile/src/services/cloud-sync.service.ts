@@ -284,6 +284,14 @@ export namespace CloudSyncService {
    * ——acquire 与 try 之间不允许出现任何可抛表达式。对照 desktop
    * `cloud-sync.service.ts` 的 getLocalMeta 搬移注释，这正是它当初被写下来的原因。
    */
+  /** 外层 pull 互斥的幂等释放：令牌旗标槽判真才置 false 并 release（保证恰一次）。 */
+  function releasePullBusy(slot: {held: boolean}): void {
+    if (slot.held) {
+      slot.held = false;
+      maintenanceBusy.release();
+    }
+  }
+
   // nm-style: keep-public — cloud-sync.service.test.ts describe('pullCloudSync') 多用例直接 import；progress-cancel 测试经它驱动
   export async function pull(runtime: MobileNovelMasterRuntime, onRebootstrap: Rebootstrap, options?: CloudSyncPullOptions): Promise<Result<CloudSyncPullOutcome, AppError>> {
     const local = await CloudSyncConfigStore.getLocalStatus(runtime);
@@ -307,13 +315,7 @@ export namespace CloudSyncService {
     // 完整互斥），其余出口（错误 / already-up-to-date）由 finally 兜底，
     // 令牌标记保证幂等不重复 release。
     maintenanceBusy.acquire();
-    let pullBusyHeld = true;
-    const releasePullBusy = (): void => {
-      if (pullBusyHeld) {
-        pullBusyHeld = false;
-        maintenanceBusy.release();
-      }
-    };
+    const pullBusySlot = {held: true};
 
     // progress / coordinator / 临时路径都先声明再赋值：CloudSyncProgressLog.create
     // 与 createCoordinator 都在 try 内，但 catch 里要引用 progress（需 ?.），
@@ -385,7 +387,7 @@ export namespace CloudSyncService {
         });
       }
       // 重建 + 记账已完成，重建窗口结束，此处释放外层互斥（finally 兜底幂等）。
-      releasePullBusy();
+      releasePullBusy(pullBusySlot);
       progress.done({rev: result.rev});
       return Result.ok({rev: result.rev, alreadyUpToDate: false});
     } catch (error) {
@@ -420,7 +422,7 @@ export namespace CloudSyncService {
       syncBusy.set(false);
       runtime.abortRegistry.unregister(ABORT_KEY.cloudSync('local'), abortScope);
       abortScope.dispose();
-      releasePullBusy();
+      releasePullBusy(pullBusySlot);
       if (exportTempPath != null) {
         await ReactNativeBlobUtil.fs.unlink(exportTempPath).catch(() => undefined);
       }

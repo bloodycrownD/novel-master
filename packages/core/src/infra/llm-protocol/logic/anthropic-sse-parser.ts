@@ -202,6 +202,7 @@ export const AnthropicSseParser = {
       degradedToolCalls: [],
     };
 
+    // nm-style: keep-closure — per-stream handle 动词（闭包生命周期=单条流），feed 还以值传给 SseLineBuffer.drain（API 契约要求闭包形态）；handle 形态是适配器与白盒测试的契约。
     const feed = (chunk: string): void => {
       SseJsonEvents.feed(state, chunk, (event) => {
         const type = event.type;
@@ -269,6 +270,7 @@ export const AnthropicSseParser = {
       });
     };
 
+    // nm-style: keep-closure — 同族 handle 动词；抽取需自建 lambda 重建对 feed 的 drain 引用，零收益。
     const finish = (): SseFinishResult => {
       SseLineBuffer.drain(state, feed);
       AnthropicSseParser.flushActiveBlock(state, onStream, toolNames);
@@ -283,6 +285,7 @@ export const AnthropicSseParser = {
       };
     };
 
+    // nm-style: keep-closure — 同族 handle 动词，捕获集与 finish 高度重叠（state,feed,onStream,toolNames）；要动必须三动词同族一次性同构抽取，不可单独动一个。
     const finishPartial = (): SseFinishResult => {
       SseLineBuffer.drain(state, feed);
       AnthropicSseParser.flushActiveBlock(state, onStream, toolNames);

@@ -163,10 +163,6 @@ export interface BareExportsContext {
 export function scanBareExports(ctx: BareExportsContext): Finding[] {
   const findings: Finding[] = [];
   const headCache = new Map<string, Set<string> | null>();
-  const headNamesOf = (rel: string): Set<string> | null => {
-    if (!headCache.has(rel)) headCache.set(rel, headExportFnNames(rel));
-    return headCache.get(rel)!;
-  };
   for (const entry of ctx.entries) {
     const rel = toPosix(entry.file);
     const text = entry.text ?? readDisk(entry.file);
@@ -174,13 +170,19 @@ export function scanBareExports(ctx: BareExportsContext): Finding[] {
     for (const fn of bareExportsOf(text, rel.endsWith(".tsx"))) {
       if (ctx.changed) {
         if (!ctx.isAdded(rel, fn.line)) continue;
-        const head = headNamesOf(rel);
+        const head = headNamesOf(headCache, rel);
         if (head != null && head.has(fn.name)) continue;
       }
       findings.push({ rule: "bare-exports", file: rel, line: fn.line, symbol: fn.name, verdict: "BARE_EXPORT", detail: BARE_EXPORT_DETAIL, blocking: ctx.changed });
     }
   }
   return findings;
+}
+
+/** HEAD 导出名查询 memo（headCache 承载「文件 → HEAD 顶层 export function 名集」，Map 引用传入即可）。 */
+function headNamesOf(headCache: Map<string, Set<string> | null>, rel: string): Set<string> | null {
+  if (!headCache.has(rel)) headCache.set(rel, headExportFnNames(rel));
+  return headCache.get(rel)!;
 }
 
 function readDisk(file: string): string | null {

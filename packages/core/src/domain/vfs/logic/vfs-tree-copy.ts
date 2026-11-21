@@ -64,6 +64,25 @@ type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
   revisions?: VfsRevisionRepository;
 };
 
+/**
+ * 文件边界：先同步判停，通过后按累计文件数每 20 个让路一次。
+ *
+ * `hooks?.checkpoint?.()` 未注入时得到 `undefined`，判空必须用宽松的
+ * `hit != null`——写成 `hit !== null` 会把 undefined 误判为命中，随后取
+ * `.reason` 直接崩。累计文件数 / 让路阈值是跨文件边界的节流游标，
+ * 由 progress 槽对象承载（调用方持同一引用，跨调用累计）。
+ */
+const checkpointFiles = async (progress: { files: number; nextYieldAt: number }, hooks: LongTaskHooks | undefined, fileCount = 1): Promise<Interrupt | null> => {
+  const hit = hooks?.checkpoint?.();
+  if (hit != null) return hit;
+  progress.files += fileCount;
+  if (progress.files >= progress.nextYieldAt) {
+    progress.nextYieldAt = progress.files + 20;
+    await hooks?.onProgress?.();
+  }
+  return null;
+};
+
 export const VfsTreeCopy = {
   relativeUnderPrefix(fullPath: string, prefix: string): string {
     const base = Path.stripTrailingSlash(prefix);
@@ -132,26 +151,8 @@ export const VfsTreeCopy = {
   async copyTree(repo: VfsEntryRepository, fromScope: VfsCopyScope, fromPathPrefix: string, toScope: VfsCopyScope, toPathPrefix: string, options?: CopyVfsTreeOptions): Promise<Outcome<void>> {
     const excludePrefixes = VfsTreeCopy.resolveExcludePrefixes(options?.excludePrefixes);
     const hooks = options?.hooks;
-    let processedFiles = 0;
-    let nextYieldAt = 20;
-
-    /**
-     * 文件边界：先同步判停，通过后按累计文件数每 20 个让路一次。
-     *
-     * `hooks?.checkpoint?.()` 未注入时得到 `undefined`，判空必须用宽松的
-     * `hit != null`——写成 `hit !== null` 会把 undefined 误判为命中，随后取
-     * `.reason` 直接崩。
-     */
-    const checkpointFiles = async (fileCount = 1): Promise<Interrupt | null> => {
-      const hit = hooks?.checkpoint?.();
-      if (hit != null) return hit;
-      processedFiles += fileCount;
-      if (processedFiles >= nextYieldAt) {
-        nextYieldAt = processedFiles + 20;
-        await hooks?.onProgress?.();
-      }
-      return null;
-    };
+    // 累计文件数 / 下次让路阈值（每 20 个文件让路一次的节流游标）。
+    const progress = { files: 0, nextYieldAt: 20 };
 
     // --- 目录：批量检查存在 + 批量 INSERT ---
     const dirPaths = await repo.listDirectoryPathsUnderPrefix(fromScope.scopeKey, fromPathPrefix);
@@ -234,7 +235,7 @@ export const VfsTreeCopy = {
             mtimeMs: f.mtimeMs,
           }));
         // 批量 INSERT 是单个原子段：入口判一次停，按批量文件数记账让路。
-        const batchInterrupted = await checkpointFiles(newEntries.length);
+        const batchInterrupted = await checkpointFiles(progress, hooks, newEntries.length);
         if (batchInterrupted != null) return batchInterrupted;
         if (newEntries.length > 0) {
           const inserted = await repo.batchInsertFileEntriesWithHash(toScope.scopeKey, newEntries);
@@ -242,7 +243,7 @@ export const VfsTreeCopy = {
         }
         // 已存在的目标用逐条 update（tree-copy 到清空 scope 时不会走到）
         for (const f of blobFiles.filter((f) => existingTargets.value.has(f.targetPath))) {
-          const interrupted = await checkpointFiles();
+          const interrupted = await checkpointFiles(progress, hooks);
           if (interrupted != null) return interrupted;
           const nextVersion = await VfsTreeCopy.nextUpdateVersion(repo, options?.revisions, toScope.scopeKey, f.targetPath, null);
           if (!nextVersion.ok) return { kind: "failed", error: nextVersion.error };
@@ -254,7 +255,7 @@ export const VfsTreeCopy = {
         const plainMap = await VfsTreeCopy.resolvePlainContentMap(repo, fromScope.scopeKey, fromPathPrefix);
         if (!plainMap.ok) return { kind: "failed", error: plainMap.error };
         for (const f of blobFiles) {
-          const interrupted = await checkpointFiles();
+          const interrupted = await checkpointFiles(progress, hooks);
           if (interrupted != null) return interrupted;
           if (options != null) {
             await options.contentStore.ensureBlob(f.contentHash!, plainMap.value.get(f.sourcePath) ?? null);
@@ -279,7 +280,7 @@ export const VfsTreeCopy = {
       const plainMap = await VfsTreeCopy.resolvePlainContentMap(repo, fromScope.scopeKey, fromPathPrefix);
       if (!plainMap.ok) return { kind: "failed", error: plainMap.error };
       for (const f of plainFiles) {
-        const interrupted = await checkpointFiles();
+        const interrupted = await checkpointFiles(progress, hooks);
         if (interrupted != null) return interrupted;
         const content = plainMap.value.get(f.sourcePath);
         if (content == null) {

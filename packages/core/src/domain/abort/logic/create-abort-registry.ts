@@ -10,6 +10,7 @@ import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 export const AbortRegistryFactory = {
   create(): AbortRegistry {
     const scopes = new Map<string, AbortScope>();
+    // nm-style: keep-closure — scopes 是 create() 每次新建的注册表资源，与本返回字面量其余 7 个闭包方法完全同构；单独参数化反而制造 7 闭包 + 1 模块函数的不一致形态。
     const registerIfAbsent = (key: string, scope: AbortScope): boolean => {
       if (scopes.has(key)) {
         return false;

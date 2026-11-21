@@ -164,6 +164,9 @@ const TEMPLATE_PLACEHOLDER_EXAMPLES: Readonly<Record<string, string>> = {
   baseUrl: "https://example.invalid",
 };
 
+/** 模板校验失败的统一错误（TOOL_SEARCH_TEMPLATE_INVALID，key `error.tool.search_template_invalid`，params 带英文 reason）。 */
+const invalidTemplate = (reason: string): Result<never, SearchTemplateValidationError> => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: { key: "error.tool.search_template_invalid", params: { reason } } }));
+
 export const SearchEngine = {
   /**
    * 归一化结果条数：缺省 / 非有限数 / 小于 1 → 5；其余向下取整并 clamp 到
@@ -235,51 +238,50 @@ export const SearchEngine = {
    * `error.tool.search_secret_detected`（params 带字段名）。
    */
   validateTemplate(raw: unknown): Result<SearchEngineTemplate, SearchTemplateValidationError> {
-    const invalid = (reason: string) => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: { key: "error.tool.search_template_invalid", params: { reason } } }));
-    if (!Guards.isRecord(raw)) return invalid("expected an object");
+    if (!Guards.isRecord(raw)) return invalidTemplate("expected an object");
 
     const name = typeof raw.name === "string" ? raw.name.trim() : "";
-    if (name.length === 0) return invalid("name is required");
+    if (name.length === 0) return invalidTemplate("name is required");
 
     const method = raw.method;
-    if (method !== "GET" && method !== "POST") return invalid("method must be GET or POST");
+    if (method !== "GET" && method !== "POST") return invalidTemplate("method must be GET or POST");
 
     const url = typeof raw.url === "string" ? raw.url.trim() : "";
-    if (url.length === 0) return invalid("url is required");
+    if (url.length === 0) return invalidTemplate("url is required");
     const unknownUrlPlaceholder = SearchEngine.unknownPlaceholderIn(url);
-    if (unknownUrlPlaceholder != null) return invalid(`url contains unknown placeholder {{${unknownUrlPlaceholder}}}`);
+    if (unknownUrlPlaceholder != null) return invalidTemplate(`url contains unknown placeholder {{${unknownUrlPlaceholder}}}`);
     try {
       const probe = new URL(url.replace(SEARCH_TEMPLATE_PLACEHOLDER_PATTERN, (token, placeholder: string) => TEMPLATE_PLACEHOLDER_EXAMPLES[placeholder] ?? token));
-      if (probe.protocol !== "http:" && probe.protocol !== "https:") return invalid("url must use http or https");
+      if (probe.protocol !== "http:" && probe.protocol !== "https:") return invalidTemplate("url must use http or https");
     } catch {
-      return invalid("url must be a valid http(s) URL");
+      return invalidTemplate("url must be a valid http(s) URL");
     }
 
-    if (!Guards.isRecord(raw.headers)) return invalid("headers must be an object of string values");
+    if (!Guards.isRecord(raw.headers)) return invalidTemplate("headers must be an object of string values");
     const headers: Record<string, string> = {};
     for (const [headerName, headerValue] of Object.entries(raw.headers)) {
-      if (headerName.length === 0) return invalid("header name must not be empty");
-      if (!HEADER_NAME_PATTERN.test(headerName)) return invalid(`header ${headerName} must be a valid HTTP token`);
-      if (typeof headerValue !== "string") return invalid(`header ${headerName} must be a string`);
+      if (headerName.length === 0) return invalidTemplate("header name must not be empty");
+      if (!HEADER_NAME_PATTERN.test(headerName)) return invalidTemplate(`header ${headerName} must be a valid HTTP token`);
+      if (typeof headerValue !== "string") return invalidTemplate(`header ${headerName} must be a string`);
       const unknownHeaderPlaceholder = SearchEngine.unknownPlaceholderIn(headerValue);
-      if (unknownHeaderPlaceholder != null) return invalid(`header ${headerName} contains unknown placeholder {{${unknownHeaderPlaceholder}}}`);
+      if (unknownHeaderPlaceholder != null) return invalidTemplate(`header ${headerName} contains unknown placeholder {{${unknownHeaderPlaceholder}}}`);
       headers[headerName] = headerValue;
     }
 
     let defaultBody: string | undefined;
     if (raw.defaultBody != null) {
-      if (typeof raw.defaultBody !== "string") return invalid("defaultBody must be JSON text");
+      if (typeof raw.defaultBody !== "string") return invalidTemplate("defaultBody must be JSON text");
       const text = raw.defaultBody.trim();
       if (text.length > 0) {
         const unknownBodyPlaceholder = SearchEngine.unknownPlaceholderIn(text);
-        if (unknownBodyPlaceholder != null) return invalid(`defaultBody contains unknown placeholder {{${unknownBodyPlaceholder}}}`);
+        if (unknownBodyPlaceholder != null) return invalidTemplate(`defaultBody contains unknown placeholder {{${unknownBodyPlaceholder}}}`);
         let parsedBody: unknown;
         try {
           parsedBody = JSON.parse(text);
         } catch {
-          return invalid("defaultBody must be valid JSON");
+          return invalidTemplate("defaultBody must be valid JSON");
         }
-        if (!Guards.isRecord(parsedBody)) return invalid("defaultBody must be a JSON object");
+        if (!Guards.isRecord(parsedBody)) return invalidTemplate("defaultBody must be a JSON object");
         const pending: unknown[] = [parsedBody];
         while (pending.length > 0) {
           const node = pending.pop();
@@ -288,12 +290,12 @@ export const SearchEngine = {
             continue;
           }
           if (typeof node === "string") {
-            if (node.includes("{{count}}") && node !== "{{count}}") return invalid("{{count}} must be a whole-string value in defaultBody");
+            if (node.includes("{{count}}") && node !== "{{count}}") return invalidTemplate("{{count}} must be a whole-string value in defaultBody");
             continue;
           }
           if (Guards.isRecord(node)) {
             for (const key of Object.keys(node)) {
-              if (TEMPLATE_PLACEHOLDER_PROBE.test(key)) return invalid(`defaultBody key ${key} must not contain a placeholder`);
+              if (TEMPLATE_PLACEHOLDER_PROBE.test(key)) return invalidTemplate(`defaultBody key ${key} must not contain a placeholder`);
             }
             pending.push(...Object.values(node));
           }
@@ -301,9 +303,9 @@ export const SearchEngine = {
         defaultBody = text;
       }
     }
-    if (method === "GET" && defaultBody != null) return invalid("defaultBody is not allowed for GET");
+    if (method === "GET" && defaultBody != null) return invalidTemplate("defaultBody is not allowed for GET");
 
-    if (typeof raw.paramHint !== "string") return invalid("paramHint must be a string");
+    if (typeof raw.paramHint !== "string") return invalidTemplate("paramHint must be a string");
     const paramHint = raw.paramHint.trim();
 
     const secretFields = [

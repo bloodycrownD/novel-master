@@ -13,6 +13,9 @@ import type { VfsService } from "../ports/vfs-service.port.js";
 /** mkdirIgnoreExistingDirectory 的失败载荷：`VFS_NOT_A_DIRECTORY` + 端口透传。 */
 type VfsNotADirectoryError = AppError;
 
+/** move 目标已存在的统一冲突错误（写前失败，防 rename 冲突覆盖目标）。 */
+const alreadyExistsError = (to: string): Result<void, AppError> => Result.err(new AppError("VFS_ALREADY_EXISTS", { detail: `Path already exists: ${to}`, path: to }));
+
 export const VfsMove = {
   /**
    * mkdir that treats an existing directory as success; fails when path is a file.
@@ -62,10 +65,9 @@ export const VfsMove = {
     const normalizedTo = Path.stripTrailingSlash(to);
     // WHY: fail before write/delete so a rename conflict cannot overwrite the target.
     if (normalizedFrom !== normalizedTo) {
-      const alreadyExists = (): Result<void, AppError> => Result.err(new AppError("VFS_ALREADY_EXISTS", { detail: `Path already exists: ${to}`, path: to }));
       const targetRead = await vfs.read(to);
       if (targetRead.ok || targetRead.error.key === "VFS_IS_DIRECTORY") {
-        return alreadyExists();
+        return alreadyExistsError(to);
       }
       if (targetRead.error.key !== "VFS_NOT_FOUND") {
         return Result.err(targetRead.error);
@@ -73,7 +75,7 @@ export const VfsMove = {
       const targetList = await vfs.list(normalizedTo, { recursive: false });
       if (targetList.ok) {
         const hasDirRow = targetList.value.some((e) => e.kind === "directory" && Path.stripTrailingSlash(e.path) === normalizedTo);
-        if (targetList.value.length > 0 || hasDirRow) return alreadyExists();
+        if (targetList.value.length > 0 || hasDirRow) return alreadyExistsError(to);
       } else if (targetList.error.key !== "VFS_NOT_FOUND") {
         return Result.err(targetList.error);
       }

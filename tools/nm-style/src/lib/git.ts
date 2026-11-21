@@ -42,16 +42,18 @@ export type AddedLinePredicate = (file: string, line: number) => boolean;
  * 旧实现边界（忠实保留）：某文件的变更全部被配对吃掉时不进 addedLines，谓词与未跟踪文件同走
  * 「整文件新增」分支——该文件所有行都按新增报。
  */
+/** hunk 内删行配对：吃掉一条已登记的删行计数（removedInHunk 按 Map 引用传入）。 */
+function consumeRemoved(removedInHunk: Map<string, number>, text: string): void {
+  const count = removedInHunk.get(text) ?? 0;
+  if (count > 0) removedInHunk.set(text, count - 1);
+}
+
 export function addedLineFilter(changed: boolean): AddedLinePredicate {
   if (!changed) return () => true;
   const addedLines = new Map<string, Set<number>>();
   let current: string | null = null;
   let plusLine = 0;
   let removedInHunk = new Map<string, number>();
-  const consumeRemoved = (text: string): void => {
-    const count = removedInHunk.get(text) ?? 0;
-    if (count > 0) removedInHunk.set(text, count - 1);
-  };
   for (const raw of gitLines("git diff HEAD -U0")) {
     const line = raw.replace(/\r$/, "");
     if (line.startsWith("diff --git ")) {
@@ -68,7 +70,7 @@ export function addedLineFilter(changed: boolean): AddedLinePredicate {
     } else if (current != null && line.startsWith("+") && !line.startsWith("+++")) {
       const text = line.slice(1);
       if ((removedInHunk.get(text) ?? 0) > 0) {
-        consumeRemoved(text);
+        consumeRemoved(removedInHunk, text);
       } else {
         const set = addedLines.get(current) ?? new Set<number>();
         set.add(plusLine);

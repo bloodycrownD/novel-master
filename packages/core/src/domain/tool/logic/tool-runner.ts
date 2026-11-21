@@ -45,6 +45,15 @@ function normalizeToolFailure(name: string, e: unknown): AppError {
 }
 
 /**
+ * 取消裁定（七期 §6.2）：`TOOL_CANCELLED` 命中即收成取消 outcome，沿返回值向上，
+ * 不再往下抛。ctx 上仍是裸 signal（工具 API 不传染 scope），故 reason 按用户停止
+ * 兜底；八期起在途竞速以 AbortError reject，走 catch 的失败 outcome 形态。
+ */
+function failedOutcome(error: unknown): ParallelToolOutcome {
+  return AppErrorOps.is(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
+}
+
+/**
  * Executes tools from a registry with schema validation and consistent errors.
  *
  * @remarks
@@ -138,50 +147,47 @@ export class ToolRunner<Ctx = unknown> {
     const outcomes: ParallelToolOutcome[] = new Array(calls.length);
     // 同 path 的突变调用串行化：每个 path 维护一条 tail promise 链。
     const pathTail = new Map<string, Promise<void>>();
-    let nextIndex = 0;
-    // 取消裁定（七期 §6.2）：`TOOL_CANCELLED` 命中即收成取消 outcome，沿返回值向上，
-    // 不再往下抛。ctx 上仍是裸 signal（工具 API 不传染 scope），故 reason 按用户停止
-    // 兜底；八期起在途竞速以 AbortError reject，走下方 catch 的失败 outcome 形态。
-    const failedOutcome = (error: unknown): ParallelToolOutcome =>
-      AppErrorOps.is(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
-    // nm-style: keep-local — §2 一行写完的中转变量：内联进 Promise.all(Array.from(...)) 会重新拆出多行实参。
-    const worker = async () => {
-      while (true) {
-        const index = nextIndex;
-        nextIndex += 1;
-        if (index >= calls.length) return;
-        const call = calls[index]!;
-        const paths = FsCommand.classifyMutatingToolCall(call.name, call.input).paths;
-        let release: (() => void) | undefined;
-        if (paths != null && paths.length > 0) {
-          const prevTails = paths.map((path) => pathTail.get(path) ?? Promise.resolve());
-          const gate = new Promise<void>((resolve) => {
-            release = resolve;
-          });
-          const myTail = Promise.all(prevTails).then(() => gate);
-          for (const path of paths) {
-            pathTail.set(path, myTail);
-          }
-          await Promise.all(prevTails);
-        }
-        try {
-          try {
-            const result = await this.call(call.name, call.input, ctx);
-            // 已知失败与取消都沿 Result.err 接力：TOOL_CANCELLED 收成取消 outcome
-            // （保留 error 供展示层沿用 AppErrorOps.is 分类），其余原样落失败。
-            outcomes[index] = result.ok ? { ok: true, output: result.value } : failedOutcome(result.error);
-          } catch (error: unknown) {
-            // 在途竞速的 reject（八期载荷 AbortError.create，平台协议例外）与未知异常
-            // 同口收编，不再向上抛；AbortError 载荷原样保留，供上层用 isAbortLikeError
-            // 识别取消（取消 outcome 形态只留给 TOOL_CANCELLED 返回值通道）。
-            outcomes[index] = failedOutcome(error);
-          }
-        } finally {
-          release?.();
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: concurrency }, worker));
+    // 取号游标：N 个并发 worker 共享的进行态，对象槽承载（逐个取号、不回退）。
+    const cursor = { current: 0 };
+    await Promise.all(Array.from({ length: concurrency }, () => this.drainQueue(cursor, calls, ctx, pathTail, outcomes)));
     return outcomes;
+  }
+
+  /** 并发 worker 主循环：共享 cursor 取号，同 path 经 pathTail 串行化，结果落 outcomes。 */
+  private async drainQueue(cursor: {current: number}, calls: readonly ToolCall[], ctx: Ctx, pathTail: Map<string, Promise<void>>, outcomes: ParallelToolOutcome[]): Promise<void> {
+    while (true) {
+      const index = cursor.current;
+      cursor.current += 1;
+      if (index >= calls.length) return;
+      const call = calls[index]!;
+      const paths = FsCommand.classifyMutatingToolCall(call.name, call.input).paths;
+      let release: (() => void) | undefined;
+      if (paths != null && paths.length > 0) {
+        const prevTails = paths.map((path) => pathTail.get(path) ?? Promise.resolve());
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const myTail = Promise.all(prevTails).then(() => gate);
+        for (const path of paths) {
+          pathTail.set(path, myTail);
+        }
+        await Promise.all(prevTails);
+      }
+      try {
+        try {
+          const result = await this.call(call.name, call.input, ctx);
+          // 已知失败与取消都沿 Result.err 接力：TOOL_CANCELLED 收成取消 outcome
+          // （保留 error 供展示层沿用 AppErrorOps.is 分类），其余原样落失败。
+          outcomes[index] = result.ok ? { ok: true, output: result.value } : failedOutcome(result.error);
+        } catch (error: unknown) {
+          // 在途竞速的 reject（八期载荷 AbortError.create，平台协议例外）与未知异常
+          // 同口收编，不再向上抛；AbortError 载荷原样保留，供上层用 isAbortLikeError
+          // 识别取消（取消 outcome 形态只留给 TOOL_CANCELLED 返回值通道）。
+          outcomes[index] = failedOutcome(error);
+        }
+      } finally {
+        release?.();
+      }
+    }
   }
 }

@@ -219,12 +219,16 @@ function runCheck(argv: string[]): number {
   for (const line of dup.lines) console.log(line);
   console.log("\n== throw-audit（gate 透传，不阻断；四形态 throw 盘点，详见 nm-style throw-audit --gate）==");
   for (const line of throwAudit.lines) console.log(line);
-  const countOf = (rule: string): number => reported.filter((finding) => finding.rule === rule && finding.blocking).length;
   const bareSegment = flags.changed ? String(bareBlocked.length) : `INFO(${bareFindings.length})`;
-  const oopSegment = flags.strict ? String(countOf("oop")) : `INFO(${oopFindings.length})`;
+  const oopSegment = flags.strict ? String(countBlockingOf(reported, "oop")) : `INFO(${oopFindings.length})`;
   const failed = reported.some((finding) => finding.blocking) || bareBlocked.length > 0;
-  console.log(`\nnm-style: ${failed ? "FINDINGS" : "PASS"}（signatures=${countOf("signatures")} hygiene=${countOf("hygiene")} top-let=${countOf("top-level-let")} bare-exports=${bareSegment} dup=${dup.summary} oop=${oopSegment} throw-audit=${throwAudit.summary}）`);
+  console.log(`\nnm-style: ${failed ? "FINDINGS" : "PASS"}（signatures=${countBlockingOf(reported, "signatures")} hygiene=${countBlockingOf(reported, "hygiene")} top-let=${countBlockingOf(reported, "top-level-let")} bare-exports=${bareSegment} dup=${dup.summary} oop=${oopSegment} throw-audit=${throwAudit.summary}）`);
   return failed ? 1 : 0;
+}
+
+/** 汇总行按规则名数阻断条目（runCheck 的 reported 只读过滤）。 */
+function countBlockingOf(reported: Finding[], rule: string): number {
+  return reported.filter((finding) => finding.rule === rule && finding.blocking).length;
 }
 
 /** dup 缺省基线路径（cwd=被扫仓根）：scripts/dup-signatures-baseline.json。 */

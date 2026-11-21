@@ -176,6 +176,21 @@ interface CollectCtx {
   ownerName: string | null;
 }
 
+/** collectUnit 的 per-unit 遍历上下文：visitUnitNode 及其调用的注册/登记函数共享的原闭包捕获集。 */
+interface UnitWalkCtx {
+  data: UnitData;
+  defs: InternalDef[];
+  sourceFile: ts.SourceFile;
+}
+
+/** buildSymbolIndex 的 index 级共享状态：globalRefsOf/localRefsOf 提升为模块级后的原闭包捕获集。 */
+interface IndexCtx {
+  defBySymbol: Map<SymbolInfo, InternalDef>;
+  exportedTopLevelCount: Map<string, number>;
+  unitData: UnitData[];
+  containersByName: Map<string, ContainerDef[]>;
+}
+
 // ---------- 解析辅助 ----------
 
 function hasExportModifier(node: ts.Node): boolean {
@@ -319,164 +334,164 @@ function collectUnit(unit: SymbolUnit, defs: InternalDef[]): UnitData {
     }
   }
 
-  const registerContainer = (kind: ContainerKind, name: string, exported: boolean, fallback: boolean): ContainerDef => {
-    const container: ContainerDef = { name, kind, unit: data, exported, fallback, members: [] };
-    const list = data.localContainers.get(name) ?? [];
-    list.push(container);
-    data.localContainers.set(name, list);
-    return container;
-  };
-
-  const addTopDef = (name: string, form: SymbolForm, node: ts.Node, exported: boolean, body?: ts.Node, container?: ContainerDef): void => {
-    const info: SymbolInfo = { name, container: container == null ? null : { kind: container.kind, name: container.name }, form, file: unit.file, line: data.lineOf(node), exported, isPrivate: false, deprecated: isDeprecatedNode(node) };
-    defs.push({ info, unit: data, decl: node, body, container });
-  };
-
-  const addMemberDef = (container: ContainerDef, name: string, form: SymbolForm, node: ts.Node, isPrivate: boolean): void => {
-    // namespace 成员看自己的 export 修饰符；object/class 成员随容器导出面（private 永不在面上）。
-    const exported = container.kind === "namespace" ? hasExportModifier(node) : container.exported && !isPrivate;
-    const info: SymbolInfo = { name, container: { kind: container.kind, name: container.name }, form, file: unit.file, line: data.lineOf(node), exported, isPrivate, deprecated: isDeprecatedNode(node) };
-    const def: InternalDef = { info, unit: data, decl: node, container };
-    defs.push(def);
-    container.members.push(def);
-  };
-
-  /** 对象字面量的绑定名：具名变量 / 属性位 / 其余回退到外层具名函数名或文件名（工厂返回、port 实参同口径）。 */
-  const objectBindingOf = (node: ts.ObjectLiteralExpression): { name: string; exported: boolean; topLevel: boolean; declNode: ts.Node } | null => {
-    const outer = unwrapValue(node);
-    const parent = outer.parent;
-    if (parent != null && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
-      const statement = parent.parent.parent;
-      const isVariableStatement = statement != null && ts.isVariableStatement(statement);
-      return { name: parent.name.text, exported: isVariableStatement && hasExportModifier(statement), topLevel: isVariableStatement && statement.parent === sourceFile, declNode: parent };
-    }
-    if (parent != null && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent)) && memberNameText(parent.name) != null) {
-      return { name: memberNameText(parent.name) as string, exported: false, topLevel: false, declNode: parent };
-    }
-    return null;
-  };
-
-  const classBindingOf = (node: ts.ClassDeclaration | ts.ClassExpression): { name: string; exported: boolean } | null => {
-    if (ts.isClassDeclaration(node)) return node.name == null ? null : { name: node.name.text, exported: hasExportModifier(node) };
-    const outer = unwrapValue(node);
-    const parent = outer.parent;
-    if (parent != null && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) return { name: parent.name.text, exported: exportFlagOfVariableDeclaration(parent) };
-    if (parent != null && ts.isPropertyDeclaration(parent) && memberNameText(parent.name) != null) return { name: memberNameText(parent.name) as string, exported: false };
-    return null;
-  };
-
-  const fallbackContainerName = (): string => path.basename(unit.file).replace(/\.(ts|tsx)$/, "");
-
-  const visit = (node: ts.Node, ctx: CollectCtx): void => {
-    // —— 容器与声明形态 ——
-    if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name) && node.body != null) {
-      const exported = hasExportModifier(node);
-      const container = registerContainer("namespace", node.name.text, exported, false);
-      if (node.parent === sourceFile && exported) addTopDef(node.name.text, "namespace-object", node, exported);
-      ts.forEachChild(node, (child) => visit(child, { container, ownerName: node.name.text }));
-      return;
-    }
-    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
-      const bound = classBindingOf(node);
-      if (bound == null) {
-        ts.forEachChild(node, (child) => visit(child, { container: null, ownerName: ctx.ownerName }));
-        return;
-      }
-      const container = registerContainer("class", bound.name, bound.exported, false);
-      // 只有成员声明拿到 class 上下文；构造器/属性初始化器里的嵌套函数不属于类成员。
-      ts.forEachChild(node, (child) => visit(child, { container: isMemberDecl(child) ? container : null, ownerName: bound.name }));
-      return;
-    }
-    if (ts.isObjectLiteralExpression(node)) {
-      const bound = objectBindingOf(node);
-      const name = bound?.name ?? ctx.ownerName ?? fallbackContainerName();
-      // bound == null → 回退命名容器：名字来自 ownerName/文件名猜测（实参/数组元素/工厂返回），对象并未绑定到该名字，接收者归因不得把它当该名字的真值（spec §3.2）。
-      const container = registerContainer("object", name, bound?.exported ?? false, bound == null);
-      // 顶层导出的对象字面量本身入表（namespace-object），供 exports 审计判整对象死活。
-      if (bound != null && bound.topLevel && bound.exported) addTopDef(bound.name, "namespace-object", bound.declNode, true);
-      ts.forEachChild(node, (child) => visit(child, { container: isMemberDecl(child) || ts.isPropertyAssignment(child) || ts.isShorthandPropertyAssignment(child) ? container : null, ownerName: name }));
-      return;
-    }
-    if (ts.isFunctionDeclaration(node) && node.name != null) {
-      const fnName = node.name.text;
-      addTopDef(fnName, "bare-fn", node, hasExportModifier(node), node.body ?? undefined, ctx.container ?? undefined);
-      ts.forEachChild(node, (child) => visit(child, { container: null, ownerName: fnName }));
-      return;
-    }
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer != null) {
-      const varName = node.name.text;
-      const init = node.initializer;
-      if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
-        addTopDef(varName, "var-fn", node, exportFlagOfVariableDeclaration(node), init, ctx.container ?? undefined);
-        ts.forEachChild(node, (child) => visit(child, { container: null, ownerName: varName }));
-        return;
-      }
-      ts.forEachChild(node, (child) => visit(child, { container: ctx.container, ownerName: varName }));
-      return;
-    }
-    if (ts.isPropertyAssignment(node) && ctx.container?.kind === "object") {
-      const propName = memberNameText(node.name);
-      if (propName != null) {
-        if (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) addMemberDef(ctx.container, propName, "object-arrow", node, false);
-        else if (ts.isIdentifier(node.initializer)) {
-          // object-binding 候选：{ check: fn } —— 绑定有效性后置解析，有效才注册成员并豁免绑定位裸名。
-          data.bindingCandidates.push({ valueNode: node.initializer, container: ctx.container, propName, declNode: node, boundRaw: node.initializer.text });
-        }
-      }
-      ts.forEachChild(node, (child) => visit(child, ctx));
-      return;
-    }
-    if (ts.isShorthandPropertyAssignment(node) && ctx.container?.kind === "object") {
-      // { helper } 简写：名字即值，同走绑定候选。
-      data.bindingCandidates.push({ valueNode: node.name, container: ctx.container, propName: node.name.text, declNode: node, boundRaw: node.name.text });
-      ts.forEachChild(node, (child) => visit(child, ctx));
-      return;
-    }
-    if (isMemberDecl(node) && ctx.container != null) {
-      const name = memberNameText(node.name);
-      if (name != null) {
-        if (ctx.container.kind === "class") addMemberDef(ctx.container, name, ts.isMethodDeclaration(node) ? "class-method" : "class-accessor", node, isPrivateMember(node));
-        else if (ts.isMethodDeclaration(node)) addMemberDef(ctx.container, name, "object-method", node, false); // 对象字面量的 get/set 不在八值 form 内，不收
-      }
-      ts.forEachChild(node, (child) => visit(child, { container: null, ownerName: name ?? ctx.ownerName }));
-      return;
-    }
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(node.left) && ts.isIdentifier(node.left.name) && ts.isIdentifier(node.left.expression)) {
-      // Ns.check = fn 成员赋值注册（容器限本文件定义）；右值为箭头/函数表达式则收 object-arrow。
-      const container = data.localContainers.get(node.left.expression.text)?.[0];
-      if (container != null) {
-        if (ts.isIdentifier(node.right)) {
-          data.bindingCandidates.push({ valueNode: node.right, container, propName: node.left.name.text, declNode: node, boundRaw: node.right.text });
-        } else if (ts.isArrowFunction(node.right) || ts.isFunctionExpression(node.right)) {
-          addMemberDef(container, node.left.name.text, "object-arrow", node, false);
-        }
-      }
-      ts.forEachChild(node, (child) => visit(child, ctx));
-      return;
-    }
-
-    // —— 泛型引用登记 ——
-    if (ts.isIdentifier(node)) {
-      if (!isExcludedRefPosition(node, node.parent)) {
-        const raw = node.text;
-        data.occurrences.push({ node, raw, name: data.aliases.get(raw) ?? raw, isCall: (ts.isCallExpression(node.parent) || ts.isNewExpression(node.parent)) && node.parent.expression === node });
-      }
-      return;
-    }
-    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.name)) {
-      data.memberSites.push({
-        node,
-        member: node.name.text,
-        isCall: (ts.isCallExpression(node.parent) || ts.isNewExpression(node.parent)) && node.parent.expression === node,
-        enclosingClassName: enclosingClassNameOf(node),
-        isAssignmentTarget: ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.parent.left === node,
-      });
-    }
-    ts.forEachChild(node, (child) => visit(child, ctx));
-  };
-
-  for (const statement of sourceFile.statements) visit(statement, { container: null, ownerName: null });
+  const unitCtx: UnitWalkCtx = { data, defs, sourceFile };
+  for (const statement of sourceFile.statements) visitUnitNode(statement, unitCtx, { container: null, ownerName: null });
   return data;
+}
+
+function registerContainer(data: UnitData, kind: ContainerKind, name: string, exported: boolean, fallback: boolean): ContainerDef {
+  const container: ContainerDef = { name, kind, unit: data, exported, fallback, members: [] };
+  const list = data.localContainers.get(name) ?? [];
+  list.push(container);
+  data.localContainers.set(name, list);
+  return container;
+}
+
+function addTopDef(data: UnitData, defs: InternalDef[], name: string, form: SymbolForm, node: ts.Node, exported: boolean, body?: ts.Node, container?: ContainerDef): void {
+  const info: SymbolInfo = { name, container: container == null ? null : { kind: container.kind, name: container.name }, form, file: data.file, line: data.lineOf(node), exported, isPrivate: false, deprecated: isDeprecatedNode(node) };
+  defs.push({ info, unit: data, decl: node, body, container });
+}
+
+function addMemberDef(data: UnitData, defs: InternalDef[], container: ContainerDef, name: string, form: SymbolForm, node: ts.Node, isPrivate: boolean): void {
+  // namespace 成员看自己的 export 修饰符；object/class 成员随容器导出面（private 永不在面上）。
+  const exported = container.kind === "namespace" ? hasExportModifier(node) : container.exported && !isPrivate;
+  const info: SymbolInfo = { name, container: { kind: container.kind, name: container.name }, form, file: data.file, line: data.lineOf(node), exported, isPrivate, deprecated: isDeprecatedNode(node) };
+  const def: InternalDef = { info, unit: data, decl: node, container };
+  defs.push(def);
+  container.members.push(def);
+}
+
+/** 对象字面量的绑定名：具名变量 / 属性位 / 其余回退到外层具名函数名或文件名（工厂返回、port 实参同口径）。 */
+function objectBindingOf(node: ts.ObjectLiteralExpression, sourceFile: ts.SourceFile): { name: string; exported: boolean; topLevel: boolean; declNode: ts.Node } | null {
+  const outer = unwrapValue(node);
+  const parent = outer.parent;
+  if (parent != null && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    const statement = parent.parent.parent;
+    const isVariableStatement = statement != null && ts.isVariableStatement(statement);
+    return { name: parent.name.text, exported: isVariableStatement && hasExportModifier(statement), topLevel: isVariableStatement && statement.parent === sourceFile, declNode: parent };
+  }
+  if (parent != null && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent)) && memberNameText(parent.name) != null) {
+    return { name: memberNameText(parent.name) as string, exported: false, topLevel: false, declNode: parent };
+  }
+  return null;
+}
+
+function classBindingOf(node: ts.ClassDeclaration | ts.ClassExpression): { name: string; exported: boolean } | null {
+  if (ts.isClassDeclaration(node)) return node.name == null ? null : { name: node.name.text, exported: hasExportModifier(node) };
+  const outer = unwrapValue(node);
+  const parent = outer.parent;
+  if (parent != null && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) return { name: parent.name.text, exported: exportFlagOfVariableDeclaration(parent) };
+  if (parent != null && ts.isPropertyDeclaration(parent) && memberNameText(parent.name) != null) return { name: memberNameText(parent.name) as string, exported: false };
+  return null;
+}
+
+function visitUnitNode(node: ts.Node, unitCtx: UnitWalkCtx, ctx: CollectCtx): void {
+  const { data, defs, sourceFile } = unitCtx;
+  // —— 容器与声明形态 ——
+  if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name) && node.body != null) {
+    const exported = hasExportModifier(node);
+    const container = registerContainer(data, "namespace", node.name.text, exported, false);
+    if (node.parent === sourceFile && exported) addTopDef(data, defs, node.name.text, "namespace-object", node, exported);
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container, ownerName: node.name.text }));
+    return;
+  }
+  if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+    const bound = classBindingOf(node);
+    if (bound == null) {
+      ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: null, ownerName: ctx.ownerName }));
+      return;
+    }
+    const container = registerContainer(data, "class", bound.name, bound.exported, false);
+    // 只有成员声明拿到 class 上下文；构造器/属性初始化器里的嵌套函数不属于类成员。
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: isMemberDecl(child) ? container : null, ownerName: bound.name }));
+    return;
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    const bound = objectBindingOf(node, sourceFile);
+    const name = bound?.name ?? ctx.ownerName ?? path.basename(data.file).replace(/\.(ts|tsx)$/, "");
+    // bound == null → 回退命名容器：名字来自 ownerName/文件名猜测（实参/数组元素/工厂返回），对象并未绑定到该名字，接收者归因不得把它当该名字的真值（spec §3.2）。
+    const container = registerContainer(data, "object", name, bound?.exported ?? false, bound == null);
+    // 顶层导出的对象字面量本身入表（namespace-object），供 exports 审计判整对象死活。
+    if (bound != null && bound.topLevel && bound.exported) addTopDef(data, defs, bound.name, "namespace-object", bound.declNode, true);
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: isMemberDecl(child) || ts.isPropertyAssignment(child) || ts.isShorthandPropertyAssignment(child) ? container : null, ownerName: name }));
+    return;
+  }
+  if (ts.isFunctionDeclaration(node) && node.name != null) {
+    const fnName = node.name.text;
+    addTopDef(data, defs, fnName, "bare-fn", node, hasExportModifier(node), node.body ?? undefined, ctx.container ?? undefined);
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: null, ownerName: fnName }));
+    return;
+  }
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer != null) {
+    const varName = node.name.text;
+    const init = node.initializer;
+    if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+      addTopDef(data, defs, varName, "var-fn", node, exportFlagOfVariableDeclaration(node), init, ctx.container ?? undefined);
+      ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: null, ownerName: varName }));
+      return;
+    }
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: ctx.container, ownerName: varName }));
+    return;
+  }
+  if (ts.isPropertyAssignment(node) && ctx.container?.kind === "object") {
+    const propName = memberNameText(node.name);
+    if (propName != null) {
+      if (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) addMemberDef(data, defs, ctx.container, propName, "object-arrow", node, false);
+      else if (ts.isIdentifier(node.initializer)) {
+        // object-binding 候选：{ check: fn } —— 绑定有效性后置解析，有效才注册成员并豁免绑定位裸名。
+        data.bindingCandidates.push({ valueNode: node.initializer, container: ctx.container, propName, declNode: node, boundRaw: node.initializer.text });
+      }
+    }
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, ctx));
+    return;
+  }
+  if (ts.isShorthandPropertyAssignment(node) && ctx.container?.kind === "object") {
+    // { helper } 简写：名字即值，同走绑定候选。
+    data.bindingCandidates.push({ valueNode: node.name, container: ctx.container, propName: node.name.text, declNode: node, boundRaw: node.name.text });
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, ctx));
+    return;
+  }
+  if (isMemberDecl(node) && ctx.container != null) {
+    const name = memberNameText(node.name);
+    if (name != null) {
+      if (ctx.container.kind === "class") addMemberDef(data, defs, ctx.container, name, ts.isMethodDeclaration(node) ? "class-method" : "class-accessor", node, isPrivateMember(node));
+      else if (ts.isMethodDeclaration(node)) addMemberDef(data, defs, ctx.container, name, "object-method", node, false); // 对象字面量的 get/set 不在八值 form 内，不收
+    }
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, { container: null, ownerName: name ?? ctx.ownerName }));
+    return;
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(node.left) && ts.isIdentifier(node.left.name) && ts.isIdentifier(node.left.expression)) {
+    // Ns.check = fn 成员赋值注册（容器限本文件定义）；右值为箭头/函数表达式则收 object-arrow。
+    const container = data.localContainers.get(node.left.expression.text)?.[0];
+    if (container != null) {
+      if (ts.isIdentifier(node.right)) {
+        data.bindingCandidates.push({ valueNode: node.right, container, propName: node.left.name.text, declNode: node, boundRaw: node.right.text });
+      } else if (ts.isArrowFunction(node.right) || ts.isFunctionExpression(node.right)) {
+        addMemberDef(data, defs, container, node.left.name.text, "object-arrow", node, false);
+      }
+    }
+    ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, ctx));
+    return;
+  }
+
+  // —— 泛型引用登记 ——
+  if (ts.isIdentifier(node)) {
+    if (!isExcludedRefPosition(node, node.parent)) {
+      const raw = node.text;
+      data.occurrences.push({ node, raw, name: data.aliases.get(raw) ?? raw, isCall: (ts.isCallExpression(node.parent) || ts.isNewExpression(node.parent)) && node.parent.expression === node });
+    }
+    return;
+  }
+  if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.name)) {
+    data.memberSites.push({
+      node,
+      member: node.name.text,
+      isCall: (ts.isCallExpression(node.parent) || ts.isNewExpression(node.parent)) && node.parent.expression === node,
+      enclosingClassName: enclosingClassNameOf(node),
+      isAssignmentTarget: ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.parent.left === node,
+    });
+  }
+  ts.forEachChild(node, (child) => visitUnitNode(child, unitCtx, ctx));
 }
 
 // ---------- 索引构建 ----------
@@ -539,175 +554,7 @@ export function buildSymbolIndex(units: readonly SymbolUnit[], options: SymbolIn
   const defBySymbol = new Map<SymbolInfo, InternalDef>();
   for (const def of defs) defBySymbol.set(def.info, def);
 
-  /**
-   * 全局唯一容器查找（跨文件兜底，调用方先过 import 门）。三道过滤：
-   * ① 回退命名容器（fallback=true）不是绑定值的容器（名字是猜的），identifier / 属性尾段不收；
-   * ② 非 test 单元的引用点结构上消费不到 test 文件定义的容器（prod 不 import test）——测试桩是
-   *    真绑定容器且名字常与 prod 变量/属性同形，不过滤会把 prod 消费精确劫持到测试桩上；
-   * ③ 过滤后非唯一 → null（同名多容器无法区分，走保守归因）。
-   */
-  const globalUniqueContainers = (name: string, allowFallback: boolean, fromTest: boolean): ContainerDef[] | null => {
-    const all = (containersByName.get(name) ?? []).filter((c) => (allowFallback || !c.fallback) && (fromTest || !c.unit.isTest));
-    if (all.length === 0) return null;
-    return all.length === 1 ? all : null; // 全局同名多容器无法区分 → 视为无法归因，走保守兜底
-  };
-
-  /**
-   * 接收者归因：返回候选容器列表；null=无法归因（按属性名保守命中全部同名成员）。
-   * 归因顺序：本文件同名容器 → import 感知的全局唯一容器 → 属性链尾段 → 工厂调用 callee。
-   * identifier / 属性尾段只认真绑定容器（fallback=false）：回退命名容器（实参/数组元素/工厂返回，
-   * 名字是猜的）不是该标识符绑定值或该属性的值，放行会把真消费劫持到实参对象上（如
-   * `const w = Factory.create({...}); w.noteActivity()` 的实参被注册成名为 w 的容器 → 假 DEAD）。
-   * 跨文件查找必须过 import 门（v1 不上语义解析，用已登记的 import 作用域当锚）：
-   * identifier 只认 named import 位（importedNames），属性尾段只认 namespace/named import 的
-   * base（ns.C / importedX.y）——`this.deps.x`、局部变量 `repo.x` 结构上摸不到别的文件里的
-   * 容器，按名唯一也会 latch 到无关同形容器（真仓 toolRunner/deps/base 劫持实证）→ null 保守。
-   * identifier 本地只剩回退容器时直接 null——同名本地声明遮蔽 import，落到全局反而可能误归因；
-   * 属性尾段无遮蔽关系，本地为空继续查全局。
-   * 工厂调用分支放行回退容器：callee 同名的回退容器正是该函数的返回对象，f().m() 的接收者就是它
-   * （prod 工厂必然留有同名词作用域锚，跨文件走全局唯一查找不会因此劫持）。
-   */
-  const resolveReceiver = (u: UnitData, receiver: ts.Expression): ContainerDef[] | null => {
-    if (ts.isIdentifier(receiver)) {
-      const raw = receiver.text;
-      if (u.namespaceLocals.has(raw)) return null; // ns.X 是裸名层面的消费，成员计数跳过
-      const local = (u.localContainers.get(raw) ?? []).filter((c) => !c.fallback);
-      if (local.length > 0) return local;
-      if (u.localContainers.has(raw)) return null;
-      const imported = u.aliases.get(raw) ?? raw;
-      if (!u.importedNames.has(imported)) return null; // 非 import 位（局部变量/未知名）不跨文件归因
-      return globalUniqueContainers(imported, false, u.isTest);
-    }
-    if (ts.isPropertyAccessExpression(receiver) && ts.isIdentifier(receiver.name)) {
-      const local = (u.localContainers.get(receiver.name.text) ?? []).filter((c) => !c.fallback);
-      if (local.length > 0) return local;
-      const base = receiver.expression;
-      if (!ts.isIdentifier(base) || (!u.namespaceLocals.has(base.text) && !u.importedNames.has(u.aliases.get(base.text) ?? base.text))) return null;
-      return globalUniqueContainers(receiver.name.text, false, u.isTest); // ns.C / importedX.y：按尾段名归因
-    }
-    if ((ts.isCallExpression(receiver) || ts.isNewExpression(receiver)) && ts.isIdentifier(receiver.expression)) {
-      const raw = receiver.expression.text;
-      const local = u.localContainers.get(raw);
-      if (local != null && local.length > 0) return local;
-      return globalUniqueContainers(raw, true, u.isTest); // 工厂调用 createSink().member
-    }
-    return null; // this / 复杂表达式：无法静态归因
-  };
-
-  const bareOccurrencesIn = (def: InternalDef, u: UnitData, onRef: (isCall: boolean, isSelf: boolean) => void): void => {
-    for (const occ of u.occurrences) {
-      if (occ.raw !== def.info.name) continue;
-      if (u.validBindingNodes.has(occ.node)) continue;
-      const isSelf = def.body != null && isInside(occ.node, def.body);
-      onRef(occ.isCall, isSelf);
-    }
-  };
-
-  const memberSitesIn = (u: UnitData, onSite: (site: RawMemberSite) => void): void => {
-    for (const site of u.memberSites) {
-      if (site.isAssignmentTarget) continue; // 纯写入不是消费
-      onSite(site);
-    }
-  };
-
-  const globalRefsOf = (symbol: SymbolInfo): GlobalRefs => {
-    // 编程护栏（assert 通道）：symbol 必来自本索引 defs（index.symbols / binding.member 同源），此分支不可达。
-    const def = defBySymbol.get(symbol);
-    assertInvariant(def != null, "nm-style: symbol 不属于本索引");
-    const refs: GlobalRefs = { prodCalls: 0, prodRefs: 0, testCalls: 0, testRefs: 0 };
-    // 定义文件恒参与（同文件用法是真实消费，旧 fake-exports 的 localCalls 语义）；桶：test 文件进 test，其余（含非 prod/test 路径的定义文件）进 prod。
-    const bump = (u: UnitData, isCall: boolean): void => {
-      if (u.isTest) {
-        if (isCall) refs.testCalls += 1;
-        else refs.testRefs += 1;
-      } else {
-        if (isCall) refs.prodCalls += 1;
-        else refs.prodRefs += 1;
-      }
-    };
-    if (def.info.container == null) {
-      const name = def.info.name;
-      for (const u of unitData) {
-        const isDefining = u === def.unit;
-        if (!isDefining && !u.isProd && !u.isTest) continue; // 非生产/非测试路径不参与引用面
-        for (const occ of u.occurrences) {
-          if (isDefining ? occ.raw !== name : occ.name !== name) continue;
-          if (!isDefining && !u.importedNames.has(name)) continue; // 跨文件必须有 import 才算在作用域内
-          if (u.validBindingNodes.has(occ.node)) continue;
-          if (def.body != null && isInside(occ.node, def.body)) continue; // 自引用剔除（spec §3.2）
-          bump(u, occ.isCall);
-        }
-        if (exportedTopLevelCount.get(name) === 1) {
-          for (const site of u.memberSites) {
-            if (site.member !== name || site.isAssignmentTarget) continue;
-            const expr = site.node.expression;
-            if (!ts.isIdentifier(expr) || !u.namespaceLocals.has(expr.text)) continue;
-            bump(u, site.isCall); // import * as ns; ns.fn() / ns.Obj
-          }
-        }
-      }
-      return refs;
-    }
-    const container = def.container;
-    if (container == null) return refs;
-    for (const u of unitData) {
-      const isDefining = u === def.unit;
-      if (!isDefining && !u.isProd && !u.isTest) continue;
-      memberSitesIn(u, (site) => {
-        if (site.member !== def.info.name) return;
-        if (ts.isIdentifier(site.node.expression) && u.namespaceLocals.has(site.node.expression.text)) return; // ns.X 走裸名层面
-        if (def.info.isPrivate) {
-          // private class 方法：只数同文件同类（this.helper() 的接收者未知，不得跨类归因）。
-          if (!isDefining || site.enclosingClassName !== container.name) return;
-          bump(u, site.isCall);
-          return;
-        }
-        const targets = resolveReceiver(u, site.node.expression);
-        if (targets == null || targets.includes(container)) bump(u, site.isCall); // 无法归因 → 保守命中全部同名成员；跨容器同名不互算
-      });
-      if (container.kind === "namespace") {
-        // namespace 成员在本 namespace 内是裸名作用域，全仓参与文件的裸名用法都照计（防误杀；cr-func 实测跨文件无 import 的裸调用也计，保守方向）。
-        bareOccurrencesIn(def, u, (isCall, isSelf) => {
-          if (!isSelf) bump(u, isCall);
-        });
-      }
-    }
-    return refs;
-  };
-
-  const localRefsOf = (symbol: SymbolInfo): LocalRefs => {
-    // 编程护栏（assert 通道）：同 globalRefsOf——symbol 必来自本索引 defs，此分支不可达。
-    const def = defBySymbol.get(symbol);
-    assertInvariant(def != null, "nm-style: symbol 不属于本索引");
-    const u = def.unit;
-    let calls = 0;
-    let refs = 0;
-    let selfRefs = 0;
-    if (def.info.container == null || def.info.container.kind === "namespace") {
-      // 顶层/嵌套函数与 namespace 成员：同文件裸名计数，自引用单列。
-      bareOccurrencesIn(def, u, (isCall, isSelf) => {
-        if (isSelf) selfRefs += 1;
-        else if (isCall) calls += 1;
-        else refs += 1;
-      });
-    }
-    if (def.container != null) {
-      const container = def.container;
-      memberSitesIn(u, (site) => {
-        if (site.member !== def.info.name) return;
-        if (ts.isIdentifier(site.node.expression) && u.namespaceLocals.has(site.node.expression.text)) return;
-        if (def.info.isPrivate) {
-          if (site.enclosingClassName !== container.name) return;
-        } else {
-          const targets = resolveReceiver(u, site.node.expression);
-          if (targets == null || !targets.includes(container)) return; // 本地计数只认精确归因
-        }
-        if (site.isCall) calls += 1;
-        else refs += 1;
-      });
-    }
-    return { calls, refs, selfRefs };
-  };
+  const index: IndexCtx = { defBySymbol, exportedTopLevelCount, unitData, containersByName };
 
   const symbols = defs.map((def) => def.info);
   return {
@@ -715,11 +562,185 @@ export function buildSymbolIndex(units: readonly SymbolUnit[], options: SymbolIn
     bindings,
     publicNames: loadPublicNames(options.snapshotDir),
     topLevelNameCount: (name) => exportedTopLevelCount.get(name) ?? 0,
-    localRefs: localRefsOf,
-    globalRefs: globalRefsOf,
+    localRefs: (symbol) => localRefsOf(index, symbol),
+    globalRefs: (symbol) => globalRefsOf(index, symbol),
     find: (name, containerName) =>
       defs
         .filter((def) => def.info.name === name && (containerName === undefined || (containerName === null ? def.info.container == null : def.info.container?.name === containerName)))
         .map((def) => def.info),
   };
+}
+
+/**
+ * 全局唯一容器查找（跨文件兜底，调用方先过 import 门）。三道过滤：
+ * ① 回退命名容器（fallback=true）不是绑定值的容器（名字是猜的），identifier / 属性尾段不收；
+ * ② 非 test 单元的引用点结构上消费不到 test 文件定义的容器（prod 不 import test）——测试桩是
+ *    真绑定容器且名字常与 prod 变量/属性同形，不过滤会把 prod 消费精确劫持到测试桩上；
+ * ③ 过滤后非唯一 → null（同名多容器无法区分，走保守归因）。
+ */
+function globalUniqueContainers(containersByName: Map<string, ContainerDef[]>, name: string, allowFallback: boolean, fromTest: boolean): ContainerDef[] | null {
+  const all = (containersByName.get(name) ?? []).filter((c) => (allowFallback || !c.fallback) && (fromTest || !c.unit.isTest));
+  if (all.length === 0) return null;
+  return all.length === 1 ? all : null; // 全局同名多容器无法区分 → 视为无法归因，走保守兜底
+}
+
+/**
+ * 接收者归因：返回候选容器列表；null=无法归因（按属性名保守命中全部同名成员）。
+ * 归因顺序：本文件同名容器 → import 感知的全局唯一容器 → 属性链尾段 → 工厂调用 callee。
+ * identifier / 属性尾段只认真绑定容器（fallback=false）：回退命名容器（实参/数组元素/工厂返回，
+ * 名字是猜的）不是该标识符绑定值或该属性的值，放行会把真消费劫持到实参对象上（如
+ * `const w = Factory.create({...}); w.noteActivity()` 的实参被注册成名为 w 的容器 → 假 DEAD）。
+ * 跨文件查找必须过 import 门（v1 不上语义解析，用已登记的 import 作用域当锚）：
+ * identifier 只认 named import 位（importedNames），属性尾段只认 namespace/named import 的
+ * base（ns.C / importedX.y）——`this.deps.x`、局部变量 `repo.x` 结构上摸不到别的文件里的
+ * 容器，按名唯一也会 latch 到无关同形容器（真仓 toolRunner/deps/base 劫持实证）→ null 保守。
+ * identifier 本地只剩回退容器时直接 null——同名本地声明遮蔽 import，落到全局反而可能误归因；
+ * 属性尾段无遮蔽关系，本地为空继续查全局。
+ * 工厂调用分支放行回退容器：callee 同名的回退容器正是该函数的返回对象，f().m() 的接收者就是它
+ * （prod 工厂必然留有同名词作用域锚，跨文件走全局唯一查找不会因此劫持）。
+ */
+function resolveReceiver(u: UnitData, receiver: ts.Expression, containersByName: Map<string, ContainerDef[]>): ContainerDef[] | null {
+  if (ts.isIdentifier(receiver)) {
+    const raw = receiver.text;
+    if (u.namespaceLocals.has(raw)) return null; // ns.X 是裸名层面的消费，成员计数跳过
+    const local = (u.localContainers.get(raw) ?? []).filter((c) => !c.fallback);
+    if (local.length > 0) return local;
+    if (u.localContainers.has(raw)) return null;
+    const imported = u.aliases.get(raw) ?? raw;
+    if (!u.importedNames.has(imported)) return null; // 非 import 位（局部变量/未知名）不跨文件归因
+    return globalUniqueContainers(containersByName, imported, false, u.isTest);
+  }
+  if (ts.isPropertyAccessExpression(receiver) && ts.isIdentifier(receiver.name)) {
+    const local = (u.localContainers.get(receiver.name.text) ?? []).filter((c) => !c.fallback);
+    if (local.length > 0) return local;
+    const base = receiver.expression;
+    if (!ts.isIdentifier(base) || (!u.namespaceLocals.has(base.text) && !u.importedNames.has(u.aliases.get(base.text) ?? base.text))) return null;
+    return globalUniqueContainers(containersByName, receiver.name.text, false, u.isTest); // ns.C / importedX.y：按尾段名归因
+  }
+  if ((ts.isCallExpression(receiver) || ts.isNewExpression(receiver)) && ts.isIdentifier(receiver.expression)) {
+    const raw = receiver.expression.text;
+    const local = u.localContainers.get(raw);
+    if (local != null && local.length > 0) return local;
+    return globalUniqueContainers(containersByName, raw, true, u.isTest); // 工厂调用 createSink().member
+  }
+  return null; // this / 复杂表达式：无法静态归因
+}
+
+function bareOccurrencesIn(def: InternalDef, u: UnitData, onRef: (isCall: boolean, isSelf: boolean) => void): void {
+  for (const occ of u.occurrences) {
+    if (occ.raw !== def.info.name) continue;
+    if (u.validBindingNodes.has(occ.node)) continue;
+    const isSelf = def.body != null && isInside(occ.node, def.body);
+    onRef(occ.isCall, isSelf);
+  }
+}
+
+function memberSitesIn(u: UnitData, onSite: (site: RawMemberSite) => void): void {
+  for (const site of u.memberSites) {
+    if (site.isAssignmentTarget) continue; // 纯写入不是消费
+    onSite(site);
+  }
+}
+
+/** 单次调用/引用按 u 的 prod/test 桶计进 refs（原 bump 闭包：refs 是单次 globalRefsOf 的累加器，引用传参即够）。 */
+function bumpRef(refs: GlobalRefs, u: UnitData, isCall: boolean): void {
+  if (u.isTest) {
+    if (isCall) refs.testCalls += 1;
+    else refs.testRefs += 1;
+  } else {
+    if (isCall) refs.prodCalls += 1;
+    else refs.prodRefs += 1;
+  }
+}
+
+function globalRefsOf(index: IndexCtx, symbol: SymbolInfo): GlobalRefs {
+  const { defBySymbol, exportedTopLevelCount, unitData, containersByName } = index;
+  // 编程护栏（assert 通道）：symbol 必来自本索引 defs（index.symbols / binding.member 同源），此分支不可达。
+  const def = defBySymbol.get(symbol);
+  assertInvariant(def != null, "nm-style: symbol 不属于本索引");
+  const refs: GlobalRefs = { prodCalls: 0, prodRefs: 0, testCalls: 0, testRefs: 0 };
+  // 定义文件恒参与（同文件用法是真实消费，旧 fake-exports 的 localCalls 语义）；桶：test 文件进 test，其余（含非 prod/test 路径的定义文件）进 prod。
+  if (def.info.container == null) {
+    const name = def.info.name;
+    for (const u of unitData) {
+      const isDefining = u === def.unit;
+      if (!isDefining && !u.isProd && !u.isTest) continue; // 非生产/非测试路径不参与引用面
+      for (const occ of u.occurrences) {
+        if (isDefining ? occ.raw !== name : occ.name !== name) continue;
+        if (!isDefining && !u.importedNames.has(name)) continue; // 跨文件必须有 import 才算在作用域内
+        if (u.validBindingNodes.has(occ.node)) continue;
+        if (def.body != null && isInside(occ.node, def.body)) continue; // 自引用剔除（spec §3.2）
+        bumpRef(refs, u, occ.isCall);
+      }
+      if (exportedTopLevelCount.get(name) === 1) {
+        for (const site of u.memberSites) {
+          if (site.member !== name || site.isAssignmentTarget) continue;
+          const expr = site.node.expression;
+          if (!ts.isIdentifier(expr) || !u.namespaceLocals.has(expr.text)) continue;
+          bumpRef(refs, u, site.isCall); // import * as ns; ns.fn() / ns.Obj
+        }
+      }
+    }
+    return refs;
+  }
+  const container = def.container;
+  if (container == null) return refs;
+  for (const u of unitData) {
+    const isDefining = u === def.unit;
+    if (!isDefining && !u.isProd && !u.isTest) continue;
+    memberSitesIn(u, (site) => {
+      if (site.member !== def.info.name) return;
+      if (ts.isIdentifier(site.node.expression) && u.namespaceLocals.has(site.node.expression.text)) return; // ns.X 走裸名层面
+      if (def.info.isPrivate) {
+        // private class 方法：只数同文件同类（this.helper() 的接收者未知，不得跨类归因）。
+        if (!isDefining || site.enclosingClassName !== container.name) return;
+        bumpRef(refs, u, site.isCall);
+        return;
+      }
+      const targets = resolveReceiver(u, site.node.expression, containersByName);
+      if (targets == null || targets.includes(container)) bumpRef(refs, u, site.isCall); // 无法归因 → 保守命中全部同名成员；跨容器同名不互算
+    });
+    if (container.kind === "namespace") {
+      // namespace 成员在本 namespace 内是裸名作用域，全仓参与文件的裸名用法都照计（防误杀；cr-func 实测跨文件无 import 的裸调用也计，保守方向）。
+      bareOccurrencesIn(def, u, (isCall, isSelf) => {
+        if (!isSelf) bumpRef(refs, u, isCall);
+      });
+    }
+  }
+  return refs;
+}
+
+function localRefsOf(index: IndexCtx, symbol: SymbolInfo): LocalRefs {
+  const { defBySymbol, containersByName } = index;
+  // 编程护栏（assert 通道）：同 globalRefsOf——symbol 必来自本索引 defs，此分支不可达。
+  const def = defBySymbol.get(symbol);
+  assertInvariant(def != null, "nm-style: symbol 不属于本索引");
+  const u = def.unit;
+  let calls = 0;
+  let refs = 0;
+  let selfRefs = 0;
+  if (def.info.container == null || def.info.container.kind === "namespace") {
+    // 顶层/嵌套函数与 namespace 成员：同文件裸名计数，自引用单列。
+    bareOccurrencesIn(def, u, (isCall, isSelf) => {
+      if (isSelf) selfRefs += 1;
+      else if (isCall) calls += 1;
+      else refs += 1;
+    });
+  }
+  if (def.container != null) {
+    const container = def.container;
+    memberSitesIn(u, (site) => {
+      if (site.member !== def.info.name) return;
+      if (ts.isIdentifier(site.node.expression) && u.namespaceLocals.has(site.node.expression.text)) return;
+      if (def.info.isPrivate) {
+        if (site.enclosingClassName !== container.name) return;
+      } else {
+        const targets = resolveReceiver(u, site.node.expression, containersByName);
+        if (targets == null || !targets.includes(container)) return; // 本地计数只认精确归因
+      }
+      if (site.isCall) calls += 1;
+      else refs += 1;
+    });
+  }
+  return { calls, refs, selfRefs };
 }

@@ -256,15 +256,16 @@ function buildSite(stmt: ts.ThrowStatement, form: ThrowForm, file: string): Thro
 export function throwSitesOfText(file: string, text: string): ThrowSite[] {
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const sites: ThrowSite[] = [];
-  const visit = (node: ts.Node): void => {
-    if (ts.isThrowStatement(node) && node.expression != null) {
-      const form = formOf(node.expression);
-      if (form != null) sites.push(buildSite(node, form, file));
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sf);
+  collectThrowSites(sf, sites, file);
   return sites;
+}
+
+function collectThrowSites(node: ts.Node, sites: ThrowSite[], file: string): void {
+  if (ts.isThrowStatement(node) && node.expression != null) {
+    const form = formOf(node.expression);
+    if (form != null) sites.push(buildSite(node, form, file));
+  }
+  ts.forEachChild(node, (child) => collectThrowSites(child, sites, file));
 }
 
 /** 扫描文件集（packages+apps+tools，git 口径含未跟踪；排除 cli/dist/test/.d.ts）。 */

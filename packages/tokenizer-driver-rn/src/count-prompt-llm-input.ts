@@ -85,7 +85,7 @@ export namespace PromptLlmInputCounter {
   interface ChunkCountArgs {
     text: string;
     scope: string;
-    encodeText: (text: string) => number;
+    encoding: RnTokenEncoding;
     probe?: ProbeStats;
   }
 
@@ -137,12 +137,17 @@ export namespace PromptLlmInputCounter {
     console.info(message);
   }
 
+  /** 单次 encode 求长（rn/node 双驱动同形闭包的同名收口；encoding 为共享单例只读句柄）。 */
+  function encodedLength(encoding: RnTokenEncoding, text: string): number {
+    return encoding.encode(text).length;
+  }
+
   /**
    * 块级 L2 计数（与 node 驱动同构，spec 计数流程第 3 步）：
    * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
    * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
    */
-  function countChunksWithL2({ text, scope, encodeText, probe }: ChunkCountArgs): number {
+  function countChunksWithL2({ text, scope, encoding, probe }: ChunkCountArgs): number {
     let total = 0;
     for (const chunk of ChunkSplitter.splitText(text)) {
       const hash = TokenChunkCache.chunkHash16(chunk);
@@ -157,7 +162,7 @@ export namespace PromptLlmInputCounter {
       if (probe != null) {
         probe.chunkMisses += 1;
       }
-      const count = TokenizerTextCount.count(encodeText, chunk);
+      const count = TokenizerTextCount.count((text) => encodedLength(encoding, text), chunk);
       tokenChunkCache.record(hash, scope, count);
       total += count;
     }
@@ -190,8 +195,7 @@ export namespace PromptLlmInputCounter {
     if (encoding == null) {
       return heuristicCount(text);
     }
-    const encodeText = (chunk: string) => encoding.encode(chunk).length;
-    return countChunksWithL2({ text, scope, encodeText, probe });
+    return countChunksWithL2({ text, scope, encoding, probe });
   }
 
   interface SerializedCountResult {
@@ -286,13 +290,7 @@ export namespace PromptLlmInputCounter {
       // 口径差 ≤1%（T-TC5）。
       const msg = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage("");
       const overhead = OpenAiStyleMessageCount.count(encoding, [msg], tiktokenModel);
-      const encodeText = (text: string) => encoding.encode(text).length;
-      const chunks = countChunksWithL2({
-        text: serialized,
-        scope,
-        encodeText,
-        probe,
-      });
+      const chunks = countChunksWithL2({ text: serialized, scope, encoding, probe });
       const count = overhead + chunks;
       return { count, counterKind: "tiktoken", estimated: false };
     } catch {

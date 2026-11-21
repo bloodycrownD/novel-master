@@ -160,6 +160,35 @@ export const IncrementalTokenCounter = {
   },
 
   /**
+   * 把一段文本按「自然边界优先、固定步长兜底」拆成 ≤
+   * {@link MAX_ENCODE_CHARS} 字符的小段逐一 encode；任一小段失败即返回 null
+   * （调用方按「本次不可编码」处理，保持上一次读值）。
+   */
+  encodePiece(text: string, encode: (text: string) => number, lookbackChars: number): number | null {
+    if (text.length === 0) {
+      return 0;
+    }
+    let total = 0;
+    let start = 0;
+    while (start < text.length) {
+      const hardEnd = Math.min(text.length, start + MAX_ENCODE_CHARS);
+      const end = IncrementalTokenCounter.chooseCut(text, start + 1, hardEnd, lookbackChars);
+      let chunkTokens: number | null;
+      try {
+        chunkTokens = encode(text.slice(start, end));
+      } catch {
+        chunkTokens = null;
+      }
+      if (chunkTokens === null) {
+        return null;
+      }
+      total += chunkTokens;
+      start = end;
+    }
+    return total;
+  },
+
+  /**
    * 建一个尾窗增量计数器。
    *
    * 内部只保留尾窗片段（≤ `tailChars + commitStepChars`，且无边界串会更快被
@@ -194,41 +223,14 @@ export const IncrementalTokenCounter = {
     let warnedCommitFailure = false;
     let warnedReadFailure = false;
 
-    /**
-     * 把一段文本按「自然边界优先、固定步长兜底」拆成 ≤
-     * {@link MAX_ENCODE_CHARS} 字符的小段逐一 encode；任一小段失败即返回 null
-     * （调用方按「本次不可编码」处理，保持上一次读值）。
-     */
-    const encodePiece = (text: string): number | null => {
-      if (text.length === 0) {
-        return 0;
-      }
-      let total = 0;
-      let start = 0;
-      while (start < text.length) {
-        const hardEnd = Math.min(text.length, start + MAX_ENCODE_CHARS);
-        const end = IncrementalTokenCounter.chooseCut(text, start + 1, hardEnd, lookbackChars);
-        let chunkTokens: number | null;
-        try {
-          chunkTokens = encode(text.slice(start, end));
-        } catch {
-          chunkTokens = null;
-        }
-        if (chunkTokens === null) {
-          return null;
-        }
-        total += chunkTokens;
-        start = end;
-      }
-      return total;
-    };
     /** 固化：把尾窗超出部分（≥1 字符）切下来计入 committedTokens。 */
+    // nm-style: keep-closure — committedTokens/tail/unencodableCharsValue/warnedCommitFailure 构成计数器核心账本（闭包生命周期=counter 实例），失败兜底不变量（1:1 计入+单次告警+tail 照常推进）是注释明示的脆弱点；单调用点无复用收益，未来抽取须四项状态折进单个 ledger 对象槽整族迁移。
     // nm-style: keep-local — 固化路径读写 committedTokens/tail/unencodableChars/warnedCommitFailure 这组计数器状态，内联会拆散失败兜底的不变量。
     const commitOnce = (): void => {
       const target = tail.length - tailChars;
       const cut = IncrementalTokenCounter.chooseCut(tail, 1, target, lookbackChars);
       const piece = tail.slice(0, cut);
-      const pieceTokens = encodePiece(piece);
+      const pieceTokens = IncrementalTokenCounter.encodePiece(piece, encode, lookbackChars);
       if (pieceTokens !== null) {
         committedTokens += pieceTokens;
       } else {
@@ -278,7 +280,7 @@ export const IncrementalTokenCounter = {
       },
       get tokens(): number {
         if (tailDirty) {
-          tailTokens = encodePiece(tail);
+          tailTokens = IncrementalTokenCounter.encodePiece(tail, encode, lookbackChars);
           tailDirty = false;
           if (tailTokens === null && !warnedReadFailure) {
             warnedReadFailure = true;

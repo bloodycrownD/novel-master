@@ -58,6 +58,7 @@ export const OpenAiSseParser = {
       malformedLineCount: 0,
     };
 
+    // nm-style: keep-closure — 三家 parser 最薄的 per-stream handle 动词（lastEvent/lastUsageEvent 台账 + 委托 OpenAiMapper），经 drain 以值引用；per-stream 资源生命周期。
     const feed = (chunk: string): void => {
       SseJsonEvents.feed(state, chunk, (event) => {
         state.lastEvent = event;
@@ -76,6 +77,7 @@ export const OpenAiSseParser = {
       });
     };
 
+    // nm-style: keep-closure — 同族 handle 动词，抽取无复用收益。
     const finish = (): SseFinishResult => {
       SseLineBuffer.drain(state, feed);
       const { blocks, degradedToolCalls } = OpenAiMapper.streamAccumulatorsToBlocks(state, onStream);
@@ -91,6 +93,7 @@ export const OpenAiSseParser = {
     };
 
     /** Abort 快照：宽松解析已累积参数、不 assert；先冲刷尾部残行，与 anthropic/gemini 的中断收尾一致。 */
+    // nm-style: keep-closure — 同族 handle 动词，捕获集与 finish 高度重叠（state,feed,onStream）；同族一次性同构抽取才可动。
     const finishPartial = (): SseFinishResult => {
       SseLineBuffer.drain(state, feed);
       const blocks = OpenAiMapper.streamAccumulatorsToPartialBlocks(state, onStream);

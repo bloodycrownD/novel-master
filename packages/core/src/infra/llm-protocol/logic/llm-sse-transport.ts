@@ -144,6 +144,124 @@ const xhrSelection = {
   overrideForTests: undefined as boolean | undefined,
 };
 
+/** post 成功终态载荷（resolveOnce 与 SseTransport.post 共用形状）。 */
+type SsePostResult = { status: number; contentType: string | null };
+
+/** 分发台账形状（dispatch-sse-chunk 内部类型，推导引用）。 */
+type SseDispatchState = ReturnType<typeof SseDispatch.createState>;
+
+/** XHR 分支整流 emitter 的 handle 形状（sse-chunk-emitter 内部类型，推导引用）。 */
+type SseEmitterHandle = ReturnType<typeof SseChunkEmitter.create>;
+
+/**
+ * 单次 post 的 per-request 编排槽：settle-once 守卫、whole-call 定时器、观测
+ * 计数与 XHR 游标进同一 ctx，模块函数族共享——变异共享由槽承载而不是复制值。
+ */
+type SsePostSettleCtx = {
+  /** settle-once 终态守卫（onprogress/onload 与迟到错误回调也直读）。 */
+  settled: boolean;
+  /** 已收响应数据累计字符数（超时分级判据）。 */
+  processedLength: number;
+  /** 最近一次响应数据到达时刻（诊断）。 */
+  lastActivityAt: number;
+  /** 分支注册的断流钩子（超时 settle 后主动断流）：XHR 为 xhr.abort；fetch 与 native 为 controller.abort（native 经 opts.signal 由 wrapper 转发到原生 sseAbort）。 */
+  abortStream: (() => void) | undefined;
+  /** 分支注册的终态清理钩子（XHR 的 emitter.dispose 等，幂等）。 */
+  cleanupBranch: (() => void) | undefined;
+  /** whole-call JS 定时器槽（仅 fetch 分支启用；XHR 用原生 xhr.timeout、native 用 transport 内 callTimeout，避免双触发竞态）。 */
+  wholeCallTimer: ReturnType<typeof setTimeout> | null;
+  /** XHR responseText 消费游标（deliverNewText 的 slice 起点，跨回调推进）。 */
+  xhrCursor: number;
+  /** 以 rejectOnce 语义 settle 失败终态（handleWholeCallTimeout 专用入口）。 */
+  settleReject: (error: Error) => void;
+  /** 日志标签（超时日志用）。 */
+  logTag: string;
+};
+
+/** 清 whole-call 定时器槽（仅 fetch 分支启用；幂等）。 */
+const clearWholeCallTimer = (ctx: SsePostSettleCtx): void => {
+  if (ctx.wholeCallTimer != null) {
+    clearTimeout(ctx.wholeCallTimer);
+    ctx.wholeCallTimer = null;
+  }
+};
+
+/** settle-once resolve：先抢占 settled 守卫，再清定时器，最后兑现（顺序不可动）。 */
+const resolveOnce = (ctx: SsePostSettleCtx, resolve: (value: SsePostResult) => void, value: SsePostResult): void => {
+  if (ctx.settled) return;
+  ctx.settled = true;
+  clearWholeCallTimer(ctx);
+  resolve(value);
+};
+
+/** settle-once reject（transport 边界的 Promise reject 通道，throw 语义不变）：顺序同 resolveOnce。 */
+const rejectOnce = (ctx: SsePostSettleCtx, reject: (error: Error) => void, error: Error): void => {
+  if (ctx.settled) return;
+  ctx.settled = true;
+  clearWholeCallTimer(ctx);
+  reject(error);
+};
+
+/** 响应数据到达（含空增量/解码滞后的增量）：`bytes` 为本次解码后新增字符数。 */
+const noteActivity = (ctx: SsePostSettleCtx, bytes: number): void => {
+  ctx.lastActivityAt = Date.now();
+  ctx.processedLength += bytes;
+};
+
+/**
+ * 整调用兜底公共语义（回炉版 spec 第 2 节）：到点按「是否已收到响应数据」
+ * 分级——黑洞 0 字节 → first-chunk（可重试，Connection: close 保证重试走
+ * 新连接）；健康长流超预算（有输出）→ idle（不自动重试，走失败链）。
+ * 触发机制按分支表达：XHR `xhr.timeout` 到点回调 / fetch whole-call
+ * 定时器 / native transport 超时错误映射（detail 区分来源）；`bufferedBytes`
+ * 由三个触发点各自绑定（读值时刻=超时触发时刻，不再走可重绑槽）。
+ */
+const handleWholeCallTimeout = (ctx: SsePostSettleCtx, bufferedBytes: () => number, detail?: string): void => {
+  if (ctx.settled) {
+    // 迟到的触发与其它 settle 来源竞态：丢弃。
+    return;
+  }
+  const phase = ctx.processedLength > 0 ? "idle" : "first-chunk";
+  LlmSseTransport.logSse(ctx.logTag, "stream timeout", {
+    phase,
+    source: detail ?? "whole-call",
+    lastActivityAt: ctx.lastActivityAt,
+    processedLength: ctx.processedLength,
+    bufferedBytes: bufferedBytes(),
+  });
+  // LlmStreamTimeoutError 已退役为 AppError("PROVIDER_STREAM_TIMEOUT")：phase/timeoutMs 进 params
+  // （重试分级经 details.phase 判），detail 承载原动态 message 文案（失败链占位文案依赖它）。
+  const budget = detail ?? "whole-call budget";
+  let timeoutDetail: string;
+  if (phase === "first-chunk") {
+    timeoutDetail = `LLM stream timed out after ${SSE_WHOLE_CALL_TIMEOUT_MS}ms waiting for the first chunk (${budget})`;
+  } else {
+    timeoutDetail = `LLM stream idle for ${SSE_WHOLE_CALL_TIMEOUT_MS}ms after the last chunk (${budget})`;
+  }
+  ctx.settleReject(new AppError("PROVIDER_STREAM_TIMEOUT", { phase, timeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS, detail: timeoutDetail }));
+  ctx.abortStream?.();
+  ctx.cleanupBranch?.();
+};
+
+/** native 分支 chunk 投递（wrapper 多次异步调用）：观测计数与首包台账经 ctx/state 共享，裸参数化会拆散台账。 */
+const deliverNativeChunk = (ctx: SsePostSettleCtx, state: SseDispatchState, onChunk: SseByteHandler, logTag: string, chunk: string): void => {
+  noteActivity(ctx, chunk.length);
+  SseDispatch.dispatchChunk(chunk, state, onChunk, (bytes) => LlmSseTransport.logSse(logTag, "native first chunk", { bytes }));
+};
+
+/** XHR 分支新文本投递：按 ctx.xhrCursor 切增量，游标与观测计数经 ctx 原子推进（settled 守卫由调用侧直读）。 */
+const deliverNewText = (ctx: SsePostSettleCtx, xhr: SseXmlHttpRequest, state: SseDispatchState, emitter: SseEmitterHandle, logTag: string): void => {
+  const text = xhr.responseText;
+  if (text.length <= ctx.xhrCursor) {
+    return;
+  }
+  const chunk = text.slice(ctx.xhrCursor);
+  ctx.xhrCursor = text.length;
+  noteActivity(ctx, chunk.length);
+  // 经公共 dispatchChunk 转发到 emitter（节流由 emitter 负责），首包日志统一在此。
+  SseDispatch.dispatchChunk(chunk, state, emitter.append, (bytes) => LlmSseTransport.logSse(logTag, "xhr first chunk", { bytes }));
+};
+
 export const LlmSseTransport = {
   /**
    * 注册/注销 SSE 传输实现（app 装配层调用；mobile 注册 native 管子，
@@ -221,41 +339,19 @@ export const LlmSseTransport = {
 
     return new Promise((resolve, reject) => {
       // ===== 公共层（whole-call / settle 守卫上移，三分支共用）=====
-      let settled = false;
-      let processedLength = 0;
-      let lastActivityAt = Date.now();
-      // 观测打点：当前待发缓冲长度（XHR 分支注册 emitter 口径；fetch/native
-      // 即时转发无节流缓冲，保持默认记 0）。
-      let bufferedBytesNow = (): number => 0;
-      // 分支注册的断流钩子（超时 settle 后主动断流）：XHR 为 xhr.abort；fetch
-      // 与 native 为 controller.abort（native 经 opts.signal 由 wrapper 转发
-      // 到原生 sseAbort）。
-      let abortStream: (() => void) | undefined;
-      // 分支注册的终态清理钩子（XHR 的 emitter.dispose 等，幂等）。
-      let cleanupBranch: (() => void) | undefined;
-      // whole-call JS 定时器（仅 fetch 分支启用；XHR 用原生 xhr.timeout、
-      // native 用 transport 内 callTimeout，避免双触发竞态）。
-      let wholeCallTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const clearWholeCallTimer = (): void => {
-        if (wholeCallTimer != null) {
-          clearTimeout(wholeCallTimer);
-          wholeCallTimer = null;
-        }
-      };
-
-      const resolveOnce = (value: { status: number; contentType: string | null }) => {
-        if (settled) return;
-        settled = true;
-        clearWholeCallTimer();
-        resolve(value);
-      };
-      // 放宽为 Error：整调用超时要以此 settle PROVIDER_STREAM_TIMEOUT AppError（非 ProviderError 家族旧语义）。
-      const rejectOnce = (error: Error) => {
-        if (settled) return;
-        settled = true;
-        clearWholeCallTimer();
-        reject(error);
+      // per-request 编排槽：settle-once 守卫、whole-call 定时器、观测计数与
+      // XHR 游标进同一 ctx（模块函数族共享；settle-once 顺序逐字保持——先
+      // 抢占 settled，再清定时器/断流清理，防 isRequestAborted 吞成 partial）。
+      const ctx: SsePostSettleCtx = {
+        settled: false,
+        processedLength: 0,
+        lastActivityAt: Date.now(),
+        abortStream: undefined,
+        cleanupBranch: undefined,
+        wholeCallTimer: null,
+        xhrCursor: 0,
+        settleReject: (error) => rejectOnce(ctx, reject, error),
+        logTag,
       };
 
       // 淘汰记录：流空闲看门狗（原 idle 30s 自动断流）已按产品拍板移除——
@@ -264,46 +360,6 @@ export const LlmSseTransport = {
       // 唯一的自动兜底是整调用预算（callTimeout/xhr.timeout/whole-call 定时器），
       // 死流由用户手动终止。settle 守卫时序（先抢占 settle、再断流清理，防
       // isRequestAborted 吞成 partial）仍由下方分支沿用。
-
-      /** 响应数据到达（含空增量/解码滞后的增量）：`bytes` 为本次解码后新增字符数。 */
-      const noteActivity = (bytes: number): void => {
-        lastActivityAt = Date.now();
-        processedLength += bytes;
-      };
-
-      /**
-       * 整调用兜底公共语义（回炉版 spec 第 2 节）：到点按「是否已收到响应数据」
-       * 分级——黑洞 0 字节 → first-chunk（可重试，Connection: close 保证重试走
-       * 新连接）；健康长流超预算（有输出）→ idle（不自动重试，走失败链）。
-       * 触发机制按分支表达：XHR `xhr.timeout` 到点回调 / fetch whole-call
-       * 定时器 / native transport 超时错误映射（detail 区分来源）。
-       */
-      const handleWholeCallTimeout = (detail?: string): void => {
-        if (settled) {
-          // 迟到的触发与其它 settle 来源竞态：丢弃。
-          return;
-        }
-        const phase = processedLength > 0 ? "idle" : "first-chunk";
-        LlmSseTransport.logSse(logTag, "stream timeout", {
-          phase,
-          source: detail ?? "whole-call",
-          lastActivityAt,
-          processedLength,
-          bufferedBytes: bufferedBytesNow(),
-        });
-        // LlmStreamTimeoutError 已退役为 AppError("PROVIDER_STREAM_TIMEOUT")：phase/timeoutMs 进 params
-        // （重试分级经 details.phase 判），detail 承载原动态 message 文案（失败链占位文案依赖它）。
-        const budget = detail ?? "whole-call budget";
-        let timeoutDetail: string;
-        if (phase === "first-chunk") {
-          timeoutDetail = `LLM stream timed out after ${SSE_WHOLE_CALL_TIMEOUT_MS}ms waiting for the first chunk (${budget})`;
-        } else {
-          timeoutDetail = `LLM stream idle for ${SSE_WHOLE_CALL_TIMEOUT_MS}ms after the last chunk (${budget})`;
-        }
-        rejectOnce(new AppError("PROVIDER_STREAM_TIMEOUT", { phase, timeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS, detail: timeoutDetail }));
-        abortStream?.();
-        cleanupBranch?.();
-      };
 
       // ===== 分支执行（分支内只保留传输专属清理）=====
 
@@ -327,7 +383,7 @@ export const LlmSseTransport = {
             signal.addEventListener("abort", () => controller.abort(), { once: true });
           }
         }
-        abortStream = () => controller.abort();
+        ctx.abortStream = () => controller.abort();
 
         const dispatchState = SseDispatch.createState();
         // 整调用预算单点下发（core-transport/C-orch-1）：wrapper 以之覆盖
@@ -335,17 +391,12 @@ export const LlmSseTransport = {
         const postOptions = { providerId, signal: controller.signal, logTag, wholeCallTimeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS };
 
         // native 侧已合批（~10 事件/s），JS 侧直投（与 fetch 同款即时转发）。
-        // nm-style: keep-local — 内联回 .post 第 3 实参会让 url/init/postOptions 三个普通实参跨行（check-signatures ARGS），单点内联与「调用写一行」互斥。
-        const deliverNativeChunk = (chunk: string): void => {
-          noteActivity(chunk.length);
-          SseDispatch.dispatchChunk(chunk, dispatchState, onChunk, (bytes) => LlmSseTransport.logSse(logTag, "native first chunk", { bytes }));
-        };
-        void transport.post(url, init, deliverNativeChunk, postOptions).then(
+        void transport.post(url, init, (chunk) => deliverNativeChunk(ctx, dispatchState, onChunk, logTag, chunk), postOptions).then(
           (result) => {
-            resolveOnce(result);
+            resolveOnce(ctx, resolve, result);
           },
           (error: unknown) => {
-            if (settled) {
+            if (ctx.settled) {
               // 公共层已以超时错误 settle：断流导致的迟到错误在此丢弃，
               // 不让它顶替/竞态超时错误。
               return;
@@ -355,17 +406,17 @@ export const LlmSseTransport = {
               // native 整调用 callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
               // detail 透传 wrapper 错误的真实信息；终版无流式空闲界，
               // SocketTimeoutException 仅存防御性文案路径。
-              handleWholeCallTimeout(`native timeout: ${error instanceof Error ? error.message : String(error)}`);
+              handleWholeCallTimeout(ctx, () => 0, `native timeout: ${error instanceof Error ? error.message : String(error)}`);
               return;
             }
-            rejectOnce(error instanceof Error ? error : new Error(String(error)));
+            rejectOnce(ctx, reject, error instanceof Error ? error : new Error(String(error)));
           }
         );
       } else if (kind === "xhr") {
         /** XHR 分支：RN 上 fetch 无流式 body 时的主力路径（无 native 注册时）。 */
         const XhrCtor = getXmlHttpRequestCtor();
         if (XhrCtor == null) {
-          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "XMLHttpRequest is not available in this environment", providerId }));
+          rejectOnce(ctx, reject, new AppError("PROVIDER_HTTP_ERROR", { detail: "XMLHttpRequest is not available in this environment", providerId }));
           return;
         }
 
@@ -373,24 +424,8 @@ export const LlmSseTransport = {
         const dispatchState = SseDispatch.createState();
         const emitter = SseChunkEmitter.create(onChunk);
 
-        bufferedBytesNow = () => emitter.bufferedLength();
-        abortStream = () => xhr.abort();
-        cleanupBranch = () => emitter.dispose();
-
-        // 已从 responseText 消费的长度（slice 游标）。
-        let xhrCursor = 0;
-
-        const deliverNewText = (): void => {
-          const text = xhr.responseText;
-          if (text.length <= xhrCursor) {
-            return;
-          }
-          const chunk = text.slice(xhrCursor);
-          xhrCursor = text.length;
-          noteActivity(chunk.length);
-          // 经公共 dispatchChunk 转发到 emitter（节流由 emitter 负责），首包日志统一在此。
-          SseDispatch.dispatchChunk(chunk, dispatchState, emitter.append, (bytes) => LlmSseTransport.logSse(logTag, "xhr first chunk", { bytes }));
-        };
+        ctx.abortStream = () => xhr.abort();
+        ctx.cleanupBranch = () => emitter.dispose();
 
         xhr.open(init.method ?? "POST", url);
         // 整调用兜底（回炉版 spec 第 2 节）：RN 0.85.3 将 xhr.timeout 映射为
@@ -402,7 +437,7 @@ export const LlmSseTransport = {
         if (signal != null) {
           if (signal.aborted) {
             emitter.dispose();
-            rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
+            rejectOnce(ctx, reject, new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
             return;
           }
           signal.addEventListener("abort", () => xhr.abort(), { once: true });
@@ -411,25 +446,25 @@ export const LlmSseTransport = {
         xhr.onprogress = () => {
           // settle 即终态：超时/中止抢占 settle 后，RN 可能仍补发迟到进度
           // 回调（run 上与 ontimeout 竞态），此时不得再投递任何数据。
-          if (settled) return;
+          if (ctx.settled) return;
           // 任何响应数据到达（含 UTF-8 解码滞后的空增量）：更新观测打点
           //（lastActivityAt / processedLength），不参与任何超时判定。
-          noteActivity(0);
-          deliverNewText();
+          noteActivity(ctx, 0);
+          deliverNewText(ctx, xhr, dispatchState, emitter, logTag);
         };
 
         // 整调用预算耗尽（callTimeout 到点，RN dispatch 'timeout' 事件）：
         // 分级与 settle 语义在公共层 handleWholeCallTimeout；rejectOnce 抢占
         // settle 后，RN 后续可能补发的 load/error/abort 回调被 settled 守卫丢弃。
         xhr.ontimeout = () => {
-          handleWholeCallTimeout();
+          handleWholeCallTimeout(ctx, () => emitter.bufferedLength());
         };
 
         xhr.onload = () => {
           // settle 即终态：超时/中止 settle 后迟到的完成回调不得补投 tail、
           // 也不得用 resolve/reject 顶替既有终态。
-          if (settled) return;
-          deliverNewText();
+          if (ctx.settled) return;
+          deliverNewText(ctx, xhr, dispatchState, emitter, logTag);
           // Synchronous flush on complete: no async drain chain; guarantees tail delivery.
           const tail = emitter.flush();
           if (tail.length > 0) {
@@ -443,21 +478,21 @@ export const LlmSseTransport = {
           if (status < 200 || status >= 300) {
             const body = xhr.responseText;
             const snippet = Text.truncate(body, 500);
-            rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${status}: ${snippet}`, providerId }));
+            rejectOnce(ctx, reject, new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${status}: ${snippet}`, providerId }));
             return;
           }
 
-          resolveOnce({ status, contentType });
+          resolveOnce(ctx, resolve, { status, contentType });
         };
 
         xhr.onerror = () => {
           emitter.dispose();
-          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "XHR network error", providerId }));
+          rejectOnce(ctx, reject, new AppError("PROVIDER_HTTP_ERROR", { detail: "XHR network error", providerId }));
         };
 
         xhr.onabort = () => {
           emitter.dispose();
-          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
+          rejectOnce(ctx, reject, new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
         };
 
         const headers = init.headers;
@@ -504,15 +539,15 @@ export const LlmSseTransport = {
             signal.addEventListener("abort", () => controller.abort(), { once: true });
           }
         }
-        abortStream = () => controller.abort();
+        ctx.abortStream = () => controller.abort();
 
         const dispatchState = SseDispatch.createState();
 
         // 整调用兜底（与 XHR 的 xhr.timeout 语义对齐，回炉版 spec 第 2 节）：
         // connect/写/读全周期预算，到点经公共层 handleWholeCallTimeout 分级收敛。
-        wholeCallTimer = setTimeout(() => {
-          wholeCallTimer = null;
-          handleWholeCallTimeout();
+        ctx.wholeCallTimer = setTimeout(() => {
+          ctx.wholeCallTimer = null;
+          handleWholeCallTimeout(ctx, () => 0);
         }, SSE_WHOLE_CALL_TIMEOUT_MS);
 
         void (async () => {
@@ -520,7 +555,7 @@ export const LlmSseTransport = {
             const response = await fetchFn(url, { ...init, signal: controller.signal });
             const checked = await HttpUtil.assertOk(response, providerId);
             if (!checked.ok) {
-              rejectOnce(checked.error);
+              rejectOnce(ctx, reject, checked.error);
               return;
             }
 
@@ -529,7 +564,7 @@ export const LlmSseTransport = {
               // SSE transport 的失败通道是 Promise reject（与文件内其余错误路径同款）：
               // transport 边界不返 Result，AppError 经 rejectOnce 上行，由 adapter 收口。
               const detail = `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`;
-              rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail, providerId }));
+              rejectOnce(ctx, reject, new AppError("PROVIDER_HTTP_ERROR", { detail, providerId }));
               return;
             }
 
@@ -551,21 +586,21 @@ export const LlmSseTransport = {
               // 分发语义。noteActivity 只更新观测打点（lastActivityAt /
               // processedLength），不参与任何超时判定（空闲看门狗已退役）。
               const chunk = decoder.decode(value, { stream: true });
-              noteActivity(chunk.length);
+              noteActivity(ctx, chunk.length);
               SseDispatch.dispatchChunk(chunk, dispatchState, onChunk, (bytes) => LlmSseTransport.logSse(logTag, "fetch first chunk", { bytes }));
             }
 
-            resolveOnce({
+            resolveOnce(ctx, resolve, {
               status: response.status,
               contentType: response.headers.get("content-type"),
             });
           } catch (error) {
-            if (settled) {
+            if (ctx.settled) {
               // 公共层已以超时错误 settle：controller.abort() 导致的 AbortError
               // 在此丢弃，不让它顶替/竞态超时错误。
               return;
             }
-            rejectOnce(error instanceof Error ? error : new Error(String(error)));
+            rejectOnce(ctx, reject, error instanceof Error ? error : new Error(String(error)));
           }
         })();
       }

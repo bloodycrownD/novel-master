@@ -101,6 +101,24 @@ export interface ResolveCurrentPromptTokensOptions {
   readonly shouldBail?: () => Interrupt | null;
 }
 
+/**
+ * 两分支共用的记忆键构造（r4-core-5：原先两处参数逐字重复）。键含
+ * `模型|指纹|消息尾戳|tools|layout 摘要`——layout 段是 r4-core-1 补的，
+ * agent 定义被编辑后键跟着变，不再命中旧读数。
+ *
+ * **只在调用处求值**：函数体里的消息尾戳会对 `messages` 做一次
+ * JSON.stringify，两个调用点必须留在弃权检查点之后——提取为模块函数天然保持
+ * 惰性，调用位置与提取前逐字相同。
+ */
+const buildMemoKey = (params: CountPromptLlmInputParams): string | null =>
+  ChatTokenEstimateMemo.buildKey({
+    savedModelId: params.savedModelId,
+    workplaceFingerprint: params.ctx?.workplaceFingerprint,
+    messages: params.ctx?.messages,
+    tools: params.tools,
+    layout: params.layout,
+  });
+
 export const CurrentPromptTokens = {
   /**
    * API 命中时的增量估算：锚点之后追加的可见消息折算 token。
@@ -197,12 +215,10 @@ export const CurrentPromptTokens = {
    * 阈值判定）；无指纹（旧格式值）按兼容处理照常采用。
    */
   async resolve(sessionId: string, params: CountPromptLlmInputParams, options?: ResolveCurrentPromptTokensOptions): Promise<Outcome<ResolvedPromptTokens>> {
-    // r3-chip-1 弃权检查点执行器（api 命中分支不用：只一次 KKV 读 + 小增量
-    // 估算，无整串级重活，不值得为它加判据）。未传 shouldBail 恒 null；命中即
-    // 把调用方给的 Interrupt 直作 Outcome 的 cancelled/replaced 分支返回
-    // （错误通道迁移二期：哨兵 throw 改返回值）。api 命中分支不调用。
-    const shouldBail = options?.shouldBail;
-    const bail = (): Interrupt | null => shouldBail?.() ?? null;
+    // r3-chip-1 弃权检查点执行语义（检查点见下方两处调用）：未传 shouldBail 恒
+    // null；命中即把调用方给的 Interrupt 直作 Outcome 的 cancelled/replaced
+    // 分支返回（错误通道迁移二期：哨兵 throw 改返回值）。api 命中分支不设
+    // 检查点：只一次 KKV 读 + 小增量估算，无整串级重活，不值得为它加判据。
     const entry = await SessionApiPromptTokenEntry.read(options?.sessionKkv, sessionId);
     if (entry != null && (entry.savedModelId == null || entry.savedModelId === params.savedModelId)) {
       return {
@@ -230,24 +246,6 @@ export const CurrentPromptTokens = {
     //   true：读口的本地分支本身就是用户可见的真实刷新，不存在预热路径）。
     const sessionKkv = options?.sessionKkv ?? null;
 
-    /**
-     * 两分支共用的记忆键构造（r4-core-5：原先两处参数逐字重复）。键含
-     * `模型|指纹|消息尾戳|tools|layout 摘要`——layout 段是 r4-core-1 补的，
-     * agent 定义被编辑后键跟着变，不再命中旧读数。
-     *
-     * **只在调用处求值**：函数体里的消息尾戳会对 `messages` 做一次
-     * JSON.stringify，估算分支的调用点必须留在 `bail()`（检查点①）之后——
-     * 定义成函数（而非早求值的常量）正是为此，调用位置与提取前逐字相同。
-     */
-    const resolveMemoKey = (): string | null =>
-      ChatTokenEstimateMemo.buildKey({
-        savedModelId: params.savedModelId,
-        workplaceFingerprint: params.ctx?.workplaceFingerprint,
-        messages: params.ctx?.messages,
-        tools: params.tools,
-        layout: params.layout,
-      });
-
     // 估算优先：无统计可用时不做真分词器计数——但**先查 L1 整串缓存**
     // （cr-fix-spec-r2 s2/G-1，2026-09-29）：L1 命中是零成本现成精确值，
     // 拒读它会让「后台暖机写的 L1 永远没人消费」、chip 在 api miss 期间锁死
@@ -263,7 +261,7 @@ export const CurrentPromptTokens = {
       // 弃权检查点①：必须在**序列化之前**。下方 serializePromptLlmInput 与
       // lookupWholeCacheEntry 内部的 chunkHash16 各自把整串过一遍（真机上大
       // 会话就是秒级），检查点放在序列化之后等于「观察点在重活后面」。
-      const stopped = bail();
+      const stopped = options?.shouldBail?.() ?? null;
       if (stopped != null) {
         return stopped;
       }
@@ -271,7 +269,7 @@ export const CurrentPromptTokens = {
       // 尾戳 + tools + 模型 + layout」⇒ 序列化产物同值，serialize/hash/count
       // 三趟整串线性扫（真机 ~2s）全免。条目也可能来自精确分支的回写（升级语义：
       // 命中即精确档，与下方 L1 预查同精神，不给「锁死估算档」留口）。
-      const memoKey = resolveMemoKey();
+      const memoKey = buildMemoKey(params);
       if (memoKey != null) {
         const memoHit = ChatTokenEstimateMemo.lookup(sessionId, memoKey);
         if (memoHit != null) {
@@ -378,7 +376,7 @@ export const CurrentPromptTokens = {
     // 弃权检查点②：L1/L2 seed 之后、PromptLlmInputCount.count 之前。家族原生计数器
     // 整串计数（glm ~5.8s）是 resolve 链最重的一步，必须让它成为「起跑前先看
     // 一眼」的形态——落在它之后就等于没有弃权点。
-    const stopped = bail();
+    const stopped = options?.shouldBail?.() ?? null;
     if (stopped != null) {
       return stopped;
     }
@@ -386,7 +384,7 @@ export const CurrentPromptTokens = {
     // 跑**，即便 L1 已有整串条目也要付 serialize+hash（真机 ~1.3s）。同键记忆
     // 里已有精确读数（上一轮升级/完整口径回写）时直接复用，重复进入的成本归
     // 零。命中但只有估读时照旧走真计数——升级本来就是来补精确值的。
-    const preciseMemoKey = resolveMemoKey();
+    const preciseMemoKey = buildMemoKey(params);
     if (preciseMemoKey != null) {
       const preciseMemoHit = ChatTokenEstimateMemo.lookup(sessionId, preciseMemoKey);
       if (preciseMemoHit != null && preciseMemoHit.estimated === false) {

@@ -48,6 +48,12 @@ const TEMPLATE_ENGINE_TIMEOUT_MS = 30_000;
 /** 提取文本超预算时追加的截断标注（文本不再保证是合法 JSON，标注让 agent 知情）。 */
 const TRUNCATION_MARKER = `\n…[结果超 ${TOOL_OUTPUT_MAX_BYTES} 字节预算已截断]`;
 
+/** body 字符串值归一：整值 `"{{count}}"` 直取数值，其余走占位符替换（headers 内插口径；displayName 进错误文案）。 */
+const bodyValue = (value: string, numResults: number, values: TemplatePlaceholderValues, displayName: string): Result<string | number, AppError> => {
+  if (value === "{{count}}") return Result.ok(numResults);
+  return TemplateEngine.substitutePlaceholders(value, values, displayName, false);
+};
+
 export const TemplateEngine = {
   /**
    * 占位符内插：URL 传 encodeQuery（仅 `{{query}}` 百分号编码），headers/defaultBody 原样；
@@ -97,11 +103,6 @@ export const TemplateEngine = {
       baseUrl: resolved.baseUrl,
     };
     // 占位符替换 / body 字符串值归一：失败一律在 fetch 前收 Result.err（search-tool run 的降级判别收口）。
-    const bodyValue = (value: string): Result<string | number, AppError> => {
-      if (value === "{{count}}") return Result.ok(numResults);
-      return TemplateEngine.substitutePlaceholders(value, values, template.name, false);
-    };
-
     const urlResult = TemplateEngine.substitutePlaceholders(template.url, values, template.name, true);
     if (!urlResult.ok) return Result.err(urlResult.error);
     let requestUrl = urlResult.value;
@@ -144,7 +145,7 @@ export const TemplateEngine = {
             for (let index = 0; index < node.length; index += 1) {
               const value: unknown = node[index];
               if (typeof value === "string") {
-                const substituted = bodyValue(value);
+                const substituted = bodyValue(value, numResults, values, template.name);
                 if (!substituted.ok) return Result.err(substituted.error);
                 node[index] = substituted.value;
               } else pending.push(value);
@@ -154,7 +155,7 @@ export const TemplateEngine = {
           if (!Guards.isRecord(node)) continue;
           for (const [key, value] of Object.entries(node)) {
             if (typeof value === "string") {
-              const substituted = bodyValue(value);
+              const substituted = bodyValue(value, numResults, values, template.name);
               if (!substituted.ok) return Result.err(substituted.error);
               node[key] = substituted.value;
             } else pending.push(value);
@@ -172,6 +173,7 @@ export const TemplateEngine = {
     // 在途取消判据改走监听器置位（let + 闭包写值不受属性收窄影响），且精确区分
     // 父级取消与 30s 计时器 abort。
     let parentAborted = false;
+    // nm-style: keep-closure — add/removeEventListener 同引用不变量 + parentAborted 在途取消标志由监听器置位（let+闭包写值不受属性收窄影响），与 duckduckgo 同构。
     const onParentAbort = () => {
       parentAborted = true;
       controller.abort();

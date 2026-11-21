@@ -38,9 +38,11 @@ export const Concurrency = {
   /** 进程级忙碌旗工厂：`> 0` 即忙碌；`release` 钳到 0，多释放不产生负计数。 */
   createBusyFlag(): BusyFlag {
     let count = 0;
+    // nm-style: keep-closure — count 是 BusyFlag 实例的隐藏计数状态（闭包生命周期=实例生命周期）；提升模块级会把 count 全局化破坏三端多实例语义，转 this-方法会把 count 暴露在公共 handle 上破坏封装。
     const acquire = () => {
       count += 1;
     };
+    // nm-style: keep-closure — 与 acquire 同为 count 的互补动词（同一隐藏状态的严格配对），捕获集完全重叠但不构成可合并。
     const release = () => {
       count = Math.max(0, count - 1);
     };

@@ -4,7 +4,7 @@
  * @module domain/vfs/logic/user-vfs-save-mapping
  */
 
-import { diffArrays } from "diff";
+import { diffArrays, type ArrayChange } from "diff";
 import { Text } from "@/common/text.js";
 import { UserVfsActionXml } from "./user-vfs-action-xml.js";
 import type { ToolUseBlock } from "@/domain/chat/model/content-block.js";
@@ -43,6 +43,51 @@ type LineChangeRegion = {
   readonly newEnd: number;
 };
 
+/**
+ * 行级 diff（Myers，`diff` 包 diffArrays）→ 闭区间变更块：相邻 added/removed
+ * （中间没有公共行）归并成一个变更块。
+ * 纯插入侧 oldStart > oldEnd、纯删除侧 newStart > newEnd，由对称扩展处理。
+ */
+function collectChangeRegions(parts: ReadonlyArray<ArrayChange<unknown>>): LineChangeRegion[] {
+  const regions: LineChangeRegion[] = [];
+  let oldIdx = 0; // 已消费的 baseline 行号（开区间端点）
+  let newIdx = 0; // 已消费的 saved 行号（开区间端点）
+  let blockOldStart = 0; // 当前变更块在 baseline 的起点
+  let blockNewStart = 0; // 当前变更块在 saved 的起点
+  let inBlock = false;
+  // 把当前变更块落成一个 region；oldEnd/newEnd 用闭区间（开区间端点 - 1）。
+  const flush = (oldEndExclusive: number, newEndExclusive: number): void => {
+    if (!inBlock) return;
+    regions.push({ oldStart: blockOldStart, oldEnd: oldEndExclusive - 1, newStart: blockNewStart, newEnd: newEndExclusive - 1 });
+    inBlock = false;
+  };
+  for (const part of parts) {
+    if (part.added) {
+      // 进入变更块时记下起点（此时两侧都还没推进，天然对齐到块首）。
+      if (!inBlock) {
+        inBlock = true;
+        blockOldStart = oldIdx;
+        blockNewStart = newIdx;
+      }
+      newIdx += part.count;
+    } else if (part.removed) {
+      if (!inBlock) {
+        inBlock = true;
+        blockOldStart = oldIdx;
+        blockNewStart = newIdx;
+      }
+      oldIdx += part.count;
+    } else {
+      // 公共行会切断变更块：先落盘当前块，再同步推进两侧指针。
+      flush(oldIdx, newIdx);
+      oldIdx += part.count;
+      newIdx += part.count;
+    }
+  }
+  flush(oldIdx, newIdx);
+  return regions;
+}
+
 export const UserVfsSaveMapping = {
   /**
    * 将用户保存映射为 `edit` 多 hunk 或 `write` fallback / no-op。
@@ -61,46 +106,7 @@ export const UserVfsSaveMapping = {
 
     const baselineLines = Text.splitLines(baseline);
     const savedLines = Text.splitLines(content);
-    // 行级 diff：基于 Myers 算法（`diff` 包的 `diffArrays`）把相邻 added/removed
-    // （中间没有公共行）归并成一个变更块，最终转换成闭区间表示。
-    // 纯插入侧 oldStart > oldEnd、纯删除侧 newStart > newEnd，由下方对称扩展处理。
-    const regions: LineChangeRegion[] = [];
-    const parts = diffArrays([...baselineLines], [...savedLines]);
-    let oldIdx = 0; // 已消费的 baseline 行号（开区间端点）
-    let newIdx = 0; // 已消费的 saved 行号（开区间端点）
-    let blockOldStart = 0; // 当前变更块在 baseline 的起点
-    let blockNewStart = 0; // 当前变更块在 saved 的起点
-    let inBlock = false;
-    // 把当前变更块落成一个 region；oldEnd/newEnd 用闭区间（开区间端点 - 1）。
-    const flush = (oldEndExclusive: number, newEndExclusive: number): void => {
-      if (!inBlock) return;
-      regions.push({ oldStart: blockOldStart, oldEnd: oldEndExclusive - 1, newStart: blockNewStart, newEnd: newEndExclusive - 1 });
-      inBlock = false;
-    };
-    for (const part of parts) {
-      if (part.added) {
-        // 进入变更块时记下起点（此时两侧都还没推进，天然对齐到块首）。
-        if (!inBlock) {
-          inBlock = true;
-          blockOldStart = oldIdx;
-          blockNewStart = newIdx;
-        }
-        newIdx += part.count;
-      } else if (part.removed) {
-        if (!inBlock) {
-          inBlock = true;
-          blockOldStart = oldIdx;
-          blockNewStart = newIdx;
-        }
-        oldIdx += part.count;
-      } else {
-        // 公共行会切断变更块：先落盘当前块，再同步推进两侧指针。
-        flush(oldIdx, newIdx);
-        oldIdx += part.count;
-        newIdx += part.count;
-      }
-    }
-    flush(oldIdx, newIdx);
+    const regions = collectChangeRegions(diffArrays([...baselineLines], [...savedLines]));
     if (regions.length === 0) {
       return { kind: "noop" };
     }

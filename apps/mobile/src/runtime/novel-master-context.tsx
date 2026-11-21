@@ -13,7 +13,7 @@ import {MobileRuntimeFactory} from './create-mobile-runtime';
 import mobilePackage from '../../package.json';
 import {MobileScope, type MobileScopeSnapshot} from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
-import {RebootWaiter} from './reboot-waiter';
+import {RebootWaiter, type RebootWaiterSlot} from './reboot-waiter';
 import {SessionStreamUnitManager, type SessionStreamPrefBridge} from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
 import {StreamTokenEstimator} from '@/services/stream-token-estimator';
@@ -63,6 +63,33 @@ function formatBootstrapError(err: unknown): string {
     return err.message;
   }
   return String(err);
+}
+
+/** boot effect 的错误屏 setter 组（failBootstrap 的 render 作用域捕获进参）。 */
+type BootstrapFailUi = {
+  setRuntime: React.Dispatch<React.SetStateAction<MobileNovelMasterRuntime | undefined>>;
+  setAppUi: React.Dispatch<React.SetStateAction<AppUiPreferences | undefined>>;
+  setError: React.Dispatch<React.SetStateAction<string | undefined>>;
+  setStatus: React.Dispatch<React.SetStateAction<RuntimeStatus>>;
+};
+
+/** boot 等待者的 reject 终端：按代号 settle，代际不一致时安全 no-op。 */
+function rejectRebootWaiter(slot: RebootWaiterSlot<MobileNovelMasterRuntime>, bootToken: number, err: unknown): void {
+  RebootWaiter.settle(slot, bootToken, {kind: 'reject', error: err});
+}
+
+/**
+ * bootstrap 失败统一终端（错误通道迁移四期）：装配/读偏好/scope 装载的
+ * Result.err 与平台 reject 共用——错误屏 + reject 等待者。
+ */
+function failBootstrap(cancelled: boolean, ui: BootstrapFailUi, slot: RebootWaiterSlot<MobileNovelMasterRuntime>, bootToken: number, err: unknown): void {
+  if (!cancelled) {
+    ui.setRuntime(undefined);
+    ui.setAppUi(undefined);
+    ui.setError(formatBootstrapError(err));
+    ui.setStatus('error');
+  }
+  rejectRebootWaiter(slot, bootToken, err);
 }
 
 export const NovelMasterContextHelpers = {
@@ -200,30 +227,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     let cancelled = false;
     setStatus('loading');
     setError(undefined);
-
-    const resolveRebootWaiter = (rt: MobileNovelMasterRuntime): void => {
-      RebootWaiter.settle(rebootWaiterRef, bootToken, {
-        kind: 'resolve',
-        runtime: rt,
-      });
-    };
-    const rejectRebootWaiter = (err: unknown): void => {
-      RebootWaiter.settle(rebootWaiterRef, bootToken, {
-        kind: 'reject',
-        error: err,
-      });
-    };
-    // bootstrap 失败统一终端（错误通道迁移四期）：装配/读偏好/scope 装载的
-    // Result.err 与平台 reject 共用——错误屏 + reject 等待者。
-    const failBootstrap = (err: unknown): void => {
-      if (!cancelled) {
-        setRuntime(undefined);
-        setAppUi(undefined);
-        setError(formatBootstrapError(err));
-        setStatus('error');
-      }
-      rejectRebootWaiter(err);
-    };
+    const failUi: BootstrapFailUi = {setRuntime, setAppUi, setError, setStatus};
 
     const bootstrapPromise = (async () => {
       if (bootToken > 0) {
@@ -236,7 +240,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       }
       const rtResult = await MobileRuntimeFactory.create();
       if (!rtResult.ok) {
-        failBootstrap(rtResult.error);
+        failBootstrap(cancelled, failUi, rebootWaiterRef, bootToken, rtResult.error);
         return;
       }
       const rt = rtResult.value;
@@ -256,13 +260,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       });
       const loaded = await MobileScope.load(runtime);
       if (!loaded.ok) {
-        failBootstrap(loaded.error);
+        failBootstrap(cancelled, failUi, rebootWaiterRef, bootToken, loaded.error);
         return;
       }
       const ui = AppUiPrefs.create(runtime.kkv);
       const epoch = await AppVersionGuard.syncAppVersionForRichRender(ui, mobilePackage.version);
       if (!epoch.ok) {
-        failBootstrap(epoch.error);
+        failBootstrap(cancelled, failUi, rebootWaiterRef, bootToken, epoch.error);
         return;
       }
       if (cancelled) {
@@ -274,7 +278,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         await MobileDb.closeMobileConnection();
         // 同样必须 reject：调用方（云同步 pull）不能永挂在 await 上，
         // 否则它持有的 busy 令牌永不 release。
-        rejectRebootWaiter(new Error('重建 runtime 已取消，请重试'));
+        rejectRebootWaiter(rebootWaiterRef, bootToken, new Error('重建 runtime 已取消，请重试'));
         return;
       }
       setRuntime(runtime);
@@ -282,9 +286,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       setRichRenderEpoch(epoch.value);
       setScope(loaded.value);
       setStatus('ready');
-      resolveRebootWaiter(runtime);
+      RebootWaiter.settle(rebootWaiterRef, bootToken, {kind: 'resolve', runtime});
     })();
-    bootstrapPromise.catch(failBootstrap);
+    bootstrapPromise.catch(err => failBootstrap(cancelled, failUi, rebootWaiterRef, bootToken, err));
 
     return () => {
       cancelled = true;

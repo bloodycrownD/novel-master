@@ -15,22 +15,24 @@ import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-p
 const MODULE = "nm-model-retry";
 const KEY = "policy";
 
+/** 重试策略校验失败的统一错误（PROVIDER_INVALID_ARGUMENT，detail 带字段原因）。 */
+const invalidPolicy = (message: string): Result<never, AppError<"PROVIDER_INVALID_ARGUMENT">> => Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid retry policy: ${message}` }));
+
 function validatePolicy(input: ModelRetryPolicy): Result<void, AppError<"PROVIDER_INVALID_ARGUMENT">> {
-  const invalid = (message: string) => Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid retry policy: ${message}` }));
   if (!Number.isFinite(input.maxRetries) || input.maxRetries < 0) {
-    return invalid("maxRetries must be >= 0");
+    return invalidPolicy("maxRetries must be >= 0");
   }
   if (!Number.isFinite(input.baseDelayMs) || input.baseDelayMs < 0) {
-    return invalid("baseDelayMs must be >= 0");
+    return invalidPolicy("baseDelayMs must be >= 0");
   }
   if (!Number.isFinite(input.maxDelayMs) || input.maxDelayMs < 0) {
-    return invalid("maxDelayMs must be >= 0");
+    return invalidPolicy("maxDelayMs must be >= 0");
   }
   if (input.maxDelayMs < input.baseDelayMs) {
-    return invalid("maxDelayMs must be >= baseDelayMs");
+    return invalidPolicy("maxDelayMs must be >= baseDelayMs");
   }
   if (!Number.isFinite(input.jitterRatio) || input.jitterRatio < 0 || input.jitterRatio > 1) {
-    return invalid("jitterRatio must be in [0, 1]");
+    return invalidPolicy("jitterRatio must be in [0, 1]");
   }
   return Result.ok<void>(undefined);
 }

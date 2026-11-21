@@ -58,80 +58,85 @@ type RunStateWritethroughOptions = {
   readonly largePayloadChars?: number;
 };
 
+/** 写通 coalescer 的共享状态槽：timer/scheduledMs 是被重绑的调度游标，pending 是待写快照，disposed 是僵尸写防御闸。 */
+type RunStateWritethroughSlot = {
+  pending: SessionRunState | null;
+  timer: ReturnType<typeof setTimeout> | null;
+  /** 当前定时器的档位（毫秒）：仅当新载荷要求更慢的档时才重排。 */
+  scheduledMs: number;
+  disposed: boolean;
+};
+
 export namespace RunStateWritethrough {
+  function clearTimer(slot: RunStateWritethroughSlot): void {
+    if (slot.timer != null) {
+      clearTimeout(slot.timer);
+      slot.timer = null;
+    }
+    slot.scheduledMs = 0;
+  }
+
+  /** 定时到期/flush 的共同落点：取走 pending 并同步发起写（吞错留日志）。 */
+  function writeNow(slot: RunStateWritethroughSlot, write: RunStateWritethroughWriteFn): void {
+    slot.timer = null;
+    slot.scheduledMs = 0;
+    if (slot.pending == null) {
+      return;
+    }
+    const state = slot.pending;
+    slot.pending = null;
+    write(state).catch(err => {
+      console.error('[novel-master/run-state-writethrough] write failed', err);
+    });
+  }
+
   export function create(write: RunStateWritethroughWriteFn, options?: RunStateWritethroughOptions): RunStateWritethrough {
     const intervalMs = options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
     const slowIntervalMs = options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
     const largePayloadChars = options?.largePayloadChars ?? RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
 
-    let pending: SessionRunState | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    /** 当前定时器的档位（毫秒）：仅当新载荷要求更慢的档时才重排。 */
-    let scheduledMs = 0;
-    let disposed = false;
-
-    const clearTimer = (): void => {
-      if (timer != null) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      scheduledMs = 0;
-    };
-
-    /** 定时到期/flush 的共同落点：取走 pending 并同步发起写（吞错留日志）。 */
-    const writeNow = (): void => {
-      timer = null;
-      scheduledMs = 0;
-      if (pending == null) {
-        return;
-      }
-      const state = pending;
-      pending = null;
-      write(state).catch(err => {
-        console.error('[novel-master/run-state-writethrough] write failed', err);
-      });
-    };
+    const slot: RunStateWritethroughSlot = {pending: null, timer: null, scheduledMs: 0, disposed: false};
 
     return {
       append(state: SessionRunState): void {
-        if (disposed) {
+        if (slot.disposed) {
           return;
         }
-        pending = state;
+        slot.pending = state;
         const payloadChars = (state.partialText?.length ?? 0) + (state.partialThinking?.length ?? 0) + (state.pendingChildrenJson?.length ?? 0);
         const wantMs = payloadChars > largePayloadChars ? slowIntervalMs : intervalMs;
-        if (timer == null) {
-          timer = setTimeout(writeNow, wantMs);
-          scheduledMs = wantMs;
-        } else if (wantMs > scheduledMs) {
+        if (slot.timer == null) {
+          slot.timer = setTimeout(() => writeNow(slot, write), wantMs);
+          slot.scheduledMs = wantMs;
+        } else if (wantMs > slot.scheduledMs) {
           // 载荷变大 → 升到慢档重排（推迟写，防写放大）；变小则等本轮到期
           // 后自然恢复快档，不做提前重排。
-          clearTimer();
-          timer = setTimeout(writeNow, wantMs);
-          scheduledMs = wantMs;
+          clearTimer(slot);
+          slot.timer = setTimeout(() => writeNow(slot, write), wantMs);
+          slot.scheduledMs = wantMs;
         }
       },
 
       flush(): void {
-        if (disposed) {
+        if (slot.disposed) {
           return;
         }
-        clearTimer();
-        writeNow();
+        clearTimer(slot);
+        writeNow(slot, write);
       },
 
       dispose(): void {
-        clearTimer();
-        pending = null;
-        disposed = true;
+        clearTimer(slot);
+        slot.pending = null;
+        slot.disposed = true;
       },
 
       isDisposed(): boolean {
-        return disposed;
+        return slot.disposed;
       },
 
       hasPending(): boolean {
-        return pending != null;
+        return slot.pending != null;
       },
     };
   }
