@@ -19,9 +19,10 @@ describe("WorkspaceSettingsView subagentStream 开关（T-D2）", () => {
   const source = readFileSync(viewPath, "utf8");
 
   it("SettingsSwitchRow「子会话流式」行存在并带静态 desc", () => {
+    // i18n 后 label 锁 coreT 形态+键名；desc 键面无键（3c-c MISS 补迁），仍锁中文原样。
     assert.match(
       source,
-      /<SettingsSwitchRow\s+label="子会话流式"\s+desc="子智能体会话的实时输出；关闭后回复完成后一次性显示"/,
+      /<SettingsSwitchRow\s+label=\{coreT\(\{key: "ui\.chat_config\.stream_sub"\}\)\}\s+desc="子智能体会话的实时输出；关闭后回复完成后一次性显示"/,
     );
   });
 
@@ -35,8 +36,9 @@ describe("WorkspaceSettingsView subagentStream 开关（T-D2）", () => {
   });
 
   it("「子会话流式」紧邻「父会话流式」之后", () => {
-    const llmIdx = source.indexOf('label="父会话流式"');
-    const subIdx = source.indexOf('label="子会话流式"');
+    // 锚点随 i18n 换 coreT 调用形态（带 label={ 前缀保证命中开关行）。
+    const llmIdx = source.indexOf('label={coreT({key: "ui.chat_config.stream_parent"})}');
+    const subIdx = source.indexOf('label={coreT({key: "ui.chat_config.stream_sub"})}');
     assert.ok(llmIdx >= 0, "「父会话流式」行缺失");
     assert.ok(subIdx > llmIdx, "「子会话流式」应位于「父会话流式」之后");
   });

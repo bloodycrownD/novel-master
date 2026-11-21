@@ -210,10 +210,9 @@ export function WorkspaceSettingsView() {
         desc={coreT({key: "ui.chat_config.chat_prefs_hint"})}
       >
         <SettingsRows>
-          {/* 两行开关的 label+desc 被 workspace-settings-subagent-stream.test.ts 以 JSX 属性形态
-              readFileSync+正则锁死（波 3c 对齐测试前保留原字面量）。 */}
+          {/* 两行开关 label 已 i18n（desc 键面无键，仍为原字面量，待 3c-c MISS 补迁）。 */}
           <SettingsSwitchRow
-            label="父会话流式"
+            label={coreT({key: "ui.chat_config.stream_parent"})}
             desc="主对话的实时输出；关闭后回复完成后一次性显示"
             checked={llmStream}
             onChange={async (next) => {
@@ -222,7 +221,7 @@ export function WorkspaceSettingsView() {
             }}
           />
           <SettingsSwitchRow
-            label="子会话流式"
+            label={coreT({key: "ui.chat_config.stream_sub"})}
             desc="子智能体会话的实时输出；关闭后回复完成后一次性显示"
             checked={subagentStream}
             onChange={async (next) => {
