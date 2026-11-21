@@ -4,6 +4,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { IconButton } from "@/components/ui/IconButton";
 import { showToast } from "@/components/ui/show-toast";
+import { coreT } from "@shared/logic/core-i18n";
 import { ipcSessionsPullTemplate, ipcSessionsPushTemplate } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 
@@ -41,7 +42,7 @@ export function WorkspaceHeaderActions({
         const result = await ipcSessionsPullTemplate({ sessionId: workspaceSessionId });
         if (result.ok) {
           onRefresh();
-          showToast("已从项目工作区同步");
+          showToast(coreT({key: "ui.vfs.synced_from_project"}));
         } else {
           showToast(result.error.message);
         }
@@ -59,7 +60,7 @@ export function WorkspaceHeaderActions({
         const result = await ipcSessionsPushTemplate({ sessionId: workspaceSessionId });
         if (result.ok) {
           onRefresh();
-          showToast("已推送到项目工作区");
+          showToast(coreT({key: "ui.vfs.pushed_to_project"}));
         } else {
           showToast(result.error.message);
         }
@@ -73,8 +74,8 @@ export function WorkspaceHeaderActions({
   const menuItems = useMemo((): readonly ContextMenuItem[] => {
     const items: ContextMenuItem[] = [];
     if (showSync) {
-      items.push({ label: "初始化", action: "pull-template" });
-      items.push({ label: "推送到项目工作区", action: "push-template", danger: true });
+      items.push({ label: coreT({key: "ui.vfs.init_action"}), action: "pull-template" });
+      items.push({ label: coreT({key: "ui.vfs.push_project_title"}), action: "push-template", danger: true });
     }
     return items;
   }, [showSync]);
@@ -91,8 +92,8 @@ export function WorkspaceHeaderActions({
   }
 
   // 拉取与推送的确认文案分别明示各自影响面（覆盖哪个工作区、谁丢修改）。
-  const pushTemplateConfirmMessage = "将用当前聊天工作区覆盖项目工作区。项目工作区是该项目所有会话的模板母本，之后新建的会话与其它会话的「从上级同步」都会拿到覆盖后的内容。";
-  const pullTemplateConfirmMessage = "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？";
+  const pushTemplateConfirmMessage = coreT({key: "ui.vfs.push_confirm_desktop"});
+  const pullTemplateConfirmMessage = coreT({key: "ui.vfs.pull_confirm"});
   const confirmCopy = confirmKind === "push-template" ? { message: pushTemplateConfirmMessage, danger: true } : { message: pullTemplateConfirmMessage, danger: false };
 
   return (
@@ -100,7 +101,7 @@ export function WorkspaceHeaderActions({
       <div className="explorer-header__actions">
         <IconButton
           className="explorer-header__more-btn"
-          label="更多"
+          label={coreT({key: "ui.common.more"})}
           onClick={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
             setMenu({
@@ -122,7 +123,7 @@ export function WorkspaceHeaderActions({
       />
       <ConfirmModal
         open={confirmKind != null}
-        title="确认操作"
+        title={coreT({key: "ui.common.confirm_op"})}
         message={confirmCopy.message}
         danger={confirmCopy.danger}
         busy={busy}

@@ -23,6 +23,7 @@ import {
   vfsScope,
 } from "@/ipc/client";
 import { joinVfsPath } from "@/utils/vfs-path";
+import { coreT } from "@shared/logic/core-i18n";
 import { entryName } from "./vfs-tree-utils";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
@@ -52,6 +53,7 @@ export function scopeRequestFromTarget( target: WorkspaceContextTarget, projectI
 
 export async function saveFileInclusion( target: WorkspaceContextTarget, inclusionMode: "auto" | "show" | "hide", projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
   if (target.kind !== "row" || target.row.kind !== "file") {
+    // 「无效操作」与 ui.common.unknown_action（未知操作）不同文，漏键待波 3c，保留原字面量。
     return { ok: false, message: "无效操作" };
   }
   const result = await ipcWorkplaceSetFileRule({
@@ -182,7 +184,7 @@ export async function saveDirRule( input: WorkplaceSetDirRuleRequest ): Promise<
 
 export function entryLabelForTarget(target: WorkspaceContextTarget): string {
   if (target.kind === "blank") {
-    return "条目";
+    return coreT({key: "ui.vfs.entry_label"});
   }
   return entryName(target.row.path);
 }
@@ -224,6 +226,7 @@ export async function startSingleFileImport( scope: VfsScopeRequest, targetDir: 
   const picked = await ipcVfsFilePick();
   if (!picked.ok) {
     // nm-throw: keep — renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch
+    // 「选择文件失败」键面无此键（漏键待波 3c），保留原字面量。
     throw new Error(picked.error.message || "选择文件失败");
   }
   const hostPath = picked.data;
@@ -239,7 +242,7 @@ export async function startSingleFileImport( scope: VfsScopeRequest, targetDir: 
   });
   if (!result.ok) {
     // nm-throw: keep — renderer 侧 IpcResult 解包边界
-    throw new Error(result.error.message || "导入失败");
+    throw new Error(result.error.message || coreT({key: "ui.common.import_failed"}));
   }
   if (result.data.status === "needs_confirm") {
     return {
@@ -265,12 +268,12 @@ export async function confirmSingleFileImport( scope: VfsScopeRequest, targetDir
   });
   if (!result.ok) {
     // nm-throw: keep — renderer 侧 IpcResult 解包边界
-    throw new Error(result.error.message || "导入失败");
+    throw new Error(result.error.message || coreT({key: "ui.common.import_failed"}));
   }
   if (result.data.status !== "applied") {
     // 已确认覆盖后 core 仍报 needs_confirm 属协议破损；宁可显式失败也不静默当成功。
     // nm-throw: keep — 两段式协议不变量破坏（带 overwriteConfirmed 仍回 needs_confirm），属不可达分支。
-    throw new Error("导入未完成");
+    throw new Error(coreT({key: "ui.vfs.import_incomplete"}));
   }
   return {
     status: "applied",
@@ -298,7 +301,7 @@ export async function exportWorkspaceTarget( scope: VfsScopeRequest, target: Wor
     });
     if (!single.ok) {
       // nm-throw: keep — renderer 侧 IpcResult 解包边界
-      throw new Error(single.error.message || "导出失败");
+      throw new Error(single.error.message || coreT({key: "ui.common.export_failed"}));
     }
     return single.data;
   }
@@ -307,7 +310,7 @@ export async function exportWorkspaceTarget( scope: VfsScopeRequest, target: Wor
   const zip = await ipcVfsZipExport({ ...scope, directoryPath });
   if (!zip.ok) {
     // nm-throw: keep — renderer 侧 IpcResult 解包边界
-    throw new Error(zip.error.message || "导出失败");
+      throw new Error(zip.error.message || coreT({key: "ui.common.export_failed"}));
   }
   return zip.data;
 }

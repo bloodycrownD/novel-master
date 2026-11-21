@@ -8,6 +8,7 @@
 import type { VfsBatchApplyReportDto, VfsBatchExportSkippedDto, VfsScopeRequest } from "@shared/ipc-types";
 import { getDesktopBridge, ipcVfsBatchClearStaging, ipcVfsBatchExportStage, ipcVfsBatchIngestFromPaths, ipcVfsRename, onVfsStartDragFailed } from "@/ipc/client";
 import { showToast } from "@/components/ui/show-toast";
+import { coreT } from "@shared/logic/core-i18n";
 import { dropTargetDir, isSelfOrAncestorPath, resolveMoveDestination } from "./vfs-tree-dnd";
 
 type ActiveNativeDrag = {
@@ -104,18 +105,18 @@ export function clearActiveNativeDrag(): void {
 export function formatBatchApplyToast(report: VfsBatchApplyReportDto): string {
   const parts: string[] = [];
   if (report.written.length > 0) {
-    parts.push(`已写入 ${report.written.length}`);
+    parts.push(coreT({key: "ui.vfs.import_report_written", params: {count: report.written.length}}));
   }
   if (report.skipped.length > 0) {
-    parts.push(`跳过 ${report.skipped.length}`);
+    parts.push(coreT({key: "ui.vfs.import_report_skipped", params: {count: report.skipped.length}}));
   }
   if (report.failed.length > 0) {
-    parts.push(`失败 ${report.failed.length}`);
+    parts.push(coreT({key: "ui.vfs.import_report_failed", params: {count: report.failed.length}}));
   }
   if (parts.length === 0) {
-    return "导入完成（无变更）";
+    return coreT({key: "ui.vfs.import_done_nochange"});
   }
-  return `导入完成：${parts.join("，")}`;
+  return coreT({key: "ui.vfs.import_done_report", params: {report: parts.join("，")}});
 }
 
 /**
@@ -125,7 +126,7 @@ export function formatBatchApplyToast(report: VfsBatchApplyReportDto): string {
  * 所以拖入链路两处与菜单单文件链路共用同一句，避免第三处再抄一遍。
  */
 export function skippedBinaryToastMessage(count: number): string {
-  return `跳过 ${count} 个非 UTF-8 文件`;
+  return coreT({key: "ui.vfs.skip_non_utf8", params: {count}});
 }
 
 function hostPathsFromDataTransfer(dt: DataTransfer): string[] {
@@ -202,7 +203,7 @@ export async function prefetchExportStage(options: { readonly scope: VfsScopeReq
  */
 export function startPrefetchedNativeDrag(options: { readonly logicalPath: string; readonly dragEvent: DragEvent }): boolean {
   if (prefetchInFlight.has(options.logicalPath)) {
-    showToast("导出准备中…");
+    showToast(coreT({key: "ui.vfs.export_preparing"}));
     return false;
   }
   const staged = stagedByPath.get(options.logicalPath);
@@ -239,7 +240,7 @@ export async function handleFilesDropIngest(options: {
 }): Promise<void> {
   const hostPaths = hostPathsFromDataTransfer(options.dataTransfer);
   if (hostPaths.length === 0) {
-    showToast("无法读取拖入的本机文件");
+    showToast(coreT({key: "ui.vfs.local_file_read_failed"}));
     return;
   }
 
@@ -283,7 +284,7 @@ export async function confirmAndApplyBatchIngest(req: BatchIngestConfirmRequest,
     return;
   }
   if (result.data.status !== "applied") {
-    showToast("导入未完成");
+    showToast(coreT({key: "ui.vfs.import_incomplete"}));
     return;
   }
   onApplied();
@@ -302,7 +303,7 @@ export async function moveVfsPathsToDir(options: {
   let moved = 0;
   for (const sourcePath of options.sourcePaths) {
     if (isSelfOrAncestorPath(sourcePath, options.targetDir)) {
-      showToast("不能移动到自身或子目录");
+      showToast(coreT({key: "ui.vfs.move_self_blocked"}));
       continue;
     }
     const newPath = resolveMoveDestination(sourcePath, options.targetDir);
