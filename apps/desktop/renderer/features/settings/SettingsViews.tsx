@@ -1619,9 +1619,8 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
           onChange={setActiveTab}
           aria-label={coreT({key: "ui.provider.detail_tab_aria"})}
           options={[
-            // 两个 tab label 被 provider-detail-tabs.test.ts 源码正则锁死，波 3c 对齐后再迁。
-            { value: "config", label: "服务商配置" },
-            { value: "models", label: "模型管理" },
+            { value: "config", label: coreT({key: "ui.nav.providers"}) },
+            { value: "models", label: coreT({key: "ui.nav.model_management"}) },
           ]}
         />
       </div>

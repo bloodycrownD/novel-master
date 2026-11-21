@@ -24,9 +24,9 @@ test("T-T1: ProviderDetailView 改 tab 容器，含两个 tab 选项（服务商
   // tab 容器结构
   assert.match(source, /<div className="provider-detail">/);
   assert.match(source, /<SegmentedControl<ProviderTab>/);
-  // 两个 tab 选项
-  assert.match(source, /\{ value: "config", label: "服务商配置" \}/);
-  assert.match(source, /\{ value: "models", label: "模型管理" \}/);
+  // 两个 tab 选项（i18n 后锁 coreT 调用形态+键名，文案由 catalog 保证）
+  assert.match(source, /\{ value: "config", label: coreT\(\{key: "ui\.nav\.providers"\}\) \}/);
+  assert.match(source, /\{ value: "models", label: coreT\(\{key: "ui\.nav\.model_management"\}\) \}/);
   // 服务商配置 tab 内嵌 ProviderFormView edit
   assert.match(
     source,
