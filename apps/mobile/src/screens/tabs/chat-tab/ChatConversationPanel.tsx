@@ -31,7 +31,7 @@
 import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {Platform, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
-import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {AttachmentChip} from '@novel-master/core/chat';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {HostThemeMapping} from '@/webview-host/host-theme-from-tokens';
@@ -189,7 +189,7 @@ function ChatConversationWebSurface(props: {
    */
   const chipLabels = useMemo(
     // 显式单参回调：core 该函数第二参是 chip 口径 options，直接当 map 回调会把 index 当 options。
-    () => composer.composerState.chips.map(a => AttachmentChip.formatStatusLabelFromAttachment(a)),
+    () => composer.composerState.chips.map(a => { const d = AttachmentChip.fromAttachment(a); return d == null ? '' : coreT(d); }),
     [composer.composerState.chips],
   );
 

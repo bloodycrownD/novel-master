@@ -7,7 +7,7 @@ import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {RollbackConfirmView} from '@novel-master/core/presentation/chat/rollback-confirm.js';
+import {RollbackConfirmView} from '@novel-master/core/chat';
 import {type ChatMessageData, ChatMessage, AttachmentXmlCodec} from '@novel-master/core/chat';
 
 import {FormatError} from '@/errors/format-error';

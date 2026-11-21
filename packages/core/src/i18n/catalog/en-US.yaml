@@ -96,6 +96,7 @@ label:
     action:
       delete: Delete
     chip: "{action}:{path}"
+    attach_ref: "{path}"
   transcript:
     generating: Generating
     thinking_header: Thinking

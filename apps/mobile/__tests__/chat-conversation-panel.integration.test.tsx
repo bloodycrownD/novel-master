@@ -156,7 +156,11 @@ import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversati
 import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
 import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
 import {ComposerDraftSchema} from '@novel-master/core/chat';
-import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {AttachmentChip} from '@novel-master/core/chat';
+import {coreT} from '@/i18n/core';
+
+// descriptor 化兼容 shim：断言与组件实现同口径（fromAttachment → coreT 渲染）。
+const chipText = (d: ReturnType<typeof AttachmentChip.fromAttachment>): string => (d == null ? '' : coreT(d as never));
 
 /**
  * 灌一个够 controller 跑起来的 mock runtime（草稿水化 + 发送决策）。
@@ -866,7 +870,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     expect(ChatComposerDraft.readState('s1').text).toBe('');
   });
 
-  it('chipLabels 由状态条附件经 core AttachmentChip.formatStatusLabelFromAttachment 派生', async () => {
+  it('chipLabels 由状态条附件经 core AttachmentChip.fromAttachment + coreT 派生', async () => {
     await act(async () => {
       tree = TestRenderer.create(<TestHost />);
       await flushPromises();
@@ -887,7 +891,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     });
 
     expect(lastComposerProps().chipLabels).toEqual([
-      AttachmentChip.formatStatusLabelFromAttachment(attachment),
+      chipText(AttachmentChip.fromAttachment(attachment)),
     ]);
   });
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import {  describe, it  } from "node:test";
 import {  createTranslator, type MessageCatalog  } from "../../src/common/i18n.js";
 import type { ChatMessageKey } from "../../src/domain/chat/i18n/keys.js";
-import {  RollbackConfirmView  } from "../../src/presentation/chat/rollback-confirm.js";
+import {  RollbackConfirmView  } from "../../src/domain/chat/presentation/rollback-confirm.js";
 
 const zhCN = JSON.parse(fs.readFileSync(new URL("../../locales/chat.zh-CN.json", import.meta.url), "utf8")) as MessageCatalog<ChatMessageKey>;
 const enUS = JSON.parse(fs.readFileSync(new URL("../../locales/chat.en-US.json", import.meta.url), "utf8")) as MessageCatalog<ChatMessageKey>;

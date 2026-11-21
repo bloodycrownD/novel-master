@@ -68,6 +68,10 @@ module.exports = {
     // prompt-yaml module which depends on `yaml` ESM browser entry and breaks
     // under the default RN Jest transform settings.
     '^@novel-master/core$': '<rootDir>/test-utils/core-shim.ts',
+    '^@novel-master/core/domain/chat/presentation/(.*)$': path.join(
+      repoRoot,
+      'packages/core/dist/domain/chat/presentation/$1',
+    ),
     '^@novel-master/core/chat$': path.join(
       repoRoot,
       'packages/core/dist/public/chat.js',
@@ -242,13 +246,6 @@ module.exports = {
     '^@novel-master/core/i18n$': path.join(
       repoRoot,
       'packages/core/dist/i18n/index.js',
-    ),
-    // chat 转录 presentation 文案（attachment chip / tool 摘要）：webview runtime
-    // 直接按子路径 import；exports 只声明 import 条件，Jest 的 require 解析不到，
-    // 与其它 core 子路径同样直连 dist 真实文件。
-    '^@novel-master/core/presentation/chat/(.*)$': path.join(
-      repoRoot,
-      'packages/core/dist/presentation/chat/$1',
     ),
     // 错误通道三期新增的 public/errors 子入口（AppError / Result / Outcome）：
     // 同其它 core 子路径直连 dist 真实文件，exports 只声明 import 条件，

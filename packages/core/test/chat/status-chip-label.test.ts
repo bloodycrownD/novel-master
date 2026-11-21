@@ -4,24 +4,39 @@
 
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  AttachmentChip  } from "../../src/presentation/chat/attachment-chip.js";
+import {  AttachmentChip  } from "../../src/domain/chat/presentation/attachment-chip.js";
+import {  CORE_CATALOGS  } from "../../src/i18n/index.js";
+import {  createTranslator  } from "../../src/common/i18n.js";
+
+const zhT = createTranslator(CORE_CATALOGS, "zh-CN");
+
+// descriptor 化后的兼容 shim：断言体保持旧调用形态，文案口径经 zh catalog 渲染逐字不变。
+function formatStatusLabel(action: Parameters<typeof AttachmentChip.statusLabel>[0], path: string): string | null {
+  return label(AttachmentChip.statusLabel(action, path));
+}
+function formatStatusLabelFromAttachment(a: Parameters<typeof AttachmentChip.fromAttachment>[0], options?: Parameters<typeof AttachmentChip.fromAttachment>[1]): string | null {
+  return label(AttachmentChip.fromAttachment(a, options));
+}
+function label(d: ReturnType<typeof AttachmentChip.fromAttachment>): string | null {
+  return d == null ? null : (zhT(d as never) as string);
+}
 
 describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
   it("已知枚举 → 中文二字:path；mkdir 与 write 同为「创建」；rename/move 自描述", () => {
-    assert.equal(AttachmentChip.formatStatusLabel("workplaceChange", "/a"), "规则:/a");
-    assert.equal(AttachmentChip.formatStatusLabel("write", "/b"), "创建:/b");
-    assert.equal(AttachmentChip.formatStatusLabel("annotate", "/c"), "批注:/c");
-    assert.equal(AttachmentChip.formatStatusLabel("edit", "/e"), "编辑:/e");
-    assert.equal(AttachmentChip.formatStatusLabel("delete", "/d"), "删除:/d");
-    assert.equal(AttachmentChip.formatStatusLabel("mkdir", "/m"), "创建:/m");
-    assert.equal(AttachmentChip.formatStatusLabel("rename", "/to"), "改名:/to");
-    assert.equal(AttachmentChip.formatStatusLabel("move", "/dir/to"), "移动:/dir/to");
-    assert.equal(AttachmentChip.formatStatusLabel("userAttach", "/x"), "");
+    assert.equal(formatStatusLabel("workplaceChange", "/a"), "规则:/a");
+    assert.equal(formatStatusLabel("write", "/b"), "创建:/b");
+    assert.equal(formatStatusLabel("annotate", "/c"), "批注:/c");
+    assert.equal(formatStatusLabel("edit", "/e"), "编辑:/e");
+    assert.equal(formatStatusLabel("delete", "/d"), "删除:/d");
+    assert.equal(formatStatusLabel("mkdir", "/m"), "创建:/m");
+    assert.equal(formatStatusLabel("rename", "/to"), "改名:/to");
+    assert.equal(formatStatusLabel("move", "/dir/to"), "移动:/dir/to");
+    assert.equal(formatStatusLabel("userAttach", "/x"), null);
   });
 
   it("FromAttachment：有 action 走映射；rename→改名；move→移动", () => {
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "workplaceChange",
         path: "/a",
         name: "/a",
@@ -31,7 +46,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "规则:/a",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "write",
         path: "/b",
         name: "/b",
@@ -41,7 +56,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "创建:/b",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "mkdir",
         path: "/m",
         name: "/m",
@@ -51,7 +66,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "创建:/m",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/c",
         name: "/c",
@@ -61,7 +76,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "批注:/c",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "rename",
         path: "/new.md",
         name: "/new.md",
@@ -71,7 +86,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "改名:/new.md",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "move",
         path: "/续写/文风指导.md",
         name: "/续写/文风指导.md",
@@ -86,7 +101,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
   it("annotate chip：有 content 时优先显示 userAnnotation，回落 originalText；截断+省略号；content 为 null 回落路径", () => {
     // content 同时含 originalText 和 userAnnotation → chip 优先显示 userAnnotation
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/note.md",
         name: "/note.md",
@@ -98,7 +113,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // userAnnotation 前后空白会被 trim，再截断
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/note.md",
         name: "/note.md",
@@ -111,7 +126,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     // 超长原文 → 截断 20 字 + 省略号
     const long = "这是一段很长的划词原文内容超过二十个字符就会被截断掉哦";
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/note.md",
         name: "/note.md",
@@ -125,7 +140,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // 多行原文 → 换行压空格
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/note.md",
         name: "/note.md",
@@ -137,7 +152,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // content 为 null → 回落路径（向后兼容）
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/c",
         name: "/c",
@@ -148,7 +163,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // content 缺 originalText、但有 userAnnotation → 显示 userAnnotation
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/c",
         name: "/c",
@@ -160,7 +175,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // userAnnotation 为空串 → 回落 originalText
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/note.md",
         name: "/note.md",
@@ -172,7 +187,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // JSON 无 userAnnotation 字段 → 回落 originalText
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/note.md",
         name: "/note.md",
@@ -184,7 +199,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // content JSON 解析失败 → 回落路径
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "annotate",
         path: "/c",
         name: "/c",
@@ -197,7 +212,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
 
   it("无 action 降级：workplace→规则；旧 write:/、mkdir:/；rename→取右侧并按父目录区分；否则裸 path", () => {
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "workplace",
         name: "/w.md",
         path: "/w.md",
@@ -206,7 +221,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "规则:/w.md",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "user_ops",
         name: "write:/old.md",
         path: "/old.md",
@@ -215,7 +230,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "创建:/old.md",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "user_ops",
         name: "mkdir:/dir",
         path: "/dir",
@@ -224,7 +239,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "创建:/dir",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "user_ops",
         name: "rename:/a.md→/b.md",
         content: null,
@@ -232,7 +247,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "改名:/b.md",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "user_ops",
         name: "rename:/a.md→/dir/b.md",
         content: null,
@@ -240,7 +255,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       "移动:/dir/b.md",
     );
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "user_ops",
         name: "/bare.md",
         path: "/bare.md",
@@ -250,7 +265,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
     // 不做「规则 ·」兼容
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "attach",
         name: "规则 · /x",
         content: null,

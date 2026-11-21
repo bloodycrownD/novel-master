@@ -6,7 +6,7 @@
 
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
-import type { RollbackMode } from "@/presentation/chat/rollback-confirm.js";
+import type { RollbackMode } from "@/domain/chat/presentation/rollback-confirm.js";
 import { SessionFiles } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { MissingRevisions } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { RollbackAnchor } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";

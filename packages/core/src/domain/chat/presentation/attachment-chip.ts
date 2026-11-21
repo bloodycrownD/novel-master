@@ -1,43 +1,31 @@
 /**
- * Composer / 气泡状态 chip 文案（presentation）。
+ * Composer / 气泡状态 chip 文案（domain/chat 展示层）。
  *
- * @module presentation/chat/attachment-chip
+ * 只产出 descriptor（key + params），不包含文案、不依赖 locale；由 UI 用
+ * core catalog + translator（desktop/mobile `coreT`、webview `uiText`）渲染。
+ *
+ * @module domain/chat/presentation/attachment-chip
  */
 
 import {Text} from "@/common/text.js";
 import type {MessageAttachment, MessageAttachmentAction} from "@/domain/chat/model/message-attachment.schema.js";
 import {attachmentPath} from "@/domain/chat/logic/message/attachment-path.js";
+import type {MessageDescriptor} from "@/common/i18n.js";
+import {CHIP_ACTION_KEYS, CHIP_TEMPLATE_KEY, CHIP_BARE_KEY} from "./chip-keys.js";
 
-/** 已知 action → 中文二字。 */
-const STATUS_CHIP_ZH: Readonly<Record<MessageAttachmentAction, string>> = {
-    delete: "删除",
-    write: "创建",
-    edit: "编辑",
-    mkdir: "创建",
-    /** 同目录换名。 */
-    rename: "改名",
-    /** 跨目录移动。 */
-    move: "移动",
-    workplaceChange: "规则",
-    userAttach: "", // 不进状态 chip；映射表仍保留
-    annotate: "批注",
-    skillAttach: "", // 不进状态 chip；chip 文案以附件 skillName 为准
-};
+/** chip descriptor（嵌套：action 位递归取二字词，模板 `{action}:{path}` 插值）。 */
+export type AttachmentChipDescriptor = MessageDescriptor<typeof CHIP_TEMPLATE_KEY> | MessageDescriptor<typeof CHIP_BARE_KEY>;
+
+/** 已知 action → chip action 词 key；null = 不进状态 chip（userAttach / skillAttach）。 */
+function chipActionKey(action: MessageAttachmentAction): AttachmentChipDescriptor | null {
+    const key = (CHIP_ACTION_KEYS as Record<string, `label.attachment.action.${string}` | undefined>)[action];
+    if (key == null) {
+        return null;
+    }
+    return {key: CHIP_TEMPLATE_KEY, params: {action: {key}, path: ""}};
+}
 
 const LEGACY_ACTION_PREFIX_RE = /^(\w+):(.*)$/;
-
-/** 旧英文 action 前缀 → 中文二字（无 `action` 字段降级用）。 */
-const LEGACY_PREFIX_ZH: Readonly<Record<string, string>> = {
-    write: "创建",
-    edit: "编辑",
-    delete: "删除",
-    mkdir: "创建",
-    rename: "改名",
-    move: "移动",
-    workplaceChange: "规则",
-    annotate: "批注",
-    userAttach: ""
-};
 
 /** 批注 chip 摘要最大字符数（防 mobile chip 超长）。 */
 const ANNOTATE_CHIP_MAX_CHARS = 20;
@@ -52,34 +40,35 @@ export interface StatusChipLabelOptions {
 }
 
 /**
- * 状态 chip 文案操作族。
+ * 状态 chip 文案操作族（descriptor 出口；文案本体在 chat catalog）。
  */
 export const AttachmentChip = {
     /**
-     * 已知枚举 → `中文二字:` + path。
-     * `userAttach` 返回空串（不进状态 chip）。
+     * 已知枚举 → chip descriptor（action 词 + `{action}:{path}` 模板）。
+     * `userAttach` / `skillAttach` 返回 null（不进状态 chip）。
      */
-    formatStatusLabel(action: MessageAttachmentAction, path: string): string {
-        const zh = STATUS_CHIP_ZH[action];
-        if (zh === "") {
-            return "";
+    statusLabel(action: MessageAttachmentAction, path: string): AttachmentChipDescriptor | null {
+        const base = chipActionKey(action);
+        if (base == null) {
+            return null;
         }
-        return `${zh}:${path}`;
+        return {key: base.key, params: {action: base.params!.action, path}};
     },
 
     /**
-     * 从附件读 `action`/`path`（及 rename/move 的 `to`）生成 chip 文案。
-     * 有 `action` 时直接走 {@link STATUS_CHIP_ZH}（action 自描述，不再靠 name hack）。
+     * 从附件读 `action`/`path`（及 rename/move 的 `to`）生成 chip descriptor。
+     * 有 `action` 时直接走 {@link chipActionKey}（action 自描述，不再靠 name hack）。
      * 无 `action` 时按降级规则（不做英文 /「规则 ·」/ emoji 兼容承诺）。
      */
-    formatStatusLabelFromAttachment(a: Pick<MessageAttachment, "action" | "path" | "name" | "source" | "content">, options?: StatusChipLabelOptions): string {
+    fromAttachment(a: Pick<MessageAttachment, "action" | "path" | "name" | "source" | "content">, options?: StatusChipLabelOptions): AttachmentChipDescriptor | null {
         if (options?.attachPrefixed === true && a.source === "attach") {
             const path = a.path || a.name || "";
-            return path.startsWith("@") ? path : `@${path}`;
+            const ref = path.startsWith("@") ? path : `@${path}`;
+            return {key: CHIP_BARE_KEY, params: {path: ref}};
         }
         if (a.action != null) {
             if (a.action === "userAttach") {
-                return "";
+                return null;
             }
             let path: string;
             if (a.action === "annotate") {
@@ -99,23 +88,23 @@ export const AttachmentChip = {
             } else {
                 path = AttachmentChip.resolvePathOrName(a);
             }
-            return AttachmentChip.formatStatusLabel(a.action, path);
+            return AttachmentChip.statusLabel(a.action, path);
         }
 
         // 无 action 降级 1：workplace → 规则:<path>
         if (a.source === "workplace") {
             const path = AttachmentChip.resolvePathOrName(a);
-            return AttachmentChip.formatStatusLabel("workplaceChange", path);
+            return AttachmentChip.statusLabel("workplaceChange", path);
         }
 
-        // 无 action 降级 2：旧 name 为 `write:/…` 等
+        // 无 action 降级 2：旧 name 为 `write:/…` 等（legacy 前缀名与 action 同名，复用同一张 key 表）
         const raw = (a.name ?? "").trim();
         const m = LEGACY_ACTION_PREFIX_RE.exec(raw);
         if (m != null) {
             const prefix = m[1]!;
             let suffix = m[2] ?? "";
-            const zh = LEGACY_PREFIX_ZH[prefix];
-            if (zh != null && zh !== "") {
+            const legacy = chipActionKey(prefix as MessageAttachmentAction);
+            if (legacy != null) {
                 if (prefix === "rename" || prefix === "move") {
                     const sep = "→";
                     const idx = suffix.indexOf(sep);
@@ -123,17 +112,21 @@ export const AttachmentChip = {
                         const from = suffix.slice(0, idx);
                         const to = suffix.slice(idx + sep.length);
                         if (from !== "" && to !== "") {
-                            return `${STATUS_CHIP_ZH[attachmentPath.actionBetween(from, to)]}:${to}`;
+                            const derived = chipActionKey(attachmentPath.actionBetween(from, to));
+                            if (derived != null) {
+                                return {key: derived.key, params: {action: derived.params!.action, path: to}};
+                            }
                         }
                     }
                     suffix = AttachmentChip.renameSuffixToPath(suffix);
                 }
-                return `${zh}:${suffix}`;
+                return {key: legacy.key, params: {action: legacy.params!.action, path: suffix}};
             }
         }
 
-        // 降级 3：裸 path / name
-        return AttachmentChip.resolvePathOrName(a);
+        // 降级 3：裸 path / name（非翻译文案，`{path}` 直出）
+        const bare = AttachmentChip.resolvePathOrName(a);
+        return bare === "" ? null : {key: CHIP_BARE_KEY, params: {path: bare}};
     },
 
     resolvePathOrName(a: Pick<MessageAttachment, "path" | "name">): string {

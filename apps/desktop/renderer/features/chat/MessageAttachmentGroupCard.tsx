@@ -31,7 +31,8 @@ export function formatMessageAttachmentLabel(a: MessageAttachmentDto): string {
     const path = a.path ?? a.name;
     return path.startsWith('@') ? path : `@${path}`;
   }
-  return AttachmentChip.formatStatusLabelFromAttachment(a);
+  const d = AttachmentChip.fromAttachment(a);
+  return d == null ? '' : coreT(d);
 }
 
 export function MessageAttachmentGroupCard({

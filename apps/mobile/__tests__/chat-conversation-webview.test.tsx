@@ -387,8 +387,11 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     // 再直比 zh-CN catalog 字面值：避免宿主与断言共用同一个装配函数造成自证。
     // p27 R6：桥的 ui map 只随发 UI_LABEL_KEYS 声明的管线键（其余 ui.* 走 web 侧
     // DEFAULT 兜底），键集走源码契约提取——不为测试假导出，也不复制键单造成双漂移面。
+    // p27 附件 chip descriptor 化：键域扩 label.attachment.*（action 词 + chip 模板 + attach_ref）。
     const zh = CORE_CATALOGS['zh-CN']!;
-    const bridgeKeys = [...readFileSync(join(__dirname, '../src/components/chat/transcript-labels.ts'), 'utf8').matchAll(/'(ui\.[a-z0-9_.]+)'/g)].map(match => match[1]);
+    const labelsSrc = readFileSync(join(__dirname, '../src/components/chat/transcript-labels.ts'), 'utf8');
+    const keysArray = labelsSrc.slice(labelsSrc.indexOf('const UI_LABEL_KEYS'), labelsSrc.indexOf('] as const;'));
+    const bridgeKeys = [...keysArray.matchAll(/'((?:ui|label)\.[a-z0-9_.]+)'/g)].map(match => match[1]);
     const zhUi = Object.fromEntries(bridgeKeys.map(key => [key, zh[key]]));
     expect(Object.keys(init!.payload.labels!.ui).sort()).toEqual([...bridgeKeys].sort());
     expect(init?.payload.labels).toEqual({

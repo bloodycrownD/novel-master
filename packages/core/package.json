@@ -132,9 +132,9 @@
       "import": "./dist/i18n/index.js"
     },
     "./i18n/catalog/*": "./src/i18n/catalog/*",
-    "./presentation/chat/*": {
-      "types": "./dist/presentation/chat/*",
-      "import": "./dist/presentation/chat/*"
+    "./domain/chat/presentation/*": {
+      "types": "./dist/domain/chat/presentation/*",
+      "import": "./dist/domain/chat/presentation/*"
     }
   },
   "scripts": {

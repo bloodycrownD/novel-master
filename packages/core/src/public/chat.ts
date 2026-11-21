@@ -101,3 +101,15 @@ export type {
   MessageTranscriptEffectsService,
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
+// chat 域展示层（domain/chat/presentation；原 presentation/chat 顶级层降级并入）。
+export {ToolSummary} from "../domain/chat/presentation/tool-summary.js";
+export {AttachmentChip} from "../domain/chat/presentation/attachment-chip.js";
+export type {StatusChipLabelOptions} from "../domain/chat/presentation/attachment-chip.js";
+export type {AttachmentChipDescriptor} from "../domain/chat/presentation/attachment-chip.js";
+export {CHIP_TEMPLATE_KEY, CHIP_BARE_KEY} from "../domain/chat/presentation/chip-keys.js";
+export {RollbackConfirmView} from "../domain/chat/presentation/rollback-confirm.js";
+export type {
+  RollbackMode,
+  RollbackConfirmKind,
+  RollbackConfirmDescriptor,
+} from "../domain/chat/presentation/rollback-confirm.js";

@@ -267,6 +267,7 @@ label:
       workplace_change: 规则
       annotate: 批注
     chip: "{action}:{path}"
+    attach_ref: "{path}"
   # —— chat ——
   chat:
     link_not_found: "{path} 不存在"

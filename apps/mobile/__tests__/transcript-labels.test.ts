@@ -86,8 +86,9 @@ describe('宿主 labels 装配（T-SP22）', () => {
     const uiKeys = Object.keys(built.ui);
     expect(uiKeys.length).toBeGreaterThan(0);
     for (const key of uiKeys) {
-      // 波 3-1 起桥随发共享 portal 的 ui.common.close，键域不再限于 transcript 段。
-      expect(key).toMatch(/^ui\./);
+      // 波 3-1 起桥随发共享 portal 的 ui.common.close，键域不再限于 transcript 段；
+      // p27 附件 chip descriptor 化后桥随发 label.attachment.*（action 词与模板，AttachGroup 两步渲染）。
+      expect(key).toMatch(/^(ui|label)\./);
       expect(built.ui[key]).toBe(zh[key]);
     }
   });

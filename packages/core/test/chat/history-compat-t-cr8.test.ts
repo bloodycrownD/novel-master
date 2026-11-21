@@ -9,7 +9,16 @@ import {  TextBlocks  } from "@novel-master/core/chat";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
 import {  PromptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import {  AttachmentChip  } from "../../src/presentation/chat/attachment-chip.js";
+import {  AttachmentChip  } from "../../src/domain/chat/presentation/attachment-chip.js";
+import {  CORE_CATALOGS  } from "../../src/i18n/index.js";
+import {  createTranslator  } from "../../src/common/i18n.js";
+
+const zhT = createTranslator(CORE_CATALOGS, "zh-CN");
+// descriptor 化兼容 shim：断言保持旧字符串口径（zh 渲染逐字一致）。
+const formatStatusLabelFromAttachment = (a: Parameters<typeof AttachmentChip.fromAttachment>[0], options?: Parameters<typeof AttachmentChip.fromAttachment>[1]): string | null => {
+  const d = AttachmentChip.fromAttachment(a, options);
+  return d == null ? null : (zhT(d as never) as string);
+};
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {  RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
@@ -42,7 +51,7 @@ function userMsg(
 describe("history workplaceChange compat (T-CR8)", () => {
   it("T-CR8: 历史 workplaceChange / source:workplace 气泡文案仍为「规则:path」", () => {
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         action: "workplaceChange",
         path: "/legacy.md",
         name: "/legacy.md",
@@ -53,7 +62,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     );
     // 无 action 的旧落库形态
     assert.equal(
-      AttachmentChip.formatStatusLabelFromAttachment({
+      formatStatusLabelFromAttachment({
         source: "workplace",
         name: "/old.md",
         path: "/old.md",

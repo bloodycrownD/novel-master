@@ -46,7 +46,7 @@ export function AttachGroup({
         return (
           <div key={i} className="tool-group-item tool-card attach-card">
             <div className="tool-header">
-              <span className="tool-name">{RowLogic.attachmentChipLabel(a)}</span>
+              <span className="tool-name">{RowLogic.attachmentChipText(labels, a)}</span>
               {src ? <span className="tool-status success">{src}</span> : null}
             </div>
           </div>

@@ -5,7 +5,7 @@ import type {ToolCallRow} from '../state/state';
  * 工具组 UI 由 ui/render/ToolGroup 渲染；本文件仅供其复用的纯逻辑。
  * `ToolSummary.callSummary` 单源在 core（RN 同用），这里只保留 webview 的入口名。
  */
-export {ToolSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
+export {ToolSummary} from '@novel-master/core/domain/chat/presentation/tool-summary.js';
 
 export const ToolLogic = {
   /**

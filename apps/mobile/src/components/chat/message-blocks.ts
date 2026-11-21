@@ -52,8 +52,8 @@ export interface BuildChatListItemsOptions {
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 }
 
-// nm-style: keep-public — 工具卡片摘要单源在 core（`presentation/chat/tool-summary.ts` 的 ToolSummary），本文件只保留入口名给 ToolCallCard。
-export {ToolSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
+// nm-style: keep-public — 工具卡片摘要单源在 core（`domain/chat/presentation/tool-summary.ts` 的 ToolSummary），本文件只保留入口名给 ToolCallCard。
+export {ToolSummary} from '@novel-master/core/chat';
 
 export namespace MessageBlocks {
   function blocksForMessage(message: ChatMessageData): readonly ContentBlock[] {

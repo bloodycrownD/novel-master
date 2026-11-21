@@ -343,6 +343,7 @@ const LABEL_MESSAGE_KEYS = [
   "label.attachment.action.workplace_change",
   "label.attachment.action.annotate",
   "label.attachment.chip",
+  "label.attachment.attach_ref",
   // chat
   "label.chat.link_not_found",
   // prompt_preview：summaryText / metaText / 预览截断

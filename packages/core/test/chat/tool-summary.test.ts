@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  ToolSummary  } from "../../src/presentation/chat/tool-summary.js";
+import {  ToolSummary  } from "../../src/domain/chat/presentation/tool-summary.js";
 
 describe("summarizeToolInput（core 单源）", () => {
   it("T-TS-01: skill / read + domain=global → `read global:my-skill`", () => {

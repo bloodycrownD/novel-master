@@ -3,11 +3,19 @@
  */
 import {describe, expect, it} from '@jest/globals';
 import {RowLogic} from '@/web/chat-transcript/webview/runtime/render/row-logic';
+import {CORE_CATALOGS, createTranslator} from '@novel-master/core/i18n';
+
+const zhT = createTranslator(CORE_CATALOGS, 'zh-CN');
+// descriptor 化兼容 shim：断言保持旧字符串口径（zh 渲染逐字一致）。
+const attachmentChipLabel = (a: Parameters<typeof RowLogic.attachmentChipDescriptor>[0]): string => {
+  const d = RowLogic.attachmentChipDescriptor(a);
+  return d == null ? '' : zhT(d as never);
+};
 
 describe('attachmentChipLabel', () => {
   it('user_ops + action → 中文二字:path', () => {
     expect(
-      RowLogic.attachmentChipLabel({
+      attachmentChipLabel({
         source: 'user_ops',
         type: 'text',
         name: '/a.md',
@@ -16,7 +24,7 @@ describe('attachmentChipLabel', () => {
       }),
     ).toBe('创建:/a.md');
     expect(
-      RowLogic.attachmentChipLabel({
+      attachmentChipLabel({
         source: 'user_ops',
         name: '/n.md',
         path: '/n.md',
@@ -27,7 +35,7 @@ describe('attachmentChipLabel', () => {
 
   it('T-CR8: workplace + action/无 action → 规则:path', () => {
     expect(
-      RowLogic.attachmentChipLabel({
+      attachmentChipLabel({
         source: 'workplace',
         name: '/r.md',
         path: '/r.md',
@@ -35,7 +43,7 @@ describe('attachmentChipLabel', () => {
       }),
     ).toBe('规则:/r.md');
     expect(
-      RowLogic.attachmentChipLabel({
+      attachmentChipLabel({
         source: 'workplace',
         name: '/r.md',
         path: '/r.md',
@@ -45,7 +53,7 @@ describe('attachmentChipLabel', () => {
 
   it('无 action 旧 name=write:/x → 创建:/x', () => {
     expect(
-      RowLogic.attachmentChipLabel({
+      attachmentChipLabel({
         source: 'user_ops',
         name: 'write:/ops.md',
         path: '/ops.md',
@@ -55,7 +63,7 @@ describe('attachmentChipLabel', () => {
 
   it('attach → @path（不进中文状态口径）', () => {
     expect(
-      RowLogic.attachmentChipLabel({
+      attachmentChipLabel({
         source: 'attach',
         name: '/a.md',
         path: '/a.md',

@@ -4,7 +4,7 @@
  * 只产出 descriptor（key + params），不包含文案、不依赖 locale；由 UI 用 JSON
  * catalog + `createTranslator` 渲染。
  *
- * @module presentation/chat/rollback-confirm
+ * @module domain/chat/presentation/rollback-confirm
  */
 
 import type { ChatMessageDescriptor } from "@/domain/chat/i18n/keys.js";

@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {AttachmentChip} from '@novel-master/core/chat';
 import {composerChips, type MessageAttachment} from '@novel-master/core/chat';
 import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -22,11 +22,12 @@ type AttachmentDraftChipsProps = {
 // helper 主体是 chip 状态文案，按内容主体起名 AttachmentChipLabel，成员剥主体词剩动词。
 export namespace AttachmentChipLabel {
   /**
-   * Chip 文案：中文二字 + `:` + path（Core `AttachmentChip.formatStatusLabelFromAttachment`）。
+   * Chip 明文（core descriptor 经 coreT 渲染；文案在 chat catalog，zh 逐字同旧口径）。
    */
-  // nm-style: keep-public — chip 文案契约：core AttachmentChip.formatStatusLabelFromAttachment 的命名收口
+  // nm-style: keep-public — chip 文案契约：core AttachmentChip.fromAttachment 的命名收口
   export function format(a: MessageAttachment): string {
-    return AttachmentChip.formatStatusLabelFromAttachment(a);
+    const d = AttachmentChip.fromAttachment(a);
+    return d == null ? '' : coreT(d);
   }
 }
 

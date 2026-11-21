@@ -42,6 +42,18 @@ const UI_LABEL_KEYS = [
   'ui.transcript.attach_src.file',
   // mermaid 全屏关闭（两管线共享 portal；波 3-1 第二桥随两条 init.labels 通道都下发，波 3-2 接线）。
   'ui.common.close',
+  // 附件状态 chip（presentation 降级 domain/chat 后 descriptor 化；webview AttachGroup 两步渲染：
+  // 先 uiText 取 action 词，再插 label.attachment.chip 模板。宿主 coreT 预渲染下发，缺省兜底见 webview labels）。
+  'label.attachment.action.delete',
+  'label.attachment.action.write',
+  'label.attachment.action.edit',
+  'label.attachment.action.mkdir',
+  'label.attachment.action.rename',
+  'label.attachment.action.move',
+  'label.attachment.action.workplace_change',
+  'label.attachment.action.annotate',
+  'label.attachment.chip',
+  'label.attachment.attach_ref',
 ] as const;
 
 // 偏离登记：文件名主体 TranscriptLabels 与本文件 import 的类型 TranscriptLabels 撞名，
