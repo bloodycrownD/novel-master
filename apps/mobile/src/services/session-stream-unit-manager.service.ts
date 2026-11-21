@@ -121,6 +121,7 @@ import {ScopeKeyCache, type LruMap} from '@/services/scope-key-cache';
 import {MessagePaging} from '@/services/message-paging';
 import {YieldQuantum} from '@/services/yield-quantum';
 import {LogFactory} from '@novel-master/core/log';
+import {coreT} from '@/i18n/core';
 import {AppState} from 'react-native';
 
 /**
@@ -1668,7 +1669,7 @@ export class SessionStreamUnitManager {
       // 失败反馈也收口在所有权校验之后：无主 FAILED 不弹 toast；
       // 桥未注入时用 log.error 兜底，不留无任何痕迹的失败。
       if (this.uiBridge != null) {
-        this.uiBridge.onError(errorMessage ?? '生成失败');
+        this.uiBridge.onError(errorMessage ?? coreT({key: "ui.notification.failed_title"}));
       } else {
         log.error('run failed (uiBridge not ready)', {
           sessionId,

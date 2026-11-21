@@ -4,6 +4,7 @@
  * @module services/cloud-sync-progress-ui
  */
 import type {CloudSyncProgressOp} from './cloud-sync-progress-log';
+import {coreT} from '../i18n/core';
 
 /** 供遮罩层展示的云同步进度快照 */
 export type CloudSyncProgressUiState = {
@@ -26,64 +27,64 @@ type StepRule = {
 
 /** Push 事件 → UI 规则（按典型执行顺序） */
 const PUSH_RULES: Record<string, StepRule> = {
-  start: {label: '准备推送…', progress: 0.02},
-  coordinator_push_start: {label: '连接云端…', progress: 0.05},
-  storage_head_start: {label: '检查云端状态…', progress: 0.08},
-  storage_get_start: {label: '读取云端状态…', progress: 0.1},
-  storage_put_start: {label: '获取同步锁…', progress: 0.14},
-  storage_put_done: {label: '同步锁已获取', progress: 0.18},
-  db_export_start: {label: '导出本地数据库…', progress: 0.22},
-  db_export_done: {label: '导出完成', progress: 0.28},
-  sha256_file_start: {label: '校验快照…', progress: 0.32},
-  sha256_start: {label: '校验快照…', progress: 0.32},
-  sha256_file_done: {label: '校验完成', progress: 0.38},
-  sha256_done: {label: '校验完成', progress: 0.38},
-  read_snapshot_start: {label: '读取快照…', progress: 0.32},
-  read_snapshot_done: {label: '读取完成', progress: 0.38},
+  start: {label: coreT({key: "ui.cloud_sync.progress_push_prepare"}), progress: 0.02},
+  coordinator_push_start: {label: coreT({key: "ui.cloud_sync.progress_connecting"}), progress: 0.05},
+  storage_head_start: {label: coreT({key: "ui.cloud_sync.progress_checking_remote"}), progress: 0.08},
+  storage_get_start: {label: coreT({key: "ui.cloud_sync.progress_reading_remote"}), progress: 0.1},
+  storage_put_start: {label: coreT({key: "ui.cloud_sync.progress_acquiring_lock"}), progress: 0.14},
+  storage_put_done: {label: coreT({key: "ui.cloud_sync.progress_lock_acquired"}), progress: 0.18},
+  db_export_start: {label: coreT({key: "ui.cloud_sync.progress_exporting"}), progress: 0.22},
+  db_export_done: {label: coreT({key: "ui.cloud_sync.progress_exported"}), progress: 0.28},
+  sha256_file_start: {label: coreT({key: "ui.cloud_sync.progress_hashing"}), progress: 0.32},
+  sha256_start: {label: coreT({key: "ui.cloud_sync.progress_hashing"}), progress: 0.32},
+  sha256_file_done: {label: coreT({key: "ui.cloud_sync.progress_hashed"}), progress: 0.38},
+  sha256_done: {label: coreT({key: "ui.cloud_sync.progress_hashed"}), progress: 0.38},
+  read_snapshot_start: {label: coreT({key: "ui.cloud_sync.progress_reading_snapshot"}), progress: 0.32},
+  read_snapshot_done: {label: coreT({key: "ui.cloud_sync.progress_snapshot_read"}), progress: 0.38},
   storage_put_file_start: {
-    label: '上传快照到云端…',
+    label: coreT({key: "ui.cloud_sync.progress_uploading"}),
     progress: 0.42,
     indeterminate: true,
   },
   storage_put_start_large: {
-    label: '上传快照到云端…',
+    label: coreT({key: "ui.cloud_sync.progress_uploading"}),
     progress: 0.42,
     indeterminate: true,
   },
-  storage_put_file_done: {label: '快照已上传', progress: 0.88},
-  storage_put_done_large: {label: '快照已上传', progress: 0.88},
-  push_done: {label: '推送完成', progress: 1},
+  storage_put_file_done: {label: coreT({key: "ui.cloud_sync.progress_uploaded"}), progress: 0.88},
+  storage_put_done_large: {label: coreT({key: "ui.cloud_sync.progress_uploaded"}), progress: 0.88},
+  push_done: {label: coreT({key: "ui.cloud_sync.push_done"}), progress: 1},
   // 取消终态（spec T-S16）：阶段级取消在下一个真实边界生效，UI 静默收尾。
-  push_cancelled: {label: '推送已取消', progress: 1},
+  push_cancelled: {label: coreT({key: "ui.cloud_sync.push_cancelled"}), progress: 1},
 };
 
 /** Pull 事件 → UI 规则 */
 const PULL_RULES: Record<string, StepRule> = {
-  start: {label: '准备拉取…', progress: 0.02},
-  coordinator_pull_start: {label: '连接云端…', progress: 0.05},
-  storage_head_start: {label: '检查云端状态…', progress: 0.08},
-  storage_get_start: {label: '读取云端状态…', progress: 0.12},
+  start: {label: coreT({key: "ui.cloud_sync.progress_pull_prepare"}), progress: 0.02},
+  coordinator_pull_start: {label: coreT({key: "ui.cloud_sync.progress_connecting"}), progress: 0.05},
+  storage_head_start: {label: coreT({key: "ui.cloud_sync.progress_checking_remote"}), progress: 0.08},
+  storage_get_start: {label: coreT({key: "ui.cloud_sync.progress_reading_remote"}), progress: 0.12},
   storage_get_to_path_start: {
-    label: '下载云端快照…',
+    label: coreT({key: "ui.cloud_sync.progress_downloading"}),
     progress: 0.18,
     indeterminate: true,
   },
   storage_get_start_large: {
-    label: '下载云端快照…',
+    label: coreT({key: "ui.cloud_sync.progress_downloading"}),
     progress: 0.18,
     indeterminate: true,
   },
-  storage_get_to_path_done: {label: '下载完成', progress: 0.72},
-  storage_get_done_large: {label: '下载完成', progress: 0.72},
-  sha256_file_start: {label: '校验快照…', progress: 0.76},
-  sha256_start: {label: '校验快照…', progress: 0.76},
-  sha256_file_done: {label: '校验完成', progress: 0.82},
-  sha256_done: {label: '校验完成', progress: 0.82},
-  db_import_start: {label: '导入数据库…', progress: 0.86},
-  db_import_done: {label: '导入完成', progress: 0.95},
-  pull_done: {label: '拉取完成', progress: 1},
+  storage_get_to_path_done: {label: coreT({key: "ui.cloud_sync.progress_downloaded"}), progress: 0.72},
+  storage_get_done_large: {label: coreT({key: "ui.cloud_sync.progress_downloaded"}), progress: 0.72},
+  sha256_file_start: {label: coreT({key: "ui.cloud_sync.progress_hashing"}), progress: 0.76},
+  sha256_start: {label: coreT({key: "ui.cloud_sync.progress_hashing"}), progress: 0.76},
+  sha256_file_done: {label: coreT({key: "ui.cloud_sync.progress_hashed"}), progress: 0.82},
+  sha256_done: {label: coreT({key: "ui.cloud_sync.progress_hashed"}), progress: 0.82},
+  db_import_start: {label: coreT({key: "ui.cloud_sync.progress_importing"}), progress: 0.86},
+  db_import_done: {label: coreT({key: "ui.cloud_sync.progress_imported"}), progress: 0.95},
+  pull_done: {label: coreT({key: "ui.cloud_sync.pull_done"}), progress: 1},
   // 取消终态（spec T-S16）：阶段级取消在下一个真实边界生效，UI 静默收尾。
-  pull_cancelled: {label: '拉取已取消', progress: 1},
+  pull_cancelled: {label: coreT({key: "ui.cloud_sync.pull_cancelled"}), progress: 1},
 };
 
 const SNAPSHOT_BYTE_THRESHOLD = 64 * 1024;
@@ -145,7 +146,7 @@ export namespace CloudSyncProgressUi {
     return {
       op,
       event: 'start',
-      label: op === 'push' ? '准备推送…' : '准备拉取…',
+      label: op === 'push' ? coreT({key: "ui.cloud_sync.progress_push_prepare"}) : coreT({key: "ui.cloud_sync.progress_pull_prepare"}),
       progress: 0.02,
     };
   }

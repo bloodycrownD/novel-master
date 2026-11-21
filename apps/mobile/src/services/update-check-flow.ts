@@ -9,6 +9,7 @@ import {AppUiPrefIo} from '../storage/app-ui-pref-io';
 import {APP_UI_KEY_UPDATES_AUTO_CHECK} from '../storage/app-ui-keys';
 import {CheckForUpdates} from '../update-check/check-for-updates';
 import type {UpdateCheckData} from '@novel-master/core/common';
+import {coreT} from '../i18n/core';
 
 export type UpdateCheckResultKind = 'up-to-date' | 'error';
 
@@ -86,8 +87,8 @@ export namespace UpdateCheckFlow {
       }
       if (dismissed.value === data.remoteVersion) return;
 
-      fx.showToast(`发现新版本 ${data.remoteVersion}`, {
-        actionLabel: '查看',
+      fx.showToast(coreT({key: "ui.update.available_line", params: {version: data.remoteVersion}}), {
+        actionLabel: coreT({key: "ui.common.view"}),
         onAction: () => {
           fx.showUpdateDetail(data, () => {
             void UpdatePrefs.writeDismissedVersion(appUi, data.remoteVersion);

@@ -2,9 +2,10 @@
  * Agent picker data + selection (shared by AgentPickerModal).
  */
 import {Result, AppError} from '@novel-master/core/errors';
+import {coreT} from '../i18n/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
-export const AGENT_PICKER_EMPTY_MESSAGE = '暂无智能体。请先在「智能体配置」中创建。';
+export const AGENT_PICKER_EMPTY_MESSAGE = coreT({key: "ui.session.agent_picker_empty"});
 
 export interface AgentPickerRow {
   readonly agentId: string;
