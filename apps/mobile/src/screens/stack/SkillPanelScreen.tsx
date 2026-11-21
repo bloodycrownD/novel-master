@@ -65,6 +65,7 @@ export function SkillPanelScreen() {
         if (AppErrorOps.is(list.error, 'VFS_NOT_FOUND')) {
           return [];
         }
+        // nm-throw: keep — fetcher 槽位契约：抛错由 useFocusListReload 收进 error 态（onError toast）
         throw list.error;
       }
       return list.value;

@@ -107,6 +107,7 @@ export function SubagentSessionScreen() {
       }
       try {
         const read = await runtime.messages.listBySession(sessionId);
+        // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
         if (read.kind === 'failed') throw read.error;
         // 未注入 hooks：中断分支不可达；真出现时按「本次不采纳」保留空面。
         if (read.kind !== 'completed') return [];

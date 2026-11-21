@@ -20,7 +20,7 @@ import { EncodingCache } from "./encoding-cache.js";
 function getEncoding(tiktokenModel: string) {
   const enc = EncodingCache.forModel(tiktokenModel);
   if (enc == null) {
-    // nm-throw: keep — tiktoken 第三方编码表加载边界：拿不到表按契约抛给驱动层降级。
+    // nm-throw: keep — 跨包协议：TokenCounter port 同步契约（countText(): number）无 Result 通道（接口在 core/infra/tokenizer），编码表缺失按设计抛给驱动层降级。
     throw new Error(`tiktoken encoding unavailable: ${tiktokenModel}`);
   }
   return enc;

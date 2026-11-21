@@ -117,6 +117,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         const entry = TdbcTransaction.unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
         if (entry == null) {
           if (!recursive) {
+            // nm-throw: keep — 平台强制 P2：事务回调内失败靠抛错回滚，域失败由方法边界 catch 收进 Result.err。
             throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` });
           }
           // WHY: Worktree 可从子文件推断目录，但 vfs_entry 未必有 directory 行。
@@ -170,15 +171,18 @@ export class RevisionAwareVfsService implements InternalVfsService {
         const existing = TdbcTransaction.unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
         // entry 缺失（已被 hardDelete 且 revision 无 entry 可挂）时直接抛 NOT_FOUND。
         if (existing == null) {
+          // nm-throw: keep — 平台强制 P2：事务回调内抛错驱动回滚，域失败由方法边界 catch 收进 Result.err。
           throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });
         }
         const entryId = existing.entryId;
 
         const rev = TdbcTransaction.unwrapOrRollback(await revisionRepo.findByEntryAndVersion(entryId, version));
         if (rev == null || rev.status === "deleted") {
+          // nm-throw: keep — 平台强制 P2：事务回调内抛错驱动回滚，域失败由方法边界 catch 收进 Result.err。
           throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });
         }
         if (rev.content == null) {
+          // nm-throw: keep — 平台强制 P2：事务回调内抛错驱动回滚，域失败由方法边界 catch 收进 Result.err。
           throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}` });
         }
 

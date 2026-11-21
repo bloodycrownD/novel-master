@@ -86,7 +86,7 @@ export function SearchEnginesScreen() {
   const {rows, loading, error, reload, setRows} = useFocusListReload({
     fetcher: useCallback(async () => {
       const config = await searchStore.readConfig();
-      // 读失败进 useFocusListReload 的 error 态（UI 边界展示通道，四期门⑦沿 Result 到这里转码）
+      // nm-throw: keep — fetcher 槽位契约：读失败进 useFocusListReload 的 error 态（UI 边界展示通道，四期门⑦沿 Result 到这里转码）
       if (!config.ok) throw config.error;
       return config.value.engines;
     }, [searchStore]),

@@ -36,6 +36,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (ctx == null) {
+    // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
     throw new Error('useToast must be used within ToastHost');
   }
   return ctx;

@@ -174,6 +174,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
           if (existing == null) {
             TdbcTransaction.unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
           } else if (existing.entryKind !== "directory") {
+            // nm-throw: keep — 平台强制 P2：事务回调内抛错驱动整体回滚；外层 catch 把 AppError 原形收进 Result.err。
             throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` });
           }
         }

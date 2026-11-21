@@ -87,23 +87,27 @@ export function FileEditorScreen() {
         return runtime.globalVfs();
       case 'project':
         if (!projectId) {
+          // nm-throw: keep — UI 回调解包边界：缺路由参数转 throw 交加载/保存 effect 的 catch toast
           throw new Error('缺少 projectId');
         }
         return runtime.projectVfs(projectId);
       case 'session':
         if (!projectId || !sessionId) {
+          // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
           throw new Error('缺少 projectId 或 sessionId');
         }
         return runtime.sessionVfs(projectId, sessionId);
       case 'skill':
         // 技能已重定位到独立 meta 域，路由 path 仍锚定 /meta/skills/{name}/ 前缀
         if (!skillRef) {
+          // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
           throw new Error('缺少 skillRef');
         }
         if (skillRef.domain === 'global') {
           return runtime.globalMetaVfs();
         }
         if (!skillRef.projectId) {
+          // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
           throw new Error('项目域技能缺少 projectId');
         }
         return runtime.projectMetaVfs(skillRef.projectId);

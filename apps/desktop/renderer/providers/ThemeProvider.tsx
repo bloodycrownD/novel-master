@@ -81,6 +81,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) {
+    // nm-throw: keep — UI 错误边界语义：Context hook 缺 Provider 属渲染期编程护栏（React 惯例 throw）。
     throw new Error("useTheme must be used within ThemeProvider");
   }
   return ctx;

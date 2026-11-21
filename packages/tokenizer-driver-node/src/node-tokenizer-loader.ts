@@ -8,6 +8,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { assert } from "@novel-master/core/common";
+
 export interface TokenizerLoader {
   readJson(relativePath: string): ArrayBuffer;
   readModel(relativePath: string): string;
@@ -42,10 +44,8 @@ export namespace NodeTokenizerLoader {
 
   /** Returns the active loader set by {@link TokenizerNodeRegister.register}. */
   export function get(): TokenizerLoader {
-    if (loaderSlot.current == null) {
-      // nm-throw: keep — 驱动装配不变量：未注册 loader 即调用属编程错误。
-      throw new Error("Node tokenizer loader not installed. Call TokenizerNodeRegister.register() first.");
-    }
+    // 编程护栏（assert 通道）：未注册 loader 即调用属 API 误用（register 缺参同款）。
+    assert(loaderSlot.current != null, "Node tokenizer loader not installed. Call TokenizerNodeRegister.register() first.");
     return loaderSlot.current;
   }
 }

@@ -44,7 +44,8 @@ describe("clearVfsBatchExportStaging", () => {
     await mkdir(stagingRoot, { recursive: true });
     await writeFile(join(stagingRoot, "note.md"), "x", "utf8");
 
-    await VfsBatchService.clearStaging(stagingRoot);
+    const cleared = await VfsBatchService.clearStaging(stagingRoot);
+    assert.equal(cleared.ok, true);
 
     await assert.rejects(() => stat(stagingRoot));
   });
@@ -65,24 +66,26 @@ describe("clearVfsBatchExportStaging", () => {
   });
 
   it("S-D-02-a: 拒绝清理 staging 根之外的路径", async () => {
-    await assert.rejects(
-      () => VfsBatchService.clearStaging(app.getPath("userData")),
-      /拒绝清理/,
-    );
+    const denied1 = await VfsBatchService.clearStaging(app.getPath("userData"));
+    assert.ok(!denied1.ok, "userData 不在 staging 根内，必须拒");
+    if (!denied1.ok) assert.match(String(denied1.error.detail ?? denied1.error.message), /拒绝清理/);
   });
 
   it("S-D-02-b: 拒绝清理 staging 根的父目录（前缀撞车）", async () => {
     // 这条专门防「只判 startsWith(base) 不带分隔符」的错误实现——
     // `base + "-evil"` 这类前缀撞车必须也拒。
     const sibling = `${stagingBase()}-evil`;
-    await assert.rejects(() => VfsBatchService.clearStaging(sibling), /拒绝清理/);
+    const denied2 = await VfsBatchService.clearStaging(sibling);
+    assert.ok(!denied2.ok, "前缀撞车路径必须拒");
+    if (!denied2.ok) assert.match(String(denied2.error.detail ?? denied2.error.message), /拒绝清理/);
     // join(base, "..") resolve 后落在 base 之外 ⇒ 同样拒
-    await assert.rejects(
-      () => VfsBatchService.clearStaging(join(stagingBase(), "..")),
-      /拒绝清理/,
-    );
+    const denied3 = await VfsBatchService.clearStaging(join(stagingBase(), ".."));
+    assert.ok(!denied3.ok, "父目录必须拒");
+    if (!denied3.ok) assert.match(String(denied3.error.detail ?? denied3.error.message), /拒绝清理/);
     // 系统根也必须拒（原先 rm('/', {recursive:true}) 会被执行）
-    await assert.rejects(() => VfsBatchService.clearStaging("/"), /拒绝清理/);
+    const denied4 = await VfsBatchService.clearStaging("/");
+    assert.ok(!denied4.ok, "系统根必须拒");
+    if (!denied4.ok) assert.match(String(denied4.error.detail ?? denied4.error.message), /拒绝清理/);
   });
 
   it("S-D-02-c: staging 根本身与其下子目录仍可清理（正向不回归）", async () => {

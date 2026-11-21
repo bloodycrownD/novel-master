@@ -73,6 +73,7 @@ export function ModelSamplingScreen() {
     setLoading(true);
     try {
       const got = await runtime.providerModels.getSavedById(savedModelId);
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
       if (!got.ok) throw got.error;
       const saved = got.value;
       if (saved == null) {
@@ -80,6 +81,7 @@ export function ModelSamplingScreen() {
         return;
       }
       const gotProvider = await runtime.providers.get(saved.providerId);
+      // nm-throw: keep — UI 回调解包边界：同上，交本地 catch toast
       if (!gotProvider.ok) throw gotProvider.error;
       const provider = gotProvider.value;
       setProtocol(provider.protocol);
@@ -129,6 +131,7 @@ export function ModelSamplingScreen() {
     try {
       if (trimmedName !== initialModelName.trim()) {
         const updated = await runtime.providerModels.editSaved(savedModelId, trimmedName);
+        // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
         if (!updated.ok) throw updated.error;
         setInitialModelName(updated.value.modelName);
         setModelName(updated.value.modelName);
@@ -143,6 +146,7 @@ export function ModelSamplingScreen() {
       const sampling = paramsAreEmpty ? {enabled: false as const} : {enabled: true as const, params};
       const settingsPatch = {contextWindowTokens: contextWindow, sampling, tokenCounterMode, thinkingLevel};
       const stored = await runtime.providerModels.updateSettings(savedModelId, settingsPatch);
+      // nm-throw: keep — UI 回调解包边界：同上，交本地 catch toast
       if (!stored.ok) throw stored.error;
       showToast(coreT({key: "ui.sampling.saved_done"}));
       navigation.goBack();
@@ -160,8 +164,10 @@ export function ModelSamplingScreen() {
     setResetting(true);
     try {
       const updated = await runtime.providerModels.resetContextWindowToDefault(savedModelId);
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
       if (!updated.ok) throw updated.error;
       const cleared = await runtime.providerModels.updateSettings(savedModelId, {sampling: {enabled: false}});
+      // nm-throw: keep — UI 回调解包边界：同上，交本地 catch toast
       if (!cleared.ok) throw cleared.error;
       setContextWindowTokens(String(SavedModelSettings.contextWindowTokens(updated.value.settings)));
       setParams(undefined);

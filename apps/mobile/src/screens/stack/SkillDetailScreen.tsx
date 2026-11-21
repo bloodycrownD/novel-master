@@ -42,6 +42,7 @@ export function SkillDetailScreen() {
     setLoading(true);
     try {
       const list = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
       if (list.kind === 'failed') throw list.error;
       // 未注入 hooks：中断分支不可达；真出现时按「清单不可用」收尾，不伪造空清单。
       if (list.kind !== 'completed') return;

@@ -41,7 +41,7 @@ export namespace RnFileIo {
     const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
     const fs = anyMod.fs ?? anyMod.default?.fs;
     if (fs == null) {
-      // 平台能力缺失（native 模块未注入），不是程序不变量破坏。
+      // nm-throw: keep — 平台边界：native 模块未注入（平台能力缺失，非不变量破坏），同步访问器无失败位；调用方 17 处 >10，不改签名
       throw new AppError('INFRA_UNSUPPORTED_PLATFORM', {detail: 'react-native-blob-util.fs unavailable'});
     }
     return fs;

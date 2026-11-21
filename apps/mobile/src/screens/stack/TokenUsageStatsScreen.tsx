@@ -231,6 +231,7 @@ export function TokenUsageStatsScreen() {
   const reloadModels = useCallback(async () => {
     try {
       const providerListResult = await runtime.providers.list();
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch 回退空选项（React 回调，调用方改不动）
       if (!providerListResult.ok) throw providerListResult.error;
       const providerList = providerListResult.value;
       const labels: Record<string, string> = {};

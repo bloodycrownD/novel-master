@@ -23,7 +23,7 @@ const native = NativeModules as { SkspModule?: SkspNativeModule };
 export namespace SkspNative {
   export function get(): SkspNativeModule {
     if (!native.SkspModule) {
-      // nm-throw: keep — native bridge 边界：SkspModule 未链接（Android 原生侧装配缺失）。
+      // nm-throw: keep — 平台强制（native bridge 边界）：SkspModule 未链接属 Android 原生侧装配缺失（运行时环境事实，非调用方可控编程错误）；消费方（android-secret-store）在 sksp 协议内以 throw 收口，改签名跨文件跨分片。
       throw new Error("SkspModule is not linked (Android only)");
     }
     return native.SkspModule;

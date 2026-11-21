@@ -183,6 +183,7 @@ export namespace LlmNativeFetchShim {
       const requestId = `llm-native-fetch-${NATIVE_FETCH_REQUEST_ID_PREFIX}-${nativeFetchRequestIdCounter.next++}`;
       if (signal?.aborted === true) {
         // fetch 语义：aborted signal 立即以 AbortError 拒绝；native 请求不发出。
+        // nm-throw: keep — 平台强制（fetch AbortError）：fetch 契约以 reject 报错
         throw new NativeSseAbortError(requestId);
       }
       // 提取 fetch 首参的 URL 字符串（string | URL | Request 形态）。
@@ -217,6 +218,7 @@ export namespace LlmNativeFetchShim {
         if (err instanceof NativeSseAbortError) {
           // 用户取消是终态：AbortError 形态原样上抛，不套传输错误映射——core 的
           // isAbortLikeError / isRequestAborted 按 name 识别。
+          // nm-throw: keep — 平台强制（fetch AbortError）：AbortError 原样 reject 交 core 识别
           throw err;
         }
         // 网络失败 / callTimeout 到点：reject（与 fetch 的网络错误语义一致）；
@@ -226,17 +228,21 @@ export namespace LlmNativeFetchShim {
         // 携带错误分类 "network" | "timeout" | "abort"）映射为 transport 契约错误形态；
         // 其它错误原样上抛。
         if (err instanceof NativeSseTransportError) {
+          // nm-throw: keep — 平台强制（fetch AbortError 同族）：transport 错误原样 reject
           throw err;
         }
         const code = (err as {code?: unknown} | null)?.code;
         if (code === 'abort' || cancelState.userAborted) {
           // native 侧取消回传（requestAbort 后的 reject("abort")）：统一成
           // AbortError，不当网络错误弹给用户。
+          // nm-throw: keep — 平台强制（fetch AbortError）：native abort 回传统一成 AbortError reject
           throw new NativeSseAbortError(requestId);
         }
         if (code === 'network' || code === 'timeout') {
+          // nm-throw: keep — 平台强制（fetch AbortError 同族）：network/timeout 映射 transport 错误 reject
           throw new NativeSseTransportError(code, err instanceof Error ? err.message : String(err), requestId);
         }
+        // nm-throw: keep — 平台强制（fetch AbortError 同族）：未知 bridge 错误原样 reject（fetch 契约）
         throw err;
       } finally {
         // 迟到 settle 已在 race 内吞掉；本端标记不跨请求泄漏。

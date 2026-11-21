@@ -64,6 +64,8 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
     return;
   }
   if (existing.entryKind !== "directory") {
+    // nm-throw: keep — 平台强制 P2：本函数只在 import 段 B0 的 conn.transaction 回调内调用（见上方 JSDoc），
+    // throw 驱动整体回滚；边界 catch 把 AppError 包成 ImportFailure 收口。
     throw new AppError("VFS_NOT_A_DIRECTORY", { path: logical, detail: `Not a directory: ${logical}` });
   }
 }

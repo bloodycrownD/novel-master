@@ -4,8 +4,8 @@
  * @module domain/tool/tool-registry
  */
 
+import { assert } from "@/common/assert.js";
 import type { Tool } from "../model/tool.js";
-import { AppError } from "@/errors/app-error.js";
 
 /**
  * In-memory registry for tools.
@@ -19,12 +19,12 @@ export class ToolRegistry<Ctx = unknown> {
   /**
    * Registers a tool.
    *
-   * @throws ToolError CONFLICT when name already registered
+   * @remarks
+   * 重名注册是装配期 API 误用（名字唯一是注册表不变量，调用方无法据其做运行时决策），
+   * 按错误通道矩阵第 4 条走 assert 编程护栏，不进业务错误通道。
    */
   register(tool: Tool<any, any, Ctx>): void {
-    if (this.tools.has(tool.name)) {
-      throw new AppError("TOOL_CONFLICT", {toolName: tool.name, detail: `Tool already registered: ${tool.name}`});
-    }
+    assert(!this.tools.has(tool.name), `Tool already registered: ${tool.name}`);
     this.tools.set(tool.name, tool);
   }
 

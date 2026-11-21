@@ -100,6 +100,7 @@ export namespace DocumentIo {
       if (DocumentPick.isUserCancelled(error)) {
         return 'cancelled';
       }
+      // nm-throw: keep — 编排层契约：非取消错误原样上抛，由业务域 catch 映射（本文件头约定的 throw 通道）
       throw error;
     } finally {
       await fs.unlink(tmpPath).catch(() => undefined);
@@ -117,6 +118,7 @@ export namespace DocumentIo {
     const fileName = options.localFileName ?? originalName ?? DEFAULT_PICKED_FILE_NAME;
     const [copyResult] = await keepLocalCopy({files: [{uri: file.uri, fileName}], destination: 'cachesDirectory'});
     if (copyResult.status !== 'success') {
+      // nm-throw: keep — 编排层契约：失败以注入的 buildCopyError 抛给业务域 catch（本文件头约定的 throw 通道）
       throw options.buildCopyError?.(copyResult.copyError) ?? new Error(copyResult.copyError ?? '无法读取所选文件');
     }
     return {
@@ -185,6 +187,7 @@ export namespace DocumentIo {
       return;
     }
     if (stat != null && typeof stat.size === 'number' && stat.size > options.maxBytes) {
+      // nm-throw: keep — 编排层契约：超限以注入的 buildTooLargeError 抛给业务域 catch（本文件头约定的 throw 通道）
       throw options.buildTooLargeError(stat.size);
     }
   }
@@ -193,6 +196,7 @@ export namespace DocumentIo {
     const fs = RnFileIo.blobFs();
     const exists = await fs.exists(fsPath);
     if (!exists) {
+      // nm-throw: keep — 编排层契约：文件缺失以注入的 buildMissingError 抛给业务域 catch（本文件头约定的 throw 通道）
       throw buildMissingError?.(fsPath) ?? new Error(`文件不存在: ${fsPath}`);
     }
     const base64 = await fs.readFile(fsPath, 'base64');

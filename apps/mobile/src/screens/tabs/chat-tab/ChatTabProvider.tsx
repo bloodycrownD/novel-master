@@ -178,6 +178,7 @@ const ChatTabCtx = createContext<ChatTabContextValue | null>(null);
 export function useChatTabContext(): ChatTabContextValue {
   const ctx = useContext(ChatTabCtx);
   if (ctx == null) {
+    // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
     throw new Error('useChatTabContext 须在 ChatTabProvider 内使用');
   }
   return ctx;

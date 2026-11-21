@@ -268,6 +268,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const result = await TdbcTemplate.execute(this.conn, this.parser, sql24, { entryId, version, delta });
     if (delta > 0 && result.changes === 0) {
       // 记录缺失而非路径缺失，无 path 可挂；走旧签名过渡保 details 一层形态（与旧 VfsError 一致）。
+      // nm-throw: keep — port 契约锁定：vfs-revision.port.ts adjustRefCount 声明 Promise<void> 且 @throws
+      // 明文守护 T-RB-REF-MISSING 不变量；改 Result 需动 port 与全部调用方（跨分片），登记待办。
       throw new AppError("VFS_NOT_FOUND", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });
     }
   }
@@ -294,6 +296,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
       if (missing.length > 0) {
         const first = missing[0]!;
+        // nm-throw: keep — port 契约锁定：vfs-revision.port.ts batchAdjustRefCount(WithDelta) 的 @throws 契约
+        // 同款（批量前置存在性校验，守护 T-RB-REF-MISSING）；改 Result 需动 port 与调用方（跨分片）。
         throw new AppError("VFS_NOT_FOUND", { detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing });
       }
     }

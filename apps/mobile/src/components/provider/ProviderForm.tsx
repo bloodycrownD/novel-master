@@ -55,11 +55,13 @@ export namespace ProviderFormMapper {
     }
     const parsed = JSON.parse(trimmed) as unknown;
     if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      // nm-throw: keep — 表单校验槽位：已知业务失败，但消费通道是调用方 UI catch（onSubmit→toast），且消费方含跨分片 ProviderCreateScreen，改 Result 需跨片连带
       throw new Error('Headers 必须是 JSON 对象');
     }
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof value !== 'string') {
+        // nm-throw: keep — 表单校验槽位：同上，交调用方 UI catch 收口
         throw new Error(`Header ${key} 必须是字符串`);
       }
       out[key] = value;
@@ -78,6 +80,7 @@ export namespace ProviderFormMapper {
     }
     const parsed = JSON.parse(trimmed) as unknown;
     if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      // nm-throw: keep — 表单校验槽位：已知业务失败，消费通道是调用方 UI catch（onSubmit→toast），保持 throw 通道与 JSON.parse 一致
       throw new Error('自定义参数必须是 JSON 对象');
     }
     return parsed as Record<string, unknown>;
@@ -88,9 +91,11 @@ export namespace ProviderFormMapper {
     const baseUrl = values.baseUrl.trim();
     const apiKey = values.apiKey.trim();
     if (!displayName || !baseUrl) {
+      // nm-throw: keep — 表单校验槽位：消费方 ProviderCreateScreen.tsx（跨分片）以 UI catch 收口，改 Result 需跨片连带，不改签名
       throw new Error(coreT({key: "ui.provider.name_baseurl_required"}));
     }
     if (!apiKey) {
+      // nm-throw: keep — 表单校验槽位：同上，交跨分片调用方 UI catch 收口
       throw new Error(coreT({key: "ui.provider.api_key_required"}));
     }
     return {
@@ -132,6 +137,7 @@ export namespace ProviderFormMapper {
     // 非法输入由 parseBodyParamsJson 抛中文错误阻断保存。
     patch.bodyParams = ProviderFormMapper.parseBodyParamsJson(values.bodyParamsJson);
     if (Object.keys(patch).length === 0) {
+      // nm-throw: keep — 表单校验槽位：消费方 ProviderDetailScreen 的 onSubmit 以 UI catch 收口成 toast，保持 throw 通道
       throw new Error(coreT({key: "ui.provider.change_required"}));
     }
     return patch;

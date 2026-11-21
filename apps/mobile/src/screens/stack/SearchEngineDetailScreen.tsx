@@ -157,7 +157,7 @@ export function SearchEngineDetailScreen() {
       }
       try {
         const nextConfig = await searchStore.readConfig();
-        // 读失败进 catch 的 toast 通道（UI 边界，四期门⑦沿 Result 到这里转码）
+        // nm-throw: keep — UI 回调解包边界：读失败进 catch 的 toast 通道（四期门⑦沿 Result 到这里转码）
         if (!nextConfig.ok) throw nextConfig.error;
         setConfig(nextConfig.value);
         const {engines, customEngines} = nextConfig.value;

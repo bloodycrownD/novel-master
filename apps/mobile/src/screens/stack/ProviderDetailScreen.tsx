@@ -79,10 +79,12 @@ export function ProviderDetailScreen() {
         return null;
       }
       const got = await runtime.providers.get(providerId);
+      // nm-throw: keep — fetcher 槽位契约：抛错由 useFocusListReload 收进 error 态（配重试）
       if (!got.ok) throw got.error;
       const provider = got.value;
       setStackOverride({title: provider.displayName});
       const saved = await runtime.providerModels.savedList(providerId);
+      // nm-throw: keep — fetcher 槽位契约：同上，收进 hook error 态
       if (!saved.ok) throw saved.error;
       const nameCounts = new Map<string, number>();
       for (const model of saved.value) {
@@ -126,6 +128,7 @@ export function ProviderDetailScreen() {
       return;
     }
     const savedModel = await runtime.providerModels.save(providerId, vendorModelId, modelName);
+    // nm-throw: keep — UI 回调解包边界：失败位转 throw 交 TextPromptModal onConfirm 回调链收口（React 回调，调用方改不动）
     if (!savedModel.ok) throw savedModel.error;
     await reload();
     showToast(coreT({key: "ui.provider.models_added_done"}));
@@ -134,6 +137,7 @@ export function ProviderDetailScreen() {
   const deleteModels = async (savedModelIds: string[]) => {
     for (const savedModelId of savedModelIds) {
       const deleted = await runtime.providerModels.deleteSaved(savedModelId);
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交调用点 .catch toast（React 回调，调用方改不动）
       if (!deleted.ok) throw deleted.error;
     }
     await reload();
@@ -174,12 +178,14 @@ export function ProviderDetailScreen() {
     }
     try {
       const renamed = await runtime.providerModels.editSaved(menuSavedModelId, modelName);
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
       if (!renamed.ok) throw renamed.error;
       await reload();
       showToast(coreT({key: "ui.provider.model_renamed_done"}));
       setMenuSavedModelId(undefined);
     } catch (error) {
       showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), error));
+      // nm-throw: keep — UI 回调解包边界：toast 后原样上抛交上层回调链收口（React 回调，调用方改不动）
       throw error;
     }
   };
@@ -342,9 +348,11 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
     setLoading(true);
     try {
       const got = await runtime.providers.get(providerId);
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch 设错误态（React 回调，调用方改不动）
       if (!got.ok) throw got.error;
       const provider = got.value;
       const listed = await runtime.providers.list();
+      // nm-throw: keep — UI 回调解包边界：同上，交本地 catch 设错误态
       if (!listed.ok) throw listed.error;
       const listedItem = listed.value.find(p => p.id === providerId);
       setIsBuiltin(provider.isBuiltin);

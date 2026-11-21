@@ -93,6 +93,7 @@ export function ThemeProvider({children}: {children: ReactNode}) {
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) {
+    // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
     throw new Error('useTheme must be used within ThemeProvider');
   }
   return ctx;

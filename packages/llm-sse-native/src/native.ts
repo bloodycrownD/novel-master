@@ -87,7 +87,7 @@ export namespace NativeSse {
     }
     const bridge = createBridge();
     if (bridge == null) {
-      // nm-throw: keep — native bridge 边界：LlmSseNative 模块不可用（非 Android / 未 autolink），须先经 isAvailable 判定。
+      // nm-throw: keep — 平台强制：本包设计上不依赖 core（无 Result/assert 通道可用），native bridge 装配失败以 throw 上行；装配点 registerWith 已先经 isAvailable 门控，直调不可用属编程误用。
       throw new Error("LlmSseNative 模块不可用（非 Android 或未 autolink）；请先经 NativeSse.isAvailable() 判定",);
     }
     transportSlot.current = NativeSseTransport.create(bridge);

@@ -651,7 +651,8 @@ export namespace Vfs {
 
   export async function batchClearStaging(req: VfsBatchClearStagingRequest): Promise<IpcResult<void>> {
     try {
-      await VfsBatchService.clearStaging(req.stagingRoot);
+      const cleared = await VfsBatchService.clearStaging(req.stagingRoot);
+      if (!cleared.ok) return { ok: false, error: FormatIpcError.format(cleared.error) };
       return { ok: true, data: undefined };
     } catch (err) {
       return { ok: false, error: FormatIpcError.format(err) };

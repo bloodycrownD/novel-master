@@ -216,6 +216,8 @@ export class DefaultSessionService implements SessionService {
     await VfsTreeCopy.deletePrefix(r.vfs, `session:${session.projectId}:${session.id}`, "/");
     const deleted = await r.sessions.delete(session.id);
     if (!deleted) {
+      // nm-throw: keep — 平台强制 P2：本方法只在 delete 的 conn.transaction 回调内（含递归）运行，
+      // throw 驱动整体回滚；改 return Result 会让事务回调「正常返回」commit 半删树。
       throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${session.id}`, kind: "session", id: session.id });
     }
   }

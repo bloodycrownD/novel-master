@@ -270,6 +270,8 @@ export class SqliteVfsContentStore implements VfsContentStore {
       return contentHash;
     }
     if (fallbackPlain == null) {
+      // nm-throw: keep — port 契约锁定：vfs-content-store.port.ts ensureBlob 声明 Promise<string> + @throws NOT_FOUND；
+      // 改 Result 需同波动 port 与 3 处跨分片调用方（tree-copy / seed / backfill），登记待办。
       throw new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });
     }
     // 走 put 路径落新行（insert 或复用同 hash 其他行；含 member 抽回）

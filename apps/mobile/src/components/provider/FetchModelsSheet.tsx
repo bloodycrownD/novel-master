@@ -69,8 +69,10 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
     setError(undefined);
     try {
       const fetched = await runtime.providerModels.fetch(providerId);
+      // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch 设错误态（React 回调，调用方改不动）
       if (!fetched.ok) throw fetched.error;
       const suggestions = await runtime.providerModels.suggestList(providerId);
+      // nm-throw: keep — UI 回调解包边界：同上，交本地 catch 设错误态
       if (!suggestions.ok) throw suggestions.error;
       setRows(suggestions.value.filter(s => !s.stale));
     } catch (cause) {
@@ -107,6 +109,7 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
       for (const item of selected) {
         try {
           const savedModel = await runtime.providerModels.save(providerId, item.vendorModelId, item.displayName ?? undefined);
+          // nm-throw: keep — UI 回调解包边界：失败位转 throw 交内层 catch 展示（React 回调，调用方改不动）
           if (!savedModel.ok) throw savedModel.error;
           savedNow.push(item.vendorModelId);
         } catch (cause) {

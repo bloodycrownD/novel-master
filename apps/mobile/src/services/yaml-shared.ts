@@ -50,6 +50,7 @@ export namespace YamlShared {
       assertFileName: name => {
         const check = YamlDocumentPick.assertFileName(name);
         if (!check.ok) {
+          // nm-throw: keep — 校验槽位契约只认 throw（zod preprocess 同款例外）：Result 失败位原样解包中止导入
           throw check.error;
         }
       },

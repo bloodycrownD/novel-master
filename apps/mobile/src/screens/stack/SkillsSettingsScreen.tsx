@@ -90,11 +90,13 @@ export function SkillsSettingsScreen() {
   } = useFocusListReload<SkillsPayload>({
     fetcher: useCallback(async () => {
       const [projectList, globalList] = await Promise.all([runtime.projects.list(), runtime.skills().listSkills('global')]);
+      // nm-throw: keep — fetcher 槽位契约：业务失败抛错由 useFocusListReload 收进 error 态
       if (globalList.kind === 'failed') throw globalList.error;
       // 未注入 hooks：中断分支不可达；真出现时按空清单收尾，业务失败仍走 throw 通道。
       if (globalList.kind !== 'completed') return EMPTY_PAYLOAD;
       const projectSkillRows = projectList.map(async p => {
         const list = await runtime.skills().listSkills({projectId: p.id});
+        // nm-throw: keep — fetcher 槽位契约：同上，业务失败抛错收进 hook error 态
         if (list.kind === 'failed') throw list.error;
         // 同一口径：单项目清单被中断时跳过该项目，不返回半份行。
         if (list.kind !== 'completed') return [];

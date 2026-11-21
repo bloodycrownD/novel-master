@@ -679,6 +679,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       // 允许空目录（无子项）：根自身已被上面这条 UPDATE 改到新路径
       // （rootResult.changes === 1）即算成功，不能再按旧路径 SELECT 复核——
       // 根已改名，旧路径必然查不到。
+      // nm-throw: keep — port 契约锁定：vfs-entry.port.ts renamePrefixInScope 声明 Promise<void>；改 Result
+      // 需同波动 port 与 vfs-rename-primitive（跨分片）；throw 在事务回调内驱动回滚，方法边界转码 Result。
       throw new AppError("VFS_NOT_FOUND", { path: oldBase, detail: `Path not found: ${oldBase}` });
     }
   }

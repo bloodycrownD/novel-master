@@ -362,6 +362,7 @@ export function AgentList({onCreate}: Props) {
           } else if (action === 'duplicate') {
             void (async () => {
               const def = await runtime.agentRegistry.get(id);
+              // nm-throw: keep — UI 回调解包边界：失败位转 throw 交 .catch 收口（React 回调，调用方改不动）
               if (!def.ok) throw def.error;
               const copyId = `agent-${Date.now()}`;
               await runtime.agentRegistry.upsert(copyId, {
@@ -407,6 +408,7 @@ export function AgentList({onCreate}: Props) {
             const trimmed = values[0].trim();
             if (trimmed !== '') {
               const def = await runtime.agentRegistry.get(prompt.agentId);
+              // nm-throw: keep — UI 回调解包边界：失败位转 throw 交上层 catch（React 回调，调用方改不动）
               if (!def.ok) throw def.error;
               await runtime.agentRegistry.upsert(prompt.agentId, {
                 ...def.value,

@@ -2,7 +2,7 @@
  * IPC handlers for app metadata and GitHub release update checks (main-process fetch).
  */
 
-import { type AppError, type Result } from "@novel-master/core/errors";
+import { AppError, Result } from "@novel-master/core/errors";
 import type { UpdateCheckData } from "@novel-master/core/common";
 import { FormatIpcError } from "../format-ipc-error.js";
 import type {
@@ -61,14 +61,14 @@ export const AppInfo = {
       getPlatform: overrides.getPlatform ?? (() => process.platform),
       runUpdateCheck:
         overrides.runUpdateCheck ??
-        (async () => {
-          // nm-throw: keep — 测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。
-          throw new Error("runUpdateCheck not configured for tests");
-        }),
+        // 测试 seam 未配置属编程错误；契约是 Promise<Result>，已知失败沿 Result 上行（判据 1），
+        // 由 checkForUpdates 收口成 IPC 错误 payload。
+        (async () => Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: "runUpdateCheck not configured for tests" }))),
       openExternal:
         overrides.openExternal ??
         (async () => {
-          // nm-throw: keep — 测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。
+          // nm-throw: keep — 测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值；
+          // openExternal 契约是 Promise<void>，失败只有 reject 通道（平台强制 P3 家族）。
           throw new Error("openExternal not configured for tests");
         }),
     };

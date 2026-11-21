@@ -214,12 +214,9 @@ export namespace AgentRegistry {
       // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
       if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
       const rt = built.value;
-      // 原 exportAgentYamlWithDialog 内联：导出调用方只有 throw 通道，registry
-      // 已知失败转 throw 由本 catch 收口。
       const def = await rt.agentRegistry.get(req.agentId);
-      if (!def.ok) {
-        throw def.error;
-      }
+      // registry 已知失败就地短路（与本 handler 上方 built 短路同款），未知异常仍由 catch 兜。
+      if (!def.ok) return { ok: false, error: FormatIpcError.format(def.error) };
       const yaml = AgentYamlCodec.encode(def.value);
       const result = await YamlShared.exportWithDialog(yaml, `${req.agentId}.agent.yaml`, BrowserWindow.getFocusedWindow());
       return { ok: true, data: result };

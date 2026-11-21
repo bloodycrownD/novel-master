@@ -49,11 +49,13 @@ export function ProvidersScreen() {
   const {rows, loading, error, reload} = useFocusListReload({
     fetcher: useCallback(async () => {
       const listed = await runtime.providers.list();
+      // nm-throw: keep — fetcher 槽位契约：抛错由 useFocusListReload 收进 error 态（配重试）
       if (!listed.ok) throw listed.error;
       const providers = listed.value;
       const enriched: ProviderRow[] = [];
       for (const provider of providers) {
         const saved = await runtime.providerModels.savedList(provider.id);
+        // nm-throw: keep — fetcher 槽位契约：同上，收进 hook error 态
         if (!saved.ok) throw saved.error;
         enriched.push({
           ...provider,

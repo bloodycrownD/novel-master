@@ -416,6 +416,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
 export function useNovelMaster(): NovelMasterContextValue {
   const ctx = useContext(NovelMasterContext);
   if (!ctx) {
+    // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
     throw new Error('useNovelMaster must be used within NovelMasterProvider');
   }
   return ctx;

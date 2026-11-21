@@ -39,6 +39,7 @@ import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {coreT} from '@/i18n/core';
 import {chatAnnotateDraftStore, ComposerSendPolicy, AttachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
+import {assert} from '@novel-master/core/common';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -529,10 +530,8 @@ export function useChatComposerController({
         // 门禁由 manager 的 per-session 单元拒绝（返回明确错误），run 本体
         // fire-and-forget；refcount 与收尾归 manager。
         const manager = runtime.sessionStreamUnitManager;
-        if (manager == null) {
-          // nm-throw: keep — invariant：Provider 仅在 manager 装配完成后才置 status='ready'（类型亦非可空），此分支不可达
-          throw new Error('运行时尚未就绪，请稍后重试');
-        }
+        // invariant：Provider 仅在 manager 装配完成后才置 status='ready'（类型亦非可空），此分支不可达
+        assert(manager != null, '运行时尚未就绪，请稍后重试');
         const started = manager.startRun(sessionId, scope.projectId, content, {
           stream,
           allowResumeWithoutInput,

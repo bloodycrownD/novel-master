@@ -14,6 +14,7 @@
  */
 
 import fs from "node:fs";
+import { ok as assertInvariant } from "node:assert/strict";
 import path from "node:path";
 import ts from "typescript";
 import { isTestPath } from "./core.js";
@@ -610,8 +611,9 @@ export function buildSymbolIndex(units: readonly SymbolUnit[], options: SymbolIn
   };
 
   const globalRefsOf = (symbol: SymbolInfo): GlobalRefs => {
+    // 编程护栏（assert 通道）：symbol 必来自本索引 defs（index.symbols / binding.member 同源），此分支不可达。
     const def = defBySymbol.get(symbol);
-    if (def == null) throw new Error("nm-style: symbol 不属于本索引");
+    assertInvariant(def != null, "nm-style: symbol 不属于本索引");
     const refs: GlobalRefs = { prodCalls: 0, prodRefs: 0, testCalls: 0, testRefs: 0 };
     // 定义文件恒参与（同文件用法是真实消费，旧 fake-exports 的 localCalls 语义）；桶：test 文件进 test，其余（含非 prod/test 路径的定义文件）进 prod。
     const bump = (u: UnitData, isCall: boolean): void => {
@@ -674,8 +676,9 @@ export function buildSymbolIndex(units: readonly SymbolUnit[], options: SymbolIn
   };
 
   const localRefsOf = (symbol: SymbolInfo): LocalRefs => {
+    // 编程护栏（assert 通道）：同 globalRefsOf——symbol 必来自本索引 defs，此分支不可达。
     const def = defBySymbol.get(symbol);
-    if (def == null) throw new Error("nm-style: symbol 不属于本索引");
+    assertInvariant(def != null, "nm-style: symbol 不属于本索引");
     const u = def.unit;
     let calls = 0;
     let refs = 0;

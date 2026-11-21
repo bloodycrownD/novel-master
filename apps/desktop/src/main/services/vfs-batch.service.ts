@@ -11,6 +11,7 @@ import {
 } from "@novel-master/core/vfs";
 import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
+import { assert } from "@novel-master/core/common";
 import { app, nativeImage, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -71,10 +72,8 @@ export namespace VfsBatchService {
       }
     }
     const fallback = nativeImage.createFromBuffer(FALLBACK_DRAG_ICON_PNG);
-    if (fallback.isEmpty()) {
-      // nm-throw: keep — 固定 1×1 PNG 解码失败属平台不变量破坏（nativeImage 异常），用户无纠正路径。
-      throw new Error("拖出图标无效");
-    }
+    // 固定 1×1 PNG 解码失败属不可达分支（平台不变量破坏，nativeImage 异常），编程错误走 assert。
+    assert(!fallback.isEmpty(), "拖出图标无效");
     return fallback;
   }
 
@@ -90,9 +89,9 @@ export namespace VfsBatchService {
 
   /** 删除 export staging 临时目录；dragEnd / 取消 / 失败 / TTL 到期时调用。 */
   // nm-style: keep-local — vfs-batch-staging.test 直引断言 S-D-02 路径包含护栏与 TTL 清理（7 个调用点）；内联会破坏测试锁名。
-  export async function clearStaging(stagingRoot: string): Promise<void> {
+  export async function clearStaging(stagingRoot: string): Promise<Result<void, AppError>> {
     if (stagingRoot.trim() === "") {
-      return;
+      return Result.ok(undefined);
     }
     // S-D-02 路径包含断言：IPC 通道把 renderer 传来的 stagingRoot 原样交给
     // `rm(recursive: true, force: true)`，若通道本身不校验，传 `C:\Users\<用户>` 或 `/`
@@ -101,8 +100,9 @@ export namespace VfsBatchService {
     const resolved = resolve(stagingRoot);
     const base = resolve(stagingBase());
     if (resolved !== base && !resolved.startsWith(base + sep)) {
-      // nm-throw: keep — 安全护栏，参数越界说明调用方写错，不能让清理继续
-      throw new Error(`拒绝清理非 staging 路径: ${stagingRoot}`);
+      // S-D-02 安全护栏走 Result 通道（error-matrix-final W4）：护栏拒绝是可预期的业务失败，
+      // handler 按 IpcResult 错误线格式透传 renderer。
+      return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `拒绝清理非 staging 路径: ${stagingRoot}` }));
     }
     const timer = stagingTtlTimers.get(stagingRoot);
     if (timer != null) {
@@ -110,6 +110,7 @@ export namespace VfsBatchService {
       stagingTtlTimers.delete(stagingRoot);
     }
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
+    return Result.ok(undefined);
   }
 
   /** @internal 测试辅助：当前注册的 staging TTL 数量。 */
@@ -161,10 +162,8 @@ export namespace VfsBatchService {
       }
 
       const filePaths = [...topNames].map((name) => join(stagingRoot, name));
-      if (filePaths.length === 0) {
-        // nm-throw: keep — 不可达分支：本函数早段已挡掉 files 与 mkdirPaths 皆空的情况，topNames 必非空，命中即不变量破坏。
-        throw new Error("导出物化失败：无顶层条目");
-      }
+      // 不可达分支：本函数早段已挡掉 files 与 mkdirPaths 皆空的情况，topNames 必非空，命中即不变量破坏（走 assert）。
+      assert(filePaths.length > 0, "导出物化失败：无顶层条目");
 
       const previousTtlTimer = stagingTtlTimers.get(stagingRoot);
       if (previousTtlTimer != null) clearTimeout(previousTtlTimer);
@@ -187,7 +186,9 @@ export namespace VfsBatchService {
       });
     } catch (err) {
       await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
-      throw err;
+      // 本函数契约是 Result（判据 1）：物化中途的 fs 未知异常包 INFRA_UNEXPECTED_ERROR 沿 Result 上行，
+      // cause 走第三参 options（禁塞 params，防 firstDescriptorOf 误认 descriptor）。
+      return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: "导出物化失败" }, { cause: err }));
     }
   }
 

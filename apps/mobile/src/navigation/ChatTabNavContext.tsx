@@ -44,6 +44,7 @@ export const ChatTabNavigationCtx = createContext<ChatTabNavigationContextValue 
 export function useChatTabNavigation(): ChatTabNavigationContextValue {
   const ctx = useContext(ChatTabNavigationCtx);
   if (ctx == null) {
+    // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
     throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');
   }
   return ctx;

@@ -4,6 +4,8 @@
  * @module tdbc-driver-op-sqlite/impl/op-sqlite.adapter
  */
 
+import { assert } from "@novel-master/core/common";
+
 import type { OpSqliteResult, OpSqliteAdapter } from "../adapter.js";
 
 /** op-sqlite 原生 execute 结果（metadata 为 {name, type, index} 形态）。 */
@@ -127,10 +129,10 @@ export class BaseOpSqliteAdapter implements OpSqliteAdapter {
   }
 
   private requireDb(): OpSqliteDb {
-    if (!this.db) {
-      // nm-throw: keep — 驱动层 API 误用不变量：未 open 即调用属编程错误。
-      throw new Error("op-sqlite adapter is not open");
-    }
+    // 编程护栏（assert 通道）：未 open 即调用属 API 误用；tdbc 协议面的 close-后-调用
+    // 由 connection.ts 的 assertOpen 抛 TdbcError CONNECTION_CLOSED（conformance C1 锁定），
+    // 不经此处。
+    assert(this.db != null, "op-sqlite adapter is not open");
     return this.db;
   }
 }

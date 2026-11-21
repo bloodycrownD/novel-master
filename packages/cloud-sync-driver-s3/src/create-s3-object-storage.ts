@@ -75,6 +75,7 @@ export namespace S3ObjectStorage {
           ) {
             return { exists: false };
           }
+          // nm-throw: keep — 平台强制：ObjectStoragePort.head 契约为 throw 通道（接口在 core、返回非 Result，跨包协议），S3 非 404 异常原样上抛由 coordinator/service 收口。
           throw error;
         }
       },
@@ -83,12 +84,12 @@ export namespace S3ObjectStorage {
         const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
         const etag = normalizeEtag(response.ETag);
         if (etag == null) {
-          // nm-throw: keep — S3 第三方 SDK 边界：GetObject 响应缺 ETag 属服务端异常，由上层基础设施错误收口。
+          // nm-throw: keep — 平台强制：ObjectStoragePort.get 契约为 throw 通道（接口在 core、返回非 Result，跨包协议），服务端响应缺 ETag 上抛由上层收口。
           throw new Error(`S3 GetObject 未返回 ETag: ${key}`);
         }
         const body = await response.Body?.transformToByteArray();
         if (body == null) {
-          // nm-throw: keep — S3 第三方 SDK 边界：GetObject 响应缺 Body 属服务端异常，由上层基础设施错误收口。
+          // nm-throw: keep — 平台强制：ObjectStoragePort.get 契约为 throw 通道（接口在 core、返回非 Result，跨包协议），服务端响应缺 Body 上抛由上层收口。
           throw new Error(`S3 GetObject 未返回 Body: ${key}`);
         }
         return { body, etag };
@@ -122,8 +123,7 @@ export namespace S3ObjectStorage {
           const response = await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, IfMatch: putOptions?.ifMatch, IfNoneMatch: putOptions?.ifNoneMatch }));
           const etag = normalizeEtag(response.ETag);
           if (etag == null) {
-            // nm-throw: keep — S3 第三方 SDK 边界：PutObject 响应缺 ETag 属服务端异常，由上层基础设施错误收口。
-            throw new Error(`S3 PutObject 未返回 ETag: ${key}`);
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: `S3 PutObject 未返回 ETag: ${key}` }));
           }
           return Result.ok({ etag });
         } catch (error) {
@@ -139,7 +139,8 @@ export namespace S3ObjectStorage {
           ) {
             return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", { detail: "同步冲突，请重试" }, { cause: error }));
           }
-          throw error;
+          // put 返回 Result：未知异常（S3 SDK 非 412 错误）转 Result 上行，不再走 throw 通道。
+          return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: `S3 PutObject 失败: ${key}` }, { cause: error }));
         }
       },
 

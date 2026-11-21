@@ -175,7 +175,7 @@ export namespace ConformanceSuite {
               await tx.execute("INSERT INTO conformance_tx_rb (id) VALUES (?)", [
                 2,
               ]);
-              // nm-throw: keep — conformance 测试夹具：故意抛错验证事务回滚，非业务错误。
+              // nm-throw: keep — 平台强制（P1 事务回调）：throw 驱动事务回滚正是 C6 的被测语义，测试夹具非业务错误。
               throw new Error("rollback me");
             });
           });

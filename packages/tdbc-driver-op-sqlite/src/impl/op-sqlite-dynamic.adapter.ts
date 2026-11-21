@@ -5,6 +5,8 @@
  * @remarks 使用命名导出 `open` + 平台路径常量；execute/executeSync 都在 open 返回的 DB 实例上。
  */
 
+import { assert } from "@novel-master/core/common";
+
 import type { OpSqliteAdapter, OpSqliteResult } from "../adapter.js";
 import {
   BaseOpSqliteAdapter,
@@ -15,12 +17,12 @@ async function loadOpSqlite(): Promise<OpSqliteBindings> {
   try {
     const mod = (await import("@op-engineering/op-sqlite")) as unknown as Partial<OpSqliteBindings>;
     if (typeof mod.open !== "function") {
-      // nm-throw: keep — 第三方驱动模块契约边界：op-sqlite 导出缺失属依赖装配失败。
+      // nm-throw: keep — 内部控制信号：op-sqlite 导出缺失由同函数 catch 统一转「未安装/加载失败」上抛。
       throw new Error("@op-engineering/op-sqlite 导出缺失（需要 open）");
     }
     return mod as OpSqliteBindings;
   } catch (cause) {
-    // nm-throw: keep — 第三方驱动加载边界：op-sqlite 未安装/加载失败，交装配层处理。
+    // nm-throw: keep — 平台强制（P5 tdbc 驱动层）：peer 依赖加载失败以 reject 上行，tdbc 协议错误通道为 throw/reject。
     throw new Error("@op-engineering/op-sqlite 未安装或加载失败。请将其安装为 peer 依赖并重新构建原生应用。", { cause },);
   }
 }
@@ -65,10 +67,8 @@ export class OpSqliteDynamicAdapter implements OpSqliteAdapter {
   }
 
   private requireDelegate(): BaseOpSqliteAdapter {
-    if (!this.delegate) {
-      // nm-throw: keep — 驱动层 API 误用不变量：未 open 即调用属编程错误。
-      throw new Error("Adapter not open");
-    }
+    // 编程护栏（assert 通道）：未 open 即调用属 API 误用（同 op-sqlite.adapter 的 requireDb）。
+    assert(this.delegate != null, "Adapter not open");
     return this.delegate;
   }
 }
