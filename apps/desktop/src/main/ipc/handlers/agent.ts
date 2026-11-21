@@ -26,6 +26,7 @@ import type {
   ModelListPickerResponse,
   ModelSetCurrentRequest,
 } from "../../../../shared/ipc-types.js";
+import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { AgentRunService } from "../../services/agent-run.service.js";
@@ -99,7 +100,7 @@ export namespace Agent {
       if (!resolvedId.ok) return Result.err(resolvedId.error);
       const agentId = resolvedId.value;
       if (agentId == null) {
-        return Result.ok({ agentId: undefined, agentName: "未配置 Agent", modelLabel: "—", hasDedicatedModel: false });
+        return Result.ok({ agentId: undefined, agentName: coreT({key: "ui.session.agent_unconfigured"}), modelLabel: "—", hasDedicatedModel: false });
       }
       // resolve key 走 `AgentTurnError` 抛出通道（`toIpcResult` 的 rejection 分支收口成
       // AGENT_RUN_FAILED）；本 handler 自己的 Result 通道只承载 id 解析的已知失败。
@@ -107,7 +108,7 @@ export namespace Agent {
       const hasDedicatedModel = definition.model != null && definition.model !== "";
       // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
       const savedModelId = definition.model;
-      let modelLabel = "未选择模型";
+      let modelLabel = coreT({key: "ui.chat.no_model_selected"});
       if (savedModelId) {
         const label = await resolveModelLabel(rt, savedModelId);
         if (!label.ok) return Result.err(label.error);

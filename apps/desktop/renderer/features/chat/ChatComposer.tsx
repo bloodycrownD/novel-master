@@ -101,7 +101,7 @@ export function ChatComposer({
   const checkModel = useCallback(async () => {
     const result = await ipcPromptAgentMeta({ projectId, sessionId });
     if (result.ok) {
-      setHasModel( result.data.modelLabel !== "未选择模型" && result.data.modelLabel !== "—" );
+      setHasModel( result.data.modelLabel !== coreT({key: "ui.chat.no_model_selected"}) && result.data.modelLabel !== "—" );
     }
   }, [projectId, sessionId]);
 
@@ -327,7 +327,7 @@ export function ChatComposer({
       const modelCheck = await ipcPromptAgentMeta({ projectId, sessionId });
       if (
         modelCheck.ok &&
-        (modelCheck.data.modelLabel === "未选择模型" ||
+        (modelCheck.data.modelLabel === coreT({key: "ui.chat.no_model_selected"}) ||
           modelCheck.data.modelLabel === "—")
       ) {
         reportError(coreT({key: "ui.chat.configure_model_first"}));

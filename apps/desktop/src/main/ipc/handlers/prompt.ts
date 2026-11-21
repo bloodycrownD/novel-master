@@ -101,7 +101,7 @@ export const Prompt = {
         if (AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
           return Result.ok({
             source: "none",
-            agentName: "未配置 Agent",
+            agentName: coreT({key: "ui.session.agent_unconfigured"}),
             modelLabel: "—",
             hasDedicatedModel: false,
           });
@@ -114,7 +114,7 @@ export const Prompt = {
       const sessionConfig = await rt.sessions.getSessionAgentConfig(req.sessionId);
       if (!sessionConfig.ok) return Result.err(sessionConfig.error);
       const savedModelId = definition.model ?? sessionConfig.value.modelId;
-      let modelLabel = "未选择模型";
+      let modelLabel = coreT({key: "ui.chat.no_model_selected"});
       if (savedModelId) {
         const saved = await rt.providerModels.getSavedById(savedModelId);
         if (!saved.ok) return Result.err(saved.error);
