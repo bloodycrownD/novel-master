@@ -11,6 +11,7 @@ import {CloudSyncProgressPanel} from '@/components/chrome/CloudSyncProgressPanel
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
 import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
@@ -35,7 +36,7 @@ export function CloudSyncProgressScreen() {
   const setStackOverride = useStackOverrideSetter();
 
   const {op, forceOverwriteRemote = false} = route.params;
-  const title = op === 'pull' ? '从云端拉取' : '推送到云端';
+  const title = op === 'pull' ? coreT({key: "ui.cloud_sync.pull_title"}) : coreT({key: "ui.cloud_sync.push_title"});
 
   const [progress, setProgress] = useState<CloudSyncProgressUiState>(() => CloudSyncProgressUi.initial(op));
   const [running, setRunning] = useState(true);
@@ -55,20 +56,20 @@ export function CloudSyncProgressScreen() {
   }, [running, cancelling, runtime]);
 
   const handleNeedPullFirst = useCallback(() => {
-    Alert.alert('云端有更新', '建议先拉取云端数据。仍要覆盖云端吗？', [
+    Alert.alert(coreT({key: "ui.cloud_sync.cloud_newer_title"}), coreT({key: "ui.cloud_sync.cloud_newer_msg"}), [
       {
-        text: '取消',
+        text: coreT({key: "ui.common.cancel"}),
         style: 'cancel',
         onPress: () => navigation.goBack(),
       },
       {
-        text: '先拉取',
+        text: coreT({key: "ui.cloud_sync.pull_first"}),
         onPress: () => {
           navigation.replace('CloudSyncProgress', {op: 'pull'});
         },
       },
       {
-        text: '仍要覆盖云端',
+        text: coreT({key: "ui.cloud_sync.force_overwrite"}),
         style: 'destructive',
         onPress: () => {
           navigation.replace('CloudSyncProgress', {
@@ -129,7 +130,7 @@ export function CloudSyncProgressScreen() {
           handleNeedPullFirst();
           return;
         }
-        showToast(ToastMessage.toast(op === 'pull' ? '拉取失败' : '推送失败', error));
+        showToast(ToastMessage.toast(op === 'pull' ? coreT({key: "ui.common.pull_failed"}) : coreT({key: "ui.common.push_failed"}), error));
         runningRef.current = false;
         navigation.goBack();
       };
@@ -154,9 +155,9 @@ export function CloudSyncProgressScreen() {
             return;
           }
           if (result.value.alreadyUpToDate) {
-            showToast('已是最新');
+            showToast(coreT({key: "ui.cloud_sync.up_to_date"}));
           } else {
-            showToast('拉取成功，正在重新加载…');
+            showToast(coreT({key: "ui.cloud_sync.pull_reloading"}));
           }
         } else {
           const pushOptions = {

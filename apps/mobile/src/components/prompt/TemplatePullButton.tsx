@@ -45,9 +45,9 @@ export function TemplatePullButton({
     try {
       await runtime.sessions.pullSessionTemplate(scope.sessionId);
       onPulled?.();
-showToast(coreT({key: "ui.vfs.sync_done"}));
+      showToast(coreT({key: "ui.vfs.sync_done"}));
     } catch (error) {
-showToast(ToastMessage.toast(coreT({key: "ui.common.sync_failed"}), error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.sync_failed"}), error));
     } finally {
       setPulling(false);
     }

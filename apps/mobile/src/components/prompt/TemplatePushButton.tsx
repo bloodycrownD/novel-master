@@ -48,9 +48,9 @@ export function TemplatePushButton({
     try {
       await runtime.sessions.pushSessionTemplate(scope.sessionId);
       onPushed?.();
-showToast(coreT({key: "ui.cloud_sync.push_done"}));
+      showToast(coreT({key: "ui.cloud_sync.push_done"}));
     } catch (error) {
-showToast(ToastMessage.toast(coreT({key: "ui.common.push_failed"}), error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.push_failed"}), error));
     } finally {
       setPushing(false);
     }

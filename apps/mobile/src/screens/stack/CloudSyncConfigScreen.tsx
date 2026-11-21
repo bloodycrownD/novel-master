@@ -16,6 +16,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type FormState = {
   endpoint: string;
@@ -65,7 +66,7 @@ export function CloudSyncConfigScreen() {
         deviceLabel: config.value.deviceLabel ?? '',
       });
     } else {
-      showToast(ToastMessage.toast('加载云同步配置失败', config.error));
+      showToast(ToastMessage.toast(coreT({key: "ui.cloud_sync.load_config_failed"}), config.error));
     }
     setLoading(false);
   }, [runtime, showToast]);
@@ -93,12 +94,12 @@ export function CloudSyncConfigScreen() {
     try {
       const tested = await CloudSyncService.testConnection(runtime, toInput());
       if (!tested.ok) {
-        showToast(ToastMessage.toast('连接失败', tested.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.connect_failed"}), tested.error));
         return;
       }
-      showToast('连接成功');
+      showToast(coreT({key: "ui.cloud_sync.connected_done"}));
     } catch (error) {
-      showToast(ToastMessage.toast('连接失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.connect_failed"}), error));
     } finally {
       setTesting(false);
     }
@@ -109,7 +110,7 @@ export function CloudSyncConfigScreen() {
       return;
     }
     if (!form.secretAccessKey.trim() && !secretKeySet) {
-      showToast('请填写 Secret Key');
+      showToast(coreT({key: "ui.cloud_sync.secret_required"}));
       return;
     }
     setSaving(true);
@@ -118,21 +119,21 @@ export function CloudSyncConfigScreen() {
       if (!input.secretAccessKey?.trim() && secretKeySet) {
         const existing = await runtime.secretStore.get('cloud-sync/s3-secret-key');
         if (!existing) {
-          showToast('请填写 Secret Key');
+          showToast(coreT({key: "ui.cloud_sync.secret_required"}));
           return;
         }
         input.secretAccessKey = existing;
       }
       const saved = await CloudSyncConfigStore.set(runtime, input);
       if (!saved.ok) {
-        showToast(ToastMessage.toast('保存失败', saved.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), saved.error));
         return;
       }
       setSecretKeySet(true);
       setForm(prev => ({...prev, secretAccessKey: ''}));
-      showToast('配置已保存');
+      showToast(coreT({key: "ui.cloud_sync.config_saved"}));
     } catch (error) {
-      showToast(ToastMessage.toast('保存失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
     } finally {
       setSaving(false);
     }
@@ -152,7 +153,7 @@ export function CloudSyncConfigScreen() {
       footer={
         <StickyFormFooter
           tokens={tokens}
-          label="保存配置"
+          label={coreT({key: "ui.cloud_sync.save_config"})}
           onPress={() => {
             handleSave().catch(() => undefined);
           }}
@@ -161,8 +162,8 @@ export function CloudSyncConfigScreen() {
         />
       }
     >
-      <FormSectionCard tokens={tokens} title="S3 兼容存储">
-        <FormField label="Endpoint" tokens={tokens} hint="含 https://">
+      <FormSectionCard tokens={tokens} title={coreT({key: "ui.cloud_sync.s3_section"})}>
+        <FormField label="Endpoint" tokens={tokens} hint={coreT({key: "ui.cloud_sync.endpoint_hint"})}>
           <FormTextInput
             tokens={tokens}
             value={form.endpoint}
@@ -178,46 +179,46 @@ export function CloudSyncConfigScreen() {
         <FormField label="Region" tokens={tokens} hint="MinIO 可留空">
           <FormTextInput tokens={tokens} value={form.region} onChangeText={region => setForm(prev => ({...prev, region}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
-        <FormField label="路径前缀" tokens={tokens} hint="须以 / 结尾，保存时自动规范化">
+        <FormField label={coreT({key: "ui.cloud_sync.prefix_label"})} tokens={tokens} hint={coreT({key: "ui.cloud_sync.prefix_hint"})}>
           <FormTextInput tokens={tokens} value={form.pathPrefix} onChangeText={pathPrefix => setForm(prev => ({...prev, pathPrefix}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
         <FormSwitchRow
           label="Path style"
-          description="MinIO 需开启；阿里云 OSS 官方 Endpoint 请关闭"
+          description={coreT({key: "ui.cloud_sync.path_style_hint"})}
           tokens={tokens}
           value={form.forcePathStyle}
           onValueChange={forcePathStyle => setForm(prev => ({...prev, forcePathStyle}))}
         />
       </FormSectionCard>
 
-      <FormSectionCard tokens={tokens} title="凭据">
+      <FormSectionCard tokens={tokens} title={coreT({key: "ui.cloud_sync.credentials_section"})}>
         <FormField label="Access Key ID" tokens={tokens}>
           <FormTextInput tokens={tokens} value={form.accessKeyId} onChangeText={accessKeyId => setForm(prev => ({...prev, accessKeyId}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
-        <FormField label="Secret Access Key" tokens={tokens} hint={secretKeySet ? '已保存；留空则保留原密钥' : '保存时写入 SKSP'}>
+        <FormField label="Secret Access Key" tokens={tokens} hint={secretKeySet ? coreT({key: "ui.cloud_sync.secret_saved_hint"}) : coreT({key: "ui.cloud_sync.secret_create_hint"})}>
           <FormTextInput
             tokens={tokens}
             value={form.secretAccessKey}
             onChangeText={secretAccessKey => setForm(prev => ({...prev, secretAccessKey}))}
-            placeholder={secretKeySet ? '留空保留已存密钥' : ''}
+            placeholder={secretKeySet ? coreT({key: "ui.cloud_sync.secret_placeholder"}) : ''}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
           />
         </FormField>
-        <FormField label="设备名称（可选）" tokens={tokens}>
-          <FormTextInput tokens={tokens} value={form.deviceLabel} onChangeText={deviceLabel => setForm(prev => ({...prev, deviceLabel}))} placeholder="便于识别本机" />
+        <FormField label={coreT({key: "ui.cloud_sync.device_label"})} tokens={tokens}>
+          <FormTextInput tokens={tokens} value={form.deviceLabel} onChangeText={deviceLabel => setForm(prev => ({...prev, deviceLabel}))} placeholder={coreT({key: "ui.cloud_sync.device_hint"})} />
         </FormField>
         <SecondaryButton
           tokens={tokens}
           fullWidth
-          label={testing ? '测试中…' : '测试连接'}
+          label={testing ? coreT({key: "ui.cloud_sync.testing"}) : coreT({key: "ui.cloud_sync.test_connection"})}
           onPress={() => {
             handleTest().catch(() => undefined);
           }}
           disabled={testing || saving}
         />
-        <Text style={[styles.note, {color: tokens.textTertiary}]}>测试连接仅校验桶访问权限，不会执行拉取或推送。</Text>
+        <Text style={[styles.note, {color: tokens.textTertiary}]}>{coreT({key: "ui.cloud_sync.test_note"})}</Text>
       </FormSectionCard>
     </ScreenFormLayout>
   );
