@@ -135,10 +135,11 @@ describe("push-session-workspace（session → project 整树推送）", () => {
 
     // 推送链后：所有 vfs_content_blob 行必须被某 revision 引用（无孤儿）
     const orphanRows = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob b
-       WHERE NOT EXISTS (
-         SELECT 1 FROM vfs_revision r WHERE r.content_hash = b.content_hash
-       )`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob b
+    WHERE NOT EXISTS ( SELECT 1
+    FROM vfs_revision r
+    WHERE r.content_hash = b.content_hash )`,
     );
     assert.equal(
       Number(orphanRows[0]!.n),

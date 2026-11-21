@@ -50,15 +50,14 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       rev_rows: number;
       ref_count: number | null;
     }>(
-      `SELECT e.path AS path,
-              e.head_version AS head,
-              (SELECT COUNT(*) FROM vfs_revision r
-                WHERE r.entry_id = e.entry_id AND r.version = e.head_version) AS rev_rows,
-              (SELECT r.ref_count FROM vfs_revision r
-                WHERE r.entry_id = e.entry_id AND r.version = e.head_version) AS ref_count
-       FROM vfs_entry e
-       WHERE e.scope_key = ? AND e.entry_kind = 'file'
-       ORDER BY e.path`,
+      `SELECT e.path AS path, e.head_version AS head, (SELECT COUNT(*)
+    FROM vfs_revision r
+    WHERE r.entry_id = e.entry_id AND r.version = e.head_version) AS rev_rows, (SELECT r.ref_count
+    FROM vfs_revision r
+    WHERE r.entry_id = e.entry_id AND r.version = e.head_version) AS ref_count
+    FROM vfs_entry e
+    WHERE e.scope_key = ? AND e.entry_kind = 'file'
+    ORDER BY e.path`,
       [scopeKey]
     );
     return rows.map((r) => ({
@@ -121,10 +120,10 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
 
     const refs = await conn.query<{ entry_id: number; version: number; ref_count: number }>(
       `SELECT r.entry_id, r.version, r.ref_count
-       FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ?
-       ORDER BY e.path, r.version`,
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ?
+    ORDER BY e.path, r.version`,
       [scopeKey]
     );
     const entryRepo = new SqliteVfsEntryRepository(conn);
@@ -203,10 +202,11 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
     unwrap(await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: true }));
 
     const rows = await conn.query<{ version: number; ref_count: number }>(
-      `SELECT r.version, r.ref_count FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ? AND e.path = '/x.md'
-       ORDER BY r.version`,
+      `SELECT r.version, r.ref_count
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ? AND e.path = '/x.md'
+    ORDER BY r.version`,
       [scopeKey]
     );
     assert.deepEqual(
@@ -237,9 +237,10 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       { overwriteConfirmed: false }
     ));
     const before = await conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ?`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ?`,
       [scopeKey]
     );
     unwrap(await batch.applyBatchIngest(
@@ -249,9 +250,10 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       { overwriteConfirmed: true }
     ));
     const after = await conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ?`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ?`,
       [scopeKey]
     );
     assert.equal(Number(after[0]!.n), Number(before[0]!.n), "同文重导入不得新增 revision 行");
@@ -283,13 +285,11 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
 
     // 复用共享写路径的另一面：落下的 revision 行与 entry 的 content_hash 同源。
     const rows = await conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_entry e
-       WHERE e.scope_key = ?
-         AND e.entry_kind = 'file'
-         AND NOT EXISTS (
-           SELECT 1 FROM vfs_revision r
-           WHERE r.entry_id = e.entry_id AND r.content_hash = e.content_hash
-         )`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_entry e
+    WHERE e.scope_key = ? AND e.entry_kind = 'file' AND NOT EXISTS ( SELECT 1
+    FROM vfs_revision r
+    WHERE r.entry_id = e.entry_id AND r.content_hash = e.content_hash )`,
       [`project:${project.id}`]
     );
     assert.equal(Number(rows[0]!.n), 0, "每个 entry 的 content_hash 都必须有 revision 支撑");

@@ -117,15 +117,11 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION - 1}`);
       await conn.execute(
         `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-         VALUES ('${sessionId}', '${randomUUID()}', 'legacy', ${now}, ${now})`
+    VALUES ('${sessionId}', '${randomUUID()}', 'legacy', ${now}, ${now})`
       );
       await conn.execute(
-        `INSERT INTO chat_message (
-           id, session_id, seq, role, content_json, created_at_ms
-         ) VALUES (
-           '${legacyMessageId}', '${sessionId}', 1, 'user',
-           '{"blocks":[{"type":"text","text":"legacy-plaintext"}]}', ${now}
-         )`
+        `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms )
+    VALUES ( '${legacyMessageId}', '${sessionId}', 1, 'user', '{"blocks":[{"type":"text","text":"legacy-plaintext"}]}', ${now} )`
       );
 
       await NovelMasterBootstrap.bootstrap(conn);
@@ -183,25 +179,15 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       const checkSeqBase = 10;
       await assert.rejects(() =>
         conn.execute(
-          `INSERT INTO chat_message (
-             id, session_id, seq, role, content_json,
-             content_encoding, content_blob, created_at_ms
-           ) VALUES (
-             '${randomUUID()}', '${sessionId}', ${checkSeqBase}, 'user', '{}',
-             'gzip', NULL, ${now + 10}
-           )`
+          `INSERT INTO chat_message ( id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms )
+    VALUES ( '${randomUUID()}', '${sessionId}', ${checkSeqBase}, 'user', '{}', 'gzip', NULL, ${now + 10} )`
         )
       );
       let seq = checkSeqBase + 1;
       for (const encoding of ["zlib", "zlib-b64"]) {
         await conn.execute(
-          `INSERT INTO chat_message (
-             id, session_id, seq, role, content_json,
-             content_encoding, content_blob, created_at_ms
-           ) VALUES (
-             '${randomUUID()}', '${sessionId}', ${seq}, 'user', '{}',
-             '${encoding}', NULL, ${now + 10 + seq}
-           )`
+          `INSERT INTO chat_message ( id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms )
+    VALUES ( '${randomUUID()}', '${sessionId}', ${seq}, 'user', '{}', '${encoding}', NULL, ${now + 10 + seq} )`
         );
         seq += 1;
       }

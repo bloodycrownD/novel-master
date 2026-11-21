@@ -168,7 +168,7 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
     );
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${projectId}', 'legacy-bootstrap', ${now}, ${now})`,
+    VALUES ('${sessionId}', '${projectId}', 'legacy-bootstrap', ${now}, ${now})`,
     );
     await NovelMasterBootstrap.bootstrap(conn);
 

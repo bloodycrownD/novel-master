@@ -116,9 +116,10 @@ async function seedRollbackFixture(prefix: string): Promise<Fixture> {
 /** 会话 scope 下现有文件的逻辑路径集合。 */
 async function livePaths(projectId: string, sessionId: string): Promise<string[]> {
   const rows = await ctx.conn.query<{ path: string }>(
-    `SELECT path FROM vfs_entry
-      WHERE scope_key = ? AND entry_kind = 'file'
-      ORDER BY path ASC`,
+    `SELECT path
+    FROM vfs_entry
+    WHERE scope_key = ? AND entry_kind = 'file'
+    ORDER BY path ASC`,
     [`session:${projectId}:${sessionId}`]
   );
   return rows.map((r) => String(r.path));

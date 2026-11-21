@@ -47,7 +47,9 @@ describe("内置智能排序规则 seed", () => {
     try {
       const rows = await conn.query<RuleRow>(
         `SELECT rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order
-         FROM smart_sort_rule WHERE rule_id LIKE 'builtin-%' ORDER BY sort_order`
+    FROM smart_sort_rule
+    WHERE rule_id LIKE 'builtin-%'
+    ORDER BY sort_order`
       );
       assert.equal(rows.length, 7);
       assert.deepEqual(
@@ -95,8 +97,9 @@ describe("内置智能排序规则 seed", () => {
     const conn = await openBootstrappedConn();
     try {
       await conn.execute(
-        `UPDATE smart_sort_rule SET enabled = 0, name = '我的改名', updated_at_ms = updated_at_ms + 1
-         WHERE rule_id = 'builtin-zh-chapter'`
+        `UPDATE smart_sort_rule
+    SET enabled = 0, name = '我的改名', updated_at_ms = updated_at_ms + 1
+    WHERE rule_id = 'builtin-zh-chapter'`
       );
 
       await BuiltinSmartSortRules.seed(conn);
@@ -121,10 +124,9 @@ describe("内置智能排序规则 seed", () => {
     const conn = await openBootstrappedConn();
     try {
       await conn.execute(
-        `INSERT INTO smart_sort_rule (
-           rule_id, name, pattern, flags, description, enabled,
-           sort_order, created_at_ms, updated_at_ms
-         ) VALUES ('user-mine', '我的规则', '^番外([0-9]+)', '', '番外说明', 1, 9, 1, 1)`
+        `INSERT INTO smart_sort_rule ( rule_id, name, pattern, flags, description, enabled, sort_order, created_at_ms,
+    updated_at_ms )
+    VALUES ('user-mine', '我的规则', '^番外([0-9]+)', '', '番外说明', 1, 9, 1, 1)`
       );
 
       await BuiltinSmartSortRules.seed(conn);

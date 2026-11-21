@@ -48,15 +48,22 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     }
 
     const beforeActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
-       AND entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+      `SELECT COUNT(*) AS cnt
+    FROM vfs_revision
+    WHERE status='active' AND content_hash IS NOT NULL AND entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?)`,
       [`session:${project.id}:${session.id}`],
     );
     const beforeBlob = await ctx.conn.query<{ cnt: number }>(
       // 按 body-v1/v2 前缀限定：内置技能种子（agent-config）也占 1 个 blob
-      `SELECT COUNT(*) AS cnt FROM vfs_content_blob
-       WHERE content_hash IN (SELECT content_hash FROM vfs_revision
-         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
+      `SELECT COUNT(*) AS cnt
+    FROM vfs_content_blob
+    WHERE content_hash IN (SELECT content_hash
+    FROM vfs_revision
+    WHERE entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?))`,
       [`session:${project.id}:${session.id}`],
     );
     // 10 文件 × 2 版 active = 20 条；20 个不同内容 = 20 个 blob。
@@ -96,14 +103,21 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     const gcBlobs = await DeferredBlobGc.run(ctx.conn);
 
     const afterActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
-       AND entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+      `SELECT COUNT(*) AS cnt
+    FROM vfs_revision
+    WHERE status='active' AND content_hash IS NOT NULL AND entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?)`,
       [`session:${project.id}:${session.id}`],
     );
     const afterBlob = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_content_blob
-       WHERE content_hash IN (SELECT content_hash FROM vfs_revision
-         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
+      `SELECT COUNT(*) AS cnt
+    FROM vfs_content_blob
+    WHERE content_hash IN (SELECT content_hash
+    FROM vfs_revision
+    WHERE entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?))`,
       [`session:${project.id}:${session.id}`],
     );
 
@@ -159,9 +173,10 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
 
     // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
     const orphanActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision
-       WHERE status = 'active' AND content_hash IS NOT NULL
-         AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
+      `SELECT COUNT(*) AS cnt
+    FROM vfs_revision
+    WHERE status = 'active' AND content_hash IS NOT NULL AND entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)`,
     );
     assert.equal(
       Number(orphanActiveRev[0]!.cnt),
@@ -175,8 +190,9 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
 
     // 存活的 5 个文件不受影响：entry 还在、内容还能读。
     const survivorFiles = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_entry
-       WHERE scope_key = ? AND entry_kind = 'file'`,
+      `SELECT COUNT(*) AS cnt
+    FROM vfs_entry
+    WHERE scope_key = ? AND entry_kind = 'file'`,
       [`session:${project.id}:${session.id}`],
     );
     assert.equal(

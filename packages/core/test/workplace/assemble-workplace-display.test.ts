@@ -376,11 +376,11 @@ describe("assembleWorkplaceDisplay", () => {
     // 伪造毒数据：把该文件 content blob 的 byte_len 改成超闸门大小
     // （真实毒卡是压缩后仍巨大的 blob，这里直改长度列避免真的写入 MB 级正文）
     await ctx.conn.execute(
-      `UPDATE vfs_content_blob SET byte_len = ?
-       WHERE content_hash = (
-         SELECT content_hash FROM vfs_entry
-         WHERE scope_key LIKE ? AND path = ?
-       )`,
+      `UPDATE vfs_content_blob
+    SET byte_len = ?
+    WHERE content_hash = ( SELECT content_hash
+    FROM vfs_entry
+    WHERE scope_key LIKE ? AND path = ? )`,
       [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"]
     );
 

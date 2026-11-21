@@ -18,22 +18,13 @@ import type { ProviderRepository } from "../provider.port.js";
 const PROVIDER_COLUMNS = "id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms";
 const SELECT_ALL_SQL = `SELECT ${PROVIDER_COLUMNS} FROM llm_provider ORDER BY id`;
 const SELECT_BY_ID_SQL = `SELECT ${PROVIDER_COLUMNS} FROM llm_provider WHERE id = #{id}`;
-const INSERT_SQL = `
-  INSERT INTO llm_provider (${PROVIDER_COLUMNS}) VALUES (
-    #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName},
-    #{secretRef}, #{headersJson}, #{bodyParamsJson}, #{isBuiltin},
-    #{createdAtMs}, #{updatedAtMs}
-  )`;
-const UPDATE_SQL = `
-  UPDATE llm_provider SET
-    protocol = #{protocol},
-    base_url = #{baseUrl},
-    display_name = #{displayName},
-    secret_ref = #{secretRef},
-    headers_json = #{headersJson},
-    body_params_json = #{bodyParamsJson},
-    updated_at_ms = #{updatedAtMs}
-  WHERE id = #{id}`;
+const INSERT_SQL = `INSERT INTO llm_provider (${PROVIDER_COLUMNS})
+    VALUES ( #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef}, #{headersJson},
+    #{bodyParamsJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs} )`;
+const UPDATE_SQL = `UPDATE llm_provider
+    SET protocol = #{protocol}, base_url = #{baseUrl}, display_name = #{displayName}, secret_ref = #{secretRef},
+    headers_json = #{headersJson}, body_params_json = #{bodyParamsJson}, updated_at_ms = #{updatedAtMs}
+    WHERE id = #{id}`;
 const DELETE_SQL = "DELETE FROM llm_provider WHERE id = #{id}";
 
 /** 列 JSON 根必须是对象；根非法（非对象/解析失败）降级 {}，不抛错。 */

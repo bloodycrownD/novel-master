@@ -125,13 +125,13 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
     );
 
     const orphanCount = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob b
-       WHERE NOT EXISTS (
-         SELECT 1 FROM vfs_revision r WHERE r.content_hash = b.content_hash
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM vfs_entry e WHERE e.content_hash = b.content_hash
-       )`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob b
+    WHERE NOT EXISTS ( SELECT 1
+    FROM vfs_revision r
+    WHERE r.content_hash = b.content_hash ) AND NOT EXISTS ( SELECT 1
+    FROM vfs_entry e
+    WHERE e.content_hash = b.content_hash )`,
     );
     assert.equal(Number(orphanCount[0]!.n), 0, "不应有 orphan blob");
   });
@@ -169,13 +169,13 @@ describe("T-G2: 模板替换链后无 orphan blob（pullSessionTemplate 载体�
     //（CS-07 守卫生效后，「entry 还在但 revision 已被 sweep」的过渡态 blob
     //   会被有意保留——守卫无法区分它与「entry 马上要删」）。
     const orphanRows = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob b
-       WHERE NOT EXISTS (
-         SELECT 1 FROM vfs_revision r WHERE r.content_hash = b.content_hash
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM vfs_entry e WHERE e.content_hash = b.content_hash
-       )`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob b
+    WHERE NOT EXISTS ( SELECT 1
+    FROM vfs_revision r
+    WHERE r.content_hash = b.content_hash ) AND NOT EXISTS ( SELECT 1
+    FROM vfs_entry e
+    WHERE e.content_hash = b.content_hash )`,
     );
     assert.equal(
       Number(orphanRows[0]!.n),
@@ -266,14 +266,11 @@ describe("T-G2: 模板替换链后无 orphan blob（pullSessionTemplate 载体�
     // 「存储缓慢增长」已知限制；这里只钉住**仍被本域 entry 引用的 blob 必须
     // 都有 revision 支撑**——否则文件当场不可读。
     const danglingLive = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_entry e
-       WHERE e.scope_key = ?
-         AND e.entry_kind = 'file'
-         AND e.content_hash IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1 FROM vfs_revision r
-           WHERE r.entry_id = e.entry_id AND r.content_hash = e.content_hash
-         )`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_entry e
+    WHERE e.scope_key = ? AND e.entry_kind = 'file' AND e.content_hash IS NOT NULL AND NOT EXISTS ( SELECT 1
+    FROM vfs_revision r
+    WHERE r.entry_id = e.entry_id AND r.content_hash = e.content_hash )`,
       [projectScope],
     );
     assert.equal(
@@ -316,19 +313,19 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
     // 悬空 entry：content_hash = hash，但**没有任何 revision 行**（CS-06 形态）
     await ctx.conn.execute(
       `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-       VALUES (?, ?, 'file', 1, ?, 0)`,
+    VALUES (?, ?, 'file', 1, ?, 0)`,
       [scope, `/dangling-${suffix}.md`, hash],
     );
     // 持有点的 entry：带一条引用同 hash 的活 revision（ref_count=1）
     await ctx.conn.execute(
       `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-       VALUES (?, ?, 'file', 1, ?, 0)`,
+    VALUES (?, ?, 'file', 1, ?, 0)`,
       [scope, `/holder-${suffix}.md`, hash],
     );
     const holder = unwrap(await entryRepo.findByPath(scope, `/holder-${suffix}.md`));
     await ctx.conn.execute(
       `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-       VALUES (?, 1, 'active', 0, ?, 1)`,
+    VALUES (?, 1, 'active', 0, ?, 1)`,
       [holder!.entryId, hash],
     );
     return { hash, revisionEntryId: holder!.entryId };
@@ -404,13 +401,13 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     await ctx.conn.execute(
       `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-       VALUES (?, '/lonely.md', 'file', 1, ?, 0)`,
+    VALUES (?, '/lonely.md', 'file', 1, ?, 0)`,
       [scope, hash],
     );
     const entry = unwrap(await entryRepo.findByPath(scope, "/lonely.md"));
     await ctx.conn.execute(
       `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-       VALUES (?, 1, 'active', 0, ?, 1)`,
+    VALUES (?, 1, 'active', 0, ?, 1)`,
       [entry!.entryId, hash],
     );
     // 先删 entry（模拟真实链里「entry 已走」的时刻），再删 revision
@@ -636,12 +633,12 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
       const scope = `project:up-${Date.now()}`;
       await ctx.conn.execute(
         `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-         VALUES (?, '/dangling.md', 'file', 1, ?, 0)`,
+    VALUES (?, '/dangling.md', 'file', 1, ?, 0)`,
         [scope, guardedHash]
       );
       await ctx.conn.execute(
         `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-         VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
+    VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
         [scope, guardedHash]
       );
       const holder = unwrap(await new SqliteVfsEntryRepository(ctx.conn).findByPath(
@@ -650,7 +647,7 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
       ));
       await ctx.conn.execute(
         `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-         VALUES (?, 1, 'active', 0, ?, 1)`,
+    VALUES (?, 1, 'active', 0, ?, 1)`,
         [holder!.entryId, guardedHash]
       );
       await ctx.conn.execute(`DELETE FROM vfs_revision WHERE entry_id = ?`, [
@@ -672,7 +669,7 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
       );
       await ctx.conn.execute(
         `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-         VALUES (?, '/lonely.md', 'file', 1, ?, 0)`,
+    VALUES (?, '/lonely.md', 'file', 1, ?, 0)`,
         [scope, freeHash]
       );
       const lonely = unwrap(await new SqliteVfsEntryRepository(ctx.conn).findByPath(
@@ -681,7 +678,7 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
       ));
       await ctx.conn.execute(
         `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-         VALUES (?, 1, 'active', 0, ?, 1)`,
+    VALUES (?, 1, 'active', 0, ?, 1)`,
         [lonely!.entryId, freeHash]
       );
       await ctx.conn.execute(`DELETE FROM vfs_entry WHERE entry_id = ?`, [
@@ -802,12 +799,12 @@ describe("CS-07 第三条升级路径：被撤回 v18 留下的 user_version = 1
       const scope = `project:reclaim-${Date.now()}`;
       await ctx.conn.execute(
         `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-         VALUES (?, '/dangling.md', 'file', 1, ?, 0)`,
+    VALUES (?, '/dangling.md', 'file', 1, ?, 0)`,
         [scope, guardedHash]
       );
       await ctx.conn.execute(
         `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
-         VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
+    VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
         [scope, guardedHash]
       );
       const holder = unwrap(await new SqliteVfsEntryRepository(ctx.conn).findByPath(
@@ -816,7 +813,7 @@ describe("CS-07 第三条升级路径：被撤回 v18 留下的 user_version = 1
       ));
       await ctx.conn.execute(
         `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-         VALUES (?, 1, 'active', 0, ?, 1)`,
+    VALUES (?, 1, 'active', 0, ?, 1)`,
         [holder!.entryId, guardedHash]
       );
       await ctx.conn.execute(`DELETE FROM vfs_revision WHERE entry_id = ?`, [

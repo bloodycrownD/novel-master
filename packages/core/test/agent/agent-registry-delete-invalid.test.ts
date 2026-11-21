@@ -29,9 +29,8 @@ describe("AgentRegistryService.delete 不解码", () => {
     const now = Date.now();
 
     await ctx.conn.execute(
-      `INSERT INTO agent_definition (
-        agent_id, prompts_json, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_definition ( agent_id, prompts_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?)`,
       [agentId, brokenPromptsJson(), now, now],
     );
 

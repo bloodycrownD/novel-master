@@ -45,8 +45,9 @@ function parsePayload(raw: string): FileCachePayload {
 /** 把 file_cache blob 行的指定 hash 换成解压必失败的字节。 */
 async function corruptFileCacheBlob(conn: { execute(sql: string, params?: readonly unknown[]): Promise<unknown> }, contentHash: string): Promise<void> {
   await conn.execute(
-    `UPDATE session_file_cache_blob SET bytes = ?, encoding = 'zlib'
-     WHERE content_hash = ?`,
+    `UPDATE session_file_cache_blob
+    SET bytes = ?, encoding = 'zlib'
+    WHERE content_hash = ?`,
     [new Uint8Array([1, 2, 3]), contentHash]
   );
 }
@@ -54,8 +55,9 @@ async function corruptFileCacheBlob(conn: { execute(sql: string, params?: readon
 /** 取某会话 file_cache 键当前指向的 content_hash。 */
 async function entryHash(conn: { query<T extends Record<string, unknown>>(sql: string, params?: readonly unknown[]): Promise<T[]> }, sessionId: string, key: string): Promise<string> {
   const rows = await conn.query<{ content_hash: string }>(
-    `SELECT content_hash FROM session_file_cache_entry
-     WHERE session_id = ? AND key = ?`,
+    `SELECT content_hash
+    FROM session_file_cache_entry
+    WHERE session_id = ? AND key = ?`,
     [sessionId, key]
   );
   assert.equal(rows.length, 1, "entry 引用行应存在");
@@ -80,8 +82,9 @@ describe("file_cache × 进程内解压产物层", () => {
 
     // mtime 改成另一个值：缓存的是正文、mtime 每次从 entry 行现拿
     await conn.execute(
-      `UPDATE session_file_cache_entry SET mtime_ms = 2000
-       WHERE session_id = ? AND key = ?`,
+      `UPDATE session_file_cache_entry
+    SET mtime_ms = 2000
+    WHERE session_id = ? AND key = ?`,
       [sessionId, key]
     );
     const second = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);

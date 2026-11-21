@@ -14,9 +14,8 @@ import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
 
 const SESSION_COLUMNS = "id, project_id, title, parent_session_id, created_at_ms, updated_at_ms";
 
-const SESSION_INSERT_SQL = `
-  INSERT INTO chat_session (${SESSION_COLUMNS})
-  VALUES (${SESSION_COLUMNS.split(", ").map(() => "?").join(", ")})`;
+const SESSION_INSERT_SQL = `INSERT INTO chat_session (${SESSION_COLUMNS})
+    VALUES (${SESSION_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 function rowToSession(row: Row): ChatSession {
   return {
@@ -42,13 +41,19 @@ export class SqliteSessionRepository extends BaseSqliteChatRepository<ChatSessio
   }
 
   async listByProject(projectId: string): Promise<ChatSession[]> {
-    const sql = `SELECT ${SESSION_COLUMNS} FROM chat_session WHERE project_id = #{projectId} AND parent_session_id IS NULL ORDER BY created_at_ms`;
+    const sql = `SELECT ${SESSION_COLUMNS}
+    FROM chat_session
+    WHERE project_id = #{projectId} AND parent_session_id IS NULL
+    ORDER BY created_at_ms`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { projectId });
     return rows.map(rowToSession);
   }
 
   async listByParentSession(parentSessionId: string): Promise<ChatSession[]> {
-    const sql = `SELECT ${SESSION_COLUMNS} FROM chat_session WHERE parent_session_id = #{parentSessionId} ORDER BY created_at_ms`;
+    const sql = `SELECT ${SESSION_COLUMNS}
+    FROM chat_session
+    WHERE parent_session_id = #{parentSessionId}
+    ORDER BY created_at_ms`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { parentSessionId });
     return rows.map(rowToSession);
   }

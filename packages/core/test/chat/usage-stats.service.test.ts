@@ -337,11 +337,11 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`
+    VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = new DefaultUsageStatsService(ctx.conn);
@@ -516,10 +516,10 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(now);
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`
+    VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`
     );
     const insertModel = `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES (?, 'stats-provider', ?, ?, '{}', ${ts}, ${ts})`;
+    VALUES (?, 'stats-provider', ?, ?, '{}', ${ts}, ${ts})`;
     await ctx.conn.execute(insertModel, ["sm-1", "model-b", "model-b"]);
     await ctx.conn.execute(insertModel, ["sm-2", "model-a", "model-a"]);
     await ctx.conn.execute(insertModel, ["sm-3", "model-b", "model-b"]);
@@ -657,11 +657,11 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`
+    VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = new DefaultUsageStatsService(ctx.conn);
@@ -705,12 +705,12 @@ describe("usage stats service (T-S5)", () => {
     for (const pid of ["stats-px", "stats-py"]) {
       await ctx.conn.execute(
         `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-         VALUES ('${pid}', 'openai', 'https://example.com', '${pid}', '{}', 0, ${ts}, ${ts})`
+    VALUES ('${pid}', 'openai', 'https://example.com', '${pid}', '{}', 0, ${ts}, ${ts})`
       );
     }
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-pm-1', 'stats-px', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('som-pm-1', 'stats-px', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = new DefaultUsageStatsService(ctx.conn);
@@ -781,11 +781,11 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-g2-p1', 'openai', 'https://example.com', 'G2 P1', '{}', 0, ${ts}, ${ts})`
+    VALUES ('stats-g2-p1', 'openai', 'https://example.com', 'G2 P1', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-g2-1', 'stats-g2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('som-g2-1', 'stats-g2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = new DefaultUsageStatsService(ctx.conn);
@@ -849,12 +849,12 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-cr2-p1', 'openai', 'https://example.com', 'CR2 P1', '{}', 0, ${ts}, ${ts})`
+    VALUES ('stats-cr2-p1', 'openai', 'https://example.com', 'CR2 P1', '{}', 0, ${ts}, ${ts})`
     );
     // model-a 进入已保存模型集合（全局 distinct，不分服务商）。
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-cr2-1', 'stats-cr2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('som-cr2-1', 'stats-cr2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = new DefaultUsageStatsService(ctx.conn);
@@ -906,12 +906,12 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-cr2-p2', 'openai', 'https://example.com', 'CR2 P2', '{}', 0, ${ts}, ${ts})`
+    VALUES ('stats-cr2-p2', 'openai', 'https://example.com', 'CR2 P2', '{}', 0, ${ts}, ${ts})`
     );
     // 配置集内只放 model-cfg：model-legacy 成为「未配置模型」。
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-cr2-2', 'stats-cr2-p2', 'model-cfg', 'model-cfg', '{}', ${ts}, ${ts})`
+    VALUES ('som-cr2-2', 'stats-cr2-p2', 'model-cfg', 'model-cfg', '{}', ${ts}, ${ts})`
     );
 
     const svc = new DefaultUsageStatsService(ctx.conn);
@@ -1161,11 +1161,11 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`
+    VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
     const svc = new DefaultUsageStatsService(ctx.conn);
     const now = Date.now();
@@ -1385,8 +1385,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(detail.visibleMessageCount, 0);
     assert.equal(detail.toolUseCount, 0);
     const cached = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      `SELECT COUNT(*) AS n
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
       [empty.id]
     );
     assert.equal(Number(cached[0]?.n ?? 0), 1);
@@ -1407,9 +1408,8 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     });
     // 明文直插行（e2e fixture 形态）：content_json 带 1 个 tool_use。
     await ctx.conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms, hidden
-       ) VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
+      `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms, hidden )
+    VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
       [
         randomUUID(),
         session.id,
@@ -1434,8 +1434,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(first.toolUseCount, 3);
     assert.equal(first.visibleMessageCount, 2);
     const cacheRows = await ctx.conn.query<{ value: string }>(
-      `SELECT value FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
       [session.id]
     );
     assert.equal(cacheRows[0]?.value, "3");
@@ -1473,8 +1474,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       blocks: [{ type: "text", text: "plain" }],
     }));
     const afterPlain = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      `SELECT COUNT(*) AS n
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
       [session.id]
     );
     assert.equal(Number(afterPlain[0]?.n ?? 0), 1);
@@ -1569,8 +1571,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     unwrap(await messages.hide(seq2));
     unwrap(await messages.show(seq2));
     const afterVisibility = await ctx.conn.query<{ value: string }>(
-      `SELECT value FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
       [session.id]
     );
     assert.equal(afterVisibility[0]?.value, "3", "hide/show 不得失效缓存");
@@ -1612,9 +1615,8 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
     });
     await ctx.conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms, hidden
-       ) VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
+      `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms, hidden )
+    VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
       [randomUUID(), session.id, "{not-json", now]
     );
 
@@ -1626,14 +1628,15 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     // 脏缓存值（非数字串）：当 miss 重算并覆盖回填。
     await ctx.conn.execute(
       `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
-       VALUES (?, 'usage_stats', 'toolUseCount', 'abc')`,
+    VALUES (?, 'usage_stats', 'toolUseCount', 'abc')`,
       [session.id]
     );
     const dirty = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(dirty.toolUseCount, 1, "脏值当 miss 重算");
     const after = await ctx.conn.query<{ value: string }>(
-      `SELECT value FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
       [session.id]
     );
     assert.equal(after[0]?.value, "1", "重算值应覆盖脏值");
@@ -1671,7 +1674,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
         armed = false;
         await originalExecute(
           `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
-           VALUES (?, 'usage_stats', 'toolUseCount', '')`,
+    VALUES (?, 'usage_stats', 'toolUseCount', '')`,
           [session.id]
         );
       }
@@ -1683,8 +1686,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       // 本次返回值已出：现算结果 2，不受回填拦截影响。
       assert.equal(first.toolUseCount, 2);
       const cacheAfter = await originalQuery<{ value: string }>(
-        `SELECT value FROM session_kkv_entry
-         WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+        `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
         [session.id]
       );
       assert.equal(
@@ -1698,8 +1702,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       const second = unwrap(await svc.getSessionUsageDetail(session.id));
       assert.equal(second.toolUseCount, 2);
       const cacheFinal = await originalQuery<{ value: string }>(
-        `SELECT value FROM session_kkv_entry
-         WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+        `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
         [session.id]
       );
       assert.equal(cacheFinal[0]?.value, "2", "哨兵场景正常回填不循环");
@@ -1839,11 +1844,9 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     ));
 
     const rows = await ctx.conn.query<Record<string, unknown>>(
-      `SELECT session_id, message_seq, provider, provider_id, model_name,
-              prompt_tokens, completion_tokens, total_tokens,
-              cache_read_tokens, cache_creation_tokens,
-              first_token_ms, duration_ms, created_at_ms
-       FROM usage_record`
+      `SELECT session_id, message_seq, provider, provider_id, model_name, prompt_tokens, completion_tokens, total_tokens,
+    cache_read_tokens, cache_creation_tokens, first_token_ms, duration_ms, created_at_ms
+    FROM usage_record`
     );
     assert.equal(rows.length, 1);
     const row = rows[0]!;
@@ -1901,11 +1904,11 @@ describe("usage stats service 动态筛选 `<if>` 片段（R4 迁移回归）", 
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('r4-provider', 'openai', 'https://example.com', 'R4 Provider', '{}', 0, ${ts}, ${ts})`
+    VALUES ('r4-provider', 'openai', 'https://example.com', 'R4 Provider', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('r4-som-1', 'r4-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    VALUES ('r4-som-1', 'r4-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
     return { ctx, today0 };
   }

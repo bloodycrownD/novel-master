@@ -35,6 +35,7 @@ export const SchemaMigrationsTable = {
    * nm-style: keep-public — 登记表写入口；TABLE/parser 是本模块私有建表状态，内联会让 runner 复刻表名与解析器。
    */
   async markApplied(tx: TdbcConnection, id: string, appliedAtMs: number): Promise<void> {
-    await TdbcTemplate.execute(tx, parser, `INSERT INTO ${TABLE} (id, applied_at_ms) VALUES (#{id}, #{appliedAtMs})`, { id, appliedAtMs });
+    await TdbcTemplate.execute(tx, parser, `INSERT INTO ${TABLE} (id, applied_at_ms)
+    VALUES (#{id}, #{appliedAtMs})`, { id, appliedAtMs });
   },
 } as const;

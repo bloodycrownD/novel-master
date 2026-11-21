@@ -72,9 +72,11 @@ export class SqlCounter {
    * 同一类操作可能因分块 / 不同分支产生多条不同文本的 SQL，用子串聚合更稳——
    * 比如所有查 `vfs_content_blob` 的 SELECT 都含 `FROM vfs_content_blob`，
    * 所有删 `vfs_entry` 的 DELETE 都含 `DELETE FROM vfs_entry`。
+   * 匹配前两侧空白归一：SQL 空白不敏感，记录侧的排版（p29 起按关键字多行）不应影响特征命中。
    */
   countBySubstring(needle: string): number {
-    return this.records.filter((r) => r.sql.includes(needle)).length;
+    const flatNeedle = needle.replace(/\s+/g, " ");
+    return this.records.filter((r) => r.sql.replace(/\s+/g, " ").includes(flatNeedle)).length;
   }
 
   /** 已记录的全部 SQL（只读视图）。 */

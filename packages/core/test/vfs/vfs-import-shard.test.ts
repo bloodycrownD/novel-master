@@ -163,8 +163,10 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     // ⇒ 该前缀下零 revision 残留。裸 deleteVfsPrefix 会留下一批 ref_count=1 的
     // 孤儿 revision ⇒ 这条断言是「口径写死」那颗牙齿。
     const orphans = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_revision
-       WHERE entry_id NOT IN (SELECT entry_id FROM vfs_entry)`
+      `SELECT COUNT(*) AS n
+    FROM vfs_revision
+    WHERE entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)`
     );
     assert.equal(Number(orphans[0]!.n), 0, "补偿后不得有孤儿 vfs_revision 行");
     // ⚠️ 这里**不**断言 blob 零残留：`sweepRevisionsUnderScope` 的固定顺序是
@@ -273,9 +275,10 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     }
 
     const revisions = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ?`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ?`,
       [`project:${project.id}`]
     );
     assert.equal(Number(revisions[0]!.n), 5000);

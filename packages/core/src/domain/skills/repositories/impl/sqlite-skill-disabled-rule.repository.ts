@@ -10,15 +10,20 @@ import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import { SKILL_DISABLED_RULE_TABLE } from "@/bootstrap/skills/skills-schema.js";
 import type { SkillDisabledRuleRepository } from "../skill-disabled-rule.port.js";
 
-const LIST_DISABLED_SQL = `SELECT skill_name FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{scopeKey} ORDER BY skill_name`;
-const INSERT_SQL = `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name) VALUES (#{scopeKey}, #{skillName})`;
-const REMOVE_SQL = `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{scopeKey} AND skill_name = #{skillName}`;
+const LIST_DISABLED_SQL = `SELECT skill_name
+    FROM ${SKILL_DISABLED_RULE_TABLE}
+    WHERE scope_key = #{scopeKey}
+    ORDER BY skill_name`;
+const INSERT_SQL = `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name)
+    VALUES (#{scopeKey}, #{skillName})`;
+const REMOVE_SQL = `DELETE
+    FROM ${SKILL_DISABLED_RULE_TABLE}
+    WHERE scope_key = #{scopeKey} AND skill_name = #{skillName}`;
 const REMOVE_SCOPE_SQL = `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
 const REMOVE_ALL_BY_NAME_SQL = `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE skill_name = #{skillName}`;
-const COPY_SCOPE_SQL = `
-  INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name)
-  SELECT #{toScopeKey}, skill_name FROM ${SKILL_DISABLED_RULE_TABLE}
-  WHERE scope_key = #{fromScopeKey}`;
+const COPY_SCOPE_SQL = `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name) SELECT #{toScopeKey}, skill_name
+    FROM ${SKILL_DISABLED_RULE_TABLE}
+    WHERE scope_key = #{fromScopeKey}`;
 
 /** TDBC-backed `skill_disabled_rule` repository。 */
 export class SqliteSkillDisabledRuleRepository implements SkillDisabledRuleRepository {
@@ -58,8 +63,12 @@ export class SqliteSkillDisabledRuleRepository implements SkillDisabledRuleRepos
     if (scopeKey != null) {
       params.scopeKey = scopeKey;
     }
-    await TdbcTemplate.execute(this.conn, this.parser, `UPDATE OR IGNORE ${SKILL_DISABLED_RULE_TABLE} SET skill_name = #{to} WHERE skill_name = #{from}${scopeFilter}`, params);
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE skill_name = #{from}${scopeFilter}`, params);
+    await TdbcTemplate.execute(this.conn, this.parser, `UPDATE OR IGNORE ${SKILL_DISABLED_RULE_TABLE}
+    SET skill_name = #{to}
+    WHERE skill_name = #{from}${scopeFilter}`, params);
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM ${SKILL_DISABLED_RULE_TABLE}
+    WHERE skill_name = #{from}${scopeFilter}`, params);
   }
 
   /** nm-style: keep-public — 实现 SkillDisabledRuleRepository.copyScopeRules 端口方法；内联会把跨 scope 复制 SQL 搬进调用层。 */

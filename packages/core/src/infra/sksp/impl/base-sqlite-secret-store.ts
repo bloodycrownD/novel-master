@@ -29,7 +29,9 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
 
   async get(ref: string): Promise<string | null> {
     SkspRefAssert.validRef(ref);
-    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`, { ref });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ciphertext, iv, algo, version
+    FROM sksp_secrets
+    WHERE ref = #{ref}`, { ref });
     if (rows.length === 0) {
       return null;
     }
@@ -42,7 +44,10 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
 
   async has(ref: string): Promise<boolean> {
     SkspRefAssert.validRef(ref);
-    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`, { ref });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT 1 AS n
+    FROM sksp_secrets
+    WHERE ref = #{ref}
+    LIMIT 1`, { ref });
     return rows.length > 0;
   }
 
@@ -67,7 +72,9 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
 
   async delete(ref: string): Promise<boolean> {
     SkspRefAssert.validRef(ref);
-    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM sksp_secrets WHERE ref = #{ref}`, { ref });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM sksp_secrets
+    WHERE ref = #{ref}`, { ref });
     return result.changes > 0;
   }
 }

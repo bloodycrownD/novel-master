@@ -18,10 +18,9 @@ async function insertProviderRow(
   displayName: string,
 ): Promise<void> {
   await conn.execute(
-    `INSERT INTO llm_provider (
-      id, builtin_key, protocol, base_url, display_name, secret_ref,
-      headers_json, is_builtin, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO llm_provider ( id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, is_builtin,
+    created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       null,

@@ -37,7 +37,9 @@ after(async () => {
 
 /** 把某张 blob 表的指定 hash 行换成解压必失败的字节。 */
 async function corruptBlobRow(conn: TdbcConnection, table: "vfs_content_blob" | "session_file_cache_blob", contentHash: string): Promise<void> {
-  await conn.execute(`UPDATE ${table} SET bytes = ?, encoding = 'zlib' WHERE content_hash = ?`, [new Uint8Array([1, 2, 3]), contentHash]);
+  await conn.execute(`UPDATE ${table}
+    SET bytes = ?, encoding = 'zlib'
+    WHERE content_hash = ?`, [new Uint8Array([1, 2, 3]), contentHash]);
 }
 
 describe("vfs content-store × 进程内解压产物层", () => {
@@ -120,8 +122,9 @@ describe("vfs content-store × 进程内解压产物层", () => {
     const key = `full:/share-${testIsolationSuffix()}.md`;
     await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 42 }));
     const entryRows = await conn.query<{ content_hash: string }>(
-      `SELECT content_hash FROM session_file_cache_entry
-       WHERE session_id = ? AND key = ?`,
+      `SELECT content_hash
+    FROM session_file_cache_entry
+    WHERE session_id = ? AND key = ?`,
       [sessionId, key]
     );
     assert.equal(String(entryRows[0]!.content_hash), vfsHash, "两套存储对同一正文算出同一个 hash（共池的前提）");

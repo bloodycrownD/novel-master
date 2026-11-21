@@ -52,20 +52,12 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     const resolved = PathNormalizer.normalize(rule.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
-    const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
-        scope_key, logical_path, rule_enabled, sort_field, sort_order,
-        head_count, tail_count, fill_policy
-      ) VALUES (
-        #{scopeKey}, #{logicalPath}, #{ruleEnabled}, #{sortField}, #{sortOrder},
-        #{headCount}, #{tailCount}, #{fillPolicy}
-      )
-      ON CONFLICT(scope_key, logical_path) DO UPDATE SET
-        rule_enabled = excluded.rule_enabled,
-        sort_field = excluded.sort_field,
-        sort_order = excluded.sort_order,
-        head_count = excluded.head_count,
-        tail_count = excluded.tail_count,
-        fill_policy = excluded.fill_policy`;
+    const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} ( scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count, fill_policy )
+    VALUES ( #{scopeKey}, #{logicalPath}, #{ruleEnabled}, #{sortField}, #{sortOrder}, #{headCount}, #{tailCount},
+    #{fillPolicy} )
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET rule_enabled = excluded.rule_enabled, sort_field = excluded.sort_field, sort_order = excluded.sort_order,
+    head_count = excluded.head_count, tail_count = excluded.tail_count, fill_policy = excluded.fill_policy`;
     await TdbcTemplate.execute(this.conn, this.parser, sql28, {
       scopeKey: rule.scopeKey,
       logicalPath,
@@ -85,9 +77,9 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
-       VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
-       ON CONFLICT(scope_key, logical_path) DO UPDATE SET
-         inclusion_mode = excluded.inclusion_mode`;
+    VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET inclusion_mode = excluded.inclusion_mode`;
     await TdbcTemplate.execute(this.conn, this.parser, sql29, {
       scopeKey: rule.scopeKey,
       logicalPath,
@@ -106,17 +98,11 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     // 位置占位符 SQL（和本 worktree 其它 batch 实现一致），一次 conn.batch 提交全部行。
     // 调用方负责先清空目标 scope，这里走 INSERT … ON CONFLICT DO UPDATE（upsert 语义）。
     // 注意：SQL 与单条 upsertDirRule 保持一致，改一处务必同步另一处。
-    const sql = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
-        scope_key, logical_path, rule_enabled, sort_field, sort_order,
-        head_count, tail_count, fill_policy
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(scope_key, logical_path) DO UPDATE SET
-        rule_enabled = excluded.rule_enabled,
-        sort_field = excluded.sort_field,
-        sort_order = excluded.sort_order,
-        head_count = excluded.head_count,
-        tail_count = excluded.tail_count,
-        fill_policy = excluded.fill_policy`;
+    const sql = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} ( scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count, fill_policy )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET rule_enabled = excluded.rule_enabled, sort_field = excluded.sort_field, sort_order = excluded.sort_order,
+    head_count = excluded.head_count, tail_count = excluded.tail_count, fill_policy = excluded.fill_policy`;
     const paramsList: unknown[][] = [];
     for (const rule of rules) {
       const resolved = PathNormalizer.normalize(rule.logicalPath);
@@ -134,9 +120,9 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     }
     // SQL 与单条 upsertFileRule 保持一致，改一处务必同步另一处。
     const sql = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
-      VALUES (?, ?, ?)
-      ON CONFLICT(scope_key, logical_path) DO UPDATE SET
-        inclusion_mode = excluded.inclusion_mode`;
+    VALUES (?, ?, ?)
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET inclusion_mode = excluded.inclusion_mode`;
     const paramsList: unknown[][] = [];
     for (const rule of rules) {
       const resolved = PathNormalizer.normalize(rule.logicalPath);
@@ -149,30 +135,34 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
 
   /** nm-style: keep-public — 实现 WorkplaceRepository.deleteScope 端口方法；内联会把双表删除 SQL 搬进调用层。 */
   async deleteScope(scopeKey: string): Promise<void> {
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM ${WORKPLACE_DIR_RULE_TABLE}
+    WHERE scope_key = #{scopeKey}`, { scopeKey });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM ${WORKPLACE_FILE_RULE_TABLE}
+    WHERE scope_key = #{scopeKey}`, { scopeKey });
   }
 
   async listDirRules(scopeKey: string): Promise<WorkplaceDirRule[]> {
-    const sql30 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
-              head_count, tail_count, fill_policy
-       FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
+    const sql30 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count, fill_policy
+    FROM ${WORKPLACE_DIR_RULE_TABLE}
+    WHERE scope_key = #{scopeKey}`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql30, { scopeKey });
     return rows.map(rowToDirRule);
   }
 
   async listFileRules(scopeKey: string): Promise<WorkplaceFileRule[]> {
     const sql31 = `SELECT scope_key, logical_path, inclusion_mode
-       FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
+    FROM ${WORKPLACE_FILE_RULE_TABLE}
+    WHERE scope_key = #{scopeKey}`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql31, { scopeKey });
     return rows.map(rowToFileRule);
   }
 
   async findDirRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceDirRule | null, AppError>> {
-    const sql32 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
-              head_count, tail_count, fill_policy
-       FROM ${WORKPLACE_DIR_RULE_TABLE}
-       WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
+    const sql32 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count, fill_policy
+    FROM ${WORKPLACE_DIR_RULE_TABLE}
+    WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
@@ -185,8 +175,8 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   /** nm-style: keep-public — 实现 WorkplaceRepository.findFileRule 端口方法；生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async findFileRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceFileRule | null, AppError>> {
     const sql33 = `SELECT scope_key, logical_path, inclusion_mode
-       FROM ${WORKPLACE_FILE_RULE_TABLE}
-       WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
+    FROM ${WORKPLACE_FILE_RULE_TABLE}
+    WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = PathNormalizer.normalize(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
@@ -226,13 +216,13 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     const base = resolved.value;
     const escaped = ScopePrefix.escapeLike(base);
     const childPattern = `${escaped}/%`;
-    const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
-       WHERE scope_key = #{scopeKey}
-         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
+    const sql34 = `DELETE
+    FROM ${WORKPLACE_DIR_RULE_TABLE}
+    WHERE scope_key = #{scopeKey} AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
     await TdbcTemplate.execute(this.conn, this.parser, sql34, { scopeKey, path: base, childPattern });
-    const sql35 = `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
-       WHERE scope_key = #{scopeKey}
-         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
+    const sql35 = `DELETE
+    FROM ${WORKPLACE_FILE_RULE_TABLE}
+    WHERE scope_key = #{scopeKey} AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
     await TdbcTemplate.execute(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
     return Result.ok(undefined);
   }
@@ -248,22 +238,14 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     const childPattern = `${escaped}/%`;
     const matchClause = "scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')";
     // 一条 UPDATE：精确匹配自身（替换为 newBase）或子路径（拼接 newBase + 剩余部分）
-    const renameDir = `
-      UPDATE ${WORKPLACE_DIR_RULE_TABLE}
-      SET logical_path = CASE
-        WHEN logical_path = #{oldBase} THEN #{newBase}
-        ELSE #{newBase} || substr(logical_path, length(#{oldBase}) + 1)
-      END
-      WHERE ${matchClause}
-    `;
-    const renameFile = `
-      UPDATE ${WORKPLACE_FILE_RULE_TABLE}
-      SET logical_path = CASE
-        WHEN logical_path = #{oldBase} THEN #{newBase}
-        ELSE #{newBase} || substr(logical_path, length(#{oldBase}) + 1)
-      END
-      WHERE ${matchClause}
-    `;
+    const renameDir = `UPDATE ${WORKPLACE_DIR_RULE_TABLE}
+    SET logical_path = CASE WHEN logical_path = #{oldBase} THEN #{newBase} ELSE #{newBase} || substr(logical_path,
+    length(#{oldBase}) + 1) END
+    WHERE ${matchClause}`;
+    const renameFile = `UPDATE ${WORKPLACE_FILE_RULE_TABLE}
+    SET logical_path = CASE WHEN logical_path = #{oldBase} THEN #{newBase} ELSE #{newBase} || substr(logical_path,
+    length(#{oldBase}) + 1) END
+    WHERE ${matchClause}`;
     // 两条 UPDATE 放进同一事务，避免 dir_rule 成功而 file_rule 失败时留下半套状态。
     // 注意：TDBC 事务不可嵌套——目前唯一调用方（createWorkplaceService 的默认连接）
     // 在此处是非事务连接，安全；若未来有调用方把本方法放进外层事务，需改成“复用外层 tx”。

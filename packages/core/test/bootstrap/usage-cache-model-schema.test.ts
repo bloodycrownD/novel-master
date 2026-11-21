@@ -84,14 +84,10 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
       await execLegacyV7ChatMessageDdl(conn);
       const now = 1_700_000_000_000;
       await conn.execute(
-        `INSERT INTO chat_message (
-           id, session_id, seq, role, content_json, provider, raw_json,
-           created_at_ms, hidden, prompt_tokens, completion_tokens, total_tokens
-         ) VALUES (
-           'msg-v7', 'sess-v7', 1, 'assistant',
-           '{"blocks":[{"type":"text","text":"hi"}]}', 'openai', '{"usage":{}}',
-           ${now}, 0, 12, 34, 46
-         )`
+        `INSERT INTO chat_message ( id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden,
+    prompt_tokens, completion_tokens, total_tokens )
+    VALUES ( 'msg-v7', 'sess-v7', 1, 'assistant', '{"blocks":[{"type":"text","text":"hi"}]}', 'openai', '{"usage":{}}',
+    ${now}, 0, 12, 34, 46 )`
       );
       await conn.execute("PRAGMA user_version = 7");
 

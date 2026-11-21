@@ -58,8 +58,10 @@ describe("T-RP1 RevisionRefCount.repair 批量化", () => {
     //直接走裸 SQL，避开 adjustRefCount 的存在性校验路径。
     await c.conn.execute(
       `UPDATE vfs_revision
-       SET ref_count = 0
-       WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+    SET ref_count = 0
+    WHERE entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?)`,
       [sk],
     );
 
@@ -108,10 +110,10 @@ describe("T-RP1 RevisionRefCount.repair 批量化", () => {
     // 修复后所有 ref_count 应回到 1（live head 维护的期望值）。
     const rows = await c.conn.query<{ ref_count: number; n: number }>(
       `SELECT ref_count, COUNT(*) AS n
-       FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ?
-       GROUP BY ref_count`,
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ?
+    GROUP BY ref_count`,
       [sk],
     );
     const total = rows.reduce((acc, r) => acc + Number(r.n), 0);

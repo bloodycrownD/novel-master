@@ -101,10 +101,16 @@ async function main(): Promise<void> {
         revs: number;
         ck_files: number;
       }>(
-        `SELECT (SELECT COUNT(*) FROM chat_message WHERE session_id = ?) AS msgs,
-          (SELECT COUNT(*) FROM vfs_entry WHERE scope_key = ? AND content_hash IS NOT NULL) AS files,
-          (SELECT COUNT(*) FROM vfs_revision r JOIN vfs_entry e ON e.entry_id = r.entry_id WHERE e.scope_key = ?) AS revs,
-          (SELECT COUNT(*) FROM message_checkpoint_file WHERE session_id = ?) AS ck_files`,
+        `SELECT (SELECT COUNT(*)
+    FROM chat_message
+    WHERE session_id = ?) AS msgs, (SELECT COUNT(*)
+    FROM vfs_entry
+    WHERE scope_key = ? AND content_hash IS NOT NULL) AS files, (SELECT COUNT(*)
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ?) AS revs, (SELECT COUNT(*)
+    FROM message_checkpoint_file
+    WHERE session_id = ?) AS ck_files`,
         [copy.id, sk, sk, copy.id],
       );
       const c = counts[0]!;

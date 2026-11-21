@@ -298,8 +298,9 @@ describe("SqliteVfsEntryRepository", () => {
     unwrap(await repo.insert(GLOBAL_SCOPE, legacyPath, "placeholder"));
     // 裸 SQL 造遗留内联行：正文内联、无 content_hash（迁移窗口形态）
     await ctx.conn.execute(
-      `UPDATE vfs_entry SET content = '遗留内联正文', content_hash = NULL
-       WHERE scope_key = ? AND path = ?`,
+      `UPDATE vfs_entry
+    SET content = '遗留内联正文', content_hash = NULL
+    WHERE scope_key = ? AND path = ?`,
       [GLOBAL_SCOPE, legacyPath]
     );
 

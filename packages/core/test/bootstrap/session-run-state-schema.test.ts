@@ -73,13 +73,9 @@ describe("session_run_state schema 升级", () => {
       assert.equal(versionRows[0]!.user_version, SCHEMA_BOOT_VERSION);
 
       // 建出的表可正常写入（列清单与 CHECK 约束与仓储契约一致）。
-      await conn.execute(`
-        INSERT INTO session_run_state (
-          session_id, project_id, run_id, status, started_at_ms,
-          text_chars, thinking_chars, partial_text, partial_thinking,
-          pending_children_json, updated_at_ms
-        ) VALUES ('s', 'p', 'r', 'running', 1, 0, 0, NULL, NULL, NULL, 1)
-      `);
+      await conn.execute(`INSERT INTO session_run_state ( session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars,
+    partial_text, partial_thinking, pending_children_json, updated_at_ms )
+    VALUES ('s', 'p', 'r', 'running', 1, 0, 0, NULL, NULL, NULL, 1)`);
     } finally {
       await conn.close();
     }

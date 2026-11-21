@@ -10,12 +10,12 @@ import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import { BUILTIN_PROVIDER_ROWS } from "@/domain/provider/logic/builtin-providers.js";
 
 /** 内置服务商幂等插入 SQL（模板内缩进是语句正文，勿改）。 */
-const INSERT_BUILTIN_PROVIDER_SQL = `INSERT INTO llm_provider (
-        id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json,
-        is_builtin, created_at_ms, updated_at_ms
-      )
-      SELECT #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, NULL, '{}', 1, #{now}, #{now}
-      WHERE NOT EXISTS (SELECT 1 FROM llm_provider WHERE builtin_key = #{builtinKey})`.trim();
+const INSERT_BUILTIN_PROVIDER_SQL = `INSERT INTO llm_provider ( id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, is_builtin,
+    created_at_ms, updated_at_ms ) SELECT #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, NULL, '{}', 1,
+    #{now}, #{now}
+    WHERE NOT EXISTS (SELECT 1
+    FROM llm_provider
+    WHERE builtin_key = #{builtinKey})`.trim();
 
 /**
  * 内置服务商 seed 操作族。

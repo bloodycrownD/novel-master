@@ -377,7 +377,9 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
       const id = `bulk-${i}`;
       ids.push(id);
       await ctx.conn.execute(
-        `INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+        `INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order,
+    created_at_ms, updated_at_ms)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
         [id, `n${i}`, `第([0-9]+)话${i}`, "", "smart", null, i + 1, now, now],
       );
     }

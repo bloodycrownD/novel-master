@@ -26,7 +26,7 @@ novelMasterTestFixture();
 
 /** 全局孤儿 DELETE 的 SQL 特征（deleteGlobalOrphans 专用形态）。 */
 function isGlobalOrphanDelete(sql: string): boolean {
-  const n = sql.toLowerCase();
+  const n = sql.replace(/\s+/g, " ").toLowerCase();
   return (
     n.includes("delete from vfs_revision") &&
     n.includes("not in (select entry_id from vfs_entry)")
@@ -55,7 +55,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     // active+NULL 的 CHECK 约束）。
     await ctx.conn.execute(
       `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-       VALUES (999001, 1, 'deleted', 0, NULL, 0)`
+    VALUES (999001, 1, 'deleted', 0, NULL, 0)`
     );
 
     ctx.counter.clear();
@@ -129,7 +129,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     // 窗口语义：孤儿残留时回滚照常正确（孤儿与本会话无关）。
     await ctx.conn.execute(
       `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-       VALUES (999002, 1, 'deleted', 0, NULL, 0)`
+    VALUES (999002, 1, 'deleted', 0, NULL, 0)`
     );
 
     // 第一次调度：清扫挂在 gate 上（进行中）。

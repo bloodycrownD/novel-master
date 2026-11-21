@@ -40,7 +40,9 @@ export abstract class BaseSqliteChatRepository<TEntity> {
   }
 
   async findById(id: string): Promise<TEntity | null> {
-    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ${this.columns} FROM ${this.table} WHERE id = #{id}`, { id });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ${this.columns}
+    FROM ${this.table}
+    WHERE id = #{id}`, { id });
     return rows.length === 0 ? null : this.entityFromRow(rows[0]!);
   }
 
@@ -49,7 +51,9 @@ export abstract class BaseSqliteChatRepository<TEntity> {
   }
 
   async delete(id: string): Promise<boolean> {
-    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM ${this.table} WHERE id = #{id}`, { id });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM ${this.table}
+    WHERE id = #{id}`, { id });
     return result.changes > 0;
   }
 }

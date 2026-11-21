@@ -15,10 +15,9 @@ const DEFAULT_SETTINGS_JSON = JSON.stringify({
 /** 向 legacy llm_saved_model 写入 openai 两行测试数据。 */
 export async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<void> {
   await conn.execute(
-    `INSERT INTO llm_provider (
-      id, protocol, base_url, display_name, secret_ref, headers_json,
-      is_builtin, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO llm_provider ( id, protocol, base_url, display_name, secret_ref, headers_json, is_builtin, created_at_ms,
+    updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       "openai",
       "openai",
@@ -32,9 +31,8 @@ export async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<vo
     ],
   );
   await conn.execute(
-    `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO llm_saved_model ( provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?)`,
     [
       "openai",
       "gpt-4o",
@@ -45,9 +43,8 @@ export async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<vo
     ],
   );
   await conn.execute(
-    `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO llm_saved_model ( provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?)`,
     [
       "openai",
       "gpt-4o-mini",
@@ -184,7 +181,7 @@ export async function execLegacyChatProjectWithAgentConfig(
   `);
   await conn.execute(
     `INSERT INTO chat_project (id, display_name, created_at_ms, updated_at_ms, agent_config_json)
-     VALUES (?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?)`,
     [
       "legacy-project",
       "旧项目",
@@ -234,15 +231,14 @@ export async function seedLegacyWorktreeRuleRows(
   scopeKey = "project:legacy-wp",
 ): Promise<void> {
   await conn.execute(
-    `INSERT INTO worktree_dir_rule (
-      scope_key, logical_path, rule_enabled, sort_field, sort_order,
-      head_count, tail_count, fill_policy
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO worktree_dir_rule ( scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count,
+    fill_policy )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [scopeKey, "/", 1, "name", "asc", 0, 1000, "hidden"],
   );
   await conn.execute(
     `INSERT INTO worktree_file_rule (scope_key, logical_path, inclusion_mode)
-     VALUES (?, ?, ?)`,
+    VALUES (?, ?, ?)`,
     [scopeKey, "/readme.md", "force"],
   );
 }

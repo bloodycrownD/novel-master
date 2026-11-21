@@ -79,7 +79,7 @@ describe("schema 列对齐（T-B3）", () => {
     await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${projectId}', 'legacy-session', ${now}, ${now})`
+    VALUES ('${sessionId}', '${projectId}', 'legacy-session', ${now}, ${now})`
     );
     await NovelMasterBootstrap.bootstrap(conn);
 
@@ -104,14 +104,11 @@ describe("schema 列对齐（T-B3）", () => {
     await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${randomUUID()}', 'msg-session', ${now}, ${now})`
+    VALUES ('${sessionId}', '${randomUUID()}', 'msg-session', ${now}, ${now})`
     );
     await conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms
-       ) VALUES (
-         '${messageId}', '${sessionId}', 1, 'user', '{"blocks":[{"type":"text","text":"hi"}]}', ${now}
-       )`
+      `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms )
+    VALUES ( '${messageId}', '${sessionId}', 1, 'user', '{"blocks":[{"type":"text","text":"hi"}]}', ${now} )`
     );
     await NovelMasterBootstrap.bootstrap(conn);
 
@@ -224,7 +221,7 @@ describe("schema 列对齐（T-B3）", () => {
     await execBootstrapSchemaDdl(conn);
     await conn.execute(
       `INSERT INTO chat_project (id, name, created_at_ms, updated_at_ms)
-       VALUES ('${projectId}', 'legacy-project', ${now}, ${now})`
+    VALUES ('${projectId}', 'legacy-project', ${now}, ${now})`
     );
     await NovelMasterBootstrap.bootstrap(conn);
 
@@ -258,7 +255,7 @@ describe("schema 列对齐（T-B3）", () => {
     await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${projectId}', 'legacy-agent-col', ${now}, ${now})`
+    VALUES ('${sessionId}', '${projectId}', 'legacy-agent-col', ${now}, ${now})`
     );
     await NovelMasterBootstrap.bootstrap(conn);
 
@@ -310,15 +307,11 @@ describe("schema 列对齐（T-B3）", () => {
     await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${randomUUID()}', 'timing-align', ${now}, ${now})`
+    VALUES ('${sessionId}', '${randomUUID()}', 'timing-align', ${now}, ${now})`
     );
     await conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms
-       ) VALUES (
-         '${legacyMessageId}', '${sessionId}', 1, 'assistant',
-         '{"blocks":[{"type":"text","text":"legacy"}]}', ${now}
-       )`
+      `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms )
+    VALUES ( '${legacyMessageId}', '${sessionId}', 1, 'assistant', '{"blocks":[{"type":"text","text":"legacy"}]}', ${now} )`
     );
     await NovelMasterBootstrap.bootstrap(conn);
     // 重复执行幂等：第二次 bootstrap 不因列已存在而报错
@@ -413,13 +406,9 @@ describe("schema 列对齐（T-B3）", () => {
       const legacyId = randomUUID();
       const now = 1_700_000_000_000;
       await conn.execute(
-        `INSERT INTO llm_provider (
-           id, builtin_key, protocol, base_url, display_name, secret_ref,
-           headers_json, is_builtin, created_at_ms, updated_at_ms
-         ) VALUES (
-           '${legacyId}', NULL, 'openai', 'https://example.com/v1', 'v11-row',
-           NULL, '{}', 0, ${now}, ${now}
-         )`
+        `INSERT INTO llm_provider ( id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, is_builtin,
+    created_at_ms, updated_at_ms )
+    VALUES ( '${legacyId}', NULL, 'openai', 'https://example.com/v1', 'v11-row', NULL, '{}', 0, ${now}, ${now} )`
       );
 
       await NovelMasterBootstrap.bootstrap(conn);
@@ -466,14 +455,9 @@ describe("schema 列对齐（T-B3）", () => {
       const legacySessionId = randomUUID();
       const now = 1_700_000_000_000;
       await conn.execute(
-        `INSERT INTO session_run_state (
-           session_id, project_id, run_id, status, started_at_ms,
-           text_chars, thinking_chars, partial_text, partial_thinking,
-           pending_children_json, updated_at_ms
-         ) VALUES (
-           '${legacySessionId}', '${randomUUID()}', 'run-v15', 'running', ${now},
-           120, 30, 'partial', NULL, NULL, ${now}
-         )`
+        `INSERT INTO session_run_state ( session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars,
+    partial_text, partial_thinking, pending_children_json, updated_at_ms )
+    VALUES ( '${legacySessionId}', '${randomUUID()}', 'run-v15', 'running', ${now}, 120, 30, 'partial', NULL, NULL, ${now} )`
       );
       await conn.execute(
         "ALTER TABLE session_run_state DROP COLUMN completion_tokens"
@@ -497,8 +481,9 @@ describe("schema 列对齐（T-B3）", () => {
         completion_tokens: number;
         token_source: string;
       }>(
-        `SELECT completion_tokens, token_source FROM session_run_state
-         WHERE session_id = '${legacySessionId}'`
+        `SELECT completion_tokens, token_source
+    FROM session_run_state
+    WHERE session_id = '${legacySessionId}'`
       );
       assert.equal(legacyRow[0]?.completion_tokens, 0);
       assert.equal(legacyRow[0]?.token_source, "heuristic");

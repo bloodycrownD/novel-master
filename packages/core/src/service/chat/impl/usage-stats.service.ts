@@ -163,15 +163,10 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 单条 GROUP BY 查询替代旧实现的逐日 N+1：strftime 的 localtime 与
     // JS Date 同用进程本地时区，DST 日按挂钟日归桶；整数除法截到秒不影响
     // 日归属（日界切换发生在整秒的 0 点，毫秒截断不可能跨日）。
-    const dailyBucketsSql = `SELECT strftime('%Y-%m-%d', created_at_ms / 1000, 'unixepoch', 'localtime') AS day_key,
-              ${AGG_SELECT_SQL}
-       FROM usage_record
-       WHERE ${USAGE_NOT_NULL_SQL}
-         AND created_at_ms >= #{fromMs}
-         AND created_at_ms < #{toMs}
-         ${MODEL_FILTER_SQL}
-         ${PROVIDER_FILTER_SQL}
-       GROUP BY day_key`;
+    const dailyBucketsSql = `SELECT strftime('%Y-%m-%d', created_at_ms / 1000, 'unixepoch', 'localtime') AS day_key, ${AGG_SELECT_SQL}
+    FROM usage_record
+    WHERE ${USAGE_NOT_NULL_SQL} AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs} ${MODEL_FILTER_SQL} ${PROVIDER_FILTER_SQL}
+    GROUP BY day_key`;
     const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, dailyBucketsSql, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
     const rowByDay = new Map<string, Row>();
     for (const row of rows) {
@@ -213,13 +208,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     if (!range.ok) return Result.err(range.error);
     const { fromMs, toMs } = range.value;
     const modelBreakdownSql = `SELECT provider_id, model_name, ${AGG_SELECT_SQL}
-       FROM usage_record
-       WHERE ${USAGE_NOT_NULL_SQL}
-         ${TIME_RANGE_SQL}
-         ${MODEL_FILTER_SQL}
-         ${PROVIDER_FILTER_SQL}
-       GROUP BY provider_id, model_name
-       -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）`;
+    FROM usage_record
+    WHERE ${USAGE_NOT_NULL_SQL} ${TIME_RANGE_SQL} ${MODEL_FILTER_SQL} ${PROVIDER_FILTER_SQL}
+    GROUP BY provider_id, model_name -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）`;
     const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, modelBreakdownSql, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
     const mapped = rows.map((row) => ({
       providerId: row.provider_id == null ? null : String(row.provider_id),
@@ -285,14 +276,13 @@ export class DefaultUsageStatsService implements UsageStatsService {
       offset,
       limit,
     };
-    const totalRows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, `SELECT COUNT(*) AS n FROM usage_record ${whereSql}`, params);
-    const requestRowsSql = `SELECT created_at_ms, model_name, prompt_tokens, completion_tokens,
-              total_tokens, cache_read_tokens, cache_creation_tokens,
-              first_token_ms, duration_ms
-       FROM usage_record
-       ${whereSql}
-       ORDER BY created_at_ms DESC, id ASC
-       LIMIT #{limit} OFFSET #{offset}`;
+    const totalRows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, `SELECT COUNT(*) AS n
+    FROM usage_record ${whereSql}`, params);
+    const requestRowsSql = `SELECT created_at_ms, model_name, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens,
+    cache_creation_tokens, first_token_ms, duration_ms
+    FROM usage_record ${whereSql}
+    ORDER BY created_at_ms DESC, id ASC
+    LIMIT #{limit} OFFSET #{offset}`;
     const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, requestRowsSql, params);
     return Result.ok({
       rows: rows.map(
@@ -333,12 +323,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // fork 新会话天然 miss 重算）；miss 时解压 assistant 行现算并回填——
     // 大会话这笔现算数百毫秒量级，由失效挂点保证只在「真的变了之后」付
     // 一次。会话累计输入/输出已移除（含 hidden 的累计对用户无意义）。
-    const lastRequestSql = `SELECT message_seq, model_name, provider, prompt_tokens, completion_tokens,
-                cache_read_tokens, cache_creation_tokens, created_at_ms
-         FROM usage_record
-         WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}
-         ORDER BY created_at_ms DESC, id DESC
-         LIMIT 1`;
+    const lastRequestSql = `SELECT message_seq, model_name, provider, prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens,
+    created_at_ms
+    FROM usage_record
+    WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}
+    ORDER BY created_at_ms DESC, id DESC
+    LIMIT 1`;
     const visibleCountSql = "SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId} AND hidden = 0";
     const sessionUsageQueries = Promise.all([
       TdbcTemplate.query<Row>(this.conn, this.parser, lastRequestSql, { sessionId }),
@@ -440,11 +430,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
    */
   private async queryAggregateRow(fromMs: number | null, toMs: number | null, model: string | null | undefined, providerId: string | null | undefined): Promise<Row> {
     const aggregateSql = `SELECT ${AGG_SELECT_SQL}
-       FROM usage_record
-       WHERE ${USAGE_NOT_NULL_SQL}
-         ${TIME_RANGE_SQL}
-         ${MODEL_FILTER_SQL}
-         ${PROVIDER_FILTER_SQL}`;
+    FROM usage_record
+    WHERE ${USAGE_NOT_NULL_SQL} ${TIME_RANGE_SQL} ${MODEL_FILTER_SQL} ${PROVIDER_FILTER_SQL}`;
     const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, aggregateSql, { fromMs, toMs, model, providerId });
     return rows[0] ?? ZERO_AGG_ROW;
   }

@@ -66,7 +66,7 @@ describe("MacSqliteSecretStore", () => {
     const ref = "provider/wrong/algo";
     await conn.execute(
       `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
-       VALUES (?, ?, ?, ?, 1, ?)`,
+    VALUES (?, ?, ?, ?, 1, ?)`,
       [ref, Buffer.from("x"), Buffer.alloc(12), "dpapi-v1", Date.now()],
     );
     await assert.rejects(

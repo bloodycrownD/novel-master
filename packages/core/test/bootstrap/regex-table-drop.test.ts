@@ -45,7 +45,7 @@ async function seedLegacyRegexTables(conn: TdbcConnection): Promise<void> {
   );
   await conn.execute(
     `INSERT INTO regex_rule (group_id, rule_id, sort_order, name, pattern, flags, enabled, created_at_ms, updated_at_ms)
-     VALUES ('g1', 'r1', 0, '去噪', 'foo', '', 1, 1, 1)`
+    VALUES ('g1', 'r1', 0, '去噪', 'foo', '', 1, 1, 1)`
   );
   await conn.execute("PRAGMA user_version = 10");
 }

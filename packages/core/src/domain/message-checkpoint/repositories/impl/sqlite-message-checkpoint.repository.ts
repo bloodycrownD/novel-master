@@ -113,9 +113,9 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // ⇒ 各块之和 == 整段计数。
     let total = 0;
     for (const chunk of chunkIdList(messageIds, 1)) {
-      const sql3 = `SELECT COUNT(*) AS n FROM message_checkpoint
-         WHERE session_id = #{sessionId}
-           AND message_id IN (${chunk.inClause})`;
+      const sql3 = `SELECT COUNT(*) AS n
+    FROM message_checkpoint
+    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
       const rows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, sql3, { sessionId, ...chunk.bindings });
       // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
       total += Number(rows[0]!.n);
@@ -147,7 +147,8 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // 会变成 N 次 SQL 往返，seed-fork 500 消息 × 200 文件就是 10 万次，相当卡。
     // 这里切到 conn.batch（位置占位符 ?），一次调用处理整批。
     if (input.files.length > 0) {
-      const sql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path) VALUES (?, ?, ?, ?, ?)`;
+      const sql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path)
+    VALUES (?, ?, ?, ?, ?)`;
       const paramsList = input.files.map((f) => [input.sessionId, input.messageId, f.entryId, f.revisionVersion, f.path]);
       await this.conn.batch(sql, paramsList);
     }
@@ -275,9 +276,8 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     const out: MessageCheckpointFile[] = [];
     for (const chunk of chunkIdList(messageIds, 1)) {
       const sql13 = `SELECT session_id, message_id, entry_id, revision_version
-         FROM message_checkpoint_file
-         WHERE session_id = #{sessionId}
-           AND message_id IN (${chunk.inClause})`;
+    FROM message_checkpoint_file
+    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
       const rows = await TdbcTemplate.query(this.conn, this.parser, sql13, { sessionId, ...chunk.bindings });
       for (const row of rows) {
         out.push(rowToFilePointer(row));
@@ -298,8 +298,8 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     const chunks = [...chunkIdList(messageIds, 1)];
     for (const chunk of chunks) {
       const sql14 = `SELECT session_id, message_id, entry_id, revision_version
-         FROM message_checkpoint_file
-         WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
+    FROM message_checkpoint_file
+    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
       const rows = await TdbcTemplate.query(this.conn, this.parser, sql14, { sessionId, ...chunk.bindings });
       for (const row of rows) {
         fileRows.push(rowToFilePointer(row));
@@ -310,11 +310,13 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
 
     for (const chunk of chunks) {
-      const sql15 = `DELETE FROM message_checkpoint_file
-         WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
+      const sql15 = `DELETE
+    FROM message_checkpoint_file
+    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
       await TdbcTemplate.execute(this.conn, this.parser, sql15, { sessionId, ...chunk.bindings });
-      const sql16 = `DELETE FROM message_checkpoint
-         WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
+      const sql16 = `DELETE
+    FROM message_checkpoint
+    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
       await TdbcTemplate.execute(this.conn, this.parser, sql16, { sessionId, ...chunk.bindings });
     }
   }
@@ -329,7 +331,11 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
       await RevisionRefCount.decrementForCheckpointFiles(revisionRepo, pointers);
     }
 
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM message_checkpoint_file WHERE session_id = #{sessionId}`, { sessionId });
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM message_checkpoint WHERE session_id = #{sessionId}`, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM message_checkpoint_file
+    WHERE session_id = #{sessionId}`, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM message_checkpoint
+    WHERE session_id = #{sessionId}`, { sessionId });
   }
 }

@@ -224,9 +224,10 @@ describe("CS-05b backfill 事务边界", () => {
     // （见 ensure-import-dir-rules.ts:87-89）——这里不要「顺手统一」成 vfs 键，
     // 那样查的是另一张表的另一批行，断言会静默失效。
     const rules = await ctx.conn.query<{ logical_path: string }>(
-      `SELECT logical_path FROM workplace_dir_rule
-       WHERE scope_key = ?
-       ORDER BY logical_path`,
+      `SELECT logical_path
+    FROM workplace_dir_rule
+    WHERE scope_key = ?
+    ORDER BY logical_path`,
       [`session:${seeded.sessionId}`]
     );
     assert.equal(

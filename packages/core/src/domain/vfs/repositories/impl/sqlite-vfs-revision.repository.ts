@@ -41,10 +41,10 @@ const REVISION_REPAIR_CHUNK_SIZE = 500;
  * 历史：曾与 orphan-revision-gc-v1 migration（一次性回扫存量，v1.4.28 退役）共享同一
  * 常量；migration 退役后运行期独占，语义不变。
  */
-const ORPHAN_REVISION_GC_SQL = `
-    DELETE FROM vfs_revision
-    WHERE ref_count <= 0
-      AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`.trim();
+const ORPHAN_REVISION_GC_SQL = `DELETE
+    FROM vfs_revision
+    WHERE ref_count <= 0 AND entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)`.trim();
 
 export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   private readonly parser = new SqlTemplateParser();
@@ -55,7 +55,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   }
 
   async findMaxVersionForEntry(entryId: number): Promise<number | null> {
-    const rows = await TdbcTemplate.query<{ max_version: number | null }>(this.conn, this.parser, `SELECT MAX(version) AS max_version FROM vfs_revision WHERE entry_id = #{entryId}`, { entryId });
+    const rows = await TdbcTemplate.query<{ max_version: number | null }>(this.conn, this.parser, `SELECT MAX(version) AS max_version
+    FROM vfs_revision
+    WHERE entry_id = #{entryId}`, { entryId });
     const max = rows[0]?.max_version;
     return max == null ? null : Number(max);
   }
@@ -75,9 +77,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       });
       const inList = placeholders.join(", ");
       const sql52 = `SELECT entry_id, MAX(version) AS max_version
-         FROM vfs_revision
-         WHERE entry_id IN (${inList})
-         GROUP BY entry_id`;
+    FROM vfs_revision
+    WHERE entry_id IN (${inList})
+    GROUP BY entry_id`;
       const rows = await TdbcTemplate.query<{ entry_id: number; max_version: number }>(this.conn, this.parser, sql52, bindings);
       for (const row of rows) {
         result.set(Number(row.entry_id), Number(row.max_version));
@@ -141,8 +143,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       });
       const conditions = placeholders.join(" OR ");
       const sql56 = `SELECT entry_id, version, status, content_hash
-         FROM vfs_revision
-         WHERE ${conditions}`;
+    FROM vfs_revision
+    WHERE ${conditions}`;
       const rows = await TdbcTemplate.query<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, sql56, bindings);
       for (const row of rows) {
         result.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), {
@@ -167,7 +169,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       for (const pair of chunk) {
         params.push(pair.entryId, pair.version);
       }
-      const rows = await this.conn.query<{ entry_id: number; version: number }>(`SELECT entry_id, version FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`, params);
+      const rows = await this.conn.query<{ entry_id: number; version: number }>(`SELECT entry_id, version
+    FROM vfs_revision
+    WHERE (entry_id, version) IN (${placeholders})`, params);
       for (const row of rows) {
         result.add(RevisionPairKey.build(Number(row.entry_id), Number(row.version)));
       }
@@ -184,7 +188,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       readonly refCount: number;
     }>): Promise<void> {
     if (items.length === 0) return;
-    const sql = `INSERT INTO vfs_revision (entry_id, version, content_hash, status, mtime_ms, ref_count) VALUES (?, ?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO vfs_revision (entry_id, version, content_hash, status, mtime_ms, ref_count)
+    VALUES (?, ?, ?, ?, ?, ?)`;
     const paramsList = items.map((i) => [i.entryId, i.version, i.contentHash, i.status, i.mtimeMs, i.refCount]);
     await this.conn.batch(sql, paramsList);
   }
@@ -320,7 +325,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       for (const pair of chunk) {
         params.push(pair.entryId, pair.version);
       }
-      await this.conn.execute(`UPDATE vfs_revision SET ref_count = ref_count ${deltaLiteral} WHERE (entry_id, version) IN (${placeholders})${clamp}`, params);
+      await this.conn.execute(`UPDATE vfs_revision
+    SET ref_count = ref_count ${deltaLiteral}
+    WHERE (entry_id, version) IN (${placeholders})${clamp}`, params);
     }
   }
 
@@ -362,7 +369,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       for (const item of chunk) {
         params.push(item.entryId, item.version);
       }
-      const rows = await this.conn.query<{ entry_id: number; version: number; ref_count: number }>(`SELECT entry_id, version, ref_count FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`, params);
+      const rows = await this.conn.query<{ entry_id: number; version: number; ref_count: number }>(`SELECT entry_id, version, ref_count
+    FROM vfs_revision
+    WHERE (entry_id, version) IN (${placeholders})`, params);
       for (const row of rows) {
         currentMap.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), Number(row.ref_count));
       }
@@ -419,25 +428,20 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
     const excludeSql = excludeClauses.length > 0 ? ` AND NOT (${excludeClauses.join(" OR ")})` : "";
     const sql26 = `SELECT COUNT(*) AS n
-       FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = #{scopeKey}
-         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
-         AND r.ref_count <= 0`;
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = #{scopeKey} AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql} AND r.ref_count <= 0`;
     const before = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, sql26, bindings);
     const count = Number(before[0]?.n ?? 0);
     if (count === 0) {
       return 0;
     }
-    const sql27 = `DELETE FROM vfs_revision
-       WHERE (entry_id, version) IN (
-         SELECT r.entry_id, r.version
-         FROM vfs_revision r
-         JOIN vfs_entry e ON e.entry_id = r.entry_id
-         WHERE e.scope_key = #{scopeKey}
-           AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
-           AND r.ref_count <= 0
-       )`;
+    const sql27 = `DELETE
+    FROM vfs_revision
+    WHERE (entry_id, version) IN ( SELECT r.entry_id, r.version
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = #{scopeKey} AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql} AND r.ref_count <= 0 )`;
     // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
     // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
     // 所以这条改动本身不改变 rowid 表上的行为。

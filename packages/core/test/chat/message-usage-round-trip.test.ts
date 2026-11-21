@@ -352,10 +352,9 @@ describe("message cache/model_name round-trip (T-S3)", () => {
 
     // spec 关键决策 1：凡 cache 列非 NULL 的行，provider 必非 NULL（新消息由请求侧写入）。
     const violated = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM chat_message
-       WHERE (cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)
-         AND provider IS NULL
-         AND session_id = ?`,
+      `SELECT COUNT(*) AS n
+    FROM chat_message
+    WHERE (cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL) AND provider IS NULL AND session_id = ?`,
       [session.id],
     );
     assert.equal(violated[0]?.n, 0, "cache 列非 NULL 的行 provider 不能是 NULL");

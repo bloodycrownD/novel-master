@@ -219,10 +219,11 @@ describe("项目删除无孤儿（T-SR3）", () => {
     // DeferredBlobGc.run，按全库引用集（entry ∪ revision 反查）验证无 orphan blob。
     await DeferredBlobGc.run(ctx.conn);
     const orphanRows = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob b
-       WHERE NOT EXISTS (
-         SELECT 1 FROM vfs_revision r WHERE r.content_hash = b.content_hash
-       )`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob b
+    WHERE NOT EXISTS ( SELECT 1
+    FROM vfs_revision r
+    WHERE r.content_hash = b.content_hash )`,
     );
     assert.equal(
       Number(orphanRows[0]!.n),

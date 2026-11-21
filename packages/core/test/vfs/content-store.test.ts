@@ -84,7 +84,8 @@ describe("VfsContentStore", () => {
       bytes_type: string;
     }>(
       `SELECT encoding, byte_len, bytes, TYPEOF(bytes) AS bytes_type
-         FROM vfs_content_blob WHERE content_hash = ?`,
+    FROM vfs_content_blob
+    WHERE content_hash = ?`,
       [hash],
     );
     assert.equal(meta.length, 1);
@@ -105,7 +106,7 @@ describe("VfsContentStore", () => {
     // 直插模拟 RN 存量库：encoding=zlib-b64，bytes 列存 base64 文本。
     await conn.execute(
       `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
-       VALUES (?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?)`,
       [contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
     );
 
@@ -133,7 +134,7 @@ describe("VfsContentStore", () => {
     // 模拟存量：encoding 仍标 zlib，但列里实际是 base64 文本（RN 读回形态）。
     await conn.execute(
       `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
-       VALUES (?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?)`,
       [contentHash, VFS_CONTENT_ENCODING_ZLIB, b64, b64.length],
     );
 
@@ -150,7 +151,7 @@ describe("VfsContentStore", () => {
     // 先手插一条存量 zlib-b64 文本行，再 put 同明文：应复用、不改写。
     await conn.execute(
       `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
-       VALUES (?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?)`,
       [contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
     );
 

@@ -428,7 +428,9 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
       content_blob: Uint8Array | null;
     }>(
       `SELECT content_json, content_encoding, content_blob
-         FROM chat_message WHERE session_id = ? ORDER BY seq ASC`,
+    FROM chat_message
+    WHERE session_id = ?
+    ORDER BY seq ASC`,
       [copied.id]
     );
     assert.equal(copyRows.length, 3);

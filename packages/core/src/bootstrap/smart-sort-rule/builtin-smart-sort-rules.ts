@@ -112,10 +112,9 @@ export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[
 ];
 
 /** 内置规则幂等插入 SQL（模板内缩进是语句正文，勿改）。 */
-const INSERT_OR_IGNORE_SMART_SORT_RULE_SQL = `INSERT OR IGNORE INTO ${SMART_SORT_RULE_TABLE} (
-        rule_id, name, pattern, flags, capture_kind, description, enabled,
-        sort_order, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`.trim();
+const INSERT_OR_IGNORE_SMART_SORT_RULE_SQL = `INSERT OR IGNORE INTO ${SMART_SORT_RULE_TABLE} ( rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order,
+    created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`.trim();
 
 /**
  * 内置智能排序规则 seed 操作族。

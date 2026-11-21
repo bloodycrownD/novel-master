@@ -49,8 +49,9 @@ describe("RevisionAwareVfsService (integration)", () => {
     // 钉住高版本（模拟 checkpoint 引用：ref_count +1）
     if (pinnedVersions.length > 0) {
       await conn.execute(
-        `UPDATE vfs_revision SET ref_count = ref_count + 1
-         WHERE entry_id = ? AND version IN (${pinnedVersions.map(() => "?").join(",")})`,
+        `UPDATE vfs_revision
+    SET ref_count = ref_count + 1
+    WHERE entry_id = ? AND version IN (${pinnedVersions.map(() => "?").join(",")})`,
         [entryId, ...pinnedVersions],
       );
     }
@@ -303,8 +304,9 @@ describe("RevisionAwareVfsService (integration)", () => {
     unwrap(await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true }));
 
     const tombstones = await conn.query<{ entry_id: number; version: number; status: string }>(
-      `SELECT entry_id, version, status FROM vfs_revision
-       WHERE entry_id IN (?, ?, ?) AND status = 'deleted'`,
+      `SELECT entry_id, version, status
+    FROM vfs_revision
+    WHERE entry_id IN (?, ?, ?) AND status = 'deleted'`,
       [aEid, bEid, cEid],
     );
     const byEntry = new Map(tombstones.map((t) => [Number(t.entry_id), Number(t.version)]));
@@ -339,8 +341,10 @@ describe("RevisionAwareVfsService (integration)", () => {
     const orphanEid = await entryIdForPath(conn, orphan);
     await conn.execute(`DELETE FROM vfs_entry WHERE entry_id = ?`, [orphanEid]);
     await conn.execute(
-      `UPDATE sqlite_sequence SET seq = (SELECT COALESCE(MAX(entry_id), 0) FROM vfs_entry)
-       WHERE name = 'vfs_entry'`,
+      `UPDATE sqlite_sequence
+    SET seq = (SELECT COALESCE(MAX(entry_id), 0)
+    FROM vfs_entry)
+    WHERE name = 'vfs_entry'`,
     );
 
     // 发号器推号越过孤儿（对齐启动期 entry-sequence repair）

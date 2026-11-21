@@ -78,7 +78,8 @@ async function rawContentColumns(id: string): Promise<{
     content_json: string | null;
   }>(
     `SELECT content_encoding, content_blob, content_json
-     FROM chat_message WHERE id = ?`,
+    FROM chat_message
+    WHERE id = ?`,
     [id]
   );
   const row = rows[0]!;

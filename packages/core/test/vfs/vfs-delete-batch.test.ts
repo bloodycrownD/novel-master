@@ -94,10 +94,9 @@ describe("T-DEL1 vfs.delete 递归删除批量化", () => {
     // 项目 scope 下旧 active 行的 ref_count 应该都被 -1 到 0（墓碑 +1 在 deleted 行上）。
     const staleActive = await c.conn.query<{ c: number }>(
       `SELECT COUNT(*) AS c
-       FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = ? AND e.path LIKE '/tree2/%'
-         AND r.status = 'active' AND r.ref_count > 0`,
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = ? AND e.path LIKE '/tree2/%' AND r.status = 'active' AND r.ref_count > 0`,
       [project.id],
     );
 

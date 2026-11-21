@@ -114,7 +114,7 @@ describe("getRawWire + assess 集成", () => {
     const now = Date.now();
     await ctx.conn.execute(
       `INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms)
-       VALUES (?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?)`,
       ["legacy-agent", JSON.stringify(legacyWire), now, now],
     );
 

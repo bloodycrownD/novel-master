@@ -39,10 +39,9 @@ const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000001";
 /** 写入测试用服务商与密钥行（与 bootstrap DDL 列对齐）。 */
 async function seedTestProviderData(conn: TdbcConnection): Promise<void> {
   await conn.execute(
-    `INSERT INTO llm_provider (
-      id, protocol, base_url, display_name, secret_ref,
-      headers_json, is_builtin, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO llm_provider ( id, protocol, base_url, display_name, secret_ref, headers_json, is_builtin, created_at_ms,
+    updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       "custom-openai",
       "openai",
@@ -56,10 +55,9 @@ async function seedTestProviderData(conn: TdbcConnection): Promise<void> {
     ],
   );
   await conn.execute(
-    `INSERT INTO llm_saved_model (
-      id, provider_id, vendor_model_id, model_name,
-      settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO llm_saved_model ( id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms,
+    updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       TEST_SAVED_MODEL_ID,
       "custom-openai",
@@ -71,9 +69,8 @@ async function seedTestProviderData(conn: TdbcConnection): Promise<void> {
     ],
   );
   await conn.execute(
-    `INSERT INTO sksp_secrets (
-      ref, ciphertext, iv, algo, version, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sksp_secrets ( ref, ciphertext, iv, algo, version, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?)`,
     [
       "sksp:custom-openai-key",
       new Uint8Array([1, 2, 3, 4]),

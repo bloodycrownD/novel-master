@@ -185,6 +185,9 @@ function checkArguments(state: ScanState, node: ts.CallExpression | ts.NewExpres
   if (isHookCallText(node.expression.getText(state.sourceFile))) return;
   // E2：JSX 上下文/JSX 实参豁免。
   if (isJsxContext(node, args)) return;
+  // E5（p29 W2）：SQL 模板实参豁免——`TdbcTemplate.query(conn, parser, `多行SQL`, bindings)` 的
+  // SQL 文本按关键字排版是合法形态，与 R5 常量豁免同口径。
+  if (args.some((arg) => isSqlTemplateValue(arg))) return;
   const firstArgMoved = callbacks.length === 0 && regular[0] === args[0] && lineOf(state.sourceFile, regular[0]) !== callSiteLine(node, state.sourceFile);
   const regularSplit = regular.some((arg, index) => index > 0 && lineOf(state.sourceFile, arg) !== lineOf(state.sourceFile, regular[index - 1]));
   if (!firstArgMoved && !regularSplit) return;
@@ -257,6 +260,15 @@ function checkOneLineValue(state: ScanState, node: ts.Node, value: ts.Expression
 /** R5：全大写 `*_SQL` 后缀常量的模板字面量豁免一行要求（多行 SQL 文本按关键字引导换行是合法排版）。 */
 const SQL_CONST_NAME_RE = /^[A-Z][A-Z0-9_]*_SQL$/;
 
+/** SQL 语句起始关键字——模板字面量内容以其开头即视为 SQL 文本（p29 W2：局部 `const sql = ...` 同享豁免）。 */
+const SQL_HEAD_RE = /^\s*(?:WITH|SELECT|INSERT|UPDATE|DELETE)\b/;
+
+function isSqlTemplateValue(value: ts.Expression): boolean {
+  if (!ts.isTemplateExpression(value) && !ts.isNoSubstitutionTemplateLiteral(value)) return false;
+  const head = ts.isNoSubstitutionTemplateLiteral(value) ? value.text : value.head.text;
+  return SQL_HEAD_RE.test(head);
+}
+
 function isSqlTemplateConst(name: string, value: ts.Expression): boolean {
   if (!SQL_CONST_NAME_RE.test(name)) return false;
   return ts.isTemplateExpression(value) || ts.isNoSubstitutionTemplateLiteral(value);
@@ -267,15 +279,15 @@ function checkVariable(state: ScanState, node: ts.VariableDeclaration): void {
   if (lineOf(state.sourceFile, node.name) !== lineOf(state.sourceFile, node.name.getEnd())) return;
   if (node.type != null && lineOf(state.sourceFile, node.type) !== lineOf(state.sourceFile, node.type.getEnd())) return;
   const name = node.name.getText(state.sourceFile);
-  // R5 / E1：SQL 模板常量多行合法；hook 调用 RHS（useState/useMemo/...）拆行是 React 惯用排版。
-  if (isSqlTemplateConst(name, node.initializer)) return;
+  // R5 / E1：SQL 模板常量多行合法（p29 W2 扩：模板内容以 SQL 关键字开头的局部变量同享）；hook 调用 RHS（useState/useMemo/...）拆行是 React 惯用排版。
+  if (isSqlTemplateConst(name, node.initializer) || isSqlTemplateValue(node.initializer)) return;
   if (ts.isCallExpression(node.initializer) && isHookCallText(node.initializer.expression.getText(state.sourceFile))) return;
   checkOneLineValue(state, node, node.initializer, lineOf(state.sourceFile, node.name.getEnd()), "VARDECL", name, name);
 }
 
 function checkAssignment(state: ScanState, node: ts.AssignmentExpression<ts.AssignmentOperatorToken>): void {
   const detail = node.left.getText(state.sourceFile).slice(0, 80);
-  // R5：ASSIGN 侧同豁免（SQL 模板常量重赋值形态）。
-  if (isSqlTemplateConst(node.left.getText(state.sourceFile), node.right)) return;
+  // R5：ASSIGN 侧同豁免（SQL 模板常量重赋值形态；p29 W2 扩同 isSqlTemplateValue）。
+  if (isSqlTemplateConst(node.left.getText(state.sourceFile), node.right) || isSqlTemplateValue(node.right)) return;
   checkOneLineValue(state, node, node.right, lineOf(state.sourceFile, node.left.getEnd()), "ASSIGN", detail, detail);
 }

@@ -105,7 +105,7 @@ describe("AndroidSecretStore", () => {
       const iv = Buffer.alloc(12, 0).toString("base64");
       await conn.execute(
         `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
-         VALUES (?, ?, ?, ?, 2, ?)`,
+    VALUES (?, ?, ?, ?, 2, ?)`,
         [ref, Buffer.from(ciphertext, "base64"), Buffer.from(iv, "base64"), ALGO, Date.now()],
       );
 
@@ -134,7 +134,7 @@ describe("AndroidSecretStore", () => {
       const ref = "provider/wrong/algo";
       await conn.execute(
         `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
-         VALUES (?, ?, ?, ?, 1, ?)`,
+    VALUES (?, ?, ?, ?, 1, ?)`,
         [ref, Buffer.from("x"), Buffer.alloc(12), "macos-keychain-aes-gcm-v1", Date.now()],
       );
       const store = AndroidSecretStoreFactory.create(conn);

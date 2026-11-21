@@ -152,8 +152,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       });
       const inClause = placeholders.join(", ");
       const sql30 = `SELECT path, content_hash, entry_kind
-         FROM vfs_entry
-         WHERE scope_key = #{scopeKey} AND path IN (${inClause})`;
+    FROM vfs_entry
+    WHERE scope_key = #{scopeKey} AND path IN (${inClause})`;
       const rows = await TdbcTemplate.query<{ path: string; content_hash: string | null; entry_kind: string }>(this.conn, this.parser, sql30, bindings);
       for (const row of rows) {
         const path = String(row.path);
@@ -350,7 +350,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         return Result.err(new AppError("VFS_DIRECTORY_NOT_EMPTY", { path: normalized, detail: `Directory not empty: ${normalized}` }));
       }
 
-      const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}`, { scopeKey, path: normalized });
+      const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM vfs_entry
+    WHERE scope_key = #{scopeKey} AND path = #{path}`, { scopeKey, path: normalized });
       if (result.changes === 0) {
         return Result.err(new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` }));
       }
@@ -549,8 +551,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         return `#{path${index}}`;
       });
       const inClause = placeholders.join(", ");
-      const sql22 = `SELECT path FROM vfs_entry
-         WHERE scope_key = #{scopeKey} AND path IN (${inClause})`;
+      const sql22 = `SELECT path
+    FROM vfs_entry
+    WHERE scope_key = #{scopeKey} AND path IN (${inClause})`;
       const rows = await TdbcTemplate.query<{ path: string }>(this.conn, this.parser, sql22, bindings);
       for (const row of rows) {
         result.add(String(row.path));
@@ -566,7 +569,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       mtimeMs: number;
     }>): Promise<Result<void, AppError>> {
     if (entries.length === 0) return Result.ok(undefined);
-    const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
+    const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+    VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
     const paramsList: unknown[][] = [];
     for (const e of entries) {
       const resolved = PathNormalizer.normalize(e.path);
@@ -580,7 +584,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   /** nm-style: keep-public — 实现 VfsEntryRepository.batchInsertDirectoryEntries 端口方法；内联会把批量 INSERT 搬进调用层。 */
   async batchInsertDirectoryEntries(scopeKey: string, paths: ReadonlyArray<string>): Promise<Result<void, AppError>> {
     if (paths.length === 0) return Result.ok(undefined);
-    const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
+    const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+    VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
     const now = Date.now();
     const paramsList: unknown[][] = [];
     for (const p of paths) {

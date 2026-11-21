@@ -171,16 +171,15 @@ async function seedCheckpoints(
     const part = anchorRows.slice(off, off + 500);
     await ctx.conn.execute(
       `INSERT INTO message_checkpoint (session_id, message_id, created_at_ms)
-       VALUES ${part.map(() => "(?, ?, ?)").join(", ")}`,
+    VALUES ${part.map(() => "(?, ?, ?)").join(", ")}`,
       part.flat(),
     );
   }
   for (let off = 0; off < fileRows.length; off += 500) {
     const part = fileRows.slice(off, off + 500);
     await ctx.conn.execute(
-      `INSERT INTO message_checkpoint_file
-         (session_id, message_id, entry_id, revision_version, path)
-       VALUES ${part.map(() => "(?, ?, ?, ?, ?)").join(", ")}`,
+      `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path)
+    VALUES ${part.map(() => "(?, ?, ?, ?, ?)").join(", ")}`,
       part.flat(),
     );
   }

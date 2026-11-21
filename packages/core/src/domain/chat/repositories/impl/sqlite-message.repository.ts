@@ -35,9 +35,8 @@ const MESSAGE_HEADER_COLUMNS = "id, session_id, seq, role, hidden, created_at_ms
  */
 const MESSAGE_INSERT_COLUMNS = "id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms";
 
-const MESSAGE_INSERT_SQL = `
-  INSERT INTO chat_message (${MESSAGE_INSERT_COLUMNS})
-  VALUES (${MESSAGE_INSERT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
+const MESSAGE_INSERT_SQL = `INSERT INTO chat_message (${MESSAGE_INSERT_COLUMNS})
+    VALUES (${MESSAGE_INSERT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 /**
  * 把 ChatMessageData 摊平成与 {@link MESSAGE_INSERT_COLUMNS} 列顺序对齐的参数数组。
@@ -214,13 +213,19 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 只消费可见历史）因此不必把不可见行的正文字节取回来，也省掉逐行
     // parse content_json（读路径只有明文一种形态）。
     const hiddenFilter = options?.includeHidden === false ? " AND hidden = 0" : "";
-    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`;
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId}${hiddenFilter}
+    ORDER BY seq ASC`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId });
     return this.mapRows(rows, hooks);
   }
 
   async listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
-    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq >= #{fromSeq} ORDER BY seq ASC`;
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND seq >= #{fromSeq}
+    ORDER BY seq ASC`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, fromSeq });
     return this.mapRows(rows, hooks);
   }
@@ -230,7 +235,10 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
     // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
     // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
-    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq <= #{maxSeq} ORDER BY seq ASC`;
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND seq <= #{maxSeq}
+    ORDER BY seq ASC`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, maxSeq });
     return this.mapRows(rows, hooks);
   }
@@ -239,7 +247,13 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
     // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
     const clampedLimit = Math.max(1, Math.floor(limit));
-    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND role = #{role} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM (SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND role = #{role}
+    ORDER BY seq DESC
+    LIMIT #{limit})
+    ORDER BY seq ASC`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, role, limit: clampedLimit });
     return this.mapRows(rows, hooks);
   }
@@ -279,21 +293,37 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 不取正文字节。原先按 19 列全量取并逐条 JSON.parse——会话导入 / 复制 /
     // 首次回填时 offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
     const clampedOffset = Math.max(0, Math.floor(offset));
-    const sql = `SELECT ${MESSAGE_HEADER_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC LIMIT -1 OFFSET #{offset}`;
+    const sql = `SELECT ${MESSAGE_HEADER_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId}
+    ORDER BY seq ASC
+    LIMIT -1 OFFSET #{offset}`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, offset: clampedOffset });
     return rows.map(rowToHeader);
   }
 
   async listBySessionTail(sessionId: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const clampedLimit = Math.max(1, Math.floor(limit));
-    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM (SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId}
+    ORDER BY seq DESC
+    LIMIT #{limit})
+    ORDER BY seq ASC`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, limit: clampedLimit });
     return this.mapRows(rows, hooks);
   }
 
   async listBySessionPage(sessionId: string, limit: number, beforeSeq?: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const clampedLimit = Math.max(1, Math.floor(limit));
-    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq}) ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM (SELECT ${MESSAGE_SELECT_COLUMNS}
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
+    ORDER BY seq DESC
+    LIMIT #{limit})
+    ORDER BY seq ASC`;
     const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit });
     return this.mapRows(rows, hooks);
   }
@@ -312,7 +342,9 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 一起置 NULL。存量压缩行改写后仍要清掉旧 blob，避免后续迁移 / 人工排查
     // 把同一行看成双形态。反例由 test/chat/message-plaintext-write.test.ts 的
     // T-MP1 锁死。
-    const sql = `UPDATE chat_message SET content_json = #{json}, content_encoding = NULL, content_blob = NULL WHERE id = #{id}`;
+    const sql = `UPDATE chat_message
+    SET content_json = #{json}, content_encoding = NULL, content_blob = NULL
+    WHERE id = #{id}`;
     const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id, json: JSON.stringify(content) });
     return result.changes > 0;
   }
@@ -394,7 +426,9 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
 
   async updateHiddenRange(sessionId: string, fromSeq: number, toSeq: number, hidden: boolean): Promise<number> {
     const hiddenFilter = hidden ? "AND hidden = 0" : "AND hidden = 1";
-    const sql = `UPDATE chat_message SET hidden = #{hidden} WHERE session_id = #{sessionId} AND seq >= #{fromSeq} AND seq <= #{toSeq} ${hiddenFilter}`;
+    const sql = `UPDATE chat_message
+    SET hidden = #{hidden}
+    WHERE session_id = #{sessionId} AND seq >= #{fromSeq} AND seq <= #{toSeq} ${hiddenFilter}`;
     const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 });
     return result.changes;
   }

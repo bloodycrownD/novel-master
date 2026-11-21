@@ -379,8 +379,9 @@ describe("SkillService（T-SK5）", () => {
     unwrap(await skills.deleteSkill({ domain: "project", projectId: p.id, name }));
 
     const residue = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob
-       WHERE content_hash = ? AND ref_count <= 0`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash = ? AND ref_count <= 0`,
       [skillHash],
     );
     assert.equal(

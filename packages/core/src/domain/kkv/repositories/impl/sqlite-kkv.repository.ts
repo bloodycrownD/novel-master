@@ -19,7 +19,10 @@ export class SqliteKkvRepository implements KkvRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async listKeys(module: string): Promise<string[]> {
-    const rows = await TdbcTemplate.query<{ key: string }>(this.conn, this.parser, `SELECT key FROM kkv_entry WHERE module = #{module} ORDER BY key`, { module });
+    const rows = await TdbcTemplate.query<{ key: string }>(this.conn, this.parser, `SELECT key
+    FROM kkv_entry
+    WHERE module = #{module}
+    ORDER BY key`, { module });
     return rows.map((row) => String(row.key));
   }
 
@@ -34,12 +37,17 @@ export class SqliteKkvRepository implements KkvRepository {
   }
 
   async set(module: string, key: string, value: string): Promise<void> {
-    const sql = `INSERT INTO kkv_entry (module, key, value) VALUES (#{module}, #{key}, #{value}) ON CONFLICT(module, key) DO UPDATE SET value = excluded.value`;
+    const sql = `INSERT INTO kkv_entry (module, key, value)
+    VALUES (#{module}, #{key}, #{value})
+    ON CONFLICT(module, key) DO UPDATE
+    SET value = excluded.value`;
     await TdbcTemplate.execute(this.conn, this.parser, sql, { module, key, value });
   }
 
   async delete(module: string, key: string): Promise<boolean> {
-    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM kkv_entry WHERE module = #{module} AND key = #{key}`, { module, key });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE
+    FROM kkv_entry
+    WHERE module = #{module} AND key = #{key}`, { module, key });
     return result.changes > 0;
   }
 }

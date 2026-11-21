@@ -37,9 +37,8 @@ describe("agent-registry IPC handlers", () => {
       prompts: { blocks: {} },
     };
     await rt.conn.execute(
-      `INSERT INTO agent_definition (
-        agent_id, prompts_json, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_definition ( agent_id, prompts_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?)`,
       ["broken-agent", JSON.stringify(brokenWire), now, now],
     );
     await DesktopRuntimeSingleton.resetForTest();
@@ -97,9 +96,8 @@ describe("agent-registry IPC handlers", () => {
       prompts: { blocks: {} },
     };
     await rt.conn.execute(
-      `INSERT INTO agent_definition (
-        agent_id, prompts_json, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_definition ( agent_id, prompts_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?)`,
       ["broken-get-agent", JSON.stringify(brokenWire), now, now],
     );
     await DesktopRuntimeSingleton.resetForTest();
@@ -152,9 +150,8 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
     const rt = rtR.value;
     const now = Date.now();
     await rt.conn.execute(
-      `INSERT INTO agent_definition (
-        agent_id, prompts_json, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_definition ( agent_id, prompts_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?)`,
       [
         "broken-mode-agent",
         JSON.stringify({

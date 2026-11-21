@@ -308,11 +308,10 @@ describe("template pull", () => {
 
     const rows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n
-       FROM vfs_revision r
-       WHERE r.ref_count <= 0
-         AND NOT EXISTS (
-           SELECT 1 FROM vfs_entry e WHERE e.entry_id = r.entry_id
-         )`,
+    FROM vfs_revision r
+    WHERE r.ref_count <= 0 AND NOT EXISTS ( SELECT 1
+    FROM vfs_entry e
+    WHERE e.entry_id = r.entry_id )`,
     );
     assert.equal(
       Number(rows[0]!.n),

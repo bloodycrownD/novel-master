@@ -65,7 +65,7 @@ async function insertPackRows(conn: TdbcConnection, entryId: number, format: Vfs
   const encoded = unwrapResult(format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1 ? encodeZlibConcatPack(utf8s) : encodeFossilChainPack(utf8s));
   await conn.execute(
     `INSERT INTO vfs_content_pack (entry_id, format, bytes, byte_len, member_count, created_at_ms)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?)`,
     [entryId, format, encoded.bytes, encoded.bytes.byteLength, utf8s.length, Date.now()]
   );
   const idRows = await conn.query<{ pack_id: number }>(`SELECT last_insert_rowid() AS pack_id`);
@@ -79,7 +79,7 @@ async function insertPackRows(conn: TdbcConnection, entryId: number, format: Vfs
     const compressedByteLen = ZlibCodec.compress(utf8s[index]!).byteLength;
     await conn.execute(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
-       VALUES (?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?)`,
       [contentHash, packId, span.offset, span.length, compressedByteLen]
     );
     members.push({
@@ -97,13 +97,15 @@ async function insertPackRows(conn: TdbcConnection, entryId: number, format: Vfs
 async function insertActiveRevision(conn: TdbcConnection, entryId: number, version: number, contentHash: string): Promise<void> {
   await conn.execute(
     `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-     VALUES (?, ?, 'active', ?, ?, 1)`,
+    VALUES (?, ?, 'active', ?, ?, 1)`,
     [entryId, version, Date.now(), contentHash]
   );
 }
 
 async function entryIdOf(conn: TdbcConnection, scopeKey: string, path: string): Promise<number> {
-  const rows = await conn.query<{ entry_id: number }>(`SELECT entry_id FROM vfs_entry WHERE scope_key = ? AND path = ?`, [scopeKey, path]);
+  const rows = await conn.query<{ entry_id: number }>(`SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ? AND path = ?`, [scopeKey, path]);
   return Number(rows[0]!.entry_id);
 }
 
@@ -442,7 +444,9 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     assert.equal(unwrapResult(await store.get(hB)), pB);
     assert.equal(unwrapResult(await store.get(hHead)), pHead, "head 仍走 blob 原路径");
     // 一 hash 一 member 行（主键保证）；重复 hash 不产生第二行。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?`, [pack.packId]), 2);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_pack_member
+    WHERE pack_id = ?`, [pack.packId]), 2);
 
     // —— fossil 组：三版本链（局部修改 + 追加），head 独立保留 blob ——
     const [f0, f1, f2] = fossilVersions(suffix);
@@ -498,13 +502,17 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const { packId } = await insertPackRows(conn, entryId, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, [plainChunk(`filler`, suffix, 5)]);
     await conn.execute(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
-       VALUES (?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?)`,
       [hHead, packId, 0x40000000, 1, 1]
     );
     // 夹具有效性自检：member 行确实存在（保证下面断言测的是「blob 优先」而非「member 不存在」）。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?`, [hHead]), 1);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_pack_member
+    WHERE content_hash = ?`, [hHead]), 1);
     // live head 永不被打包的读侧体现：blob 表始终有 head 行、get 命中即返回。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`, [hHead]), 1);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash = ?`, [hHead]), 1);
 
     assert.equal(unwrapResult(await store.get(hHead)), pHead);
     assert.equal(unwrapResult(await store.getMany([hHead])).get(hHead), pHead);
@@ -551,8 +559,12 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     // packX 这 1 行空 pack，共 ≥5 行）。
     assert.ok(reclaimed >= 5, `本轮至少应回收 5 行（packX 3 member + packZ 1 孤儿 member + 1 空 pack），实际 ${reclaimed}`);
 
-    const memberCount = (packId: number, hash?: string) => countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?${hash != null ? ` AND content_hash = ?` : ``}`, hash != null ? [packId, hash] : [packId]);
-    const packExists = (packId: number) => countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack WHERE pack_id = ?`, [packId]);
+    const memberCount = (packId: number, hash?: string) => countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_pack_member
+    WHERE pack_id = ?${hash != null ?` AND content_hash = ?` : ``}`, hash != null ? [packId, hash] : [packId]);
+    const packExists = (packId: number) => countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_pack
+    WHERE pack_id = ?`, [packId]);
 
     assert.equal(await memberCount(packX.packId), 0, "无引用 pack 的 member 应全删");
     assert.equal(await packExists(packX.packId), 0, "空 pack 应被回收");
@@ -575,7 +587,9 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
     await conn.execute(`DELETE FROM vfs_revision WHERE entry_id = ? AND version IN (300, 301)`, [entryId]);
     // 触发器把 hBlob 的 blob 行 ref_count 归零自动删除（不触碰 pack 表）。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`, [hBlob]), 0);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash = ?`, [hBlob]), 0);
     assert.equal(await memberCount(packV.packId), 1, "删 revision 不直接影响 member");
 
     await store.gc();
@@ -627,20 +641,23 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const bulkHashes = Array.from({ length: 500 }, (_, index) => ContentHash.hash(`tvp5b-bulk-${suffix}-${index}`));
     await conn.batch(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
-       VALUES (?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?)`,
       bulkHashes.map((contentHash) => [contentHash, packId, 0, 1, 1])
     );
     // 夹具自检：500 条 bulk member 行确实落库，且对应 blob 行不存在。
     assert.equal(
       await countRows(
         conn,
-        `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?
-         AND content_hash IN (${bulkHashes.map(() => `?`).join(`,`)})`,
+        `SELECT COUNT(*) AS n
+    FROM vfs_content_pack_member
+    WHERE pack_id = ? AND content_hash IN (${bulkHashes.map(() =>`?`).join(`,`)})`,
         [packId, ...bulkHashes]
       ),
       500
     );
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash IN (${bulkHashes.map(() => `?`).join(`,`)})`, [...bulkHashes]), 0);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash IN (${bulkHashes.map(() =>`?`).join(`,`)})`, [...bulkHashes]), 0);
 
     // —— 探针：包一层 conn，只数「命中两张内容表」的单语句实际绑定变量数。
     const probe = createBlobHashQueryProbe(conn);
@@ -700,7 +717,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const { packId } = await insertPackRows(conn, 987654321, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, [plainChunk(`filler`, suffix, 5)]);
     await conn.execute(
       `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
-       VALUES (?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?)`,
       [hBoth, packId, 0, 1, bothByteLen + 999]
     );
     const pathBoth = `/tvp6/both-${suffix}.md`;
@@ -744,11 +761,15 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     // 超限组：compressed_byte_len 抬到闸门之上。该列的真实语义就是「这份内容
     // 作为独立 blob 行时的 byte_len」，抬到闸门之上即模拟「超大文件被打包」。
     const overBytes = gate + 1;
-    await conn.execute(`UPDATE vfs_content_pack_member SET compressed_byte_len = ? WHERE content_hash = ?`, [overBytes, hashOver]);
+    await conn.execute(`UPDATE vfs_content_pack_member
+    SET compressed_byte_len = ?
+    WHERE content_hash = ?`, [overBytes, hashOver]);
     // 对照组互斥性自检：独立压缩长必在闸门之下。
     assert.ok(memberUnder!.compressedByteLen < gate, `对照组压缩长 ${memberUnder!.compressedByteLen} 应远低于闸门 ${gate}`);
     // 夹具互斥性自检：两个 hash 都不得有 blob 行（否则探测走 blob 早返回）。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash IN (?, ?)`, [hashOver, hashUnder]), 0);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash IN (?, ?)`, [hashOver, hashUnder]), 0);
 
     const pathOver = `/tvp6b/over-${suffix}.md`;
     const pathUnder = `/tvp6b/under-${suffix}.md`;
@@ -843,20 +864,30 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     await insertActiveRevision(conn, entryId, 2, m1.contentHash);
     await insertActiveRevision(conn, entryId, 3, m2.contentHash);
 
-    const beforeRows = await conn.query<{ bytes: Uint8Array }>(`SELECT bytes FROM vfs_content_pack WHERE pack_id = ?`, [packId]);
+    const beforeRows = await conn.query<{ bytes: Uint8Array }>(`SELECT bytes
+    FROM vfs_content_pack
+    WHERE pack_id = ?`, [packId]);
     const bytesBefore = beforeRows[0]!.bytes;
 
     // 抽回：put 幂等保活把首成员抽回独立 blob 行当 head（resetHeadToVersion 场景）。
     assert.equal(await store.put(f0), m0.contentHash);
 
     // 恒红判据 1：member 表必须删掉 h0（不删则 count=1）。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?`, [m0.contentHash]), 0, "put 抽回后同 hash member 行应被删除");
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`, [m0.contentHash]), 1, "抽回后 blob 行应存在");
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_pack_member
+    WHERE content_hash = ?`, [m0.contentHash]), 0, "put 抽回后同 hash member 行应被删除");
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash = ?`, [m0.contentHash]), 1, "抽回后 blob 行应存在");
     // 同组剩余成员 member 行不受牵连。
-    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?`, [packId]), 2);
+    assert.equal(await countRows(conn, `SELECT COUNT(*) AS n
+    FROM vfs_content_pack_member
+    WHERE pack_id = ?`, [packId]), 2);
 
     // 恒红判据 2：pack 流字节逐字节不变（死区段留在流里等整组 GC，永不改写）。
-    const afterRows = await conn.query<{ bytes: Uint8Array }>(`SELECT bytes FROM vfs_content_pack WHERE pack_id = ?`, [packId]);
+    const afterRows = await conn.query<{ bytes: Uint8Array }>(`SELECT bytes
+    FROM vfs_content_pack
+    WHERE pack_id = ?`, [packId]);
     assert.ok(bytesEqual(bytesBefore, afterRows[0]!.bytes), "pack 流字节应不变");
 
     // 双侧读回全等：h0 走 blob 路径；h1/h2 沿段链（含已成死区的段 0 作 base）。

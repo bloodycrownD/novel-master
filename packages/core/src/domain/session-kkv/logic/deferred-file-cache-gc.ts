@@ -29,7 +29,11 @@ export const DeferredFileCacheGc = {
    */
   run: async (conn: TdbcConnection): Promise<number> => {
     const parser = new SqlTemplateParser();
-    const sql = `DELETE FROM session_file_cache_blob WHERE content_hash NOT IN (SELECT content_hash FROM session_file_cache_entry WHERE content_hash IS NOT NULL)`;
+    const sql = `DELETE
+    FROM session_file_cache_blob
+    WHERE content_hash NOT IN (SELECT content_hash
+    FROM session_file_cache_entry
+    WHERE content_hash IS NOT NULL)`;
     const result = await TdbcTemplate.execute(conn, parser, sql, {});
     return result.changes;
   },

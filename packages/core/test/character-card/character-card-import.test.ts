@@ -115,8 +115,9 @@ describe("CharacterCardImportService", () => {
     const staleReplaced = await vfs.read("/角色/独有旧文件.md");
     assert.ok(!staleReplaced.ok, "被替换的旧文件应走 Err 通道");
     const residue = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob
-       WHERE content_hash = ? AND ref_count <= 0`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash = ? AND ref_count <= 0`,
       [oldHash],
     );
     assert.equal(

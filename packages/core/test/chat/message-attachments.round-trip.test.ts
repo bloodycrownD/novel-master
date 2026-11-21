@@ -151,8 +151,8 @@ describe("message attachments round-trip (Step 5)", () => {
     // 模拟历史行里今天不再接受的附件形态（append-only，不可重写）
     await ctx.conn.execute(
       `UPDATE chat_message
-       SET attachments_json = ?
-       WHERE id = ?`,
+    SET attachments_json = ?
+    WHERE id = ?`,
       [
         JSON.stringify([
           legal[0],

@@ -110,8 +110,9 @@ describe("VfsZipIoService", () => {
     unwrap(await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, VfsZipBuild.build(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])), { confirmed: true }));
 
     const residue = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM vfs_content_blob
-       WHERE content_hash = ? AND ref_count <= 0`,
+      `SELECT COUNT(*) AS n
+    FROM vfs_content_blob
+    WHERE content_hash = ? AND ref_count <= 0`,
       [oldHash]
     );
     assert.equal(Number(residue[0]!.n), 0, "zip 导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 DeferredBlobGc.run）");

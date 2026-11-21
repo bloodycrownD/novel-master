@@ -125,22 +125,13 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
 
       // 建出的表可正常写入：pack 头行 + member 行，列清单与 CHECK 值域
       // 与仓储契约一致（format 只认两种打包形态）。
-      await conn.execute(`
-        INSERT INTO vfs_content_pack (
-          entry_id, format, bytes, byte_len, member_count, created_at_ms
-        ) VALUES (1, 'fossil-chain-v1', x'789c', 4, 1, 1)
-      `);
-      await conn.execute(`
-        INSERT INTO vfs_content_pack_member (
-          content_hash, pack_id, offset, length, compressed_byte_len
-        ) VALUES ('sha-abc', 1, 0, 10, 4)
-      `);
+      await conn.execute(`INSERT INTO vfs_content_pack ( entry_id, format, bytes, byte_len, member_count, created_at_ms )
+    VALUES (1, 'fossil-chain-v1', x'789c', 4, 1, 1)`);
+      await conn.execute(`INSERT INTO vfs_content_pack_member ( content_hash, pack_id, offset, length, compressed_byte_len )
+    VALUES ('sha-abc', 1, 0, 10, 4)`);
       await assert.rejects(() =>
-        conn.execute(`
-          INSERT INTO vfs_content_pack (
-            entry_id, format, bytes, byte_len, member_count, created_at_ms
-          ) VALUES (1, 'raw', x'789c', 4, 1, 1)
-        `)
+        conn.execute(`INSERT INTO vfs_content_pack ( entry_id, format, bytes, byte_len, member_count, created_at_ms )
+    VALUES (1, 'raw', x'789c', 4, 1, 1)`)
       );
     } finally {
       await conn.close();

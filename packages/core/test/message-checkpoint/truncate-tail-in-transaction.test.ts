@@ -23,8 +23,10 @@ async function orphanRevisionExists(
   entryId: number
 ): Promise<boolean> {
   const rows = await conn.query(
-    `SELECT COUNT(*) AS n FROM vfs_revision
-     WHERE entry_id = ? AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
+    `SELECT COUNT(*) AS n
+    FROM vfs_revision
+    WHERE entry_id = ? AND entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)`,
     [entryId]
   );
   return Number(rows[0]!.n) > 0;
@@ -39,7 +41,7 @@ async function insertOrphanRevision(
   // active+NULL 的 CHECK 约束。
   await conn.execute(
     `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-     VALUES (?, 1, 'deleted', 0, NULL, 0)`,
+    VALUES (?, 1, 'deleted', 0, NULL, 0)`,
     [entryId]
   );
 }

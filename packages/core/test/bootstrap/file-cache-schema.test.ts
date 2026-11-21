@@ -101,14 +101,10 @@ describe("session_file_cache 两表 schema 升级", () => {
 
       // 建出的表可正常写入（列清单与 CHECK 约束与仓储契约一致）：
       // blob 用 x'' 十六进制字面量写 BLOB，不经绑定参数。
-      await conn.execute(`
-        INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len)
-        VALUES ('h1', 'zlib', x'010203', 3)
-      `);
-      await conn.execute(`
-        INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms)
-        VALUES ('s', 'full:/a.md', 'h1', 123)
-      `);
+      await conn.execute(`INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len)
+    VALUES ('h1', 'zlib', x'010203', 3)`);
+      await conn.execute(`INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms)
+    VALUES ('s', 'full:/a.md', 'h1', 123)`);
     } finally {
       await conn.close();
     }

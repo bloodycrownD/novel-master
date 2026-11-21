@@ -15,22 +15,16 @@ import type { SavedModel } from "../../model/saved-model.js";
 import type { SavedModelRepository } from "../saved-model.port.js";
 
 const SAVED_MODEL_COLUMNS = "id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms";
-const SELECT_BY_PROVIDER_SQL = `
-  SELECT ${SAVED_MODEL_COLUMNS} FROM llm_saved_model
-  WHERE provider_id = #{providerId}
-  ORDER BY vendor_model_id, model_name`;
+const SELECT_BY_PROVIDER_SQL = `SELECT ${SAVED_MODEL_COLUMNS}
+    FROM llm_saved_model
+    WHERE provider_id = #{providerId}
+    ORDER BY vendor_model_id, model_name`;
 const SELECT_BY_ID_SQL = `SELECT ${SAVED_MODEL_COLUMNS} FROM llm_saved_model WHERE id = #{id}`;
-const INSERT_SQL = `
-  INSERT INTO llm_saved_model (${SAVED_MODEL_COLUMNS}) VALUES (
-    #{id}, #{providerId}, #{vendorModelId}, #{modelName},
-    #{settingsJson}, #{createdAtMs}, #{updatedAtMs}
-  )`;
-const UPDATE_SQL = `
-  UPDATE llm_saved_model SET
-    model_name = #{modelName},
-    settings_json = #{settingsJson},
-    updated_at_ms = #{updatedAtMs}
-  WHERE id = #{id}`;
+const INSERT_SQL = `INSERT INTO llm_saved_model (${SAVED_MODEL_COLUMNS})
+    VALUES ( #{id}, #{providerId}, #{vendorModelId}, #{modelName}, #{settingsJson}, #{createdAtMs}, #{updatedAtMs} )`;
+const UPDATE_SQL = `UPDATE llm_saved_model
+    SET model_name = #{modelName}, settings_json = #{settingsJson}, updated_at_ms = #{updatedAtMs}
+    WHERE id = #{id}`;
 const DELETE_BY_ID_SQL = "DELETE FROM llm_saved_model WHERE id = #{id}";
 const DELETE_BY_PROVIDER_SQL = "DELETE FROM llm_saved_model WHERE provider_id = #{providerId}";
 

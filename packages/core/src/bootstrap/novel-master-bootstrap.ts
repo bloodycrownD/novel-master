@@ -261,7 +261,9 @@ export const NovelMasterBootstrap = {
   // 若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
   // `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
   // `no such column`，把本应给出的升级提示顶掉。故单列此探测。
-  const contentHashProbeTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`);
+  const contentHashProbeTables = await tx.query<{ name: string }>(`SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'vfs_entry'`);
   if (contentHashProbeTables.length > 0) {
     const contentHashProbeCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('vfs_entry')`);
     if (!contentHashProbeCols.some((c) => c.name === "content_hash")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
@@ -271,26 +273,35 @@ export const NovelMasterBootstrap = {
 
   // 任一 legacy 形态命中即视为未升级到最低支持版本。
   // `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。
-  const savedModelTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'llm_saved_model'`);
+  const savedModelTables = await tx.query<{ name: string }>(`SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'llm_saved_model'`);
   if (savedModelTables.length > 0) {
     const savedModelCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('llm_saved_model')`);
     if (!new Set(savedModelCols.map((c) => c.name)).has("id")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
   }
 
   // 存在 `worktree_*` 规则表 → 未走 rename-worktree-tables-to-workplace-v1。
-  const worktreeRuleRows = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`);
+  const worktreeRuleRows = await tx.query<{ name: string }>(`SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`);
   if (worktreeRuleRows.length > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
 
   // `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）→ 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
-  const vfsEntryTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`);
+  const vfsEntryTables = await tx.query<{ name: string }>(`SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'vfs_entry'`);
   if (vfsEntryTables.length > 0) {
-    const vfsEntryCols = await tx.query<{ name: string; pk: number }>(`SELECT name, pk FROM pragma_table_info('vfs_entry')`);
+    const vfsEntryCols = await tx.query<{ name: string; pk: number }>(`SELECT name, pk
+    FROM pragma_table_info('vfs_entry')`);
     const entryId = vfsEntryCols.find((c) => c.name === "entry_id");
     if (!(entryId != null && entryId.pk > 0)) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
   }
 
   // `chat_session` 存在但缺 `agent_config_json` 列 → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
-  const chatSessionTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_session'`);
+  const chatSessionTables = await tx.query<{ name: string }>(`SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'chat_session'`);
   if (chatSessionTables.length > 0) {
     const chatSessionCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_session')`);
     if (!chatSessionCols.some((c) => c.name === "agent_config_json")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
@@ -298,17 +309,23 @@ export const NovelMasterBootstrap = {
 
   // `vfs_revision` 存在但未切 WITHOUT ROWID（table-constraints-v1b 的独有形态变化，canonical DDL 之外没有别处会改它）
   // → 未走 table-constraints-v1b（< v1.4.28）。判据与原迁移自身的探测一致；查询异常/空结果的保守方向是 false（新装路径不触发）。
-  const vfsRevisionRows = await tx.query<{ sql: string | null }>(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`);
+  const vfsRevisionRows = await tx.query<{ sql: string | null }>(`SELECT sql
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'vfs_revision'`);
   if (vfsRevisionRows.length > 0 && vfsRevisionRows[0]?.sql != null && !/WITHOUT\s+ROWID/i.test(String(vfsRevisionRows[0]?.sql ?? ""))) {
     return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
   }
 
   // `chat_project` 存在且 `agent_config_json` 有非 NULL 残留 → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
-  const chatProjectTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_project'`);
+  const chatProjectTables = await tx.query<{ name: string }>(`SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'chat_project'`);
   if (chatProjectTables.length > 0) {
     const chatProjectCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_project')`);
     if (chatProjectCols.some((c) => c.name === "agent_config_json")) {
-      const chatProjectRows = await tx.query<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM chat_project WHERE agent_config_json IS NOT NULL`);
+      const chatProjectRows = await tx.query<{ cnt: number }>(`SELECT COUNT(*) AS cnt
+    FROM chat_project
+    WHERE agent_config_json IS NOT NULL`);
       if (Number(chatProjectRows[0]?.cnt ?? 0) > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
     }
   }
