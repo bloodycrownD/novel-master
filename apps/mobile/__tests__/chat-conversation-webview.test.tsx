@@ -11,6 +11,8 @@
  * - 8s 超时兜底（假时钟；每次 onLoad / 重挂重新计时）；
  * - 切会话 key 重挂、transcriptOnly 变体、流式命令式 API 与块提交判路。
  */
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import React from 'react';
 import {ChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -383,9 +385,12 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     // T-SP22：init.labels 与 core catalog 的 4 个 transcript key 逐字段 parity。
     expect(init?.payload.labels).toEqual(TranscriptLabelsFactory.build(coreT));
     // 再直比 zh-CN catalog 字面值：避免宿主与断言共用同一个装配函数造成自证。
-    // p27 R6 第 0 片：labels 随 build 扩 ui.* map，与 zh catalog 的 ui.* 键直比。
+    // p27 R6：桥的 ui map 只随发 UI_LABEL_KEYS 声明的管线键（其余 ui.* 走 web 侧
+    // DEFAULT 兜底），键集走源码契约提取——不为测试假导出，也不复制键单造成双漂移面。
     const zh = CORE_CATALOGS['zh-CN']!;
-    const zhUi = Object.fromEntries(Object.entries(zh).filter(([key]) => key.startsWith('ui.')));
+    const bridgeKeys = [...readFileSync(join(__dirname, '../src/components/chat/transcript-labels.ts'), 'utf8').matchAll(/'(ui\.[a-z0-9_.]+)'/g)].map(match => match[1]);
+    const zhUi = Object.fromEntries(bridgeKeys.map(key => [key, zh[key]]));
+    expect(Object.keys(init!.payload.labels!.ui).sort()).toEqual([...bridgeKeys].sort());
     expect(init?.payload.labels).toEqual({
       generating: zh['label.transcript.generating'],
       thinking: zh['label.transcript.thinking_header'],

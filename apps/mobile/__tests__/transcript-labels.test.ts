@@ -86,7 +86,8 @@ describe('宿主 labels 装配（T-SP22）', () => {
     const uiKeys = Object.keys(built.ui);
     expect(uiKeys.length).toBeGreaterThan(0);
     for (const key of uiKeys) {
-      expect(key).toMatch(/^ui\.transcript\./);
+      // 波 3-1 起桥随发共享 portal 的 ui.common.close，键域不再限于 transcript 段。
+      expect(key).toMatch(/^ui\./);
       expect(built.ui[key]).toBe(zh[key]);
     }
   });
