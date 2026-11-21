@@ -915,6 +915,10 @@ const UI_MESSAGE_KEYS = [
   "ui.agent.new_title",
   "ui.agent.deleted_count_done",
 
+  // agent：波 3c-c 补键（3c-b D 线契约对齐新 MISS：SettingsViews 主/子智能体 tab hint）
+  "ui.agent.primary_scope_hint",
+  "ui.agent.subagent_scope_hint",
+
   // provider（服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui））
   "ui.provider.title",
   "ui.provider.name_label",
@@ -995,6 +999,10 @@ const UI_MESSAGE_KEYS = [
   "ui.provider.path_style_label",
   "ui.provider.api_key_sksp_hint",
 
+  // provider：波 3c-c 补键（3c-b D 线新 MISS：服务商/模型 named 删除确认模板）
+  "ui.provider.delete_confirm_msg_named",
+  "ui.provider.delete_model_confirm_msg_named",
+
   // sampling（采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm））
   "ui.sampling.model_name_hint",
   "ui.sampling.vendor_id_line",
@@ -1062,6 +1070,10 @@ const UI_MESSAGE_KEYS = [
 
   // chat_config：波 3c-a 补键（波 3-2 MISS 收尾：M1 聊天配置屏标题）
   "ui.chat_config.title",
+
+  // chat_config：波 3c-c 补键（3c-b D 线契约对齐新 MISS：WorkspaceSettingsView 流式开关 desc）
+  "ui.chat_config.stream_parent_desc",
+  "ui.chat_config.stream_sub_desc",
 
   // skills（技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel））
   "ui.skills.new_title",
@@ -1246,6 +1258,14 @@ const UI_MESSAGE_KEYS = [
   "ui.smart_sort.reset_title",
   "ui.smart_sort.help_smart_title",
   "ui.smart_sort.help_smart_body",
+
+  // smart_sort：波 3c-c 补键（3c-b D 线契约对齐新 MISS：空态/规则缺失/测试提示/named 删除模板/正则帮助段）
+  "ui.smart_sort.load_retry_empty",
+  "ui.smart_sort.empty_create_hint",
+  "ui.smart_sort.rule_missing",
+  "ui.smart_sort.test_result_pending",
+  "ui.smart_sort.delete_rule_confirm_msg_named",
+  "ui.smart_sort.help_regex_syntax",
 
   // prompt（提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard））
   "ui.prompt.turn_aria",

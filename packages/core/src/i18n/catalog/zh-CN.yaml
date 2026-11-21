@@ -848,6 +848,9 @@ ui:
     not_found: "未找到 Agent：{agent_id}"
     new_title: 新建 Agent
     deleted_count_done: "已删除 {count} 个 Agent"
+    # —— 波 3c-c 补键：3c-b D 线契约对齐新 MISS（SettingsViews 主/子智能体 tab hint） ——
+    primary_scope_hint: 主智能体直接响应用户消息；作用域为「全部」的智能体双 tab 均显示。
+    subagent_scope_hint: 子智能体由主智能体委派调用；内置 general 为通用兜底，不可编辑。
   # —— provider：服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui） ——
   provider:
     title: 服务商
@@ -926,6 +929,9 @@ ui:
     secret_key_label: Secret Access Key
     path_style_label: Path style（MinIO / 部分 OSS）
     api_key_sksp_hint: API Key 将通过 SKSP 安全存储
+    # —— 波 3c-c 补键：3c-b D 线新 MISS（服务商/模型 named 删除确认模板） ——
+    delete_confirm_msg_named: "删除服务商「{name}」？"
+    delete_model_confirm_msg_named: "删除模型「{name}」？"
   # —— sampling：采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm） ——
   sampling:
     model_name_hint: 用于列表与选择器展示；派生 displayName 为 服务商/模型名称。
@@ -990,6 +996,9 @@ ui:
     permission_request_failed: 通知权限申请失败
     # —— 波 3c-a 补键：波 3-2 MISS 收尾（M1 聊天配置屏标题） ——
     title: 聊天配置
+    # —— 波 3c-c 补键：3c-b D 线契约对齐新 MISS（WorkspaceSettingsView 流式开关 desc） ——
+    stream_parent_desc: 主对话的实时输出；关闭后回复完成后一次性显示
+    stream_sub_desc: 子智能体会话的实时输出；关闭后回复完成后一次性显示
   # —— skills：技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel） ——
   skills:
     new_title: 新建技能
@@ -1170,6 +1179,13 @@ ui:
     reset_title: 恢复默认规则
     help_smart_title: 智能数字
     help_smart_body: 从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。
+    # —— 波 3c-c 补键：3c-b D 线契约对齐新 MISS（空态/规则缺失/测试提示/named 删除模板/正则帮助段） ——
+    load_retry_empty: 加载失败，请重试。
+    empty_create_hint: 暂无规则，点击上方按钮创建。
+    rule_missing: 规则不存在或已被删除
+    test_result_pending: 输入测试文本后点击「测试」查看匹配结果。
+    delete_rule_confirm_msg_named: "删除规则「{name}」？"
+    help_regex_syntax: 支持 /正则/flags 格式，如 /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
   # —— prompt：提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard） ——
   prompt:
     turn_aria: "{action}{role}轮，{summary}"

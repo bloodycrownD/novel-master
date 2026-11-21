@@ -609,6 +609,9 @@ ui:
     not_found: "Agent not found: {agent_id}"
     new_title: New Agent
     deleted_count_done: "Deleted {count} Agents"
+    # p27 wave 3c-c: 3c-b D-line contract-align new MISS (SettingsViews primary/sub agent tab hints)
+    primary_scope_hint: "Primary agents respond to user messages directly; agents scoped to all show in both tabs."
+    subagent_scope_hint: "Subagents are delegated by primary agents; the built-in general is a fallback and cannot be edited."
   provider:
     title: Providers
     name_label: Provider name
@@ -686,6 +689,9 @@ ui:
     secret_key_label: Secret Access Key
     path_style_label: "Path style (MinIO / some OSS)"
     api_key_sksp_hint: API Key will be stored securely via SKSP
+    # p27 wave 3c-c: 3c-b D-line new MISS (provider/model named delete confirm templates)
+    delete_confirm_msg_named: 'Delete provider "{name}"?'
+    delete_model_confirm_msg_named: 'Delete model "{name}"?'
   sampling:
     model_name_hint: Shown in lists and pickers; the derived displayName is Provider/Model name.
     vendor_id_line: "Vendor ID: {id}"
@@ -748,6 +754,9 @@ ui:
     permission_request_failed: Failed to request notification permission
     # p27 wave 3c-a: wave 3-2 MISS backfill (M1 chat-config screen title)
     title: Chat Config
+    # p27 wave 3c-c: 3c-b D-line contract-align new MISS (WorkspaceSettingsView stream toggle descs)
+    stream_parent_desc: "Primary conversation output in real time; when off, the reply renders at once when complete."
+    stream_sub_desc: "Subagent session output in real time; when off, the reply renders at once when complete."
   skills:
     new_title: New skill
     name_label_plain: Skill name
@@ -926,6 +935,13 @@ ui:
     reset_title: Restore default rules
     help_smart_title: Smart number
     help_smart_body: "Extract the number from regex capture groups; both Chinese and Arabic numerals work (第十二章→12、第12章→12); multiple capture groups form a composite number (第X卷第Y章→[X,Y]). At least one capture group is required."
+    # p27 wave 3c-c: 3c-b D-line contract-align new MISS (empty states / rule missing / test hint / named delete template / regex help)
+    load_retry_empty: "Load failed. Please retry."
+    empty_create_hint: "No rules yet. Use the button above to create one."
+    rule_missing: "Rule not found or already deleted."
+    test_result_pending: 'Enter test text and click "Test" to see matches.'
+    delete_rule_confirm_msg_named: 'Delete rule "{name}"?'
+    help_regex_syntax: "Supports /regex/flags syntax, e.g. /第(\\d+)章/i; smart-number rules need at least one capture group and every capture group must parse as a number (Chinese numerals auto-converted), otherwise the next rule is tried; fixed rules jump to top/bottom on match, ignoring capture groups."
   prompt:
     turn_aria: "{action} {role} turn, {summary}"
     tool_group_aria: "{action} tool calls {name}"
