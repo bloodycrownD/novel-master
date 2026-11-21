@@ -692,6 +692,7 @@ ui:
     # p27 wave 3c-c: 3c-b D-line new MISS (provider/model named delete confirm templates)
     delete_confirm_msg_named: 'Delete provider "{name}"?'
     delete_model_confirm_msg_named: 'Delete model "{name}"?'
+    custom_engine_create_title: New Custom Engine
   sampling:
     model_name_hint: Shown in lists and pickers; the derived displayName is Provider/Model name.
     vendor_id_line: "Vendor ID: {id}"
@@ -942,6 +943,13 @@ ui:
     test_result_pending: 'Enter test text and click "Test" to see matches.'
     delete_rule_confirm_msg_named: 'Delete rule "{name}"?'
     help_regex_syntax: "Supports /regex/flags syntax, e.g. /第(\\d+)章/i; smart-number rules need at least one capture group and every capture group must parse as a number (Chinese numerals auto-converted), otherwise the next rule is tried; fixed rules jump to top/bottom on match, ignoring capture groups."
+    zod_end_depth: End depth
+    zod_start_depth: Start depth
+    zod_flags: Flags
+    zod_group_id: Group ID
+    zod_rule_id: Rule ID
+    zod_invalid_input: Invalid input
+    zod_nonneg_or_empty: Must be a non-negative integer or left empty
   prompt:
     turn_aria: "{action} {role} turn, {summary}"
     tool_group_aria: "{action} tool calls {name}"
@@ -1369,3 +1377,22 @@ ui:
     over_limit_hint: Content too long; showing raw text
   mermaid:
     render_failed_badge: Render failed; showing source
+  menu:
+    file: File
+    quit: Quit
+    edit: Edit
+    undo: Undo
+    redo: Redo
+    cut: Cut
+    view: View
+    reload: Reload
+    dev_tools: Developer Tools
+    fullscreen: Fullscreen
+    window: Window
+    minimize: Minimize
+    close_window: Close Window
+    help: Help
+    open_logs_dir: Open Logs Directory
+    export_diagnostics: Export Diagnostics
+    about: About
+    version_line: "Version {version}"

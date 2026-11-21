@@ -932,6 +932,7 @@ ui:
     # —— 波 3c-c 补键：3c-b D 线新 MISS（服务商/模型 named 删除确认模板） ——
     delete_confirm_msg_named: "删除服务商「{name}」？"
     delete_model_confirm_msg_named: "删除模型「{name}」？"
+    custom_engine_create_title: 新建自定义引擎
   # —— sampling：采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm） ——
   sampling:
     model_name_hint: 用于列表与选择器展示；派生 displayName 为 服务商/模型名称。
@@ -1186,6 +1187,13 @@ ui:
     test_result_pending: 输入测试文本后点击「测试」查看匹配结果。
     delete_rule_confirm_msg_named: "删除规则「{name}」？"
     help_regex_syntax: 支持 /正则/flags 格式，如 /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
+    zod_end_depth: 结束深度
+    zod_start_depth: 起始深度
+    zod_flags: 标志
+    zod_group_id: 组 ID
+    zod_rule_id: 规则 ID
+    zod_invalid_input: 无效输入
+    zod_nonneg_or_empty: 须为非负整数或留空
   # —— prompt：提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard） ——
   prompt:
     turn_aria: "{action}{role}轮，{summary}"
@@ -1625,3 +1633,22 @@ ui:
   # —— mermaid：mermaid 全屏浮层与桌面失败徽标（r6-exemptions 桥接面盘点：1 处未立键，随第二座桥补齐） ——
   mermaid:
     render_failed_badge: 图表渲染失败，已显示源码
+  menu:
+    file: 文件
+    quit: 退出
+    edit: 编辑
+    undo: 撤销
+    redo: 重做
+    cut: 剪切
+    view: 视图
+    reload: 重新加载
+    dev_tools: 开发者工具
+    fullscreen: 全屏
+    window: 窗口
+    minimize: 最小化
+    close_window: 关闭窗口
+    help: 帮助
+    open_logs_dir: 打开日志目录
+    export_diagnostics: 导出诊断包
+    about: 关于
+    version_line: "版本 {version}"

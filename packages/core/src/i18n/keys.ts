@@ -102,6 +102,8 @@ export const UI_KEY_DOMAINS = [
   "rich_document",
   // mermaid：mermaid 全屏浮层与桌面失败徽标
   "mermaid",
+  // menu：desktop 原生应用菜单与关于弹窗（波 4a D 线补域）
+  "menu",
 ] as const;
 
 /** 错误消息 key（A 桶 187 处去重后的全量清单）。 */
@@ -1003,6 +1005,9 @@ const UI_MESSAGE_KEYS = [
   "ui.provider.delete_confirm_msg_named",
   "ui.provider.delete_model_confirm_msg_named",
 
+  // provider：波 4a 补键（desktop SettingsOverlay 自定义搜索引擎新建标题）
+  "ui.provider.custom_engine_create_title",
+
   // sampling（采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm））
   "ui.sampling.model_name_hint",
   "ui.sampling.vendor_id_line",
@@ -1266,6 +1271,15 @@ const UI_MESSAGE_KEYS = [
   "ui.smart_sort.test_result_pending",
   "ui.smart_sort.delete_rule_confirm_msg_named",
   "ui.smart_sort.help_regex_syntax",
+
+  // smart_sort：波 4a 补键（desktop format-user-error 的 zod issue 字段标签与校验消息）
+  "ui.smart_sort.zod_end_depth",
+  "ui.smart_sort.zod_start_depth",
+  "ui.smart_sort.zod_flags",
+  "ui.smart_sort.zod_group_id",
+  "ui.smart_sort.zod_rule_id",
+  "ui.smart_sort.zod_invalid_input",
+  "ui.smart_sort.zod_nonneg_or_empty",
 
   // prompt（提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard））
   "ui.prompt.turn_aria",
@@ -1713,6 +1727,26 @@ const UI_MESSAGE_KEYS = [
 
   // mermaid（mermaid 全屏浮层与桌面失败徽标（r6-exemptions 桥接面盘点：1 处未立键，随第二座桥补齐））
   "ui.mermaid.render_failed_badge",
+
+  // menu：desktop 原生应用菜单/关于弹窗（波 4a D 线补键：shell-menu 其余 18 处 + 版本行 composed）
+  "ui.menu.file",
+  "ui.menu.quit",
+  "ui.menu.edit",
+  "ui.menu.undo",
+  "ui.menu.redo",
+  "ui.menu.cut",
+  "ui.menu.view",
+  "ui.menu.reload",
+  "ui.menu.dev_tools",
+  "ui.menu.fullscreen",
+  "ui.menu.window",
+  "ui.menu.minimize",
+  "ui.menu.close_window",
+  "ui.menu.help",
+  "ui.menu.open_logs_dir",
+  "ui.menu.export_diagnostics",
+  "ui.menu.about",
+  "ui.menu.version_line",
 ] as const;
 
 /** core 全量消息 key（zh-CN catalog 必须 100% 覆盖）。 */
