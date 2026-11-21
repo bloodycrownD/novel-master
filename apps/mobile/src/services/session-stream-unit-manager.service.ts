@@ -611,7 +611,7 @@ export class SessionStreamUnitManager {
         if (runId != null) {
           const failure: RunOutcome = {
             status: 'failed',
-            errorMessage: '连接已断开，生成被中断',
+            errorMessage: coreT({key: "ui.chat.stream_disconnected"}),
           };
           this.finishRun(sessionId, runId, failure);
         }
@@ -1262,14 +1262,14 @@ export class SessionStreamUnitManager {
   startRun(sessionId: string, projectId: string, content: string, options?: SessionStreamStartOptions): SessionStreamStartResult {
     timingLog('startRun enter');
     if (this.disposed) {
-      return {ok: false, error: '运行时正在重建，请稍后重试'};
+      return {ok: false, error: coreT({key: "ui.chat.runtime_rebuilding"})};
     }
     const existing = this.units.get(sessionId);
     if (
       (existing != null && this.isActiveUnit(existing)) ||
       this.runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))
     ) {
-      return {ok: false, error: '该会话已有进行中的生成，请先等待完成或停止'};
+      return {ok: false, error: coreT({key: "ui.chat.session_generating_busy"})};
     }
 
     // settled 旧单元（interrupted/finished/failed，含宽限中）替换吸收：删旧建新。

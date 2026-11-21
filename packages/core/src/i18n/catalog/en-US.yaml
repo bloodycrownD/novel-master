@@ -154,6 +154,8 @@ ui:
     added: Added
     new: New
     retry: Retry
+    select_placeholder: "Select…"
+    no_options: No options
     back: Back
     more: More
     move_up: Move up
@@ -411,6 +413,10 @@ ui:
     io_input_label: Input
     io_output_label: Output
     reset_workplace_cache_done: Persistent workspace cache reset
+    reset_workplace_cache_failed: Failed to reset workplace cache
+    stream_disconnected: Connection lost; generation interrupted
+    runtime_rebuilding: Runtime is rebuilding; please try again shortly
+    session_generating_busy: This session already has an ongoing generation; wait for it or stop it first
     # p27 R6 wave 3-2a: agent-running guards and message action failures (incl. U-line conservative item 7)
     agent_running_compact_blocked: Cannot compact while an agent is running
     agent_running_fork_blocked: Cannot fork while an agent is running
@@ -841,6 +847,7 @@ ui:
     pick_ref_aria: "Reference skill {name}"
     disabled_tag: Disabled
     session_panel_back: Back to session details
+    domain_tag_project: Project
     session_organize: Organize
     session_enabled_stat: "{enabled}/{valid} enabled"
     session_empty: "No skills yet. Tap \"New\" to create project skills, or maintain global skills in Settings → Skill management."
@@ -1059,6 +1066,7 @@ ui:
     ratio_label: Share
     day_hourly_template: "{day} · Hourly distribution"
     format_invalid: Unexpected statistics response format
+    month_label: "{month}/{year}"
   cloud_sync:
     save_config: Save settings
     s3_section: S3-compatible storage

@@ -39,7 +39,7 @@ const WEEKDAY_LABELS = [
 const TEXT_ON_PRIMARY = '#FFFFFF';
 
 function monthLabel(year: number, month: number): string {
-  return `${year} 年 ${month + 1} 月`;
+  return coreT({key: "ui.stats.month_label", params: {year: String(year), month: String(month + 1)}});
 }
 
 export function MonthRangePickerSheet({

@@ -450,6 +450,9 @@ const UI_MESSAGE_KEYS = [
   "ui.common.added",
   "ui.common.new",
   "ui.common.retry",
+  // common：波 4a mobile 补键（FormSelectField 缺省 placeholder/空态）
+  "ui.common.select_placeholder",
+  "ui.common.no_options",
   "ui.common.back",
   "ui.common.more",
   "ui.common.move_up",
@@ -711,6 +714,12 @@ const UI_MESSAGE_KEYS = [
   "ui.chat.io_input_label",
   "ui.chat.io_output_label",
   "ui.chat.reset_workplace_cache_done",
+
+  // chat：波 4a mobile 补键（session-stream-unit-manager 用户可见中断/忙态 + 缓存重置失败 toast）
+  "ui.chat.reset_workplace_cache_failed",
+  "ui.chat.stream_disconnected",
+  "ui.chat.runtime_rebuilding",
+  "ui.chat.session_generating_busy",
 
   // chat：Agent 运行中守卫与消息操作失败提示（波 3-2a 补键；含 U 线保守清单第 7 条「该消息没有可复制的文本」「未知操作」）
   "ui.chat.agent_running_compact_blocked",
@@ -1162,6 +1171,8 @@ const UI_MESSAGE_KEYS = [
   "ui.skills.pick_aria",
   "ui.skills.pick_ref_aria",
   "ui.skills.disabled_tag",
+  // skills：波 4a mobile 补键（skill-ui 域徽标第三态）
+  "ui.skills.domain_tag_project",
   "ui.skills.session_panel_back",
   "ui.skills.session_organize",
   "ui.skills.session_enabled_stat",
@@ -1394,6 +1405,8 @@ const UI_MESSAGE_KEYS = [
   "ui.stats.ratio_label",
   "ui.stats.day_hourly_template",
   "ui.stats.format_invalid",
+  // stats：波 4a mobile 补键（MonthRangePickerSheet 月份标题模板）
+  "ui.stats.month_label",
 
   // cloud_sync（云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel））
   "ui.cloud_sync.save_config",

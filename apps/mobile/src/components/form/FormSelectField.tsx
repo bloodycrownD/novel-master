@@ -26,7 +26,7 @@ type Props = {
   disabled?: boolean;
 };
 
-export function FormSelectField({tokens, value, options, onChange, placeholder = '请选择', emptyLabel = '暂无选项', sheetTitle, disabled = false}: Props) {
+export function FormSelectField({tokens, value, options, onChange, placeholder = coreT({key: "ui.common.select_placeholder"}), emptyLabel = coreT({key: "ui.common.no_options"}), sheetTitle, disabled = false}: Props) {
   const overlay = useFormOverlay();
   const overlayKey = useId();
   const insets = useSafeAreaInsets();

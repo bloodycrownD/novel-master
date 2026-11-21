@@ -19,7 +19,7 @@ export namespace SkillUi {
     if (domain === 'global') {
       return coreT({key: "ui.skills.domain_tag_global"});
     }
-    return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : '项目';
+    return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_tag_project"});
   }
 
   /** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */

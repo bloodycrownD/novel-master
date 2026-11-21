@@ -389,6 +389,8 @@ ui:
     added: 已添加
     new: 新建
     retry: 重试
+    select_placeholder: "请选择"
+    no_options: 暂无选项
     back: 返回
     more: 更多
     move_up: 上移
@@ -648,6 +650,10 @@ ui:
     io_input_label: 【输入】
     io_output_label: 【输出】
     reset_workplace_cache_done: 已重置常驻工作区缓存
+    reset_workplace_cache_failed: 重置常驻工作区缓存失败
+    stream_disconnected: 连接已断开，生成被中断
+    runtime_rebuilding: 运行时正在重建，请稍后重试
+    session_generating_busy: 该会话已有进行中的生成，请先等待完成或停止
     # —— 波 3-2a 补键：Agent 运行中守卫与消息操作失败提示（含 U 线保守清单第 7 条「该消息没有可复制的文本」「未知操作」） ——
     agent_running_compact_blocked: Agent 运行中无法压缩
     agent_running_fork_blocked: Agent 运行中无法分叉
@@ -1084,6 +1090,7 @@ ui:
     pick_ref_aria: "引用技能 {name}"
     disabled_tag: 已关闭
     session_panel_back: 返回会话详情
+    domain_tag_project: 项目
     session_organize: 整理
     session_enabled_stat: "{enabled}/{valid} 启用"
     session_empty: 暂无技能。点击「新建」创建项目技能，或在设置·技能管理页维护全局技能。
@@ -1305,6 +1312,7 @@ ui:
     ratio_label: 占比
     day_hourly_template: "{day} · 按小时分布"
     format_invalid: 统计数据返回格式异常
+    month_label: "{year} 年 {month} 月"
   # —— cloud_sync：云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel） ——
   cloud_sync:
     save_config: 保存配置

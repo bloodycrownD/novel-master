@@ -82,7 +82,7 @@ export function useChatTabController() {
         });
         ctx.showToast(coreT({key: "ui.chat.reset_workplace_cache_done"}));
       } catch {
-        ctx.showToast('重置常驻工作区缓存失败');
+        ctx.showToast(coreT({key: "ui.chat.reset_workplace_cache_failed"}));
       }
     })();
   }, [ctx]);
