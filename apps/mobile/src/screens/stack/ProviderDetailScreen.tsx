@@ -206,7 +206,7 @@ export function ProviderDetailScreen() {
       ) : (
         <>
           <ManageHeader
-            title="已保存模型"
+            title={coreT({key: "ui.provider.models_saved_done"})}
             batchMode={batch.active}
             selectedCount={batch.selectedCount}
             allSelected={rows.length > 0 && batch.selectedCount === rows.length}

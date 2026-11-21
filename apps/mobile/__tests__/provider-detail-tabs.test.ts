@@ -40,7 +40,7 @@ describe('ProviderDetailScreen (mobile) — T-T1', () => {
   });
 
   it('模型管理 tab 保留 ManageHeader + 模型列表（含添加/远程）', () => {
-    expect(detailSource).toMatch(/title="已保存模型"/);
+    expect(detailSource).toMatch(/title=\{coreT\(\{key: "ui\.provider\.models_saved_done"\}\)\}/);
     expect(detailSource).toMatch(/navigation\.navigate\('ModelSampling'/);
   });
 
