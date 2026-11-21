@@ -9,6 +9,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useRuntime} from '../../hooks/useRuntime';
+import {coreT} from '../../i18n/core';
 import {CloudSyncService} from '../../services/cloud-sync.service';
 import {agentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
@@ -73,27 +74,27 @@ export function CloudSyncStorageScreen() {
 
   const formatSyncResultLabel = (result?: string): string | undefined => {
     if (result === 'success') {
-      return '成功';
+      return coreT({key: "ui.cloud_sync.result_ok"});
     }
     if (result === 'already_up_to_date') {
-      return '已是最新';
+      return coreT({key: "ui.cloud_sync.up_to_date"});
     }
     if (result === 'error') {
-      return '失败';
+      return coreT({key: "ui.cloud_sync.result_fail"});
     }
     return result?.trim() ? result : undefined;
   };
 
   const syncControlValue = (lastAt?: string, lastResult?: string): string => {
     if (agentActive) {
-      return 'Agent 运行中';
+      return coreT({key: "ui.cloud_sync.agent_busy_value"});
     }
     if (lastAt) {
       const resultLabel = formatSyncResultLabel(lastResult);
       const time = formatSyncTime(lastAt);
-      return resultLabel != null ? `${resultLabel} · ${time}` : `上次 ${time}`;
+      return resultLabel != null ? `${resultLabel} · ${time}` : coreT({key: "ui.cloud_sync.last_time", params: {time}});
     }
-    return '手动同步';
+    return coreT({key: "ui.cloud_sync.manual_sync"});
   };
 
   const syncStatusContent = (): {
@@ -105,20 +106,20 @@ export function CloudSyncStorageScreen() {
     }>;
   } => {
     if (statusLoading) {
-      return {message: '加载中…'};
+      return {message: coreT({key: "ui.common.loading"})};
     }
     if (!cloudConfigured) {
-      return {message: '请先完成云存储配置'};
+      return {message: coreT({key: "ui.cloud_sync.not_configured_msg"})};
     }
     if (cloudRemoteRev == null || cloudLastSyncedRev == null) {
-      return {message: '无法读取同步状态'};
+      return {message: coreT({key: "ui.cloud_sync.status_unreadable"})};
     }
     const aligned = cloudRemoteRev === cloudLastSyncedRev;
     return {
       metrics: [
-        {label: '云端 rev', value: String(cloudRemoteRev)},
+        {label: coreT({key: "ui.cloud_sync.rev_cloud"}), value: String(cloudRemoteRev)},
         {
-          label: '本机 rev',
+          label: coreT({key: "ui.cloud_sync.rev_local"}),
           value: String(cloudLastSyncedRev),
           tone: aligned ? 'success' : 'warning',
         },
@@ -131,13 +132,13 @@ export function CloudSyncStorageScreen() {
       return undefined;
     }
     if (agentActive) {
-      return 'Agent 运行中，同步操作已禁用。';
+      return coreT({key: "ui.cloud_sync.agent_active_note"});
     }
     if (cloudSuggestPull) {
-      return '云端有更新，建议先拉取后再推送。';
+      return coreT({key: "ui.cloud_sync.cloud_newer_hint"});
     }
     if (cloudRemoteRev != null && cloudLastSyncedRev != null && cloudRemoteRev === cloudLastSyncedRev) {
-      return '本机与云端 rev 已对齐。';
+      return coreT({key: "ui.cloud_sync.local_status"});
     }
     return undefined;
   };
@@ -146,10 +147,10 @@ export function CloudSyncStorageScreen() {
     if (syncControlsDisabled) {
       return;
     }
-    Alert.alert('从云端拉取', '将用云端最新快照替换本机数据（项目、会话、消息等）。本机服务商与 API Key 将保留。是否继续？', [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.cloud_sync.pull_title"}), coreT({key: "ui.cloud_sync.pull_confirm_msg"}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '拉取',
+        text: coreT({key: "ui.cloud_sync.pull_action"}),
         onPress: () => navigation.navigate('CloudSyncProgress', {op: 'pull'}),
       },
     ]);
@@ -177,17 +178,17 @@ export function CloudSyncStorageScreen() {
   return (
     <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <ProfileStatusCard
-        title="同步状态"
-        hint="显示本机与云端的 rev 对齐情况"
+        title={coreT({key: "ui.cloud_sync.sync_status"})}
+        hint={coreT({key: "ui.cloud_sync.status_desc"})}
         message={syncStatus.message}
         metrics={syncStatus.metrics}
         notice={syncStatusNotice()}
         noticeTone={agentActive || cloudSuggestPull ? 'warning' : 'muted'}
         tokens={tokens}
       />
-      <ProfileMenuItem icon="☁️" label="云存储配置" value={cloudConfigured ? '已配置' : '未配置'} tokens={tokens} onPress={() => navigation.navigate('CloudSyncConfig')} />
-      <ProfileMenuItem icon="⬇️" label="从云端拉取" value={syncControlValue(cloudLastPullAt, cloudLastPullResult)} tokens={tokens} onPress={runPull} />
-      <ProfileMenuItem icon="⬆️" label="推送到云端" value={syncControlValue(cloudLastPushAt, cloudLastPushResult)} tokens={tokens} onPress={runPush} />
+      <ProfileMenuItem icon="☁️" label={coreT({key: "ui.nav.cloud_storage"})} value={cloudConfigured ? coreT({key: "ui.cloud_sync.configured"}) : coreT({key: "ui.cloud_sync.not_configured"})} tokens={tokens} onPress={() => navigation.navigate('CloudSyncConfig')} />
+      <ProfileMenuItem icon="⬇️" label={coreT({key: "ui.cloud_sync.pull_title"})} value={syncControlValue(cloudLastPullAt, cloudLastPullResult)} tokens={tokens} onPress={runPull} />
+      <ProfileMenuItem icon="⬆️" label={coreT({key: "ui.cloud_sync.push_title"})} value={syncControlValue(cloudLastPushAt, cloudLastPushResult)} tokens={tokens} onPress={runPush} />
     </ScrollView>
   );
 }

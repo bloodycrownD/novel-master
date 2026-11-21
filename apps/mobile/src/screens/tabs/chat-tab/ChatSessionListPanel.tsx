@@ -33,6 +33,7 @@ import {
 } from '@/components/vfs/VfsFileManager';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {ThemeTokens} from '@/theme/tokens';
+import {coreT} from '@/i18n/core';
 import {FormatRelativeTime} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
@@ -176,8 +177,8 @@ function ChatSessionListPanelInner({
         value={sessionListPanel}
         onChange={onSessionListPanelChange}
         options={[
-          {value: 'sessions', label: '会话', testID: 'tab-sessions'},
-          {value: 'projects', label: '项目工作区', testID: 'tab-projects'},
+          {value: 'sessions', label: coreT({key: "ui.nav.chat"}), testID: 'tab-sessions'},
+          {value: 'projects', label: coreT({key: "ui.nav.project_workspace_title"}), testID: 'tab-projects'},
         ]}
       />
       {sessionListPanel === 'projects' ? (
@@ -196,22 +197,22 @@ function ChatSessionListPanelInner({
           </View>
         ) : (
           <View style={styles.placeholder}>
-            <Text style={{color: tokens.textSecondary}}>请先选择项目</Text>
+            <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.chat.select_project_first"})}</Text>
           </View>
         )
       ) : (
         <>
           <ManageHeader
-            title="会话"
+            title={coreT({key: "ui.nav.chat"})}
             batchMode={sessionBatchActive}
             selectedCount={sessionBatchSelectedCount}
             onEnterBatch={onEnterSessionBatch}
             onCancelBatch={onExitSessionBatch}
             onDelete={onConfirmBatchDelete}
-            hint="选择要删除的会话"
+            hint={coreT({key: "ui.project.select_sessions_hint"})}
             normalActions={
               <PrimaryButton
-                label="新建会话"
+                label={coreT({key: "ui.project.new_session"})}
                 tokens={tokens}
                 onPress={onCreateSession}
               />
@@ -224,7 +225,7 @@ function ChatSessionListPanelInner({
             keyExtractor={item => item.id}
             ListEmptyComponent={
               <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                暂无会话
+                {coreT({key: "ui.project.empty_sessions"})}
               </Text>
             }
             renderItem={({item}) => {
@@ -289,7 +290,7 @@ function ChatSessionListPanelInner({
                       ]}
                     >
                       {FormatRelativeTime.formatMs(item.updatedAtMs)}
-                      {showsActiveMeta ? ' · 活跃中' : ''}
+                      {showsActiveMeta ? coreT({key: "ui.chat.active_suffix"}) : ''}
                     </Text>
                   </View>
                   {isRunning ? (
@@ -299,7 +300,7 @@ function ChatSessionListPanelInner({
                         {backgroundColor: tokens.primary},
                       ]}
                     >
-                      <Text style={styles.currentBadgeText}>生成中</Text>
+                      <Text style={styles.currentBadgeText}>{coreT({key: "label.stream_metrics.running"})}</Text>
                     </View>
                   ) : null}
                   {isInterrupted ? (
@@ -309,7 +310,7 @@ function ChatSessionListPanelInner({
                         {backgroundColor: tokens.textSecondary},
                       ]}
                     >
-                      <Text style={styles.currentBadgeText}>已中断</Text>
+                      <Text style={styles.currentBadgeText}>{coreT({key: "ui.transcript.tool_status.interrupted"})}</Text>
                     </View>
                   ) : null}
                   {isCurrent && !sessionBatchActive ? (
@@ -319,7 +320,7 @@ function ChatSessionListPanelInner({
                         {backgroundColor: tokens.primary},
                       ]}
                     >
-                      <Text style={styles.currentBadgeText}>当前</Text>
+                      <Text style={styles.currentBadgeText}>{coreT({key: "ui.common.current"})}</Text>
                     </View>
                   ) : null}
                   {!sessionBatchActive ? (
@@ -356,15 +357,15 @@ function ChatSessionListPanelInner({
             items={
               menuSessionId != null && activeRunIds.has(menuSessionId)
                 ? [
-                    {label: '停止生成', action: 'stop-generating'},
-                    {label: '重命名', action: 'rename'},
-                    {label: '复制', action: 'copy'},
-                    {label: '删除', action: 'delete', danger: true},
+                    {label: coreT({key: "ui.chat.stop_generating"}), action: 'stop-generating'},
+                    {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+                    {label: coreT({key: "ui.transcript.menu.copy"}), action: 'copy'},
+                    {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
                   ]
                 : [
-                    {label: '重命名', action: 'rename'},
-                    {label: '复制', action: 'copy'},
-                    {label: '删除', action: 'delete', danger: true},
+                    {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+                    {label: coreT({key: "ui.transcript.menu.copy"}), action: 'copy'},
+                    {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
                   ]
             }
             onClose={() => onMenuSessionIdChange(undefined)}

@@ -10,6 +10,7 @@ import {useCallback} from 'react';
 import {Alert} from 'react-native';
 import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
+import {coreT} from '../i18n/core';
 import {AppToast} from '../services/app-toast';
 import {ToastMessage} from '../errors/toast-message';
 
@@ -35,21 +36,21 @@ export function useBatchDeleteConfirm<T>({
         return;
       }
       Alert.alert(title, message(items), [
-        {text: '取消', style: 'cancel'},
+        {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
         {
-          text: '删除',
+          text: coreT({key: "ui.common.delete"}),
           style: 'destructive',
           onPress: () => {
             (async () => {
               for (const item of items) {
                 const outcome = await deleteOne(item);
                 if (!outcome.ok) {
-                  AppToast.show(ToastMessage.toast('删除失败', outcome.error));
+                  AppToast.show(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), outcome.error));
                   return;
                 }
               }
               await onDone();
-            })().catch(err => AppToast.show(ToastMessage.toast('删除失败', err)));
+            })().catch(err => AppToast.show(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err)));
           },
         },
       ]);

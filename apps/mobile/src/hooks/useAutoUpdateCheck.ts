@@ -7,6 +7,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useNovelMaster} from '../runtime/novel-master-context';
+import {coreT} from '../i18n/core';
 import {ToastMessage} from '../errors/toast-message';
 import {UpdateCheckFlow, type UpdateCheckResultKind, type UpdateCheckSideEffects} from '../services/update-check-flow';
 
@@ -40,7 +41,7 @@ export function useAutoUpdateCheck(ui: AutoUpdateCheckUi): AutoUpdateCheckContro
       await UpdateCheckFlow.snoozeToday(appUi);
       setResultModal(null);
     } catch (cause) {
-      uiRef.current.showToast(ToastMessage.toast('设置失败', cause));
+      uiRef.current.showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), cause));
     }
   }, [appUi]);
 

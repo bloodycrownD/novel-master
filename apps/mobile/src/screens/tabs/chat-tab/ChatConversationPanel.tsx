@@ -57,6 +57,7 @@ import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBo
 import {useToast} from '@/components/chrome/ToastHost';
 import {useTheme} from '@/theme/ThemeProvider';
 import {AGENT_LOCK_TOAST_GUIDE, ChatAgentMeta, MODEL_LOCK_TOAST} from '@/services/chat-agent-meta';
+import {coreT} from '@/i18n/core';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
@@ -422,8 +423,8 @@ export function ChatConversationPanel({
         value={conversationPanel}
         onChange={setConversationPanel}
         options={[
-          {value: 'chat', label: '聊天', testID: 'tab-chat'},
-          {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
+          {value: 'chat', label: coreT({key: "ui.chat.tab_chat"}), testID: 'tab-chat'},
+          {value: 'workspace', label: coreT({key: "ui.transcript.open_kind.workspace"}), testID: 'tab-workspace'},
         ]}
       />
       {surfaceReady ? (
@@ -477,28 +478,28 @@ export function ChatConversationPanel({
           ) : workspaceActive ? (
             <View style={styles.placeholder}>
               <Text style={{color: tokens.textSecondary}}>
-                聊天工作区不可用
+                {coreT({key: "ui.chat.workspace_unavailable"})}
               </Text>
             </View>
           ) : null}
         </>
       ) : (
         <View style={styles.placeholder}>
-          <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.chat.select_session_first"})}</Text>
         </View>
       )}
       <BottomSheetMenu
         visible={sessionDrawerOpen}
-        title="会话操作"
+        title={coreT({key: "ui.nav.session_actions"})}
         items={[
           {
-            label: '查看提示词',
+            label: coreT({key: "ui.nav.view_prompt"}),
             action: 'real-prompt',
             disabled: controller.onNavigateRealPrompt == null,
           },
-          {label: '压缩上下文', action: 'compact'},
-          {label: '切换大模型', action: 'switch-model'},
-          {label: '切换智能体', action: 'switch-agent'},
+          {label: coreT({key: "ui.session.compact_context"}), action: 'compact'},
+          {label: coreT({key: "ui.session.switch_model"}), action: 'switch-model'},
+          {label: coreT({key: "ui.session.switch_agent"}), action: 'switch-agent'},
         ]}
         onClose={() => setSessionDrawerOpen(false)}
         onSelect={action => {
@@ -515,11 +516,11 @@ export function ChatConversationPanel({
       />
       <MessageEditModal
         visible={messageEditPrompt != null}
-        title="编辑消息"
-        label="内容"
-        placeholder="输入消息内容"
+        title={coreT({key: "ui.chat.edit_message_title"})}
+        label={coreT({key: "ui.common.content"})}
+        placeholder={coreT({key: "ui.chat.edit_message_placeholder"})}
         initialValue={messageEditPrompt?.initialText ?? ''}
-        confirmLabel="保存"
+        confirmLabel={coreT({key: "ui.common.save"})}
         onClose={() => setMessageEditPrompt(undefined)}
         onConfirm={async value => {
           const prompt = messageEditPrompt;

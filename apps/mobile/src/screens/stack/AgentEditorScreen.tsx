@@ -4,6 +4,7 @@
 import React, {useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useRoute} from '@react-navigation/native';
+import {coreT} from '@/i18n/core';
 import type {RouteProp} from '@react-navigation/native';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 import {AgentEditorForm} from '@/components/agent/AgentEditorForm';

@@ -12,6 +12,7 @@ import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useVfsBackNavigation} from '../../hooks/useVfsBackNavigation';
 import type {RootStackParamList} from '../../navigation/types';
+import {coreT} from '../../i18n/core';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -39,7 +40,7 @@ export function GlobalTemplateScreen() {
       <View style={styles.bannerWrap}>
         <FormSectionCard
           tokens={tokens}
-          hint="全库文件只读浏览：全局模板、技能与各项目/会话拼接为统一视图，仅供查看。"
+          hint={coreT({key: "ui.vfs.global_template_hint"})}
         />
       </View>
       <VfsFileManager
