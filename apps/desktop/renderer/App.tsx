@@ -238,7 +238,7 @@ function DesktopOverlays() {
           if (status === 'saved') {
             // 文案按分流来源走：文件行导的是单文件、目录/空白行导的是 ZIP 子树，
             // 共用一句「已导出」用户分辨不出落盘的是什么。
-            showToast( exportFilePathForTarget(target) == null ? '已导出 ZIP' : '已导出文件' );
+            showToast( exportFilePathForTarget(target) == null ? coreT({key: "ui.vfs.exported_zip"}) : coreT({key: "ui.vfs.exported_file"}) );
           }
         } catch (err) {
           showToast(err instanceof Error ? err.message : coreT({key: "ui.common.export_failed"}));

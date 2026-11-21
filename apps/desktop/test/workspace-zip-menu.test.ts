@@ -186,11 +186,15 @@ test("T-DM5: 导出 toast 文案按 file / zip 分流，两句锚并存", () => 
     fileURLToPath(new URL("../renderer/App.tsx", import.meta.url)),
     "utf8",
   );
+  // i18n 后两句锚改锁 coreT 调用形态+键名（分流文案由 catalog 保证）。
   assert.ok(
-    appSource.includes("已导出文件"),
+    appSource.includes(`coreT({key: "ui.vfs.exported_file"})`),
     "缺少单文件导出的 toast 文案锚",
   );
-  assert.ok(appSource.includes("已导出 ZIP"), "缺少 ZIP 导出的 toast 文案锚");
+  assert.ok(
+    appSource.includes(`coreT({key: "ui.vfs.exported_zip"})`),
+    "缺少 ZIP 导出的 toast 文案锚",
+  );
   // 共用的退化文案不该再出现（'已导出 ZIP' / '已导出文件' 是子串，按带引号的整句查）。
   assert.ok(
     !appSource.includes("showToast('已导出')"),
