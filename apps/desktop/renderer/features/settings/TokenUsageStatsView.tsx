@@ -27,6 +27,7 @@ import type {
   UsageStatsSummaryDto,
 } from "@shared/ipc-types";
 import { SettingsListEmpty, SettingsPanel, SettingsSection } from "./settings-ui";
+import { coreT } from "@shared/logic/core-i18n";
 import { formatTokenCount } from "@shared/logic/format-token-count";
 import { formatHitRate, hitRate } from "@shared/logic/hit-rate";
 import {
@@ -93,7 +94,15 @@ function formatTokensPerSecond(v: number | null): string {
  * 图表不展示命中率——命中率出口仅保留在汇总卡片与当天汇总行。
  */
 function bucketTooltip(key: string, b: UsageStatsBucketDto): string {
-  return `${key} · 输入 ${formatTokenCount(b.promptTokens)} · 输出 ${formatTokenCount( b.completionTokens )} · 调用 ${b.calls} 次`;
+  return coreT({
+    key: "ui.stats.bucket_line",
+    params: {
+      key,
+      input: formatTokenCount(b.promptTokens),
+      output: formatTokenCount(b.completionTokens),
+      calls: b.calls,
+    },
+  });
 }
 
 /** 零值桶（「今天」无数据时当天汇总行的兜底形态）。 */
@@ -145,11 +154,11 @@ function TokenStatsChart({
       <div className="token-stats-chart__legend">
         <span className="token-stats-chart__legend-item">
           <span className="token-stats-chart__legend-dot token-stats-chart__legend-dot--input" />
-          输入
+          {coreT({key: "ui.stats.input_label"})}
         </span>
         <span className="token-stats-chart__legend-item">
           <span className="token-stats-chart__legend-dot token-stats-chart__legend-dot--output" />
-          输出
+          {coreT({key: "ui.stats.output_label"})}
         </span>
       </div>
       <div className="token-stats-chart__plot">
@@ -316,7 +325,15 @@ function PieChart({
                 type="button"
                 className={`token-stats-pie__slice${selectedKey === a.key ? " is-selected" : ""}`}
                 data-slice={a.key}
-                aria-label={`${a.label} · 用量 ${formatTokenCount(a.value)} · ${a.calls} 次 · 占比 ${shareText}`}
+                aria-label={coreT({
+                  key: "ui.stats.slice_aria",
+                  params: {
+                    label: a.label,
+                    value: formatTokenCount(a.value),
+                    calls: a.calls,
+                    share: shareText,
+                  },
+                })}
                 onClick={() => onSelect(a.key)}
               >
                 <svg viewBox="-1.08 -1.08 2.16 2.16" aria-hidden="true">
@@ -372,6 +389,8 @@ export function TokenUsageStatsView() {
   const [providerNames, setProviderNames] = useState<Map<string, string>>(new Map());
 
   // 自定义区间校验（from ≤ to，无跨度上限）；非法时行内提示且暂停重查。
+  // 「请选择起止日期」「开始日期不能晚于结束日期」键面无同文键
+  // （ui.stats.range_start_after_end 文案不同：自定义区间起始日不能晚于结束日），保留原字面量。
   const customRangeError = useMemo(() => {
     if (rangeKind !== "custom") return null;
     if (customFrom.length === 0 || customTo.length === 0) return "请选择起止日期";
@@ -438,6 +457,7 @@ export function TokenUsageStatsView() {
       !Array.isArray(dailyRes.data) ||
       !Array.isArray(rowsRes.data)
     ) {
+      // 「统计数据返回格式异常」键面无对应键（漏键待波 3c），保留原字面量。
       setLoadError("统计数据返回格式异常");
       return;
     }
@@ -499,6 +519,7 @@ export function TokenUsageStatsView() {
       body == null ||
       !Array.isArray((body as UsageStatsRequestPageDto).rows)
     ) {
+      // 「统计数据返回格式异常」键面无对应键（漏键待波 3c），保留原字面量。
       setLoadError("统计数据返回格式异常");
       return;
     }
@@ -608,9 +629,9 @@ export function TokenUsageStatsView() {
   const pieSlices = useMemo<PieSlice[]>(
     () =>
       sortedModelRows.map((row, index) => {
-        const modelPart = row.modelName ?? "其他模型";
+        const modelPart = row.modelName ?? coreT({key: "ui.stats.model_other"});
         // label 斜杠格式（{服务商}/{模型}）与聊天侧模型选择下拉一致（2026-09-28 统一）。
-        const label = row.providerId == null ? "未记录服务商" : `${providerNames.get(row.providerId) ?? "未知服务商"}/${modelPart}`;
+        const label = row.providerId == null ? coreT({key: "ui.stats.provider_unlogged"}) : `${providerNames.get(row.providerId) ?? coreT({key: "ui.provider.unknown_provider"})}/${modelPart}`;
         return {
           key: `${row.providerId ?? "__no_provider__"}::${row.modelName ?? "__other_model__"}`,
           label,
@@ -631,7 +652,7 @@ export function TokenUsageStatsView() {
 
   const modelSelectValue = modelFilter === undefined ? MODEL_OPTION_ALL : modelFilter === null ? MODEL_OPTION_UNLOGGED : modelFilter;
 
-  const rangeLabel = rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0 ? `${customFrom} — ${customTo}` : rangeKind === "today" ? "今天" : rangeKind === "last30" ? "近 30 天" : "近 7 天";
+  const rangeLabel = rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0 ? `${customFrom} — ${customTo}` : rangeKind === "today" ? coreT({key: "ui.stats.range_today"}) : rangeKind === "last30" ? coreT({key: "ui.stats.range_30d"}) : coreT({key: "ui.stats.range_7d"});
 
   const empty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
@@ -668,16 +689,16 @@ export function TokenUsageStatsView() {
 
   return (
     <SettingsPanel>
-      <SettingsSection title="筛选">
+      <SettingsSection title={coreT({key: "ui.stats.filter_label"})}>
         <div className="token-stats-view__controls">
           <SegmentedControl
-            aria-label="时间范围"
+            aria-label={coreT({key: "ui.stats.time_range"})}
             value={rangeKind}
             options={[
-              { value: "today" as RangeKind, label: "今天" },
-              { value: "last7" as RangeKind, label: "近 7 天" },
-              { value: "last30" as RangeKind, label: "近 30 天" },
-              { value: "custom" as RangeKind, label: "自定义" },
+              { value: "today" as RangeKind, label: coreT({key: "ui.stats.range_today"}) },
+              { value: "last7" as RangeKind, label: coreT({key: "ui.stats.range_7d"}) },
+              { value: "last30" as RangeKind, label: coreT({key: "ui.stats.range_30d"}) },
+              { value: "custom" as RangeKind, label: coreT({key: "ui.stats.range_custom"}) },
             ]}
             onChange={handleRangeKindChange}
           />
@@ -687,7 +708,7 @@ export function TokenUsageStatsView() {
             <input
               type="date"
               className="token-stats-view__date"
-              aria-label="开始日期"
+              aria-label={coreT({key: "ui.stats.start_date"})}
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
             />
@@ -695,7 +716,7 @@ export function TokenUsageStatsView() {
             <input
               type="date"
               className="token-stats-view__date"
-              aria-label="结束日期"
+              aria-label={coreT({key: "ui.stats.end_date"})}
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
             />
@@ -705,10 +726,10 @@ export function TokenUsageStatsView() {
           </div>
         ) : null}
         <label className="token-stats-view__model-filter">
-          <span className="token-stats-view__model-filter-label">模型</span>
+          <span className="token-stats-view__model-filter-label">{coreT({key: "ui.common.model"})}</span>
           <select
             className="token-stats-view__model-select"
-            aria-label="模型筛选"
+            aria-label={coreT({key: "ui.stats.model_filter_aria"})}
             value={modelSelectValue}
             onChange={(e) =>
               setModelFilter(
@@ -720,14 +741,14 @@ export function TokenUsageStatsView() {
               )
             }
           >
-            <option value={MODEL_OPTION_ALL}>全部模型</option>
+            <option value={MODEL_OPTION_ALL}>{coreT({key: "ui.stats.model_all"})}</option>
             {models.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
             {/* 常量与 value 名保留 __unlogged__（历史命名），语义已升级为「其他模型」：NULL + 非当前配置历史模型。modelBreakdown 行为 provider×model 复合维度原样透传，本选项仍按模型名单值筛选 */}
-            <option value={MODEL_OPTION_UNLOGGED}>其他模型</option>
+            <option value={MODEL_OPTION_UNLOGGED}>{coreT({key: "ui.stats.model_other"})}</option>
           </select>
         </label>
         {loadError != null ? <p className="token-stats-view__error">{loadError}</p> : null}
@@ -735,12 +756,12 @@ export function TokenUsageStatsView() {
 
       <div className="token-stats-view__tabs">
         <SegmentedControl
-          aria-label="视图页签"
+          aria-label={coreT({key: "ui.stats.view_tabs_aria"})}
           value={pageTab}
           options={[
-            { value: "summary" as PageTab, label: "汇总" },
-            { value: "detail" as PageTab, label: "图表" },
-            { value: "requests" as PageTab, label: "流水" },
+            { value: "summary" as PageTab, label: coreT({key: "ui.stats.tab_summary"}) },
+            { value: "detail" as PageTab, label: coreT({key: "ui.stats.tab_charts"}) },
+            { value: "requests" as PageTab, label: coreT({key: "ui.stats.tab_requests"}) },
           ]}
           onChange={setPageTab}
         />
@@ -750,45 +771,45 @@ export function TokenUsageStatsView() {
       {/* 空态——流水跟随时间窗口，窗口外无数据可展示；库全空探底命中时为 */}
       {/* 冷启动引导文案。 */}
       {empty ? (
-        <SettingsSection title="数据统计">
+        <SettingsSection title={coreT({key: "ui.nav.token_stats"})}>
           {libraryEmpty ? (
             <SettingsListEmpty>
-              库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
+              {coreT({key: "ui.stats.empty_db"})}
             </SettingsListEmpty>
           ) : (
             <SettingsListEmpty>
-              当前筛选范围内暂无用量数据，可调整时间范围或模型筛选后再试。
+              {coreT({key: "ui.stats.empty_filtered"})}
             </SettingsListEmpty>
           )}
         </SettingsSection>
       ) : pageTab === "summary" ? (
         <>
-          <SettingsSection title={`总览 · ${rangeLabel}`} desc="跟随当前时间范围与模型筛选">
+          <SettingsSection title={coreT({key: "ui.stats.overview_title", params: {range: rangeLabel}})} desc={coreT({key: "ui.stats.overview_desc"})}>
             <div className="token-stats-cards token-stats-cards--metrics">
               <div className="token-stats-card" data-metric="totalTokens">
-                <span className="token-stats-card__label">总 token</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.total_tokens"})}</span>
                 <span className="token-stats-card__value">
                   {formatTokenCount(summary?.totalTokens ?? 0)}
                 </span>
               </div>
               <div className="token-stats-card" data-metric="promptTokens">
-                <span className="token-stats-card__label">输入</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.input_label"})}</span>
                 <span className="token-stats-card__value">
                   {formatTokenCount(summary?.promptTokens ?? 0)}
                 </span>
               </div>
               <div className="token-stats-card" data-metric="completionTokens">
-                <span className="token-stats-card__label">输出</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.output_label"})}</span>
                 <span className="token-stats-card__value">
                   {formatTokenCount(summary?.completionTokens ?? 0)}
                 </span>
               </div>
               <div className="token-stats-card" data-metric="calls">
-                <span className="token-stats-card__label">调用次数</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.calls_label"})}</span>
                 <span className="token-stats-card__value">{String(summary?.calls ?? 0)}</span>
               </div>
               <div className="token-stats-card" data-metric="hitRate">
-                <span className="token-stats-card__label">命中率</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.hit_rate"})}</span>
                 <span className="token-stats-card__value token-stats-card__value--success">
                   {formatHitRate(
                     hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0),
@@ -797,25 +818,25 @@ export function TokenUsageStatsView() {
               </div>
               {/* 新指标卡：无有效行为 null → 空态文案而非 0 */}
               <div className="token-stats-card" data-metric="avgTokensPerSecond">
-                <span className="token-stats-card__label">平均速率</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.avg_rate"})}</span>
                 <span className="token-stats-card__value">
                   {formatTokensPerSecond(summary?.avgTokensPerSecond ?? null)}
                 </span>
               </div>
               <div className="token-stats-card" data-metric="avgFirstTokenMs">
-                <span className="token-stats-card__label">平均首字延迟</span>
+                <span className="token-stats-card__label">{coreT({key: "ui.stats.avg_first_token"})}</span>
                 <span className="token-stats-card__value">
                   {formatDurationMs(summary?.avgFirstTokenMs ?? null)}
                 </span>
                 {/* 口径注记：非流式请求的 TTFT 取完成时刻，避免误导 */}
-                <span className="token-stats-card__hint">非流式请求按完成时刻计</span>
+                <span className="token-stats-card__hint">{coreT({key: "ui.stats.nonstream_hint"})}</span>
               </div>
             </div>
           </SettingsSection>
 
           <SettingsSection
-            title="服务商 × 模型"
-            desc="点选扇区或图例查看用量、调用次数与占比"
+            title={coreT({key: "ui.stats.pie_section"})}
+            desc={coreT({key: "ui.stats.pie_desc"})}
           >
             <div className="token-stats-pie-block">
               <PieChart
@@ -828,10 +849,16 @@ export function TokenUsageStatsView() {
                   className="token-stats-pie-block__detail"
                   data-slice-detail={selectedSlice.key}
                 >
-                  {selectedSlice.label} · 用量{" "}
-                  {formatTokenCount(selectedSlice.row.totalTokens)} · 调用{" "}
-                  {selectedSlice.row.calls} 次 · 占比{" "}
-                  {selectedSlice.share == null ? "—" : `${Math.round(selectedSlice.share * 100)}%`}
+                  {/* 同文借用 ui.stats.slice_aria（aria 键用于展示详情行，模板同形）——对号表外借待 3c 裁决。 */}
+                  {coreT({
+                    key: "ui.stats.slice_aria",
+                    params: {
+                      label: selectedSlice.label,
+                      value: formatTokenCount(selectedSlice.row.totalTokens),
+                      calls: selectedSlice.row.calls,
+                      share: selectedSlice.share == null ? "—" : `${Math.round(selectedSlice.share * 100)}%`,
+                    },
+                  })}
                 </p>
               ) : null}
             </div>
@@ -839,18 +866,18 @@ export function TokenUsageStatsView() {
         </>
       ) : pageTab === "requests" ? (
         <SettingsSection
-          title={`请求流水 · 共 ${reqTotal} 条`}
-          desc="按时间倒序列出当前筛选范围内的请求"
+          title={coreT({key: "ui.stats.requests_title", params: {count: reqTotal}})}
+          desc={coreT({key: "ui.stats.requests_desc"})}
         >
           <div className="token-stats-requests">
             <div className="token-stats-requests__row token-stats-requests__row--head">
-              <span>时间</span>
-              <span>模型</span>
-              <span>输入</span>
-              <span>输出</span>
-              <span>缓存读</span>
-              <span>首字延迟</span>
-              <span>总时间</span>
+              <span>{coreT({key: "ui.stats.col_time"})}</span>
+              <span>{coreT({key: "ui.common.model"})}</span>
+              <span>{coreT({key: "ui.stats.input_label"})}</span>
+              <span>{coreT({key: "ui.stats.output_label"})}</span>
+              <span>{coreT({key: "ui.stats.col_cache_read"})}</span>
+              <span>{coreT({key: "ui.stats.col_first_token"})}</span>
+              <span>{coreT({key: "ui.stats.col_total_time"})}</span>
             </div>
             {reqRows.map((row, index) => (
               <div
@@ -884,7 +911,7 @@ export function TokenUsageStatsView() {
                 disabled={reqLoading || reqPage === 0}
                 onClick={() => void loadRequests(requestsFilter, reqPage - 1)}
               >
-                上一页
+                {coreT({key: "ui.stats.page_prev"})}
               </button>
               {pageWindowItems(
                 reqPage + 1,
@@ -916,7 +943,7 @@ export function TokenUsageStatsView() {
                 }
                 onClick={() => void loadRequests(requestsFilter, reqPage + 1)}
               >
-                下一页
+                {coreT({key: "ui.stats.page_next"})}
               </button>
             </div>
           ) : null}
@@ -925,34 +952,35 @@ export function TokenUsageStatsView() {
         // 「今天」模式（T-D4）：跳过按天图（单日柱无信息量），直出当天汇总行 +
         // 按小时图；当天汇总行取 dailyBuckets 的选中天桶（即唯一桶），无数据日
         // 显示零值文案。hourly 数据由 selectedDay 自动补选（P1-1）触发拉取。
-        <SettingsSection title="今天 · 按小时分布" desc="当天 0-24 点的输入输出与调用量">
+        <SettingsSection title={coreT({key: "ui.stats.day_hourly_title"})} desc={coreT({key: "ui.stats.day_hourly_desc"})}>
           <div
             className="token-stats-view__day-detail"
             data-day-detail={selectedDay ?? undefined}
           >
             <p className="token-stats-view__day-detail-summary">
-              输入 {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).promptTokens)} · 输出{" "}
-              {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).completionTokens)} · 命中率{" "}
+              {/* 拼接句用标签键拼；「调用 {n} 次」同文外借 ui.stats.chart_calls_aria（对号表外借待 3c 裁决）。 */}
+              {coreT({key: "ui.stats.input_label"})} {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
+              {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
               {formatHitRate(
                 hitRate(
                   (selectedDayBucket ?? ZERO_BUCKET).cacheReadTokens,
                   (selectedDayBucket ?? ZERO_BUCKET).billedInputTokens,
                 ),
               )}{" "}
-              · 调用 {(selectedDayBucket ?? ZERO_BUCKET).calls} 次 · 平均速率{" "}
-              {formatTokensPerSecond((selectedDayBucket ?? ZERO_BUCKET).avgTokensPerSecond)} · 平均首字延迟{" "}
+              · {coreT({key: "ui.stats.chart_calls_aria", params: {count: (selectedDayBucket ?? ZERO_BUCKET).calls})}} · {coreT({key: "ui.stats.avg_rate"})}{" "}
+              {formatTokensPerSecond((selectedDayBucket ?? ZERO_BUCKET).avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
               {formatDurationMs((selectedDayBucket ?? ZERO_BUCKET).avgFirstTokenMs)}
             </p>
             <TokenStatsChart
               buckets={hourlyBuckets ?? []}
               chart="hourly"
               keyOf={(_b, index) => String(index)}
-              labelOf={(key) => `${Number(key)}时`}
+              labelOf={(key) => coreT({key: "ui.stats.hour_label", params: {hour: Number(key)}})}
             />
           </div>
         </SettingsSection>
       ) : (
-        <SettingsSection title="按天用量">
+        <SettingsSection title={coreT({key: "ui.stats.by_day_title"})}>
           <TokenStatsChart
             buckets={dailyBuckets}
             chart="daily"
@@ -963,25 +991,26 @@ export function TokenUsageStatsView() {
           />
           {selectedDay != null && selectedDayBucket != null ? (
             <div className="token-stats-view__day-detail" data-day-detail={selectedDay}>
+              {/* 「{day} · 按小时分布」键面无对应键（day_hourly_title 固定「今天 · 」前缀），保留原字面量。 */}
               <p className="token-stats-view__day-detail-title">{selectedDay} · 按小时分布</p>
               <p className="token-stats-view__day-detail-summary">
-                输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出{" "}
-                {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{" "}
+                {coreT({key: "ui.stats.input_label"})} {formatTokenCount(selectedDayBucket.promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
+                {formatTokenCount(selectedDayBucket.completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
                 {formatHitRate(
                   hitRate(
                     selectedDayBucket.cacheReadTokens,
                     selectedDayBucket.billedInputTokens,
                   ),
                 )}{" "}
-                · 调用 {selectedDayBucket.calls} 次 · 平均速率{" "}
-                {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · 平均首字延迟{" "}
+                · {coreT({key: "ui.stats.chart_calls_aria", params: {count: selectedDayBucket.calls})}} · {coreT({key: "ui.stats.avg_rate"})}{" "}
+                {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
                 {formatDurationMs(selectedDayBucket.avgFirstTokenMs)}
               </p>
               <TokenStatsChart
                 buckets={hourlyBuckets ?? []}
                 chart="hourly"
                 keyOf={(_b, index) => String(index)}
-                labelOf={(key) => `${Number(key)}时`}
+                labelOf={(key) => coreT({key: "ui.stats.hour_label", params: {hour: Number(key)}})}
               />
             </div>
           ) : null}
