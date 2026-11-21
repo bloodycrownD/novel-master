@@ -278,7 +278,7 @@ export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime,
     try {
       const raw = await runtime.agentRegistry.getRawWire(agentId);
       if (raw === null) {
-        setLoadError(`未找到 Agent：${agentId}`);
+        setLoadError(coreT({key: "ui.agent.not_found", params: {agent_id: agentId}}));
         return;
       }
       const health = storedConfig.AgentDefinitionWire.assess(raw);

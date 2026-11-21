@@ -308,7 +308,7 @@ export function SmartSortRuleEditorScreen() {
         await runtime.smartSortRule.createRule(payload);
       }
       setBaseline(snapshot);
-      showToast('已保存规则');
+      showToast(coreT({key: "ui.smart_sort.saved_done"}));
       allowLeaveWithoutPrompt();
       navigation.goBack();
     } catch (error) {
@@ -341,13 +341,13 @@ export function SmartSortRuleEditorScreen() {
       tokens={tokens}
       footer={
         <View>
-          {dirty ? <Text style={[styles.unsaved, {color: tokens.danger}]}>未保存的更改</Text> : null}
+          {dirty ? <Text style={[styles.unsaved, {color: tokens.danger}]}>{coreT({key: "ui.common.unsaved_changes"})}</Text> : null}
           <StickyFormFooter tokens={tokens} label={coreT({key: "ui.common.save"})} loading={saving} onPress={() => handleSave().catch(() => undefined)} />
         </View>
       }
     >
       <FormSectionCard tokens={tokens}>
-        <FormSwitchRow tokens={tokens} label="启用规则" value={draft.enabled} onValueChange={v => patchDraft({enabled: v})} />
+        <FormSwitchRow tokens={tokens} label={coreT({key: "ui.smart_sort.enable_label"})} value={draft.enabled} onValueChange={v => patchDraft({enabled: v})} />
         <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
           <FormTextInput tokens={tokens} value={draft.name} onChangeText={v => patchDraft({name: v})} placeholder={coreT({key: "ui.smart_sort.name_example"})} />
         </FormField>
@@ -446,7 +446,7 @@ export function SmartSortRuleEditorScreen() {
                 <Text style={[styles.resultCount, {color: tokens.textSecondary}]}>{testOutcome.result.matches.length > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: testOutcome.result.matches.length}}) : coreT({key: "ui.smart_sort.no_matches"})}</Text>
               </>
             ) : (
-              <Text style={[styles.resultText, {color: tokens.danger}]}>{`正则无效：${testOutcome.result.error}`}</Text>
+              <Text style={[styles.resultText, {color: tokens.danger}]}>{coreT({key: "ui.smart_sort.regex_invalid", params: {detail: testOutcome.result.error}})}</Text>
             )}
           </View>
         </FormField>
@@ -481,7 +481,7 @@ export function SmartSortRuleEditorScreen() {
       <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
         <Text style={[styles.helpTitle, {color: tokens.text}]}>{coreT({key: "ui.smart_sort.help_title"})}</Text>
         <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_priority_title"})} body={coreT({key: "ui.smart_sort.help_priority_body"})} />
-        <HelpSection tokens={tokens} title="智能数字" body="从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。" />
+        <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_smart_title"})} body={coreT({key: "ui.smart_sort.help_smart_body"})} />
         <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_fixed_title"})} body={coreT({key: "ui.smart_sort.help_fixed_body"})} />
         <HelpSection tokens={tokens} title={coreT({key: "ui.smart_sort.help_regex_title"})} body={coreT({key: "ui.smart_sort.help_regex_body"})} />
         <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>

@@ -284,7 +284,7 @@ export function SmartSortRulesScreen() {
         allSelected={rows.length > 0 && batch.selectedCount === rows.length}
         actions={[
           {label: coreT({key: "ui.common.enable"}), onPress: () => runBatchSetEnabled(true)},
-          {label: '禁用', onPress: () => runBatchSetEnabled(false)},
+          {label: coreT({key: "ui.common.disable"}), onPress: () => runBatchSetEnabled(false)},
         ]}
         hint={coreT({key: "ui.smart_sort.batch_select_hint"})}
         normalActions={

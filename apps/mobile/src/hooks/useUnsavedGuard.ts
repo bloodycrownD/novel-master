@@ -4,9 +4,10 @@
 import {useCallback, useEffect, useRef} from 'react';
 import {Alert} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import {coreT} from '@/i18n/core';
 
 /** Confirm before leaving a screen with dirty editor state. */
-export function useUnsavedGuard(isDirty: boolean, message = '有未保存的更改，确定离开？'): {allowLeaveWithoutPrompt: () => void} {
+export function useUnsavedGuard(isDirty: boolean, message = coreT({key: "ui.common.unsaved_confirm_msg"})): {allowLeaveWithoutPrompt: () => void} {
   const navigation = useNavigation();
   const allowLeaveRef = useRef(false);
 
@@ -20,10 +21,10 @@ export function useUnsavedGuard(isDirty: boolean, message = '有未保存的更�
         return;
       }
       event.preventDefault();
-      Alert.alert('未保存', message, [
-        {text: '留下', style: 'cancel'},
+      Alert.alert(coreT({key: "ui.common.unsaved_title"}), message, [
+        {text: coreT({key: "ui.common.stay"}), style: 'cancel'},
         {
-          text: '离开',
+          text: coreT({key: "ui.common.leave"}),
           style: 'destructive',
           onPress: () => navigation.dispatch(event.data.action),
         },

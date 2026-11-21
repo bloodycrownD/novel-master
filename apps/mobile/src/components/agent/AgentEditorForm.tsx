@@ -285,7 +285,7 @@ export function AgentEditorForm(props: Props) {
       {isDirty ? (
         <View style={styles.unsavedWrap}>
           <FormSectionCard tokens={tokens}>
-            <Text style={[styles.unsaved, {color: tokens.danger}]}>有未保存的更改</Text>
+            <Text style={[styles.unsaved, {color: tokens.danger}]}>{coreT({key: "ui.common.unsaved_changes"})}</Text>
           </FormSectionCard>
         </View>
       ) : null}
