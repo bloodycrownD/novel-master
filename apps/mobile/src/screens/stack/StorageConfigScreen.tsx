@@ -97,27 +97,25 @@ export function StorageConfigScreen() {
   return (
     <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <ProfileStatusCard
-        // nm-style/契约：storage-config-screen-source.test 锁 title="存储空间" 等 JSX 字面量锚点，波 3c 对齐后再迁。
-        title="存储空间"
+        title={coreT({key: "ui.storage.space_section"})}
         hint={coreT({key: "ui.storage.space_desc"})}
         metrics={[
-          {label: '库体积', value: formatStorageBytes(dbFileBytes)},
-          {label: '可回收', value: formatStorageBytes(dbReclaimBytes)},
+          {label: coreT({key: "ui.storage.db_size"}), value: formatStorageBytes(dbFileBytes)},
+          {label: coreT({key: "ui.storage.reclaimable"}), value: formatStorageBytes(dbReclaimBytes)},
         ]}
         tokens={tokens}
       />
-      <ProfileMenuItem icon="☁️" label="云端配置" value={cloudConfigured ? '已配置' : '未配置'} tokens={tokens} onPress={() => navigation.navigate('CloudSyncStorage')} />
+      <ProfileMenuItem icon="☁️" label={coreT({key: "ui.storage.cloud_entry"})} value={cloudConfigured ? coreT({key: "ui.cloud_sync.configured"}) : coreT({key: "ui.cloud_sync.not_configured"})} tokens={tokens} onPress={() => navigation.navigate('CloudSyncStorage')} />
       <ProfileMenuItem
         icon="🧹"
-        label="数据清理"
+        label={coreT({key: "ui.storage.cleanup_section"})}
         value={dbBusy ? coreT({key: "ui.common.processing"}) : agentActive ? coreT({key: "ui.cloud_sync.agent_busy_value"}) : coreT({key: "ui.storage.cleanup_action"})}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
             return;
           }
-          // nm-style/契约：本测试锁 Alert.alert('数据清理' 形态，波 3c 对齐后再迁。
-          Alert.alert('数据清理', CLEANUP_CONFIRM_TEXT, [
+          Alert.alert(coreT({key: "ui.storage.cleanup_section"}), CLEANUP_CONFIRM_TEXT, [
             {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
             {
               text: coreT({key: "ui.storage.cleanup_start"}),
@@ -126,16 +124,15 @@ export function StorageConfigScreen() {
                 DbMaintenanceService.run(runtime)
                   .then(result => {
                     if (!result.ok) {
-                      showToast(ToastMessage.toast('清理失败', result.error));
+                      showToast(ToastMessage.toast(coreT({key: "ui.common.cleanup_failed"}), result.error));
                       return;
                     }
                     const before = formatStorageBytes(result.value.beforeBytes);
                     const after = formatStorageBytes(result.value.afterBytes);
-                    // nm-style/契约：本测试锁 `清理完成` 模板串与 toast('清理失败', err) 形态，波 3c 对齐后再迁。
-                    showToast(`清理完成：${before} → ${after}`);
+                    showToast(coreT({key: "ui.storage.cleanup_done", params: {before, after}}));
                     refreshMaintenanceStats().catch(() => undefined);
                   })
-                  .catch(err => showToast(ToastMessage.toast('清理失败', err)))
+                  .catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.cleanup_failed"}), err)))
                   .finally(() => setDbBusy(false));
               },
             },
@@ -144,7 +141,7 @@ export function StorageConfigScreen() {
       />
       <ProfileMenuItem
         icon="💾"
-        label="导出数据库"
+        label={coreT({key: "ui.storage.export_db"})}
         value={dbBusy ? coreT({key: "ui.common.processing"}) : coreT({key: "ui.storage.share_backup"})}
         tokens={tokens}
         onPress={() => {
@@ -196,7 +193,7 @@ export function StorageConfigScreen() {
       />
       <ProfileMenuItem
         icon="📥"
-        label="导入数据库"
+        label={coreT({key: "ui.storage.import_db"})}
         value={dbBusy ? coreT({key: "ui.common.processing"}) : coreT({key: "ui.storage.replace_all"})}
         tokens={tokens}
         onPress={() => {
