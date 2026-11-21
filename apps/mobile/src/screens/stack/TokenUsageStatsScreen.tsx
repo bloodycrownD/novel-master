@@ -33,6 +33,7 @@ import type {UsageStatsBucket, UsageStatsFilter, UsageStatsModelRow, UsageStatsR
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {useToast} from '../../components/chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {PageTab, ProviderModelFilterValue, ProviderModelOption, RangeKind} from './token-usage/format';
@@ -115,7 +116,7 @@ export function TokenUsageStatsScreen() {
         if (seq !== reloadSeqRef.current) {
           return; // 过期请求的报错不覆盖新一轮状态。
         }
-        const message = ToastMessage.toast('加载统计失败', err);
+        const message = ToastMessage.toast(coreT({key: "ui.stats.load_failed"}), err);
         setLoadError(message);
         showToast(message);
       };
@@ -150,7 +151,7 @@ export function TokenUsageStatsScreen() {
       if (seq !== reloadSeqRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。
       }
-      const message = ToastMessage.toast('加载统计失败', err);
+      const message = ToastMessage.toast(coreT({key: "ui.stats.load_failed"}), err);
       setLoadError(message);
       showToast(message);
     } finally {
@@ -182,7 +183,7 @@ export function TokenUsageStatsScreen() {
             // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
             // 条件仍满足导致无限重试；重试交给用户切页签/改筛选触发（MF-1）。
             reqDirtyRef.current = false;
-            showToast(ToastMessage.toast('加载流水失败', result.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.stats.requests_load_failed"}), result.error));
           }
           return;
         }
@@ -198,7 +199,7 @@ export function TokenUsageStatsScreen() {
           // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
           // 条件仍满足导致无限重试；重试交给用户切页签/改筛选触发（MF-1）。
           reqDirtyRef.current = false;
-          showToast(ToastMessage.toast('加载流水失败', err));
+          showToast(ToastMessage.toast(coreT({key: "ui.stats.requests_load_failed"}), err));
         }
       } finally {
         if (seq === reqSeqRef.current) {
@@ -284,13 +285,13 @@ export function TokenUsageStatsScreen() {
           if (buckets.ok) {
             setHourlyBuckets(buckets.value);
           } else {
-            showToast(ToastMessage.toast('加载小时分布失败', buckets.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.stats.hourly_load_failed"}), buckets.error));
           }
         }
       })
       .catch(err => {
         if (!cancelled) {
-          showToast(ToastMessage.toast('加载小时分布失败', err));
+          showToast(ToastMessage.toast(coreT({key: "ui.stats.hourly_load_failed"}), err));
         }
       });
     return () => {
@@ -311,7 +312,7 @@ export function TokenUsageStatsScreen() {
     // 跨度不设上限（PRD 明确不与查询成本耦合）；仅保 from ≤ to 兑底护栏
     //（sheet 点选自动排序，正常路径恒满足）。
     if (!UsageStats.isCustomRangeValid(from, to)) {
-      showToast('自定义区间起始日不能晚于结束日');
+      showToast(coreT({key: "ui.stats.range_start_after_end"}));
       return;
     }
     setCustomFrom(from);
@@ -320,14 +321,14 @@ export function TokenUsageStatsScreen() {
     setRangeSheetVisible(false);
   };
 
-  const providerLabelOf = (id: string) => providerLabels[id] ?? '未知服务商';
+  const providerLabelOf = (id: string) => providerLabels[id] ?? coreT({key: "ui.provider.unknown_provider"});
   let modelFilterLabel: string;
   if (comboFilter === undefined) {
-    modelFilterLabel = '全部模型';
+    modelFilterLabel = coreT({key: "ui.stats.model_all"});
   } else if (comboFilter.providerId === null) {
-    modelFilterLabel = '未记录服务商';
+    modelFilterLabel = coreT({key: "ui.stats.provider_unlogged"});
   } else if (comboFilter.model === null) {
-    modelFilterLabel = `${providerLabelOf(comboFilter.providerId)}/其他模型`;
+    modelFilterLabel = coreT({key: "ui.stats.provider_other_label", params: {provider: providerLabelOf(comboFilter.providerId)}});
   } else {
     modelFilterLabel = `${providerLabelOf(comboFilter.providerId)}/${comboFilter.model}`;
   }
@@ -336,11 +337,11 @@ export function TokenUsageStatsScreen() {
   if (rangeKind === 'custom' && customFrom && customTo) {
     rangeLabel = `${customFrom.getMonth() + 1}/${customFrom.getDate()} — ${customTo.getMonth() + 1}/${customTo.getDate()}`;
   } else if (rangeKind === 'today') {
-    rangeLabel = '今天';
+    rangeLabel = coreT({key: "ui.stats.range_today"});
   } else if (rangeKind === 'last30') {
-    rangeLabel = '近 30 天';
+    rangeLabel = coreT({key: "ui.stats.range_30d"});
   } else {
-    rangeLabel = '近 7 天';
+    rangeLabel = coreT({key: "ui.stats.range_7d"});
   }
 
   // 空态区分（mobile/A-1）：库全空（配置侧无任何服务商×模型组合且已
@@ -375,17 +376,17 @@ export function TokenUsageStatsScreen() {
         options={[
           {
             value: 'summary' as PageTab,
-            label: '汇总',
+            label: coreT({key: "ui.stats.tab_summary"}),
             testID: 'stats-tab-summary',
           },
           {
             value: 'detail' as PageTab,
-            label: '图表',
+            label: coreT({key: "ui.stats.tab_charts"}),
             testID: 'stats-tab-detail',
           },
           {
             value: 'requests' as PageTab,
-            label: '流水',
+            label: coreT({key: "ui.stats.tab_requests"}),
             testID: 'stats-tab-requests',
           },
         ]}
@@ -403,15 +404,13 @@ export function TokenUsageStatsScreen() {
       ) : null}
       {loadError != null && summary == null ? null : libraryEmpty ? (
         <View style={styles.empty} testID="empty-cold-start">
-          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-            Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
-          </Text>
+          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.empty_db"})}</Text>
         </View>
       ) : rangeEmpty ? (
         // 范围空态覆盖全部页签（需求①勘误后）：流水同样随时间窗口，
         // 窗口空（库非空）时与其他页签统一显示区间空态。
         <View style={styles.empty} testID="empty-range">
-          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>该区间无数据</Text>
+          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.empty_range"})}</Text>
         </View>
       ) : pageTab === 'summary' ? (
         <SummaryTab summary={summary} modelRows={modelRows} providerLabels={providerLabels} rangeLabel={rangeLabel} tokens={tokens} />

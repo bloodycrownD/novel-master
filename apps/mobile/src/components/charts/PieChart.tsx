@@ -19,6 +19,7 @@ import {Pressable, Text, View} from 'react-native';
 import Svg, {Circle, G, Path, Text as SvgText} from 'react-native-svg';
 import {TokenFormat} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
+import {coreT} from '@/i18n/core';
 import {styles} from '@/screens/stack/token-usage/styles';
 
 /** 饼图数据行：调用方（SummaryTab）排好序原样传入，组件不折叠不改序。 */
@@ -191,7 +192,7 @@ export function PieChart({
                 {selected.label}
               </Text>
               <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>用量 {TokenFormat.count(selected.totalTokens)}</Text>
-              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>调用 {selected.calls} 次</Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.chart_calls_aria", params: {count: selected.calls}})}</Text>
               <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>占比 {selectedShare == null ? '—' : `${Math.round(selectedShare * 100)}%`}</Text>
             </View>
           ) : null}

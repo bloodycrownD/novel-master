@@ -13,6 +13,7 @@ import React, {useCallback, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {TokenFormat} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
+import {coreT} from '@/i18n/core';
 
 interface StackedBarsDatum {
   key: string;
@@ -95,8 +96,8 @@ export function StackedBars({data, selectedKey, onSelect, onLongPress, tokens, f
     <View testID={testID}>
       <View style={styles.legendRow}>
         {[
-          {label: '输入', color: tokens.primary},
-          {label: '输出', color: tokens.textSecondary},
+          {label: coreT({key: "ui.stats.input_label"}), color: tokens.primary},
+          {label: coreT({key: "ui.stats.output_label"}), color: tokens.textSecondary},
         ].map(item => (
           <View key={item.label} style={styles.legendItem}>
             <View style={[styles.legendDot, {backgroundColor: item.color}]} />
@@ -133,7 +134,7 @@ export function StackedBars({data, selectedKey, onSelect, onLongPress, tokens, f
               const primaryHeight = height > 0 && total > 0 ? Math.max(1, Math.round((datum.primary / total) * height)) : 0;
               const secondaryHeight = height - primaryHeight;
               // 读屏文案与 desktop 侧 bucketTooltip 同口径：日期 · 输入 · 输出 · 调用次数。
-              const labelParts = [label, `输入 ${TokenFormat.count(datum.primary)}`, `输出 ${TokenFormat.count(datum.secondary ?? 0)}`, ...(datum.calls != null ? [`调用 ${datum.calls} 次`] : [])];
+              const labelParts = [label, coreT({key: "ui.stats.chart_input_aria", params: {count: TokenFormat.count(datum.primary)}}), coreT({key: "ui.stats.chart_output_aria", params: {count: TokenFormat.count(datum.secondary ?? 0)}}), ...(datum.calls != null ? [coreT({key: "ui.stats.chart_calls_aria", params: {count: datum.calls}})] : [])];
               const barA11yLabel = labelParts.join(' · ');
               return (
                 <Pressable
