@@ -21,9 +21,10 @@ const source = readFileSync(
 
 describe("SkillsManageView 导出 ZIP 入口（源码断言）", () => {
   it("行菜单含「导出 ZIP」，排在编辑后、删除前", () => {
-    const exportIdx = source.indexOf('{ label: "导出 ZIP", action: "export-zip" }');
-    const editIdx = source.indexOf('{ label: "编辑", action: "edit" }');
-    const deleteIdx = source.indexOf('{ label: "删除", action: "delete", danger: true }');
+    // i18n 后菜单四项锁 coreT 调用形态+键名（文案由 catalog 保证），顺序意图不变。
+    const exportIdx = source.indexOf('{ label: coreT({key: "ui.skills.export_zip"}), action: "export-zip" }');
+    const editIdx = source.indexOf('{ label: coreT({key: "ui.common.edit"}), action: "edit" }');
+    const deleteIdx = source.indexOf('{ label: coreT({key: "ui.common.delete"}), action: "delete", danger: true }');
     assert.ok(exportIdx > 0, "缺少「导出 ZIP」菜单项");
     assert.ok(editIdx > 0 && editIdx < exportIdx, "导出应排在编辑之后");
     assert.ok(deleteIdx > exportIdx, "导出应排在删除之前");

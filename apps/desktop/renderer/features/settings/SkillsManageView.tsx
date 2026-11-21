@@ -133,19 +133,17 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     if (menu == null) {
       return [];
     }
-    // 菜单四项标签被源码契约测试锁（skills-manage-export-menu.test.ts / skill-zip-import.test.tsx
-    // 以 readFileSync+正则锁死精确串与顺序），波 3c 对齐测试前保留原字面量。
     const items: ContextMenuItem[] = [
-      { label: "编辑", action: "edit" },
+      { label: coreT({key: "ui.common.edit"}), action: "edit" },
       {
-        label: "编辑信息",
+        label: coreT({key: "ui.skills.edit_info"}),
         action: "edit-info",
         // invalid（front matter 不可解析）时禁用：改名链路会跳过 front
         // matter 重写，先修复 SKILL.md 再改信息
         disabled: !menu.valid,
       },
-      { label: "导出 ZIP", action: "export-zip" },
-      { label: "删除", action: "delete", danger: true },
+      { label: coreT({key: "ui.skills.export_zip"}), action: "export-zip" },
+      { label: coreT({key: "ui.common.delete"}), action: "delete", danger: true },
     ];
     return items;
   }, [menu]);

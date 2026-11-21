@@ -291,7 +291,8 @@ describe("SkillInfoEditModal（T-S5：编辑信息弹窗）", () => {
       ),
       "utf8",
     );
-    assert.match(manageSrc, /"编辑信息"/);
+    // 「编辑信息」入口 i18n 后锁 coreT 形态+键名（文案由 catalog 保证）。
+    assert.match(manageSrc, /coreT\(\{key: "ui\.skills\.edit_info"\}\)/);
     assert.match(manageSrc, /disabled: !menu\.valid/);
     assert.match(manageSrc, /SkillInfoEditModal/);
   });
