@@ -70,3 +70,8 @@ CSS `::before` / `::after` 的 `content` 由样式表渲染，translator 无法�
 ## desktop 原生菜单（波 4a D 线接线收口）
 
 `shell-menu.ts` 原生菜单文案 18 处已接 `ui.menu.*`（新域，波 4a 补键）+ 现键四处；`zod` 格式化 7 处接 `ui.smart_sort.zod_*`（`zod_nonneg_or_empty` 带 `{field}` 占位）；SettingsOverlay 自定义引擎新建标题接 `ui.provider.custom_engine_create_title`。
+
+## 发债主体 YAML 校验消息与 mobile 会话标题前缀（波 4a M 线登记）
+
+- `agent-yaml.service.ts`（mobile）:35/42/46/50「Agent YAML 无效」与 desktop `agent-registry.ts` 同款——`Errors.normalizeYaml` detail 载荷，AppError detail 形态族豁免。
+- `apps/mobile/src/utils/session-default-title.ts`「新会话」前缀 + `/^新会话(\d+)$/`——与 desktop「会话」前缀**不同源**（两平台默认标题各自落库），同数据协议豁免：i18n 化须随「生成侧 + 匹配侧 + 存量数据迁移」专项处理，p27 不动。
