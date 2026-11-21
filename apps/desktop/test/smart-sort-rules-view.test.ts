@@ -34,6 +34,7 @@ describe("SmartSortRulesView 评审修复（desktop/B-1、B-2、C-1）", () => {
   });
 
   it("B-1：空态文案区分「加载失败」与「暂无规则」", () => {
+    // 两句键面无键（ui.common.load_failed / ui.smart_sort.empty 均不同文），3c-c MISS 补迁前仍锁中文。
     assert.match(
       source,
       /\{loadFailed\s*\?\s*"加载失败，请重试。"\s*:\s*"暂无规则，点击上方按钮创建。"\}/,
@@ -41,6 +42,7 @@ describe("SmartSortRulesView 评审修复（desktop/B-1、B-2、C-1）", () => {
   });
 
   it("B-2：ruleId 缺失时提示「规则不存在或已被删除」并回退新建语义", () => {
+    // 键面无同文键（ui.smart_sort.missing_toast 缺「被」字），3c-c MISS 补迁前仍锁中文。
     assert.match(source, /toastSettingsError\("规则不存在或已被删除"\);/);
     assert.match(source, /setRuleId\(undefined\);/);
     // navState 同步清空（overlay 标题基线）
@@ -110,6 +112,7 @@ describe("SmartSortRuleEditorView 评审修复 round 4（dtcli/B-1/B-2/B-3）", 
   });
 
   it("B-1：清空后结果区回 idle 占位文案（源码级断言，偏弱：锁占位分支存在）", () => {
+    // 键面无同文键（ui.smart_sort.result_pending 无「输入测试文本后」前缀），3c-c MISS 补迁前仍锁中文。
     assert.match(
       source,
       /: \(\s*"输入测试文本后点击「测试」查看匹配结果。"\s*\)\)/,
@@ -117,9 +120,10 @@ describe("SmartSortRuleEditorView 评审修复 round 4（dtcli/B-1/B-2/B-3）", 
   });
 
   it("B-2：save 前置 trim + 空名本地拦截（不达 IPC）", () => {
+    // 空名拦截提示 i18n 后锁 coreT 形态+键名（文案由 catalog 保证）。
     assert.match(
       source,
-      /const name = draft\.name\.trim\(\);\s*if \(!name\) \{\s*toastSettingsError\("请填写规则名称"\);\s*return;\s*\}/,
+      /const name = draft\.name\.trim\(\);\s*if \(!name\) \{\s*toastSettingsError\(coreT\(\{key: "ui\.smart_sort\.name_required"\}\)\);\s*return;\s*\}/,
     );
     // payload 用 trim 后的 name；空名短路 return 在构造 IPC 请求之前
     assert.match(

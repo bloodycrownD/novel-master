@@ -2401,7 +2401,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     // 不把空名/纯空格发到 IPC 靠 core 兜底（dtcli/B-2）。
     const name = draft.name.trim();
     if (!name) {
-      toastSettingsError("请填写规则名称");
+      toastSettingsError(coreT({key: "ui.smart_sort.name_required"}));
       return;
     }
     const description = draft.description.trim() || null;
