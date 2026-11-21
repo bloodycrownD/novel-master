@@ -8,6 +8,7 @@ import {ProtocolSamplingDefaults, type ModelSamplingParams} from '@novel-master/
 import {FormField} from '@/components/form/FormField';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import type {ThemeTokens} from '@/theme/tokens';
+import {coreT} from '@/i18n/core';
 
 type Props = {
   tokens: ThemeTokens;
@@ -71,25 +72,25 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
     <View style={styles.root}>
       {protocol === 'openai' ? (
         <>
-          <NumberField tokens={tokens} label="温度" value={numStr(openai.temperature)} onChangeText={v => onChange(patchOpenAi(params, {temperature: parseNumber(v)}))} />
+          <NumberField tokens={tokens} label={coreT({key: "ui.sampling.temperature_label"})} value={numStr(openai.temperature)} onChangeText={v => onChange(patchOpenAi(params, {temperature: parseNumber(v)}))} />
           <NumberField tokens={tokens} label="Top P" value={numStr(openai.top_p)} onChangeText={v => onChange(patchOpenAi(params, {top_p: parseNumber(v)}))} />
-          <NumberField tokens={tokens} label="输出最大长度" value={numStr(openai.max_tokens)} onChangeText={v => onChange(patchOpenAi(params, {max_tokens: parseNumber(v)}))} />
+          <NumberField tokens={tokens} label={coreT({key: "ui.sampling.max_output_label"})} value={numStr(openai.max_tokens)} onChangeText={v => onChange(patchOpenAi(params, {max_tokens: parseNumber(v)}))} />
         </>
       ) : null}
       {protocol === 'anthropic' ? (
         <>
-          <NumberField tokens={tokens} label="温度" value={numStr(anthropic.temperature)} onChangeText={v => onChange(patchAnthropic(params, {temperature: parseNumber(v)}))} />
+          <NumberField tokens={tokens} label={coreT({key: "ui.sampling.temperature_label"})} value={numStr(anthropic.temperature)} onChangeText={v => onChange(patchAnthropic(params, {temperature: parseNumber(v)}))} />
           <NumberField tokens={tokens} label="Top P" value={numStr(anthropic.top_p)} onChangeText={v => onChange(patchAnthropic(params, {top_p: parseNumber(v)}))} />
           <NumberField tokens={tokens} label="Top K" value={numStr(anthropic.top_k)} onChangeText={v => onChange(patchAnthropic(params, {top_k: parseNumber(v)}))} />
-          <NumberField tokens={tokens} label="输出最大长度" value={numStr(anthropic.max_tokens)} onChangeText={v => onChange(patchAnthropic(params, {max_tokens: parseNumber(v)}))} />
+          <NumberField tokens={tokens} label={coreT({key: "ui.sampling.max_output_label"})} value={numStr(anthropic.max_tokens)} onChangeText={v => onChange(patchAnthropic(params, {max_tokens: parseNumber(v)}))} />
         </>
       ) : null}
       {protocol === 'gemini' ? (
         <>
-          <NumberField tokens={tokens} label="温度" value={numStr(gemini.temperature)} onChangeText={v => onChange(patchGemini(params, {temperature: parseNumber(v)}))} />
+          <NumberField tokens={tokens} label={coreT({key: "ui.sampling.temperature_label"})} value={numStr(gemini.temperature)} onChangeText={v => onChange(patchGemini(params, {temperature: parseNumber(v)}))} />
           <NumberField tokens={tokens} label="Top P" value={numStr(gemini.topP)} onChangeText={v => onChange(patchGemini(params, {topP: parseNumber(v)}))} />
           <NumberField tokens={tokens} label="Top K" value={numStr(gemini.topK)} onChangeText={v => onChange(patchGemini(params, {topK: parseNumber(v)}))} />
-          <NumberField tokens={tokens} label="输出最大长度" value={numStr(gemini.maxOutputTokens)} onChangeText={v => onChange(patchGemini(params, {maxOutputTokens: parseNumber(v)}))} />
+          <NumberField tokens={tokens} label={coreT({key: "ui.sampling.max_output_label"})} value={numStr(gemini.maxOutputTokens)} onChangeText={v => onChange(patchGemini(params, {maxOutputTokens: parseNumber(v)}))} />
         </>
       ) : null}
     </View>

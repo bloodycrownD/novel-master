@@ -7,6 +7,7 @@ import {ToolResultBlock as CoreToolResultBlock} from '@novel-master/core';
 import {SkillToolRefResolver, VfsToolFilePath} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import {Text} from '@novel-master/core/common';
+import {coreT} from '../../i18n/core';
 import type {TranscriptRow} from './ChatTranscriptBridge';
 
 export interface ToolCallView {
@@ -304,7 +305,7 @@ export namespace MessageBlocks {
             }
             break;
           case 'redacted_thinking':
-            thinkingParts.push('思考（已脱敏）');
+            thinkingParts.push(coreT({key: "ui.chat.thinking_sanitized"}));
             break;
           case 'tool_use':
             toolUses.push(block);

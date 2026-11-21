@@ -8,6 +8,7 @@
  */
 import {errorCodes, isErrorWithCode, pick, type DocumentPickerOptions, type DocumentPickerResponse} from '@react-native-documents/picker';
 import {AppToast} from './app-toast';
+import {coreT} from '../i18n/core';
 
 export namespace DocumentPick {
   /** 判定文档选择/保存错误是否为用户主动取消（iOS reject 形态）。 */
@@ -22,13 +23,13 @@ export namespace DocumentPick {
       [file] = await pick({type: options.type, allowMultiSelection: false});
     } catch (error) {
       if (isUserCancelled(error)) {
-        AppToast.show('已取消');
+        AppToast.show(coreT({key: "ui.common.cancelled"}));
         return null;
       }
       throw error;
     }
     if (file == null) {
-      AppToast.show('已取消');
+      AppToast.show(coreT({key: "ui.common.cancelled"}));
       return null;
     }
     return file;
