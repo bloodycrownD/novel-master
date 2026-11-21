@@ -9,6 +9,7 @@
  *    保存（按钮或 Mod-s）才回填 onChange，取消不动；Esc / 点击遮罩关闭。
  */
 import { useEffect, useState, type ReactNode } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 import { CodeEditor } from "@/components/ui/CodeEditor";
 
@@ -64,8 +65,8 @@ export function PromptCollapsibleField({
         type="button"
         className="icon-btn prompt-field-inline__expand"
         disabled={disabled}
-        aria-label={ariaLabel ? `全屏编辑：${ariaLabel}` : "全屏编辑"}
-        title="全屏编辑"
+        aria-label={ariaLabel ? coreT({key: "ui.common.fullscreen_edit_aria", params: {label: ariaLabel}}) : coreT({key: "ui.common.open_fullscreen"})}
+        title={coreT({key: "ui.common.open_fullscreen"})}
         onClick={() => {
           setDraft(value);
           setEditorOpen(true);
@@ -91,10 +92,10 @@ export function PromptCollapsibleField({
             />
             <div className="prompt-editor-modal__footer">
               <Button variant="secondary" onClick={closeEditor}>
-                取消
+                {coreT({key: "ui.common.cancel"})}
               </Button>
               <Button variant="primary" onClick={saveEditor}>
-                保存
+                {coreT({key: "ui.common.save"})}
               </Button>
             </div>
           </div>

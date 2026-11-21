@@ -1,3 +1,4 @@
+import { coreT } from "@shared/logic/core-i18n";
 import type { ToolCallView } from "./message-blocks";
 import { ToolCallCard } from "./ToolCallCard";
 
@@ -23,7 +24,7 @@ export function ToolCallGroupCard({
 
   return (
     <details className={`chat-message__tool-group${dimmed ? " chat-message__tool-group--dimmed" : ""}`}>
-      <summary>工具调用 ({tools.length})</summary>
+      <summary>{coreT({key: "ui.transcript.tool_group_title", params: {count: tools.length}})}</summary>
       <div className="chat-message__tool-group-items">
         {tools.map((tool) => (
           <ToolCallCard

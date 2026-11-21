@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 
 /** 批量模式次操作（如「启用」/「禁用」）：主操作（删除）右侧依次渲染。 */
 type ManageHeaderBatchAction = {
@@ -45,7 +46,7 @@ export function ManageHeader({
   allSelected,
   hint,
   normalActions,
-  primaryActionLabel = '删除',
+  primaryActionLabel = coreT({key: "ui.common.delete"}),
   onPrimaryAction,
   primaryActionTone = 'danger',
   actions,
@@ -58,12 +59,12 @@ export function ManageHeader({
       {batchMode ? (
         <div className="list-manage-header__batch-row">
           <button type="button" className="list-manage-header__link" onClick={onCancelBatch}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
-          <span className="list-manage-header__count">已选 {selectedCount} 项</span>
+          <span className="list-manage-header__count">{coreT({key: "ui.common.selected_count", params: {count: selectedCount}})}</span>
           {onSelectAll ? (
             <button type="button" className="list-manage-header__link" onClick={onSelectAll}>
-              {allSelected ? "全不选" : "全选"}
+              {allSelected ? coreT({key: "ui.common.select_none"}) : coreT({key: "ui.common.select_all"})}
             </button>
           ) : null}
           {runPrimary ? (
@@ -100,7 +101,7 @@ export function ManageHeader({
           <span className="list-manage-header__title">{title}</span>
           <div className="list-manage-header__actions">
             <button type="button" className="list-manage-header__btn" onClick={onEnterBatch}>
-              管理
+              {coreT({key: "ui.common.manage"})}
             </button>
             {normalActions}
           </div>
