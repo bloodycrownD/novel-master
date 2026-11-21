@@ -24,6 +24,7 @@ import {
 import {MessageBlocks} from '@/components/chat/message-blocks'
 import {MessageRow} from '@/web/chat-transcript/webview/ui/render/MessageRow';
 import {AttachGroup} from '@/web/chat-transcript/webview/ui/render/AttachGroup';
+import {DEFAULT_LABELS} from '@/web/chat-transcript/webview/ui/labels';
 import type {AttachmentChip} from '@/web/chat-transcript/webview/runtime/state/state';
 
 /** 子会话屏里 task 挂上来的文本附件（与 core `attachmentsFromPaths` 出口同形）。 */
@@ -123,6 +124,7 @@ function renderChipLabels(
   expanded = true,
 ): string[] {
   const sectionEl = AttachGroup({
+    labels: DEFAULT_LABELS,
     attachments,
     groupKey: 'attach:child-u1',
     expanded,
@@ -210,6 +212,7 @@ describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => 
     ];
     const texts = collectText(
       AttachGroup({
+        labels: DEFAULT_LABELS,
         attachments: atts,
         groupKey: 'attach:child-u2',
         expanded: true,
