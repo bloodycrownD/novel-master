@@ -261,6 +261,11 @@ ui:
     push_failed: Push failed
     sync_failed: Sync failed
     pull_failed: Pull failed
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M1 compact/fork failure toasts, M2/D3 batch "disable", unsaved-changes marker)
+    compact_failed: Compact failed
+    fork_failed: Fork failed
+    disable: Disable
+    unsaved_changes: Unsaved changes
   nav:
     tab_chat: Chat
     tab_profile: Me
@@ -458,6 +463,11 @@ ui:
     agent_info_load_failed: Failed to load agent info
     detail_load_failed: Failed to load session details
     subsession_load_failed: Failed to load subagent session
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M1 meta fallback name / compact Alert button + D1 drawer aria)
+    agent_unconfigured: Agent not configured
+    compact_button: Compact
+    view_skills_aria: View session skills
+    switch_model_locked_aria: "Switch model (locked)"
   agent:
     basic_info: Basics
     import_yaml: Import YAML
@@ -593,6 +603,12 @@ ui:
     overwrite_default_failed: Failed to overwrite with default template
     export_yaml_failed: YAML export failed
     import_yaml_failed: YAML import failed
+    # p27 wave 3c-a: wave 3-2 MISS backfill (D2 editor guards / load failure, M1 not-found, D3 new + batch delete template)
+    agent_id_missing: Missing agentId
+    load_failed: Unable to load agent configuration
+    not_found: "Agent not found: {agent_id}"
+    new_title: New Agent
+    deleted_count_done: "Deleted {count} Agents"
   provider:
     title: Providers
     name_label: Provider name
@@ -655,6 +671,21 @@ ui:
     name_baseurl_required: Provider name and baseUrl are required
     api_key_required: API Key is required
     provider_id_missing: providerId is missing
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2 form guards / section titles, D3 provider form + invalid-config guards / saved-models title)
+    connect_section: Connection
+    change_required: Change at least one item
+    models_saved_done: Models saved
+    config_invalid_copy_blocked: "Config invalid; fix it before copying"
+    config_invalid_rename_blocked: "Config invalid; fix it before renaming"
+    name_required: Enter a provider name
+    name_empty: Provider name cannot be empty
+    new_title: New Provider
+    rename_title: Rename Provider
+    api_key_label: API Key
+    api_key_new_label: New API Key
+    secret_key_label: Secret Access Key
+    path_style_label: "Path style (MinIO / some OSS)"
+    api_key_sksp_hint: API Key will be stored securely via SKSP
   sampling:
     model_name_hint: Shown in lists and pickers; the derived displayName is Provider/Model name.
     vendor_id_line: "Vendor ID: {id}"
@@ -677,6 +708,9 @@ ui:
     context_limit_positive: Context limit must be a positive integer
     model_missing: Model not found
     saved_model_id_missing: savedModelId is missing
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2/D2 save + reset-defaults toasts)
+    saved_done: Model settings saved
+    reset_done: Sampling parameters restored to defaults
   chat_config:
     stream_parent: Parent streaming
     stream_parent_on: Main conversation replies stream as generated (recommended)
@@ -712,6 +746,8 @@ ui:
     token_ratio_required: Token ratio is required when enabled
     keepalive_toggle_failed: Failed to toggle keep-alive
     permission_request_failed: Failed to request notification permission
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M1 chat-config screen title)
+    title: Chat Config
   skills:
     new_title: New skill
     name_label_plain: Skill name
@@ -806,6 +842,15 @@ ui:
     path_relative_required: Enter a relative path.
     path_no_dotdot: 'Path cannot contain "..".'
     file_exists: This file already exists.
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2 load failure / NewSkillModal validations / delete-confirm frame + D1/D2 aux file)
+    load_failed: Failed to load skills
+    aux_deleted: Auxiliary file deleted
+    path_relative_label: "Relative path (subdirectories supported, e.g. references/x.md)"
+    desc_empty: Description required (it enters the index so the model can decide usage)
+    project_required: Select a project
+    zip_root_missing: "ZIP root lacks SKILL.md (export format: the zip root is the skill directory)"
+    domain_name_conflict: "A skill named \"{name}\" already exists in the target domain"
+    delete_confirm_frame: ". Delete {names}? The whole directory and its disable records will be removed."
   smart_sort:
     delete_title: Delete rules
     delete_confirm_named: "Delete \"{name}\"?"
@@ -873,6 +918,14 @@ ui:
     regex_required: Regex is required
     adjust_failed: Failed to adjust order
     missing_toast: Rule does not exist or has been deleted
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2/D3 editor save / toggle / regex validation / help section + D3 reset title)
+    saved_done: Rule saved
+    enable_label: Enable rule
+    regex_invalid: "Invalid regex: {detail}"
+    test_text_required: Enter test text
+    reset_title: Restore default rules
+    help_smart_title: Smart number
+    help_smart_body: "Extract the number from regex capture groups; both Chinese and Arabic numerals work (第十二章→12、第12章→12); multiple capture groups form a composite number (第X卷第Y章→[X,Y]). At least one capture group is required."
   prompt:
     turn_aria: "{action} {role} turn, {summary}"
     tool_group_aria: "{action} tool calls {name}"
@@ -893,6 +946,8 @@ ui:
     input_label: Input
     empty_prompt: (empty prompt)
     empty_value: (empty)
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2 RealPrompt project/session guard)
+    select_project_session: Select a project and session first
   stats:
     filter_label: Filters
     time_range: Time range
@@ -973,6 +1028,13 @@ ui:
     requests_load_failed: Failed to load requests
     hourly_load_failed: Failed to load hourly distribution
     range_start_after_end: Custom range start date cannot be after the end date
+    # p27 wave 3c-a: wave 3-2 MISS backfill (session-total both ends, M3 chart labels, D3 range validation + format error)
+    session_total: Session total
+    range_required: Select start and end dates
+    usage_label: Usage
+    ratio_label: Share
+    day_hourly_template: "{day} · Hourly distribution"
+    format_invalid: Unexpected statistics response format
   cloud_sync:
     save_config: Save settings
     s3_section: S3-compatible storage
@@ -1059,6 +1121,13 @@ ui:
     # p27 R6 wave 3-2a: config load failure and Secret validation (CloudSyncConfigScreen)
     secret_required: Secret Key is required
     load_config_failed: Failed to load cloud sync configuration
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M3 push button / MinIO / Region + D3 pull confirm and cloud-newer desktop variants)
+    push_action: Push
+    minio_optional_hint: Leave empty for MinIO
+    region_label: Region
+    pull_confirm_title: Confirm pull
+    pull_confirm_msg_desktop: "Pulling will replace the local database with the cloud snapshot (local providers and API Keys are kept). Continue?"
+    cloud_newer_msg_desktop: "The cloud has unpulled updates. Pull to merge first, or overwrite the cloud anyway (unpulled cloud changes will be lost)."
   storage:
     space_section: Storage
     space_desc: Database file size and reclaimable space
@@ -1209,6 +1278,16 @@ ui:
     rule_load_failed: Failed to load rules
     local_file_read_failed: Cannot read the dropped local file
     import_incomplete: Import not completed
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M3 protected paths + D3 invalid op / drag-out / materialize / import hints / annotate aria)
+    protected_path_blocked: "Selection contains a protected path: {path}"
+    invalid_action: Invalid operation
+    pick_file_failed: Failed to pick file
+    drag_out_failed: Drag out failed
+    export_materialize_failed: Export materialization failed
+    import_hint_zip: Extract into the target directory; all existing contents under it will be overwritten
+    import_hint_card: Parse the character card and write into the target directory; same-name files there will be overwritten
+    import_hint_file: Write a single file; same-name files require confirmation before being overwritten
+    annotate_actions_aria: Annotate actions
   project:
     title: Projects
     new_title: New project
@@ -1248,6 +1327,8 @@ ui:
     github_repo: GitHub repository
     releases: Releases
     license: License
+    # p27 wave 3c-a: wave 3-2 MISS backfill (D1 settings-nav plain "About")
+    title: About
   runtime:
     loading: Loading…
     boot_failed: Startup failed

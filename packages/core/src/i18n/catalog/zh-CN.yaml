@@ -496,6 +496,11 @@ ui:
     push_failed: 推送失败
     sync_failed: 同步失败
     pull_failed: 拉取失败
+    # —— 波 3c-a 补键：波 3-2 六片 MISS 收尾（M1 压缩/分叉失败标题、M2/D3 批量「禁用」、双端未保存标记） ——
+    compact_failed: 压缩失败
+    fork_failed: 分叉失败
+    disable: 禁用
+    unsaved_changes: 有未保存的更改
   # —— nav：导航头/tab/设置分类/桌面壳导航（mobile header-config·RootNavigator·ProfileTabScreen + desktop AppChrome·MainShell·settings-nav·ChatRail·ShellNavProvider） ——
   nav:
     tab_chat: 对话
@@ -696,6 +701,11 @@ ui:
     agent_info_load_failed: 智能体信息加载失败
     detail_load_failed: 加载会话详情失败
     subsession_load_failed: 加载子会话失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M1 meta 兜底名/压缩 Alert 确认按钮 + D1 drawer aria） ——
+    agent_unconfigured: 未配置 Agent
+    compact_button: 压缩
+    view_skills_aria: 查看会话技能
+    switch_model_locked_aria: 切换大模型（已锁定）
   # —— agent：智能体编辑器/列表/选择器/工具目录（config-forms agent-editor-state 两端共用 + mobile Agent* + desktop AgentEditorView·ToolPolicyPicker） ——
   agent:
     basic_info: 基本信息
@@ -832,6 +842,12 @@ ui:
     overwrite_default_failed: 覆盖默认失败
     export_yaml_failed: 导出 YAML 失败
     import_yaml_failed: 导入 YAML 失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（D2 编辑器守卫/加载失败、M1 未找到、D3 新建与批量删除模板） ——
+    agent_id_missing: 缺少 agentId
+    load_failed: 无法加载智能体配置
+    not_found: "未找到 Agent：{agent_id}"
+    new_title: 新建 Agent
+    deleted_count_done: "已删除 {count} 个 Agent"
   # —— provider：服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui） ——
   provider:
     title: 服务商
@@ -895,6 +911,21 @@ ui:
     name_baseurl_required: 请填写服务商名称与 baseUrl
     api_key_required: 请填写 API Key
     provider_id_missing: 缺少 providerId
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2 表单守卫/分区标题、D3 服务商表单与失效守卫/已保存模型标题） ——
+    connect_section: 连接
+    change_required: 请至少修改一项
+    models_saved_done: 已保存模型
+    config_invalid_copy_blocked: 配置已失效，请先修复后再复制
+    config_invalid_rename_blocked: 配置已失效，请先修复后再重命名
+    name_required: 请填写服务商名称
+    name_empty: 服务商名称不能为空
+    new_title: 新建服务商
+    rename_title: 重命名服务商
+    api_key_label: API Key
+    api_key_new_label: 新 API Key
+    secret_key_label: Secret Access Key
+    path_style_label: Path style（MinIO / 部分 OSS）
+    api_key_sksp_hint: API Key 将通过 SKSP 安全存储
   # —— sampling：采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm） ——
   sampling:
     model_name_hint: 用于列表与选择器展示；派生 displayName 为 服务商/模型名称。
@@ -918,6 +949,9 @@ ui:
     context_limit_positive: 上下文上限须为正整数
     model_missing: 模型不存在
     saved_model_id_missing: 缺少 savedModelId
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2/D2 保存与恢复默认两 toast） ——
+    saved_done: 已保存模型设置
+    reset_done: 已恢复默认采样参数
   # —— chat_config：聊天/工作区配置（mobile ChatConfigScreen + desktop WorkspaceSettingsView） ——
   chat_config:
     stream_parent: 父会话流式
@@ -954,6 +988,8 @@ ui:
     token_ratio_required: 启用时至少填写 token 比例
     keepalive_toggle_failed: 常驻保活切换失败
     permission_request_failed: 通知权限申请失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M1 聊天配置屏标题） ——
+    title: 聊天配置
   # —— skills：技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel） ——
   skills:
     new_title: 新建技能
@@ -1049,6 +1085,15 @@ ui:
     path_relative_required: 请输入相对路径。
     path_no_dotdot: 路径不能包含「..」。
     file_exists: 该文件已存在。
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2 加载失败/NewSkillModal 校验/删除确认 frame + D1/D2 辅助文件） ——
+    load_failed: 加载技能失败
+    aux_deleted: 已删除辅助文件
+    path_relative_label: 相对路径（支持子目录，如 references/x.md）
+    desc_empty: 描述不能为空（进入索引，供模型判断是否使用）
+    project_required: 请选择所属项目
+    zip_root_missing: ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）
+    domain_name_conflict: "目标域已存在同名技能「{name}」"
+    delete_confirm_frame: "。确定删除{names}？删除会清理整目录与对应禁用记录。"
   # —— smart_sort：智能排序规则（mobile SmartSort* + desktop SettingsViews 规则库/编辑器） ——
   smart_sort:
     delete_title: 删除规则
@@ -1117,6 +1162,14 @@ ui:
     regex_required: 请填写正则表达式
     adjust_failed: 调整失败
     missing_toast: 规则不存在或已删除
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2/D3 编辑器保存/开关/正则校验/帮助段 + D3 恢复默认标题） ——
+    saved_done: 已保存规则
+    enable_label: 启用规则
+    regex_invalid: "正则无效：{detail}"
+    test_text_required: 请输入测试文本
+    reset_title: 恢复默认规则
+    help_smart_title: 智能数字
+    help_smart_body: 从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。
   # —— prompt：提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard） ——
   prompt:
     turn_aria: "{action}{role}轮，{summary}"
@@ -1138,6 +1191,8 @@ ui:
     input_label: 入参
     empty_prompt: （空提示词）
     empty_value: （空）
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2 RealPrompt 项目/会话守卫） ——
+    select_project_session: 请先选择项目与会话
   # —— stats：数据统计/用量详情/图表/区间选择（mobile TokenUsageStats*·charts + desktop TokenUsageStatsView + 两端 metrics 条与详情表） ——
   stats:
     filter_label: 筛选
@@ -1219,6 +1274,13 @@ ui:
     requests_load_failed: 加载流水失败
     hourly_load_failed: 加载小时分布失败
     range_start_after_end: 自定义区间起始日不能晚于结束日
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（两端会话累计、M3 图表标签、D3 区间校验与格式异常） ——
+    session_total: 会话累计
+    range_required: 请选择起止日期
+    usage_label: 用量
+    ratio_label: 占比
+    day_hourly_template: "{day} · 按小时分布"
+    format_invalid: 统计数据返回格式异常
   # —— cloud_sync：云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel） ——
   cloud_sync:
     save_config: 保存配置
@@ -1306,6 +1368,13 @@ ui:
     # —— 波 3-2a 补键：配置加载失败与 Secret 校验（CloudSyncConfigScreen） ——
     secret_required: 请填写 Secret Key
     load_config_failed: 加载云同步配置失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M3 推送按钮/MinIO/Region + D3 拉取确认与云端较新桌面变体） ——
+    push_action: 推送
+    minio_optional_hint: MinIO 可留空
+    region_label: Region
+    pull_confirm_title: 确认拉取
+    pull_confirm_msg_desktop: 拉取将用云端快照替换本机数据库（本机服务商与 API Key 将保留）。确定继续？
+    cloud_newer_msg_desktop: 云端有尚未拉取的更新。可先拉取合并，或仍要覆盖云端（将丢失云端未拉取的变更）。
   # —— storage：存储配置（mobile StorageConfigScreen + desktop SettingsViews data） ——
   storage:
     space_section: 存储空间
@@ -1458,6 +1527,16 @@ ui:
     rule_load_failed: 加载规则失败
     local_file_read_failed: 无法读取拖入的本机文件
     import_incomplete: 导入未完成
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M3 受保护路径 + D3 无效操作/拖出/物化/导入 hint/批注 aria） ——
+    protected_path_blocked: "选中项含受保护路径：{path}"
+    invalid_action: 无效操作
+    pick_file_failed: 选择文件失败
+    drag_out_failed: 拖出失败
+    export_materialize_failed: 导出物化失败
+    import_hint_zip: 解压到目标目录，将覆盖目标目录下全部内容
+    import_hint_card: 解析角色卡并写入目标目录，将覆盖目标目录内的同名文件
+    import_hint_file: 写入单个文件，同名文件存在时需确认后才会覆盖
+    annotate_actions_aria: 批注操作
   # —— project：项目抽屉/项目列表（mobile ProjectDrawer + desktop ChatRail 项目段） ——
   project:
     title: 项目
@@ -1500,6 +1579,8 @@ ui:
     github_repo: GitHub 仓库
     releases: 发行版
     license: 许可证
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（D1 settings-nav 纯「关于」） ——
+    title: 关于
   # —— runtime：启动/加载屏（mobile novel-master-context·ChatConversationWebView 错误态 + desktop NovelMasterProvider） ——
   runtime:
     loading: 正在加载…

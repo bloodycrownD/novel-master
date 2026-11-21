@@ -557,6 +557,12 @@ const UI_MESSAGE_KEYS = [
   "ui.common.sync_failed",
   "ui.common.pull_failed",
 
+  // common：波 3c-a 补键（波 3-2 六片 MISS 收尾：M1 压缩/分叉失败标题、M2/D3 批量「禁用」、双端未保存标记）
+  "ui.common.compact_failed",
+  "ui.common.fork_failed",
+  "ui.common.disable",
+  "ui.common.unsaved_changes",
+
   // nav（导航头/tab/设置分类/桌面壳导航（mobile header-config·RootNavigator·ProfileTabScreen + desktop AppChrome·MainShell·settings-nav·ChatRail·ShellNavProvider））
   "ui.nav.tab_chat",
   "ui.nav.tab_profile",
@@ -759,6 +765,12 @@ const UI_MESSAGE_KEYS = [
   "ui.session.detail_load_failed",
   "ui.session.subsession_load_failed",
 
+  // session：波 3c-a 补键（波 3-2 MISS 收尾：M1 meta 兜底名/压缩 Alert 确认按钮 + D1 drawer aria）
+  "ui.session.agent_unconfigured",
+  "ui.session.compact_button",
+  "ui.session.view_skills_aria",
+  "ui.session.switch_model_locked_aria",
+
   // agent（智能体编辑器/列表/选择器/工具目录（config-forms agent-editor-state 两端共用 + mobile Agent* + desktop AgentEditorView·ToolPolicyPicker））
   "ui.agent.basic_info",
   "ui.agent.import_yaml",
@@ -896,6 +908,13 @@ const UI_MESSAGE_KEYS = [
   "ui.agent.export_yaml_failed",
   "ui.agent.import_yaml_failed",
 
+  // agent：波 3c-a 补键（波 3-2 MISS 收尾：D2 编辑器守卫/加载失败、M1 未找到、D3 新建与批量删除模板）
+  "ui.agent.agent_id_missing",
+  "ui.agent.load_failed",
+  "ui.agent.not_found",
+  "ui.agent.new_title",
+  "ui.agent.deleted_count_done",
+
   // provider（服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui））
   "ui.provider.title",
   "ui.provider.name_label",
@@ -960,6 +979,22 @@ const UI_MESSAGE_KEYS = [
   "ui.provider.api_key_required",
   "ui.provider.provider_id_missing",
 
+  // provider：波 3c-a 补键（波 3-2 MISS 收尾：M2 表单守卫/分区标题、D3 服务商表单与失效守卫/已保存模型标题）
+  "ui.provider.connect_section",
+  "ui.provider.change_required",
+  "ui.provider.models_saved_done",
+  "ui.provider.config_invalid_copy_blocked",
+  "ui.provider.config_invalid_rename_blocked",
+  "ui.provider.name_required",
+  "ui.provider.name_empty",
+  "ui.provider.new_title",
+  "ui.provider.rename_title",
+  "ui.provider.api_key_label",
+  "ui.provider.api_key_new_label",
+  "ui.provider.secret_key_label",
+  "ui.provider.path_style_label",
+  "ui.provider.api_key_sksp_hint",
+
   // sampling（采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm））
   "ui.sampling.model_name_hint",
   "ui.sampling.vendor_id_line",
@@ -983,6 +1018,10 @@ const UI_MESSAGE_KEYS = [
   "ui.sampling.context_limit_positive",
   "ui.sampling.model_missing",
   "ui.sampling.saved_model_id_missing",
+
+  // sampling：波 3c-a 补键（波 3-2 MISS 收尾：M2/D2 保存与恢复默认两 toast）
+  "ui.sampling.saved_done",
+  "ui.sampling.reset_done",
 
   // chat_config（聊天/工作区配置（mobile ChatConfigScreen + desktop WorkspaceSettingsView））
   "ui.chat_config.stream_parent",
@@ -1020,6 +1059,9 @@ const UI_MESSAGE_KEYS = [
   "ui.chat_config.token_ratio_required",
   "ui.chat_config.keepalive_toggle_failed",
   "ui.chat_config.permission_request_failed",
+
+  // chat_config：波 3c-a 补键（波 3-2 MISS 收尾：M1 聊天配置屏标题）
+  "ui.chat_config.title",
 
   // skills（技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel））
   "ui.skills.new_title",
@@ -1117,6 +1159,16 @@ const UI_MESSAGE_KEYS = [
   "ui.skills.path_no_dotdot",
   "ui.skills.file_exists",
 
+  // skills：波 3c-a 补键（波 3-2 MISS 收尾：M2 加载失败/NewSkillModal 校验/删除确认 frame + D1/D2 辅助文件）
+  "ui.skills.load_failed",
+  "ui.skills.aux_deleted",
+  "ui.skills.path_relative_label",
+  "ui.skills.desc_empty",
+  "ui.skills.project_required",
+  "ui.skills.zip_root_missing",
+  "ui.skills.domain_name_conflict",
+  "ui.skills.delete_confirm_frame",
+
   // smart_sort（智能排序规则（mobile SmartSort* + desktop SettingsViews 规则库/编辑器））
   "ui.smart_sort.delete_title",
   "ui.smart_sort.delete_confirm_named",
@@ -1186,6 +1238,15 @@ const UI_MESSAGE_KEYS = [
   "ui.smart_sort.adjust_failed",
   "ui.smart_sort.missing_toast",
 
+  // smart_sort：波 3c-a 补键（波 3-2 MISS 收尾：M2/D3 编辑器保存/开关/正则校验/帮助段 + D3 恢复默认标题）
+  "ui.smart_sort.saved_done",
+  "ui.smart_sort.enable_label",
+  "ui.smart_sort.regex_invalid",
+  "ui.smart_sort.test_text_required",
+  "ui.smart_sort.reset_title",
+  "ui.smart_sort.help_smart_title",
+  "ui.smart_sort.help_smart_body",
+
   // prompt（提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard））
   "ui.prompt.turn_aria",
   "ui.prompt.tool_group_aria",
@@ -1206,6 +1267,9 @@ const UI_MESSAGE_KEYS = [
   "ui.prompt.input_label",
   "ui.prompt.empty_prompt",
   "ui.prompt.empty_value",
+
+  // prompt：波 3c-a 补键（波 3-2 MISS 收尾：M2 RealPrompt 项目/会话守卫）
+  "ui.prompt.select_project_session",
 
   // stats（数据统计/用量详情/图表/区间选择（mobile TokenUsageStats*·charts + desktop TokenUsageStatsView + 两端 metrics 条与详情表））
   "ui.stats.filter_label",
@@ -1288,6 +1352,14 @@ const UI_MESSAGE_KEYS = [
   "ui.stats.requests_load_failed",
   "ui.stats.hourly_load_failed",
   "ui.stats.range_start_after_end",
+
+  // stats：波 3c-a 补键（波 3-2 MISS 收尾：两端会话累计、M3 图表标签、D3 区间校验与格式异常）
+  "ui.stats.session_total",
+  "ui.stats.range_required",
+  "ui.stats.usage_label",
+  "ui.stats.ratio_label",
+  "ui.stats.day_hourly_template",
+  "ui.stats.format_invalid",
 
   // cloud_sync（云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel））
   "ui.cloud_sync.save_config",
@@ -1376,6 +1448,14 @@ const UI_MESSAGE_KEYS = [
   // cloud_sync：配置加载失败与 Secret 校验（波 3-2a 补键：CloudSyncConfigScreen）
   "ui.cloud_sync.secret_required",
   "ui.cloud_sync.load_config_failed",
+
+  // cloud_sync：波 3c-a 补键（波 3-2 MISS 收尾：M3 推送按钮/MinIO/Region + D3 拉取确认与云端较新桌面变体）
+  "ui.cloud_sync.push_action",
+  "ui.cloud_sync.minio_optional_hint",
+  "ui.cloud_sync.region_label",
+  "ui.cloud_sync.pull_confirm_title",
+  "ui.cloud_sync.pull_confirm_msg_desktop",
+  "ui.cloud_sync.cloud_newer_msg_desktop",
 
   // storage（存储配置（mobile StorageConfigScreen + desktop SettingsViews data））
   "ui.storage.space_section",
@@ -1530,6 +1610,17 @@ const UI_MESSAGE_KEYS = [
   "ui.vfs.local_file_read_failed",
   "ui.vfs.import_incomplete",
 
+  // vfs：波 3c-a 补键（波 3-2 MISS 收尾：M3 受保护路径 + D3 无效操作/拖出/物化/导入 hint/批注 aria）
+  "ui.vfs.protected_path_blocked",
+  "ui.vfs.invalid_action",
+  "ui.vfs.pick_file_failed",
+  "ui.vfs.drag_out_failed",
+  "ui.vfs.export_materialize_failed",
+  "ui.vfs.import_hint_zip",
+  "ui.vfs.import_hint_card",
+  "ui.vfs.import_hint_file",
+  "ui.vfs.annotate_actions_aria",
+
   // project（项目抽屉/项目列表（mobile ProjectDrawer + desktop ChatRail 项目段））
   "ui.project.title",
   "ui.project.new_title",
@@ -1571,6 +1662,9 @@ const UI_MESSAGE_KEYS = [
   "ui.about.github_repo",
   "ui.about.releases",
   "ui.about.license",
+
+  // about：波 3c-a 补键（波 3-2 MISS 收尾：D1 settings-nav 纯「关于」）
+  "ui.about.title",
 
   // runtime（启动/加载屏（mobile novel-master-context·ChatConversationWebView 错误态 + desktop NovelMasterProvider））
   "ui.runtime.loading",
