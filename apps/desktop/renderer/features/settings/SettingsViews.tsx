@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Text } from "@shared/logic/common";
 export { AgentEditorView } from "./AgentEditorView";
 
@@ -288,7 +289,7 @@ export function DataManagementView() {
     try {
       const res = await ipcCloudSyncSetConfig(configPayload());
       if (res.ok) {
-        toastSettingsSuccess("云同步配置已保存");
+        toastSettingsSuccess(coreT({key: "ui.cloud_sync.config_saved_desktop"}));
         setSecretAccessKey("");
         setCloudSyncEnabled(true);
         await reloadConfig();
@@ -329,7 +330,7 @@ export function DataManagementView() {
       }
       const res = await ipcCloudSyncTestConnection();
       if (res.ok) {
-        toastSettingsSuccess("连接成功");
+        toastSettingsSuccess(coreT({key: "ui.cloud_sync.connected_done"}));
         await reloadConfig();
       } else {
         toastSettingsError(res.error.message);
@@ -349,7 +350,7 @@ export function DataManagementView() {
       const res = await ipcCloudSyncPull();
       if (res.ok) {
         retry({ skipRebootstrap: true });
-        toastSettingsSuccess(`已拉取云端数据（rev ${res.data.rev}）`);
+        toastSettingsSuccess(coreT({key: "ui.cloud_sync.pulled_done", params: {rev: res.data.rev}}));
         await reloadStatus();
       } else if (res.error.code === "CLOUD_SYNC_ALREADY_UP_TO_DATE") {
         showToast(res.error.message);
@@ -373,7 +374,7 @@ export function DataManagementView() {
     try {
       const res = await ipcCloudSyncPush({ runId, ...(forceOverwriteRemote ? { forceOverwriteRemote } : {}) });
       if (res.ok) {
-        toastSettingsSuccess(`已推送到云端（rev ${res.data.rev}）`);
+        toastSettingsSuccess(coreT({key: "ui.cloud_sync.pushed_done", params: {rev: res.data.rev}}));
         await reloadStatus();
       } else if (res.error.code === "CLOUD_SYNC_NEED_PULL_FIRST") {
         setConfirmPushOverwrite(true);
@@ -396,7 +397,7 @@ export function DataManagementView() {
     try {
       const res = await ipcBackupExport({ runId });
       if (res.ok) {
-        const message = res.data === "saved" ? "已导出数据库" : "已取消";
+        const message = res.data === "saved" ? coreT({key: "ui.storage.export_db_done_desktop"}) : coreT({key: "ui.common.cancelled"});
         toastSettingsSuccess(message);
       } else if (!isIpcAborted(res)) {
         toastSettingsError(res.error.message);
@@ -418,9 +419,9 @@ export function DataManagementView() {
       if (res.ok) {
         if (res.data === "imported") {
           retry({ skipRebootstrap: true });
-          toastSettingsSuccess("已导入并重新加载");
+          toastSettingsSuccess(coreT({key: "ui.storage.imported_done"}));
         } else {
-          toastSettingsSuccess("已取消");
+          toastSettingsSuccess(coreT({key: "ui.common.cancelled"}));
         }
       } else if (!isIpcAborted(res)) {
         toastSettingsError(res.error.message);
@@ -444,7 +445,7 @@ export function DataManagementView() {
       if (res.ok) {
         const before = formatStorageBytes(res.data.beforeBytes);
         const after = formatStorageBytes(res.data.afterBytes);
-        const summary = `清理完成：库体积 ${before} → ${after}`;
+        const summary = coreT({key: "ui.storage.cleanup_done", params: {before, after}});
         toastSettingsSuccess(summary);
         await reloadDbStats();
       } else if (!isIpcAborted(res)) {
@@ -457,27 +458,27 @@ export function DataManagementView() {
   };
 
   const syncLines = [
-    `云端 rev：${status?.remoteRev ?? "—"}`,
-    `本机已同步 rev：${status?.lastSyncedRev}`,
+    coreT({key: "ui.cloud_sync.rev_cloud_line", params: {rev: String(status?.remoteRev ?? "—")}}),
+    coreT({key: "ui.cloud_sync.rev_synced_line", params: {rev: status?.lastSyncedRev}}),
     status?.lastPullAt
-      ? `上次拉取：${new Date(status.lastPullAt).toLocaleString()}`
+      ? coreT({key: "ui.cloud_sync.last_pull_line", params: {time: new Date(status.lastPullAt).toLocaleString()}})
       : null,
     status?.lastPushAt
-      ? `上次推送：${new Date(status.lastPushAt).toLocaleString()}`
+      ? coreT({key: "ui.cloud_sync.last_push_line", params: {time: new Date(status.lastPushAt).toLocaleString()}})
       : null,
-    status?.lastPullResult ? `拉取结果：${status.lastPullResult}` : null,
-    status?.lastPushResult ? `推送结果：${status.lastPushResult}` : null,
+    status?.lastPullResult ? coreT({key: "ui.cloud_sync.last_pull_result", params: {result: status.lastPullResult}}) : null,
+    status?.lastPushResult ? coreT({key: "ui.cloud_sync.last_push_result", params: {result: status.lastPushResult}}) : null,
   ];
   const syncText = syncLines.filter(Boolean).join(" · ");
 
   return (
     <SettingsPanel>
       <SettingsFormSection
-        title="云同步"
-        desc="通过 S3 兼容对象存储在 Desktop 与 Mobile 之间同步数据库快照。Secret Key 经 SKSP 加密存储。"
+        title={coreT({key: "ui.nav.cloud_sync"})}
+        desc={coreT({key: "ui.cloud_sync.desc"})}
       >
         <SettingsSwitchRow
-          label="启用云同步"
+          label={coreT({key: "ui.cloud_sync.enabled_toggle"})}
           checked={cloudSyncEnabled}
           onChange={(next) => {
             if (controlsDisabled || configLoading) {
@@ -509,10 +510,10 @@ export function DataManagementView() {
                   value={region}
                   disabled={configLoading}
                   onChange={(e) => setRegion(e.target.value)}
-                  placeholder="可留空（MinIO）"
+                  placeholder={coreT({key: "ui.cloud_sync.bucket_hint"})}
                 />
               </SettingsField>
-              <SettingsField label="路径前缀">
+              <SettingsField label={coreT({key: "ui.cloud_sync.prefix_label"})}>
                 <input
                   value={pathPrefix}
                   disabled={configLoading}
@@ -542,7 +543,7 @@ export function DataManagementView() {
                 onChange={(e) => setSecretAccessKey(e.target.value)}
               />
             </SettingsField>
-            <SettingsField label="设备名称（可选）">
+            <SettingsField label={coreT({key: "ui.cloud_sync.device_label"})}>
               <input
                 value={deviceLabel}
                 disabled={configLoading}
@@ -560,37 +561,37 @@ export function DataManagementView() {
                 disabled={controlsDisabled || configLoading}
                 onClick={() => void testConnection()}
               >
-                测试连接
+                {coreT({key: "ui.cloud_sync.test_connection"})}
               </Button>
               <Button
                 variant="primary"
                 disabled={controlsDisabled || configLoading}
                 onClick={() => void saveConfig()}
               >
-                保存配置
+                {coreT({key: "ui.cloud_sync.save_config"})}
               </Button>
             </div>
 
             <div className="config-block-card config-block-card--sync">
               <div className="config-block-card__header">
                 <span className="config-block-card__section-label">
-                  同步状态
+                  {coreT({key: "ui.cloud_sync.sync_status"})}
                 </span>
               </div>
               <div className="config-block-card__body">
                 <p className="config-block-card__hint config-block-card__hint--subtle">
                   {status?.agentActive
-                    ? "Agent 运行中，同步操作已禁用。"
-                    : "显示本机与云端的 rev 对齐情况；须先保存配置后再拉取/推送。"}
+                    ? coreT({key: "ui.cloud_sync.agent_active_note"})
+                    : coreT({key: "ui.cloud_sync.status_desc_desktop"})}
                 </p>
                 {status?.suggestsPull ? (
                   <SettingsStatus
-                    error="云端有更新，建议先拉取后再推送。"
+                    error={coreT({key: "ui.cloud_sync.cloud_newer_hint"})}
                     inline
                   />
                 ) : null}
                 <SettingsStatus
-                  message={status == null ? "加载中…" : syncText}
+                  message={status == null ? coreT({key: "ui.common.loading"}) : syncText}
                 />
                 <div className="settings-form-actions settings-form-actions--solo">
                   <Button
@@ -598,7 +599,7 @@ export function DataManagementView() {
                     disabled={controlsDisabled || !status?.configured}
                     onClick={() => setConfirmPull(true)}
                   >
-                    从云端拉取
+                    {coreT({key: "ui.cloud_sync.pull_title"})}
                   </Button>
                   {activeLongTask === "pull" ? (
                     <Button
@@ -615,7 +616,7 @@ export function DataManagementView() {
                     disabled={controlsDisabled || !status?.configured}
                     onClick={() => void runPush()}
                   >
-                    推送到云端
+                    {coreT({key: "ui.cloud_sync.push_title"})}
                   </Button>
                   {activeLongTask === "push" ? (
                     <Button
@@ -635,8 +636,8 @@ export function DataManagementView() {
       </SettingsFormSection>
 
       <SettingsActionSection
-        title="导出"
-        desc="将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。"
+        title={coreT({key: "ui.common.export"})}
+        desc={coreT({key: "ui.storage.export_desc"})}
         action={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button
@@ -644,7 +645,7 @@ export function DataManagementView() {
               disabled={controlsDisabled}
               onClick={() => void runExport()}
             >
-              导出数据库
+              {coreT({key: "ui.storage.export_db"})}
             </Button>
             {activeLongTask === "export" ? (
               <Button
@@ -660,8 +661,8 @@ export function DataManagementView() {
         }
       />
       <SettingsActionSection
-        title="导入"
-        desc="用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。"
+        title={coreT({key: "ui.common.import"})}
+        desc={coreT({key: "ui.storage.import_desc_desktop"})}
         action={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button
@@ -669,7 +670,7 @@ export function DataManagementView() {
               disabled={controlsDisabled}
               onClick={() => setConfirmImport(true)}
             >
-              导入数据库
+              {coreT({key: "ui.storage.import_db"})}
             </Button>
             {activeLongTask === "import" ? (
               <Button
@@ -686,11 +687,7 @@ export function DataManagementView() {
       />
       <SettingsActionSection
         title="数据清理"
-        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${
-          dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"
-        } · 可回收约 ${
-          dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"
-        }。`}
+        desc={coreT({key: "ui.storage.cleanup_desktop_desc", params: {before: dbStats ? formatStorageBytes(dbStats.fileBytes) : "—", after: dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}})}
         action={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button
@@ -731,8 +728,8 @@ export function DataManagementView() {
         open={confirmPushOverwrite}
         title="云端较新"
         message="云端有尚未拉取的更新。可先拉取合并，或仍要覆盖云端（将丢失云端未拉取的变更）。"
-        confirmLabel="仍要覆盖云端"
-        cancelLabel="先拉取"
+        confirmLabel={coreT({key: "ui.cloud_sync.force_overwrite"})}
+        cancelLabel={coreT({key: "ui.cloud_sync.pull_first"})}
         danger
         busy={busy}
         onConfirm={() => void runPush(true)}
@@ -746,8 +743,8 @@ export function DataManagementView() {
       />
       <ConfirmModal
         open={confirmImport}
-        title="确认导入"
-        message="导入将完全替换当前数据库；本机服务商与 API Key 将保留，备份中的服务商配置不会导入。确定继续？"
+        title={coreT({key: "ui.storage.import_confirm_title_desktop"})}
+        message={coreT({key: "ui.storage.import_confirm_desktop"})}
         danger
         busy={busy}
         onConfirm={() => void runImport()}
@@ -934,7 +931,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         />
       </div>
       <ManageHeader
-        title={tab === "primary" ? "主智能体" : "子智能体"}
+        title={tab === "primary" ? coreT({key: "ui.agent.primary_tab"}) : coreT({key: "ui.agent.subagent_tab"})}
         batchMode={batch.active}
         selectedCount={batch.selectedCount}
         onEnterBatch={batch.enter}
@@ -969,7 +966,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         }
       />
       <SettingsListSection>
-        {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
+        {loading ? <SettingsListEmpty>{coreT({key: "ui.common.loading"})}</SettingsListEmpty> : null}
         {!loading && visibleRows.length === 0 && !showGeneralRow ? (
           <SettingsListEmpty>
             {tab === "primary"
@@ -1049,10 +1046,10 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
           agentMenu?.agentId === GENERAL_AGENT_ID
             ? [{ label: "查看", action: "view" }]
             : [
-                { label: "编辑", action: "edit" },
-                { label: "重命名", action: "rename" },
-                { label: "复制", action: "duplicate" },
-                { label: "删除", action: "delete", danger: true },
+                { label: coreT({key: "ui.common.edit"}), action: "edit" },
+                { label: coreT({key: "ui.common.rename"}), action: "rename" },
+                { label: coreT({key: "ui.common.copy"}), action: "duplicate" },
+                { label: coreT({key: "ui.common.delete"}), action: "delete", danger: true },
               ]
         }
         onSelect={(action) => void handleAgentMenuSelect(action)}
@@ -1060,17 +1057,17 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       />
       <TextPromptModal
         open={renamePrompt != null}
-        title="重命名 Agent"
+        title={coreT({key: "ui.agent.rename_title"})}
         initialValue={renamePrompt?.initialName ?? ""}
         onClose={() => setRenamePrompt(null)}
         onConfirm={handleRename}
       />
       <ConfirmModal
         open={deleteConfirm != null}
-        title="删除 Agent"
+        title={coreT({key: "ui.agent.delete_agent_title"})}
         message={
           deleteConfirm?.kind === "batch"
-            ? `确定删除选中的 ${deleteConfirm.count} 个 Agent？`
+            ? coreT({key: "ui.agent.delete_agents_confirm_msg", params: {count: deleteConfirm.count}})
             : `删除 Agent「${
                 deleteConfirm?.kind === "single" ? deleteConfirm.name : ""
               }」？`
@@ -1132,7 +1129,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
     }
     batch.exit();
     const count = providerIds.length;
-    const message = count > 1 ? `已删除 ${count} 个服务商` : "已删除服务商";
+    const message = count > 1 ? coreT({key: "ui.provider.deleted_count_done", params: {count}}) : coreT({key: "ui.provider.deleted_done"});
     toastSettingsSuccess(message);
     await reload();
   };
@@ -1190,7 +1187,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
       <SettingsListSection
         header={
           <ManageHeader
-            title="服务商"
+            title={coreT({key: "ui.provider.title"})}
             batchMode={batch.active}
             selectedCount={batch.selectedCount}
             onEnterBatch={batch.enter}
@@ -1201,7 +1198,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
               }
               setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
             }}
-            hint="选择要删除的服务商"
+            hint={coreT({key: "ui.provider.delete_select_title"})}
             normalActions={
               <button
                 type="button"
@@ -1218,7 +1215,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
         }
       >
         {rows.length === 0 ? (
-          <SettingsListEmpty>暂无服务商，点击上方按钮添加。</SettingsListEmpty>
+          <SettingsListEmpty>{coreT({key: "ui.provider.empty_hint_desktop"})}</SettingsListEmpty>
         ) : null}
         {rows.map((p) => (
           <SettingsListItem
@@ -1226,7 +1223,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
             title={p.displayName}
             meta={
               <>
-                {`${p.savedCount} 个模型 · `}
+                {coreT({key: "ui.provider.models_meta", params: {count: p.savedCount}})}
                 <ApiKeyStatusTag status={p.apiKeyStatus} />
               </>
             }
@@ -1253,8 +1250,8 @@ export function ProvidersView({ nav }: { nav: Nav }) {
         x={providerMenu?.x ?? 0}
         y={providerMenu?.y ?? 0}
         items={[
-          { label: "重命名", action: "rename" },
-          { label: "删除", action: "delete", danger: true },
+          { label: coreT({key: "ui.common.rename"}), action: "rename" },
+          { label: coreT({key: "ui.common.delete"}), action: "delete", danger: true },
         ]}
         onSelect={(action) => handleProviderMenuSelect(action)}
         onClose={() => setProviderMenu(null)}
@@ -1268,10 +1265,10 @@ export function ProvidersView({ nav }: { nav: Nav }) {
       />
       <ConfirmModal
         open={deleteConfirm != null}
-        title="删除服务商"
+        title={coreT({key: "ui.provider.delete_title"})}
         message={
           deleteConfirm?.kind === "batch"
-            ? `确定删除选中的 ${deleteConfirm.count} 个服务商？`
+            ? coreT({key: "ui.provider.delete_batch_confirm", params: {count: deleteConfirm.count}})
             : `删除服务商「${
                 deleteConfirm?.kind === "single" ? deleteConfirm.label : ""
               }」？`
@@ -1395,7 +1392,7 @@ export function ProviderFormView({
         if (!isBuiltin) patch.protocol = protocol;
         const res = await ipcProvidersEdit({ providerId, ...patch });
         if (res.ok) {
-          toastSettingsSuccess("已保存");
+          toastSettingsSuccess(coreT({key: "ui.common.saved"}));
         } else {
           toastSettingsError(res.error.message);
         }
@@ -1408,7 +1405,7 @@ export function ProviderFormView({
   return (
     <SettingsPanel>
       <SettingsFormSection
-        title={mode === "create" ? "新建服务商" : "编辑服务商"}
+        title={mode === "create" ? "新建服务商" : coreT({key: "ui.provider.edit_title"})}
         desc={
           mode === "edit" ? (
             <>
@@ -1421,11 +1418,11 @@ export function ProviderFormView({
         }
         footer={
           <Button variant="primary" onClick={() => void submit()}>
-            {mode === "create" ? "创建" : "保存"}
+            {mode === "create" ? coreT({key: "ui.common.create"}) : coreT({key: "ui.common.save"})}
           </Button>
         }
       >
-        <SettingsField label="协议">
+        <SettingsField label={coreT({key: "ui.provider.protocol_label"})}>
           <select
             value={protocol}
             disabled={isBuiltin}
@@ -1444,7 +1441,7 @@ export function ProviderFormView({
             onChange={(e) => setBaseUrl(e.target.value)}
           />
         </SettingsField>
-        <SettingsField label="服务商名称">
+        <SettingsField label={coreT({key: "ui.provider.name_label"})}>
           <input
             type="text"
             value={displayName}
@@ -1470,7 +1467,7 @@ export function ProviderFormView({
             }}
           />
         </SettingsField>
-        <SettingsField label="自定义参数（JSON 对象，原样合并进请求体顶层，可覆盖标准字段）">
+        <SettingsField label={coreT({key: "ui.provider.custom_params_hint_desktop"})}>
           <textarea
             rows={4}
             value={bodyParamsJson}
@@ -1478,7 +1475,7 @@ export function ProviderFormView({
             onKeyDown={(e) => {
               handleMultilineSubmitKeyDown(e, () => void submit());
             }}
-            placeholder='{"tool_stream": true}，清空并保存即移除全部自定义参数'
+            placeholder={coreT({key: "ui.provider.custom_params_placeholder"})}
           />
         </SettingsField>
       </SettingsFormSection>
@@ -2074,7 +2071,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
         <p className="settings-hint">
           目录选「智能排序」时按本列表从上到下逐条尝试，首条命中规则的捕获组提取序号；可拖拽或用行菜单调整优先级。
         </p>
-        {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
+        {loading ? <SettingsListEmpty>{coreT({key: "ui.common.loading"})}</SettingsListEmpty> : null}
         {!loading && rules.length === 0 ? (
           <SettingsListEmpty>
             {loadFailed ? "加载失败，请重试。" : "暂无规则，点击上方按钮创建。"}
