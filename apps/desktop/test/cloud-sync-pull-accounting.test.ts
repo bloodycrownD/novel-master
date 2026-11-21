@@ -214,13 +214,12 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     }
   });
 
-  it("DatabaseReplacedError 仍完成 runtime 换代（catch 分支的 G1 断言）", async () => {
-    // 先往本机 llm_provider 塞一行「非法」数据（display_name 为空，schema 层
-    // 没有 CHECK 拦它，但 service 级校验会拒）。于是：
-    //   覆盖动作成功（库已换代、库文件本身是合法 sqlite）
-    // → 恢复三表前 ProviderTableSnapshotIo.validate 抛错
-    // → coordinator 原样透传 DatabaseReplacedError。
-    // 「库已换却不重建」比「记账失败」更糟，所以 catch 分支必须先换代再报错。
+  it("restore 段校验失败仍完成 runtime 换代（DB_SYNC_REPLACE_INCOMPLETE，G1 断言）", async () => {
+    // 场景：本机塞一行「非法」数据（display_name 为空）→ dump 本机快照不拦（写入
+    // 方向校验）→ 覆盖成功（库已换代）→ restore 本机快照回新库时 125 段校验拦截
+    // → error-matrix-final R2 的 DB_SYNC_REPLACE_INCOMPLETE（Err 通道）。
+    // 「库已换却不重建」比「记账失败」更糟：handler catch 判 key 后必须先
+    // rebootstrap 再上报——换代优先语义由本用例钉住。
     const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
@@ -237,11 +236,13 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
 
     assert.equal(result.ok, false, "收尾失败应回报失败");
     if (!result.ok) {
-      assert.match(
-        result.error.message,
-        /服务商配置恢复失败/,
-        "失败信息必须可读且带上 providerTablesRestored",
+      // IpcResult 线格式：code 装 ErrorKey（formatIpcError 分派链）。
+      assert.equal(
+        result.error.code,
+        "DB_SYNC_REPLACE_INCOMPLETE",
+        `必须是 DB_SYNC_REPLACE_INCOMPLETE，实际: ${result.error.code}`,
       );
+      assert.match(result.error.message, /服务商配置恢复失败/);
     }
     const afterR = await DesktopRuntimeSingleton.get();
     if (!afterR.ok) throw afterR.error;

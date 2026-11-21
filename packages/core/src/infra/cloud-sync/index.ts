@@ -19,7 +19,6 @@ export type {
   CloudSyncStatus,
 } from "./model/cloud-sync-status.js";
 export type { CloudSyncConfigInput } from "./model/cloud-sync-config.js";
-export { DatabaseReplacedError } from "./model/database-replaced-error.js";
 
 export {
   CloudSyncLease,

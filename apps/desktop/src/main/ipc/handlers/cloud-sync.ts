@@ -2,7 +2,6 @@
  * 云同步 IPC 处理器：配置、测试连接、Pull/Push。
  */
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
-import { DatabaseReplacedError } from "@novel-master/core";
 import { AppError, type Outcome } from "@novel-master/core/errors";
 import type {
   CloudSyncConfigDto,
@@ -135,7 +134,19 @@ export namespace CloudSync {
       // 换库窗口之前命中即抛 AbortError，原样经 runAbortable 收成 IPC_ABORTED。
       const pulled = await service.pull({ checkpoint: () => scope.checkpoint() });
       // 已知失败沿 Result 到达；coordinator 侧故障仍走下方 catch。
-      if (!pulled.ok) return { kind: "failed", error: pulled.error };
+      if (!pulled.ok) {
+        // 换代失败（error-matrix-final R2：DB_SYNC_REPLACE_INCOMPLETE 沿 Result 到达，
+        // 不再经异常通道）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」
+        // 更糟（后续请求继续绑在已关连接上）。
+        if (pulled.error.key === "DB_SYNC_REPLACE_INCOMPLETE") {
+          const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
+          if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
+          // providerTablesRestored 等字段值只进日志；用户文案在 error 的 detail 里，
+          // 不要把 TypeScript 字段名拼进 toast（CR cloudsync P2-2）。
+          log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: pulled.error.details?.providerTablesRestored });
+        }
+        return { kind: "failed", error: pulled.error };
+      }
       const result = pulled.value;
       if (result.databaseReplaced) {
         // 换库窗口不可中断：rebootstrap/记账无条件跑完（见上方注释）。
@@ -150,20 +161,16 @@ export namespace CloudSync {
       }
       return { kind: "completed", value: result };
     } catch (err) {
-      // 库已换代但后续步骤抛错：runtime 换代优先于报错——「库已换却不重建」
-      // 比「记账失败」更糟（后续请求继续绑在已关连接上）。
-      if (err instanceof DatabaseReplacedError) {
+      // 库已换代但收尾失败（error-matrix-final R2：DB_SYNC_REPLACE_INCOMPLETE 沿 Result
+      // 到达此处）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」更糟
+      // （后续请求继续绑在已关连接上）。
+      if (err instanceof AppError && err.key === "DB_SYNC_REPLACE_INCOMPLETE") {
         const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
         if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
-        // ⚠️ 这段文案是**给用户看的 toast**（CR cloudsync P2-2）：不要把
-        // `providerTablesRestored` 这类 TypeScript 字段名拼进去——它对用户零信息量，
-        // 只会让人对着一个内部布尔名发懵。要判断成没成，看这里的中文措辞即可；
-        // 字段值本身只进日志。
-        log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.providerTablesRestored });
-        // 补偿链的「已换代 + 三表未恢复」不是业务失败通道能表达的状态，保留既有
-        // 未知通道抛错，由 runAbortable 的边界统一 formatIpcError。
-        // nm-throw: keep — 库已换代但服务商配置表未恢复属故障态不变量，Outcome 的 failed 表达不了「库已变但重建未完成」。
-        throw new Error(`${err.message}（服务商配置未能恢复，请检查模型服务商设置）`);
+        // providerTablesRestored 等字段值只进日志；用户文案在 error 的 descriptor 里，
+        // 不要把 TypeScript 字段名拼进 toast（CR cloudsync P2-2）。
+        log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.details?.providerTablesRestored });
+        return { kind: "failed", error: err };
       }
       throw err;
     }

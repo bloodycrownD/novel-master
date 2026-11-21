@@ -6,7 +6,6 @@ import {
   type TokenLabelOptions,
 } from '@/services/chat-prompt-tokens.service';
 // 弃权哨兵已上收 core：与服务侧导入同一份类，instanceof 判定才成立。
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -898,11 +897,9 @@ describe('chat-prompt-tokens.service', () => {
 
   it('build 中途弃权（2026-09-30 回滚竞态）：shouldBail 命中返回空串哨兵，不走 fallback、不排升级轮', async () => {
     // 场景还原：回滚触发的刷新在 run 注册前起跑，build 途中 run 起步——
-    // 分段 bail 抛弃权错误，读口须按「保留旧标签」收场（空串），绝不能
-    // 落进 catch→fallback（那会再算一遍，恰是要避免的竞争）。
-    mockBuildSessionPromptInput.mockImplementationOnce(() => {
-      throw new ChatPromptBuildBailedError();
-    });
+    // 分段 bail 弃权（error-matrix-final R3：沿 null 哨兵返回值到达），读口须按
+    // 「保留旧标签」收场（空串），绝不能落进 fallback（那会再算一遍，恰是要避免的竞争）。
+    mockBuildSessionPromptInput.mockResolvedValueOnce({ok: true, value: null});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
 
     const upgrades: string[] = [];
@@ -964,7 +961,7 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('resolve 段弃权不逃逸（r3-chip-1）：Outcome replaced → 空串哨兵，绝不走 fallback', async () => {
-    // catch 只认 ChatPromptBuildBailedError 时，这个错误会一路逃到
+    // 弃权若不走 null 哨兵返回值（error-matrix-final R3），就会一路逃到
     // PreciseUpgrade.start 的 catch / 外层 rejection —— 表现为 unhandled
     // rejection，且首帧回落成「重算一遍」的 fallback（恰是要消灭的竞争）。
     mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {

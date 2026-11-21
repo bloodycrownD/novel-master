@@ -8,7 +8,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, DatabaseReplacedError, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
+import { CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, AppErrorOps, ErrorGuards, Result, type Interrupt } from "@novel-master/core/errors";
 import { S3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
@@ -248,9 +248,12 @@ class DesktopCloudSyncService {
           return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });
         }
         // 已知失败就地补记账后沿 Result 上行（错误通道迁移七期，与旧 catch 的
-        // 非换代分支同款）；换代失败不经本支——DatabaseReplacedError 仍由
-        // throw 通道抵达下方 catch（DatabaseReplacedError 判定跳过记账）。
-        await this.configStore.recordPull(false, pulled.error.message).catch(() => undefined);
+        // 非换代分支同款）；换代失败（error-matrix-final R2：DB_SYNC_REPLACE_INCOMPLETE）
+        // **不做 recordPull**——此刻 configStore 背后的连接已被换库关掉，写必败且制造
+        // 「以为记过了」的错觉；记账由 handler rebootstrap 后的 recordPullSuccess 做。
+        if (pulled.error.key !== "DB_SYNC_REPLACE_INCOMPLETE") {
+          await this.configStore.recordPull(false, pulled.error.message).catch(() => undefined);
+        }
         return Result.err(pulled.error);
       }
       return Result.ok(pulled.value);
@@ -261,7 +264,7 @@ class DesktopCloudSyncService {
         return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });
       }
       const detail = error instanceof Error ? error.message : String(error);
-      // ⚠️ `DatabaseReplacedError` 这一支**不做 recordPull**（CR cloudsync P2-1）。
+      // ⚠️ `DB_SYNC_REPLACE_INCOMPLETE` 这一支**不做 recordPull**（CR cloudsync P2-1）。
       // 此刻 `closeLiveDbForBackupImport()` 已经把 `this.configStore` 背后的连接
       // 关掉了 ⇒ `recordPull` 必抛 `CONNECTION_CLOSED` ⇒ 被下面的 `.catch` 吃掉
       // ⇒ 面板上「上次拉取结果」永远停在旧值，与实际发生的「换代成功但三表未恢复」
@@ -269,7 +272,9 @@ class DesktopCloudSyncService {
       // 一次「以为自己记过了」的错觉。
       // 换代路径的记账由 handler 在 `DesktopRuntimeSingleton.rebootstrap()` 之后走
       // `recordPullSuccess()` 现场造 store 来做（见该方法 JSDoc），不依赖本支。
-      if (!(error instanceof DatabaseReplacedError)) {
+      // error-matrix-final R2：换代失败沿 DB_SYNC_REPLACE_INCOMPLETE key 识别（已换代 ⇒
+      // 记账由 handler rebootstrap 后的 recordPullSuccess 做，本支不写注定失败的记录）。
+      if (!(error instanceof AppError && error.key === "DB_SYNC_REPLACE_INCOMPLETE")) {
         await this.configStore.recordPull(false, detail).catch(() => undefined);
       }
       // coordinator 侧故障（core CloudSyncError 体系，三期保留 throw 协议）与
@@ -417,8 +422,8 @@ class DesktopCloudSyncService {
         const { DbBackupService } = await import("./db-backup.service.js");
         // 必须 return：不 return 完全合法、零类型错误，但运行时
         // databaseReplaced === undefined ⇒ handler 永不 rebootstrap ⇒ P0 原样复发。
-        // 已知失败沿 Result 通道交给 coordinator（错误通道迁移七期：DbSyncPort
-        // 导入面已 Result 化）；DatabaseReplacedError 仍走 throw 通道。
+        // 已知失败与「已换代但收尾失败」（DB_SYNC_REPLACE_INCOMPLETE）全沿 Result
+        // 通道交给 coordinator（error-matrix-final R2：导入面全链路纯 Result）。
         return DbBackupService.importFromBytes(bytes);
       },
       importSnapshotFromPath: async (path: string) => {

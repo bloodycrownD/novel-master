@@ -11,7 +11,7 @@
 import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
-import { DatabaseBackupExport, DatabaseReplacedError, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen, type ProviderTableSnapshot } from "@novel-master/core";
+import { DatabaseBackupExport, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
@@ -31,8 +31,8 @@ const SQLITE_HEADER_BYTES = 16;
 /**
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
  *
- * 成功路径走返回值；抛错路径（覆盖已成功、收尾失败）走 {@link DatabaseReplacedError}
- * ——函数抛错时返回值送不到调用方，「已换代」信号必须由异常类型承载。
+ * 成功路径走返回值；「覆盖已成功、收尾失败」沿 `DB_SYNC_REPLACE_INCOMPLETE` 走 Result 通道
+ * （error-matrix-final R2：全链路纯 Result，异常哨兵已退役）。
  */
 type DbImportOutcome = {
   /** 活动库文件是否已被替换（true ⇒ 调用方持有的 runtime/conn 一律作废，必须先重建再用）。 */
@@ -94,7 +94,7 @@ export namespace DbBackupService {
    *   「备份失败 → 覆盖成功 → 回滚失败」这条链路上没有任何一处会中断，
    *   最终库文件已是远端快照而本地改动无声消失。
    * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后（databaseReplaced）
-   *   抛 {@link DatabaseReplacedError}，**不回滚**——库已经是新快照。
+   *   返回 `DB_SYNC_REPLACE_INCOMPLETE`，**不回滚**——库已经是新快照。
    * - 三条终态各自对 bak 的处置：**①回滚失败** ⇒ 保留（用户要能手工救回）；
    *   **②覆盖失败且回滚成功** ⇒ 冗余，finally 删掉；**③覆盖成功但三表恢复失败**
    *   ⇒ 同样保留（CR-F01：此时 bak 是磁盘上唯一一份含未同步本地改动的旧库，
@@ -104,7 +104,7 @@ export namespace DbBackupService {
    * @param replace 覆盖动作：FromPath 走 copyFile，FromBytes 走 writeFile。
    * @param providerSnapshot 覆盖前 dump 的本机服务商三表。
    */
-  async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, providerSnapshot: ProviderTableSnapshot): Promise<void> {
+  async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, providerSnapshot: ProviderTableSnapshot): Promise<Result<void, AppError>> {
     const dbPath = DesktopDbPath.resolve();
     const bakPath = `${dbPath}.nmbackup.bak`;
 
@@ -150,8 +150,14 @@ export namespace DbBackupService {
         // 此刻它是磁盘上唯一的一份，删掉等于让用户无声丢失本地数据。
         keepBackupForManualRecovery = true;
         const recoveryHint = bakCreated ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。` : "导入前没有可备份的活动库文件，无旧库副本可保留。";
-        const replacedMessage = `数据库已导入，但本机服务商配置恢复失败：${Errors.text(error)}${recoveryHint}`;
-        throw new DatabaseReplacedError(replacedMessage, false);
+        const reason = Errors.text(error);
+        // error-matrix-final R2：「已换代 + 收尾失败」沿 DB_SYNC_REPLACE_INCOMPLETE 走
+        // Result 通道（providerTablesRestored 进 details）——异常哨兵 DatabaseReplacedError 退役。
+        // 此时不得回滚：库已是新快照，回滚会把用户拉回来的数据丢掉。
+        // detail 保持旧 message 口径（完整中文句，边界 formatIpcError 直出给用户）。
+        // cause 必须走第三参 options——塞进 params 会被 firstDescriptorOf 误认成
+        // descriptor（AppError 实例带 key 字段），把 messageKey 污染成内层错误 key。
+        return Result.err(new AppError("DB_SYNC_REPLACE_INCOMPLETE", {detail: `数据库已导入，但本机服务商配置恢复失败：${reason}${recoveryHint}`, reason, recoveryHint, providerTablesRestored: false}, {cause: error}));
       }
 
       // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。
@@ -165,9 +171,11 @@ export namespace DbBackupService {
       }
       if (rollbackError != null) {
         rollbackFailed = true;
-        throw new AppError("INFRA_UNEXPECTED_ERROR", { detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${Errors.text(rollbackError)}` }, { cause: [error, rollbackError] });
+        return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${Errors.text(rollbackError)}` }, { cause: [error, rollbackError] }));
       }
-      throw error;
+      // 覆盖动作失败但回滚已成功（库已恢复旧态）：转 Result 是对现状的诚实标记
+      // （error-matrix-final §一.2——回滚后原异常不再精确描述当前状态）。
+      return Result.err(error instanceof AppError ? error : new AppError("INFRA_UNEXPECTED_ERROR", { detail: `数据库导入失败（已回滚到导入前状态）：${Errors.text(error)}` }, { cause: error }));
     } finally {
       if (bakCreated && !rollbackFailed && !keepBackupForManualRecovery) {
         await fsOps.unlink(bakPath).catch((unlinkError: unknown) => {
@@ -175,6 +183,7 @@ export namespace DbBackupService {
         });
       }
     }
+    return Result.ok(undefined);
   }
 
   /**
@@ -191,7 +200,7 @@ export namespace DbBackupService {
       // 路径级校验：只读前 16 字节确认 SQLite 魔数，不整包读入。禁止 `readFile(path, enc, 16)`
       // （第三参会被忽略，整包读入 ⇒ 大备份撑爆 Node 堆），也禁止裸 `readFile` 整包进内存。
       // 已知失败（非备份文件）沿 Result.err；其后的替换链（备份 → 关连接 → 覆盖 → 恢复三表）
-      // 保持 throw 通道（DatabaseReplacedError 的「已换代」信号必须由异常类型承载，见 DbImportOutcome 注）。
+      // 替换链（备份 → 关连接 → 覆盖 → 恢复三表）全走 Result（error-matrix-final R2）。
       const handle = await fsOps.open(srcPath, "r");
       let checked: Result<void, AppError>;
       try {
@@ -206,7 +215,8 @@ export namespace DbBackupService {
       const liveConn = await DesktopDb.get();
       const providerSnapshot = await ProviderTableSnapshotIo.dump(liveConn);
 
-      await replaceLiveDatabase((dbPath) => fsOps.copyFile(srcPath, dbPath), providerSnapshot);
+      const replaced = await replaceLiveDatabase((dbPath) => fsOps.copyFile(srcPath, dbPath), providerSnapshot);
+      if (!replaced.ok) return Result.err(replaced.error);
     } finally {
       maintenanceBusy.release();
     }
@@ -230,7 +240,8 @@ export namespace DbBackupService {
       const liveConn = await DesktopDb.get();
       const providerSnapshot = await ProviderTableSnapshotIo.dump(liveConn);
 
-      await replaceLiveDatabase((dbPath) => writeFile(dbPath, bytes), providerSnapshot);
+      const replaced = await replaceLiveDatabase((dbPath) => writeFile(dbPath, bytes), providerSnapshot);
+      if (!replaced.ok) return Result.err(replaced.error);
     } finally {
       maintenanceBusy.release();
     }

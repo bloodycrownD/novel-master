@@ -12,6 +12,7 @@ import {
   type PromptSkillIndexEntry,
 } from '@novel-master/core/prompt';
 import {Result, AppError} from '@novel-master/core/errors';
+import {AssertionError} from '@novel-master/core/common';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {SessionPromptInputService} from './session-prompt-input.service';
 
@@ -64,6 +65,10 @@ export namespace PromptPreviewService {
     const {definition} = resolved.value;
     const built = await SessionPromptInputService.build(runtime, scope, definition);
     if (!built.ok) return Result.err(built.error);
+    if (built.value == null) {
+      // 预览不传 shouldBail，弃权不可达——编程错误（error-matrix-final R3）。
+      throw new AssertionError('prompt preview 未传 shouldBail，弃权不应出现');
+    }
     const {layout, ctx} = built.value;
     const skillsIndex = await budget(runtime, scope.projectId, definition);
     // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 容量 1 保留单点在 core 纯函数）；

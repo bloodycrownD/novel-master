@@ -34,9 +34,6 @@ jest.mock('@novel-master/core', () => ({
   SqliteBackupHeader: jest.requireActual(
     '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js',
   ).SqliteBackupHeader,
-  DatabaseReplacedError: jest.requireActual(
-    '../../../packages/core/dist/infra/cloud-sync/model/database-replaced-error.js',
-  ).DatabaseReplacedError,
   // 导出链路已下沉 core：走真实实现（平台注入点仍由本测试的 mock 接管）。
   DatabaseBackupExport: jest.requireActual(
     '../../../packages/core/dist/infra/db-backup/export-database-backup.js',

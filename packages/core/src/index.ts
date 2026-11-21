@@ -66,7 +66,6 @@ export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } fr
 export {
   CloudSyncCoordinator,
   DefaultPushAgentMutex,
-  DatabaseReplacedError,
   CloudSyncStatusParser,
   EMPTY_CLOUD_SYNC_STATUS,
   CloudSyncLease,
@@ -92,7 +91,6 @@ export type {
  * 捕获后保留旧标签、不触发 fallback。desktop / mobile 导入同一个类，
  * `instanceof` 才跨包成立（spec-3 §3.6「保留（控制流）」，不进 public 面）。
  */
-export { ChatPromptBuildBailedError } from "./service/chat/model/chat-prompt-build-bailed-error.js";
 
 /**
  * 偏好与持久状态：对 KKV 的稳定封装（非 UI 模块直连 KKV）。

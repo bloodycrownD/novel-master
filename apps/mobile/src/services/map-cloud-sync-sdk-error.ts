@@ -27,10 +27,12 @@ export namespace CloudSyncSdkErrorMapper {
 
   /**
    * 将 AWS SDK / Smithy 抛出的未知错误映射为 `CLOUD_SYNC_*` AppError。
-   * 已有 `CLOUD_SYNC_*` AppError（如 `CLOUD_SYNC_NOT_CONFIGURED`）原样透传。
+   * 已有 `CLOUD_SYNC_*` AppError（如 `CLOUD_SYNC_NOT_CONFIGURED`）原样透传；
+   * DB_SYNC_REPLACE_INCOMPLETE（DB_BACKUP 域）同透传——「库已换代但收尾失败」的
+   * details/文案对用户有意义，降级成 NETWORK 会把换代事实吞掉（error-matrix-final R2）。
    */
   export function map(error: unknown): AppError {
-    if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC') {
+    if (AppErrorOps.is(error) && (ErrorGuards.domainOf(error.code) === 'CLOUD_SYNC' || error.key === 'DB_SYNC_REPLACE_INCOMPLETE')) {
       return error;
     }
 

@@ -25,7 +25,6 @@ import {
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { DbBackupService } from "../src/main/services/db-backup.service.js";
-import { DatabaseReplacedError } from "@novel-master/core";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { DesktopDbPath } from "../src/main/runtime/resolve-db-path.js";
 import {
@@ -51,7 +50,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("备份拷贝失败时抛错且不覆盖活动库文件", async () => {
+  it("备份拷贝失败时返回 Err 且不覆盖活动库文件", async () => {
     const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
@@ -73,18 +72,15 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     await rm(bakPath, { recursive: true, force: true });
     await mkdir(bakPath, { recursive: true });
 
-    await assert.rejects(
-      () => DbBackupService.importFromPath(src),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.doesNotMatch(
-          error.message,
-          /回滚失败/,
-          "备份步就失败时不该进回滚分支的措辞",
-        );
-        return true;
-      },
-    );
+    const r1 = await DbBackupService.importFromPath(src);
+    assert.ok(!r1.ok, `备份失败应返回 Err，实际 ${r1.ok ? "Ok" : ""}`);
+    if (!r1.ok) {
+      assert.doesNotMatch(
+        r1.error.message,
+        /回滚失败/,
+        "备份步就失败时不该进回滚分支的措辞",
+      );
+    }
 
     const after = await readFile(dbPath);
     assert.equal(
@@ -114,18 +110,15 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
       }) as unknown as typeof copyFile,
     });
     try {
-      await assert.rejects(
-        () => DbBackupService.importFromPath(src),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.match(error.message, /回滚失败/);
-          assert.ok(
-            error.message.includes(bakPath),
-            `错误信息必须告诉用户副本在哪: ${error.message}`,
-          );
-          return true;
-        },
-      );
+      const r2 = await DbBackupService.importFromPath(src);
+      assert.ok(!r2.ok, "覆盖失败且回滚失败应返回 Err");
+      if (!r2.ok) {
+        assert.match(r2.error.message, /回滚失败/);
+        assert.ok(
+          r2.error.message.includes(bakPath),
+          `错误信息必须告诉用户副本在哪: ${r2.error.message}`,
+        );
+      }
     } finally {
       DbBackupService.setFsOpsForTest(null);
     }
@@ -156,7 +149,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     await DesktopRuntimeSingleton.rebootstrap();
   });
 
-  it("覆盖已成功但收尾失败时抛 DatabaseReplacedError 且不回滚", async () => {
+  it("覆盖已成功但收尾失败时返回 DB_SYNC_REPLACE_INCOMPLETE 且不回滚", async () => {
     const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
@@ -166,7 +159,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
 
     // 覆盖动作照常发生，但落进去的是一份「不是数据库」的内容 ⇒
     // 恢复三表用的短连接打不开 ⇒ 收尾失败。
-    // 这正是 DatabaseReplacedError 存在的场景：库已换代，**不得回滚**。
+    // 这正是 DB_SYNC_REPLACE_INCOMPLETE 的场景：库已换代，**不得回滚**。
     const notADb = join(tempDir, "not-a-db.bin");
     await writeFile(notADb, Buffer.alloc(4096, 0x41));
     const realCopy = copyFile;
@@ -179,23 +172,17 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
       }) as unknown as typeof copyFile,
     });
     try {
-      await assert.rejects(
-        () => DbBackupService.importFromPath(src),
-        (error: unknown) => {
-          assert.ok(
-            error instanceof DatabaseReplacedError,
-            `必须是 DatabaseReplacedError，实际: ${String(error)}`,
-          );
-          assert.equal(error.databaseReplaced, true);
-          assert.equal(error.providerTablesRestored, false);
-          assert.match(error.message, /服务商配置恢复失败/);
-          // 文案必须告诉用户副本在哪——保留了却不报路径，等于把救回机会藏起来。
-          assert.ok(
-            error.message.includes(bakPath),
-            `错误信息必须写出保留副本的路径: ${error.message}`,
-          );
-          return true;
-        },
+      const result = await DbBackupService.importFromPath(src);
+      assert.ok(!result.ok, `必须是 Err（DB_SYNC_REPLACE_INCOMPLETE），实际 ${result.ok ? "Ok" : result.error.key}`);
+      const error = result.error;
+      assert.equal(error.key, "DB_SYNC_REPLACE_INCOMPLETE", `必须是 DB_SYNC_REPLACE_INCOMPLETE，实际: ${error.key}`);
+      const details = error.details as {providerTablesRestored?: boolean; recoveryHint?: string};
+      assert.equal(details.providerTablesRestored, false);
+      assert.match(error.message, /服务商配置恢复失败/);
+      // 文案必须告诉用户副本在哪——保留了却不报路径，等于把救回机会藏起来。
+      assert.ok(
+        (details.recoveryHint ?? "").includes(bakPath),
+        `错误信息必须写出保留副本的路径: ${error.message}`,
       );
     } finally {
       DbBackupService.setFsOpsForTest(null);

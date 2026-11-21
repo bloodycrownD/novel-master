@@ -13,9 +13,9 @@ import { type Result } from "@/errors/either.js";
  * `Result.err`，成功值 `{ databaseReplaced }` 指示活动库文件是否已被替换
  * （调用方据此决定是否重建 runtime）。
  *
- * 实现方在「活动库文件被替换」时必须让信号送达调用方：
- * 成功路径靠返回值；「覆盖已成功、后续收尾失败」的抛错路径靠
- * `DatabaseReplacedError` 这类异常类型承载（函数抛错时返回值送不到调用方）。
+ * 实现方在「活动库文件被替换」时必须让信号送达调用方：成功路径靠返回值；
+ * 「覆盖已成功、后续收尾失败」沿 `DB_SYNC_REPLACE_INCOMPLETE`（Err 通道，details 带
+ * providerTablesRestored）——error-matrix-final R2 起全链路纯 Result，调用方判 key。
  */
 export interface DbSyncPort {
   isAgentActive(): boolean;

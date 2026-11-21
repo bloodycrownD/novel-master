@@ -13,9 +13,8 @@
  * ① 判活源 {@link isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
  * ② run 在途抑制（读口入口 + 后台暖机排程两处判活）+ **null 哨兵**返回契约；
  * ③ build 分段弃权（SessionPromptInputService.buildAdapter 的 shouldBail）与 resolve 段
- *   弃权（错误通道迁移二期起 core 读口沿 Outcome.cancelled/replaced 返回，
- *   读口就地转抛 build 同款哨兵）——两类都由 {@link isChipBailError} 收口，
- *   **绝不进 fallback**；
+ *   弃权（core 读口沿 Outcome.cancelled/replaced 返回）——两类都沿 **null 哨兵返回值**
+ *   收口（error-matrix-final R3：异常哨兵退役），**绝不进 fallback**；
  * ④ run 终态后补推一次读口（走防抖入口，与抽屉自发那次合并，见文件末尾注册处）。
  *
  * r3-cache-3：第二相投递改为「直接推暖机手里已有的精确档」，不再「补读一次现值」
@@ -26,7 +25,6 @@
  * @module services/chat-prompt-tokens
  */
 import { app } from "electron";
-import { ChatPromptBuildBailedError } from "@novel-master/core";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import { MessageBodyText } from "@novel-master/core/prompt";
 import { type AppError } from "@novel-master/core/errors";
@@ -62,8 +60,7 @@ type CountResult = {
   contextWindow: number | undefined;
   source: "api" | "local";
 };
-type CountFn = (args: CountArgs) => Promise<Result<CountResult, AppError>>;
-type StatsResult = Result<PromptChatTokenStatsResponse, AppError>;
+type CountFn = (args: CountArgs) => Promise<Result<CountResult | null, AppError>>;
 type NullableStatsResult = Result<PromptChatTokenStatsResponse | null, AppError>;
 
 /**
@@ -130,18 +127,6 @@ const chatPromptTokenDebounceExecCounts = new Map<string, number>();
 const readWarmInflight = new Set<string>();
 
 export namespace ChatPromptTokensService {
-  /**
-   * chip 读口中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError，
-   * desktop 侧本地抛）。resolve 段自错误通道迁移二期起不再抛哨兵——core 读口
-   * 沿 Outcome.cancelled/replaced 返回，调用点就地转抛本哨兵后仍由本判定收口。
-   * 各调用点都必须收成 **null 哨兵**——漏任何一处，弃权错误都会逃逸进
-   * {@link loadResilient} 的兜底分支，而兜底是「完整 build +
-   * 启发式计数」的重活，正是要消灭的那一趟。与 mobile 的 isChipBailError 同款口径。
-   */
-  function isChipBailError(error: unknown): boolean {
-    return error instanceof ChatPromptBuildBailedError;
-  }
-
   /**
    * 兜底口径的 token 数：真 cl100k 计数优先，编码表建不起来才退回字符折算。
    *
@@ -235,20 +220,21 @@ export namespace ChatPromptTokensService {
   // 不传（它只在真异常后跑，见 loadFallback 注释）。
   //
   // 错误通道迁移四期：已知失败沿 `Result` 上行（build 装配失败 / sessionConfig 读
-  // 失败 / countFn 已知失败），由 resilient 统一收口降级；弃权哨兵
-  // ChatPromptBuildBailedError 与未知异常仍走 throw 通道。
-  async function computeStats(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, countFn: CountFn, shouldBail?: () => boolean): Promise<StatsResult> {
+  // 失败 / countFn 已知失败），由 resilient 统一收口降级；弃权（run 在途）返回
+  // Result.ok(null)——弃权是数据不是错误（error-matrix-final R3）。
+  async function computeStats(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, countFn: CountFn, shouldBail?: () => boolean): Promise<NullableStatsResult> {
     const built = await SessionPromptInputService.buildAdapter(runtime, scope, undefined, shouldBail != null ? { shouldBail } : undefined);
     if (!built.ok) return Result.err(built.error);
+    if (built.value == null) return Result.ok(null);
     const { definition, layout, ctx, rawMessages } = built.value;
 
     // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
     // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
     // getSessionAgentConfig、模型解析、TokenCounterMode.resolveForModel 三次
-    // IO——run 起步的窗口正落在这里。命中即由上层 catch 收成 null 哨兵（保留旧标签），
-    // 绝不放行到 resolve。
+    // IO——run 起步的窗口正落在这里。命中即返回 null 哨兵（保留旧标签），
+    // 绝不放行到 resolve（error-matrix-final R3）。
     if (shouldBail?.() === true) {
-      throw new ChatPromptBuildBailedError();
+      return Result.ok(null);
     }
 
     // workspace 层已移除：模型解析链为 agent pin → session.modelId。
@@ -273,6 +259,7 @@ export namespace ChatPromptTokensService {
 
     const counted = await countFn({ layout, ctx, savedModelId, rawMessages });
     if (!counted.ok) return Result.err(counted.error);
+    if (counted.value == null) return Result.ok(null);
     const { tokenCount, estimated, counterKind, contextWindow, source } = counted.value;
     return Result.ok(buildTokenStats(tokenCount, estimated, counterKind, contextWindow, source));
   }
@@ -397,7 +384,7 @@ export namespace ChatPromptTokensService {
       // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
       return Result.ok(null);
     }
-    const countFn = async (args: CountArgs): Promise<Result<CountResult, AppError>> => {
+    const countFn = async (args: CountArgs): Promise<Result<CountResult | null, AppError>> => {
       const { layout, ctx, savedModelId } = args;
       // 一次「完整口径」resolve 所需的 params 组装（tokenizerOverride / registry /
       // savedModels 三件套）：首帧 resolve 与紧随其后的后台暖机**复用同一份 params**
@@ -418,9 +405,9 @@ export namespace ChatPromptTokensService {
         return Result.err(outcome.error);
       }
       if (outcome.kind !== "completed") {
-        // 中途弃权（run 起步）：core 不再抛哨兵，转抛本地 bail 哨兵——既有
-        // isChipBailError catch 收成 null，绝不进 fallback。
-        throw new ChatPromptBuildBailedError();
+        // 中途弃权（run 起步）：沿 countFn 的 null 通道收口（error-matrix-final R3），
+        // computeStats 返回 null，绝不进 fallback。
+        return Result.ok(null);
       }
       const result = outcome.value;
       if (
@@ -457,10 +444,6 @@ export namespace ChatPromptTokensService {
             });
           })
           .catch((error: unknown) => {
-            if (isChipBailError(error)) {
-              // 中途弃权（run 起步）：静默收场，不留失败痕迹。
-              return;
-            }
             // 暖机/推送失败只丢「这次升级」，不影响正确性；但完全静默会让
             // chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——开发期
             // 留痕与首帧失败同款。
@@ -580,7 +563,7 @@ export namespace ChatPromptTokensService {
    * 造轮子），但传入的 registry 里的 `heuristic` 计数器已换成**真 cl100k 适配器**，
    * 所以这条路径的读数也不再是字符折算。
    */
-  async function loadFallback(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse, AppError>> {
+  async function loadFallback(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<NullableStatsResult> {
     // fallback 自身的 build 失败沿 Result 上行：resilient 原样透传给 IPC handler
     // （与旧链路「fallback 再抛 → handler catch」同一终点、同一载荷）。
     return computeStats(runtime, scope, async (args) => {
@@ -620,9 +603,8 @@ export namespace ChatPromptTokensService {
       if (!r.ok) return loadFallback(runtime, scope);
       return r;
     } catch (error) {
-      if (isChipBailError(error)) {
-        return Result.ok(null);
-      }
+      // 弃权不再走异常通道（error-matrix-final R3：computeStats 返回 null 哨兵），
+      // 本 catch 只兜未知异常 → fallback 降级。
       return loadFallback(runtime, scope);
     }
   }
@@ -657,9 +639,7 @@ export namespace ChatPromptTokensService {
         }
       },
       (error: unknown) => {
-        if (isChipBailError(error)) {
-          return;
-        }
+        // 弃权已沿 null 哨兵返回值到达（error-matrix-final R3），rejection 只剩未知异常。
         if (!app.isPackaged) {
           log.warn("prompt token post-run refresh failed", { error });
         }

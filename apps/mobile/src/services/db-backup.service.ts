@@ -12,7 +12,7 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {DatabaseBackupExport, DatabaseReplacedError, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen} from '@novel-master/core';
+import {DatabaseBackupExport, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen} from '@novel-master/core';
 import {AppError} from '@novel-master/core/errors';
 import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
 import {Result, type Interrupt} from '@novel-master/core/errors';
@@ -32,9 +32,8 @@ const WRITE_CHUNK_BYTES = 256 * 1024;
 /**
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
  *
- * 成功路径走返回值；抛错路径（覆盖已成功、收尾失败）走
- * {@link DatabaseReplacedError}（定义已上收 core，desktop / mobile 同一份）——
- * 函数抛错时返回值送不到调用方，「已换代」信号必须由异常类型承载。
+ * 成功路径走返回值；「覆盖已成功、收尾失败」沿 `DB_SYNC_REPLACE_INCOMPLETE` 走 Result 通道
+ * （error-matrix-final R2：全链路纯 Result，异常哨兵已退役）。
  */
 type DbImportOutcome = {
   /** 活动库文件是否已被替换（true ⇒ 调用方持有的 runtime/conn 一律作废，必须先重建再用）。 */
@@ -75,8 +74,8 @@ export namespace DbBackupService {
    * 错误处理口径（与 desktop 同款）：
    * - 文件级校验（存在性 / 体积）为已知失败，沿 `Result.err` 上行（错误通道迁移五期）。
    * - 备份步裸 await，失败即抛（全新安装 dbPath 不存在时跳过，此时无可回滚）。
-   * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后抛
-   *   {@link DatabaseReplacedError}，**不回滚**。
+   * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后返回
+   *   `DB_SYNC_REPLACE_INCOMPLETE`，**不回滚**。
    * - 回滚失败**不得静默**：与原错误合并成一条可读信息，并保留 bak 副本
    *   （mobile 从不删 bak，用户还能手工救回）。
    */
@@ -123,8 +122,13 @@ export namespace DbBackupService {
         }
       } catch (error) {
         if (databaseReplaced) {
-          // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」如实报上去。
-          throw new DatabaseReplacedError(`数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}`, false);
+          // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」沿 DB_SYNC_REPLACE_INCOMPLETE
+          // 如实报上去（error-matrix-final R2：异常哨兵 DatabaseReplacedError 退役，
+          // providerTablesRestored 进 details；调用方判 key 后重建 runtime）。
+          const recoveryHint = bakCreated ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。` : '';
+          // cause 必须走第三参 options（塞 params 会被 firstDescriptorOf 误认成 descriptor，
+          // 污染 messageKey——desktop 同款教训）。
+          return Result.err(new AppError('DB_SYNC_REPLACE_INCOMPLETE', {detail: `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}${recoveryHint}`, reason: errorDetail(error), recoveryHint, providerTablesRestored: false}, {cause: error}));
         }
 
         // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。
@@ -140,7 +144,9 @@ export namespace DbBackupService {
           const rollbackFailureDetail = `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}（原始错误：${errorDetail(error)}）`;
           return Result.err(new AppError('INFRA_UNEXPECTED_ERROR', {detail: rollbackFailureDetail}, {cause: [error, rollbackError]}));
         }
-        throw error;
+        // 覆盖动作失败但回滚已成功（库已恢复旧态）：转 Result 是对现状的诚实标记
+        // （error-matrix-final §一.2）。
+        return Result.err(error instanceof AppError ? error : new AppError('INFRA_UNEXPECTED_ERROR', {detail: `数据库导入失败（已回滚到导入前状态）：${errorDetail(error)}`}, {cause: error}));
       }
     } finally {
       maintenanceBusy.release();
@@ -175,7 +181,7 @@ export namespace DbBackupService {
       } finally {
         await stream.close();
       }
-      // 委托 FromPath：DbImportOutcome 必须原样透传（含 DatabaseReplacedError 的
+      // 委托 FromPath：DbImportOutcome 必须原样透传（含 DB_SYNC_REPLACE_INCOMPLETE 的
       // 类型），漏了这一层委托就拿不到「已换代」信号。
       return await importFromPath(tmpPath);
     } finally {

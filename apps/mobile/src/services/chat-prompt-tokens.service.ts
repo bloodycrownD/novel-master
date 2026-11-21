@@ -7,7 +7,7 @@
  * {@link TokenCounterMode.resolveForModel} → `CurrentPromptTokens.resolve`（API 优先，否则本地）。
  * {@link ChatPromptTokenLabel.loadResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInputAdapter} reports
- * `Result.err`（错误通道迁移四期；bail 哨兵仍走 throw，见同文件 isChipBailError）。
+ * `Result.err`（错误通道迁移四期）；bail 弃权沿 build 的 null 哨兵到达（error-matrix-final R3）。
  *
  * stream-metrics-native ④：两处「拿不到模型 / 构建失败」的早退路径原本走
  * `runtime.tokenCounters.heuristic.countText`（`ceil(字符数 / 3.35)`）。该折算
@@ -34,7 +34,6 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // 对拍 core 真实现而非 mock 行为）。
 import {TokenFormat} from '@novel-master/core/common';
 import {LogFactory} from '@novel-master/core/log';
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {SessionPromptInputService} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
 
@@ -64,13 +63,6 @@ type TokenLabelFrame = {
   savedModelId?: string;
 };
 
-/**
- * chip 中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError）。resolve
- * 段自错误通道迁移二期起不再抛哨兵——core 读口沿 Outcome.cancelled/replaced
- * 返回，调用点按 kind 收成空串哨兵，不走本判定。build 调用点必须用本判定
- * 收口——漏了弃权错误会逃逸成外层 rejection 并回落 fallback（重算一遍，
- * 恰是要避免的）。
- */
 /**
  * 会话首帧/两阶段的 token 占用标签读口（load 家族：单发 / resilient / fallback）。
  */
@@ -122,24 +114,20 @@ export const ChatPromptTokenLabel = {
     // Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
     // 恒 null（与不传同义，core 恒不弃权）。
     const resolveBail = (): Interrupt | null => (shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null);
-    let bundle;
-    try {
-      bundle = await SessionPromptInputService.build(runtime, scope, undefined, opt);
-    } catch (error) {
-      if (error instanceof ChatPromptBuildBailedError) {
-        // run 起步后中途弃权：label 空串是「保留旧标签」哨兵（hook 侧对空串
-        // 不写 meta），不走 fallback——fallback 会再算一遍，恰是要避免的。
-        if (__DEV__) {
-          console.log('[nm-chip] bailed (run in flight)');
-        }
-        return Result.ok({label: '', upgradeWorthy: false});
-      }
-      throw error;
-    }
+    const bundle = await SessionPromptInputService.build(runtime, scope, undefined, opt);
     if (!bundle.ok) {
       // build 链已知失败（错误通道迁移四期）：沿 Result 通道上抛，调用方
       // resilient 按 !ok 回落 fallback（与旧异常通道同终端）。
       return Result.err(bundle.error);
+    }
+    if (bundle.value == null) {
+      // run 起步后中途弃权（error-matrix-final R3：弃权沿 null 哨兵到达）：
+      // label 空串是「保留旧标签」哨兵（hook 侧对空串不写 meta），不走
+      // fallback——fallback 会再算一遍，恰是要避免的。
+      if (__DEV__) {
+        console.log('[nm-chip] bailed (run in flight)');
+      }
+      return Result.ok({label: '', upgradeWorthy: false});
     }
     const {definition, layout, ctx, rawMessages} = bundle.value;
     if (__DEV__) {
@@ -356,7 +344,8 @@ export const ChatPromptTokenLabel = {
     let savedModelId: string | undefined;
     try {
       const built = await SessionPromptInputService.build(runtime, scope);
-      if (!built.ok) {
+      if (!built.ok || built.value == null) {
+        // 失败与弃权（error-matrix-final R3）同收：兜底显示用 workspace 当前模型。
         savedModelId = workspaceModelId || undefined;
       } else {
         const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);

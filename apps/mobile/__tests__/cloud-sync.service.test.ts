@@ -1,4 +1,4 @@
-import {AppError, DatabaseReplacedError, Result} from '@novel-master/core';
+import {AppError, Result} from '@novel-master/core';
 import {RequestAbort} from '@novel-master/core/llm-protocol';
 import {ABORT_KEY, AbortError, AbortRegistryFactory} from '@novel-master/core/abort';
 import {CloudSyncService} from '@/services/cloud-sync.service';
@@ -293,8 +293,12 @@ describe('pullCloudSync', () => {
   });
 
   it('catch 分支在 pull 已换代时先重建再用新 runtime 记账', async () => {
+    // error-matrix-final R2：换代失败沿 DB_SYNC_REPLACE_INCOMPLETE key 识别（异常哨兵退役）。
     mockCoordinatorPull.mockRejectedValue(
-      new DatabaseReplacedError('数据库已导入，但本机服务商配置恢复失败', false),
+      new AppError('DB_SYNC_REPLACE_INCOMPLETE', {
+        reason: '服务商配置未能恢复',
+        providerTablesRestored: false,
+      }),
     );
     const rebootstrap = jest.fn(async () => freshRuntime);
 

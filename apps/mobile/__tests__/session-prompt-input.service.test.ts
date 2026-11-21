@@ -7,7 +7,7 @@
  * 注入了 extra-info 块，就能守住「UI 预览与发给模型的提示词在 extra-info 段上一致」。
  *
  * r3-chip-1 / r3-test-1 ④：build 段分段弃权检查点（shouldBail 命中即抛
- * ChatPromptBuildBailedError，后续段不得执行）。这两组用例都**不整体 mock**
+ * null 哨兵（error-matrix-final R3），后续段不得执行）。这两组用例都**不整体 mock**
  * buildSessionPromptInputAdapter——真跑本文件的分段逻辑，只 mock 最底层 IO
  * （messages.listBySession / sessionVkv / vfs），段与段的边界用各段内部依赖
  * 的调用与否钉住。
@@ -28,7 +28,6 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {TextBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
 import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {SessionPromptInputService} from '@/services/session-prompt-input.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -252,26 +251,29 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
     expect(runtime.sessionKkv.getMany as jest.Mock).toHaveBeenCalledTimes(1);
   });
 
-  it('第 1 段翻真（agent 解析后）：抛 ChatPromptBuildBailedError，消息段未执行', async () => {
+  it('第 1 段翻真（agent 解析后）：返回 null 哨兵，消息段未执行', async () => {
     const {promise, observed} = await buildWithBailAt(1);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
+    const r = await promise;
+    expect(r.ok && r.value === null).toBe(true);
     expect(observed.listBySession()).toBe(0);
     expect(observed.prefetch()).toBe(0);
   });
 
-  it('第 2 段翻真（消息拉取后）：抛错，workplace 段未执行', async () => {
+  it('第 2 段翻真（消息拉取后）：弃权，workplace 段未执行', async () => {
     const {promise, observed} = await buildWithBailAt(2);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
+    const r = await promise;
+    expect(r.ok && r.value === null).toBe(true);
     expect(observed.listBySession()).toBe(1);
     expect(observed.workplace()).toBe(0);
     expect(observed.skills()).toBe(0);
     expect(observed.prefetch()).toBe(0);
   });
 
-  it('第 3 段翻真（workplace 组装后）：抛错，prepare 段未执行', async () => {
+  it('第 3 段翻真（workplace 组装后）：弃权，prepare 段未执行', async () => {
     // 第 (4+N) 次 = 组装内检查点问完之后、build 的第三道段界。
     const {promise, observed} = await buildWithBailAt(4 + N);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
+    const r = await promise;
+    expect(r.ok && r.value === null).toBe(true);
     expect(observed.workplace()).toBe(1);
     expect(observed.sessionVfs()).toBe(1);
     // 前提：组装真跑进了文件循环（否则这道「组装后」的段界是空的）。
@@ -280,10 +282,11 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
     expect(observed.skills()).toBe(0);
   });
 
-  it('第 4 段翻真（prepare 后）：抛错，layout 组装段未执行', async () => {
+  it('第 4 段翻真（prepare 后）：弃权，layout 组装段未执行', async () => {
     // 第 (5+N) 次 = prepare 跑完、build 的第四道（最后一道）段界。
     const {promise, observed, bailCalls} = await buildWithBailAt(5 + N);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
+    const r = await promise;
+    expect(r.ok && r.value === null).toBe(true);
     expect(observed.skills()).toBe(1);
     expect(observed.prefetch()).toBe(1);
     // 只问了 5+N 次（= 4 道段界 + 组装内 1+N）：第 4 道段界之后没有 layout

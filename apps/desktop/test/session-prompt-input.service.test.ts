@@ -7,7 +7,7 @@
  *
  * r3-dt-align 第 3 层：build 的分段弃权（shouldBail）。真实 build 有五段（解析
  * agent / 取可见消息 / assemble 工作区 / prepare 消息 / 拼 layout），这里逐段把
- * 判据翻真，钉住「抛 ChatPromptBuildBailedError 且**后续段一次都不执行**」——
+ * 判据翻真，钉住「返回 null 哨兵且**后续段一次都不执行**」——
  * 只断言「抛错」是不够的：把 bail 挪到最后一段同样会抛错，却把整趟重活跑完了。
  */
 import assert from "node:assert/strict";
@@ -15,7 +15,6 @@ import { after, before, describe, it } from "node:test";
 import { TextBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
 import { DefaultAgentDefinition } from "@novel-master/core/stored-config-validity";
 import { RuleSnapshotCodec } from "@novel-master/core/workplace";
-import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { Projects } from "../src/main/ipc/handlers/projects.js";
 import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
 import { Agent } from "../src/main/ipc/handlers/agent.js";
@@ -322,16 +321,13 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        { shouldBail: bailAt(1) },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
-      "第①段弃权应抛 ChatPromptBuildBailedError",
+    const r1 = await SessionPromptInputService.buildAdapter(
+      runtime,
+      { projectId, sessionId },
+      undefined,
+      { shouldBail: bailAt(1) },
     );
+    assert.ok(r1.ok && r1.value === null, "第①段弃权应返回 null 哨兵（error-matrix-final R3）");
     assert.equal(counts.list, 0, "第①段弃权后不应再取可见消息");
   });
 
@@ -340,15 +336,13 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        { shouldBail: bailAt(2) },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
+    const r2 = await SessionPromptInputService.buildAdapter(
+      runtime,
+      { projectId, sessionId },
+      undefined,
+      { shouldBail: bailAt(2) },
     );
+    assert.ok(r2.ok && r2.value === null, "第②段弃权应返回 null 哨兵");
     assert.equal(counts.list, 1, "第②检查点前应已取过一次可见消息");
     assert.equal(
       counts.workplace,
@@ -362,18 +356,16 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        // 八期给 listBySession 加了 checkpoint（分片级），shouldBail 的调用次数
-        // 因此前移，"第 N 次调用" 不再是稳定坐标。改用**足迹判据**：workplace 句柄
-        // 已取过（装配起步）且 skills 还没取（prepare 未进）时才翻真。
-        { shouldBail: () => counts.workplace > 0 && counts.skills === 0 },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
+    const r3 = await SessionPromptInputService.buildAdapter(
+      runtime,
+      { projectId, sessionId },
+      undefined,
+      // 八期给 listBySession 加了 checkpoint（分片级），shouldBail 的调用次数
+      // 因此前移，"第 N 次调用" 不再是稳定坐标。改用**足迹判据**：workplace 句柄
+      // 已取过（装配起步）且 skills 还没取（prepare 未进）时才翻真。
+      { shouldBail: () => counts.workplace > 0 && counts.skills === 0 },
     );
+    assert.ok(r3.ok && r3.value === null, "第③段弃权应返回 null 哨兵");
     assert.ok(counts.workplace > 0, "第③检查点前应已装配过工作区显示");
     assert.equal(
       counts.skills,
@@ -387,17 +379,15 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        // 同上：四段足迹全部出现过（list/workplace/skills 各 ≥1）才翻真，
-        // 不依赖 shouldBail 的调用序号。
-        { shouldBail: () => counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1 },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
+    const r4 = await SessionPromptInputService.buildAdapter(
+      runtime,
+      { projectId, sessionId },
+      undefined,
+      // 同上：四段足迹全部出现过（list/workplace/skills 各 ≥1）才翻真，
+      // 不依赖 shouldBail 的调用序号。
+      { shouldBail: () => counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1 },
     );
+    assert.ok(r4.ok && r4.value === null, "第④段弃权应返回 null 哨兵");
     // 与③的区分点：prepare 已经跑过（skills 足迹 ≥1）——④是最后一段边界，
     // 此后 layout 拼装是纯计算，不再有 runtime 足迹可数，故以「前三段 IO
     // 全部发生 + 仍抛弃权错误」钉住检查点确实落在 prepare 之后。
@@ -407,7 +397,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     );
   });
 
-  it("workplace 段内中止：assemble 文件粒度抛错 → build 转抛 ChatPromptBuildBailedError", async () => {
+  it("workplace 段内中止：assemble 文件粒度抛错 → build 返回 null 哨兵", async () => {
     const rtR = await DesktopRuntimeSingleton.get();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
@@ -464,13 +454,10 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
         dynamic: [],
         workplace: "【工作区】",
       };
-      await assert.rejects(
-        SessionPromptInputService.buildAdapter(rt, { projectId, sessionId }, definition, {
-          shouldBail: () => readCalls >= 1,
-        }),
-        (error: unknown) => error instanceof ChatPromptBuildBailedError,
-        "assemble 的文件粒度中止必须转抛成 build 的统一哨兵类",
-      );
+      const rw = await SessionPromptInputService.buildAdapter(rt, { projectId, sessionId }, definition, {
+        shouldBail: () => readCalls >= 1,
+      });
+      assert.ok(rw.ok && rw.value === null, "assemble 的文件粒度中止必须收成 null 哨兵（error-matrix-final R3）");
       assert.equal(readCalls, 1, "第二个文件的 read 不该发生（文件粒度检查点）");
     } finally {
       rt.sessionVfs = realSessionVfs;

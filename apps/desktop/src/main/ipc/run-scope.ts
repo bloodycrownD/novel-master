@@ -103,7 +103,7 @@ export const RunScope = {
         },
       });
     } catch (err) {
-      // 取消 / 业务失败 / 未知异常（含补偿链里重抛的 DatabaseReplacedError）统一转码。
+      // 取消 / 业务失败 / 未知异常统一转码（error-matrix-final：控制流哨兵已退役）。
       return IpcResults.err(FormatIpcError.format(err));
     } finally {
       if (key != null) {

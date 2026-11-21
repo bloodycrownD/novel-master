@@ -5,6 +5,7 @@
  * assistant 轮」聚合后的轮数组，而不是扁平段数组——renderer 直接按轮渲染，
  * assistant 轮正文已在 `body` 一份字符串里。
  */
+import { AssertionError } from "@novel-master/core/common";
 import {
   PreviewThinkingContext,
   PromptBuilder,
@@ -41,7 +42,15 @@ export namespace PromptPreviewService {
     const built = await SessionPromptInputService.buildAdapter(runtime, scope, definition);
     // build 的已知失败沿 Result 原样上行（错误通道迁移四期）。
     if (!built.ok) return Result.err(built.error);
-    const { layout, ctx } = built.value;
+    // 预览不传 shouldBail，弃权（null）不可达——编程错误断言兜住类型联合
+    // （error-matrix-final R3 后 buildAdapter 返回值含 null）。
+    const bundle = built.value;
+    if (bundle == null) {
+      // 预览不传 shouldBail，弃权不可达——编程错误（error-matrix-final R3 后
+      // buildAdapter 返回值含 null），按不变量破断言出。
+      throw new AssertionError("prompt preview 未传 shouldBail，弃权不应出现");
+    }
+    const { layout, ctx } = bundle;
     // 预算技能索引（与 agent-runner 同源：effectiveSkills 生效清单）。
     // D4 联动：resolve 后 registry 不含 skill（policy 禁用）时保持 undefined，
     // 预览不出现技能索引段——工具与索引同进退。

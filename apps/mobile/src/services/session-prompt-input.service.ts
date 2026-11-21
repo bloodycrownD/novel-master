@@ -2,7 +2,6 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import {type AgentDefinition, AgentProjectResolver} from '@novel-master/core/agent';
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 
 import {PromptAssembler, type ChatMessageData} from '@novel-master/core/chat';
 import {PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
@@ -16,7 +15,7 @@ export interface SessionPromptScope {
 }
 
 interface BuildSessionPromptInputOptions {
-  /** 分段间防御性退出判定；真值即抛 {@link ChatPromptBuildBailedError}。 */
+  /** 分段间防御性退出判定；真值即返回 null 哨兵（弃权，error-matrix-final R3）。 */
   readonly shouldBail?: () => boolean;
 }
 
@@ -35,11 +34,11 @@ export interface SessionPromptInputBundle {
 
 /** 可见会话消息 + worktree/VFS 上下文 → 当前 Agent 的 LLM 输入。
  *
- * 失败通道（错误通道迁移四期）：组装/prepare 的已知失败沿 `Result.err` 接力
- * 给调用方；bail 弃权哨兵（{@link ChatPromptBuildBailedError}，控制流类）
- * 仍走 throw——调用方 chip 读口紧邻 catch 收成空串哨兵，判定不变。
+ * 失败通道（错误通道迁移四期）：组装/prepare 的已知失败沿 `Result.err` 接力给调用方；
+ * 分段弃权（run 在途）返回 `Result.ok(null)`——弃权是数据不是错误，调用方 chip 读口
+ * 判 null 收成空串哨兵，判定不变（error-matrix-final R3：异常哨兵退役）。
  */
-type SessionPromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
+type SessionPromptInputResult = Promise<Result<SessionPromptInputBundle | null, AppError>>;
 
 export namespace SessionPromptInputService {
   export async function build(runtime: MobileRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: BuildSessionPromptInputOptions): SessionPromptInputResult {
@@ -47,11 +46,7 @@ export namespace SessionPromptInputService {
     // 2026-09-30 回滚竞态里一次 build 墙钟 18.9s，靠分段读数定位被谁拖住。
     const shouldBail = options?.shouldBail;
     const diagT0 = __DEV__ ? Date.now() : 0;
-    const bail = (): void => {
-      if (shouldBail?.() === true) {
-        throw new ChatPromptBuildBailedError();
-      }
-    };
+    const bailed = (): boolean => shouldBail?.() === true;
 
     // 未预传入 definition 时才走 resolver（与 desktop 同款的短路逻辑），
     // 透传 scope.sessionId 让 core 解析链读到会话级绑定。
@@ -63,7 +58,7 @@ export namespace SessionPromptInputService {
       if (!r.ok) return Result.err(r.error);
       resolved = r.value.definition;
     }
-    bail();
+    if (bailed()) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] agent +${Date.now() - diagT0}ms`);
     }
@@ -73,13 +68,13 @@ export namespace SessionPromptInputService {
     // 曾实测 700+ 条会话秒级卡顿。rawMessages 透传给 resolve 的回填参数已
     // 废弃（仅签名兼容），可见口径对其无影响。
     // 分片判停复用 build 的弃权判据（shouldBail）：run 起步后读口在第一个分片
-    // 边界就死；中断转抛 build 的统一哨兵（与下方 assemble 同款收口）。
+    // 边界就死；中断返回 null 哨兵（与下方 assemble 同款收口）。
     const readOptions = shouldBail == null ? undefined : {checkpoint: (): Interrupt | null => (shouldBail() === true ? {kind: 'replaced'} : null)};
     const visibleRead = await runtime.messages.listBySession(scope.sessionId, {includeHidden: false}, readOptions);
     if (visibleRead.kind === 'failed') return Result.err(visibleRead.error);
-    if (visibleRead.kind !== 'completed') throw new ChatPromptBuildBailedError();
+    if (visibleRead.kind !== 'completed') return Result.ok(null);
     const visibleMessages = visibleRead.value;
-    bail();
+    if (bailed()) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] messages(n=${visibleMessages.length}) +${Date.now() - diagT0}ms`);
     }
@@ -93,7 +88,7 @@ export namespace SessionPromptInputService {
     // assemble → prepare(S0)，与 agent-runner 同源。workplace 段内部按文件粒度
     // 挂分段弃权判据（2026-09-30「16s 原子组装段」治本的同款下沉）：run 起步后
     // 本刷新在第一个文件边界就死；错误通道迁移二期起中止沿 Outcome.cancelled/
-    // replaced 返回，此处转抛 build 的统一哨兵，读口 catch 的判定不变。
+    // replaced 返回，此处映射 null 哨兵，读口判 null 的口径不变。
     // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉重复序列化/计数。
     const workplaceContext = {sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts};
     const stopOptions = {checkpoint: (): Interrupt | null => (shouldBail?.() === true ? {kind: 'replaced'} : null)};
@@ -103,10 +98,10 @@ export namespace SessionPromptInputService {
       return Result.err(assembled.error);
     }
     if (assembled.kind !== 'completed') {
-      throw new ChatPromptBuildBailedError();
+      return Result.ok(null);
     }
     const {workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint} = assembled.value;
-    bail();
+    if (bailed()) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] workplace +${Date.now() - diagT0}ms`);
     }
@@ -127,7 +122,7 @@ export namespace SessionPromptInputService {
     const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
-    bail();
+    if (bailed()) return Result.ok(null);
     if (__DEV__) {
       console.log(`[nm-chip-build] prepare +${Date.now() - diagT0}ms`);
     }

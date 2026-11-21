@@ -3,7 +3,6 @@
  */
 import { AgentProjectResolver, type AgentDefinition } from "@novel-master/core/agent";
 import { type AppError } from "@novel-master/core/errors";
-import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { Result, type Interrupt } from "@novel-master/core/errors";
 import { PromptAssembler } from "@novel-master/core/chat";
 import { PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
@@ -17,7 +16,7 @@ export interface SessionPromptScope {
 }
 
 interface PromptBuildOptions {
-  /** 分段间防御性退出判定；真值即抛 {@link ChatPromptBuildBailedError}。 */
+  /** 分段间防御性退出判定；真值即返回 null 哨兵（弃权，error-matrix-final R3）。 */
   readonly shouldBail?: () => boolean;
 }
 
@@ -34,24 +33,22 @@ export interface SessionPromptInputBundle {
   readonly rawMessages: readonly ChatMessageData[];
 }
 
-type PromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
+/** null = build 分段弃权（run 在途，调用方保留旧标签）；弃权走返回值不走异常（error-matrix-final R3）。 */
+type PromptInputResult = Promise<Result<SessionPromptInputBundle | null, AppError>>;
 
 export namespace SessionPromptInputService {
   /**
    * Desktop prompt-input adapter：把 desktop runtime（messages / workplace / sessionKkv /
-   * skills）适配到 core 的 assemble + PromptAssembler + PromptBuilder；失败沿用 core
-   * 的 `Result` 通道（`ChatPromptBuildBailedError` 是控制流哨兵，仍走 throw）。
+   * skills）适配到 core 的 assemble + PromptAssembler + PromptBuilder。已知失败沿
+   * `Result.err`；分段弃权（run 在途）返回 `Result.ok(null)`——弃权是数据不是错误，
+   * 调用方判 null 保留旧标签（error-matrix-final R3：异常哨兵退役）。
    */
   export async function buildAdapter(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: PromptBuildOptions): PromptInputResult {
     // 分段弃权：每段之间看一眼「run 是不是已经起步了」。mobile 真机实锤过
     // 这条链会把 POST 派发从 +1.2s 拖到 +19.6s（build 与发送链抢同一条 SQLite
     // 连接），desktop main 是同进程同连接，问题一模一样。
     const shouldBail = options?.shouldBail;
-    const bail = (): void => {
-      if (shouldBail?.() === true) {
-        throw new ChatPromptBuildBailedError();
-      }
-    };
+    const bailed = (): boolean => shouldBail?.() === true;
 
     // 错误通道迁移四期：AgentProjectResolver.resolve 沿 Result 回传，Err 直接并进本
     // 函数的 Result 通道（token 读口已有 resilient 降级、预览侧有 ipcErr 收口）。
@@ -63,19 +60,19 @@ export namespace SessionPromptInputService {
       if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
       resolved = resolvedAgent.value.definition;
     }
-    bail();
+    if (bailed()) return Result.ok(null);
 
     // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
     // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
     // 在大会话上是秒级卡顿（与 mobile 同款修法）。
     // 分片判停复用 build 的弃权判据（shouldBail）：run 起步后读口在第一个分片
-    // 边界就死，不必等整份可见历史 parse 完；中断转抛 build 的统一哨兵。
+    // 边界就死，不必等整份可见历史 parse 完；中断返回 null 哨兵。
     const readOptions = shouldBail == null ? undefined : { checkpoint: (): Interrupt | null => (shouldBail() === true ? { kind: "replaced" } : null) };
     const visibleRead = await runtime.messages.listBySession(scope.sessionId, { includeHidden: false }, readOptions);
     if (visibleRead.kind === "failed") return Result.err(visibleRead.error);
-    if (visibleRead.kind !== "completed") throw new ChatPromptBuildBailedError();
+    if (visibleRead.kind !== "completed") return Result.ok(null);
     const visibleMessages = visibleRead.value;
-    bail();
+    if (bailed()) return Result.ok(null);
     const wtScope = {
       kind: "session" as const,
       projectId: scope.projectId,
@@ -85,9 +82,9 @@ export namespace SessionPromptInputService {
     const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
     // assemble → prepare(S0)，与 agent-runner 同源。workplace 段内部按文件粒度
     // 挂分段弃权判据（2026-09-30 mobile「16s 原子组装段」治本的同款下沉）：
-    // run 起步后本刷新在第一个文件边界就死；错误通道迁移二期起中止沿
-    // Outcome.cancelled/replaced 返回，此处转抛 build 的统一哨兵，读口 catch
-    // 的判定不变。fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉
+    // run 起步后本刷新在第一个文件边界就死；中止沿 Outcome.cancelled/replaced
+    // 返回，此处映射 null 哨兵，读口判 null 的口径不变（error-matrix-final R3）。
+    // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉
     // 重复序列化/计数。
     const workplaceArgs = { sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts };
     const assembleOptions = { checkpoint: (): Interrupt | null => (shouldBail?.() === true ? { kind: "replaced" } : null) };
@@ -95,15 +92,14 @@ export namespace SessionPromptInputService {
     if (assembled.kind === "failed") {
       // 组装内的已知失败（如路径解析）沿 Result 返回（错误通道迁移四期），
       // 不吞成弃权；收口在 token 读口的 resilient（err → fallback 降级）与
-      // preview 的 handlePromptRealPreview（ipcErr + formatIpcError）。哨兵类
-      // ChatPromptBuildBailedError 见 spec-3 §3.6（控制流保留，仍走 throw）。
+      // preview 的 handlePromptRealPreview（ipcErr + formatIpcError）。
       return Result.err(assembled.error);
     }
     if (assembled.kind !== "completed") {
-      throw new ChatPromptBuildBailedError();
+      return Result.ok(null);
     }
     const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled.value;
-    bail();
+    if (bailed()) return Result.ok(null);
     const prepareRuntime = {
       sessionId: scope.sessionId,
       sessionKkv: runtime.sessionKkv,
@@ -121,7 +117,7 @@ export namespace SessionPromptInputService {
     const prepared = await PromptAssembler.prepare(visibleMessages, prepareRuntime);
     if (!prepared.ok) return Result.err(prepared.error);
     const messages = prepared.value;
-    bail();
+    if (bailed()) return Result.ok(null);
     const ctx: PromptRenderContext = {
       workplaceDisplay,
       messages,

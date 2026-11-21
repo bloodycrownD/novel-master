@@ -3,7 +3,7 @@
  *
  * @module services/cloud-sync.service
  */
-import {CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser, DatabaseReplacedError} from '@novel-master/core';
+import {CloudSyncCoordinator, CloudSyncPaths, CloudSyncStatusParser} from '@novel-master/core';
 import {Concurrency, Path} from '@novel-master/core/common';
 import {RequestAbort} from '@novel-master/core/llm-protocol';
 import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
@@ -184,7 +184,7 @@ export namespace CloudSyncService {
           // 后续所有记账/读写绑在已关连接上。
           const imported = await DbBackupService.importFromBytes(bytes);
           // 已知失败沿 Result 回传（DbSyncPort 已转 Result 通道）：coordinator
-          // 据此短路 pull；DatabaseReplacedError 这类抛错路径自然向上传播。
+          // 据此短路 pull；DB_SYNC_REPLACE_INCOMPLETE（Err 通道）自然向上传播。
           if (!imported.ok) return imported;
           progress?.step('db_import_done', {ms: Date.now() - importStart});
           return Result.ok(imported.value);
@@ -399,10 +399,10 @@ export namespace CloudSyncService {
         progress?.step('pull_cancelled', {reason: abortScope.reason ?? undefined});
         throw error;
       }
-      if (error instanceof DatabaseReplacedError) {
-        // 库已换代但后续步骤抛错：runtime 换代优先于报错。mobile 的 runtime 是
-        // React state、没有 desktop `getDesktopRuntime()` 的懒建自愈 ⇒ 不补这条，
-        // 一次失败 pull 之后整个 App 带着已关 runtime 跑到用户手动重启。
+      if (error instanceof AppError && error.key === 'DB_SYNC_REPLACE_INCOMPLETE') {
+        // 库已换代但收尾失败（error-matrix-final R2，key 判定）：runtime 换代优先于报错。
+        // mobile 的 runtime 是 React state、没有 desktop `getDesktopRuntime()` 的懒建自愈
+        // ⇒ 不补这条，一次失败 pull 之后整个 App 带着已关 runtime 跑到用户手动重启。
         try {
           accountingRuntime = await onRebootstrap();
         } catch {

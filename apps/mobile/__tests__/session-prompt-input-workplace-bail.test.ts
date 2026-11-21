@@ -2,7 +2,7 @@
  * mobile build 的 workplace 段内中止转换（2026-09-30「停止要等 14 秒」治本）：
  * core 的 WorkplaceDisplayAssembler.assemble 在文件粒度检查点中止（错误通道迁移二期起
  * 沿 Outcome.cancelled/replaced 返回，不再抛 WorkplaceAssemblyAbortedError），
- * build 把它转抛成统一的 ChatPromptBuildBailedError（读口 catch 的判定不变），
+ * build 把它收成统一的 null 哨兵（读口判 null 的判定不变，error-matrix-final R3），
  * 且 shouldBail 判据要真正透传进 assemble（run 起步后组装在第一个文件边界
  * 就死）；fingerprint 必须流进 ctx（估算记忆的键原料）。
  *
@@ -27,7 +27,6 @@ jest.mock('@novel-master/core/workplace', () => {
   };
 });
 
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {SessionPromptInputService} from '@/services/session-prompt-input.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -78,18 +77,17 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
     mockAssemble.mockReset();
   });
 
-  it('assemble 弃权（Outcome cancelled/replaced）→ build 转抛 ChatPromptBuildBailedError', async () => {
-    // 错误通道迁移二期：core assemble 不再抛 WorkplaceAssemblyAbortedError，
-    // 中止沿 Outcome.cancelled/replaced 返回，由 build 转抛统一哨兵。
+  it('assemble 弃权（Outcome cancelled/replaced）→ build 返回 null 哨兵', async () => {
+    // 错误通道迁移二期起 core assemble 沿 Outcome.cancelled/replaced 返回中止；
+    // error-matrix-final R3：build 收成 null 哨兵（弃权走返回值不走异常）。
     mockAssemble.mockResolvedValue({kind: 'replaced'});
-    await expect(
-      SessionPromptInputService.build(
-        makeStubRuntime(),
-        {projectId: 'p', sessionId: 's'},
-        workplaceDefinition(),
-        {shouldBail: () => false},
-      ),
-    ).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
+    const r = await SessionPromptInputService.build(
+      makeStubRuntime(),
+      {projectId: 'p', sessionId: 's'},
+      workplaceDefinition(),
+      {shouldBail: () => false},
+    );
+    expect(r.ok && r.value === null).toBe(true);
   });
 
   it('shouldBail 判据透传进 assemble 的 checkpoint（run 起步即死在文件边界）', async () => {
