@@ -1069,9 +1069,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         message={
           deleteConfirm?.kind === "batch"
             ? coreT({key: "ui.agent.delete_agents_confirm_msg", params: {count: deleteConfirm.count}})
-            : `删除 Agent「${
-                deleteConfirm?.kind === "single" ? deleteConfirm.name : ""
-              }」？`
+            : coreT({key: "ui.agent.delete_agent_confirm_msg_named", params: {name: deleteConfirm?.kind === "single" ? deleteConfirm.name : ""}})
         }
         danger
         onConfirm={async () => {

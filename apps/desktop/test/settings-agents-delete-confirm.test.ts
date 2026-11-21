@@ -17,9 +17,10 @@ const settingsViewsPath = path.join(
 describe("SettingsViews agent delete confirm (T-AC3-4)", () => {
   it("单条删除确认仍使用显示名文案模式", () => {
     const source = readFileSync(settingsViewsPath, "utf8");
+    // i18n 后锁 named 模板的 coreT 形态+键名+占位实参（显示名插值意图不变）。
     assert.match(
       source,
-      /删除 Agent「\$\{\s*deleteConfirm\?\.kind === "single" \? deleteConfirm\.name : ""\s*\}」？/,
+      /coreT\(\{key: "ui\.agent\.delete_agent_confirm_msg_named", params: \{name: deleteConfirm\?\.kind === "single" \? deleteConfirm\.name : ""\}\}\)/,
     );
     assert.match(
       source,
