@@ -112,7 +112,6 @@ export const ErrorCodes = {
   TOOL_SEARCH_FAILED: {code: 104003, desc: "search engine request failed"},
   TOOL_SEARCH_TEMPLATE_INVALID: {code: 104004, desc: "invalid search engine template", messageKey: "error.tool.search_template_invalid"},
   TOOL_NOT_FOUND: {code: 104005, desc: "tool not registered", messageKey: "error.tool.not_found"},
-  TOOL_CONFLICT: {code: 104006, desc: "tool already registered", messageKey: "error.tool.conflict"},
   TOOL_FAILED: {code: 104007, desc: "tool execution failed", messageKey: "error.tool.failed"},
   TOOL_FORBIDDEN: {code: 104008, desc: "tool path outside allowed scope", messageKey: "error.tool.forbidden"},
   TOOL_CANCELLED: {code: 104009, desc: "tool execution cancelled", messageKey: "error.tool.cancelled"},

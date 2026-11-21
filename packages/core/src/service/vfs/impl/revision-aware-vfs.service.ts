@@ -24,21 +24,12 @@ import { VfsRenamePrimitive } from "@/domain/vfs/logic/vfs-rename-primitive.js";
 // 本文件的删除路径（appendDeletedRevision → WriteWithRevision.nextVersionFor）必须跟着引用共享实现。
 import { WriteWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
+import { ErrorGuards } from "@/errors/guards.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 
-/**
- * 事务回调内的域失败走「抛错回滚」通道，过驱动事务边界后 AppError 被包成
- * TdbcError（原 AppError 挂在 cause 上）。这里解出域错误本体，供调用方把
- * **可容忍**的域失败（VFS_NOT_FOUND）收进 Err；解不出原样上抛。
- */
-function unwrapTxDomainError(cause: unknown): AppError | undefined {
-  if (AppErrorOps.is(cause)) return cause;
-  const inner = (cause as { cause?: unknown } | null)?.cause;
-  return AppErrorOps.is(inner) ? inner : undefined;
-}
 
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsContentSize } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
@@ -146,7 +137,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
       });
     } catch (cause) {
-      const domain = unwrapTxDomainError(cause);
+      const domain = ErrorGuards.unwrapTxDomainError(cause);
       if (domain != null) return Result.err(domain);
       throw cause;
     }
@@ -198,7 +189,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         }
       });
     } catch (cause) {
-      const domain = unwrapTxDomainError(cause);
+      const domain = ErrorGuards.unwrapTxDomainError(cause);
       if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
       throw cause;
     }
@@ -242,7 +233,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         TdbcTransaction.unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: options?.recursive === true }));
       });
     } catch (cause) {
-      const domain = unwrapTxDomainError(cause);
+      const domain = ErrorGuards.unwrapTxDomainError(cause);
       if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
       throw cause;
     }
@@ -267,7 +258,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         await VfsRenamePrimitive.renameEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
       });
     } catch (cause) {
-      const domain = unwrapTxDomainError(cause);
+      const domain = ErrorGuards.unwrapTxDomainError(cause);
       if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
       throw cause;
     }
@@ -291,7 +282,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         await VfsRenamePrimitive.renameDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
       });
     } catch (cause) {
-      const domain = unwrapTxDomainError(cause);
+      const domain = ErrorGuards.unwrapTxDomainError(cause);
       if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
       throw cause;
     }

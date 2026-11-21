@@ -94,7 +94,6 @@ export interface ErrorParamsMap {
   VFS_SINGLE_FILE_EXPORT_TARGET_INVALID: { readonly logicalPath: string };
   TOOL_SEARCH_TEMPLATE_INVALID: { readonly reason?: string };
   TOOL_NOT_FOUND: { readonly toolName: string };
-  TOOL_CONFLICT: { readonly toolName: string };
   TOOL_INVALID_ARGUMENT: { readonly toolName: string; readonly issues?: readonly ZodIssue[] };
   TOOL_FAILED: { readonly toolName: string; readonly cause?: unknown };
   TOOL_FORBIDDEN: { readonly toolName: string; readonly path: string };

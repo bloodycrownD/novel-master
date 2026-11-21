@@ -19,10 +19,10 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
 import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { ErrorGuards } from "@/errors/guards.js";
 import { Result } from "@/errors/either.js";
 import type { Outcome } from "@/errors/outcome.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { TdbcError } from "@/infra/tdbc/index.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { SkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
 import { SKILL_ENTRY_FILE, SKILLS_ROOT, SkillPaths } from "@/domain/skills/logic/skill-paths.js";
@@ -488,11 +488,8 @@ export class SkillsService implements SkillService {
       });
     } catch (error) {
       // 两 driver 的事务实现都会把非 TdbcError（含 AppError）包装成
-      // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码
-      if (error instanceof TdbcError && AppErrorOps.is(error.cause)) {
-        throw error.cause;
-      }
-      throw error;
+      // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码（解不出原样上抛）
+      throw ErrorGuards.unwrapTxDomainError(error) ?? error;
     }
     return Result.ok(undefined);
   }

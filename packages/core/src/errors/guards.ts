@@ -47,6 +47,24 @@ export const ErrorGuards = {
     }
     return false;
   },
+
+  /**
+   * 驱动事务边界的域错误解包：事务回调内抛出的 AppError 过 tdbc 驱动事务边界会被包成
+   * TdbcError（原错误挂 cause，实测可能叠层——T-SC11b 教训：裸 `AppErrorOps.is` 判不中）
+   * ——沿 cause 链取第一个 AppError 本体，供边界 catch 把可容忍的域失败收进 `Result.err`
+   * 或转码 rethrow；链上无 AppError 返回 undefined（调用方原样上抛未知异常）。
+   * {@link ErrorGuards.inDomain} 的取值版同族（同一 cause 链回溯 + visited 防环）。
+   */
+  unwrapTxDomainError(e: unknown): AppError | undefined {
+    const visited = new Set<unknown>();
+    let cur: unknown = e;
+    while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
+      visited.add(cur);
+      if (AppErrorOps.is(cur)) return cur;
+      cur = (cur as { cause?: unknown }).cause;
+    }
+    return undefined;
+  },
 } as const;
 
 /**

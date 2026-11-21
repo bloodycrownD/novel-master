@@ -31,7 +31,7 @@ export type ParallelToolOutcome =
 const DEFAULT_PARALLEL_CONCURRENCY = 8;
 
 /** runner 直通的业务错误 key（原 ToolError 5 码 + 取消控制流码）；TOOL_SEARCH_* 等域内细分码仍包装为 TOOL_FAILED。 */
-const TOOL_PASSTHROUGH_KEYS = new Set(["TOOL_NOT_FOUND", "TOOL_CONFLICT", "TOOL_INVALID_ARGUMENT", "TOOL_FAILED", "TOOL_FORBIDDEN", "TOOL_CANCELLED"]);
+const TOOL_PASSTHROUGH_KEYS = new Set(["TOOL_NOT_FOUND", "TOOL_INVALID_ARGUMENT", "TOOL_FAILED", "TOOL_FORBIDDEN", "TOOL_CANCELLED"]);
 
 /**
  * 工具失败归一化：TOOL_* 族直通，其余包成 TOOL_FAILED（cause 带原错误）。

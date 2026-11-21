@@ -56,7 +56,6 @@ error:
     already_exists: "A skill with the same name already exists: {skill_name}"
   tool:
     not_found: "Tool not registered: {tool_name}"
-    conflict: "Tool already registered: {tool_name}"
     failed: "Tool failed: {tool_name}"
     forbidden: "Tool path outside allowed scope: {tool_name} -> {path}"
     cancelled: "Tool execution cancelled: {tool_name}"

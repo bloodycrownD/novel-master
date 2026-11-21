@@ -199,7 +199,6 @@ error:
     search_test_failed: 引擎测试失败：{reason}
     search_curl_parse_failed: curl 命令解析失败：{reason}
     not_found: 工具未注册：{tool_name}
-    conflict: 工具已注册：{tool_name}
     failed: 工具执行失败：{tool_name}
     forbidden: 工具路径不在允许范围：{tool_name} -> {path}
     cancelled: 工具执行已取消：{tool_name}

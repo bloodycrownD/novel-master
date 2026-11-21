@@ -279,7 +279,6 @@ const ERROR_MESSAGE_KEYS = [
   "error.tool.search_test_failed",
   "error.tool.search_curl_parse_failed",
   "error.tool.not_found",
-  "error.tool.conflict",
   "error.tool.failed",
   "error.tool.forbidden",
   "error.tool.cancelled",

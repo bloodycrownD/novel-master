@@ -5,6 +5,7 @@
  */
 
 import { Random } from "@/common/random.js";
+import { ErrorGuards } from "@/errors/guards.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { SessionAgentConfig, SessionAgentConfigPatch } from "@/domain/chat/model/session-agent-config.js";
@@ -20,7 +21,7 @@ import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { TemplatePullServiceFactory } from "@/service/template/create-template-pull-service.js";
-import { AppError, AppErrorOps } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SerializationDecode } from "@/infra/serialization/decode.js";
 import { SessionFsServiceFactory, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
@@ -165,15 +166,15 @@ export class DefaultSessionService implements SessionService {
     if (!session.ok) return Result.err(session.error);
     // 事务回调内的域失败走「抛错回滚」（deleteSessionTree 根行删除落空抛 CHAT_NOT_FOUND，
     // 改 return 会在「子树已删、根删失败」时提交半删事务）；到本方法边界把**域失败**
-    // 收进 Err——签名承诺 Result，调用方按 `!r.ok` 消费（RB4b 边界转码，unwrapTxDomainError
-    // 与 revision-aware-vfs 同款：过驱动事务边界后 AppError 被包进 TdbcError.cause）。
+    // 收进 Err——签名承诺 Result，调用方按 `!r.ok` 消费（RB4b 边界转码，
+    // ErrorGuards.unwrapTxDomainError：过驱动事务边界后 AppError 被包进 TdbcError.cause）。
     try {
       await this.deps.conn.transaction(async (tx) => {
         await this.deleteSessionTree(tx, session.value);
       });
     } catch (cause) {
-      const domain = AppErrorOps.is(cause) ? cause : (cause as { cause?: unknown } | null)?.cause;
-      if (domain != null && AppErrorOps.is(domain)) return Result.err(domain);
+      const domain = ErrorGuards.unwrapTxDomainError(cause);
+      if (domain != null) return Result.err(domain);
       throw cause;
     }
     await DeferredBlobGc.run(this.deps.conn);

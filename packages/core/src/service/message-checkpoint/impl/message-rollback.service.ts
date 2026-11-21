@@ -24,10 +24,9 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isSessionFsError, isVfsError } from "@/errors/guards.js";
+import { ErrorGuards, isSessionFsError, isVfsError } from "@/errors/guards.js";
 import { ErrorMessage } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { TdbcError } from "@/infra/tdbc/index.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
@@ -259,21 +258,15 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         break;
       } catch (error) {
         // 仅乐观锁冲突才重试；其他错误（护栏、backfill required、vfs restore failed）直接向上。
-        // 判定走 cause 链：驱动会把事务体内抛出的非 TdbcError 包一层，裸 AppErrorOps.is
-        // 判不中 ⇒ 重试从未生效（T-SC11b / T-RB-FP-R3 / T-RB-FP-R4 暴露）。深度上限 8 防环。
-        let conflict = false;
-        for (let cur: unknown = error, depth = 0; cur != null && typeof cur === "object" && depth < 8; depth += 1, cur = (cur as { cause?: unknown }).cause) {
-          if (AppErrorOps.is(cur, "SESSION_FS_ROLLBACK_CONFLICT")) {
-            conflict = true;
-            break;
-          }
-        }
+        // 判定走 cause 链解包：驱动会把事务体内抛出的非 TdbcError 包一层，裸 AppErrorOps.is
+        // 判不中 ⇒ 重试从未生效（T-SC11b / T-RB-FP-R3 / T-RB-FP-R4 暴露）——统一走
+        // ErrorGuards.unwrapTxDomainError（visited 防环，取代手写深度上限循环）。
+        const txDomain = ErrorGuards.unwrapTxDomainError(error);
+        const conflict = txDomain != null && txDomain.key === "SESSION_FS_ROLLBACK_CONFLICT";
         if (!conflict || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
-          // 事务抛出物解包后回返回值通道：驱动把非 TdbcError（含 AppError）包成
-          // TdbcError（cause 指向原错误），先解包还原业务错误码；余下未知抛出物
+          // 事务抛出物解包后回返回值通道：解出 AppError 还原业务错误码；余下未知抛出物
           // 收进 INFRA_UNEXPECTED_ERROR（事务已整体回滚，无半写状态）。
-          if (error instanceof TdbcError && AppErrorOps.is(error.cause)) return Result.err(error.cause);
-          if (AppErrorOps.is(error)) return Result.err(error);
+          if (txDomain != null) return Result.err(txDomain);
           return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
         // 冲突重试前不再做其他事——重新 resolveRollbackPlan 会拉到最新的消息列表。
