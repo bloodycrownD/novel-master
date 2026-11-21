@@ -3,22 +3,12 @@ import { Button } from "./Button";
 
 export type UpdateCheckResultKind = "up-to-date" | "error";
 
-const UPDATE_CHECK_RESULT_TITLE = () => coreT({key: "ui.update.check_title"});
-const UPDATE_CHECK_UP_TO_DATE_MESSAGE = () => coreT({key: "ui.update.up_to_date"});
-const UPDATE_CHECK_FAILED_MESSAGE = () => coreT({key: "ui.update.check_failed"});
-
 type UpdateCheckResultModalProps = {
   open: boolean;
   kind: UpdateCheckResultKind;
   onClose: () => void;
   onSnoozeToday: () => void | Promise<void>;
 };
-
-function messageForKind(kind: UpdateCheckResultKind): string {
-  return kind === "up-to-date"
-    ? UPDATE_CHECK_UP_TO_DATE_MESSAGE()
-    : UPDATE_CHECK_FAILED_MESSAGE();
-}
 
 export function UpdateCheckResultModal({
   open,
@@ -40,9 +30,13 @@ export function UpdateCheckResultModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="update-check-result-title" className="update-modal__title">
-          {UPDATE_CHECK_RESULT_TITLE()}
+          {coreT({key: "ui.update.check_title"})}
         </h3>
-        <p className="update-modal__hint">{messageForKind(kind)}</p>
+        <p className="update-modal__hint">
+          {kind === "up-to-date"
+            ? coreT({key: "ui.update.up_to_date"})
+            : coreT({key: "ui.update.check_failed"})}
+        </p>
         <div className="update-modal__actions update-modal__actions--between">
           <Button variant="secondary" onClick={onClose}>
             {coreT({key: "ui.common.close"})}
