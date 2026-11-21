@@ -5,6 +5,7 @@ import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 import {ModalShell} from '@/components/ui/ModalShell';
 
 type Props = {
@@ -27,7 +28,7 @@ export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
       containerStyle={styles.overlay}
       panelStyle={styles.card}
     >
-      <Text style={[styles.title, {color: tokens.text}]}>选择批注</Text>
+      <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.vfs.annotate_pick_title"})}</Text>
       <View style={styles.list}>
         {drafts.map(d => (
           <Pressable
@@ -35,10 +36,10 @@ export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
             style={[styles.item, {borderBottomColor: tokens.borderLight}]}
             onPress={() => onPick(d)}
             accessibilityRole="button"
-            accessibilityLabel={d.userAnnotation || '空说明'}
+            accessibilityLabel={d.userAnnotation || coreT({key: "ui.vfs.annotate_empty_aria"})}
           >
             <Text style={[styles.itemText, {color: tokens.text}]}>
-              {d.userAnnotation || '（空说明）'}
+              {d.userAnnotation || coreT({key: "ui.common.empty_note"})}
             </Text>
           </Pressable>
         ))}
@@ -47,9 +48,9 @@ export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
         style={styles.cancel}
         onPress={onClose}
         accessibilityRole="button"
-        accessibilityLabel="取消"
+        accessibilityLabel={coreT({key: "ui.common.cancel"})}
       >
-        <Text style={{color: tokens.textSecondary}}>取消</Text>
+        <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
       </Pressable>
     </ModalShell>
   );

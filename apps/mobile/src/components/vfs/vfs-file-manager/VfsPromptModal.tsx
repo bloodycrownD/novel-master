@@ -70,10 +70,10 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
       />
       <View style={styles.promptActions}>
         <Pressable onPress={onCancel}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
         <Pressable testID="vfs-prompt-submit" onPress={handleSubmit}>
-          <Text style={{color: tokens.primary}}>确定</Text>
+          <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.confirm"})}</Text>
         </Pressable>
       </View>
     </ModalShell>

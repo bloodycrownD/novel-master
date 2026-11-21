@@ -27,8 +27,8 @@ const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
  * 批注 → inject 量测 Recogito 坐标系；勿让 Recogito 划词即建批注。
  */
 export const RICH_DOCUMENT_ANNOTATE_MENU_ITEMS = [
-  {label: '复制', key: 'copy'},
-  {label: '批注', key: 'annotate'},
+  {label: coreT({key: "ui.transcript.menu.copy"}), key: 'copy'},
+  {label: coreT({key: "ui.vfs.annotate"}), key: 'annotate'},
 ] as const;
 
 const COLLECT_RECOGITO_JS = '(function(){try{window.__nmCollectRecogitoSelection&&window.__nmCollectRecogitoSelection();}catch(e){} true;})();';

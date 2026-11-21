@@ -66,7 +66,7 @@ export namespace VfsRowMapper {
 
   /** Directory rule on/off badge for list rows. */
   export function dirRuleBadge(ruleEnabled: boolean): VfsRowBadge {
-    return ruleEnabled ? {label: '开启', tone: 'in'} : {label: '关闭', tone: 'muted'};
+    return ruleEnabled ? {label: coreT({key: "ui.common.on"}), tone: 'in'} : {label: coreT({key: "ui.common.off"}), tone: 'muted'};
   }
 
   /** Patch one directory row after rule enabled toggles (no list reload). */
@@ -83,7 +83,7 @@ export namespace VfsRowMapper {
     const name = Path.basename(row.path);
     if (row.kind === 'dir') {
       const ruleEnabled = row.ruleState === 'rule_on';
-      const subtitle = childFileCount != null && childFileCount > 0 ? `${childFileCount}个文件` : '';
+      const subtitle = childFileCount != null && childFileCount > 0 ? coreT({key: "ui.vfs.row_files_count", params: {count: String(childFileCount)}}) : '';
       return {
         path: row.path,
         name,
@@ -98,7 +98,7 @@ export namespace VfsRowMapper {
     const displayText = coreT(WorkplaceLabels.displayStateLabel(row.displayState));
     const subtitle = `${inclusionText}·${displayText}`;
     const mode = row.inclusionMode;
-    const badge: VfsRowBadge = mode === 'hide' ? {label: '隐藏', tone: 'muted'} : mode === 'show' ? {label: '展示', tone: 'in'} : {label: '跟随', tone: 'follow'};
+    const badge: VfsRowBadge = mode === 'hide' ? {label: coreT({key: "ui.vfs.row_badge_hidden"}), tone: 'muted'} : mode === 'show' ? {label: coreT({key: "label.workplace.inclusion.show"}), tone: 'in'} : {label: coreT({key: "ui.vfs.row_badge_follow"}), tone: 'follow'};
 
     return {
       path: row.path,
@@ -128,8 +128,8 @@ export namespace VfsRowMapper {
       path: entry.path,
       name,
       kind: 'file',
-      subtitle: '跟随·全内容',
-      badge: {label: '跟随', tone: 'follow'},
+      subtitle: coreT({key: "ui.vfs.row_subtitle_follow_full"}),
+      badge: {label: coreT({key: "ui.vfs.row_badge_follow"}), tone: 'follow'},
       ruleEnabled: false,
     };
   }

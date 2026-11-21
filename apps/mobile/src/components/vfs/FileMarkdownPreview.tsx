@@ -21,6 +21,7 @@ import {FrontMatterDocumentHtml} from './build-front-matter-document-html';
 import type {RichDocumentAnnotationMark, RichDocumentRecogitoCreatePayload} from './RichDocumentBridge';
 import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';
+import {coreT} from '@/i18n/core';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
 
@@ -289,10 +290,10 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
     <>
       <MessageEditModal
         visible={addVisible}
-        title="批注"
+        title={coreT({key: "ui.vfs.annotate"})}
         label={CommonText.truncate(pendingOriginalText, 80)}
-        placeholder="批注说明"
-        confirmLabel="添加"
+        placeholder={coreT({key: "ui.vfs.annotate_desc_placeholder"})}
+        confirmLabel={coreT({key: "ui.common.add"})}
         onClose={() => {
           setAddVisible(false);
           setPendingRenderRange(null);
@@ -304,7 +305,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       />
       <MessageEditModal
         visible={detailVisible}
-        title="批注"
+        title={coreT({key: "ui.vfs.annotate"})}
         initialValue={detailDraft?.userAnnotation ?? ''}
         readOnly
         onClose={() => {
@@ -317,11 +318,11 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       />
       <MessageEditModal
         visible={editVisible}
-        title="编辑批注"
+        title={coreT({key: "ui.vfs.edit_annotate_title"})}
         label={editingDraft ? CommonText.truncate(editingDraft.originalText, 80) : undefined}
-        placeholder="批注说明"
+        placeholder={coreT({key: "ui.vfs.annotate_desc_placeholder"})}
         initialValue={editingDraft?.userAnnotation ?? ''}
-        confirmLabel="保存"
+        confirmLabel={coreT({key: "ui.common.save"})}
         onClose={() => {
           setEditVisible(false);
           setEditingDraft(null);
@@ -346,7 +347,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
   );
 
   if (!content.trim()) {
-    return <Text style={[styles.empty, {color: tokens.textSecondary}]}>（空文件）</Text>;
+    return <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.empty_file"})}</Text>;
   }
 
   // rich 档：跳过 front-matter 拆分与扩展名判定，整段进 WebView 富文本管线。
@@ -411,7 +412,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       ) : showFrontMatter ? (
         <>
           <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} />
-          <Text style={{color: tokens.textSecondary, fontSize: 14}}>（正文为空）</Text>
+          <Text style={{color: tokens.textSecondary, fontSize: 14}}>{coreT({key: "ui.vfs.markdown_empty_body"})}</Text>
         </>
       ) : null}
       {mdAnnotateActive ? annotateModals : null}
@@ -437,7 +438,7 @@ function FrontMatterCard({tokens, fields, empty}: FrontMatterCardProps) {
       ]}
     >
       <Text style={[styles.fmTitle, {color: tokens.textSecondary}]}>Front Matter</Text>
-      {empty ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>（空 Front Matter）</Text> : null}
+      {empty ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>{coreT({key: "ui.vfs.fm_empty"})}</Text> : null}
       {!empty
         ? fields.map((field, index) => (
             <View key={`${field.key}-${index}`} style={styles.fmRow}>

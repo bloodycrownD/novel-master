@@ -3,6 +3,7 @@
  * so FM and markdown body share one #doc scroll container.
  */
 import {Html} from '@/components/common/html';
+import {coreT} from '@/i18n/core';
 
 type FrontMatterDocumentInput = {
   readonly fields: readonly {readonly key: string; readonly value: string}[];
@@ -20,7 +21,7 @@ export namespace FrontMatterDocumentHtml {
 
     let html = '<div class="fm-card"><div class="fm-title">Front Matter</div>';
     if (input.empty) {
-      html += '<div class="fm-empty">（空 Front Matter）</div>';
+      html += `<div class="fm-empty">${coreT({key: "ui.vfs.fm_empty"})}</div>`;
     }
     if (!input.empty) {
       for (const field of input.fields) {
