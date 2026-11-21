@@ -40,6 +40,8 @@ export interface ErrorParamsMap {
   AGENT_NOT_FOUND: { readonly agentId: string };
   AGENT_REFERENCED_NOT_FOUND: { readonly agentId: string; readonly detail: string };
   AGENT_INVALID_MODEL: { readonly modelId?: string };
+  INFRA_ROLLBACK_DEGRADED: { readonly causeText: string; readonly steps: string; readonly rollbackErrors?: readonly { readonly step: string; readonly error: unknown }[] };
+  DB_SYNC_REPLACE_INCOMPLETE: { readonly reason: string; readonly recoveryHint?: string };
   VFS_NOT_FOUND: {
     readonly path?: string;
     readonly entryId?: number;

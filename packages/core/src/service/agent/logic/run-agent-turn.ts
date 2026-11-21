@@ -804,8 +804,14 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 
                 const coordinatedRun = await coordinatedWrite.run();
                 if (!coordinatedRun.ok) {
-                    // 前奏期 append/capture 已知失败（四期门⑦沿 Result 到达）：终态记账与下方
-                    // catch 同款——此刻必在 STARTED 之前，补 FAILED(runId:'') 后沿 Result 交回。
+                    // 前奏期 append/capture 失败沿 Result 到达：终态记账与下方 catch 同款——
+                    // 此刻必在 STARTED 之前，补 FAILED(runId:'') 后沿 Result 交回。
+                    // 回滚损坏（error-matrix-final R1：INFRA_ROLLBACK_DEGRADED，回滚清单进
+                    // details/cause）不再穿异常兜底，从同一分支显式记账并 WARN——补偿机制
+                    // 损坏是系统级警报，不能混在普通业务失败里。
+                    if (coordinatedRun.error.key === "INFRA_ROLLBACK_DEGRADED") {
+                        log.warn("CoordinatedWrite 回滚阶段失败（补偿机制受损）", { cause: coordinatedRun.error.cause, error: coordinatedRun.error });
+                    }
                     AgentTurnRunner.safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
                         sessionId: scope.sessionId,
                         projectId: scope.projectId,
