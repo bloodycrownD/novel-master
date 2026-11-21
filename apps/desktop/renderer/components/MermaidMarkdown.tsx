@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import { renderCodeBlock } from "./code-block";
+import { coreT } from "@shared/logic/core-i18n";
 
 /**
  * 共享 Markdown 渲染组件：react-markdown + remarkGfm + mermaid 图表。
@@ -331,7 +332,7 @@ const MermaidBlock = memo(function MermaidBlock({ source, pending, theme }: Merm
     <div className={cls}>
       {failed ? (
         <>
-          <span className="mermaid-block__failed-badge">图表渲染失败，已显示源码</span>
+          <span className="mermaid-block__failed-badge">{coreT({key: "ui.mermaid.render_failed_badge"})}</span>
           {failedError ? <pre className="mermaid-block__failed-reason">{failedError}</pre> : null}
         </>
       ) : null}

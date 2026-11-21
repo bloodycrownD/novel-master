@@ -6,6 +6,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 
 /**
  * 围栏语言归一化表（PRD 清单）：别名 → 规范名。
@@ -81,7 +82,7 @@ function CodeCopyButton({ source }: { source: string }) {
     <button
       type="button"
       className={`code-copy-btn${copied ? " code-copy-btn--copied" : ""}`}
-      aria-label="复制代码"
+      aria-label={coreT({key: "ui.common.copy_code"})}
       onClick={() => {
         void navigator.clipboard.writeText(source).then(() => {
           setCopied(true);
