@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 import {MessageBlocks, ToolSummary, type ToolCallView} from './message-blocks';
 import type {SkillToolRef} from '@novel-master/core/chat';
@@ -22,10 +23,10 @@ type Props = {
 
 /** 状态 → 文案与主题色键（单表驱动，卡片头部与配色同源）。 */
 const STATUS_META: Record<ToolCallView['status'], {label: string; tone: 'primary' | 'danger' | 'textSecondary'}> = {
-  success: {label: '成功', tone: 'primary'},
-  error: {label: '失败', tone: 'danger'},
-  pending: {label: '执行中', tone: 'textSecondary'},
-  interrupted: {label: '已中断', tone: 'textSecondary'},
+  success: {label: coreT({key: "ui.transcript.tool_status.success"}), tone: 'primary'},
+  error: {label: coreT({key: "ui.transcript.tool_status.error"}), tone: 'danger'},
+  pending: {label: coreT({key: "ui.transcript.tool_status.pending"}), tone: 'textSecondary'},
+  interrupted: {label: coreT({key: "ui.transcript.tool_status.interrupted"}), tone: 'textSecondary'},
 };
 
 export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFile, onOpenSubagentSession, onOpenSkillDetail}: Props) {
@@ -45,7 +46,7 @@ export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFil
   const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : ToolSummary.callSummary(tool);
   const statusMeta = STATUS_META[tool.status];
   // prettier-ignore
-  const openHint = canOpenSubagent ? '点击查看 · 子会话' : canOpenSkill ? '点击查看 · 技能' : '点击查看 · 聊天工作区';
+  const openHint = canOpenSubagent ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.subagent"})}}) : canOpenSkill ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.skill"})}}) : coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.workspace"})}});
 
   const card = (
     <>
@@ -69,7 +70,7 @@ export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFil
       <Pressable
         accessibilityRole="button"
         // prettier-ignore
-        accessibilityLabel={canOpenSubagent ? `打开子会话 ${subagentSessionId}` : canOpenSkill ? `打开技能 ${skillRef.name}` : `打开文件 ${filePath}`}
+        accessibilityLabel={canOpenSubagent ? coreT({key: "ui.chat.open_subagent_aria", params: {id: subagentSessionId}}) : canOpenSkill ? coreT({key: "ui.chat.open_skill_aria", params: {name: skillRef.name}}) : coreT({key: "ui.chat.open_file_aria", params: {path: filePath}})}
         onPress={() => {
           if (canOpenSubagent) {
             onOpenSubagentSession(subagentSessionId);

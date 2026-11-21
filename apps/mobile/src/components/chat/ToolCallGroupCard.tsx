@@ -4,6 +4,7 @@
 import React from 'react';
 import {StyleSheet, Text} from 'react-native';
 import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import type {ToolCallView} from './message-blocks';
@@ -43,7 +44,7 @@ export function ToolCallGroupCard({
       defaultExpanded={defaultExpanded}
       title={
         <Text style={[styles.title, {color: tokens.textSecondary}]}>
-          工具调用 ({tools.length})
+          {coreT({key: "ui.transcript.tool_group_title", params: {count: String(tools.length)}})}
         </Text>
       }
       style={[

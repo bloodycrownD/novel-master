@@ -7,6 +7,7 @@ import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {AttachmentChip} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import {composerChips, type MessageAttachment} from '@novel-master/core/chat';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type AttachmentDraftChipsProps = {
@@ -68,7 +69,7 @@ function AttachmentDraftChips({attachments, disabled, accessibilityLabel, transp
 /** 状态 chip（无叉）：放在输入框内顶部。 */
 export function ComposerStatusChips({attachments, disabled}: {attachments: readonly MessageAttachment[]; disabled?: boolean}) {
   const {status} = composerChips.partition(attachments);
-  return <AttachmentDraftChips attachments={status} disabled={disabled} transparentRow accessibilityLabel="状态附件" />;
+  return <AttachmentDraftChips attachments={status} disabled={disabled} transparentRow accessibilityLabel={coreT({key: "ui.chat.attachment_status_aria"})} />;
 }
 
 const styles = StyleSheet.create({

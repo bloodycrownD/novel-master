@@ -37,6 +37,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import {coreT} from '@/i18n/core';
 import {chatAnnotateDraftStore, ComposerSendPolicy, AttachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
@@ -748,7 +749,7 @@ export function useChatComposerController({
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
   const sendDisabled = sendIntent.sendDisabled;
-  const placeholder = hasModel ? '输入消息…' : '选择模型后可发送';
+  const placeholder = hasModel ? coreT({key: "ui.chat.placeholder"}) : coreT({key: "ui.chat.placeholder_no_model"});
 
   const composerState = useMemo<ConversationComposerState>(
     () => ({

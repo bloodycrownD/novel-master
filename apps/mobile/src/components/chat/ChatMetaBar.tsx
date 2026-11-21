@@ -9,6 +9,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {ChatAgentMeta} from '@/services/chat-agent-meta';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -35,7 +36,7 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
         disabled={!onPressAgent}
         onPress={onPressAgent}
         accessibilityRole="button"
-        accessibilityLabel={`切换智能体，当前 ${agentName}`}
+        accessibilityLabel={coreT({key: "ui.session.switch_agent_aria", params: {name: agentName}})}
         accessibilityState={{disabled: agentLocked}}
         style={({pressed}) => [styles.agentCol, pressed && styles.pressed]}
       >
@@ -57,7 +58,7 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
         disabled={!onPressModel}
         onPress={onPressModel}
         accessibilityRole="button"
-        accessibilityLabel={`切换模型，当前 ${modelLabel}`}
+        accessibilityLabel={coreT({key: "ui.session.switch_model_aria", params: {name: modelLabel}})}
         accessibilityState={{disabled: modelLocked}}
         style={({pressed}) => [styles.metaRight, pressed && styles.pressed]}
       >

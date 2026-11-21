@@ -8,6 +8,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {type AgentStreamMetricsView, AgentStreamMetrics} from '@/hooks/useAgentStreamMetrics';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -34,7 +35,7 @@ export function ChatStreamMetricsBar({
       disabled={!onPress}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`流式指标，${line}`}
+      accessibilityLabel={coreT({key: "ui.stats.metrics_bar_aria", params: {line}})}
       style={({pressed}) => [
         styles.bar,
         {backgroundColor: tokens.bgSecondary},
@@ -42,7 +43,7 @@ export function ChatStreamMetricsBar({
       ]}
     >
       {interrupted ? (
-        <Text style={[styles.badge, {color: tokens.danger}]}>已中断</Text>
+        <Text style={[styles.badge, {color: tokens.danger}]}>{coreT({key: "ui.transcript.tool_status.interrupted"})}</Text>
       ) : null}
       <Text
         style={[styles.line, {color: tokens.textSecondary}]}

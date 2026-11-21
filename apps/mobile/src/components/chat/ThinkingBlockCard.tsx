@@ -4,6 +4,7 @@
 import React, {useState} from 'react';
 import {StyleSheet, Text} from 'react-native';
 import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
+import {coreT} from '@/i18n/core';
 import {RichContentBody} from '@/components/rich-content/RichContentBody';
 import {RichContentLimits} from '@/components/rich-content/rich-content-limits';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -47,7 +48,7 @@ export function ThinkingBlockCard({
     <CollapsibleCard
       expanded={expanded}
       onToggle={setExpanded}
-      title={<Text style={[styles.title, {color: tokens.textSecondary}]}>思考过程</Text>}
+      title={<Text style={[styles.title, {color: tokens.textSecondary}]}>{coreT({key: "label.transcript.thinking_header"})}</Text>}
       style={[
         embedded ? styles.embedded : styles.card,
         !embedded && {

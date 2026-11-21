@@ -9,6 +9,7 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {Dimensions, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 import {AppModal} from '@/components/ui/AppModal';
 
@@ -29,7 +30,7 @@ type Props = {
   onDelete?: () => void;
 };
 
-export function MessageEditModal({visible, title, label, placeholder, initialValue = '', confirmLabel = '确定', readOnly = false, onClose, onConfirm, onEdit, onDelete}: Props) {
+export function MessageEditModal({visible, title, label, placeholder, initialValue = '', confirmLabel = coreT({key: "ui.common.confirm"}), readOnly = false, onClose, onConfirm, onEdit, onDelete}: Props) {
   const {tokens} = useTheme();
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
@@ -70,7 +71,7 @@ export function MessageEditModal({visible, title, label, placeholder, initialVal
     }
   };
 
-  const displayValue = readOnly && !trimmed ? '（空说明）' : value;
+  const displayValue = readOnly && !trimmed ? coreT({key: "ui.common.empty_note"}) : value;
 
   let actions: React.ReactNode;
   if (readOnly) {
@@ -78,18 +79,18 @@ export function MessageEditModal({visible, title, label, placeholder, initialVal
       <View style={styles.actionsRow}>
         {onDelete ? (
           <Pressable onPress={onDelete} style={styles.btn}>
-            <Text style={{color: tokens.danger}}>删除</Text>
+            <Text style={{color: tokens.danger}}>{coreT({key: "ui.common.delete"})}</Text>
           </Pressable>
         ) : (
           <View />
         )}
         <View style={styles.actionsEnd}>
           <Pressable onPress={onClose} style={styles.btn}>
-            <Text style={{color: tokens.textSecondary}}>关闭</Text>
+            <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.close"})}</Text>
           </Pressable>
           {onEdit ? (
             <Pressable onPress={onEdit} style={styles.btn}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>编辑</Text>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.edit"})}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -99,7 +100,7 @@ export function MessageEditModal({visible, title, label, placeholder, initialVal
     actions = (
       <View style={styles.actions}>
         <Pressable onPress={onClose} style={styles.btn}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
         <Pressable onPress={() => handleConfirm().catch(() => undefined)} style={styles.btn} disabled={!canSubmit}>
           <Text
@@ -108,7 +109,7 @@ export function MessageEditModal({visible, title, label, placeholder, initialVal
               fontWeight: '600',
             }}
           >
-            {saving ? '保存中…' : confirmLabel}
+            {saving ? coreT({key: "ui.common.saving"}) : confirmLabel}
           </Text>
         </Pressable>
       </View>

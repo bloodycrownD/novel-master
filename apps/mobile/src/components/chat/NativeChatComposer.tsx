@@ -53,6 +53,7 @@
  * 命令式 setText 通道落文并补发 change（F5/F6）。
  */
 import React, {forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
+import {coreT} from '@/i18n/core';
 import type {LayoutChangeEvent, TextStyle} from 'react-native';
 import {Pressable, ScrollView, Text, View} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
@@ -72,9 +73,9 @@ import {TokenRanges, type TokenRange} from './native-composer/token-ranges';
 export const COMPOSER_HEIGHT_EPSILON = 0.5;
 
 /** 有模型时的占位文案（与 web dock / controller 的 placeholder 派生同文案）。 */
-export const COMPOSER_PLACEHOLDER_WITH_MODEL = '输入消息…';
+export const COMPOSER_PLACEHOLDER_WITH_MODEL = coreT({key: "ui.chat.placeholder"});
 /** 无模型时的占位文案。 */
-export const COMPOSER_PLACEHOLDER_WITHOUT_MODEL = '选择模型后可发送';
+export const COMPOSER_PLACEHOLDER_WITHOUT_MODEL = coreT({key: "ui.chat.placeholder_no_model"});
 
 /**
  * 粘贴截断上限（D9：与旧链 `ChatConversationWebView` 的
@@ -84,10 +85,10 @@ export const COMPOSER_PLACEHOLDER_WITHOUT_MODEL = '选择模型后可发送';
 export const COMPOSER_PASTE_MAX_CHARS = 256 * 1024;
 
 /** 自定义粘贴菜单项文案（jest 侧按此文本定位菜单项）。 */
-export const COMPOSER_PASTE_MENU_LABEL = '粘贴';
+export const COMPOSER_PASTE_MENU_LABEL = coreT({key: "ui.common.paste"});
 
 /** 无模型时的 hintRow 文案（与 web dock 逐字同文案）。 */
-const COMPOSER_HINT_ROW_TEXT = '请先选择工作区模型';
+const COMPOSER_HINT_ROW_TEXT = coreT({key: "ui.chat.no_workspace_model_hint"});
 
 export type NativeChatComposerProps = {
   /**
@@ -555,7 +556,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
             showsHorizontalScrollIndicator={false}
             style={[attachmentDraftChipsStyles.row, attachmentDraftChipsStyles.rowTransparent]}
             contentContainerStyle={attachmentDraftChipsStyles.content}
-            accessibilityLabel="状态附件"
+            accessibilityLabel={coreT({key: "ui.chat.attachment_status_aria"})}
           >
             {chipLabels.map((label, index) => (
               <View
@@ -613,7 +614,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
                  lineHeight=字号 + 关 fontPadding，行盒紧贴字形，容器
                  center 即字形视觉居中（真机 2026-10-12 实报偏移修正）。 */
             style={[composerToolBtnStyle, {borderColor: theme.borderLight}]}
-            accessibilityLabel="全屏编辑"
+            accessibilityLabel={coreT({key: "ui.common.open_fullscreen"})}
           >
             <Text
               style={{
@@ -631,7 +632,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
             onPress={() => emitDockAction('atPicker')}
             disabled={inputDisabledResolved}
             style={[composerToolBtnStyle, {borderColor: theme.borderLight}]}
-            accessibilityLabel="引用文件"
+            accessibilityLabel={coreT({key: "ui.chat.reference_files"})}
           >
             <Text style={{color: theme.textSecondary, fontSize: 16}}>@</Text>
           </Pressable>
@@ -640,7 +641,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
             onPress={() => emitDockAction('skillPicker')}
             disabled={inputDisabledResolved}
             style={[composerToolBtnStyle, {borderColor: theme.borderLight}]}
-            accessibilityLabel="引用技能"
+            accessibilityLabel={coreT({key: "ui.chat.reference_skills"})}
           >
             <Text style={{color: theme.textSecondary, fontSize: 16}}>$</Text>
           </Pressable>
@@ -649,7 +650,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
             onPress={() => emitDockAction(sendState.action)}
             disabled={sendState.disabled}
             style={[composerDockStyles.sendBtn, {backgroundColor: sendButtonBackground}]}
-            accessibilityLabel={running ? '终止' : '发送'}
+            accessibilityLabel={running ? coreT({key: "ui.chat.stop_gen"}) : coreT({key: "ui.common.send"})}
           >
             {running ? <TerminateIcon /> : <SendIcon />}
           </Pressable>

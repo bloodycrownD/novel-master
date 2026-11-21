@@ -8,6 +8,7 @@ import {ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View} from 're
 import type {WorkplaceListRow} from '@novel-master/core/workplace';
 import type {VfsScope} from '@novel-master/core/vfs';
 import {AppModal} from '@/components/ui/AppModal';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 import {FormatError} from '@/errors/format-error';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -164,8 +165,8 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
-          <Text style={[styles.title, {color: tokens.text}]}>{isPickDirectory ? '选择目标目录' : '引用文件'}</Text>
-          <Text style={{color: tokens.textSecondary, marginBottom: 8}}>{isPickDirectory ? '浏览到目标文件夹后确认；不可选中源自身或其子树' : '可多选文件与目录'}</Text>
+          <Text style={[styles.title, {color: tokens.text}]}>{isPickDirectory ? coreT({key: "ui.chat.pick_target_dir_title"}) : coreT({key: "ui.chat.reference_files"})}</Text>
+          <Text style={{color: tokens.textSecondary, marginBottom: 8}}>{isPickDirectory ? coreT({key: "ui.chat.pick_dir_hint"}) : coreT({key: "ui.chat.file_ref_hint"})}</Text>
           <View style={styles.navBar}>
             <Text style={[styles.cwd, {color: tokens.text}]} numberOfLines={1} testID="file-ref-cwd">
               {currentPath}
@@ -185,7 +186,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                   color: canGoUp ? tokens.primary : tokens.textSecondary,
                 }}
               >
-                上一级
+                {coreT({key: "ui.chat.parent_dir"})}
               </Text>
             </Pressable>
             <Pressable onPress={selectCurrentDir} disabled={isPickDirectory && cwdBlocked} style={styles.navBtn} testID="file-ref-select-cwd">
@@ -194,13 +195,13 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                   color: isPickDirectory && cwdBlocked ? tokens.textSecondary : tokens.primary,
                 }}
               >
-                {isPickDirectory ? '选择当前文件夹' : currentDirSelected ? '取消选用' : '选择当前文件夹'}
+                {isPickDirectory ? coreT({key: "ui.chat.select_current_folder"}) : currentDirSelected ? coreT({key: "ui.chat.deselect_current_folder"}) : coreT({key: "ui.chat.select_current_folder"})}
               </Text>
             </Pressable>
           </View>
           {cwdBlocked ? (
             <Text style={{color: tokens.danger, marginBottom: 8}} testID="file-ref-cwd-blocked">
-              当前目录是源自身或子树，不能作为目标
+              {coreT({key: "ui.chat.dir_blocked_hint"})}
             </Text>
           ) : null}
           {error ? <Text style={{color: tokens.danger, marginBottom: 8}}>{error}</Text> : null}
@@ -224,19 +225,19 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                           onPress={() => setSelectedDirs(prev => PickerRows.toggleInSet(prev, item.path))}
                           style={styles.checkHit}
                           testID={`file-ref-dir-check-${item.path}`}
-                          accessibilityLabel={`选用目录 ${label}`}
+                          accessibilityLabel={coreT({key: "ui.chat.pick_dir_aria", params: {label}})}
                         >
                           <Text style={{color: tokens.text}}>{checked ? '☑' : '☐'}</Text>
                         </Pressable>
                       )}
-                      <Pressable style={styles.rowBody} onPress={() => setCurrentPath(item.path)} testID={`file-ref-dir-enter-${item.path}`} accessibilityLabel={`进入目录 ${label}`}>
+                      <Pressable style={styles.rowBody} onPress={() => setCurrentPath(item.path)} testID={`file-ref-dir-enter-${item.path}`} accessibilityLabel={coreT({key: "ui.chat.enter_dir_aria", params: {label}})}>
                         <Text
                           style={{
                             color: dirBlocked ? tokens.textSecondary : tokens.text,
                             flex: 1,
                           }}
                         >
-                          📁 {label}/{dirBlocked ? '（不可作目标）' : ''}
+                          📁 {label}{dirBlocked ? coreT({key: "ui.chat.pick_dir_blocked"}) : ''}
                         </Text>
                         <Text style={{color: tokens.textSecondary}}>›</Text>
                       </Pressable>
@@ -246,21 +247,21 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                 const checked = selectedFiles.has(item.path);
                 return (
                   <View style={styles.row} testID={`file-ref-file-row-${item.path}`}>
-                    <Pressable onPress={() => toggleFile(item.path)} style={styles.checkHit} testID={`file-ref-file-${item.path}`} accessibilityLabel={`选用文件 ${label}`}>
+                    <Pressable onPress={() => toggleFile(item.path)} style={styles.checkHit} testID={`file-ref-file-${item.path}`} accessibilityLabel={coreT({key: "ui.chat.pick_file_aria", params: {label}})}>
                       <Text style={{color: tokens.text}}>{checked ? '☑' : '☐'}</Text>
                     </Pressable>
-                    <Pressable style={styles.rowBody} onPress={() => toggleFile(item.path)} testID={`file-ref-file-label-${item.path}`} accessibilityLabel={`选用文件 ${label}`}>
+                    <Pressable style={styles.rowBody} onPress={() => toggleFile(item.path)} testID={`file-ref-file-label-${item.path}`} accessibilityLabel={coreT({key: "ui.chat.pick_file_aria", params: {label}})}>
                       <Text style={{color: tokens.text, flex: 1}}>📄 {label}</Text>
                     </Pressable>
                   </View>
                 );
               }}
-              ListEmptyComponent={<Text style={{color: tokens.textSecondary}}>{isPickDirectory ? '暂无子目录' : '暂无文件'}</Text>}
+              ListEmptyComponent={<Text style={{color: tokens.textSecondary}}>{isPickDirectory ? coreT({key: "ui.chat.pick_dir_empty"}) : coreT({key: "ui.chat.pick_file_empty"})}</Text>}
             />
           )}
           <View style={styles.foot}>
             <Pressable onPress={onClose} style={styles.footBtn}>
-              <Text style={{color: tokens.text}}>取消</Text>
+              <Text style={{color: tokens.text}}>{coreT({key: "ui.common.cancel"})}</Text>
             </Pressable>
             <Pressable
               disabled={!canConfirm}
@@ -273,7 +274,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
               testID="file-ref-confirm"
               onPress={handleConfirm}
             >
-              <Text style={{color: '#fff'}}>确认</Text>
+              <Text style={{color: '#fff'}}>{coreT({key: "ui.common.confirm_alt"})}</Text>
             </Pressable>
           </View>
         </View>

@@ -4,6 +4,7 @@
 import React, {type ReactNode} from 'react';
 import {Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle} from 'react-native';
 import {SecondaryButton} from '@/components/ui/Buttons';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 
 /** 批量模式次操作（如 VFS 的「移动」）：主操作（删除）右侧依次渲染。 */
@@ -48,7 +49,7 @@ export function ManageHeader({
   onDelete,
   onSelectAll,
   allSelected,
-  primaryActionLabel = '删除',
+  primaryActionLabel = coreT({key: "ui.common.delete"}),
   onPrimaryAction,
   primaryActionTone = 'danger',
   actions,
@@ -66,15 +67,15 @@ export function ManageHeader({
       {batchMode ? (
         <View style={styles.batchRow}>
           <Pressable onPress={onCancelBatch}>
-            <Text style={{color: tokens.text}}>取消</Text>
+            <Text style={{color: tokens.text}}>{coreT({key: "ui.common.cancel"})}</Text>
           </Pressable>
           <View style={styles.batchCenter}>
             {onSelectAll ? (
               <Pressable onPress={onSelectAll} hitSlop={8}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>{allSelected ? '全不选' : '全选'}</Text>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>{allSelected ? coreT({key: "ui.common.select_none"}) : coreT({key: "ui.common.select_all"})}</Text>
               </Pressable>
             ) : null}
-            <Text style={{color: tokens.textSecondary}}>已选 {selectedCount} 项</Text>
+            <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.selected_count", params: {count: String(selectedCount)}})}</Text>
           </View>
           <View style={styles.batchActions}>
             <Pressable onPress={runPrimary} disabled={batchActionsDisabled}>
@@ -110,7 +111,7 @@ export function ManageHeader({
         <View style={styles.normalRow}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
           <View style={styles.actions}>
-            {onEnterBatch ? <SecondaryButton label="管理" tokens={tokens} onPress={onEnterBatch} /> : null}
+            {onEnterBatch ? <SecondaryButton label={coreT({key: "ui.common.manage"})} tokens={tokens} onPress={onEnterBatch} /> : null}
             {normalActions}
           </View>
         </View>
