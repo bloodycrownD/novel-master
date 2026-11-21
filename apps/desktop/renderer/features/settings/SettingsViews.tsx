@@ -687,7 +687,12 @@ export function DataManagementView() {
       />
       <SettingsActionSection
         title="数据清理"
-        desc={coreT({key: "ui.storage.cleanup_desktop_desc", params: {before: dbStats ? formatStorageBytes(dbStats.fileBytes) : "—", after: dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}})}
+        // desc 模板串与清理确认 message 被 settings-db-maintenance-ui.test.ts 源码正则锁死，波 3c 对齐后再迁。
+        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${
+          dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"
+        } · 可回收约 ${
+          dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"
+        }。`}
         action={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button
@@ -1614,8 +1619,9 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
           onChange={setActiveTab}
           aria-label={coreT({key: "ui.provider.detail_tab_aria"})}
           options={[
-            { value: "config", label: coreT({key: "ui.nav.providers"}) },
-            { value: "models", label: coreT({key: "ui.nav.model_management"}) },
+            // 两个 tab label 被 provider-detail-tabs.test.ts 源码正则锁死，波 3c 对齐后再迁。
+            { value: "config", label: "服务商配置" },
+            { value: "models", label: "模型管理" },
           ]}
         />
       </div>
