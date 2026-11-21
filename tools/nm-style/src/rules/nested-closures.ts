@@ -47,22 +47,26 @@ function bodyOf(fn: ts.Node): ts.Node | undefined {
   return (fn as { body?: ts.Node }).body;
 }
 
+/** 绑定名写入：Map 目标记名字→声明节点（source 兜底 fallback），Set 目标只记名字。 */
+function addBindingName(out: Set<string> | Map<string, ts.Node>, name: string, source: ts.Node | undefined, fallback: ts.Node): void {
+  if (out instanceof Map) out.set(name, source ?? fallback);
+  else out.add(name);
+}
+
+/** 绑定模式遍历：BindingElement 只递归绑定名（propertyName 键位不入集），其余节点逐层下探。 */
+function visitBindingPattern(node: ts.Node, out: Set<string> | Map<string, ts.Node>, source: ts.Node | undefined): void {
+  if (ts.isBindingElement(node)) {
+    if (node.propertyName == null || node.name !== node.propertyName) visitBindingPattern(node.name, out, source);
+    return;
+  }
+  if (ts.isOmittedExpression(node)) return;
+  ts.forEachChild(node, (child) => visitBindingPattern(child, out, source));
+}
+
 /** 绑定模式的名字收集：`x` / `{a, b: c, ...rest}` / `[x, , y]`——收「绑定到的名字」（a、c、rest、x、y），不收属性键（b）。 */
 function collectBindingNames(pattern: ts.Node, out: Set<string> | Map<string, ts.Node>, source?: ts.Node): void {
-  const add = (name: string): void => {
-    if (out instanceof Map) out.set(name, source ?? pattern);
-    else out.add(name);
-  };
-  if (ts.isIdentifier(pattern)) { add(pattern.text); return; }
-  const visit = (node: ts.Node): void => {
-    if (ts.isBindingElement(node)) {
-      if (node.propertyName == null || node.name !== node.propertyName) collectBindingNames(node.name, out, source);
-      return; // propertyName 的键位名字不入集
-    }
-    if (ts.isOmittedExpression(node)) return;
-    ts.forEachChild(node, visit);
-  };
-  visit(pattern);
+  if (ts.isIdentifier(pattern)) { addBindingName(out, pattern.text, source, pattern); return; }
+  visitBindingPattern(pattern, out, source);
 }
 
 /** 闭包体内自声明的全部名字（参数、var/let/const、class、function，含嵌套块与嵌套函数自己的声明）。 */

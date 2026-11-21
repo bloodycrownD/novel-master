@@ -56,6 +56,7 @@ function collectChangeRegions(parts: ReadonlyArray<ArrayChange<unknown>>): LineC
   let blockNewStart = 0; // 当前变更块在 saved 的起点
   let inBlock = false;
   // 把当前变更块落成一个 region；oldEnd/newEnd 用闭区间（开区间端点 - 1）。
+  // nm-style: keep-closure — 模块级纯函数内部的算法进行态游标（5 个块游标变异共享），已在函数私有作用域，参数化 7 参不成立。
   const flush = (oldEndExclusive: number, newEndExclusive: number): void => {
     if (!inBlock) return;
     regions.push({ oldStart: blockOldStart, oldEnd: oldEndExclusive - 1, newStart: blockNewStart, newEnd: newEndExclusive - 1 });

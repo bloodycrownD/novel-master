@@ -55,6 +55,7 @@ const signalViewOnCancel = (signal: AbortSignal, fn: (reason: AbortReason) => vo
     }
     return noop;
   }
+  // nm-style: keep-closure — add/removeEventListener 必须同一 listener 引用（身份不变量），包装不可消除。
   const onAbort = (): void => {
     signalViewOnAbort(fn);
   };
@@ -429,6 +430,7 @@ export const AbortScopeFactory = {
 
   /** 裸 `AbortSignal` 只读适配：无定时器、无 dispose，reason 恒为 null。 */
   signalView(signal: AbortSignal): AbortSignalView {
+    // nm-style: keep-closure — AbortSignalView.onCancel 实现位：绑定本视图的 signal 参数，race 与属性位两处共用同一引用。
     const onCancel = (fn: (reason: AbortReason) => void): (() => void) => signalViewOnCancel(signal, fn);
     return {
       signal,
