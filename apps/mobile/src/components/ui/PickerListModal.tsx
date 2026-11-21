@@ -6,6 +6,7 @@
  * 伪装成空列表。AgentPickerModal / ModelPickerModal / SkillPicker 只做数据适配。
  */
 import React, {useCallback, useEffect, useState, type ReactNode} from 'react';
+import {coreT} from '@/i18n/core';
 import {
   ActivityIndicator,
   FlatList,
@@ -136,7 +137,7 @@ export function PickerListModal<T>({
         <View style={styles.center}>
           <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
           <Pressable onPress={() => reload().catch(() => undefined)}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
           </Pressable>
         </View>
       ) : (
@@ -171,7 +172,7 @@ export function PickerListModal<T>({
         />
       )}
       <Pressable onPress={onClose} style={styles.cancelBtn}>
-        <Text style={{color: cancelColor ?? tokens.textSecondary}}>取消</Text>
+        <Text style={{color: cancelColor ?? tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
       </Pressable>
     </ModalShell>
   );

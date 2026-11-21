@@ -15,6 +15,7 @@
  * 等于啥也不干，所以 Android 全靠 hook 的 translateY（挂在本组件的 panel 上）。
  */
 import React, {type ReactNode} from 'react';
+import {coreT} from '@/i18n/core';
 import {Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
 import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
@@ -94,9 +95,9 @@ export function ModalShell({
   // 否则会垫在 drawer 下面、点 drawer 空白处穿透关闭）。
   const content = (
     <View style={containerStyleList}>
-      {variant === 'left' ? null : <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" accessibilityRole="button" />}
+      {variant === 'left' ? null : <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={coreT({key: "ui.common.close"})} accessibilityRole="button" />}
       {panel}
-      {variant === 'left' ? <Pressable style={styles.leftBackdrop} onPress={onClose} accessibilityLabel="关闭" accessibilityRole="button" /> : null}
+      {variant === 'left' ? <Pressable style={styles.leftBackdrop} onPress={onClose} accessibilityLabel={coreT({key: "ui.common.close"})} accessibilityRole="button" /> : null}
     </View>
   );
 

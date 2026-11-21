@@ -2,6 +2,7 @@
  * Bottom save bar for full-screen forms.
  */
 import React from 'react';
+import {coreT} from '@/i18n/core';
 import {StyleSheet, View} from 'react-native';
 import {PrimaryButton} from '@/components/ui/Buttons';
 import type {ThemeTokens} from '@/theme/tokens';
@@ -32,7 +33,7 @@ export function StickyFormFooter({
       ]}
     >
       <PrimaryButton
-        label={loading ? '保存中…' : label}
+        label={loading ? coreT({key: "ui.common.saving"}) : label}
         tokens={tokens}
         onPress={onPress}
         disabled={disabled || loading}

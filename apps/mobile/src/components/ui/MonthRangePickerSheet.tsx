@@ -10,6 +10,7 @@ import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {DateTime} from '@novel-master/core/common';
 import {ModalShell} from './ModalShell';
+import {coreT} from '@/i18n/core';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
@@ -20,7 +21,15 @@ type Props = {
 };
 
 /** 周一开头（中文月历惯例）。 */
-const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+const WEEKDAY_LABELS = [
+  coreT({key: "ui.stats.weekday_mon"}),
+  coreT({key: "ui.stats.weekday_tue"}),
+  coreT({key: "ui.stats.weekday_wed"}),
+  coreT({key: "ui.stats.weekday_thu"}),
+  coreT({key: "ui.stats.weekday_fri"}),
+  coreT({key: "ui.stats.weekday_sat"}),
+  coreT({key: "ui.stats.weekday_sun"}),
+];
 
 /**
  * 压 primary 底的恒亮文字色：月历选中日数字与「确定」按钮文字都坐在
@@ -133,7 +142,7 @@ export function MonthRangePickerSheet({
       animationType="slide"
       panelStyle={styles.sheet}
     >
-      <Text style={[styles.title, {color: tokens.text}]}>选择日期区间</Text>
+      <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.stats.range_picker_title"})}</Text>
       <View style={styles.monthNav}>
         <Pressable
           testID="month-range-prev"
@@ -201,12 +210,10 @@ export function MonthRangePickerSheet({
       </View>
       <Text style={[styles.hint, {color: tokens.textSecondary}]}>
         {start == null
-          ? '先选起始日，再选结束日'
+          ? coreT({key: "ui.stats.range_pick_start"})
           : end == null
-          ? '已选起始日，请选择结束日'
-          : `${start.getMonth() + 1} 月 ${start.getDate()} 日 — ${
-              end.getMonth() + 1
-            } 月 ${end.getDate()} 日`}
+          ? coreT({key: "ui.stats.range_pick_end"})
+          : `${coreT({key: "ui.stats.date_md", params: {month: String(start.getMonth() + 1), day: String(start.getDate())}})} — ${coreT({key: "ui.stats.date_md", params: {month: String(end.getMonth() + 1), day: String(end.getDate())}})}`}
       </Text>
       <View style={styles.actionRow}>
         <Pressable
@@ -217,7 +224,7 @@ export function MonthRangePickerSheet({
           }}
           style={[styles.actionBtn, {backgroundColor: tokens.bgSecondary}]}
         >
-          <Text style={{color: tokens.textSecondary}}>清除</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.clear"})}</Text>
         </Pressable>
         <Pressable
           testID="month-range-confirm"
@@ -230,7 +237,7 @@ export function MonthRangePickerSheet({
             (start == null || end == null) && {opacity: 0.4},
           ]}
         >
-          <Text style={styles.confirmText}>确定</Text>
+          <Text style={styles.confirmText}>{coreT({key: "ui.common.confirm"})}</Text>
         </Pressable>
       </View>
     </ModalShell>

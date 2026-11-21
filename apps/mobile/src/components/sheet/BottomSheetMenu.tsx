@@ -4,6 +4,7 @@
  * 传 disabled 置灰不可点，不再需要平行的 drawer 实现。
  */
 import React from 'react';
+import {coreT} from '@/i18n/core';
 import {Pressable, StyleSheet, Text} from 'react-native';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -78,7 +79,7 @@ export function BottomSheetMenu({
         style={[styles.item, {borderTopColor: tokens.border}]}
         onPress={onClose}
       >
-        <Text style={{color: tokens.textSecondary, fontSize: 16}}>取消</Text>
+        <Text style={{color: tokens.textSecondary, fontSize: 16}}>{coreT({key: "ui.common.cancel"})}</Text>
       </Pressable>
     </ModalShell>
   );

@@ -5,6 +5,7 @@
  * onConfirm 正常返回（不 throw）后自动关闭。
  */
 import React, {useEffect, useState} from 'react';
+import {coreT} from '../../i18n/core';
 import {Pressable, StyleSheet, Text, TextInput, View, type TextInputProps} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
 import {ModalShell} from './ModalShell';
@@ -36,7 +37,7 @@ type Props = {
   onConfirm: (values: string[]) => void | Promise<void>;
 };
 
-export function TextPromptModal({visible, title, variant = 'center', label, placeholder, initialValue = '', autoCapitalize, fields, confirmLabel = '确定', onClose, onConfirm}: Props) {
+export function TextPromptModal({visible, title, variant = 'center', label, placeholder, initialValue = '', autoCapitalize, fields, confirmLabel = coreT({key: "ui.common.confirm"}), onClose, onConfirm}: Props) {
   const {tokens} = useTheme();
   const effectiveFields: PromptField[] = fields ?? [{label, placeholder, initialValue, autoCapitalize}];
   const [values, setValues] = useState<string[]>(() => effectiveFields.map(field => field.initialValue ?? ''));
@@ -115,7 +116,7 @@ export function TextPromptModal({visible, title, variant = 'center', label, plac
           （还原旧 AddModelModal 的 16，勿再叠加 marginTop）。 */}
       <View style={isBottom ? styles.actionsBottom : styles.actionsCenter}>
         <Pressable onPress={onClose} style={styles.btn}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
         <Pressable testID="text-prompt-submit" onPress={() => handleConfirm().catch(() => undefined)} style={styles.btn} disabled={!canSubmit}>
           <Text
@@ -124,7 +125,7 @@ export function TextPromptModal({visible, title, variant = 'center', label, plac
               fontWeight: '600',
             }}
           >
-            {saving ? '保存中…' : confirmLabel}
+            {saving ? coreT({key: "ui.common.saving"}) : confirmLabel}
           </Text>
         </Pressable>
       </View>

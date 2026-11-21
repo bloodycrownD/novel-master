@@ -2,6 +2,7 @@
  * Compact select row that opens a bottom sheet list (for long option sets).
  */
 import React, {useEffect, useId, useMemo, useState} from 'react';
+import {coreT} from '@/i18n/core';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ThemeTokens} from '@/theme/tokens';
@@ -82,7 +83,7 @@ export function FormSelectField({tokens, value, options, onChange, placeholder =
             ]}
           >
             <Pressable onPress={close} style={styles.cancelBtn}>
-              <Text style={{color: tokens.textSecondary}}>取消</Text>
+              <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
             </Pressable>
           </View>
         </Pressable>
