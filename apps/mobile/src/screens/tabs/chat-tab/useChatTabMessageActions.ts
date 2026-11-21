@@ -107,7 +107,7 @@ export function useChatTabMessageActions({
     Alert.alert(coreT({key: "ui.session.compact_context"}), coreT({key: "ui.session.compact_confirm_msg"}), [
       {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '压缩',
+        text: coreT({key: "ui.session.compact_button"}),
         onPress: () => {
           compactionInFlightRef.current = true;
           showCompactionCancel();
@@ -122,10 +122,10 @@ export function useChatTabMessageActions({
               if (error === undefined) {
                 void reloadMessages(true);
                 void refreshChatTokenLabel();
-                showToast(ToastMessage.toast('压缩失败'));
+                showToast(ToastMessage.toast(coreT({key: "ui.common.compact_failed"})));
                 return;
               }
-              showToast(ToastMessage.toast('压缩失败', error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.compact_failed"}), error));
             },
             onSucceeded: async () => {
               await reloadMessages(true);
@@ -146,7 +146,7 @@ export function useChatTabMessageActions({
               if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast(coreT({key: "ui.chat.compact_cancelled"}));
             })
             .catch((error: unknown) => {
-              showToast(ToastMessage.toast('压缩失败', error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.compact_failed"}), error));
             })
             .finally(() => {
               compactionInFlightRef.current = false;
@@ -168,12 +168,12 @@ export function useChatTabMessageActions({
       try {
         const forked = await runtime.messages.fork(sessionId, messageId);
         if (!forked.ok) {
-          showToast(ToastMessage.toast('分叉失败', forked.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.fork_failed"}), forked.error));
           return;
         }
         const lr = await reloadLists();
         if (!lr.ok) {
-          showToast(ToastMessage.toast('分叉失败', lr.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.fork_failed"}), lr.error));
           return;
         }
         await setCurrentSession(forked.value.id);
@@ -182,7 +182,7 @@ export function useChatTabMessageActions({
         resetStreamingDisplay();
         showToast(coreT({key: "ui.chat.fork_done", params: {name: forked.value.title ?? forked.value.id}}));
       } catch (error) {
-        showToast(ToastMessage.toast('分叉失败', error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.fork_failed"}), error));
       }
     },
     [sessionId, agentRunning, runtime, reloadLists, setCurrentSession, setChatSubview, setConversationPanel, resetStreamingDisplay, showToast],

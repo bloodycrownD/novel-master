@@ -84,7 +84,7 @@ export namespace ChatAgentMeta {
           return Result.ok({
             source: 'none',
             agentId: undefined,
-            agentName: '未配置 Agent',
+            agentName: coreT({key: "ui.session.agent_unconfigured"}),
             modelLabel: '—',
             tokenLabel: '',
             hasDedicatedModel: false,
@@ -128,7 +128,7 @@ export namespace ChatAgentMeta {
         return Result.ok({
           source: 'none',
           agentId: undefined,
-          agentName: '未配置 Agent',
+          agentName: coreT({key: "ui.session.agent_unconfigured"}),
           modelLabel: '—',
           tokenLabel: '',
           hasDedicatedModel: false,

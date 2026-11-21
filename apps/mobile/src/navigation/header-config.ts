@@ -27,7 +27,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
 
   StorageConfig: {title: coreT({key: "ui.nav.storage"}), showBack: true, showNav: false},
   CloudSyncProgress: {title: coreT({key: "ui.nav.cloud_sync"}), showBack: true, showNav: false},
-  ChatConfig: {title: '聊天配置', showBack: true, showNav: false},
+  ChatConfig: {title: coreT({key: "ui.chat_config.title"}), showBack: true, showNav: false},
   CloudSyncConfig: {title: coreT({key: "ui.nav.cloud_storage"}), showBack: true, showNav: false},
   CloudSyncStorage: {title: coreT({key: "ui.nav.cloud_storage_setup"}), showBack: true, showNav: false},
   SearchEngines: {title: coreT({key: "ui.nav.search_engines"}), showBack: true, showNav: false},

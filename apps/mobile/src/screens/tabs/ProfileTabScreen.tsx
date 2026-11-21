@@ -45,7 +45,7 @@ const CONFIG_MENU: Array<{
   {icon: '🔌', label: coreT({key: "ui.nav.providers"}), route: 'Providers'},
   {icon: '🔍', label: coreT({key: "ui.nav.search_engines"}), route: 'SearchEngines'},
   {icon: '🧩', label: coreT({key: "ui.nav.skills_manage"}), route: 'SkillsSettings'},
-  {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
+  {icon: '💬', label: coreT({key: "ui.chat_config.title"}), route: 'ChatConfig'},
   {icon: '💾', label: coreT({key: "ui.nav.storage"}), route: 'StorageConfig'},
   {icon: '📊', label: coreT({key: "ui.nav.token_stats"}), route: 'TokenUsageStats'},
   {icon: '🔢', label: coreT({key: "ui.nav.settings_smart_sort"}), route: 'SmartSortRules'},

@@ -152,7 +152,7 @@ export function SessionDetailScreen() {
     Alert.alert(coreT({key: "ui.session.compact_context"}), coreT({key: "ui.session.compact_confirm_msg"}), [
       {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '压缩',
+        text: coreT({key: "ui.session.compact_button"}),
         onPress: () => {
           setCompacting(true);
           // 编排收在 runManualCompaction（r3-orc-1：与聊天页那份手工副本曾
@@ -161,7 +161,7 @@ export function SessionDetailScreen() {
           // 路径）：toast 即回，聊天页自己收到转录变更后按常规两阶段刷 chip。
           const compactionHooks: ManualCompactionHooks = {
             onFailed: error => {
-              showToast(error === undefined ? ToastMessage.toast('压缩失败') : ToastMessage.toast('压缩失败', error));
+              showToast(error === undefined ? ToastMessage.toast(coreT({key: "ui.common.compact_failed"})) : ToastMessage.toast(coreT({key: "ui.common.compact_failed"}), error));
             },
             onSucceeded: async () => {
               await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
@@ -188,7 +188,7 @@ export function SessionDetailScreen() {
               if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast(coreT({key: "ui.chat.compact_cancelled"}));
             })
             .catch((error: unknown) => {
-              showToast(ToastMessage.toast('压缩失败', error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.compact_failed"}), error));
             })
             .finally(() => {
               setCompacting(false);
