@@ -263,7 +263,7 @@ export function SmartSortRuleEditorScreen() {
 
   const runMatchTest = useCallback(() => {
     if (!draft.patternInput.trim()) {
-      setTestOutcome({kind: 'error', message: '请先填写正则表达式'});
+      setTestOutcome({kind: 'error', message: coreT({key: "ui.smart_sort.regex_required"})});
       return;
     }
     // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前

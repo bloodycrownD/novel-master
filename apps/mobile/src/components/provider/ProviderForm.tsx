@@ -200,7 +200,7 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
         </FormField>
       </FormSectionCard>
 
-      <FormSectionCard title="认证" tokens={tokens}>
+      <FormSectionCard title={coreT({key: "ui.provider.auth_section"})} tokens={tokens}>
         {mode === 'edit' && apiKeyStatus != null ? (
           <View style={styles.statusRow}>
             <Text style={[styles.statusLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.status_label"})}</Text>
