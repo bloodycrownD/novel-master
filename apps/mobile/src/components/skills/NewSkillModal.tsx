@@ -101,8 +101,8 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
 
   const nameReason = name.length > 0 ? SkillName.validate(name) : null;
   const nameIssue = nameReason == null ? null : coreT(nameReason);
-  const descriptionIssue = description.length === 0 ? '描述不能为空（进入索引，供模型判断是否使用）' : null;
-  const projectIssue = domain === 'project' && projectId == null ? '请选择所属项目' : null;
+  const descriptionIssue = description.length === 0 ? coreT({key: "ui.skills.desc_empty"}) : null;
+  const projectIssue = domain === 'project' && projectId == null ? coreT({key: "ui.skills.project_required"}) : null;
   const canSubmit = name.length > 0 && description.length > 0 && nameIssue == null && projectIssue == null && !creating;
 
   /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
@@ -129,7 +129,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
       }
       const preview = previewResult.value;
       if (preview.skillMd == null) {
-        setError('ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）');
+        setError(coreT({key: "ui.skills.zip_root_missing"}));
         return;
       }
       setImported({bytes, preview});
@@ -160,7 +160,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
         return;
       }
       if (existing.value.some(s => s.name === name)) {
-        setError(`目标域已存在同名技能「${name}」`);
+        setError(coreT({key: "ui.skills.domain_name_conflict", params: {name}}));
         return;
       }
       if (imported != null) {

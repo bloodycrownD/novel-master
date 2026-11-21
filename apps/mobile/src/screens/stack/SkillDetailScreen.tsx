@@ -54,7 +54,7 @@ export function SkillDetailScreen() {
         return;
       }
     } catch (error) {
-      showToast(ToastMessage.toast('加载技能失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.skills.load_failed"}), error));
     } finally {
       setLoading(false);
     }

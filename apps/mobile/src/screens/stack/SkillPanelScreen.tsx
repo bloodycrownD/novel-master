@@ -73,7 +73,7 @@ export function SkillPanelScreen() {
     focusSilent: true,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(ToastMessage.toast('加载技能失败', cause));
+        showToast(ToastMessage.toast(coreT({key: "ui.skills.load_failed"}), cause));
       },
       [showToast],
     ),

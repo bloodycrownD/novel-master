@@ -118,7 +118,7 @@ export function SkillsSettingsScreen() {
     fallbackValue: EMPTY_PAYLOAD,
     onError: useCallback(
       (cause: unknown) => {
-        showToast(ToastMessage.toast('加载技能失败', cause));
+        showToast(ToastMessage.toast(coreT({key: "ui.skills.load_failed"}), cause));
       },
       [showToast],
     ),
@@ -164,7 +164,7 @@ export function SkillsSettingsScreen() {
       const anyGlobal = targets.some(t => t.domain === 'global');
       const scopeHint = anyGlobal ? coreT({key: "ui.skills.scope_hint_global"}) : targets.length === 1 && targets[0]!.projectName ? coreT({key: "ui.skills.scope_hint_project_single", params: {project: targets[0]!.projectName}}) : coreT({key: "ui.skills.scope_hint_project"});
       const names = targets.map(t => t.name).join('、');
-      return `${scopeHint}。确定删除${targets.length > 1 ? coreT({key: "ui.skills.selected_skills_label", params: {count: targets.length}}) : `「${names}」`}？删除会清理整目录与对应禁用记录。`;
+      return `${scopeHint}${coreT({key: "ui.skills.delete_confirm_frame", params: {names: targets.length > 1 ? coreT({key: "ui.skills.selected_skills_label", params: {count: targets.length}}) : `「${names}」`}})}`;
     },
     deleteOne: useCallback(
       async (t: SkillRow) => {
