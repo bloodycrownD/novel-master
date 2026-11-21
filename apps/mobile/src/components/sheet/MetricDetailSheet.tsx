@@ -12,6 +12,7 @@ import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import type {SessionUsageDetail} from '@novel-master/core/chat';
 import {TokenFormat} from '@novel-master/core/common';
 import {ModalShell} from '../ui/ModalShell';
+import {coreT} from '@/i18n/core';
 import {UsageStats} from '@/screens/stack/token-usage/format';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -101,7 +102,7 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
               <Row label="缓存命中率" value={last.cacheReadTokens == null ? '—' : UsageStats.formatHitRate(UsageStats.hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
             </>
           )}
-          <SectionLabel text="会话累计" tokens={tokens} />
+          <SectionLabel text={coreT({key: "ui.stats.session_total"})} tokens={tokens} />
           <Row label="消息数（可见）" value={String(detail?.visibleMessageCount ?? 0)} tokens={tokens} />
           <Row label="工具调用" value={String(detail?.toolUseCount ?? 0)} tokens={tokens} />
           <Row label="上下文占用" value={contextTokenLabel ?? '—'} tokens={tokens} />

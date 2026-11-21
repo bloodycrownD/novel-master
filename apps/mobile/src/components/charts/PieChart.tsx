@@ -191,9 +191,9 @@ export function PieChart({
               <Text style={[styles.pieSideDetailLabel, {color: tokens.primary}]} numberOfLines={2}>
                 {selected.label}
               </Text>
-              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>用量 {TokenFormat.count(selected.totalTokens)}</Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.usage_label"})} {TokenFormat.count(selected.totalTokens)}</Text>
               <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.chart_calls_aria", params: {count: selected.calls}})}</Text>
-              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>占比 {selectedShare == null ? '—' : `${Math.round(selectedShare * 100)}%`}</Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.ratio_label"})} {selectedShare == null ? '—' : `${Math.round(selectedShare * 100)}%`}</Text>
             </View>
           ) : null}
         </View>

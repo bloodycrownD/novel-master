@@ -176,7 +176,7 @@ export function CloudSyncConfigScreen() {
         <FormField label="Bucket" tokens={tokens}>
           <FormTextInput tokens={tokens} value={form.bucket} onChangeText={bucket => setForm(prev => ({...prev, bucket}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
-        <FormField label="Region" tokens={tokens} hint="MinIO 可留空">
+        <FormField label={coreT({key: "ui.cloud_sync.region_label"})} tokens={tokens} hint={coreT({key: "ui.cloud_sync.minio_optional_hint"})}>
           <FormTextInput tokens={tokens} value={form.region} onChangeText={region => setForm(prev => ({...prev, region}))} autoCapitalize="none" autoCorrect={false} />
         </FormField>
         <FormField label={coreT({key: "ui.cloud_sync.prefix_label"})} tokens={tokens} hint={coreT({key: "ui.cloud_sync.prefix_hint"})}>

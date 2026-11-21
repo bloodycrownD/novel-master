@@ -425,7 +425,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     }
     const blocked = paths.map(p => (isProtectedPath ? isProtectedPath(p) : null)).filter((reason): reason is string => reason != null);
     if (blocked.length > 0) {
-      showToast(`选中项含受保护路径：${blocked[0]}`);
+      showToast(coreT({key: "ui.vfs.protected_path_blocked", params: {path: blocked[0]}}));
       return;
     }
     Alert.alert(coreT({key: "ui.common.confirm_delete"}), coreT({key: "ui.common.confirm_count_msg", params: {count: paths.length}}), [

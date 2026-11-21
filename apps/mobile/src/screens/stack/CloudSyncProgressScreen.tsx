@@ -176,7 +176,7 @@ export function CloudSyncProgressScreen() {
           if (!active) {
             return;
           }
-          showToast('推送成功');
+          showToast(coreT({key: "ui.cloud_sync.push_done"}));
         }
         runningRef.current = false;
         navigation.goBack();
