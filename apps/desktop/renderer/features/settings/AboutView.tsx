@@ -8,6 +8,7 @@ import {
   ipcAppUiSet,
 } from "@/ipc/client";
 import { showToast } from "@/components/ui/show-toast";
+import { coreT } from "@shared/logic/core-i18n";
 import { UpdateAvailableModal } from "@/components/ui/UpdateAvailableModal";
 import type { UpdateCheckData } from "@shared/ipc-types";
 import { ABOUT_LINKS } from "./about-links";
@@ -26,9 +27,9 @@ const KEY_LAST_REMOTE = "updates.lastCheckRemoteVersion";
 const KEY_DISMISSED = "updates.dismissedVersion";
 
 function formatStatusLabel(status: string | undefined, remote: string | undefined): string {
-  if (status === "up-to-date") return "当前已是最新版本";
-  if (status === "available" && remote) return `有新版本 ${remote}`;
-  if (status === "error") return "上次检查失败";
+  if (status === "up-to-date") return coreT({key: "ui.update.up_to_date"});
+  if (status === "available" && remote) return coreT({key: "ui.update.new_version_line", params: {version: remote}});
+  if (status === "error") return coreT({key: "ui.update.last_check_failed"});
   return "—";
 }
 
@@ -85,7 +86,7 @@ export function AboutView() {
       }
       await persistSuccessfulCheck(res.data);
       if (res.data.status === "up-to-date") {
-        showToast("当前已是最新版本");
+        showToast(coreT({key: "ui.update.up_to_date"}));
         return;
       }
       setUpdateModal(res.data);
@@ -137,19 +138,19 @@ export function AboutView() {
       <div className="about-view__header">
         <img className="about-view__logo" src={appIcon} alt="" width={64} height={64} />
         <h3 className="about-view__title">Novel Master</h3>
-        <p className="about-view__version">版本 {version}</p>
+        <p className="about-view__version">{coreT({key: "ui.about.version", params: {version}})}</p>
       </div>
 
-      <SettingsSection title="更新">
+      <SettingsSection title={coreT({key: "ui.update.section"})}>
         <SettingsRows>
           <SettingsSwitchRow
-            label="自动检查更新"
+            label={coreT({key: "ui.update.auto_check"})}
             checked={autoCheck}
             onChange={(next) => void handleAutoCheckChange(next)}
           />
           <SettingsRow
-            label="检查更新"
-            value={checking ? "检查中…" : "立即检查"}
+            label={coreT({key: "ui.update.check_now"})}
+            value={checking ? coreT({key: "ui.update.checking"}) : coreT({key: "ui.update.check_now_desktop"})}
             onClick={checking ? undefined : () => void runManualCheck()}
           />
         </SettingsRows>
@@ -158,20 +159,20 @@ export function AboutView() {
         </SettingsStatus>
       </SettingsSection>
 
-      <SettingsSection title="项目链接">
+      <SettingsSection title={coreT({key: "ui.about.links_section"})}>
         <SettingsRows>
           <SettingsRow
-            label="GitHub 仓库"
+            label={coreT({key: "ui.about.github_repo"})}
             value=""
             onClick={() => void openLink(ABOUT_LINKS.repo)}
           />
           <SettingsRow
-            label="发行版"
+            label={coreT({key: "ui.about.releases"})}
             value=""
             onClick={() => void openLink(ABOUT_LINKS.releases)}
           />
           <SettingsRow
-            label="许可证"
+            label={coreT({key: "ui.about.license"})}
             value=""
             onClick={() => void openLink(ABOUT_LINKS.license)}
           />

@@ -1,10 +1,11 @@
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "./Button";
 
 export type UpdateCheckResultKind = "up-to-date" | "error";
 
-const UPDATE_CHECK_RESULT_TITLE = "版本检查";
-const UPDATE_CHECK_UP_TO_DATE_MESSAGE = "当前已是最新版本";
-const UPDATE_CHECK_FAILED_MESSAGE = "无法检查更新，请检查网络";
+const UPDATE_CHECK_RESULT_TITLE = () => coreT({key: "ui.update.check_title"});
+const UPDATE_CHECK_UP_TO_DATE_MESSAGE = () => coreT({key: "ui.update.up_to_date"});
+const UPDATE_CHECK_FAILED_MESSAGE = () => coreT({key: "ui.update.check_failed"});
 
 type UpdateCheckResultModalProps = {
   open: boolean;
@@ -15,8 +16,8 @@ type UpdateCheckResultModalProps = {
 
 function messageForKind(kind: UpdateCheckResultKind): string {
   return kind === "up-to-date"
-    ? UPDATE_CHECK_UP_TO_DATE_MESSAGE
-    : UPDATE_CHECK_FAILED_MESSAGE;
+    ? UPDATE_CHECK_UP_TO_DATE_MESSAGE()
+    : UPDATE_CHECK_FAILED_MESSAGE();
 }
 
 export function UpdateCheckResultModal({
@@ -39,15 +40,15 @@ export function UpdateCheckResultModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="update-check-result-title" className="update-modal__title">
-          {UPDATE_CHECK_RESULT_TITLE}
+          {UPDATE_CHECK_RESULT_TITLE()}
         </h3>
         <p className="update-modal__hint">{messageForKind(kind)}</p>
         <div className="update-modal__actions update-modal__actions--between">
           <Button variant="secondary" onClick={onClose}>
-            关闭
+            {coreT({key: "ui.common.close"})}
           </Button>
           <Button variant="secondary" onClick={() => void onSnoozeToday()}>
-            今日不再提醒
+            {coreT({key: "ui.update.remind_off_today"})}
           </Button>
         </div>
       </div>

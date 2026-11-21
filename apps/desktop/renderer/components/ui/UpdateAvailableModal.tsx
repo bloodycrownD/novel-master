@@ -1,3 +1,4 @@
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "./Button";
 
 type UpdateAvailableModalProps = {
@@ -33,24 +34,24 @@ export function UpdateAvailableModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="update-modal-title" className="update-modal__title">
-          发现新版本
+          {coreT({key: "ui.update.available_title"})}
         </h3>
         <p className="update-modal__version">v{remoteVersion}</p>
         {releaseNotesExcerpt ? (
           <p className="update-modal__notes">{releaseNotesExcerpt}</p>
         ) : null}
         <p className="update-modal__hint">
-          将在浏览器中打开 GitHub 发行页，请下载对应平台的安装包。
+          {coreT({key: "ui.update.open_releases_hint"})}
         </p>
         <div className="update-modal__actions">
           <Button variant="secondary" disabled={busy} onClick={onCancel}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           <Button variant="secondary" disabled={busy} onClick={() => void onLater()}>
-            稍后
+            {coreT({key: "ui.update.later"})}
           </Button>
           <Button variant="primary" disabled={busy} onClick={() => void onDownload()}>
-            {busy ? "处理中…" : "前往下载"}
+            {busy ? coreT({key: "ui.common.processing"}) : coreT({key: "ui.update.go_download"})}
           </Button>
         </div>
       </div>
