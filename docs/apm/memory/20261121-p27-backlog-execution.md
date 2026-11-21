@@ -122,3 +122,15 @@ assistant:
 - **悬空键核验 0/1500**：check-dangling-keys.mjs 验收工具入库（60d556170）——catalog 全键在 apps+packages+scripts+tools 2473 文件匹配，含源码契约测试锁。
 - **renderer typecheck ratchet 裁决**：174/178（79 identities）既有基线漂移、波 4a 零新增（desktop agent stash 对照 + 主代理复跑同数），非 R6 范围，随 p26 起的欠账台账顺延。
 - **R6 验收门终裁**：UI/错误桶硬编码中文 grep=0 **达成**（豁免口径下，r6-exemptions.md 九类登记），全量交付非 partial；键面 1500（ui 1215 / error 187 / label 98），zh/en catalog 1500/1316。余：tag p27-backlog。
+
+## p27 验收与三起收尾事故（主会话复核，2026-11-21）
+
+实跑验收终态（main @ de61ba440，tag p27-backlog）：signatures=0、top-let=0、throw-audit PASS（UNTRIAGED=0）、typecheck 15ws、core 四批 960+808+1088+687、desktop 774、mobile 2384 全绿。
+
+**事故 1 · detached HEAD 提交**：checkout 用 `git checkout refs/heads/p27-backlog` 全名进 detached HEAD，收尾提交 1cb0cd625 落在游离链上；随后 `git merge refs/heads/p27-backlog` 合的是分支头 60d556170，收尾整段未入 merge。教训：切分支用短名 `git checkout p27-backlog`（branch 优先），或提交前 `git symbolic-ref HEAD` 确认在分支上。
+
+**事故 2 · merge 静默丢改动**：分支侧（基于旧基线）与 main 侧对同一行 SKIP_DIRS 的不同追加，三方合并未报冲突但丢了一侧——1cb0cd625 的 10 个文件修复在 merge 后全部消失。靠「commit message 声称的数字与实跑不符」回查发现，从孤儿提交 `git checkout <sha> -- <files>` 找回。教训：merge 后必须实跑门禁对账 commit message 数字，不能只看 merge 干净。
+
+**事故 3 · nm-style bin 启动器 mtime 盲区**：bin「src 比 dist 旧时自动 tsc」在 merge checkout 后失灵（checkout 让 src mtime 早于 dist），旧 dist 继续@跑旧规则（525/47 假象）。教训：改 nm-style src 后必须 `rm -rf dist && npx tsc -p tsconfig.json` 强制重编再验。
+
+其余：R6 引入 2 处顶层 let 绕过 R3 门（波次后置没回跑前置门）——已收进 holder；`.zcode`（374）/`docs`（144）进 SKIP_DIRS，扫描面 525→真代码 0；tag 从 60d556170 移至 de61ba440；p27-backlog 分支与 worktree 已删。
