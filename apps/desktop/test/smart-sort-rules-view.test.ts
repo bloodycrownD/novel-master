@@ -34,16 +34,16 @@ describe("SmartSortRulesView 评审修复（desktop/B-1、B-2、C-1）", () => {
   });
 
   it("B-1：空态文案区分「加载失败」与「暂无规则」", () => {
-    // 两句键面无键（ui.common.load_failed / ui.smart_sort.empty 均不同文），3c-c MISS 补迁前仍锁中文。
+    // 空态两句已迁 coreT（键 3c-c 前置补键 c702d0a6b 立齐），断言锁 coreT 形态+键名。
     assert.match(
       source,
-      /\{loadFailed\s*\?\s*"加载失败，请重试。"\s*:\s*"暂无规则，点击上方按钮创建。"\}/,
+      /\{loadFailed\s*\?\s*coreT\(\{key: "ui\.smart_sort\.load_retry_empty"\}\)\s*:\s*coreT\(\{key: "ui\.smart_sort\.empty_create_hint"\}\)\}/,
     );
   });
 
   it("B-2：ruleId 缺失时提示「规则不存在或已被删除」并回退新建语义", () => {
-    // 键面无同文键（ui.smart_sort.missing_toast 缺「被」字），3c-c MISS 补迁前仍锁中文。
-    assert.match(source, /toastSettingsError\("规则不存在或已被删除"\);/);
+    // 提示文案已迁 coreT（ui.smart_sort.rule_missing，3c-c 前置补键立齐），锁 coreT 形态+键名。
+    assert.match(source, /toastSettingsError\(coreT\(\{key: "ui\.smart_sort\.rule_missing"\}\)\);/);
     assert.match(source, /setRuleId\(undefined\);/);
     // navState 同步清空（overlay 标题基线）
     assert.match(
@@ -112,10 +112,10 @@ describe("SmartSortRuleEditorView 评审修复 round 4（dtcli/B-1/B-2/B-3）", 
   });
 
   it("B-1：清空后结果区回 idle 占位文案（源码级断言，偏弱：锁占位分支存在）", () => {
-    // 键面无同文键（ui.smart_sort.result_pending 无「输入测试文本后」前缀），3c-c MISS 补迁前仍锁中文。
+    // idle 占位已迁 coreT（ui.smart_sort.test_result_pending，3c-c 前置补键立齐），锁 coreT 形态+键名。
     assert.match(
       source,
-      /: \(\s*"输入测试文本后点击「测试」查看匹配结果。"\s*\)\)/,
+      /: \(\s*coreT\(\{key: "ui\.smart_sort\.test_result_pending"\}\)\s*\)/,
     );
   });
 

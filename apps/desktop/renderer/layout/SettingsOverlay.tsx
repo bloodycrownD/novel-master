@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type { SkillRefDto } from "@shared/ipc-types";
 import {
   getSettingsNavHighlightId,
@@ -184,7 +185,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
   let mainTitle = SETTINGS_TOP_LEVEL[viewId] ?? "设置";
   if (viewId === "agentEditor") mainTitle = agentEditorTitle ?? navState.editingAgentDisplayName ?? "智能体配置";
   else if (viewId === "providerDetail") mainTitle = "模型管理";
-  else if (viewId === "providerCreate") mainTitle = "新建服务商";
+  else if (viewId === "providerCreate") mainTitle = coreT({key: "ui.provider.new_title"});
   else if (viewId === "modelSampling") mainTitle = "采样配置";
   else if (viewId === "smartSortRuleEditor") mainTitle = navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
   else if (viewId === "searchEngineDetail") {
