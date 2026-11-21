@@ -66,3 +66,18 @@ test("T-NC5 keep 豁免：nm-style: keep-closure 前导注释跳过", () => {
   ].join("\n");
   assert.equal(nestedClosuresOfText("a.ts", src).length, 0);
 });
+
+test("T-NC6 名称位置与解构：属性访问键位/属性键/内层箭头形参不算捕获；解构声明的名字算自声明", () => {
+  // 属性访问 x.name 的 name 是键位不是引用：捕获集恰为 [unit]，不含 file。
+  const propAccess = nestedClosuresOfText("a.ts", "export function run(unit: {file: string}): string { const get = (): string => unit.file; return get(); }");
+  assert.deepEqual(propAccess[0].captures, ["unit"], "unit 是外层参数=捕获；file 是属性访问键位不算");
+  // 属性定义 {name: someVar} 的键名 name 不算引用。
+  const propKey = nestedClosuresOfText("a.ts", "export function run(v: number): {name: number} { const make = (): {name: number} => ({name: v}); return make(); }");
+  assert.deepEqual(propKey[0].captures, ["v"], "键位 name 不收，值位 v 收");
+  // 内层箭头形参不算闭包捕获。
+  const innerParam = nestedClosuresOfText("a.ts", "export function run(list: number[]): number { const sum = (): number => list.reduce((acc, x) => acc + x, 0); return sum(); }");
+  assert.deepEqual(innerParam[0].captures, ["list"], "acc/x 是内层形参不入捕获");
+  // 解构声明的名字是自声明（外层解构 → 是外层局部，算捕获；本层解构 → 不算）。
+  const destructureOuter = nestedClosuresOfText("a.ts", "export function create(deps: {request: string}): () => string { const {request} = deps; const fetchLike = (): string => request; return fetchLike; }");
+  assert.deepEqual(destructureOuter[0].captures, ["request"], "外层解构声明的 request 是捕获");
+});

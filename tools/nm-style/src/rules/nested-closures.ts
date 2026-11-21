@@ -47,15 +47,34 @@ function bodyOf(fn: ts.Node): ts.Node | undefined {
   return (fn as { body?: ts.Node }).body;
 }
 
+/** 绑定模式的名字收集：`x` / `{a, b: c, ...rest}` / `[x, , y]`——收「绑定到的名字」（a、c、rest、x、y），不收属性键（b）。 */
+function collectBindingNames(pattern: ts.Node, out: Set<string> | Map<string, ts.Node>, source?: ts.Node): void {
+  const add = (name: string): void => {
+    if (out instanceof Map) out.set(name, source ?? pattern);
+    else out.add(name);
+  };
+  if (ts.isIdentifier(pattern)) { add(pattern.text); return; }
+  const visit = (node: ts.Node): void => {
+    if (ts.isBindingElement(node)) {
+      if (node.propertyName == null || node.name !== node.propertyName) collectBindingNames(node.name, out, source);
+      return; // propertyName 的键位名字不入集
+    }
+    if (ts.isOmittedExpression(node)) return;
+    ts.forEachChild(node, visit);
+  };
+  visit(pattern);
+}
+
 /** 闭包体内自声明的全部名字（参数、var/let/const、class、function，含嵌套块与嵌套函数自己的声明）。 */
 function ownDeclaredNames(fn: ts.FunctionLikeDeclaration): Set<string> {
   const names = new Set<string>();
-  for (const param of fn.parameters) {
-    if (ts.isIdentifier(param.name)) names.add(param.name.text);
-    else param.name.forEachChild((n) => { if (ts.isIdentifier(n)) names.add(n.text); });
-  }
+  for (const param of fn.parameters) collectBindingNames(param.name, names);
   const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) names.add(node.name.text);
+    if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, names);
+    else if (ts.isFunctionLike(node) && node !== fn) {
+      // 嵌套函数的形参也是本闭包的自声明（内层箭头参数不该被计成捕获）。
+      for (const param of node.parameters) collectBindingNames(param.name, names);
+    }
     else if (ts.isFunctionDeclaration(node) && node.name != null) names.add(node.name.text);
     else if (ts.isClassDeclaration(node) && node.name != null) names.add(node.name.text);
     else if (ts.isInterfaceDeclaration(node) && node.name != null) names.add(node.name.text);
@@ -72,14 +91,15 @@ function outerDeclaredNames(fn: ts.FunctionLikeDeclaration): Map<string, ts.Node
   const out = new Map<string, ts.Node>();
   for (let current: ts.Node | undefined = fn.parent; current != null; current = current.parent) {
     if (!ts.isFunctionLike(current)) continue;
-    for (const param of current.parameters) {
-      if (ts.isIdentifier(param.name)) out.set(param.name.text, param);
-    }
+    for (const param of current.parameters) collectBindingNames(param.name, out, param);
     const outerBody = bodyOf(current);
     if (outerBody == null) continue;
     const visit = (node: ts.Node): void => {
       if (node === fn) return; // 自己内部的自声明不算外层
-      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) out.set(node.name.text, node);
+      if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, out, node);
+      else if (ts.isFunctionLike(node) && node !== fn) {
+        for (const param of node.parameters) collectBindingNames(param.name, out, node);
+      }
       else if (ts.isFunctionDeclaration(node) && node.name != null) out.set(node.name.text, node);
       else if (ts.isClassDeclaration(node) && node.name != null) out.set(node.name.text, node);
       ts.forEachChild(node, visit);
@@ -194,7 +214,20 @@ function buildClosure(rel: string, sourceFile: ts.SourceFile, name: string, fn: 
   const own = ownDeclaredNames(fn);
   const captured = new Map<string, ts.Node>();
   const visitRefs = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && !own.has(node.text) && outer.has(node.text)) captured.set(node.text, outer.get(node.text)!);
+    if (ts.isIdentifier(node)) {
+      const parent: ts.Node | undefined = node.parent;
+      const isNamePosition = (parent != null && (
+        (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+        (ts.isPropertyAssignment(parent) && parent.name === node) ||
+        (ts.isMethodDeclaration(parent) && parent.name === node) ||
+        (ts.isGetAccessorDeclaration(parent) && parent.name === node) ||
+        (ts.isSetAccessorDeclaration(parent) && parent.name === node) ||
+        (ts.isPropertyDeclaration(parent) && parent.name === node) ||
+        (ts.isBindingElement(parent) && parent.propertyName === node) ||
+        (ts.isQualifiedName(parent) && parent.left === node)
+      ));
+      if (!isNamePosition && !own.has(node.text) && outer.has(node.text)) captured.set(node.text, outer.get(node.text)!);
+    }
     ts.forEachChild(node, visitRefs);
   };
   const body = bodyOf(fn);
