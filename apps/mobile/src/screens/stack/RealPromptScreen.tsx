@@ -85,7 +85,7 @@ export function RealPromptScreen() {
       // 否则它照样会回来把 turns 写回去。
       const requestId = ++requestIdRef.current;
       if (projectId == null || sessionId == null) {
-        setError('请先选择项目与会话');
+        setError(coreT({key: "ui.prompt.select_project_session"}));
         setTurns([]);
         setLoading(false);
         return;

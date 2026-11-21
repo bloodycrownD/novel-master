@@ -132,7 +132,7 @@ export namespace ProviderFormMapper {
     // 非法输入由 parseBodyParamsJson 抛中文错误阻断保存。
     patch.bodyParams = ProviderFormMapper.parseBodyParamsJson(values.bodyParamsJson);
     if (Object.keys(patch).length === 0) {
-      throw new Error('请至少修改一项');
+      throw new Error(coreT({key: "ui.provider.change_required"}));
     }
     return patch;
   }
@@ -188,7 +188,7 @@ export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, sa
         )
       }
     >
-      <FormSectionCard title="连接" tokens={tokens}>
+      <FormSectionCard title={coreT({key: "ui.provider.connect_section"})} tokens={tokens}>
         <FormField label={coreT({key: "ui.provider.name_label"})} tokens={tokens}>
           <FormTextInput tokens={tokens} value={values.displayName} onChangeText={text => patch({displayName: text})} autoCapitalize="none" autoCorrect={false} placeholder={coreT({key: "ui.provider.name_placeholder"})} />
         </FormField>

@@ -184,9 +184,9 @@
       "disposition": "BOUNDARY",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请至少修改一项');": {
+    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(coreT({key: \"ui.provider.change_required\"}));": {
       "form": "T4",
-      "line": 134,
+      "line": 135,
       "disposition": "BOUNDARY",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },

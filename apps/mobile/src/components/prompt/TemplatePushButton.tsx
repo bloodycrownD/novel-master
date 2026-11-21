@@ -60,7 +60,7 @@ export function TemplatePushButton({
     Alert.alert(coreT({key: "ui.vfs.push_project_title"}), confirmMessage(), [
       {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '推送',
+        text: coreT({key: "ui.cloud_sync.push_action"}),
         style: 'destructive',
         onPress: () => runPush().catch(() => undefined),
       },

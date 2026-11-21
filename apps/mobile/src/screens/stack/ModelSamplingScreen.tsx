@@ -144,7 +144,7 @@ export function ModelSamplingScreen() {
       const settingsPatch = {contextWindowTokens: contextWindow, sampling, tokenCounterMode, thinkingLevel};
       const stored = await runtime.providerModels.updateSettings(savedModelId, settingsPatch);
       if (!stored.ok) throw stored.error;
-      showToast('已保存模型设置');
+      showToast(coreT({key: "ui.sampling.saved_done"}));
       navigation.goBack();
     } catch (error) {
       showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
@@ -165,7 +165,7 @@ export function ModelSamplingScreen() {
       if (!cleared.ok) throw cleared.error;
       setContextWindowTokens(String(SavedModelSettings.contextWindowTokens(updated.value.settings)));
       setParams(undefined);
-      showToast('已恢复默认采样参数');
+      showToast(coreT({key: "ui.sampling.reset_done"}));
     } catch (error) {
       showToast(ToastMessage.toast(coreT({key: "ui.common.restore_failed"}), error));
     } finally {
