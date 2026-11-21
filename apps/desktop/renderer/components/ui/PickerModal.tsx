@@ -1,3 +1,5 @@
+import { coreT } from "@shared/logic/core-i18n";
+
 type PickerRow = {
   readonly id: string;
   readonly label: string;
@@ -22,7 +24,7 @@ export function PickerModal({
   onSelect,
   currentId,
   allowNone,
-  noneLabel = "不启用",
+  noneLabel = coreT({key: "ui.common.not_enabled"}),
 }: PickerModalProps) {
   if (!open) {
     return null;
@@ -49,7 +51,7 @@ export function PickerModal({
             </li>
           ) : null}
           {rows.length === 0 && !allowNone ? (
-            <li className="picker-modal__empty">暂无可选项，请先在设置中创建。</li>
+            <li className="picker-modal__empty">{coreT({key: "ui.common.picker_empty"})}</li>
           ) : null}
           {rows.map((row) => (
             <li key={row.id}>
@@ -67,7 +69,7 @@ export function PickerModal({
           ))}
         </ul>
         <button type="button" className="picker-modal__cancel" onClick={onClose}>
-          取消
+          {coreT({key: "ui.common.cancel"})}
         </button>
       </div>
     </div>

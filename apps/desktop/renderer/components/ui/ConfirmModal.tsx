@@ -1,3 +1,4 @@
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "./Button";
 
 type ConfirmModalProps = {
@@ -16,8 +17,8 @@ export function ConfirmModal({
   open,
   title,
   message,
-  confirmLabel = "确定",
-  cancelLabel = "取消",
+  confirmLabel = coreT({key: "ui.common.confirm"}),
+  cancelLabel = coreT({key: "ui.common.cancel"}),
   danger = false,
   busy = false,
   onConfirm,
@@ -49,7 +50,7 @@ export function ConfirmModal({
             disabled={busy}
             onClick={() => void onConfirm()}
           >
-            {busy ? "处理中…" : confirmLabel}
+            {busy ? coreT({key: "ui.common.processing"}) : confirmLabel}
           </Button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { handleSingleLineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
+import { coreT } from "@shared/logic/core-i18n";
 
 type TextPromptModalProps = {
   open: boolean;
@@ -23,7 +24,7 @@ export function TextPromptModal({
   label,
   placeholder,
   initialValue = "",
-  confirmLabel = "确定",
+  confirmLabel = coreT({key: "ui.common.confirm"}),
   validate,
   onClose,
   onConfirm,
@@ -93,7 +94,7 @@ export function TextPromptModal({
         ) : null}
         <div className="text-prompt-modal__actions">
           <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -101,7 +102,7 @@ export function TextPromptModal({
             disabled={!canSubmit}
             onClick={() => void handleConfirm()}
           >
-            {saving ? "保存中…" : confirmLabel}
+            {saving ? coreT({key: "ui.common.saving"}) : confirmLabel}
           </button>
         </div>
       </div>
