@@ -21,6 +21,7 @@ import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ThemeTokens} from '@/theme/tokens';
 import {SegmentedControl, type SegmentOption} from '@/components/ui/SegmentedControl';
 import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
+import {coreT} from '@/i18n/core';
 
 type EditorScreenShellProps<T extends string> = {
   tokens: ThemeTokens;
@@ -107,7 +108,7 @@ export function EditorScreenShell<T extends string>({
             </Pressable>
           ) : null}
           {title == null ? null : titlePress ? (
-            <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel="收起键盘">
+            <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
               <Text style={[styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
                 {title}
               </Text>
@@ -127,7 +128,7 @@ export function EditorScreenShell<T extends string>({
                   },
                 ]}
               >
-                {toggle.previewMode ? '编辑' : '预览'}
+                {toggle.previewMode ? coreT({key: "ui.common.edit"}) : coreT({key: "ui.common.preview"})}
               </Text>
             </Pressable>
           ) : null}

@@ -6,6 +6,7 @@ import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '../../theme/tokens';
 import {RichContentLimits} from './rich-content-limits';
+import {coreT} from '../../i18n/core';
 
 interface RichContentBodyProps {
   content: string;
@@ -27,7 +28,7 @@ function RichContentBodyInner({
       <Text style={[styles.plainText, {color: plainColor}]}>{content}</Text>
       {overLimit ? (
         <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          内容过长，已显示原文
+          {coreT({key: "ui.rich_document.over_limit_hint"})}
         </Text>
       ) : null}
     </View>

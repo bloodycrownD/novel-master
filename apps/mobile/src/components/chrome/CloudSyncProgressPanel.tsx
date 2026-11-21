@@ -5,6 +5,7 @@ import React, {useEffect, useRef} from 'react';
 import {ActivityIndicator, Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 import type {CloudSyncProgressUiState} from '@/services/cloud-sync-progress-ui';
+import {coreT} from '@/i18n/core';
 
 type Props = {
   title: string;
@@ -41,7 +42,7 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
 
   const progress = state?.progress ?? 0;
   const percent = Math.round(Math.min(1, Math.max(0, progress)) * 100);
-  const phaseLabel = state?.label ?? '正在同步…';
+  const phaseLabel = state?.label ?? coreT({key: "ui.cloud_sync.progress_syncing"});
 
   return (
     <View style={styles.root}>
@@ -88,8 +89,8 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
             />
           )}
         </View>
-        <Text style={[styles.percent, {color: tokens.textSecondary}]}>{state?.indeterminate === true ? '传输中…' : `${percent}%`}</Text>
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>请勿关闭应用，大文件可能需要数分钟</Text>
+        <Text style={[styles.percent, {color: tokens.textSecondary}]}>{state?.indeterminate === true ? coreT({key: "ui.cloud_sync.progress_transferring"}) : `${percent}%`}</Text>
+        <Text style={[styles.hint, {color: tokens.textSecondary}]}>{coreT({key: "ui.cloud_sync.progress_keep_open"})}</Text>
       </View>
     </View>
   );

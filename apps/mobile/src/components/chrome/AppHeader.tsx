@@ -9,6 +9,7 @@ import {PAGE_HEADER_CONFIG} from '../../navigation/header-config';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useChatTabNavigationOptional} from '@/navigation/ChatTabNavContext';
 import {useTheme} from '../../theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 /** 顶栏内容区高度：48 minHeight + 10 paddingBottom */
 export const APP_HEADER_CONTENT_HEIGHT = 58;
@@ -47,10 +48,10 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
       let title = base.title;
       let showBack = false;
       if (state.chatSubview === 'conversation') {
-        title = state.sessionTitle ?? '会话';
+        title = state.sessionTitle ?? coreT({key: "ui.nav.chat"});
         showBack = true;
       } else if (state.sessionListPanel === 'projects') {
-        title = '项目工作区';
+        title = coreT({key: "ui.nav.project_workspace_title"});
       } else if (state.chatSubview === 'list' && state.sessionListPanel === 'sessions') {
         title = state.projectName ?? base.title;
       }
@@ -72,7 +73,7 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
     };
   }, [pageKey, chatNav, stackOverride, onBack, onMenu, ownerRouteKey]);
 
-  const menuLabel = pageKey === 'chat' && chatNav != null && chatNav.state.chatSubview === 'conversation' ? '会话操作' : '项目列表';
+  const menuLabel = pageKey === 'chat' && chatNav != null && chatNav.state.chatSubview === 'conversation' ? coreT({key: "ui.nav.session_actions"}) : coreT({key: "ui.nav.project_list_menu"});
 
   return (
     <View
@@ -87,7 +88,7 @@ export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
     >
       <View style={styles.row}>
         {resolved.showBack ? (
-          <Pressable onPress={resolved.onBack} style={styles.iconBtn} accessibilityLabel="返回">
+          <Pressable onPress={resolved.onBack} style={styles.iconBtn} accessibilityLabel={coreT({key: "ui.common.back"})}>
             <BackIcon color={tokens.primary} />
           </Pressable>
         ) : (

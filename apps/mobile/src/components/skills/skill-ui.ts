@@ -5,6 +5,7 @@
  */
 
 import type {SkillDomain} from '@novel-master/core/skills';
+import {coreT} from '../i18n/core';
 
 // front matter 重写（重命名/描述编辑与 ZIP 导入回写共用）已回收为
 // core 单源，经此处再导出供 mobile 各组件消费。
@@ -16,9 +17,9 @@ export namespace SkillUi {
   /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
   export function domainBadgeLabel(domain: SkillDomain, overridden: boolean): string {
     if (domain === 'global') {
-      return '全局';
+      return coreT({key: "ui.skills.domain_tag_global"});
     }
-    return overridden ? '项目 · 覆盖全局' : '项目';
+    return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : '项目';
   }
 
   /** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */

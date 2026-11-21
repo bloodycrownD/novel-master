@@ -10,6 +10,7 @@ import {ModalShell} from '../ui/ModalShell';
 import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
 import {FillPolicyMobile} from '../../services/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
+import {coreT} from '../../i18n/core';
 
 type Props = {
   visible: boolean;
@@ -24,21 +25,21 @@ type Props = {
 // 4 项横排 chip 会换行把面板顶出滚动区，排序方式改 PickerListModal 单选
 // （智能排序列表首项，照 ModelPickerModal 先例），表单内只留一行当前值。
 const SORT_FIELDS: {value: SortField; label: string}[] = [
-  {value: 'smart', label: '智能排序'},
-  {value: 'name', label: '文件名称'},
-  {value: 'created', label: '创建时间'},
-  {value: 'updated', label: '更新时间'},
+  {value: 'smart', label: coreT({key: "ui.nav.settings_smart_sort"})},
+  {value: 'name', label: coreT({key: "ui.vfs.sort_by_name"})},
+  {value: 'created', label: coreT({key: "ui.vfs.sort_by_created"})},
+  {value: 'updated', label: coreT({key: "ui.vfs.sort_by_updated"})},
 ];
 
 const SORT_ORDERS: {value: SortOrder; label: string}[] = [
-  {value: 'asc', label: '升序'},
-  {value: 'desc', label: '降序'},
+  {value: 'asc', label: coreT({key: "ui.vfs.sort_asc"})},
+  {value: 'desc', label: coreT({key: "ui.vfs.sort_desc"})},
 ];
 
 const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
-  {value: 'filename', label: '文件名'},
-  {value: 'header', label: '头信息'},
-  {value: 'hidden', label: '不展示'},
+  {value: 'filename', label: coreT({key: "label.workplace.display.filename"})},
+  {value: 'header', label: coreT({key: "ui.vfs.header_field_header"})},
+  {value: 'hidden', label: coreT({key: "ui.vfs.header_field_hidden"})},
 ];
 
 export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocked = false, onClose, onSave}: Props) {
@@ -94,14 +95,14 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
 
   const sheetContent = (
     <>
-      <Text style={[styles.heading, {color: tokens.text}]}>目录规则</Text>
+      <Text style={[styles.heading, {color: tokens.text}]}>{coreT({key: "ui.vfs.menu_directory_rule"})}</Text>
       <ScrollView style={styles.form} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
               ruleEnabled 沿用打开时的既有状态原样保存。 */}
-        <FieldLabel tokens={tokens} text="排序方式" />
+        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.sort_mode_label"})} />
         <Pressable
           testID="sort-field-value-row"
-          accessibilityLabel="选择排序方式"
+          accessibilityLabel={coreT({key: "ui.vfs.sort_mode_picker"})}
           onPress={() => setSortFieldPickerVisible(true)}
           style={[styles.pickerRow, {borderColor: tokens.border, backgroundColor: tokens.bgSecondary}]}
         >
@@ -110,9 +111,9 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
           </Text>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
         </Pressable>
-        <FieldLabel tokens={tokens} text="排序方向" />
+        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.sort_dir_label"})} />
         <OptionRow options={SORT_ORDERS} value={sortOrder} onChange={setSortOrder} tokens={tokens} />
-        <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
+        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.header_count_label"})} />
         <TextInput
           style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
           keyboardType="number-pad"
@@ -120,7 +121,7 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
           onChangeText={setHeadCount}
           underlineColorAndroid="transparent"
         />
-        <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
+        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.tail_count_label"})} />
         <TextInput
           style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
           keyboardType="number-pad"
@@ -128,15 +129,15 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
           onChangeText={setTailCount}
           underlineColorAndroid="transparent"
         />
-        <FieldLabel tokens={tokens} text="其余文件填充" />
+        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.rest_fill_label"})} />
         <OptionRow options={FILL_POLICIES} value={fillPolicy} onChange={setFillPolicy} tokens={tokens} />
       </ScrollView>
       <View style={[styles.actions, {borderTopColor: tokens.border}]}>
         <Pressable onPress={onClose} style={styles.actionBtn}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
+          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
         </Pressable>
         <Pressable onPress={() => handleSave().catch(() => undefined)} disabled={saving} style={styles.actionBtn}>
-          <Text style={{color: tokens.primary}}>{saving ? '保存中…' : '保存'}</Text>
+          <Text style={{color: tokens.primary}}>{saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}</Text>
         </Pressable>
       </View>
     </>
@@ -157,24 +158,24 @@ export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocke
       {/* 排序方式单选：独立底部弹层（RN Modal 叠 Modal），选中即关。 */}
       <PickerListModal
         visible={sortFieldPickerVisible}
-        title="排序方式"
+        title={coreT({key: "ui.vfs.sort_mode_label"})}
         load={loadSortFields}
         keyExtractor={item => item.value}
         renderRow={(item, selected) => (
           <>
             <Text style={{color: tokens.text}}>{item.label}</Text>
-            {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
+            {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
           </>
         )}
         getRowProps={item => ({
           testID: `sort-field-option-${item.value}`,
-          accessibilityLabel: `排序方式 ${item.label}`,
+          accessibilityLabel: coreT({key: "ui.vfs.sort_mode_aria", params: {label: item.label}}),
         })}
         onPick={item => {
           setSortField(item.value);
           setSortFieldPickerVisible(false);
         }}
-        emptyText="暂无可选排序方式"
+        emptyText={coreT({key: "ui.vfs.sort_mode_empty"})}
         onClose={() => setSortFieldPickerVisible(false)}
       />
     </>

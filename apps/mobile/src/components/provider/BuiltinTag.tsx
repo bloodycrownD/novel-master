@@ -8,11 +8,12 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
+import {coreT} from '@/i18n/core';
 
 export function BuiltinTag({tokens}: {tokens: ThemeTokens}) {
   return (
     <View style={[styles.tag, {backgroundColor: `${tokens.primary}1A`}]}>
-      <Text style={[styles.tagText, {color: tokens.primary}]}>内置</Text>
+      <Text style={[styles.tagText, {color: tokens.primary}]}>{coreT({key: "ui.common.builtin"})}</Text>
     </View>
   );
 }
