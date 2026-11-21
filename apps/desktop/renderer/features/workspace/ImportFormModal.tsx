@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 import {
   zipDirectoryPathForTarget,
@@ -27,17 +28,18 @@ const IMPORT_FORM_OPTIONS: Array<{
 }> = [
   {
     value: "zip",
-    label: "ZIP 包",
+    label: coreT({key: "ui.vfs.import_kind_zip"}),
+    // 三个 hint 键面无对应键（漏键待波 3c），保留原字面量。
     hint: "解压到目标目录，将覆盖目标目录下全部内容",
   },
   {
     value: "card",
-    label: "角色卡",
+    label: coreT({key: "ui.vfs.import_kind_card"}),
     hint: "解析角色卡并写入目标目录，将覆盖目标目录内的同名文件",
   },
   {
     value: "file",
-    label: "单文件",
+    label: coreT({key: "ui.vfs.import_kind_file"}),
     hint: "写入单个文件，同名文件存在时需确认后才会覆盖",
   },
 ];
@@ -93,18 +95,18 @@ export function ImportFormModal({
             id="import-form-modal-title"
             className="file-inclusion-modal__title"
           >
-            导入
+            {coreT({key: "ui.common.import"})}
           </h3>
           <p className="file-inclusion-modal__path">
             {directoryPath == null || directoryPath === "/"
-              ? "当前目录（工作区根）"
+              ? coreT({key: "ui.vfs.target_root"})
               : directoryPath}
           </p>
         </header>
 
         <fieldset
           className="file-inclusion-modal__options"
-          aria-label="导入形式"
+          aria-label={coreT({key: "ui.vfs.import_form_section"})}
         >
           {IMPORT_FORM_OPTIONS.map((opt) => (
             <label
@@ -133,7 +135,7 @@ export function ImportFormModal({
 
         <div className="text-prompt-modal__actions">
           <Button variant="secondary" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           {/* 确认入口：onSelect 的唯一触发源。data-import-form-submit 是 E2E 选择器锚。 */}
           <Button
@@ -144,7 +146,7 @@ export function ImportFormModal({
               onClose();
             }}
           >
-            导入
+            {coreT({key: "ui.common.import"})}
           </Button>
         </div>
       </div>

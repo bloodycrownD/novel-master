@@ -12,6 +12,7 @@ import {
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { batchIngestOverwriteMessage, type WorkspaceContextTarget } from "./workspace-context";
+import { coreT } from "@shared/logic/core-i18n";
 import {
   entryName,
   ancestorDirPaths,
@@ -215,7 +216,7 @@ export function WorkspaceTree({
   if (loading) {
     return (
       <div className="explorer-tree__body explorer-tree__body--fill">
-        <p className="tree-empty">加载中…</p>
+        <p className="tree-empty">{coreT({key: "ui.common.loading"})}</p>
       </div>
     );
   }
@@ -223,7 +224,7 @@ export function WorkspaceTree({
   return (
     <div className="explorer-tree__body explorer-tree__body--fill">
       {rows.length === 0 ? (
-        <p className="tree-empty">空目录</p>
+        <p className="tree-empty">{coreT({key: "ui.vfs.empty_dir"})}</p>
       ) : (
         visibleRows.map((row) => {
           const isDir = row.kind === "dir";
@@ -313,13 +314,13 @@ export function WorkspaceTree({
       )}
       <ConfirmModal
         open={ingestConfirm != null}
-        title="覆盖确认"
+        title={coreT({key: "ui.common.overwrite_confirm_title"})}
         message={
           ingestConfirm == null
             ? ""
             : batchIngestOverwriteMessage(ingestConfirm.conflictCount)
         }
-        confirmLabel="覆盖"
+        confirmLabel={coreT({key: "ui.common.overwrite"})}
         danger
         busy={ingestBusy}
         onCancel={() => setIngestConfirm(null)}

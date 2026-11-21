@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/show-toast";
 import { entryLabelForTarget, saveFileInclusion } from "./workspace-actions";
@@ -13,18 +14,18 @@ const INCLUSION_OPTIONS: Array<{
 }> = [
   {
     value: "show",
-    label: "展示",
-    hint: "强制纳入 Agent 上下文，显示全内容",
+    label: coreT({key: "ui.vfs.inclusion_show"}),
+    hint: coreT({key: "ui.vfs.inclusion_full_hint"}),
   },
   {
     value: "hide",
-    label: "隐藏",
-    hint: "强制不纳入 Agent 上下文",
+    label: coreT({key: "ui.vfs.row_badge_hidden"}),
+    hint: coreT({key: "ui.vfs.inclusion_hide_hint"}),
   },
   {
     value: "auto",
-    label: "跟随",
-    hint: "由父目录纳入规则决定（默认）",
+    label: coreT({key: "ui.vfs.row_badge_follow"}),
+    hint: coreT({key: "ui.vfs.inclusion_follow_hint"}),
   },
 ];
 
@@ -87,12 +88,12 @@ export function FileInclusionModal({
       >
         <header className="file-inclusion-modal__header">
           <h3 id="file-inclusion-modal-title" className="file-inclusion-modal__title">
-            文件纳入状态
+            {coreT({key: "ui.vfs.inclusion_title"})}
           </h3>
           <p className="file-inclusion-modal__path">{entryLabelForTarget(target)}</p>
         </header>
 
-        <fieldset className="file-inclusion-modal__options" aria-label="纳入方式">
+        <fieldset className="file-inclusion-modal__options" aria-label={coreT({key: "ui.vfs.inclusion_mode_label"})}>
           {INCLUSION_OPTIONS.map((opt) => (
             <label
               key={opt.value}
@@ -115,14 +116,14 @@ export function FileInclusionModal({
 
         <div className="text-prompt-modal__actions">
           <Button variant="secondary" disabled={saving} onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           <Button
             variant="primary"
             disabled={saving}
             onClick={() => void handleSave()}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </Button>
         </div>
       </div>

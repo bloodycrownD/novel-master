@@ -1,5 +1,6 @@
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
 import { useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type { WorkplaceSetDirRuleRequest } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/show-toast";
@@ -17,21 +18,22 @@ type FillPolicy = NonNullable<WorkplaceSetDirRuleRequest["fillPolicy"]>;
 type UiFillPolicy = Exclude<FillPolicy, "full">;
 
 const SORT_FIELDS: Array<{ value: SortField; label: string }> = [
-  { value: "name", label: "文件名称" },
-  { value: "created", label: "创建时间" },
-  { value: "updated", label: "更新时间" },
-  { value: "smart", label: "智能排序" },
+  { value: "name", label: coreT({key: "ui.vfs.sort_by_name"}) },
+  { value: "created", label: coreT({key: "ui.vfs.sort_by_created"}) },
+  { value: "updated", label: coreT({key: "ui.vfs.sort_by_updated"}) },
+  // 同文借用 ui.nav.settings_smart_sort（域标签语义偏差，对号表外借待 3c 裁决）。
+  { value: "smart", label: coreT({key: "ui.nav.settings_smart_sort"}) },
 ];
 
 const SORT_ORDERS: Array<{ value: SortOrder; label: string }> = [
-  { value: "asc", label: "升序" },
-  { value: "desc", label: "降序" },
+  { value: "asc", label: coreT({key: "ui.vfs.sort_asc"}) },
+  { value: "desc", label: coreT({key: "ui.vfs.sort_desc"}) },
 ];
 
 const FILL_POLICIES: Array<{ value: UiFillPolicy; label: string }> = [
-  { value: "filename", label: "文件名" },
-  { value: "header", label: "头信息" },
-  { value: "hidden", label: "不展示" },
+  { value: "filename", label: coreT({key: "label.workplace.display.filename"}) },
+  { value: "header", label: coreT({key: "ui.vfs.header_field_header"}) },
+  { value: "hidden", label: coreT({key: "ui.vfs.header_field_hidden"}) },
 ];
 
 function normalizeFillPolicy(fillPolicy: FillPolicy | undefined): UiFillPolicy {
@@ -151,32 +153,32 @@ export function DirectoryRuleModal({
       >
         <header className="dir-rule-modal__header">
           <h3 id="dir-rule-modal-title" className="dir-rule-modal__title">
-            目录规则
+            {coreT({key: "ui.vfs.menu_directory_rule"})}
           </h3>
           <p className="dir-rule-modal__path">{entryLabelForTarget(target)}</p>
         </header>
 
         {loading ? (
-          <p className="dir-rule-modal__loading">加载中…</p>
+          <p className="dir-rule-modal__loading">{coreT({key: "ui.common.loading"})}</p>
         ) : (
           <div className="dir-rule-modal__form">
             {/* 规则启用/关闭由工作区右键菜单的快捷开关负责，表单内不再提供开关，
                 仅编辑规则内容；ruleEnabled 沿用加载到的既有状态原样保存。 */}
-            <FieldLabel text="排序方式" />
+            <FieldLabel text={coreT({key: "ui.vfs.sort_mode_label"})} />
             <OptionChips
               options={SORT_FIELDS}
               value={sortField}
               onChange={setSortField}
             />
 
-            <FieldLabel text="排序方向" />
+            <FieldLabel text={coreT({key: "ui.vfs.sort_dir_label"})} />
             <OptionChips
               options={SORT_ORDERS}
               value={sortOrder}
               onChange={setSortOrder}
             />
 
-            <FieldLabel text="头部数量 (0–1000)" />
+            <FieldLabel text={coreT({key: "ui.vfs.header_count_label"})} />
             <input
               className="text-prompt-modal__input"
               type="number"
@@ -186,7 +188,7 @@ export function DirectoryRuleModal({
               onChange={(e) => setHeadCount(e.target.value)}
             />
 
-            <FieldLabel text="尾部数量 (0–1000)" />
+            <FieldLabel text={coreT({key: "ui.vfs.tail_count_label"})} />
             <input
               className="text-prompt-modal__input"
               type="number"
@@ -196,7 +198,7 @@ export function DirectoryRuleModal({
               onChange={(e) => setTailCount(e.target.value)}
             />
 
-            <FieldLabel text="其余文件填充" />
+            <FieldLabel text={coreT({key: "ui.vfs.rest_fill_label"})} />
             <OptionChips
               options={FILL_POLICIES}
               value={fillPolicy}
@@ -207,14 +209,14 @@ export function DirectoryRuleModal({
 
         <div className="text-prompt-modal__actions">
           <Button variant="secondary" disabled={saving} onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           <Button
             variant="primary"
             disabled={loading || saving}
             onClick={() => void handleSave()}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </Button>
         </div>
       </div>

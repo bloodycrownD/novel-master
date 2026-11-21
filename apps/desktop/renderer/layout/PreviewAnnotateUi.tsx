@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import type { AnnotateDraft } from "@shared/logic/chat";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "../components/ui/Button";
 import { chatAnnotateDraftStore } from "../features/chat/chat-annotate-draft";
 import { randomUUID } from "../shims/node-crypto";
@@ -24,6 +25,7 @@ export function PreviewAnnotateFloatingBar({
       className="preview-annotate-floating"
       style={{ top, left }}
       role="toolbar"
+      // 「批注操作」键面无对应 aria 键（漏键待波 3c），保留原字面量。
       aria-label="批注操作"
     >
       <button
@@ -35,7 +37,7 @@ export function PreviewAnnotateFloatingBar({
         }}
         onClick={onAdd}
       >
-        添加批注
+        {coreT({key: "ui.vfs.annotate_add"})}
       </button>
     </div>
   );
@@ -121,7 +123,7 @@ export function PreviewAnnotateAddModal({
           id="preview-annotate-add-title"
           className="text-prompt-modal__title"
         >
-          添加批注
+          {coreT({key: "ui.vfs.annotate_add"})}
         </h3>
         {label ? (
           <p className="text-prompt-modal__label preview-annotate-detail__quote">
@@ -132,7 +134,7 @@ export function PreviewAnnotateAddModal({
           className="text-prompt-modal__textarea"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="输入批注说明"
+          placeholder={coreT({key: "ui.vfs.annotate_input_hint"})}
           rows={4}
           autoFocus
         />
@@ -143,7 +145,7 @@ export function PreviewAnnotateAddModal({
             onClick={onClose}
             disabled={saving}
           >
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -151,7 +153,7 @@ export function PreviewAnnotateAddModal({
             disabled={!canSubmit}
             onClick={handleConfirm}
           >
-            {saving ? "添加中…" : "添加"}
+            {saving ? coreT({key: "ui.common.adding"}) : coreT({key: "ui.common.add"})}
           </button>
         </div>
       </div>
@@ -221,7 +223,7 @@ export function PreviewAnnotateDetailModal({
           id="preview-annotate-detail-title"
           className="text-prompt-modal__title"
         >
-          批注详情
+          {coreT({key: "ui.vfs.annotate_detail_title"})}
         </h3>
         <p className="text-prompt-modal__label preview-annotate-detail__quote">
           {draft.originalText}
@@ -230,24 +232,24 @@ export function PreviewAnnotateDetailModal({
           className="text-prompt-modal__textarea"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="批注说明"
+          placeholder={coreT({key: "ui.vfs.annotate_desc_placeholder"})}
           rows={4}
           autoFocus
         />
         <div className="confirm-modal__actions">
           <Button variant="danger" disabled={saving} onClick={handleDelete}>
-            删除
+            {coreT({key: "ui.common.delete"})}
           </Button>
           <div className="preview-annotate-detail__spacer" />
           <Button variant="secondary" disabled={saving} onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </Button>
           <Button
             variant="primary"
             disabled={!canSave}
             onClick={handleSave}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </Button>
         </div>
       </div>
@@ -285,7 +287,7 @@ export function PreviewAnnotatePickModal({
           id="preview-annotate-pick-title"
           className="text-prompt-modal__title"
         >
-          选择批注
+          {coreT({key: "ui.vfs.annotate_pick_title"})}
         </h3>
         <ul className="preview-annotate-pick-list">
           {drafts.map((d) => (
@@ -295,7 +297,7 @@ export function PreviewAnnotatePickModal({
                 className="preview-annotate-pick-list__item"
                 onClick={() => onPick(d)}
               >
-                {d.userAnnotation || "（空说明）"}
+                {d.userAnnotation || coreT({key: "ui.common.empty_note"})}
               </button>
             </li>
           ))}
@@ -306,7 +308,7 @@ export function PreviewAnnotatePickModal({
             className="text-prompt-modal__btn"
             onClick={onClose}
           >
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
         </div>
       </div>
