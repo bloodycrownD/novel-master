@@ -949,7 +949,7 @@ ui:
     zod_group_id: Group ID
     zod_rule_id: Rule ID
     zod_invalid_input: Invalid input
-    zod_nonneg_or_empty: Must be a non-negative integer or left empty
+    zod_nonneg_or_empty: "{field} must be a non-negative integer or left empty"
   prompt:
     turn_aria: "{action} {role} turn, {summary}"
     tool_group_aria: "{action} tool calls {name}"
