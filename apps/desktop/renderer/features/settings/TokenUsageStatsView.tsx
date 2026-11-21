@@ -967,7 +967,7 @@ export function TokenUsageStatsView() {
                   (selectedDayBucket ?? ZERO_BUCKET).billedInputTokens,
                 ),
               )}{" "}
-              · {coreT({key: "ui.stats.chart_calls_aria", params: {count: (selectedDayBucket ?? ZERO_BUCKET).calls})}} · {coreT({key: "ui.stats.avg_rate"})}{" "}
+              · {coreT({key: "ui.stats.chart_calls_aria", params: {count: (selectedDayBucket ?? ZERO_BUCKET).calls}})} · {coreT({key: "ui.stats.avg_rate"})}{" "}
               {formatTokensPerSecond((selectedDayBucket ?? ZERO_BUCKET).avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
               {formatDurationMs((selectedDayBucket ?? ZERO_BUCKET).avgFirstTokenMs)}
             </p>
@@ -1002,7 +1002,7 @@ export function TokenUsageStatsView() {
                     selectedDayBucket.billedInputTokens,
                   ),
                 )}{" "}
-                · {coreT({key: "ui.stats.chart_calls_aria", params: {count: selectedDayBucket.calls})}} · {coreT({key: "ui.stats.avg_rate"})}{" "}
+                · {coreT({key: "ui.stats.chart_calls_aria", params: {count: selectedDayBucket.calls}})} · {coreT({key: "ui.stats.avg_rate"})}{" "}
                 {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
                 {formatDurationMs(selectedDayBucket.avgFirstTokenMs)}
               </p>
