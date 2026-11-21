@@ -53,8 +53,7 @@ export function scopeRequestFromTarget( target: WorkspaceContextTarget, projectI
 
 export async function saveFileInclusion( target: WorkspaceContextTarget, inclusionMode: "auto" | "show" | "hide", projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
   if (target.kind !== "row" || target.row.kind !== "file") {
-    // 「无效操作」与 ui.common.unknown_action（未知操作）不同文，漏键待波 3c，保留原字面量。
-    return { ok: false, message: "无效操作" };
+    return { ok: false, message: coreT({key: "ui.vfs.invalid_action"}) };
   }
   const result = await ipcWorkplaceSetFileRule({
     ...scopeRequestFromTarget(target, projectId, sessionId),
@@ -92,7 +91,7 @@ export async function createWorkspaceEntry( target: WorkspaceContextTarget, kind
 
 export async function renameWorkspaceEntry( target: WorkspaceContextTarget, newName: string, projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
   if (target.kind !== "row") {
-    return { ok: false, message: "无效操作" };
+    return { ok: false, message: coreT({key: "ui.vfs.invalid_action"}) };
   }
   const nameCheck = validateVfsEntryName(newName);
   if (!nameCheck.ok) {
@@ -110,7 +109,7 @@ export async function renameWorkspaceEntry( target: WorkspaceContextTarget, newN
 
 export async function deleteWorkspaceEntry( target: WorkspaceContextTarget, projectId: string | undefined, sessionId: string | undefined ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (target.kind !== "row") {
-    return { ok: false, message: "无效操作" };
+    return { ok: false, message: coreT({key: "ui.vfs.invalid_action"}) };
   }
   const req = scopeRequestFromTarget(target, projectId, sessionId);
   const result = await ipcVfsDelete({
@@ -226,8 +225,7 @@ export async function startSingleFileImport( scope: VfsScopeRequest, targetDir: 
   const picked = await ipcVfsFilePick();
   if (!picked.ok) {
     // nm-throw: keep — renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch
-    // 「选择文件失败」键面无此键（漏键待波 3c），保留原字面量。
-    throw new Error(picked.error.message || "选择文件失败");
+    throw new Error(picked.error.message || coreT({key: "ui.vfs.pick_file_failed"}));
   }
   const hostPath = picked.data;
   if (hostPath == null) {

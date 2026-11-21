@@ -944,7 +944,8 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
       const errText = (err.children as unknown[])
         .map((c) => String(c))
         .join("");
-      assert.equal(errText, "开始日期不能晚于结束日期");
+      // 文案随 3c-a 裁决收口 ui.stats.range_start_after_end（原字面「开始日期不能晚于结束日期」）。
+      assert.equal(errText, "自定义区间起始日不能晚于结束日");
       assert.equal(requests.length, 0, "区间非法时不应发起查询");
       assert.ok(
         reqRowsOf().length >= 2,

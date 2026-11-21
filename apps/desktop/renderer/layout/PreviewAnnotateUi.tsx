@@ -25,8 +25,7 @@ export function PreviewAnnotateFloatingBar({
       className="preview-annotate-floating"
       style={{ top, left }}
       role="toolbar"
-      // 「批注操作」键面无对应 aria 键（漏键待波 3c），保留原字面量。
-      aria-label="批注操作"
+      aria-label={coreT({key: "ui.vfs.annotate_actions_aria"})}
     >
       <button
         type="button"

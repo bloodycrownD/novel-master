@@ -89,7 +89,7 @@ export function ensureStartDragFailureToast(): () => void {
         removeStagedByRoot(dndRuntime.active.stagingRoot);
       }
       dndRuntime.active = null;
-      showToast(payload.message || "拖出失败");
+      showToast(payload.message || coreT({key: "ui.vfs.drag_out_failed"}));
     });
   }
   return () => {
@@ -177,7 +177,7 @@ export async function prefetchExportStage(options: { readonly scope: VfsScopeReq
     if (!result.ok) {
       stagedByPath.delete(options.logicalPath);
       failedStagePaths.add(options.logicalPath);
-      showToast(result.error.message || "导出物化失败");
+      showToast(result.error.message || coreT({key: "ui.vfs.export_materialize_failed"}));
       return;
     }
     failedStagePaths.delete(options.logicalPath);
@@ -191,7 +191,7 @@ export async function prefetchExportStage(options: { readonly scope: VfsScopeReq
   } catch (err) {
     stagedByPath.delete(options.logicalPath);
     failedStagePaths.add(options.logicalPath);
-    showToast(err instanceof Error ? err.message : "导出物化失败");
+    showToast(err instanceof Error ? err.message : coreT({key: "ui.vfs.export_materialize_failed"}));
   } finally {
     prefetchInFlight.delete(options.logicalPath);
   }
@@ -226,7 +226,7 @@ export function startPrefetchedNativeDrag(options: { readonly logicalPath: strin
     clearStagingOnMain(staged.stagingRoot);
     removeStagedByRoot(staged.stagingRoot);
     dndRuntime.active = null;
-    showToast(err instanceof Error ? err.message : "拖出失败");
+    showToast(err instanceof Error ? err.message : coreT({key: "ui.vfs.drag_out_failed"}));
     return false;
   }
 }

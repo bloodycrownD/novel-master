@@ -29,18 +29,17 @@ const IMPORT_FORM_OPTIONS: Array<{
   {
     value: "zip",
     label: coreT({key: "ui.vfs.import_kind_zip"}),
-    // 三个 hint 键面无对应键（漏键待波 3c），保留原字面量。
-    hint: "解压到目标目录，将覆盖目标目录下全部内容",
+    hint: coreT({key: "ui.vfs.import_hint_zip"}),
   },
   {
     value: "card",
     label: coreT({key: "ui.vfs.import_kind_card"}),
-    hint: "解析角色卡并写入目标目录，将覆盖目标目录内的同名文件",
+    hint: coreT({key: "ui.vfs.import_hint_card"}),
   },
   {
     value: "file",
     label: coreT({key: "ui.vfs.import_kind_file"}),
-    hint: "写入单个文件，同名文件存在时需确认后才会覆盖",
+    hint: coreT({key: "ui.vfs.import_hint_file"}),
   },
 ];
 

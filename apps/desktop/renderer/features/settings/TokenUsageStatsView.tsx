@@ -389,15 +389,14 @@ export function TokenUsageStatsView() {
   const [providerNames, setProviderNames] = useState<Map<string, string>>(new Map());
 
   // 自定义区间校验（from ≤ to，无跨度上限）；非法时行内提示且暂停重查。
-  // 「请选择起止日期」「开始日期不能晚于结束日期」键面无同文键
-  // （ui.stats.range_start_after_end 文案不同：自定义区间起始日不能晚于结束日），保留原字面量。
   const customRangeError = useMemo(() => {
     if (rangeKind !== "custom") return null;
-    if (customFrom.length === 0 || customTo.length === 0) return "请选择起止日期";
+    if (customFrom.length === 0 || customTo.length === 0) return coreT({key: "ui.stats.range_required"});
     const from = parseLocalDate(customFrom);
     const to = parseLocalDate(customTo);
-    if (from == null || to == null) return "请选择起止日期";
-    if (from.getTime() > to.getTime()) return "开始日期不能晚于结束日期";
+    if (from == null || to == null) return coreT({key: "ui.stats.range_required"});
+    // 「开始日期不能晚于结束日期」收口键文 ui.stats.range_start_after_end（3c-a 裁决）。
+    if (from.getTime() > to.getTime()) return coreT({key: "ui.stats.range_start_after_end"});
     return null;
   }, [rangeKind, customFrom, customTo]);
 
@@ -457,8 +456,7 @@ export function TokenUsageStatsView() {
       !Array.isArray(dailyRes.data) ||
       !Array.isArray(rowsRes.data)
     ) {
-      // 「统计数据返回格式异常」键面无对应键（漏键待波 3c），保留原字面量。
-      setLoadError("统计数据返回格式异常");
+      setLoadError(coreT({key: "ui.stats.format_invalid"}));
       return;
     }
     setLoadError(null);
@@ -519,8 +517,7 @@ export function TokenUsageStatsView() {
       body == null ||
       !Array.isArray((body as UsageStatsRequestPageDto).rows)
     ) {
-      // 「统计数据返回格式异常」键面无对应键（漏键待波 3c），保留原字面量。
-      setLoadError("统计数据返回格式异常");
+      setLoadError(coreT({key: "ui.stats.format_invalid"}));
       return;
     }
     setLoadError(null);
@@ -991,8 +988,7 @@ export function TokenUsageStatsView() {
           />
           {selectedDay != null && selectedDayBucket != null ? (
             <div className="token-stats-view__day-detail" data-day-detail={selectedDay}>
-              {/* 「{day} · 按小时分布」键面无对应键（day_hourly_title 固定「今天 · 」前缀），保留原字面量。 */}
-              <p className="token-stats-view__day-detail-title">{selectedDay} · 按小时分布</p>
+              <p className="token-stats-view__day-detail-title">{coreT({key: "ui.stats.day_hourly_template", params: {day: selectedDay}})}</p>
               <p className="token-stats-view__day-detail-summary">
                 {coreT({key: "ui.stats.input_label"})} {formatTokenCount(selectedDayBucket.promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
                 {formatTokenCount(selectedDayBucket.completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
