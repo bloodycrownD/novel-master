@@ -210,10 +210,9 @@ export function WorkspaceSettingsView() {
         desc={coreT({key: "ui.chat_config.chat_prefs_hint"})}
       >
         <SettingsRows>
-          {/* 两行开关 label 已 i18n（desc 键面无键，仍为原字面量，待 3c-c MISS 补迁）。 */}
           <SettingsSwitchRow
             label={coreT({key: "ui.chat_config.stream_parent"})}
-            desc="主对话的实时输出；关闭后回复完成后一次性显示"
+            desc={coreT({key: "ui.chat_config.stream_parent_desc"})}
             checked={llmStream}
             onChange={async (next) => {
               setLlmStream(next);
@@ -222,7 +221,7 @@ export function WorkspaceSettingsView() {
           />
           <SettingsSwitchRow
             label={coreT({key: "ui.chat_config.stream_sub"})}
-            desc="子智能体会话的实时输出；关闭后回复完成后一次性显示"
+            desc={coreT({key: "ui.chat_config.stream_sub_desc"})}
             checked={subagentStream}
             onChange={async (next) => {
               setSubagentStream(next);

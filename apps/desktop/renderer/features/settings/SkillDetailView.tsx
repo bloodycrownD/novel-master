@@ -235,8 +235,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
     if (selected === path) {
       setSelected(SKILL_ENTRY_FILE);
     }
-    // 键面无「已删除辅助文件」键（波 3-2a 披露漏键，待波 3c 补），保留原字面量。
-    showToast("已删除辅助文件");
+    showToast(coreT({key: "ui.skills.aux_deleted"}));
   };
 
   const visiblePath = useMemo(
@@ -367,8 +366,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
       <TextPromptModal
         open={createFileOpen}
         title={coreT({key: "ui.skills.new_aux_file"})}
-        // 键面无「相对路径（支持子目录，如 references/x.md）」键（漏键待波 3c），保留原字面量。
-        label="相对路径（支持子目录，如 references/x.md）"
+        label={coreT({key: "ui.skills.path_relative_label"})}
         placeholder="references/x.md"
         confirmLabel={coreT({key: "ui.skills.create_and_edit"})}
         onClose={() => setCreateFileOpen(false)}
@@ -392,8 +390,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
 
       <ConfirmModal
         open={leaveConfirm != null}
-        // 键面无「未保存的更改」标题键（漏键待波 3c），保留原字面量。
-        title="未保存的更改"
+        title={coreT({key: "ui.common.unsaved_changes"})}
         message={coreT({key: "ui.common.unsaved_discard_msg"})}
         danger
         onConfirm={() => {

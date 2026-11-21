@@ -8,6 +8,7 @@ import {
   WORKPLACE_DISABLED_HINT,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
 } from "@shared/config-forms/agent";
+import { coreT } from "@shared/logic/core-i18n";
 import { Switch } from "@/components/ui/Switch";
 import { PromptCollapsibleField } from "./PromptCollapsibleField";
 import { SettingsField } from "./settings-ui";
@@ -53,7 +54,7 @@ export function AgentWorkplaceBlockCard({
             <>
               {/* 只读态（内置 general）不说「可编辑」，避免禁用控件与文案矛盾 */}
               <p className="config-block-card__hint">
-                {disabled ? "助手确认语（只读）。" : WORKPLACE_BLOCK_HINT}
+                {disabled ? coreT({key: "ui.agent.assistant_text_readonly_hint"}) : WORKPLACE_BLOCK_HINT}
               </p>
               <SettingsField label={WORKPLACE_ASSISTANT_TEXT_LABEL}>
                 <PromptCollapsibleField

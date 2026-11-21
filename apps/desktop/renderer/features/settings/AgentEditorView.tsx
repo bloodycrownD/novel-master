@@ -442,8 +442,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }, [agentId, invalidHealth, loadError, savedBaseline, snapshot, nav]);
 
   if (!agentId) {
-    // 键面无「缺少 agentId」键（漏键待波 3c），保留原字面量。
-    return <p className="settings-hint">缺少 agentId</p>;
+    return <p className="settings-hint">{coreT({key: "ui.agent.agent_id_missing"})}</p>;
   }
 
   const handleDeleteBrokenAgent = async () => {
@@ -521,8 +520,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
-          {/* 键面无「无法加载智能体配置」键（漏键待波 3c），保留原字面量。 */}
-          <p className="settings-error-panel__title">无法加载智能体配置</p>
+          <p className="settings-error-panel__title">{coreT({key: "ui.agent.load_failed"})}</p>
           <p className="settings-error-panel__message">{loadError}</p>
           <div className="settings-error-panel__actions">
             <Button variant="secondary" onClick={() => nav.pop()}>

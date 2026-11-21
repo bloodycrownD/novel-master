@@ -19,10 +19,10 @@ describe("WorkspaceSettingsView subagentStream 开关（T-D2）", () => {
   const source = readFileSync(viewPath, "utf8");
 
   it("SettingsSwitchRow「子会话流式」行存在并带静态 desc", () => {
-    // i18n 后 label 锁 coreT 形态+键名；desc 键面无键（3c-c MISS 补迁），仍锁中文原样。
+    // i18n 后 label/desc 均锁 coreT 形态+键名（desc 键 3c-c 前置补键 c702d0a6b 立齐）。
     assert.match(
       source,
-      /<SettingsSwitchRow\s+label=\{coreT\(\{key: "ui\.chat_config\.stream_sub"\}\)\}\s+desc="子智能体会话的实时输出；关闭后回复完成后一次性显示"/,
+      /<SettingsSwitchRow\s+label=\{coreT\(\{key: "ui\.chat_config\.stream_sub"\}\)\}\s+desc=\{coreT\(\{key: "ui\.chat_config\.stream_sub_desc"\}\)\}/,
     );
   });
 

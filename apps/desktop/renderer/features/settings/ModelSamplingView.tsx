@@ -115,8 +115,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   }, [load]);
 
   if (!savedModelId) {
-    // 键面无「缺少模型」键（漏键待波 3c），保留原字面量。
-    return <p className="settings-hint">缺少模型</p>;
+    return <p className="settings-hint">{coreT({key: "ui.sampling.model_missing"})}</p>;
   }
 
   const saveModelName = async () => {
@@ -137,8 +136,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
       }
       setModelName(res.data.modelName);
       setDisplayName(res.data.displayName);
-      // 键面无「已更新模型名称」键（漏键待波 3c），保留原字面量。
-      toastSettingsSuccess("已更新模型名称");
+      toastSettingsSuccess(coreT({key: "ui.provider.model_renamed_done"}));
     } finally {
       setRenaming(false);
     }
@@ -164,8 +162,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         toastSettingsError(res.error.message);
         return;
       }
-      // 键面无「已保存模型设置」键（漏键待波 3c），保留原字面量。
-      toastSettingsSuccess("已保存模型设置");
+      toastSettingsSuccess(coreT({key: "ui.sampling.saved_done"}));
     } finally {
       setSaving(false);
     }
@@ -192,8 +189,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         setContextWindowTokens(String(saved.settings.internal.contextWindowTokens));
       }
       setParams(undefined);
-      // 键面无「已恢复默认采样参数」键（漏键待波 3c），保留原字面量。
-      toastSettingsSuccess("已恢复默认采样参数");
+      toastSettingsSuccess(coreT({key: "ui.sampling.reset_done"}));
     } finally {
       setResetting(false);
     }
