@@ -50,18 +50,19 @@ describe("SessionDetailDrawer (T-D3)", () => {
     // 锁定指示仍保留；meta==null 的 badge 按 au/B-3 分「加载中…/加载失败」
     // 两态（旧「智能体未绑定」文案已退役——失败态不得冒充未绑定/已删）。
     assert.match(src, /session-detail-pick__lock/);
-    assert.match(src, /加载中…/);
-    assert.match(src, /智能体信息加载失败/);
+    // i18n 后锁 coreT 调用形态+键名（文案由 catalog 保证）。
+    assert.match(src, /coreT\(\{key: "ui\.common\.loading"\}\)/);
+    assert.match(src, /coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)/);
     assert.doesNotMatch(src, /智能体未绑定/);
-    assert.match(src, /智能体锁定/);
+    assert.match(src, /coreT\(\{key: "ui\.session\.agent_locked"\}\)/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
     assert.match(src, /data-session-detail-action="switch-model"/);
     assert.match(src, /data-session-detail-action="view-prompt"/);
     assert.match(src, /data-session-detail-action="compact"/);
-    // 文案
-    assert.match(src, /查看提示词/);
-    assert.match(src, /压缩上下文/);
+    // 文案（i18n 后锁 coreT 调用形态+键名）
+    assert.match(src, /coreT\(\{key: "ui\.nav\.view_prompt"\}\)/);
+    assert.match(src, /coreT\(\{key: "ui\.session\.compact_context"\}\)/);
     // 行内编辑交互：Enter 提交 / Escape 取消 / blur 提交
     assert.match(src, /commitRename/);
     assert.match(src, /cancelRename/);
@@ -83,13 +84,14 @@ describe("SessionDetailDrawer (T-D3)", () => {
     // （badge 已提示已删，不再额外弹「请重新选择」toast）
     assert.match(src, /agentDeleted = meta != null && source === "none"/);
     assert.doesNotMatch(src, /智能体已被删除，请重新选择/);
-    assert.match(src, /智能体已删除 · 点击重选/);
+    // i18n 后锁 coreT 调用形态+键名（badge 文案由 catalog 保证）。
+    assert.match(src, /coreT\(\{key: "ui\.session\.agent_deleted_hint"\}\)/);
     // 待重选 badge 样式与可点 chevron 保留（agentLocked 为 false 时渲染 ›）
     assert.match(src, /session-detail-pick__lock--reselect/);
     // model 卡维持 source !== 'session' 锁定（重选智能体后自然解锁）
     assert.match(src, /modelLocked = source !== "session"/);
-    assert.match(src, /已锁定模型/);
-    assert.match(src, /会话内无法覆盖/);
+    // i18n 后锁 coreT 调用形态+键名（旧「已锁定模型/会话内无法覆盖」两断言同键，锁定 toast 文案由 catalog 保证）。
+    assert.match(src, /coreT\(\{key: "ui\.session\.agent_model_locked_hint"\}\)/);
     // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
     assert.doesNotMatch(src, /"agent-pin"/);
     assert.doesNotMatch(src, /hasDedicatedModel/);
@@ -122,8 +124,8 @@ describe("SessionDetailDrawer (T-D3)", () => {
     const src = readDrawer();
     // 会话必须持有 agentId → agent picker 不允许 none，无“回退工作区”措辞
     assert.doesNotMatch(src, /解除会话绑定/);
-    // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用智能体锁定模型）”
-    assert.match(src, /清除会话覆盖（使用智能体锁定模型）/);
+    // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用智能体锁定模型）”（i18n 后锁 coreT 形态+键名）
+    assert.match(src, /noneLabel=\{coreT\(\{key: "ui\.session\.clear_model_override_aria"\}\)\}/);
     // 旧的“回退工作区”措辞已全部移除
     assert.doesNotMatch(src, /回退工作区/);
   });
@@ -136,7 +138,8 @@ describe("SessionDetailDrawer meta 加载失败态（cr-fix-spec 条目 10，au/
     // 可能直出英文，不直接透出 error.message）
     assert.match(src, /metaLoadFailed/);
     assert.match(src, /setMetaLoadFailed\(true\)/);
-    assert.match(src, /showToast\("智能体信息加载失败"\)/);
+    // i18n 后锁 coreT 调用形态+键名（固定兜底文案由 catalog 保证，不透出 metaRes.error.message 的意图不变）。
+    assert.match(src, /showToast\(coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)\)/);
     assert.doesNotMatch(src, /showToast\(metaRes\.error\.message\)/);
     // 成功路径清失败标记；抽屉重开/会话切换重置（重开即重试的入口语义）
     assert.match(src, /setMetaLoadFailed\(false\)/);
@@ -144,14 +147,15 @@ describe("SessionDetailDrawer meta 加载失败态（cr-fix-spec 条目 10，au/
 
   it("源码：badge 三态可辨——加载中…/智能体信息加载失败/已删待重选文案互不相同", () => {
     const src = readDrawer();
-    // 三态文案各自出现
-    assert.match(src, /加载中…/);
-    assert.match(src, /智能体信息加载失败/);
-    assert.match(src, /智能体已删除 · 点击重选/);
-    // 失败后点击智能体卡提示错误文案（不再「加载中请稍候」永不发生）
+    // 三态文案各自出现（i18n 后锁 coreT 调用形态+键名，文案互异由 catalog 保证）。
+    assert.match(src, /coreT\(\{key: "ui\.common\.loading"\}\)/);
+    assert.match(src, /coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)/);
+    assert.match(src, /coreT\(\{key: "ui\.session\.agent_deleted_hint"\}\)/);
+    // 失败后点击智能体卡提示错误文案（不再「加载中请稍候」永不发生）；
+    // i18n 后锁三元两侧的 coreT 键名（guide 句号版与 toast 无句号版是两个键）。
     assert.match(
       src,
-      /metaLoadFailed\s*\?\s*"智能体信息加载失败"\s*:\s*"智能体信息加载中，请稍候再试。"/,
+      /metaLoadFailed\s*\?\s*coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)\s*:\s*coreT\(\{key: "ui\.session\.agent_loading_guide"\}\)/,
     );
   });
 });

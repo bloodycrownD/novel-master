@@ -130,7 +130,7 @@ export function SessionDetailDrawer({
       // 失败不再静默（au/B-3）：固定中文兜底文案，不透出 metaRes.error.message
       // ——main 侧 formatIpcError 可能直出英文。meta 保持 null（锁定态）。
       setMetaLoadFailed(true);
-      showToast("智能体信息加载失败");
+      showToast(coreT({key: "ui.session.agent_info_load_failed"}));
     }
     // data 为 null = 读口本轮被抑制（run 在途）或中途弃权（r3-dt-align）：
     // **保留旧标签**，不清空也不显示占位。run 结束后 main 那边会补跑一拍
@@ -260,7 +260,7 @@ export function SessionDetailDrawer({
     if (agentLocked) {
       // meta 尚未加载完，先锁住防误点；已失败时给错误文案，不再误导
       // 「加载中请稍候」永不发生（au/B-3）。
-      showToast( metaLoadFailed ? "智能体信息加载失败" : "智能体信息加载中，请稍候再试。" );
+      showToast( metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.session.agent_loading_guide"}) );
       return;
     }
     // 原绑定智能体已被删除（agentDeleted）：卡片 badge 已提示「已删除 · 点击重选」，
@@ -276,7 +276,7 @@ export function SessionDetailDrawer({
 
   const openModelPicker = async () => {
     if (modelLocked) {
-      showToast("当前智能体已锁定模型，会话内无法覆盖。");
+      showToast(coreT({key: "ui.session.agent_model_locked_hint"}));
       return;
     }
     const result = await ipcModelListPicker();
@@ -462,7 +462,7 @@ export function SessionDetailDrawer({
                     >
                       ↻
                     </span>
-                    智能体已删除 · 点击重选
+                    {coreT({key: "ui.session.agent_deleted_hint"})}
                   </span>
                 ) : agentLocked ? (
                   // meta==null 的两态分流（au/B-3 三态可辨）：未落定 = 加载中，
@@ -474,7 +474,7 @@ export function SessionDetailDrawer({
                     >
                       {metaLoadFailed ? "⚠" : "…"}
                     </span>
-                    {metaLoadFailed ? "智能体信息加载失败" : "加载中…"}
+                    {metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.common.loading"})}
                   </span>
                 ) : null}
               </span>
@@ -514,7 +514,7 @@ export function SessionDetailDrawer({
                     >
                       🔒
                     </span>
-                    智能体锁定
+                    {coreT({key: "ui.session.agent_locked"})}
                   </span>
                 ) : null}
               </span>
@@ -566,7 +566,7 @@ export function SessionDetailDrawer({
                 requestViewPrompt();
               }}
             >
-              查看提示词
+              {coreT({key: "ui.nav.view_prompt"})}
             </button>
             <span className="session-detail-drawer__dot" aria-hidden="true">
               ·
@@ -577,7 +577,7 @@ export function SessionDetailDrawer({
               data-session-detail-action="compact"
               onClick={() => setCompactOpen(true)}
             >
-              压缩上下文
+              {coreT({key: "ui.session.compact_context"})}
             </button>
           </div>
         </div>
@@ -606,7 +606,7 @@ export function SessionDetailDrawer({
           title={coreT({key: "ui.session.model_picker_title_aria", params: {name: meta?.modelLabel ?? "—"}})}
           rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
           allowNone
-          noneLabel="清除会话覆盖（使用智能体锁定模型）"
+          noneLabel={coreT({key: "ui.session.clear_model_override_aria"})}
           onClose={() => setModelPickerOpen(false)}
           onSelect={(savedModelId) => {
             void ipcSessionsSetModelOverride({
@@ -621,7 +621,7 @@ export function SessionDetailDrawer({
 
         <ConfirmModal
           open={compactOpen}
-          title="压缩上下文"
+          title={coreT({key: "ui.session.compact_context"})}
           message={coreT({key: "ui.session.compact_confirm_msg_desktop"})}
           onConfirm={() => {
             setCompactOpen(false);
