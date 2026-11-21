@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { EffectiveSkillDto } from "@shared/ipc-types";
 import { ipcSkillsEffective } from "@/ipc/client";
 import { skillDomainLabel } from "./skill-ui";
+import { coreT } from "@shared/logic/core-i18n";
 
 type SkillPickerProps = {
   open: boolean;
@@ -72,16 +73,16 @@ export function SkillPicker({
       <div className="file-ref-picker__backdrop" onClick={onClose} />
       <div className="file-ref-picker__panel">
         <header className="file-ref-picker__head">
-          <h3>引用技能</h3>
+          <h3>{coreT({key: "ui.chat.reference_skills"})}</h3>
           <p className="file-ref-picker__hint">
-            平铺当前项目合并视图，可多选；已关闭的技能仍会注入全文
+            {coreT({key: "ui.skills.pick_hint_desktop"})}
           </p>
         </header>
         {error ? <p className="file-ref-picker__error">{error}</p> : null}
         <ul className="file-ref-picker__list">
-          {loading ? <li className="file-ref-picker__empty">加载中…</li> : null}
+          {loading ? <li className="file-ref-picker__empty">{coreT({key: "ui.common.loading"})}</li> : null}
           {!loading && rows.length === 0 ? (
-            <li className="file-ref-picker__empty">暂无可用技能</li>
+            <li className="file-ref-picker__empty">{coreT({key: "ui.skills.pick_empty"})}</li>
           ) : null}
           {rows.map((row) => {
             const checked = selected.has(row.name);
@@ -95,7 +96,7 @@ export function SkillPicker({
                   <button
                     type="button"
                     className="file-ref-picker__check"
-                    aria-label={`选用技能 ${row.name}`}
+                    aria-label={coreT({key: "ui.skills.pick_aria", params: {name: row.name}})}
                     aria-pressed={checked}
                     onClick={() => toggle(row.name)}
                   >
@@ -104,7 +105,7 @@ export function SkillPicker({
                   <button
                     type="button"
                     className="file-ref-picker__enter skill-picker__row"
-                    aria-label={`选用技能 ${row.name}`}
+                    aria-label={coreT({key: "ui.skills.pick_aria", params: {name: row.name}})}
                     onClick={() => toggle(row.name)}
                   >
                     <span className="skill-picker__name">{row.name}</span>
@@ -113,7 +114,7 @@ export function SkillPicker({
                         {skillDomainLabel(row.domain, row.overridden)}
                       </span>
                       {row.disabled ? (
-                        <span className="skill-picker__off">已关闭</span>
+                        <span className="skill-picker__off">{coreT({key: "ui.skills.disabled_tag"})}</span>
                       ) : null}
                       {row.description ?? ""}
                     </span>
@@ -125,7 +126,7 @@ export function SkillPicker({
         </ul>
         <footer className="file-ref-picker__foot">
           <button type="button" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -136,7 +137,7 @@ export function SkillPicker({
               onClose();
             }}
           >
-            确认
+            {coreT({key: "ui.common.confirm_alt"})}
           </button>
         </footer>
       </div>

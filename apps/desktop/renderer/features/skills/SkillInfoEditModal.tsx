@@ -15,6 +15,7 @@ import { BUILTIN_SKILL_NAMES, validateSkillName } from "@shared/logic/skills";
 import type { SkillRefDto } from "@shared/ipc-types";
 import { ipcSkillsUpdateInfo } from "@/ipc/client";
 import { toSkillRef } from "./skill-ui";
+import { coreT } from "@shared/logic/core-i18n";
 
 type SkillInfoEditModalProps = {
   open: boolean;
@@ -103,10 +104,10 @@ export function SkillInfoEditModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="skill-info-edit-title" className="text-prompt-modal__title">
-          编辑信息
+          {coreT({key: "ui.skills.edit_info"})}
         </h3>
         <p className="text-prompt-modal__label">
-          {builtin ? "技能名（内置技能不可改名）" : "技能名"}
+          {builtin ? coreT({key: "ui.skills.name_label_builtin_hint"}) : coreT({key: "ui.skills.name_label_plain"})}
         </p>
         <input
           className="text-prompt-modal__input"
@@ -119,18 +120,18 @@ export function SkillInfoEditModal({
         {nameIssue ? (
           <p className="new-skill-modal__error">{nameIssue}</p>
         ) : null}
-        <p className="text-prompt-modal__label">描述（进入技能索引）</p>
+        <p className="text-prompt-modal__label">{coreT({key: "ui.skills.desc_label_desktop"})}</p>
         <textarea
           className="text-prompt-modal__input new-skill-modal__desc"
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="模型会据此决定是否使用该技能"
+          placeholder={coreT({key: "ui.skills.desc_hint_desktop"})}
         />
         {error ? <p className="new-skill-modal__error">{error}</p> : null}
         <div className="text-prompt-modal__actions">
           <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -138,7 +139,7 @@ export function SkillInfoEditModal({
             disabled={!canSubmit}
             onClick={() => void handleConfirm()}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
           </button>
         </div>
       </div>
