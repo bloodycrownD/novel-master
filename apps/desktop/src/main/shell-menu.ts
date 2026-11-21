@@ -47,47 +47,47 @@ export const ShellMenu = {
   buildTemplate(deps: ShellMenuDeps): MenuItemConstructorOptions[] {
     return [
       {
-        label: "文件",
+        label: coreT({key: "ui.menu.file"}),
         id: "file",
-        submenu: [{ role: "quit", label: "退出" }],
+        submenu: [{ role: "quit", label: coreT({key: "ui.menu.quit"}) }],
       },
       {
-        label: "编辑",
+        label: coreT({key: "ui.menu.edit"}),
         id: "edit",
         submenu: [
-          { role: "undo", label: "撤销" },
-          { role: "redo", label: "重做" },
+          { role: "undo", label: coreT({key: "ui.menu.undo"}) },
+          { role: "redo", label: coreT({key: "ui.menu.redo"}) },
           { type: "separator" },
-          { role: "cut", label: "剪切" },
+          { role: "cut", label: coreT({key: "ui.menu.cut"}) },
           { role: "copy", label: coreT({key: "ui.common.copy"}) },
           { role: "paste", label: coreT({key: "ui.common.paste"}) },
           { role: "selectAll", label: coreT({key: "ui.common.select_all"}) },
         ],
       },
       {
-        label: "视图",
+        label: coreT({key: "ui.menu.view"}),
         id: "view",
         submenu: [
-          { role: "reload", label: "重新加载" },
-          ...(deps.isDev ? [{ role: "toggleDevTools" as const, label: "开发者工具" }] : []),
+          { role: "reload", label: coreT({key: "ui.menu.reload"}) },
+          ...(deps.isDev ? [{ role: "toggleDevTools" as const, label: coreT({key: "ui.menu.dev_tools"}) }] : []),
           { type: "separator" },
-          { role: "togglefullscreen", label: "全屏" },
+          { role: "togglefullscreen", label: coreT({key: "ui.menu.fullscreen"}) },
         ],
       },
       {
-        label: "窗口",
+        label: coreT({key: "ui.menu.window"}),
         id: "window",
         submenu: [
-          { role: "minimize", label: "最小化" },
-          { role: "close", label: "关闭窗口" },
+          { role: "minimize", label: coreT({key: "ui.menu.minimize"}) },
+          { role: "close", label: coreT({key: "ui.menu.close_window"}) },
         ],
       },
       {
-        label: "帮助",
+        label: coreT({key: "ui.menu.help"}),
         id: "help",
         submenu: [
-          { label: "打开日志目录", click: () => deps.onOpenLogsDir() },
-          { label: "导出诊断包", click: () => deps.onExportDiagnostics() },
+          { label: coreT({key: "ui.menu.open_logs_dir"}), click: () => deps.onOpenLogsDir() },
+          { label: coreT({key: "ui.menu.export_diagnostics"}), click: () => deps.onExportDiagnostics() },
           { type: "separator" },
           { label: coreT({key: "ui.nav.about"}), click: () => deps.onAbout() },
         ],
@@ -105,9 +105,9 @@ export const ShellMenu = {
         if (!win) return;
         void dialog.showMessageBox(win, {
           type: "info",
-          title: "关于",
+          title: coreT({key: "ui.menu.about"}),
           message: "Novel Master",
-          detail: `版本 ${app.getVersion()}`,
+          detail: coreT({key: "ui.menu.version_line", params: {version: app.getVersion()}}),
         });
       },
       onOpenLogsDir: () => {

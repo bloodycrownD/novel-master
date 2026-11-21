@@ -191,7 +191,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
   else if (viewId === "searchEngineDetail") {
     // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
     const label = engineLabel(navState.editingEngineId);
-    mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? "新建自定义引擎" : label ? `${coreT({key: "ui.nav.search_engines"})} · ${label}` : coreT({key: "ui.nav.search_engines"});
+    mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? coreT({key: "ui.provider.custom_engine_create_title"}) : label ? `${coreT({key: "ui.nav.search_engines"})} · ${label}` : coreT({key: "ui.nav.search_engines"});
   } else if (viewId === "skillDetail") {
     mainTitle = navState.viewingSkillRef != null ? `${coreT({key: "ui.nav.skills"})} · ${navState.viewingSkillRef.name}` : coreT({key: "ui.nav.skill_detail"});
   }

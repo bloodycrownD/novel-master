@@ -1,10 +1,18 @@
 /**
  * 菜单模板纯函数：帮助子菜单含「打开日志目录」「导出诊断包」，点击接到注入动作。
+ *
+ * 文案锚经 coreT 取键值（i18n 迁移后源码不再硬编码中文；结构+接线意图不变）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { MenuItemConstructorOptions } from "electron";
 import { ShellMenu } from "../src/main/shell-menu.js";
+import { coreT } from "../shared/logic/core-i18n.js";
+
+const LOGS_LABEL = coreT({key: "ui.menu.open_logs_dir"});
+const EXPORT_LABEL = coreT({key: "ui.menu.export_diagnostics"});
+const ABOUT_LABEL = coreT({key: "ui.nav.about"});
+const DEVTOOLS_LABEL = coreT({key: "ui.menu.dev_tools"});
 
 function helpItems(template: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
   const help = template.find((item) => item.id === "help");
@@ -17,10 +25,10 @@ describe("buildMenuTemplate", () => {
   it("帮助子菜单含打开日志目录 / 导出诊断包 / 关于，且排在关于之前", () => {
     const items = helpItems(ShellMenu.buildTemplate({ isDev: true, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} }));
     const labels = items.map((item) => item.label);
-    assert.ok(labels.includes("打开日志目录"));
-    assert.ok(labels.includes("导出诊断包"));
-    assert.ok(labels.indexOf("打开日志目录") < labels.indexOf("关于 Novel Master"));
-    assert.ok(labels.indexOf("导出诊断包") < labels.indexOf("关于 Novel Master"));
+    assert.ok(labels.includes(LOGS_LABEL));
+    assert.ok(labels.includes(EXPORT_LABEL));
+    assert.ok(labels.indexOf(LOGS_LABEL) < labels.indexOf(ABOUT_LABEL));
+    assert.ok(labels.indexOf(EXPORT_LABEL) < labels.indexOf(ABOUT_LABEL));
   });
 
   it("点击菜单项调到注入的 onOpenLogsDir / onExportDiagnostics", () => {
@@ -38,9 +46,9 @@ describe("buildMenuTemplate", () => {
       assert.ok(handler != null, `菜单项 ${label} 必须有 click`);
       handler();
     };
-    click("打开日志目录");
-    click("导出诊断包");
-    click("关于 Novel Master");
+    click(LOGS_LABEL);
+    click(EXPORT_LABEL);
+    click(ABOUT_LABEL);
     assert.deepEqual(calls, ["open-logs", "export", "about"]);
   });
 
@@ -49,7 +57,7 @@ describe("buildMenuTemplate", () => {
     const prodItems = ShellMenu.buildTemplate({ isDev: false, onAbout: () => {}, onOpenLogsDir: () => {}, onExportDiagnostics: () => {} });
     const viewLabels = (template: MenuItemConstructorOptions[]): Array<string | undefined> =>
       (template.find((item) => item.id === "view")?.submenu as MenuItemConstructorOptions[]).map((item) => item.label);
-    assert.ok(viewLabels(devItems).includes("开发者工具"));
-    assert.ok(!viewLabels(prodItems).includes("开发者工具"));
+    assert.ok(viewLabels(devItems).includes(DEVTOOLS_LABEL));
+    assert.ok(!viewLabels(prodItems).includes(DEVTOOLS_LABEL));
   });
 });
