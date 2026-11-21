@@ -19,6 +19,7 @@ import { scanTopLevelLet } from "./rules/top-level-let.js";
 import { hygieneUnits, scanHygiene, type HygieneMode } from "./rules/hygiene.js";
 import { rangeScanInput, scanSignatures, type SignaturesScanContext } from "./rules/signatures.js";
 import { parseThrowBaseline, scanThrowAudit, throwBaselinePayload, throwGateCompare, type ThrowSite } from "./rules/throw-audit.js";
+import { scanNestedClosures, type NestedClosure } from "./rules/nested-closures.js";
 import { buildSymbolIndex } from "./lib/symbols.js";
 
 const USAGE_LINES = [
@@ -30,6 +31,7 @@ const USAGE_LINES = [
   "  list         bare --summary | --bucket <桶> | clusters --all  [--json] [--include-tests]",
   "  baseline     write dup | bare  --baseline <path>",
   "  throw-audit  [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]   # 四形态 throw 盘点（默认全量表）",
+  "  closures     [--include-tests] [--json]   # 函数内命名闭包盘点 + 捕获集分类（hoist/method/parametrize），盘点不阻断",
   "  index        [--json]",
   "",
   "exit codes: 0=干净 1=有发现 2=用法错误 3=构建失败",
@@ -37,7 +39,7 @@ const USAGE_LINES = [
 
 const USAGE = USAGE_LINES.join("\n");
 
-const KNOWN_COMMANDS = new Set(["check", "gate", "list", "baseline", "index", "throw-audit"]);
+const KNOWN_COMMANDS = new Set(["check", "gate", "list", "baseline", "index", "throw-audit", "closures"]);
 
 const DUP_BASELINE_NOTE = "签名重复基线 v2。新增重复组会让 gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。judged 段=人工裁决的有意保留组，键消失时由下次 write 警告丢弃。";
 const BARE_BASELINE_NOTE = "nm-style 裸导出基线。gate bare 判据：新增文件条目或既有文件新增函数名 → exit 1；减少是改善，不阻断。重建：nm-style baseline write bare --baseline <path>。";
@@ -65,6 +67,7 @@ function main(): number {
   if (command === "list") return runList(rest);
   if (command === "baseline") return runBaseline(rest);
   if (command === "throw-audit") return runThrowAudit(rest);
+  if (command === "closures") return runClosures(rest);
   if (command === "index") return runIndex(rest);
   console.error(`nm-style: 命令「${command}」尚未实现`);
   return 2;
@@ -483,6 +486,46 @@ function writeBareBaseline(baselinePath: string, includeTests: boolean): number 
  * 默认打四形态全量表；--gate 与 baseline 比对（未登记 VIOLATION/VIOLATION-B/BOUNDARY → exit 1，
  * UNTRIAGED 不拦但首行显数）；--write-baseline 落盘当前站点（旧 disposition 按 key salvage）。
  */
+/** closures 子命令：局部命名闭包盘点（不阻断），按建议桶分组输出。 */
+function runClosures(argv: string[]): number {
+  const flags = parseFlags(argv);
+  const closures = scanNestedClosures(flags.includeTests);
+  const order: NestedClosure["suggestion"][] = ["hoist", "method", "method+params", "parametrize", "parametrize-shared"];
+  const buckets = new Map<string, NestedClosure[]>();
+  for (const closure of closures) {
+    const list = buckets.get(closure.suggestion) ?? [];
+    list.push(closure);
+    buckets.set(closure.suggestion, list);
+  }
+  if (argv.includes("--json")) {
+    console.log(JSON.stringify({ total: closures.length, buckets: Object.fromEntries([...buckets.entries()].map(([k, v]) => [k, v.length])), sites: closures }, null, 2));
+    return 0;
+  }
+  console.log(`== closures（函数内命名闭包盘点，${closures.length} 处；盘点不阻断——逐处定性后参数化/提升，豁免用 nm-style: keep-closure）==`);
+  const TITLES: Record<string, string> = {
+    hoist: "[零捕获] 提升为模块级函数（纯搬）",
+    method: "[捕 this] 提为私有方法",
+    "method+params": "[捕 this+变量] 私有方法 + 参数化",
+    parametrize: "[可参数化] 捕获集进签名后提升为模块级函数",
+    "parametrize-shared": "[变异捕获] 参数化是引用共享，建议对象槽/holder",
+  };
+  for (const key of order) {
+    const list = buckets.get(key) ?? [];
+    if (list.length === 0) continue;
+    console.log(`
+${TITLES[key]}——${list.length} 处`);
+    for (const closure of list) {
+      const cap = closure.captures.length > 0 ? ` 捕获[${closure.captures.join(", ")}]` : "";
+      const mut = closure.mutated.length > 0 ? ` 变异[${closure.mutated.join(", ")}]` : "";
+      const esc = closure.escapes ? " 逃逸" : "";
+      console.log(`  ${closure.file}:${closure.line}  ${closure.name}（外层 ${closure.owner}）${cap}${mut}${esc}`);
+    }
+  }
+  console.log(`
+closures: ${closures.length} 处（${order.map((k) => `${k}=${(buckets.get(k) ?? []).length}`).join(" ")}）`);
+  return 0;
+}
+
 function runThrowAudit(argv: string[]): number {
   const flags = parseFlags(argv);
   const { value: baselineOpt, error } = optionValueOf(argv, "--baseline");
