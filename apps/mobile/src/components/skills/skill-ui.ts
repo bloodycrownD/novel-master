@@ -5,7 +5,7 @@
  */
 
 import type {SkillDomain} from '@novel-master/core/skills';
-import {coreT} from '../i18n/core';
+import {coreT} from '../../i18n/core';
 
 // front matter 重写（重命名/描述编辑与 ZIP 导入回写共用）已回收为
 // core 单源，经此处再导出供 mobile 各组件消费。
