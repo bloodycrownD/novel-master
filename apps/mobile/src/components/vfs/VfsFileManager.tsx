@@ -778,7 +778,6 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
    */
   const runImport = (kind: BulkImportKind, targetPath: string) => {
     const title = kind === 'zip' ? coreT({key: "ui.vfs.import_zip_title"}) : coreT({key: "ui.vfs.import_card_title"});
-    // nm-style/契约：vfs-character-card-menu.test 锁成功 toast 中文片段，波 3c 对齐后再迁。
     const successToast = kind === 'zip' ? coreT({key: "ui.vfs.zip_import_done"}) : coreT({key: "ui.vfs.card_import_done"});
     const confirmCopy = kind === 'zip' ? zipImportConfirmCopy(targetPath) : characterCardImportConfirmCopy(targetPath);
     Alert.alert(title, confirmCopy, [
@@ -830,7 +829,6 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       }
       if (result.status === 'needs-confirm') {
         const {conflictCount, confirm} = result;
-        // nm-style/契约：vfs-character-card-menu.test 锁 `'导入单文件', singleFileImportConfirmCopy(...)` 形态，波 3c 对齐后再迁。
         Alert.alert(coreT({key: "ui.vfs.import_single_title"}), singleFileImportConfirmCopy(conflictCount), [
           {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
           {
@@ -902,7 +900,6 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           return;
         }
         if (result.value === 'saved') {
-          // nm-style/契约：vfs-character-card-menu.test 锁 saved toast 中文片段，波 3c 对齐后再迁。
           showToast(kind === 'zip' ? coreT({key: "ui.common.zip_saved"}) : coreT({key: "ui.vfs.file_saved_location"}));
         }
       })
