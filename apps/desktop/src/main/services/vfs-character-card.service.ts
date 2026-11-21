@@ -6,6 +6,7 @@
  * @module services/vfs-character-card
  */
 import { VfsServiceFactory, type VfsScope } from "@novel-master/core/vfs";
+import { coreT } from "../../../shared/logic/core-i18n.js";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -23,7 +24,7 @@ export namespace VfsCharacterCardService {
     const win = parentWindow ?? undefined;
     const dialogOpts = {
       filters: [
-        { name: "角色卡", extensions: ["png", "json"] },
+        { name: coreT({key: "ui.vfs.import_kind_card"}), extensions: ["png", "json"] },
         { name: "PNG", extensions: ["png"] },
         { name: "JSON", extensions: ["json"] },
       ],
