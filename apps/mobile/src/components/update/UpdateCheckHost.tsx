@@ -8,25 +8,27 @@ import {Alert, Linking} from 'react-native';
 import {useToast} from '../chrome/ToastHost';
 import {useAutoUpdateCheck} from '../../hooks/useAutoUpdateCheck';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import type {UpdateCheckData} from '@novel-master/core/common';
 import {UpdateCheckResultModal} from './UpdateCheckResultModal';
 
 function showUpdateDetailAlert(data: UpdateCheckData, onLater: () => void, showToast: (message: string) => void): void {
+  const openSuffix = coreT({key: "ui.update.open_releases_suffix"});
   let message: string;
   if (data.releaseNotesExcerpt) {
-    message = `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n将在浏览器中打开 GitHub 发行页下载。`;
+    message = `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n${openSuffix}`;
   } else {
-    message = `v${data.remoteVersion}\n\n将在浏览器中打开 GitHub 发行页下载。`;
+    message = `v${data.remoteVersion}\n\n${openSuffix}`;
   }
 
-  Alert.alert('发现新版本', message, [
-    {text: '取消', style: 'cancel'},
-    {text: '稍后', onPress: onLater},
+  Alert.alert(coreT({key: "ui.update.available_title"}), message, [
+    {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
+    {text: coreT({key: "ui.update.later"}), onPress: onLater},
     {
-      text: '前往下载',
+      text: coreT({key: "ui.update.go_download"}),
       onPress: () => {
         // 对齐 AboutScreen openLink：外跳失败（无浏览器可处理等）toast 而非裸 rejection。
-        void Linking.openURL(data.releaseUrl).catch(err => showToast(ToastMessage.toast('无法打开链接', err)));
+        void Linking.openURL(data.releaseUrl).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.open_link_failed"}), err)));
       },
     },
   ]);

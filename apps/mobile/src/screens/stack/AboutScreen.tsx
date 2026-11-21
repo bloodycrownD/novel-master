@@ -8,6 +8,7 @@ import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '@/components/profile/ProfileMenuItem';
 import {ProfileSwitchItem} from '@/components/profile/ProfileSwitchItem';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {UpdatePrefs} from '@/storage/update-prefs';
 import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
@@ -18,18 +19,19 @@ import type {UpdateCheckData} from '@novel-master/core/common';
 import {useTheme} from '@/theme/ThemeProvider';
 
 function showUpdateAlert(data: UpdateCheckData, onLater: () => void): void {
+  const openSuffix = coreT({key: "ui.update.open_releases_suffix"});
   let message: string;
   if (data.releaseNotesExcerpt) {
-    message = `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n将在浏览器中打开 GitHub 发行页下载。`;
+    message = `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n${openSuffix}`;
   } else {
-    message = `v${data.remoteVersion}\n\n将在浏览器中打开 GitHub 发行页下载。`;
+    message = `v${data.remoteVersion}\n\n${openSuffix}`;
   }
 
-  Alert.alert('发现新版本', message, [
-    {text: '取消', style: 'cancel'},
-    {text: '稍后', onPress: onLater},
+  Alert.alert(coreT({key: "ui.update.available_title"}), message, [
+    {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
+    {text: coreT({key: "ui.update.later"}), onPress: onLater},
     {
-      text: '前往下载',
+      text: coreT({key: "ui.update.go_download"}),
       onPress: () => {
         void Linking.openURL(data.releaseUrl);
       },
@@ -70,7 +72,7 @@ export function AboutScreen() {
       if (!checked.ok) {
         await UpdatePrefs.persistFailedUpdateCheck(appUi);
         setLastStatus('error');
-        showToast(ToastMessage.toast('检查失败', checked.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.check_failed"}), checked.error));
         return;
       }
       const data = checked.value;
@@ -78,7 +80,7 @@ export function AboutScreen() {
       setLastStatus(data.status === 'update-available' ? 'available' : 'up-to-date');
       setLastRemote(data.remoteVersion);
       if (data.status === 'up-to-date') {
-        showToast('当前已是最新版本');
+        showToast(coreT({key: "ui.update.up_to_date"}));
         return;
       }
       showUpdateAlert(data, () => {
@@ -87,7 +89,7 @@ export function AboutScreen() {
     } catch (err) {
       await UpdatePrefs.persistFailedUpdateCheck(appUi);
       setLastStatus('error');
-      showToast(ToastMessage.toast('检查失败', err));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.check_failed"}), err));
     } finally {
       setChecking(false);
     }
@@ -95,16 +97,16 @@ export function AboutScreen() {
 
   const openLink = useCallback(
     (url: string) => {
-      void Linking.openURL(url).catch(err => showToast(ToastMessage.toast('无法打开链接', err)));
+      void Linking.openURL(url).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.open_link_failed"}), err)));
     },
     [showToast],
   );
 
   let statusLabel = '—';
-  if (checking) statusLabel = '检查中…';
-  else if (lastStatus === 'up-to-date') statusLabel = '当前已是最新版本';
-  else if (lastStatus === 'available' && lastRemote) statusLabel = `有新版本 ${lastRemote}`;
-  else if (lastStatus === 'error') statusLabel = '上次检查失败';
+  if (checking) statusLabel = coreT({key: "ui.update.checking"});
+  else if (lastStatus === 'up-to-date') statusLabel = coreT({key: "ui.update.up_to_date"});
+  else if (lastStatus === 'available' && lastRemote) statusLabel = coreT({key: "ui.update.new_version_line", params: {version: lastRemote}});
+  else if (lastStatus === 'error') statusLabel = coreT({key: "ui.update.last_check_failed"});
 
   return (
     <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent}>
@@ -123,24 +125,24 @@ export function AboutScreen() {
           </Text>
         </View>
         <Text style={[styles.title, {color: tokens.text}]}>Novel Master</Text>
-        <Text style={[styles.version, {color: tokens.textSecondary}]}>版本 {APP_VERSION}</Text>
+        <Text style={[styles.version, {color: tokens.textSecondary}]}>{coreT({key: "ui.about.version", params: {version: APP_VERSION}})}</Text>
       </View>
 
-      <ListSectionTitle title="更新" tokens={tokens} />
+      <ListSectionTitle title={coreT({key: "ui.update.section"})} tokens={tokens} />
       <ProfileSwitchItem
         icon="🔄"
-        label="自动检查更新"
+        label={coreT({key: "ui.update.auto_check"})}
         value={autoCheck}
         tokens={tokens}
         onValueChange={next => {
           if (!appUi) return;
           setAutoCheck(next);
-          void AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).catch(err => showToast(ToastMessage.toast('保存失败', err)));
+          void AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), err)));
         }}
       />
       <ProfileMenuItem
         icon="⬇️"
-        label="检查更新"
+        label={coreT({key: "ui.update.check_now"})}
         value={statusLabel}
         tokens={tokens}
         onPress={() => {
@@ -148,10 +150,10 @@ export function AboutScreen() {
         }}
       />
 
-      <ListSectionTitle title="项目链接" tokens={tokens} />
-      <ProfileMenuItem icon="🔗" label="GitHub 仓库" tokens={tokens} onPress={() => openLink(APP_LINKS.repo)} />
-      <ProfileMenuItem icon="📦" label="发行版" tokens={tokens} onPress={() => openLink(APP_LINKS.releases)} />
-      <ProfileMenuItem icon="📄" label="许可证" tokens={tokens} onPress={() => openLink(APP_LINKS.license)} />
+      <ListSectionTitle title={coreT({key: "ui.about.links_section"})} tokens={tokens} />
+      <ProfileMenuItem icon="🔗" label={coreT({key: "ui.about.github_repo"})} tokens={tokens} onPress={() => openLink(APP_LINKS.repo)} />
+      <ProfileMenuItem icon="📦" label={coreT({key: "ui.about.releases"})} tokens={tokens} onPress={() => openLink(APP_LINKS.releases)} />
+      <ProfileMenuItem icon="📄" label={coreT({key: "ui.about.license"})} tokens={tokens} onPress={() => openLink(APP_LINKS.license)} />
     </ScrollView>
   );
 }

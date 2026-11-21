@@ -8,13 +8,14 @@
 import React from 'react';
 import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 import type {UpdateCheckResultKind} from '@/services/update-check-flow';
 
 export type {UpdateCheckResultKind};
 
-const UPDATE_CHECK_RESULT_TITLE = '版本检查';
-const UPDATE_CHECK_UP_TO_DATE_MESSAGE = '当前已是最新版本';
-const UPDATE_CHECK_FAILED_MESSAGE = '无法检查更新，请检查网络';
+const UPDATE_CHECK_RESULT_TITLE = coreT({key: "ui.update.check_title"});
+const UPDATE_CHECK_UP_TO_DATE_MESSAGE = coreT({key: "ui.update.up_to_date"});
+const UPDATE_CHECK_FAILED_MESSAGE = coreT({key: "ui.update.check_failed"});
 
 type Props = {
   visible: boolean;
@@ -34,7 +35,7 @@ export function UpdateCheckResultModal({visible, kind, onClose, onSnoozeToday}: 
           <Text style={[styles.message, {color: tokens.textSecondary}]}>{kind === 'up-to-date' ? UPDATE_CHECK_UP_TO_DATE_MESSAGE : UPDATE_CHECK_FAILED_MESSAGE}</Text>
           <View style={styles.actions}>
             <Pressable testID="update-check-result-close" onPress={onClose} style={styles.btn}>
-              <Text style={{color: tokens.textSecondary}}>关闭</Text>
+              <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.close"})}</Text>
             </Pressable>
             <Pressable
               testID="update-check-result-snooze"
@@ -43,7 +44,7 @@ export function UpdateCheckResultModal({visible, kind, onClose, onSnoozeToday}: 
               }}
               style={styles.btn}
             >
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>今日不再提醒</Text>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.update.remind_off_today"})}</Text>
             </Pressable>
           </View>
         </Pressable>
