@@ -686,13 +686,8 @@ export function DataManagementView() {
         }
       />
       <SettingsActionSection
-        title="数据清理"
-        // desc 模板串与清理确认 message 被 settings-db-maintenance-ui.test.ts 源码正则锁死，波 3c 对齐后再迁。
-        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${
-          dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"
-        } · 可回收约 ${
-          dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"
-        }。`}
+        title={coreT({key: "ui.storage.cleanup_section"})}
+        desc={coreT({key: "ui.storage.cleanup_desktop_desc", params: {before: dbStats ? formatStorageBytes(dbStats.fileBytes) : "—", after: dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}})}
         action={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button
@@ -700,7 +695,7 @@ export function DataManagementView() {
               disabled={controlsDisabled}
               onClick={() => setConfirmMaintenance(true)}
             >
-              清理
+              {coreT({key: "ui.storage.cleanup_action"})}
             </Button>
             {activeLongTask === "maintenance" ? (
               <>
@@ -757,8 +752,8 @@ export function DataManagementView() {
       />
       <ConfirmModal
         open={confirmMaintenance}
-        title="确认清理"
-        message="清理将回收缓存冗余并压缩数据库文件，耗时随库体积增长（大库可能数十秒），期间应用可能短暂无响应；完成后磁盘占用通常会下降。确定继续？"
+        title={coreT({key: "ui.storage.cleanup_confirm_title_desktop"})}
+        message={coreT({key: "ui.storage.cleanup_confirm_desktop"})}
         busy={busy}
         onConfirm={() => void runMaintenance()}
         onCancel={() => !busy && setConfirmMaintenance(false)}

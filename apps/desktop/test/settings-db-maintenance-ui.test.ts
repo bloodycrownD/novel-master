@@ -27,25 +27,24 @@ describe("SettingsViews 数据清理 UI（T-UID1）", () => {
   const source = readFileSync(settingsViewsPath, "utf8");
 
   it("数据清理分区展示库体积与可回收量，失败回退占位 '—'", () => {
-    assert.match(source, /title="数据清理"/);
+    // i18n 后锁 coreT 调用形态+键名+占位实参（失败回退 "—" 的意图由 params 实参保持）。
+    assert.match(source, /title=\{coreT\(\{key: "ui\.storage\.cleanup_section"\}\)\}/);
     assert.match(
       source,
-      /当前库体积 \$\{\s*dbStats \? formatStorageBytes\(dbStats\.fileBytes\) : "—"\s*\}/,
-    );
-    assert.match(
-      source,
-      /可回收约 \$\{\s*dbStats \? formatStorageBytes\(dbStats\.reclaimableBytes\) : "—"\s*\}/,
+      /desc=\{coreT\(\{key: "ui\.storage\.cleanup_desktop_desc", params: \{before: dbStats \? formatStorageBytes\(dbStats\.fileBytes\) : "—", after: dbStats \? formatStorageBytes\(dbStats\.reclaimableBytes\) : "—"\}\}\)\}/,
     );
   });
 
   it("清理按钮挂 ConfirmModal 二次确认", () => {
+    // 清理按钮文案按 3c-a 裁决接 ui.storage.cleanup_action（清理数据库空间）。
     assert.match(
       source,
-      /onClick=\{\(\) => setConfirmMaintenance\(true\)\}\s*\n\s*>\s*\n\s*清理/,
+      /onClick=\{\(\) => setConfirmMaintenance\(true\)\}\s*\n\s*>\s*\n\s*\{coreT\(\{key: "ui\.storage\.cleanup_action"\}\)\}/,
     );
     assert.match(source, /open=\{confirmMaintenance\}/);
-    assert.match(source, /title="确认清理"/);
-    assert.match(source, /耗时随库体积增长/);
+    // 确认弹窗 title 与 message（正文「耗时随库体积增长」语义）i18n 后锁 coreT 形态+键名。
+    assert.match(source, /title=\{coreT\(\{key: "ui\.storage\.cleanup_confirm_title_desktop"\}\)\}/);
+    assert.match(source, /message=\{coreT\(\{key: "ui\.storage\.cleanup_confirm_desktop"\}\)\}/);
     assert.match(
       source,
       /onConfirm=\{\(\) => void runMaintenance\(\)\}/,
