@@ -47,7 +47,8 @@ describe('SkillInfoEditModal 源码契约（T-S5）', () => {
       /target\.domain === 'global' && BUILTIN_SKILL_NAMES\.has\(target\.name\)/,
     );
     expect(modalSrc).toMatch(/editable=\{!builtin\}/);
-    expect(modalSrc).toMatch(/内置技能不可改名/);
+    // i18n 迁移后锁 label 三元的 coreT 形态与两个键名（文案由 catalog 保证）。
+    expect(modalSrc).toMatch(/builtin \? coreT\(\{key: "ui\.skills\.name_label_builtin_hint"\}\) : coreT\(\{key: "ui\.skills\.name_label_plain"\}\)/);
   });
 
   it('保存成功回传最新技能名（调用方据此刷新导航状态）', () => {
@@ -59,7 +60,7 @@ describe('SkillInfoEditModal 源码契约（T-S5）', () => {
 
 describe('入口接线源码契约（T-S5）', () => {
   it('管理页行菜单有「编辑信息」，invalid 技能置灰', () => {
-    expect(manageSrc).toMatch(/'编辑信息'/);
+    expect(manageSrc).toMatch(/label: coreT\(\{key: "ui\.skills\.edit_info"\}\)/);
     expect(manageSrc).toMatch(/disabled: !menuTarget\.item\.valid/);
     expect(manageSrc).toMatch(/<SkillInfoEditModal/);
   });
@@ -76,8 +77,8 @@ describe('NewSkillModal 消费 core 单源（front matter 重写回收）', () =
     expect(newSkillSrc).not.toMatch(
       /function withFrontMatterValues\(/,
     );
-    // 文案更新：不再声称创建后不可改
-    expect(newSkillSrc).toMatch(/可在管理页重命名/);
+    // 文案更新：不再声称创建后不可改（i18n 后锁 dir_hint 键）
+    expect(newSkillSrc).toMatch(/ui\.skills\.name_label_dir_hint/);
     expect(newSkillSrc).not.toMatch(/创建后不可改/);
   });
 

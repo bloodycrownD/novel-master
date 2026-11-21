@@ -216,7 +216,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
       )}
       <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text style={[styles.label, {color: tokens.textSecondary}]} testID="new-skill-name-label">
-          技能名（即目录名，可在管理页重命名）
+          {coreT({key: "ui.skills.name_label_dir_hint"})}
         </Text>
         <TextInput
           testID="new-skill-name-input"

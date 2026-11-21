@@ -93,7 +93,7 @@ export function SkillInfoEditModal({visible, target, currentDescription, onClose
     <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
       <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.skills.edit_info"})}</Text>
       <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>{builtin ? '技能名（内置技能不可改名）' : '技能名'}</Text>
+        <Text style={[styles.label, {color: tokens.textSecondary}]}>{builtin ? coreT({key: "ui.skills.name_label_builtin_hint"}) : coreT({key: "ui.skills.name_label_plain"})}</Text>
         <TextInput
           testID="skill-info-name-input"
           style={[

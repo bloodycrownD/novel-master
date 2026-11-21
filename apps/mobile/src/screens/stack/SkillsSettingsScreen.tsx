@@ -213,7 +213,7 @@ export function SkillsSettingsScreen() {
     }
     const items: SheetMenuItem[] = [
       {
-        label: '编辑信息',
+        label: coreT({key: "ui.skills.edit_info"}),
         action: 'edit-info',
         // invalid（front matter 不可解析）时置灰：改名链路会跳过
         // front matter 重写，先修复 SKILL.md 再改信息
