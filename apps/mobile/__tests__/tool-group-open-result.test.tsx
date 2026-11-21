@@ -9,6 +9,7 @@
  */
 import type {VNode} from 'preact';
 import {ToolGroup} from '../src/web/chat-transcript/webview/ui/render/ToolGroup';
+import {DEFAULT_LABELS} from '../src/web/chat-transcript/webview/ui/labels';
 
 /**
  * 取 ToolGroup 里各工具卡的**执行产物** vnode。
@@ -22,6 +23,7 @@ function itemVNodes(tools: object[]): VNode[] {
     tools: tools as never[],
     groupKey: 'g1',
     expanded: true,
+    labels: DEFAULT_LABELS,
   }) as VNode;
   const children = section.props.children as VNode[];
   if (!Array.isArray(children)) {

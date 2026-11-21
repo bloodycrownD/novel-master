@@ -5,6 +5,7 @@
  * 「生成中」条只属于流式行（StreamingMessageRow），这里不再承载。
  */
 import type {ToolCallRow} from '../../runtime/state/state';
+import type {TranscriptLabels} from '../labels';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {ThinkingSection} from './ThinkingSection';
 import {ToolGroup} from './ToolGroup';
@@ -22,6 +23,8 @@ type AssistantBubbleInnerProps = {
   toolGroupKey: string;
   toolGroupExpanded: boolean;
   richText: boolean;
+  /** 文案（R6 波 4a：labels 对象随 props 下传给 ToolGroup，不直读 state）。 */
+  labels: TranscriptLabels;
 };
 
 export function AssistantBubbleInner({
@@ -36,6 +39,7 @@ export function AssistantBubbleInner({
   toolGroupKey,
   toolGroupExpanded,
   richText,
+  labels,
 }: AssistantBubbleInnerProps) {
   const hasThinking = !!(thinking && String(thinking).trim());
   const hasTools = !!(tools && tools.length > 0);
@@ -74,6 +78,7 @@ export function AssistantBubbleInner({
           groupKey={toolGroupKey}
           expanded={toolGroupExpanded}
           showDividerBelow={false}
+          labels={labels}
         />
       ) : null}
     </>

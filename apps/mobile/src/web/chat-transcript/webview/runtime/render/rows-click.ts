@@ -1,4 +1,5 @@
 import {state} from '../state/state';
+import {Labels} from '../../ui/labels';
 import type {ToolCallRow} from '../state/state';
 import {post} from '../bridge';
 import {Menu} from '../menu/menu';
@@ -95,7 +96,7 @@ export const RowsClick = {
           const content = ToolLogic.readableResult(row);
           if (content != null) {
             post('openToolResult', {
-              title: row.name || '工具结果',
+              title: row.name || Labels.uiText(state.labels, 'ui.transcript.tool_result_title'),
               content: content,
               ...(row.input != null
                 ? {inputJson: JSON.stringify(row.input, null, 2)}

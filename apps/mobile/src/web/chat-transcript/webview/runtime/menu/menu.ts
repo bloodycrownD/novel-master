@@ -5,6 +5,7 @@ import {
   type AnchoredMenuLayout,
 } from '../../../../../webview-host/chat-transcript/anchored-menu-layout';
 import {state} from '../state/state';
+import {Labels} from '../../ui/labels';
 import type {
   MenuAnchor,
   MenuItem,
@@ -79,14 +80,14 @@ export const Menu = {
 
   buildItems: (row: TranscriptRow, hit: HitEl): MenuItem[] => {
     const items: MenuItem[] = [];
-    if ('text' in row && row.text) items.push({label: '编辑', action: 'edit'});
-    items.push({label: '复制', action: 'copy'});
+    if ('text' in row && row.text) items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.edit'), action: 'edit'});
+    items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.copy'), action: 'copy'});
     const hitElement = hit as Element | null;
     const inTool = !!hitElement?.closest?.('.tool-card, .tool-group-item');
     const isUser = row.kind === 'message' && row.role === 'user';
-    if (isUser && !inTool) items.push({label: '置位', action: 'set-floor'});
-    items.push({label: '分叉', action: 'fork'});
-    items.push({label: '回滚', action: 'rollback', danger: true});
+    if (isUser && !inTool) items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.set_floor'), action: 'set-floor'});
+    items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.fork'), action: 'fork'});
+    items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.rollback'), action: 'rollback', danger: true});
     return items;
   },
 

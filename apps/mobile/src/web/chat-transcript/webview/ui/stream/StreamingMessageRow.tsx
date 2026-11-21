@@ -23,6 +23,7 @@ import type {ComponentChildren} from 'preact';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import * as streamRuntime from '../../runtime/stream/stream';
 import {state} from '../../runtime/state/state';
+import {Labels} from '../labels';
 import type {MessageRow} from '../../runtime/state/state';
 import {Menu} from '../../runtime/menu/menu';
 import {ToolInvokingBar} from '../render/ToolInvokingBar';
@@ -168,11 +169,11 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
       <div className={bubbleClass}>
         {showMenu ? (
           <div className="message-menu-row">
-            <span className="message-role-label">助手</span>
+            <span className="message-role-label">{Labels.uiText(state.labels, "ui.transcript.role.assistant")}</span>
             <button
               type="button"
               className="message-menu-btn"
-              aria-label="消息操作"
+              aria-label={Labels.uiText(state.labels, "ui.transcript.message_actions")}
               onClick={event => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -223,6 +224,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
         {hasTools ? (
           <ToolGroup
             key="stream-tool-group"
+            labels={state.labels}
             tools={tools!}
             groupKey={toolGroupKey}
             expanded={groupExpanded}

@@ -86,4 +86,20 @@ export namespace Labels {
       ui: {...DEFAULT_UI_LABELS, ...uiLabels},
     };
   }
+
+  // nm-style: keep-public — R6 波 4a web 层接线唯一取值入口：组件经
+  // `state.labels`（白名单直读）或 props 下传的 labels 对象取 `ui.*` 文案，
+  // 禁止再写中文字面量；内联插值会在每个组件里复制 `{param}` 替换逻辑。
+  /**
+   * ui.* map 取值 + `{param}` 插值：键命中取文案并替换模板参数，缺键原样
+   * 回 key（resolve 已并入 DEFAULT_UI_LABELS，正常路径恒命中；缺键说明
+   * 消费方用了未登记键，显式露出便于排查）。
+   */
+  export function uiText(labels: TranscriptLabels, key: string, params?: Record<string, string | number>): string {
+    const raw = labels.ui[key] ?? key;
+    if (params == null) return raw;
+    return raw.replace(/\{(\w+)\}/g, (match, name: string) =>
+      name in params && params[name] != null ? String(params[name]) : match,
+    );
+  }
 }

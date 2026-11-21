@@ -2,6 +2,8 @@
  * 工具调用组：可折叠 header + 卡片列表。
  */
 import type {ToolCallRow} from '../../runtime/state/state';
+import type {TranscriptLabels} from '../labels';
+import {Labels} from '../labels';
 import {ToolLogic, ToolSummary} from '../../runtime/render/tool-logic';
 import {VfsToolPath} from '../../runtime/util/vfs-tool-path';
 import {SkillToolRef} from '../../runtime/util/skill-tool-ref';
@@ -13,6 +15,8 @@ type ToolGroupProps = {
   expanded: boolean;
   showDividerBelow?: boolean;
   groupTitle?: string;
+  /** 文案（R6 波 4a：宿主下发/缺省兜底的 labels 对象；Ask 方 props 下传，不直读 state）。 */
+  labels: TranscriptLabels;
 };
 
 export function ToolGroup({
@@ -21,11 +25,12 @@ export function ToolGroup({
   expanded,
   showDividerBelow,
   groupTitle,
+  labels,
 }: ToolGroupProps) {
   if (!tools || tools.length === 0) return null;
   return (
     <CollapsibleSection
-      title={groupTitle || '工具调用 (' + tools.length + ')'}
+      title={groupTitle || Labels.uiText(labels, 'ui.transcript.tool_group_title', {count: tools.length})}
       action="toggle-tool-group"
       dataKey="tool-group-key"
       dataValue={groupKey}
@@ -52,7 +57,7 @@ export function ToolGroup({
             // web bundle 无 logger 依赖：卡片路径解析失败诊断只能走 console
             // （src/web 不在 log 守卫扫描面，spec C31）。
             // prettier-ignore
-            console.warn('[ToolGroup] write/edit/read 卡片无法解析路径', 'tool=', tool.name, 'inputKeys=', inputKeys, 'input=', tool.input);
+            console.warn('[ToolGroup] write/edit/read card path unresolved', 'tool=', tool.name, 'inputKeys=', inputKeys, 'input=', tool.input);
           }
         }
         // 子会话优先；其次 skill 三元组；最后回退到文件路径打开。
@@ -70,10 +75,16 @@ export function ToolGroup({
         const canOpen = filePath != null || hasSubagent || hasSkill || hasResult;
         const summary = ToolSummary.callSummary(tool);
         const statusClass = ToolLogic.statusClass(tool.status);
-        const statusInner = ToolLogic.statusLabel(tool.status);
+        const statusInner = ToolLogic.statusLabel(tool.status, labels.ui);
         // prettier-ignore
-        const openKind = hasSubagent ? '子会话' : hasSkill ? '技能' : hasResult ? '结果' : '聊天工作区';
-        const openHint = '点击查看 · ' + openKind;
+        const openKind = hasSubagent
+          ? Labels.uiText(labels, 'ui.transcript.open_kind.subagent')
+          : hasSkill
+          ? Labels.uiText(labels, 'ui.transcript.open_kind.skill')
+          : hasResult
+          ? Labels.uiText(labels, 'ui.transcript.open_kind.result')
+          : Labels.uiText(labels, 'ui.transcript.open_kind.workspace');
+        const openHint = Labels.uiText(labels, 'ui.transcript.open_hint', {kind: openKind});
         return (
           <div
             key={i}

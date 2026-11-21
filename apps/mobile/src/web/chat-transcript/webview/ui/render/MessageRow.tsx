@@ -6,6 +6,7 @@
  */
 import type {MessageRow as MessageRowModel} from '../../runtime/state/state';
 import {state} from '../../runtime/state/state';
+import {Labels} from '../labels';
 import {Menu} from '../../runtime/menu/menu';
 import {Stream} from '../../runtime/stream/stream';
 import {AttachGroup} from './AttachGroup';
@@ -28,7 +29,7 @@ export function MessageRow({row}: MessageRowProps) {
   const hidden = row.hidden ? ' hidden' : '';
   const thinkingKey = 'msg:' + row.id;
   const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
-  const roleLabel = role === 'user' ? '用户' : '助手';
+  const roleLabel = Labels.uiText(state.labels, role === 'user' ? 'ui.transcript.role.user' : 'ui.transcript.role.assistant');
 
   const menuRow = (
     <div className="message-menu-row">
@@ -37,7 +38,7 @@ export function MessageRow({row}: MessageRowProps) {
       <button
         type="button"
         className="message-menu-btn"
-        aria-label="消息操作"
+        aria-label={Labels.uiText(state.labels, "ui.transcript.message_actions")}
         onClick={event => {
           event.preventDefault();
           event.stopPropagation();
@@ -71,6 +72,7 @@ export function MessageRow({row}: MessageRowProps) {
               </div>
             ) : null}
             <AttachGroup
+              labels={state.labels}
               attachments={attachments}
               groupKey={attachKey}
               expanded={attachExpanded}
@@ -100,6 +102,7 @@ export function MessageRow({row}: MessageRowProps) {
           textHtml={row.textHtml}
           thinking={row.thinking}
           thinkingTitle={state.labels.thinking}
+          labels={state.labels}
           thinkingKey={thinkingKey}
           thinkingExpanded={thinkingExpanded}
           thinkingHtml={row.thinkingHtml}
