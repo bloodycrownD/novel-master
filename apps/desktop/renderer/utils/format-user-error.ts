@@ -1,8 +1,10 @@
+import { coreT } from "@shared/logic/core-i18n";
+
 const FIELD_LABELS: Record<string, string> = {
   endDepth: "结束深度",
   startDepth: "起始深度",
-  pattern: "正则表达式",
-  name: "名称",
+  pattern: coreT({key: "ui.smart_sort.regex_label"}),
+  name: coreT({key: "ui.common.name"}),
   flags: "标志",
   groupId: "组 ID",
   ruleId: "规则 ID",

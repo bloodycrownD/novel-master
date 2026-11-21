@@ -2165,7 +2165,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                       )
                     );
                   }}
-                  aria-label={`启用 ${rule.name}`}
+                  aria-label={`${coreT({key: "ui.common.enable"})} ${rule.name}`}
                 />
               </div>
             ) : null}

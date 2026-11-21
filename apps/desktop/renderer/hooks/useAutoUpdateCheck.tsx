@@ -10,6 +10,7 @@ import {
   ipcAppUiSet,
 } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
+import { coreT } from "@shared/logic/core-i18n";
 import {
   UpdateCheckResultModal,
   type UpdateCheckResultKind,
@@ -110,8 +111,8 @@ export function AutoUpdateCheckHost() {
         if (dismissed === checkRes.data.remoteVersion) return;
 
         const updateData = checkRes.data;
-        showToast(`发现新版本 ${updateData.remoteVersion}`, UPDATE_TOAST_MS, {
-          actionLabel: "查看",
+        showToast(coreT({key: "ui.update.available_line", params: {version: updateData.remoteVersion}}), UPDATE_TOAST_MS, {
+          actionLabel: coreT({key: "ui.common.view"}),
           onAction: () => setUpdateModal(updateData),
         });
       })();
