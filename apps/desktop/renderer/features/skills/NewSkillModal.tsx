@@ -9,8 +9,8 @@
  */
 import { useEffect, useState } from "react";
 import {
-  SKILL_NAME_PATTERN,
   SkillZip,
+  validateSkillName,
   type SkillZipPreview,
 } from "@shared/logic/skills";
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
@@ -23,6 +23,7 @@ import {
   ipcVfsZipPick,
 } from "@/ipc/client";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { coreT } from "@shared/logic/core-i18n";
 import { NewSkillDoc, toSkillRef } from "./skill-ui";
 
 /** 导入态：zip 字节（创建时落盘）+ 预检结果（预填与 front matter 重写判定）。 */
@@ -101,7 +102,7 @@ export function NewSkillModal({
       }
       const preview = previewResult.value;
       if (preview.skillMd == null) {
-        setError("ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）");
+        setError(coreT({key: "ui.skills.zip_root_missing"}));
         return;
       }
       setImported({ bytes: pickRes.data, preview });
@@ -118,13 +119,15 @@ export function NewSkillModal({
     if (!canSubmit) {
       return;
     }
-    // 技能名输入校验（原 isValidSkillNameInput 内联：与 core SKILL_NAME_PATTERN 同口径）
-    if (!(trimmedName.length > 0 && SKILL_NAME_PATTERN.test(trimmedName))) {
-      setError("技能名不能包含空格或斜杠，且不能以「.」开头。");
+    // 技能名输入校验：消费 core validateSkillName（与 SkillInfoEditModal 同源，
+    // 空白/斜杠/「.」开头/保留名全口径 per-case reason，coreT 直出文案）。
+    const nameIssue = validateSkillName(trimmedName);
+    if (nameIssue != null) {
+      setError(nameIssue);
       return;
     }
     if (domain === "project" && !projectId) {
-      setError("请选择所属项目。");
+      setError(coreT({key: "ui.skills.project_required"}));
       return;
     }
     setSaving(true);
@@ -134,7 +137,7 @@ export function NewSkillModal({
       const listRes = await ipcSkillsList( domain === "global" ? { domain } : { domain, projectId } );
       if (listRes.ok) {
         if (listRes.data.some((s) => s.name === trimmedName)) {
-          setError(domain === "global" ? "全局域已存在同名技能。" : "该项目已存在同名技能。");
+          setError(coreT({key: "ui.skills.domain_name_conflict", params: {name: trimmedName}}));
           return;
         }
       }
@@ -214,17 +217,17 @@ export function NewSkillModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="new-skill-title" className="text-prompt-modal__title">
-          新建技能
+          {coreT({key: "ui.skills.new_title"})}
         </h3>
         {imported != null ? (
           <div className="new-skill-modal__import-row">
-            <span className="new-skill-modal__import-info">{`已导入 ZIP · ${imported.preview.fileCount} 个文件（创建后全部带入）`}</span>
+            <span className="new-skill-modal__import-info">{coreT({key: "ui.skills.zip_imported_info", params: {count: imported.preview.fileCount}})}</span>
             <button
               type="button"
               className="new-skill-modal__import-clear"
               onClick={() => setImported(null)}
             >
-              移除
+              {coreT({key: "ui.common.remove"})}
             </button>
           </div>
         ) : (
@@ -234,45 +237,45 @@ export function NewSkillModal({
             disabled={importing}
             onClick={() => void handleImport()}
           >
-            {importing ? "读取中…" : "从 ZIP 导入…"}
+            {importing ? coreT({key: "ui.skills.reading_zip"}) : coreT({key: "ui.skills.importing_zip"})}
           </button>
         )}
-        <p className="text-prompt-modal__label">技能名（可在管理页重命名）</p>
+        <p className="text-prompt-modal__label">{coreT({key: "ui.skills.name_label_manage_hint"})}</p>
         <input
           className="text-prompt-modal__input"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="如 lore-style-guide"
+          placeholder={coreT({key: "ui.skills.name_example_desktop"})}
           autoFocus
         />
-        <p className="text-prompt-modal__label">描述（进入技能索引，必填）</p>
+        <p className="text-prompt-modal__label">{coreT({key: "ui.skills.desc_required_label"})}</p>
         <textarea
           className="text-prompt-modal__input new-skill-modal__desc"
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="模型会据此决定是否使用该技能"
+          placeholder={coreT({key: "ui.skills.desc_hint_desktop"})}
         />
-        <p className="text-prompt-modal__label">存储域</p>
+        <p className="text-prompt-modal__label">{coreT({key: "ui.skills.domain_label"})}</p>
         <SegmentedControl
-          aria-label="存储域"
+          aria-label={coreT({key: "ui.skills.domain_label"})}
           value={domain}
           options={[
-            { value: "global", label: "全局（所有项目）" },
-            { value: "project", label: "项目" },
+            { value: "global", label: coreT({key: "ui.skills.domain_global"}) },
+            { value: "project", label: coreT({key: "ui.skills.domain_project"}) },
           ]}
           onChange={(next) => setDomain(next as SkillDomainDto)}
         />
         {domain === "project" ? (
           <>
-            <p className="text-prompt-modal__label">所属项目</p>
+            <p className="text-prompt-modal__label">{coreT({key: "ui.skills.project_label"})}</p>
             <select
               className="text-prompt-modal__input"
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
             >
-              {projects.length === 0 ? <option value="">（暂无项目）</option> : null}
+              {projects.length === 0 ? <option value="">{coreT({key: "ui.skills.no_projects_option"})}</option> : null}
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -284,7 +287,7 @@ export function NewSkillModal({
         {error ? <p className="new-skill-modal__error">{error}</p> : null}
         <div className="text-prompt-modal__actions">
           <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
-            取消
+            {coreT({key: "ui.common.cancel"})}
           </button>
           <button
             type="button"
@@ -292,7 +295,7 @@ export function NewSkillModal({
             disabled={!canSubmit}
             onClick={() => void handleConfirm()}
           >
-            {saving ? "创建中…" : "创建并编辑"}
+            {saving ? coreT({key: "ui.common.creating"}) : coreT({key: "ui.skills.create_and_edit"})}
           </button>
         </div>
       </div>
