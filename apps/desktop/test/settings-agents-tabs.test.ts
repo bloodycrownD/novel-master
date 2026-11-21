@@ -41,11 +41,11 @@ const appPath = path.join(__dirname, "..", "renderer", "App.tsx");
 describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
   it("tab 化：SegmentedControl 置顶 + agentModeMatchesTab 前端过滤 + 新建随 tab 落库", () => {
     const source = readFileSync(settingsViewsPath, "utf8");
-    // tabs 容器与分段控件（主 / 子双 tab，主为默认值）
+    // tabs 容器与分段控件（主 / 子双 tab，主为默认值；i18n 后锁 coreT 形态+键名）
     assert.match(source, /agents-manage__tabs/);
     assert.match(source, /SegmentedControl/);
-    assert.match(source, /label: "主智能体"/);
-    assert.match(source, /label: "子智能体"/);
+    assert.match(source, /label: coreT\(\{key: "ui\.agent\.primary_tab"\}\)/);
+    assert.match(source, /label: coreT\(\{key: "ui\.agent\.subagent_tab"\}\)/);
     // 过滤口径收口 core：agentModeMatchesTab(row.mode, tab)
     assert.match(source, /agentModeMatchesTab\(row\.mode, tab\)/);
     // 新建默认作用域随 tab 落库（mode 先按 tab 计算，再传 IPC）
@@ -60,17 +60,23 @@ describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
     const source = readFileSync(settingsViewsPath, "utf8");
     // sentinel 常量与真实 `agent-<ts>` id 不冲突
     assert.match(source, /GENERAL_AGENT_ID = "general"/);
-    // 「内置」徽标（settings-tag--primary）
-    assert.match(source, /settings-tag settings-tag--primary">\s*内置\s*</);
-    // 「全部」徽标（mode 为 all 或缺省的行）
-    assert.match(source, /settings-tag settings-tag--muted">\s*全部\s*</);
+    // 「内置」徽标（settings-tag--primary；i18n 后锁 coreT 形态+键名）
+    assert.match(
+      source,
+      /settings-tag settings-tag--primary">\s*\{coreT\(\{key: "ui\.common\.builtin"\}\)\}\s*</,
+    );
+    // 「全部」徽标（mode 为 all 或缺省的行；i18n 后锁 coreT 形态+键名）
+    assert.match(
+      source,
+      /settings-tag settings-tag--muted">\s*\{coreT\(\{key: "ui\.common\.all"\}\)\}\s*</,
+    );
     // 删除兜底 remaining 排除 general 合成行
     assert.match(
       source,
       /id !== GENERAL_AGENT_ID/,
     );
-    // 菜单仅「查看」
-    assert.match(source, /\{ label: "查看", action: "view" \}/);
+    // 菜单仅「查看」（i18n 后锁 coreT 形态+键名）
+    assert.match(source, /\{ label: coreT\(\{key: "ui\.common\.view"\}\), action: "view" \}/);
   });
 
   it("AgentEditorView general 只读分支：sentinel 短路 + 出厂常量填充完整表单 + 全禁用接线", () => {
@@ -89,8 +95,8 @@ describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
     );
     // 保存按钮保留渲染但禁用（与其他 agent 布局一致）
     assert.match(source, /disabled=\{saving \|\| isBuiltin\}/);
-    // 顶部说明条保留「内置智能体，不可编辑」文案（挪入表单 desc）
-    assert.match(source, /内置智能体，不可编辑/);
+    // 顶部说明条保留「内置智能体，不可编辑」文案（挪入表单 desc；i18n 后锁 coreT 形态+键名，文案由 catalog 保证）
+    assert.match(source, /coreT\(\{key: "ui\.agent\.builtin_note_desktop"\}\)/);
   });
 
   it("shell.css 含 .agents-manage__tabs（复刻技能页 tabs 容器样式）", () => {
@@ -111,8 +117,8 @@ describe("CR 修复防回归（cr-fix-spec f1/B-001 + f1/A-003 desktop 半）", 
 
   it("general 合成行：行内用短文案「通用助手 · 不可编辑」，不再引用完整 description", () => {
     const source = readFileSync(settingsViewsPath, "utf8");
-    // 双端文案对齐：mobile AgentList 合成行同款
-    assert.match(source, /通用助手 · 不可编辑/);
+    // 双端文案对齐：mobile AgentList 合成行同款（i18n 后锁 coreT 形态+键名）
+    assert.match(source, /coreT\(\{key: "ui\.agent\.general_note"\}\)/);
     // 详情页完整描述走 AgentEditorView 的 applyDefinition，本文件不应再引用 description
     assert.doesNotMatch(source, /DEFAULT_SUBAGENT_DEFINITION\.description/);
   });

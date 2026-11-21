@@ -927,8 +927,8 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
           aria-label="智能体作用域"
           value={tab}
           options={[
-            { value: "primary", label: "主智能体" },
-            { value: "subagent", label: "子智能体" },
+            { value: "primary", label: coreT({key: "ui.agent.primary_tab"}) },
+            { value: "subagent", label: coreT({key: "ui.agent.subagent_tab"}) },
           ]}
           onChange={(next) => {
             setTab(next as AgentSettingsTab);
@@ -985,9 +985,9 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
             title={generalName}
             meta={
               <span className="settings-list-item__meta-row">
-                <span className="settings-tag settings-tag--primary">内置</span>
+                <span className="settings-tag settings-tag--primary">{coreT({key: "ui.common.builtin"})}</span>
                 {/* 双端文案对齐：mobile AgentList 合成行同款 */}
-                <span>通用助手 · 不可编辑</span>
+                <span>{coreT({key: "ui.agent.general_note"})}</span>
               </span>
             }
             onClick={() => openAgentEditor(GENERAL_AGENT_ID, generalName)}
@@ -1013,7 +1013,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                   </span>
                   {row.mode == null || row.mode === "all" ? (
                     <span className="settings-tag settings-tag--muted">
-                      全部
+                      {coreT({key: "ui.common.all"})}
                     </span>
                   ) : null}
                   <span
@@ -1024,7 +1024,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                   </span>
                 </span>
               ) : row.mode == null || row.mode === "all" ? (
-                <span className="settings-tag settings-tag--muted">全部</span>
+                <span className="settings-tag settings-tag--muted">{coreT({key: "ui.common.all"})}</span>
               ) : undefined
             }
             batchMode={batch.active}
@@ -1050,7 +1050,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         y={agentMenu?.y ?? 0}
         items={
           agentMenu?.agentId === GENERAL_AGENT_ID
-            ? [{ label: "查看", action: "view" }]
+            ? [{ label: coreT({key: "ui.common.view"}), action: "view" }]
             : [
                 { label: coreT({key: "ui.common.edit"}), action: "edit" },
                 { label: coreT({key: "ui.common.rename"}), action: "rename" },

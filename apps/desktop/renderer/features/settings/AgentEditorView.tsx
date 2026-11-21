@@ -741,8 +741,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         title={coreT({key: "ui.nav.agent_settings"})}
         desc={
           isBuiltin
-            ? // 内置说明被源码契约测试锁（settings-agents-tabs.test.ts /内置智能体，不可编辑/），波 3c 对齐前保留原字面量。
-              "内置智能体，不可编辑——general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。"
+            ? coreT({key: "ui.agent.builtin_note_desktop"})
             : coreT({key: "ui.agent.edit_title", params: {name: displayName, dirty: dirty ? coreT({key: "ui.agent.unsaved_suffix"}) : ""}})
         }
         toolbar={
