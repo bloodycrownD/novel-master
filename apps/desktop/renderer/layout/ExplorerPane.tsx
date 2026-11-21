@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import type { VfsScopeRequest, WorkspacePanelScope } from "@shared/ipc-types";
 import { vfsScope } from "../ipc/client";
 import { WorkspaceHeaderActions } from "../features/workspace/WorkspaceHeaderActions";
@@ -103,7 +104,7 @@ export function ExplorerPane({
 
   return (
     <>
-      <header className="column-header" id="explorer-header" aria-label="工作区">
+      <header className="column-header" id="explorer-header" aria-label={coreT({key: "ui.nav.workspace"})}>
         <span className="column-header__title" id="workspace-title">
           {title}
         </span>
@@ -112,7 +113,7 @@ export function ExplorerPane({
           onRefresh={notifyWorkspaceMutated}
         />
       </header>
-      <section id="explorer-pane" aria-label="工作区">
+      <section id="explorer-pane" aria-label={coreT({key: "ui.nav.workspace"})}>
         <div className="workspace-trees">
           {PANEL_SCOPES.map((scope) => {
             const visible = workspaceScope === scope;
@@ -180,13 +181,13 @@ export function ExplorerPane({
       </section>
       <ConfirmModal
         open={ingestConfirm != null}
-        title="覆盖确认"
+        title={coreT({key: "ui.common.overwrite_confirm_title"})}
         message={
           ingestConfirm == null
             ? ""
             : batchIngestOverwriteMessage(ingestConfirm.conflictCount)
         }
-        confirmLabel="覆盖"
+        confirmLabel={coreT({key: "ui.common.overwrite"})}
         danger
         busy={ingestBusy}
         onCancel={() => setIngestConfirm(null)}

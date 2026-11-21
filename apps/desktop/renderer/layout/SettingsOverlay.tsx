@@ -182,18 +182,18 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
   // ⚙ 按钮与 × 按钮共用这一条关闭路径（守卫单点仍在 Overlay 内）。
   useImperativeHandle(ref, () => ({ requestClose: handleClose }), [handleClose]);
 
-  let mainTitle = SETTINGS_TOP_LEVEL[viewId] ?? "设置";
-  if (viewId === "agentEditor") mainTitle = agentEditorTitle ?? navState.editingAgentDisplayName ?? "智能体配置";
-  else if (viewId === "providerDetail") mainTitle = "模型管理";
+  let mainTitle = SETTINGS_TOP_LEVEL[viewId] ?? coreT({key: "ui.nav.settings"});
+  if (viewId === "agentEditor") mainTitle = agentEditorTitle ?? navState.editingAgentDisplayName ?? coreT({key: "ui.nav.agent_settings"});
+  else if (viewId === "providerDetail") mainTitle = coreT({key: "ui.nav.model_management"});
   else if (viewId === "providerCreate") mainTitle = coreT({key: "ui.provider.new_title"});
-  else if (viewId === "modelSampling") mainTitle = "采样配置";
-  else if (viewId === "smartSortRuleEditor") mainTitle = navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
+  else if (viewId === "modelSampling") mainTitle = coreT({key: "ui.nav.sampling"});
+  else if (viewId === "smartSortRuleEditor") mainTitle = navState.editingSmartSortRuleId ? coreT({key: "ui.nav.rule_editor"}) : coreT({key: "ui.smart_sort.new_rule_title"});
   else if (viewId === "searchEngineDetail") {
     // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
     const label = engineLabel(navState.editingEngineId);
-    mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? "新建自定义引擎" : label ? `搜索引擎 · ${label}` : "搜索引擎";
+    mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? "新建自定义引擎" : label ? `${coreT({key: "ui.nav.search_engines"})} · ${label}` : coreT({key: "ui.nav.search_engines"});
   } else if (viewId === "skillDetail") {
-    mainTitle = navState.viewingSkillRef != null ? `技能 · ${navState.viewingSkillRef.name}` : "技能详情";
+    mainTitle = navState.viewingSkillRef != null ? `${coreT({key: "ui.nav.skills"})} · ${navState.viewingSkillRef.name}` : coreT({key: "ui.nav.skill_detail"});
   }
 
   let content: ReactNode = null;
@@ -253,8 +253,8 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
   return (
     <div id="settings-page" className={`settings-page${open ? "" : " hidden"}`} hidden={!open} aria-hidden={!open}>
       <div className="settings-page__body">
-        <nav className="settings-nav" id="settings-nav" aria-label="设置分类">
-          <div className="settings-nav__brand">设置</div>
+        <nav className="settings-nav" id="settings-nav" aria-label={coreT({key: "ui.nav.settings_categories"})}>
+          <div className="settings-nav__brand">{coreT({key: "ui.nav.settings"})}</div>
           {SETTINGS_NAV.map((section) => (
             <div key={section.label} className="settings-nav__section">
               <div className="settings-nav__heading">{section.label}</div>
@@ -282,7 +282,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
               className={`settings-main__back${showBack ? "" : " hidden"}`}
               id="settings-main-back"
               data-action="settings-back"
-              aria-label="返回上一级"
+              aria-label={coreT({key: "ui.nav.back_level"})}
               onClick={() => {
                 // 退栈目标为栈顶；顶层页无退栈（按钮隐藏态兜底）直接放行。
                 // 注：nav.pop（view 内部「返回」按钮）不走守卫，调用方自带确认。
@@ -299,7 +299,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
             <h2 className="settings-main__title" id="settings-main-title">
               {mainTitle}
             </h2>
-            <button type="button" className="settings-main__close" onClick={handleClose} aria-label="关闭设置">
+            <button type="button" className="settings-main__close" onClick={handleClose} aria-label={coreT({key: "ui.nav.close_settings"})}>
               ×
             </button>
           </header>
@@ -314,8 +314,8 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
           可见性同步；文案与 SkillDetailView 内部「未保存的更改」同款。 */}
       <ConfirmModal
         open={pendingNav != null}
-        title="未保存的更改"
-        message="有未保存的更改，离开将丢弃。是否继续？"
+        title={coreT({key: "ui.common.unsaved_changes"})}
+        message={coreT({key: "ui.common.unsaved_discard_msg"})}
         danger
         onConfirm={() => {
           const action = pendingNav;
