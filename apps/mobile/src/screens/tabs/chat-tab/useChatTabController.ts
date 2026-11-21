@@ -16,6 +16,7 @@ import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
 import {WorkplaceBlockService} from '@/services/workplace-block.service';
 import {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
+import {coreT} from '@/i18n/core';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabMessageActions} from './useChatTabMessageActions';
 
@@ -79,7 +80,7 @@ export function useChatTabController() {
           projectId: ctx.projectId!,
           sessionId: ctx.sessionId!,
         });
-        ctx.showToast('已重置常驻工作区缓存');
+        ctx.showToast(coreT({key: "ui.chat.reset_workplace_cache_done"}));
       } catch {
         ctx.showToast('重置常驻工作区缓存失败');
       }
@@ -117,9 +118,9 @@ export function useChatTabController() {
     if (count === 0) {
       return;
     }
-    Alert.alert('确认删除', `确定删除选中的 ${count} 个会话？`, [
-      {text: '取消', style: 'cancel'},
-      {text: '删除', style: 'destructive', onPress: onConfirm},
+    Alert.alert(coreT({key: "ui.common.confirm_delete"}), coreT({key: "ui.chat.delete_sessions_confirm", params: {count: String(count)}}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
+      {text: coreT({key: "ui.common.delete"}), style: 'destructive', onPress: onConfirm},
     ]);
   }, []);
 

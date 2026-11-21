@@ -14,6 +14,7 @@ import {
   UsageStats,
 } from './format';
 import {ModelKey} from '../../../utils/model-key';
+import {coreT} from '@/i18n/core';
 import {styles} from './styles';
 
 /** 弹层选项：id 为稳定键（testID/选中比对），value 为选中后回传的筛选值。 */
@@ -69,7 +70,7 @@ export function StatsFilterBar({
   // ——保证无筛选返回的每类 (providerId, modelName) 组合行都有选项可筛。
   // 斜杠格式与聊天侧模型选择下拉一致（2026-09-28 统一）。
   const pickerOptions: readonly ModelPickerOption[] = [
-    {id: MODEL_OPTION_ALL, label: '全部模型', value: undefined},
+    {id: MODEL_OPTION_ALL, label: coreT({key: "ui.stats.model_all"}), value: undefined},
     ...combos.map(c => ({
       id: ModelKey.providerModel(c.providerId, c.model),
       label: `${c.providerLabel}/${c.model}`,
@@ -77,12 +78,12 @@ export function StatsFilterBar({
     })),
     ...providers.map(p => ({
       id: ModelKey.providerModel(p.id, MODEL_OTHER_KEY),
-      label: `${p.label}/其他模型`,
+      label: coreT({key: "ui.stats.provider_other_label", params: {provider: p.label}}),
       value: {providerId: p.id, model: null},
     })),
     {
       id: MODEL_OPTION_UNLOGGED,
-      label: '未记录服务商',
+      label: coreT({key: "ui.stats.provider_unlogged"}),
       value: {providerId: null, model: undefined},
     },
   ];
@@ -92,22 +93,22 @@ export function StatsFilterBar({
         options={[
           {
             value: 'today' as RangeKind,
-            label: '今天',
+            label: coreT({key: "ui.stats.range_today"}),
             testID: 'range-today',
           },
           {
             value: 'last7' as RangeKind,
-            label: '近 7 天',
+            label: coreT({key: "ui.stats.range_7d"}),
             testID: 'range-last7',
           },
           {
             value: 'last30' as RangeKind,
-            label: '近 30 天',
+            label: coreT({key: "ui.stats.range_30d"}),
             testID: 'range-last30',
           },
           {
             value: 'custom' as RangeKind,
-            label: '自定义',
+            label: coreT({key: "ui.stats.range_custom"}),
             testID: 'range-custom',
           },
         ]}
@@ -127,13 +128,13 @@ export function StatsFilterBar({
         ]}
       >
         <Text style={{color: tokens.text}}>{modelFilterLabel}</Text>
-        <Text style={{color: tokens.textSecondary}}>切换 ›</Text>
+        <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.stats.switch_more"})}</Text>
       </Pressable>
       <MonthRangePickerSheet visible={rangeSheetVisible} onClose={onCloseRangeSheet} onConfirm={onConfirmRange} tokens={tokens} />
       <AppModal visible={modelPickerVisible} animationType="slide" transparent onRequestClose={onCloseModelPicker}>
         <Pressable style={styles.backdrop} onPress={onCloseModelPicker}>
           <Pressable style={[styles.pickerSheet, {backgroundColor: tokens.surface}]} onPress={e => e.stopPropagation()}>
-            <Text style={[styles.pickerTitle, {color: tokens.text}]}>选择模型</Text>
+            <Text style={[styles.pickerTitle, {color: tokens.text}]}>{coreT({key: "ui.chat_config.select_model"})}</Text>
             {/* 模型列表可很长：必须包滚动容器，否则被 pickerSheet 的 maxHeight 裁剪、
                 后面的模型滚不到也点不到。 */}
             <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent} keyboardShouldPersistTaps="handled">
@@ -152,7 +153,7 @@ export function StatsFilterBar({
                     <Text style={{color: tokens.text}} numberOfLines={1}>
                       {option.label}
                     </Text>
-                    {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
+                    {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
                   </Pressable>
                 );
               })}

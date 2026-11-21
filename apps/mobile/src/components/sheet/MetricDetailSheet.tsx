@@ -78,10 +78,10 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
 
   return (
     <ModalShell visible={visible} onClose={onClose} variant="bottom" backdropOpacity={0.55} keyboardAvoid={{kind: 'none'}} panelStyle={styles.sheet}>
-      <Text style={[styles.heading, {color: tokens.text}]}>用量详情</Text>
+      <Text style={[styles.heading, {color: tokens.text}]}>{coreT({key: "ui.stats.detail_title"})}</Text>
       {loading ? (
         <Text testID="metric-detail-sheet-loading" style={[styles.hint, {color: tokens.textSecondary}]}>
-          加载中…
+          {coreT({key: "ui.common.loading"})}
         </Text>
       ) : error != null ? (
         <Text testID="metric-detail-sheet-error" style={[styles.hint, {color: tokens.danger}]}>
@@ -89,29 +89,29 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
         </Text>
       ) : (
         <ScrollView testID="metric-detail-sheet-content" style={styles.body} showsVerticalScrollIndicator={false}>
-          <SectionLabel text="最近请求" tokens={tokens} />
+          <SectionLabel text={coreT({key: "ui.stats.recent_requests"})} tokens={tokens} />
           {last == null ? (
-            <EmptyRow text="暂无请求记录" tokens={tokens} />
+            <EmptyRow text={coreT({key: "ui.stats.recent_empty"})} tokens={tokens} />
           ) : (
             <>
-              <Row label="模型" value={last.modelName ?? '—'} tokens={tokens} />
-              <Row label="输入" value={TokenFormat.count(last.promptTokens)} tokens={tokens} />
-              <Row label="输出" value={TokenFormat.count(last.completionTokens)} tokens={tokens} />
-              <Row label="缓存读取" value={last.cacheReadTokens == null ? '—' : TokenFormat.count(last.cacheReadTokens)} tokens={tokens} />
-              <Row label="缓存写入" value={last.cacheCreationTokens == null ? '—' : TokenFormat.count(last.cacheCreationTokens)} tokens={tokens} />
-              <Row label="缓存命中率" value={last.cacheReadTokens == null ? '—' : UsageStats.formatHitRate(UsageStats.hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
+              <Row label={coreT({key: "ui.common.model"})} value={last.modelName ?? '—'} tokens={tokens} />
+              <Row label={coreT({key: "ui.stats.input_label"})} value={TokenFormat.count(last.promptTokens)} tokens={tokens} />
+              <Row label={coreT({key: "ui.stats.output_label"})} value={TokenFormat.count(last.completionTokens)} tokens={tokens} />
+              <Row label={coreT({key: "ui.stats.cache_read"})} value={last.cacheReadTokens == null ? '—' : TokenFormat.count(last.cacheReadTokens)} tokens={tokens} />
+              <Row label={coreT({key: "ui.stats.cache_write"})} value={last.cacheCreationTokens == null ? '—' : TokenFormat.count(last.cacheCreationTokens)} tokens={tokens} />
+              <Row label={coreT({key: "ui.stats.cache_hit_rate"})} value={last.cacheReadTokens == null ? '—' : UsageStats.formatHitRate(UsageStats.hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
             </>
           )}
           <SectionLabel text={coreT({key: "ui.stats.session_total"})} tokens={tokens} />
-          <Row label="消息数（可见）" value={String(detail?.visibleMessageCount ?? 0)} tokens={tokens} />
-          <Row label="工具调用" value={String(detail?.toolUseCount ?? 0)} tokens={tokens} />
-          <Row label="上下文占用" value={contextTokenLabel ?? '—'} tokens={tokens} />
+          <Row label={coreT({key: "ui.stats.visible_messages"})} value={String(detail?.visibleMessageCount ?? 0)} tokens={tokens} />
+          <Row label={coreT({key: "ui.stats.tool_calls"})} value={String(detail?.toolUseCount ?? 0)} tokens={tokens} />
+          <Row label={coreT({key: "ui.session.context_usage"})} value={contextTokenLabel ?? '—'} tokens={tokens} />
           {/* 口径脚注第二行（cr-md-1）：「最近请求」是单步真值，与指标条
               整轮读数不同源——文案与 desktop 侧同文，勿单侧改写。 */}
           <Text testID="metric-detail-sheet-footnote" style={[styles.footnote, {color: tokens.textTertiary}]}>
-            消息数为可见口径 · 工具调用含已隐藏消息
+            {coreT({key: "ui.stats.footnote_visible"})}
           </Text>
-          <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>最近请求为单步真值，与指标条整轮读数不同源</Text>
+          <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>{coreT({key: "ui.stats.footnote_recent"})}</Text>
         </ScrollView>
       )}
     </ModalShell>

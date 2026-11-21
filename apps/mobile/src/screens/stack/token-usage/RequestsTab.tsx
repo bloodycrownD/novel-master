@@ -4,6 +4,7 @@ import type {UsageStatsRequestRow} from '@novel-master/core/chat';
 import {TokenFormat} from '@novel-master/core/common';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
+import {coreT} from '@/i18n/core';
 import {REQUESTS_PAGE_SIZE} from './format';
 import {styles} from './styles';
 
@@ -32,7 +33,7 @@ export function RequestsTab({
 }) {
   return (
     <>
-      <ListSectionTitle title={`请求流水 · 共 ${reqTotal} 条`} tokens={tokens} />
+      <ListSectionTitle title={coreT({key: "ui.stats.requests_title", params: {count: String(reqTotal)}})} tokens={tokens} />
       {reqRows.map((row, index) => (
         <View
           // 与 desktop 口径一致：createdAtMs+index，防同毫秒同模型碰撞（MF-5）。
@@ -42,11 +43,11 @@ export function RequestsTab({
           <View style={styles.reqRowHead}>
             <Text style={{color: tokens.text}}>{TokenFormat.requestTime(row.createdAtMs)}</Text>
             <Text numberOfLines={1} style={{color: tokens.textSecondary, flexShrink: 1}}>
-              首字延迟 {TokenFormat.durationMs(row.firstTokenMs)} · 总时间 {TokenFormat.durationMs(row.durationMs)}
+              {coreT({key: "ui.stats.col_first_token"})} {TokenFormat.durationMs(row.firstTokenMs)} · {coreT({key: "ui.stats.col_total_time"})} {TokenFormat.durationMs(row.durationMs)}
             </Text>
           </View>
           <Text numberOfLines={1} style={[styles.reqRowDetail, {color: tokens.textSecondary}]}>
-            {row.modelName ?? '其他'} · 输入 {TokenFormat.count(row.promptTokens)} · 输出 {TokenFormat.count(row.completionTokens)} · 缓存读{' '}
+            {row.modelName ?? coreT({key: "ui.stats.model_other"})} · {coreT({key: "ui.stats.input_label"})} {TokenFormat.count(row.promptTokens)} · {coreT({key: "ui.stats.output_label"})} {TokenFormat.count(row.completionTokens)} · {coreT({key: "ui.stats.col_cache_read"})}{' '}
             {row.cacheReadTokens == null ? '—' : TokenFormat.count(row.cacheReadTokens)}
           </Text>
         </View>
@@ -59,7 +60,7 @@ export function RequestsTab({
             disabled={reqLoading || reqPage === 0}
             onPress={() => onLoadRequests(reqPage - 1).catch(() => undefined)}
           >
-            <Text style={{color: tokens.primary}}>上一页</Text>
+            <Text style={{color: tokens.primary}}>{coreT({key: "ui.stats.page_prev"})}</Text>
           </Pressable>
           {TokenFormat.pageWindow(reqPage + 1, Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE))).map((item, index) =>
             item === '…' ? (
@@ -97,11 +98,11 @@ export function RequestsTab({
             disabled={reqLoading || (reqPage + 1) * REQUESTS_PAGE_SIZE >= reqTotal}
             onPress={() => onLoadRequests(reqPage + 1).catch(() => undefined)}
           >
-            <Text style={{color: tokens.primary}}>下一页</Text>
+            <Text style={{color: tokens.primary}}>{coreT({key: "ui.stats.page_next"})}</Text>
           </Pressable>
         </View>
       ) : null}
-      {reqRows.length === 0 && !reqLoading && !reqDirty ? <Text style={[styles.reqRowDetail, {color: tokens.textSecondary}]}>（无请求记录）</Text> : null}
+      {reqRows.length === 0 && !reqLoading && !reqDirty ? <Text style={[styles.reqRowDetail, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.requests_empty"})}</Text> : null}
     </>
   );
 }

@@ -5,6 +5,7 @@ import {TokenFormat} from '@novel-master/core/common';
 import {PieChart} from '../../../components/charts/PieChart';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
+import {coreT} from '@/i18n/core';
 import {SUMMARY_EMPTY_TEXT, UsageStats} from './format';
 import {styles} from './styles';
 
@@ -67,10 +68,10 @@ export function SummaryTab({
           // 聊天侧模型选择下拉一致，2026-09-28 统一）。
           label:
             row.providerId == null
-              ? '未记录服务商'
+              ? coreT({key: "ui.stats.provider_unlogged"})
               : row.modelName == null
-              ? `${providerLabels[row.providerId] ?? '未知服务商'}/其他模型`
-              : `${providerLabels[row.providerId] ?? '未知服务商'}/${row.modelName}`,
+              ? coreT({key: "ui.stats.provider_other_label", params: {provider: providerLabels[row.providerId] ?? coreT({key: "ui.provider.unknown_provider"})}})
+              : `${providerLabels[row.providerId] ?? coreT({key: "ui.provider.unknown_provider"})}/${row.modelName}`,
           totalTokens: row.totalTokens,
           calls: row.calls,
         })),
@@ -79,30 +80,30 @@ export function SummaryTab({
 
   return (
     <>
-      <ListSectionTitle title={`总览 · ${rangeLabel}`} tokens={tokens} />
+      <ListSectionTitle title={coreT({key: "ui.stats.overview_title", params: {range: rangeLabel}})} tokens={tokens} />
       <View style={styles.summaryGrid}>
-        <SummaryTile testID="summary-metric-total" label="总 token" value={TokenFormat.count(summary?.totalTokens ?? 0)} tokens={tokens} />
-        <SummaryTile testID="summary-metric-calls" label="调用次数" value={String(summary?.calls ?? 0)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-total" label={coreT({key: "ui.stats.total_tokens"})} value={TokenFormat.count(summary?.totalTokens ?? 0)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-calls" label={coreT({key: "ui.stats.calls_label"})} value={String(summary?.calls ?? 0)} tokens={tokens} />
         {/* 平均速率/首字延迟上移为第二行两卡（用户拍板 2026-09-28 重排）；
             无有效行为 null → 空态横杠而非 0 */}
-        <SummaryTile testID="summary-metric-avgTokensPerSecond" label="平均速率" value={UsageStats.formatTokensPerSecond(summary?.avgTokensPerSecond ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
-        <SummaryTile testID="summary-metric-avgFirstTokenMs" label="平均首字延迟" value={UsageStats.formatFirstTokenMs(summary?.avgFirstTokenMs ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-avgTokensPerSecond" label={coreT({key: "ui.stats.avg_rate"})} value={UsageStats.formatTokensPerSecond(summary?.avgTokensPerSecond ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
+        <SummaryTile testID="summary-metric-avgFirstTokenMs" label={coreT({key: "ui.stats.avg_first_token"})} value={UsageStats.formatFirstTokenMs(summary?.avgFirstTokenMs ?? null, SUMMARY_EMPTY_TEXT)} tokens={tokens} />
       </View>
       {/* 输入/输出/命中率下移为第三行三卡一行（31% 列）；marginTop 补与
           上半卡行的垂直间距 */}
       <View style={[styles.summaryGrid, styles.tileThirdRow]}>
-        <SummaryTile testID="summary-metric-input" label="输入" value={TokenFormat.count(summary?.promptTokens ?? 0)} layout="third" tokens={tokens} />
-        <SummaryTile testID="summary-metric-output" label="输出" value={TokenFormat.count(summary?.completionTokens ?? 0)} layout="third" tokens={tokens} />
+        <SummaryTile testID="summary-metric-input" label={coreT({key: "ui.stats.input_label"})} value={TokenFormat.count(summary?.promptTokens ?? 0)} layout="third" tokens={tokens} />
+        <SummaryTile testID="summary-metric-output" label={coreT({key: "ui.stats.output_label"})} value={TokenFormat.count(summary?.completionTokens ?? 0)} layout="third" tokens={tokens} />
         <SummaryTile
           testID="summary-metric-hitRate"
-          label="命中率"
+          label={coreT({key: "ui.stats.hit_rate"})}
           value={UsageStats.formatHitRate(UsageStats.hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0))}
           tone="success"
           layout="third"
           tokens={tokens}
         />
       </View>
-      <ListSectionTitle title="分服务商×模型汇总" tokens={tokens} />
+      <ListSectionTitle title={coreT({key: "ui.stats.pie_section"})} tokens={tokens} />
       <PieChart testID="provider-model-pie" data={pieData} totalTokens={summary?.totalTokens ?? 0} tokens={tokens} />
     </>
   );

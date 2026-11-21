@@ -5,6 +5,7 @@ import {DateTime, TokenFormat} from '@novel-master/core/common';
 import {StackedBars} from '../../../components/charts/StackedBars';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
+import {coreT} from '@/i18n/core';
 import {UsageStats} from './format';
 import {styles} from './styles';
 
@@ -72,7 +73,7 @@ export function DetailTab({
           daily 检视与点选自然不可达。 */}
       {todayMode ? null : (
         <>
-          <ListSectionTitle title="按天用量" tokens={tokens} />
+          <ListSectionTitle title={coreT({key: "ui.stats.by_day_title"})} tokens={tokens} />
           <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
             <StackedBars
               testID="daily-chart"
@@ -87,7 +88,7 @@ export function DetailTab({
           {dailyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-                {dailyInspected.key.slice(8)} 日 · 输入 {TokenFormat.count(dailyInspected.primary)} · 输出 {TokenFormat.count(dailyInspected.secondary ?? 0)} · 调用 {dailyInspected.calls ?? 0} 次
+                {coreT({key: "ui.stats.bucket_line", params: {key: dailyInspected.key.slice(8), input: TokenFormat.count(dailyInspected.primary), output: TokenFormat.count(dailyInspected.secondary ?? 0), calls: String(dailyInspected.calls ?? 0)}})}
               </Text>
             </View>
           ) : null}
@@ -95,19 +96,19 @@ export function DetailTab({
       )}
       {selectedDay != null && selectedDayBucket != null ? (
         <View style={styles.dayDetail}>
-          <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>{selectedDay} · 按小时分布</Text>
+          <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>{coreT({key: "ui.stats.day_hourly_template", params: {day: selectedDay}})}</Text>
           <Text style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}>
-            输入 {TokenFormat.count(selectedDayBucket.promptTokens)} · 输出 {TokenFormat.count(selectedDayBucket.completionTokens)} · 命中率{' '}
-            {UsageStats.formatHitRate(UsageStats.hitRate(selectedDayBucket.cacheReadTokens, selectedDayBucket.billedInputTokens))} · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
-            {UsageStats.formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} · 平均首字延迟 {UsageStats.formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
+            {coreT({key: "ui.stats.input_label"})} {TokenFormat.count(selectedDayBucket.promptTokens)} · {coreT({key: "ui.stats.output_label"})} {TokenFormat.count(selectedDayBucket.completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{' '}
+            {UsageStats.formatHitRate(UsageStats.hitRate(selectedDayBucket.cacheReadTokens, selectedDayBucket.billedInputTokens))} · {coreT({key: "ui.stats.chart_calls_aria", params: {count: String(selectedDayBucket.calls)}})} · {coreT({key: "ui.stats.avg_rate"})}{' '}
+            {UsageStats.formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} · {coreT({key: "ui.stats.avg_first_token"})} {UsageStats.formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
           </Text>
           <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
-            <StackedBars testID="hourly-chart" data={hourlyData} onLongPress={onSetInspectedKey} tokens={tokens} formatLabel={key => `${Number(key)}时`} />
+            <StackedBars testID="hourly-chart" data={hourlyData} onLongPress={onSetInspectedKey} tokens={tokens} formatLabel={key => coreT({key: "ui.stats.hour_label", params: {hour: String(Number(key))}})} />
           </View>
           {hourlyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-                {Number(hourlyInspected.key)}时 · 输入 {TokenFormat.count(hourlyInspected.primary)} · 输出 {TokenFormat.count(hourlyInspected.secondary ?? 0)} · 调用 {hourlyInspected.calls ?? 0} 次
+                {coreT({key: "ui.stats.bucket_line", params: {key: String(Number(hourlyInspected.key)), input: TokenFormat.count(hourlyInspected.primary), output: TokenFormat.count(hourlyInspected.secondary ?? 0), calls: String(hourlyInspected.calls ?? 0)}})}
               </Text>
             </View>
           ) : null}
