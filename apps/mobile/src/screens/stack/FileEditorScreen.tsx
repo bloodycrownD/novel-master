@@ -10,6 +10,7 @@ import {Path} from '@novel-master/core/common';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {VfsOperationsService} from '../../services/vfs-operations.service';
@@ -122,7 +123,7 @@ export function FileEditorScreen() {
         const result = await vfs.read(path);
         if (!result.ok) {
           if (!cancelled) {
-            showToast(ToastMessage.toast('读取失败', result.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.read_failed"}), result.error));
           }
           return;
         }
@@ -134,7 +135,7 @@ export function FileEditorScreen() {
         setMtimeMs(result.value.mtimeMs);
       } catch (error) {
         if (!cancelled) {
-          showToast(ToastMessage.toast('读取失败', error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.read_failed"}), error));
         }
       } finally {
         if (!cancelled) {
@@ -168,18 +169,18 @@ export function FileEditorScreen() {
       if (scopeKind === 'session' && sessionId && userVfsUnifiedToolTurnFlag.isEnabled()) {
         const saved = await VfsOperationsService.sessionSaveFile(runtime, sessionId, vfs, path, content, savedContent);
         if (!saved.ok) {
-          showToast(ToastMessage.toast('保存失败', saved.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), saved.error));
           return;
         }
         setSavedContent(content);
         const refreshed = await vfs.read(path);
         if (!refreshed.ok) {
-          showToast(ToastMessage.toast('保存失败', refreshed.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), refreshed.error));
           return;
         }
         setMtimeMs(refreshed.value.mtimeMs);
         onSessionVfsSavedRef.current?.();
-        showToast('已保存');
+        showToast(coreT({key: "ui.common.saved"}));
         return;
       }
 
@@ -187,13 +188,13 @@ export function FileEditorScreen() {
       setSavedContent(content);
       const refreshed = await vfs.read(path);
       if (!refreshed.ok) {
-        showToast(ToastMessage.toast('保存失败', refreshed.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), refreshed.error));
         return;
       }
       setMtimeMs(refreshed.value.mtimeMs);
-      showToast('已保存');
+      showToast(coreT({key: "ui.common.saved"}));
     } catch (error) {
-      showToast(ToastMessage.toast('保存失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
     } finally {
       setSaving(false);
     }
@@ -237,9 +238,9 @@ export function FileEditorScreen() {
   if (mtimeMs != null) {
     if (editorFocused && !previewMode) {
       statsRow = (
-        <Pressable testID="file-editor-dismiss-stats" style={[styles.statsRow, {borderBottomColor: tokens.border}]} onPress={dismissEditor} accessibilityRole="button" accessibilityLabel="收起键盘">
+        <Pressable testID="file-editor-dismiss-stats" style={[styles.statsRow, {borderBottomColor: tokens.border}]} onPress={dismissEditor} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
           <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {Number.charCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
+            {coreT({key: "ui.common.updated_at", params: {time: formatFileMtime(mtimeMs)}})} · {coreT({key: "ui.vfs.char_count", params: {count: Number.charCount(content.length)}})}{isDirty ? coreT({key: "ui.vfs.dirty_suffix"}) : ''}
           </Text>
         </Pressable>
       );
@@ -247,7 +248,7 @@ export function FileEditorScreen() {
       statsRow = (
         <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
           <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {Number.charCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
+            {coreT({key: "ui.common.updated_at", params: {time: formatFileMtime(mtimeMs)}})} · {coreT({key: "ui.vfs.char_count", params: {count: Number.charCount(content.length)}})}{isDirty ? coreT({key: "ui.vfs.dirty_suffix"}) : ''}
           </Text>
         </View>
       );
@@ -261,11 +262,11 @@ export function FileEditorScreen() {
       toolbarBorderColor={tokens.border}
       save={{
         testID: 'file-editor-save',
-        label: saving ? '保存中…' : '保存',
+        label: saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"}),
         disabled: saving || !isDirty || previewMode || isReadOnly,
         onPress: () => handleSave().catch(() => undefined),
       }}
-      title={isDirty ? '未保存' : Path.basename(path)}
+      title={isDirty ? coreT({key: "ui.common.unsaved_title"}) : Path.basename(path)}
       titleDanger={isDirty}
       titleFontSize={14}
       titlePress={editorFocused && !previewMode ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor} : undefined}
@@ -274,7 +275,7 @@ export function FileEditorScreen() {
       segmented={{
         options: [
           {value: 'markdown', label: 'Markdown'},
-          {value: 'txt', label: '文本'},
+          {value: 'txt', label: coreT({key: "ui.common.text"})},
         ],
         value: previewRenderKind,
         onChange: setPreviewRenderKind,

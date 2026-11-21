@@ -25,6 +25,7 @@ import {createVfsDirectory, createVfsFile, renameVfsDirectory, renameVfsFile, Vf
 import {WorkplaceOperationsService} from '../../services/workplace-operations.service';
 import {WorkplaceRuleDeltaDraftService} from '../../services/workplace-rule-delta-draft.service';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {useRuntime} from '../../hooks/useRuntime';
 import {VfsCharacterCardService} from '../../services/vfs-character-card.service';
 import {VfsSingleFileService} from '../../services/vfs-single-file.service';
@@ -104,15 +105,15 @@ type PromptState = VfsPromptState;
  * 分派侧按来源（行菜单 menuPath / more 菜单 currentPath）各自接线。
  * ------------------------------------------------------------------ */
 
-const IMPORT_MENU_ITEM: SheetMenuItem = {label: '导入', action: 'import'};
-const EXPORT_MENU_ITEM: SheetMenuItem = {label: '导出', action: 'export'};
+const IMPORT_MENU_ITEM: SheetMenuItem = {label: coreT({key: "ui.common.import"}), action: 'import'};
+const EXPORT_MENU_ITEM: SheetMenuItem = {label: coreT({key: "ui.common.export"}), action: 'export'};
 
 /** 导入形式选择 sheet 的标题与三项（spec D5 mobile 形态）。 */
-const IMPORT_FORM_SHEET_TITLE = '导入';
+const IMPORT_FORM_SHEET_TITLE = coreT({key: "ui.common.import"});
 const IMPORT_FORM_SHEET_ITEMS: SheetMenuItem[] = [
-  {label: '单文件', action: 'file'},
-  {label: 'ZIP 包', action: 'zip'},
-  {label: '角色卡', action: 'character-card'},
+  {label: coreT({key: "ui.vfs.import_kind_file"}), action: 'file'},
+  {label: coreT({key: "ui.vfs.import_kind_zip"}), action: 'zip'},
+  {label: coreT({key: "ui.vfs.import_kind_card"}), action: 'character-card'},
 ];
 
 /** 批量导入（ZIP / 角色卡）的形态：三种导入各自的文案独立，不共用（spec D9）。 */
@@ -120,27 +121,27 @@ type BulkImportKind = 'zip' | 'character-card';
 
 /** 目标目录在确认文案里的写法：根路径说人话，其余带引号原样。 */
 function importTargetLabel(path: string): string {
-  return path === '/' ? '「当前目录（工作区根）」' : `「${path}」`;
+  return path === '/' ? coreT({key: "ui.vfs.target_root_quoted"}) : `「${path}」`;
 }
 
 /** ZIP 导入：覆盖目标目录下全部文件。 */
 function zipImportConfirmCopy(path: string): string {
-  return `将覆盖目录${importTargetLabel(path)}下的全部文件，同级其他内容不受影响。是否继续？`;
+  return coreT({key: "ui.vfs.import_overwrite_confirm", params: {target: importTargetLabel(path)}});
 }
 
 /** 角色卡导入：只覆盖目标目录下的同名角色卡文件（与 ZIP 文案语义不同）。 */
 function characterCardImportConfirmCopy(path: string): string {
-  return `将覆盖目录${importTargetLabel(path)}下的同名角色卡文件，同级其他文件不受影响。是否继续？`;
+  return coreT({key: "ui.vfs.import_card_confirm", params: {target: importTargetLabel(path)}});
 }
 
 /** 单文件导入的同名覆盖确认文案（数量来自 core 报的 conflicts 条数）。 */
 function singleFileImportConfirmCopy(conflictCount: number): string {
-  return `目标处已有 ${conflictCount} 个同名文件，覆盖后不可撤销，是否继续？`;
+  return coreT({key: "ui.vfs.conflict_confirm", params: {count: conflictCount}});
 }
 
 /** 单文件导入成功 toast；非 UTF-8 跳过项非空时明示跳过数（spec D6）。 */
 function singleFileImportToast(skippedBinary: readonly string[]): string {
-  return skippedBinary.length > 0 ? `已导入单文件，跳过 ${skippedBinary.length} 个非 UTF-8 文件` : '已导入单文件';
+  return skippedBinary.length > 0 ? coreT({key: "ui.vfs.single_import_skipped", params: {count: skippedBinary.length}}) : coreT({key: "ui.vfs.single_import_done"});
 }
 
 export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerProps>(function VfsFileManager(props, ref) {
@@ -304,14 +305,14 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       const [listResult, allRowsResult, dirRuleResult] = await Promise.all([vfsSvc.list(currentPath), fetchWorktreeRows(), worktreeSvc?.getDirRule(currentPath) ?? Promise.resolve(null)]);
       // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走下方 catch。
       if (!listResult.ok) {
-        showToast(ToastMessage.toast('加载失败', listResult.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), listResult.error));
         return;
       }
       const listEntries = listResult.value;
       let dirRule: WorkplaceDirRule | undefined;
       if (dirRuleResult != null) {
         if (!dirRuleResult.ok) {
-          showToast(ToastMessage.toast('加载失败', dirRuleResult.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), dirRuleResult.error));
           return;
         }
         dirRule = dirRuleResult.value;
@@ -320,7 +321,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       // 智能排序目录才拉预编译规则（懒加载；其它排序方式零额外查表）。
       const compiledRules = (dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField) === 'smart' ? await runtime.smartSortRule.listCompiledRules() : undefined;
       if (compiledRules != null && !compiledRules.ok) {
-        showToast(ToastMessage.toast('加载失败', compiledRules.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), compiledRules.error));
         return;
       }
       const smartRules = compiledRules?.value;
@@ -378,7 +379,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       // subtitle（跟随·全内容等是工作区语义，在此无意义）。
       setRows(workplace == null ? mapped.map(row => ({...row, subtitle: '', badge: null})) : mapped);
     } catch (error) {
-      showToast(ToastMessage.toast('加载失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.load_failed"}), error));
     } finally {
       reloadInFlightRef.current = false;
       setLoading(false);
@@ -427,10 +428,10 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       showToast(`选中项含受保护路径：${blocked[0]}`);
       return;
     }
-    Alert.alert('确认删除', `确定删除选中的 ${paths.length} 项？`, [
-      {text: '取消', style: 'cancel'},
+    Alert.alert(coreT({key: "ui.common.confirm_delete"}), coreT({key: "ui.common.confirm_count_msg", params: {count: paths.length}}), [
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '删除',
+        text: coreT({key: "ui.common.delete"}),
         style: 'destructive',
         onPress: () => {
           void (async () => {
@@ -439,14 +440,14 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                 const deleteOptions = {recursive: true, useUserVfsTurn, sessionId};
                 const deleted = await VfsOperationsService.deleteScopedEntry(runtime, scope, writableVfs, path, deleteOptions);
                 if (!deleted.ok) {
-                  showToast(ToastMessage.toast('删除失败', deleted.error));
+                  showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
                   return;
                 }
               }
               vfsBatch.exit();
               await reloadVfsListOnly();
             } catch (err) {
-              showToast(ToastMessage.toast('删除失败', err));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err));
             }
           })();
         },
@@ -465,7 +466,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       let skipped = 0;
       for (const sourcePath of paths) {
         if (VfsMovePath.isSelfOrAncestorPath(sourcePath, targetDir)) {
-          showToast('不能移动到自身或子目录');
+          showToast(coreT({key: "ui.vfs.move_self_blocked"}));
           skipped += 1;
           continue;
         }
@@ -488,9 +489,9 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           const moveFailed = (err: unknown): void => {
             skipped += 1;
             if (AppErrorOps.is(err, 'VFS_ALREADY_EXISTS')) {
-              showToast('目标已存在同名项，已跳过');
+              showToast(coreT({key: "ui.vfs.target_exists_skipped"}));
             } else {
-              showToast(ToastMessage.toast('移动失败', err));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.move_failed"}), err));
             }
           };
           if (isDir) {
@@ -532,9 +533,9 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         } catch (err) {
           skipped += 1;
           if (AppErrorOps.is(err, 'VFS_ALREADY_EXISTS')) {
-            showToast('目标已存在同名项，已跳过');
+            showToast(coreT({key: "ui.vfs.target_exists_skipped"}));
           } else {
-            showToast(ToastMessage.toast('移动失败', err));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.move_failed"}), err));
           }
         }
       }
@@ -544,9 +545,9 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       vfsBatch.exit();
       await reloadVfsListOnly();
       if (moved > 0 && skipped > 0) {
-        showToast(`已移动 ${moved} 项，跳过 ${skipped} 项`);
+        showToast(coreT({key: "ui.vfs.moved_skipped", params: {moved, skipped}}));
       } else if (moved > 0) {
-        showToast(`已移动 ${moved} 项`);
+        showToast(coreT({key: "ui.vfs.moved_count", params: {count: moved}}));
       }
     },
     [vfsBatch, rows, dirPathSet, useUserVfsTurn, runtime, sessionId, vfs, workplace, currentPath, reloadVfsListOnly, showToast, isProtectedPath],
@@ -566,15 +567,15 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     entityMenuItems = [];
   } else if (menuRow.kind === 'dir') {
     entityMenuItems = [
-      ...(workplace != null ? [EXPORT_MENU_ITEM, IMPORT_MENU_ITEM, {label: '状态变更', action: 'toggle-include'}] : []),
-      {label: '重命名', action: 'rename'},
-      {label: '删除', action: 'delete', danger: true},
+      ...(workplace != null ? [EXPORT_MENU_ITEM, IMPORT_MENU_ITEM, {label: coreT({key: "ui.vfs.menu_status_change"}), action: 'toggle-include'}] : []),
+      {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+      {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
     ];
   } else {
     entityMenuItems = [
-      ...(workplace != null ? [EXPORT_MENU_ITEM, {label: '状态变更', action: 'toggle-include'}] : []),
-      {label: '重命名', action: 'rename'},
-      {label: '删除', action: 'delete', danger: true},
+      ...(workplace != null ? [EXPORT_MENU_ITEM, {label: coreT({key: "ui.vfs.menu_status_change"}), action: 'toggle-include'}] : []),
+      {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+      {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
     ];
   }
 
@@ -583,9 +584,9 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     moreMenuItems = [];
   } else {
     moreMenuItems = [
-      {label: '新建目录', action: 'create-directory'},
-      {label: '新建文件', action: 'create-file'},
-      ...(workplace != null ? [IMPORT_MENU_ITEM, EXPORT_MENU_ITEM, {label: '目录规则', action: 'directory-rule'}] : []),
+      {label: coreT({key: "ui.vfs.menu_create_directory"}), action: 'create-directory'},
+      {label: coreT({key: "ui.vfs.create_file"}), action: 'create-file'},
+      ...(workplace != null ? [IMPORT_MENU_ITEM, EXPORT_MENU_ITEM, {label: coreT({key: "ui.vfs.menu_directory_rule"}), action: 'directory-rule'}] : []),
     ];
   }
 
@@ -604,7 +605,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     }
     setPrompt(null);
     const submitPromise = current.onSubmit(value);
-    submitPromise.then(() => reloadVfsListOnly()).catch(err => showToast(ToastMessage.toast('失败', err)));
+    submitPromise.then(() => reloadVfsListOnly()).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.failed"}), err)));
   };
 
   const handleEntityAction = async (action: string) => {
@@ -627,7 +628,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           await WorkplaceOperationsService.cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
           const refreshed = await refreshVisibleRowsFromWorktree();
           if (!refreshed.ok) {
-            showToast(ToastMessage.toast('操作失败', refreshed.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.op_failed"}), refreshed.error));
             return;
           }
           if (sessionId != null) {
@@ -642,11 +643,11 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         if (menuRow.kind === 'dir') {
           const nextEnabledResult = await WorkplaceOperationsService.toggleDirRuleEnabled(workplace, menuPath, menuRow.ruleEnabled);
           if (!nextEnabledResult.ok) {
-            showToast(ToastMessage.toast('操作失败', nextEnabledResult.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.common.op_failed"}), nextEnabledResult.error));
             return;
           }
           const nextEnabled = nextEnabledResult.value;
-          showToast(nextEnabled ? '目录规则已开启' : '目录规则已关闭');
+          showToast(nextEnabled ? coreT({key: "ui.vfs.rule_enabled_done"}) : coreT({key: "ui.vfs.rule_disabled_done"}));
           setWorktreeRows(prev => prev.map(row => (row.path === menuPath && row.kind === 'dir' ? {...row, ruleState: nextEnabled ? 'rule_on' : 'rule_off'} : row)));
           setRows(prev => prev.map(row => (row.path === menuPath ? VfsRowMapper.patchDirRuleRow(row, nextEnabled) : row)));
           // WHY: child file inclusion/display only changes inside the toggled dir.
@@ -665,8 +666,8 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       }
       if (action === 'rename') {
         openPrompt({
-          title: '重命名',
-          placeholder: '新名称',
+          title: coreT({key: "ui.common.rename"}),
+          placeholder: coreT({key: "ui.vfs.rename_placeholder"}),
           defaultValue: menuRow.name,
           onSubmit: async name => {
             const trimmed = name.trim();
@@ -730,22 +731,22 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         return;
       }
       if (action === 'delete') {
-        Alert.alert('确认删除', `确定删除 ${menuRow.name}？`, [
-          {text: '取消', style: 'cancel'},
+        Alert.alert(coreT({key: "ui.common.confirm_delete"}), coreT({key: "ui.common.delete_named_confirm", params: {name: menuRow.name}}), [
+          {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
           {
-            text: '删除',
+            text: coreT({key: "ui.common.delete"}),
             style: 'destructive',
             onPress: () => {
               const runDelete = async () => {
                 const deleteOptions = {recursive: true, useUserVfsTurn, sessionId};
                 const deleted = await VfsOperationsService.deleteScopedEntry(runtime, scope, writableVfs, menuPath, deleteOptions);
                 if (!deleted.ok) {
-                  showToast(ToastMessage.toast('删除失败', deleted.error));
+                  showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
                   return;
                 }
                 await reloadVfsListOnly();
               };
-              runDelete().catch(err => showToast(ToastMessage.toast('删除失败', err)));
+              runDelete().catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), err)));
             },
           },
         ]);
@@ -762,7 +763,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         return;
       }
     } catch (error) {
-      showToast(ToastMessage.toast('操作失败', error));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.op_failed"}), error));
     }
   };
 
@@ -776,13 +777,13 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
    * 列表刷新之后且只覆盖一层子目录，会出现「先显示关闭、进出文件夹才变开启」。
    */
   const runImport = (kind: BulkImportKind, targetPath: string) => {
-    const title = kind === 'zip' ? '导入 ZIP' : '导入角色卡';
-    const successToast = kind === 'zip' ? 'ZIP 导入完成' : '已导入角色卡';
+    const title = kind === 'zip' ? coreT({key: "ui.vfs.import_zip_title"}) : coreT({key: "ui.vfs.import_card_title"});
+    const successToast = kind === 'zip' ? coreT({key: "ui.vfs.zip_import_done"}) : coreT({key: "ui.vfs.card_import_done"});
     const confirmCopy = kind === 'zip' ? zipImportConfirmCopy(targetPath) : characterCardImportConfirmCopy(targetPath);
     Alert.alert(title, confirmCopy, [
-      {text: '取消', style: 'cancel'},
+      {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
       {
-        text: '导入',
+        text: coreT({key: "ui.common.import"}),
         style: 'destructive',
         onPress: () => {
           void (async () => {
@@ -790,7 +791,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               if (kind === 'zip') {
                 const imported = await VfsZipService.importZip(runtime, scope, {confirmed: true, directoryPath: targetPath});
                 if (!imported.ok) {
-                  showToast(ToastMessage.toast('导入失败', imported.error));
+                  showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), imported.error));
                   return;
                 }
               } else {
@@ -802,7 +803,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               await reloadVfsListOnly();
               showToast(successToast);
             } catch (err) {
-              showToast(ToastMessage.toast('导入失败', err));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), err));
             }
           })();
         },
@@ -819,7 +820,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     try {
       const imported = await VfsSingleFileService.importFile(runtime, scope, {targetDir: targetPath});
       if (!imported.ok) {
-        showToast(ToastMessage.toast('导入失败', imported.error));
+        showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), imported.error));
         return;
       }
       const result = imported.value;
@@ -828,23 +829,23 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       }
       if (result.status === 'needs-confirm') {
         const {conflictCount, confirm} = result;
-        Alert.alert('导入单文件', singleFileImportConfirmCopy(conflictCount), [
-          {text: '取消', style: 'cancel'},
+        Alert.alert(coreT({key: "ui.vfs.import_single_title"}), singleFileImportConfirmCopy(conflictCount), [
+          {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
           {
-            text: '导入',
+            text: coreT({key: "ui.common.import"}),
             style: 'destructive',
             onPress: () => {
               void (async () => {
                 try {
                   const applied = await confirm();
                   if (!applied.ok) {
-                    showToast(ToastMessage.toast('导入失败', applied.error));
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), applied.error));
                     return;
                   }
                   await reloadVfsListOnly();
                   showToast(singleFileImportToast(applied.value.skippedBinary));
                 } catch (err) {
-                  showToast(ToastMessage.toast('导入失败', err));
+                  showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), err));
                 }
               })();
             },
@@ -855,7 +856,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       await reloadVfsListOnly();
       showToast(singleFileImportToast(result.skippedBinary));
     } catch (err) {
-      showToast(ToastMessage.toast('导入失败', err));
+      showToast(ToastMessage.toast(coreT({key: "ui.common.import_failed"}), err));
     }
   };
 
@@ -895,22 +896,22 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     task
       .then(result => {
         if (!result.ok) {
-          showToast(ToastMessage.toast('导出失败', result.error));
+          showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), result.error));
           return;
         }
         if (result.value === 'saved') {
-          showToast(kind === 'zip' ? 'ZIP 已保存到所选位置' : '文件已保存到所选位置');
+          showToast(kind === 'zip' ? coreT({key: "ui.common.zip_saved"}) : coreT({key: "ui.vfs.file_saved_location"}));
         }
       })
-      .catch(err => showToast(ToastMessage.toast('导出失败', err)))
+      .catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), err)))
       .finally(() => setExporting(false));
   };
 
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
       openPrompt({
-        title: '新建文件',
-        placeholder: '文件名，如 note.md',
+        title: coreT({key: "ui.vfs.create_file"}),
+        placeholder: coreT({key: "ui.vfs.create_file_placeholder"}),
         defaultValue: '',
         onSubmit: async name => {
           const trimmed = name.trim();
@@ -921,7 +922,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           if (useUserVfsTurn) {
             const created = await VfsOperationsService.sessionCreateFile(runtime, sessionId!, path);
             if (!created.ok) {
-              showToast(ToastMessage.toast('失败', created.error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.failed"}), created.error));
               return;
             }
           } else {
@@ -934,8 +935,8 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     }
     if (action === 'create-directory') {
       openPrompt({
-        title: '新建目录',
-        placeholder: '目录名',
+        title: coreT({key: "ui.vfs.menu_create_directory"}),
+        placeholder: coreT({key: "ui.vfs.create_directory_placeholder"}),
         defaultValue: '',
         onSubmit: async name => {
           const trimmed = name.trim();
@@ -946,7 +947,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           if (useUserVfsTurn) {
             const created = await VfsOperationsService.sessionCreateDirectory(runtime, sessionId!, path);
             if (!created.ok) {
-              showToast(ToastMessage.toast('失败', created.error));
+              showToast(ToastMessage.toast(coreT({key: "ui.common.failed"}), created.error));
               return;
             }
           } else {
@@ -970,7 +971,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         try {
           const existingRule = await workplace.getDirRule(currentPath);
           if (!existingRule.ok) {
-            showToast(ToastMessage.toast('加载规则失败', existingRule.error));
+            showToast(ToastMessage.toast(coreT({key: "ui.vfs.rule_load_failed"}), existingRule.error));
             return;
           }
           const existing = existingRule.value;
@@ -984,7 +985,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           setDirRuleInitial(initialForm);
           setDirRuleOpen(true);
         } catch (error) {
-          showToast(ToastMessage.toast('加载规则失败', error));
+          showToast(ToastMessage.toast(coreT({key: "ui.vfs.rule_load_failed"}), error));
         }
       })();
       return;
@@ -1016,7 +1017,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <View style={[styles.header, {borderBottomColor: tokens.border}]}>
         <View style={styles.navGroup}>
-          <Pressable disabled={!canGoUp} accessibilityLabel="上级目录" onPress={handleGoUp} style={[styles.iconBtn, !canGoUp && styles.iconBtnDisabled]}>
+          <Pressable disabled={!canGoUp} accessibilityLabel={coreT({key: "ui.vfs.parent_dir_aria"})} onPress={handleGoUp} style={[styles.iconBtn, !canGoUp && styles.iconBtnDisabled]}>
             <ParentDirIcon color={canGoUp ? tokens.primary : tokens.textSecondary} />
           </Pressable>
           <Text testID="vfs-current-path" style={[styles.path, {color: tokens.text}]} numberOfLines={1} ellipsizeMode="middle">
@@ -1027,7 +1028,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           {!readOnly && pullFromParent ? <TemplatePullButton iconOnly scope={pullFromParent.scope} onPulled={pullFromParent.onPulled} /> : null}
           {!readOnly && pushToParent ? <TemplatePushButton iconOnly scope={pushToParent.scope} onPushed={pushToParent.onPushed} /> : null}
           {!readOnly ? (
-            <Pressable testID="vfs-more-action" accessibilityLabel="更多操作" onPress={() => setMoreOpen(true)} style={styles.iconBtn}>
+            <Pressable testID="vfs-more-action" accessibilityLabel={coreT({key: "ui.vfs.more_actions_aria"})} onPress={() => setMoreOpen(true)} style={styles.iconBtn}>
               <Text style={{color: tokens.text, fontSize: 20, lineHeight: 22}}>⋯</Text>
             </Pressable>
           ) : null}
@@ -1040,10 +1041,10 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
           selectedCount={vfsBatch.selectedCount}
           onCancelBatch={() => vfsBatch.exit()}
           onDelete={confirmBatchDelete}
-          hint="选择要操作的条目"
+          hint={coreT({key: "ui.vfs.batch_hint"})}
           actions={[
             {
-              label: '移动',
+              label: coreT({key: "ui.common.move"}),
               onPress: () => setMovePickerOpen(true),
             },
           ]}
@@ -1052,12 +1053,12 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
       ) : null}
 
       {loading ? (
-        <Text style={[styles.empty, {color: tokens.textSecondary}]}>加载中…</Text>
+        <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.loading"})}</Text>
       ) : (
         <FlatList
           data={rows}
           keyExtractor={item => item.path}
-          ListEmptyComponent={<Text style={[styles.empty, {color: tokens.textSecondary}]}>空目录</Text>}
+          ListEmptyComponent={<Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.vfs.empty_dir"})}</Text>}
           renderItem={({item}) => {
             const selected = vfsBatch.isSelected(item.path);
             return (
