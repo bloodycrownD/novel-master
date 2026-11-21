@@ -83,7 +83,9 @@ export interface ThrowBaseline {
 // ---------- 白名单三类 ----------
 
 /** 控制信号转码类名单（spec §5.2）：携带状态字段的控制信号，Result 装不下，rethrow 喂 throw 通道 port。 */
-const CONTROL_SIGNAL_CLASSES = ["DatabaseReplacedError", "CoordinatedWriteRollbackError", "ChatPromptBuildBailedError"] as const;
+// error-matrix-final W5：三类控制流哨兵类已全部退役（CoordinatedWriteRollbackError→INFRA_ROLLBACK_DEGRADED、
+// DatabaseReplacedError→DB_BACKUP_REPLACE_INCOMPLETE、ChatPromptBuildBailedError→null 哨兵），
+// 「控制信号借异常通道」形态清零，白名单清空——若未来再出现控制信号类，先按矩阵裁决返回值承载，不加回此表。
 
 const ALLOWED_FILE_RULES: ReadonlyArray<{ category: string; test: (rel: string) => boolean }> = [
   { category: "transaction", test: (rel) => /(?:^|\/)(?:transaction-helper|[^/]*in-transaction)\.tsx?$/.test(rel) },
@@ -194,8 +196,6 @@ function keepReasonOf(stmt: ts.ThrowStatement, sf: ts.SourceFile): string | null
 function allowCategoryOf(stmt: ts.ThrowStatement, rel: string): string | null {
   for (const rule of ALLOWED_FILE_RULES) if (rule.test(rel)) return rule.category;
   if (isTransactionCallbackArgument(stmt)) return "transaction";
-  const scope = ts.isIfStatement(stmt.parent) ? stmt.parent.getText(sfOf(stmt)) : stmt.getText(sfOf(stmt));
-  if (CONTROL_SIGNAL_CLASSES.some((name) => scope.includes(name))) return "control-signal";
   return null;
 }
 
@@ -332,6 +332,13 @@ export function throwBaselinePayload(current: readonly ThrowSite[], old: ThrowBa
   for (const site of current) {
     const saved = old?.sites[site.key];
     if (saved != null) {
+      // error-matrix-final W5：disposition 跟随当前机器判定刷新（KEEP/ALLOWED 的判定依据——
+      // 注释与白名单——都在源码可复核），旧 reason 优先保留（人工写过的理由不被注释文案覆盖）；
+      // 须人工定性的 verdict（VIOLATION/VIOLATION-B/BOUNDARY）沿用旧登记，无旧条目才 UNTRIAGED。
+      if (site.verdict === "KEEP" || site.verdict === "ALLOWED") {
+        sites[site.key] = { form: site.form, line: site.line, disposition: site.verdict, reason: saved.reason || (site.verdict === "KEEP" ? site.keep || "缺理由：nm-throw: keep 注释未带理由，须补" : `白名单自动判定（${site.allow}）`) };
+        continue;
+      }
       sites[site.key] = { form: site.form, line: site.line, disposition: saved.disposition, reason: saved.reason };
       continue;
     }

@@ -432,6 +432,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 // nm-style: keep-public — desktop agent-run.service 的 resolve 包装直接消费（三端同一转码口径）。
     async mapResolveError<T>(fn: () => Promise<Result<T, AppError>>): Promise<T> {
         const result = await fn();
+        // nm-throw: keep — Result→throw 边界 adapter（三端 resolve 包装同一转码口径，p17 C5 合并产物）。
         if (!result.ok) throw result.error;
         return result.value;
     },
@@ -615,6 +616,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 const hasInput = trimmed !== "" || composerAttachOnly.length > 0 || hasAnnotateDrafts;
 
                 if (!hasInput && !allowResumeWithoutInput) {
+                    // nm-throw: keep — 喂本函数 catch 的统一收口漏斗（总纲 §五例外 7a，FAILED('') 补发依赖）。
                     throw new AppError("AGENT_MESSAGE_EMPTY");
                 }
                 if (!hasInput && allowResumeWithoutInput) {
@@ -627,6 +629,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                     // p26 门⑦边界登记（总纲 §五例外 7a）：throw 喂本函数 catch 的统一收口漏斗
                     // （前奏期唯一终态事件出口）——直接改 return Result.err 会跳过 catch 的
                     // FAILED('') 补发，双端 composer 解锁链断；走漏斗才保终态事件语义。
+                    // nm-throw: keep — 同上漏斗（p26 门⑦边界登记）。
                     if (tailRead.kind === "failed") throw tailRead.error;
                     if (tailRead.kind !== "completed") {
                         // 读分片间命中取消：与前奏其它检查点同款合成 cancelled 收尾（先发
@@ -637,6 +640,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                     const tail = tailRead.value;
                     // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
                     if (tail[tail.length - 1]?.role !== "user") {
+                        // nm-throw: keep — 同上漏斗。
                         throw new AppError("AGENT_MESSAGE_EMPTY");
                     }
                 }

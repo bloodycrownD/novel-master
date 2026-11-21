@@ -84,6 +84,8 @@ export const ProviderTableSnapshotIo = {
   async restore(conn: TdbcConnection, snapshot: ProviderTableSnapshot): Promise<void> {
     const validation = ProviderTableSnapshotIo.validate(snapshot);
     if (!validation.ok) {
+      // nm-throw: keep — restore 入口校验解包：调用方 db-backup 双端在本方法边界 catch 收编
+      // （DB_BACKUP_REPLACE_INCOMPLETE 链路），本层为事务前置的校验门（error-matrix-final W4 定性）。
       throw validation.error;
     }
     await conn.transaction(async (tx) => {

@@ -45,6 +45,7 @@ export class ChatAgentSession implements AgentSession {
     // 读口改 Outcome 后此处转回数组：已知失败抛出交 runner 收口；未注入 hooks，
     // 中断分支不可达，命中即不变量破坏（断言而非取消语义）。
     const read = await this.messages.listBySession(this.sessionId, { includeHidden: false });
+    // nm-throw: keep — Outcome→throw 转码：已知失败抛出交 runner catch 统一收口（见上注释）。
     if (read.kind === "failed") throw read.error;
     assert(read.kind === "completed", "ChatAgentSession.list 未注入 hooks，listBySession 不应产生中断");
     return read.value;

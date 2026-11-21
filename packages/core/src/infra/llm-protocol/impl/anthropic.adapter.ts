@@ -48,6 +48,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, ...req.extraHeaders };
     const fetched = await HttpUtil.fetchJson(this.fetchFn, HttpUtil.joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers, signal: req.scope?.signal });
+    // nm-throw: keep — llm-protocol 协议层边界转码：adapter 契约 @throws，transport catch → reject（error-matrix-final W4 定性）。
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { data?: Array<{ id?: string; display_name?: string }> };
     const models = (data.data ?? [])
@@ -95,6 +96,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     const url = HttpUtil.joinUrl(req.baseUrl, "/v1/messages");
     const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
     const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.scope?.signal });
+    // nm-throw: keep — llm-protocol 协议层边界转码：adapter 契约 @throws，transport catch → reject（error-matrix-final W4 定性）。
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { content?: unknown[] };

@@ -23,6 +23,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const url = `${HttpUtil.joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
     const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders }, signal: req.scope?.signal });
+    // nm-throw: keep — llm-protocol 协议层边界转码：adapter 契约 @throws，transport catch → reject（error-matrix-final W4 定性）。
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { models?: Array<{ name?: string; displayName?: string }> };
     const models = (data.models ?? [])
@@ -72,6 +73,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     const url = this.modelUrl(req, "generateContent");
     const headers = { "Content-Type": "application/json", ...req.extraHeaders };
     const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal });
+    // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> };
@@ -86,10 +88,12 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     let contents: unknown[];
     if (req.history != null && req.history.length > 0) {
       const mapped = GeminiMapper.chatMessagesToContents(req.history, { toolLookupMessages: req.toolUseLookupMessages, knownToolNames: req.tools?.map((t) => t.name) });
+      // nm-throw: keep — 同上协议层边界（mapper 解包进 throw 通道）。
       if (!mapped.ok) throw mapped.error;
       contents = mapped.value;
     } else {
       const parts = GeminiMapper.blocksToParts(TextBlocks.of(req.userContent).blocks);
+      // nm-throw: keep — 同上协议层边界。
       if (!parts.ok) throw parts.error;
       contents = [{ role: "user", parts: parts.value }];
     }

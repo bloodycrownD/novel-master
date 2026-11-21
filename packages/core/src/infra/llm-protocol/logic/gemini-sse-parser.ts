@@ -248,8 +248,9 @@ export const GeminiSseParser = {
         }
       }
 
-      // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+      // nm-throw: keep — 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
       const asserted = SseParseErrors.assertSucceededOrThrow(state, blocks, "gemini");
+      // nm-throw: keep — parser 既有 throw 通道上行（transport catch → reject）。
       if (!asserted.ok) throw asserted.error;
 
       if (blocks.length === 0 && state.streamRaw != null) {

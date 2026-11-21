@@ -30,6 +30,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const url = HttpUtil.joinUrl(req.baseUrl, "/models");
     const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "GET", headers: { Authorization: `Bearer ${req.apiKey}`, ...req.extraHeaders }, signal: req.scope?.signal });
+    // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { data?: Array<{ id?: string }> };
     const models = (data.data ?? []).filter((m) => typeof m.id === "string").map((m) => ({ vendorModelId: m.id! }));
@@ -40,6 +41,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     if (req.thinking == null && !req.stream && (req.tools == null || req.tools.length === 0) && (req.system == null || req.system === "") && (req.history == null || TextOnlyContent.isTextOnlyHistory(req.history))) {
       const url = HttpUtil.joinUrl(req.baseUrl, "/chat/completions");
       const userText = req.history != null && req.history.length > 0 ? TextOnlyContent.chatMessagesToTextOnly(req.history) : TextOnlyContent.blocksToTextOnly(TextBlocks.of(req.userContent).blocks);
+      // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
       if (!userText.ok) throw userText.error;
 
       const body: Record<string, unknown> = {
@@ -54,6 +56,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
       const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
       const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(body), signal: req.scope?.signal });
+      // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
       if (!fetched.ok) throw fetched.error;
       const raw = fetched.value;
       const record = raw as { choices?: Array<{ message?: unknown }> };
@@ -99,6 +102,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     const url = HttpUtil.joinUrl(req.baseUrl, "/chat/completions");
     const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
     const fetched = await HttpUtil.fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false)), signal: req.scope?.signal });
+    // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { choices?: Array<{ message?: unknown }> };
@@ -119,10 +123,12 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     let messages: unknown[];
     if (req.history != null && req.history.length > 0) {
       const mapped = OpenAiMapper.chatMessagesTo(req.history);
+      // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
       if (!mapped.ok) throw mapped.error;
       messages = this.withSystemMessage(req, mapped.value);
     } else {
       const content = TextOnlyContent.blocksToTextOnly(TextBlocks.of(req.userContent).blocks);
+      // nm-throw: keep — llm-protocol 协议层边界转码（同 anthropic 口径）。
       if (!content.ok) throw content.error;
       messages = this.withSystemMessage(req, [{ role: "user", content: content.value }]);
     }

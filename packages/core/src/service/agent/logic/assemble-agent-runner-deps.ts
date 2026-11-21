@@ -66,6 +66,7 @@ export const AgentRunnerDepsAssembler = {
       // 中断分支不可达，命中即不变量破坏（断言而非取消语义）。
       listVisibleSessionMessages: async () => {
         const read = await input.runtime.messages.listBySession(input.toolCtx.sessionId, { includeHidden: false });
+        // nm-throw: keep — Outcome→throw 转码：同 chat-agent-session 口径，交 runner catch 收口。
         if (read.kind === "failed") throw read.error;
         assert(read.kind === "completed", "listVisibleSessionMessages 未注入 hooks，listBySession 不应产生中断");
         return read.value;
