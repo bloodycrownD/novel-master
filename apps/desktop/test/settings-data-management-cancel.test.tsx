@@ -309,7 +309,8 @@ describe("设置页长任务取消入口（Step 14）", () => {
     });
     const mounted = await mount(invoke);
     try {
-      await click(requireButton(mounted.renderer.root, "清理"));
+      // 清理按钮文案随波 3c-a 裁决接 ui.storage.cleanup_action（清理→清理数据库空间），点击意图不变。
+      await click(requireButton(mounted.renderer.root, "清理数据库空间"));
       await click(requireButton(mounted.renderer.root, "确定"));
 
       const maintenanceCall = calls.find((call) => call.channel === IPC_CHANNELS.DB_MAINTENANCE);
