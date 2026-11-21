@@ -881,7 +881,8 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     }
     batch.exit();
     const count = agentIds.length;
-    const message = count > 1 ? `已删除 ${count} 个 Agent` : "已删除 Agent";
+    // 「已删除 {count} 个 Agent」键面无此键（漏键待波 3c），批量分支保留原字面量。
+    const message = count > 1 ? `已删除 ${count} 个 Agent` : coreT({key: "ui.agent.deleted_done"});
     toastSettingsSuccess(message);
     await reload();
   };
@@ -1518,7 +1519,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
 
   useEffect(() => void reload().catch(() => undefined), [reload]);
 
-  if (!providerId) return <p className="settings-hint">缺少 providerId</p>;
+  if (!providerId) return <p className="settings-hint">{coreT({key: "ui.provider.provider_id_missing"})}</p>;
 
   const deleteModels = async (savedModelIds: readonly string[]) => {
     for (const savedModelId of savedModelIds) {
@@ -1550,7 +1551,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     }
     const trimmed = name.trim();
     if (!trimmed) {
-      toastSettingsError("模型名称不能为空");
+      toastSettingsError(coreT({key: "ui.sampling.name_required"}));
       return;
     }
     const patch = { savedModelId: target.savedModelId, modelName: trimmed };
@@ -1559,6 +1560,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
       toastSettingsError(res.error.message);
       return;
     }
+    // 键面无「已更新模型名称」键（漏键待波 3c），保留原字面量。
     toastSettingsSuccess("已更新模型名称");
     await reload();
   };
@@ -1610,10 +1612,10 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
         <SegmentedControl<ProviderTab>
           value={activeTab}
           onChange={setActiveTab}
-          aria-label="服务商详情 tab"
+          aria-label={coreT({key: "ui.provider.detail_tab_aria"})}
           options={[
-            { value: "config", label: "服务商配置" },
-            { value: "models", label: "模型管理" },
+            { value: "config", label: coreT({key: "ui.nav.providers"}) },
+            { value: "models", label: coreT({key: "ui.nav.model_management"}) },
           ]}
         />
       </div>
@@ -1624,6 +1626,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
           <SettingsListSection
             header={
               <ManageHeader
+                // 键面无「已保存模型」标题键（漏键待波 3c），保留原字面量。
                 title="已保存模型"
                 batchMode={batch.active}
                 selectedCount={batch.selectedCount}
@@ -1642,7 +1645,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
                     count: batch.selectedCount,
                   });
                 }}
-                hint="选择要删除的模型"
+                hint={coreT({key: "ui.provider.delete_models_select_title"})}
                 normalActions={
                   <>
                     <button
@@ -1650,14 +1653,14 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
                       className="list-manage-header__btn"
                       onClick={() => setFetchModalOpen(true)}
                     >
-                      拉取模型
+                      {coreT({key: "ui.provider.fetch_models_title"})}
                     </button>
                     <button
                       type="button"
                       className="list-manage-header__btn list-manage-header__btn--primary"
                       onClick={() => setAddModelOpen(true)}
                     >
-                      添加
+                      {coreT({key: "ui.common.add"})}
                     </button>
                   </>
                 }
@@ -1696,7 +1699,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
             savedVendorIds={models.map((m) => m.vendorModelId)}
             onClose={() => setFetchModalOpen(false)}
             onSaved={async () => {
-              showToast("已添加模型");
+              showToast(coreT({key: "ui.provider.models_added_done"}));
               await reload();
             }}
             onError={(message) => toastSettingsError(message)}
@@ -1711,7 +1714,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
                 toastSettingsError(res.error.message);
                 return;
               }
-              showToast("已添加模型");
+              showToast(coreT({key: "ui.provider.models_added_done"}));
               await reload();
             }}
           />
@@ -1720,26 +1723,26 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
             x={modelMenu?.x ?? 0}
             y={modelMenu?.y ?? 0}
             items={[
-              { label: "编辑", action: "edit" },
-              { label: "重命名", action: "rename" },
-              { label: "删除", action: "delete", danger: true },
+              { label: coreT({key: "ui.common.edit"}), action: "edit" },
+              { label: coreT({key: "ui.common.rename"}), action: "rename" },
+              { label: coreT({key: "ui.common.delete"}), action: "delete", danger: true },
             ]}
             onSelect={(action) => handleModelMenuSelect(action)}
             onClose={() => setModelMenu(null)}
           />
           <TextPromptModal
             open={renamePrompt != null}
-            title="重命名模型"
+            title={coreT({key: "ui.provider.rename_model_title"})}
             initialValue={renamePrompt?.initialName ?? ""}
             onClose={() => setRenamePrompt(null)}
             onConfirm={handleRename}
           />
           <ConfirmModal
             open={deleteConfirm != null}
-            title="删除模型"
+            title={coreT({key: "ui.provider.delete_model_title"})}
             message={
               deleteConfirm?.kind === "batch"
-                ? `确定删除选中的 ${deleteConfirm.count} 个模型？`
+                ? coreT({key: "ui.provider.delete_models_confirm", params: {count: deleteConfirm.count}})
                 : `删除模型「${
                     deleteConfirm?.kind === "single" ? deleteConfirm.label : ""
                   }」？`
@@ -1841,7 +1844,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     }
     batch.exit();
     const count = ruleIds.length;
-    const message = count > 1 ? `已删除 ${count} 条规则` : "已删除规则";
+    const message = count > 1 ? coreT({key: "ui.smart_sort.delete_rules_count", params: {count}}) : coreT({key: "ui.smart_sort.delete_rules_done"});
     toastSettingsSuccess(message);
     await reload();
   };
@@ -1856,7 +1859,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
       toastSettingsError(res.error.message);
       return;
     }
-    toastSettingsSuccess(enabled ? "已启用所选规则" : "已禁用所选规则");
+    toastSettingsSuccess(enabled ? coreT({key: "ui.smart_sort.enable_batch_done"}) : coreT({key: "ui.smart_sort.disable_batch_done"}));
     await reload();
   };
 
@@ -1866,7 +1869,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     try {
       const res = await ipcSmartSortRuleYamlExport();
       if (res.ok) {
-        const message = res.data === "saved" ? "已导出规则 YAML" : "已取消";
+        const message = res.data === "saved" ? coreT({key: "ui.smart_sort.exported_yaml"}) : coreT({key: "ui.common.cancelled"});
         toastSettingsSuccess(message);
       } else {
         toastSettingsError(res.error.message);
@@ -1885,10 +1888,10 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
       if (res.ok) {
         if (res.data === "imported") {
           batch.exit();
-          toastSettingsSuccess("已导入并替换全部规则");
+          toastSettingsSuccess(coreT({key: "ui.smart_sort.imported_all"}));
           await reload();
         } else {
-          toastSettingsSuccess("已取消");
+          toastSettingsSuccess(coreT({key: "ui.common.cancelled"}));
         }
       } else {
         toastSettingsError(res.error.message);
@@ -1905,7 +1908,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     try {
       const res = await ipcSmartSortRuleResetDefaults();
       if (res.ok) {
-        toastSettingsSuccess("已恢复默认规则");
+        toastSettingsSuccess(coreT({key: "ui.smart_sort.reset_done"}));
         await reload();
       } else {
         toastSettingsError(res.error.message);
@@ -1986,7 +1989,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   const menuRule = rules.find((r) => r.ruleId === menuRuleId);
   // 内置规则仅可禁用不可删除（spec D3），隐藏删除项
   const builtin = menuRule != null && isBuiltinSmartSortRule(menuRule.ruleId);
-  const deleteItem = { label: "删除", action: "delete", danger: true };
+  const deleteItem = { label: coreT({key: "ui.common.delete"}), action: "delete", danger: true };
   const menuItems = builtin ? [] : [deleteItem];
   const everySelected = rules.every((r) => batch.selectedIds.has(r.ruleId));
   const allSelected = rules.length > 0 && everySelected;
@@ -1996,7 +1999,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
       <SettingsListSection
         header={
           <ManageHeader
-            title="智能排序"
+            title={coreT({key: "ui.nav.settings_smart_sort"})}
             batchMode={batch.active}
             selectedCount={batch.selectedCount}
             onEnterBatch={batch.enter}
@@ -2010,7 +2013,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                 return;
               }
               if ([...batch.selectedIds].some(isBuiltinSmartSortRule)) {
-                toastSettingsError("内置规则不可删除，仅可禁用");
+                toastSettingsError(coreT({key: "ui.smart_sort.builtin_delete_block_desktop"}));
                 return;
               }
               setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
@@ -2019,17 +2022,18 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
               batch.active
                 ? [
                     {
-                      label: "启用",
+                      label: coreT({key: "ui.common.enable"}),
                       onClick: () => void runBatchSetEnabled(true),
                     },
                     {
+                      // 键面无单独「禁用」动作键（漏键待波 3c），保留原字面量。
                       label: "禁用",
                       onClick: () => void runBatchSetEnabled(false),
                     },
                   ]
                 : undefined
             }
-            hint="内置规则仅可禁用不可删除"
+            hint={coreT({key: "ui.smart_sort.builtin_delete_block_desktop2"})}
             normalActions={
               <>
                 <button
@@ -2038,7 +2042,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                   disabled={busy}
                   onClick={() => setImportConfirm(true)}
                 >
-                  导入 YAML
+                  {coreT({key: "ui.agent.import_yaml"})}
                 </button>
                 <button
                   type="button"
@@ -2046,7 +2050,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                   disabled={busy}
                   onClick={() => void runExportYaml()}
                 >
-                  导出 YAML
+                  {coreT({key: "ui.agent.export_yaml"})}
                 </button>
                 <button
                   type="button"
@@ -2054,13 +2058,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                   disabled={busy}
                   onClick={() => setResetConfirm(true)}
                 >
-                  恢复默认
+                  {coreT({key: "ui.common.reset_default"})}
                 </button>
                 <button
                   type="button"
                   className="list-manage-header__btn list-manage-header__btn--primary"
                   onClick={() => openEditor()}
                 >
+                  {/* 键面无「新建规则」按钮键（new_rule_title 是「新规则」，不同文），保留原字面量。 */}
                   新建规则
                 </button>
               </>
@@ -2069,7 +2074,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
         }
       >
         <p className="settings-hint">
-          目录选「智能排序」时按本列表从上到下逐条尝试，首条命中规则的捕获组提取序号；可拖拽或用行菜单调整优先级。
+          {coreT({key: "ui.smart_sort.list_hint_desktop"})}
         </p>
         {loading ? <SettingsListEmpty>{coreT({key: "ui.common.loading"})}</SettingsListEmpty> : null}
         {!loading && rules.length === 0 ? (
@@ -2144,7 +2149,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                   ) : null}
                   {!rule.enabled ? (
                     <span className="settings-tag settings-tag--muted">
-                      已禁用
+                      {coreT({key: "ui.smart_sort.disabled_tag"})}
                     </span>
                   ) : null}
                 </span>
@@ -2179,7 +2184,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
               <button
                 type="button"
                 className="settings-list-item__menu-btn"
-                aria-label="更多"
+                aria-label={coreT({key: "ui.common.more"})}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setRuleMenu({
@@ -2200,11 +2205,11 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
         x={ruleMenu?.x ?? 0}
         y={ruleMenu?.y ?? 0}
         items={[
-          { label: "编辑", action: "edit" },
-          { label: "置顶", action: "move-top" },
-          { label: "上移", action: "move-up" },
-          { label: "下移", action: "move-down" },
-          { label: "置底", action: "move-bottom" },
+          { label: coreT({key: "ui.common.edit"}), action: "edit" },
+          { label: coreT({key: "ui.common.move_top"}), action: "move-top" },
+          { label: coreT({key: "ui.common.move_up"}), action: "move-up" },
+          { label: coreT({key: "ui.common.move_down"}), action: "move-down" },
+          { label: coreT({key: "ui.common.move_bottom"}), action: "move-bottom" },
           ...menuItems,
         ]}
         onSelect={(action) => handleMenuSelect(action)}
@@ -2212,10 +2217,10 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
       />
       <ConfirmModal
         open={deleteConfirm != null}
-        title="删除规则"
+        title={coreT({key: "ui.smart_sort.delete_title"})}
         message={
           deleteConfirm?.kind === "batch"
-            ? `确定删除选中的 ${deleteConfirm.count} 条规则？`
+            ? coreT({key: "ui.smart_sort.delete_batch_confirm", params: {count: deleteConfirm.count}})
             : `删除规则「${
                 deleteConfirm?.kind === "single" ? deleteConfirm.label : ""
               }」？`
@@ -2237,16 +2242,17 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
       />
       <ConfirmModal
         open={importConfirm}
-        title="导入 YAML"
-        message="导入将清空并替换当前全部规则（含内置规则），确定继续？"
+        title={coreT({key: "ui.agent.import_yaml"})}
+        message={coreT({key: "ui.smart_sort.import_confirm_desktop"})}
         danger
         onConfirm={() => void runImportYaml()}
         onCancel={() => setImportConfirm(false)}
       />
       <ConfirmModal
         open={resetConfirm}
+        // 键面无「恢复默认规则」标题键（reset_done 是「已恢复默认规则」，不同文），保留原字面量。
         title="恢复默认规则"
-        message="将删除并重灌全部内置规则（自定义规则不受影响），确定继续？"
+        message={coreT({key: "ui.smart_sort.reset_confirm_desktop"})}
         onConfirm={() => void runResetDefaults()}
         onCancel={() => setResetConfirm(false)}
       />
@@ -2285,9 +2291,9 @@ const SMART_SORT_CAPTURE_KIND_OPTIONS: ReadonlyArray<{
   value: SmartSortCaptureKindDto;
   label: string;
 }> = [
-  { value: "smart", label: "智能数字" },
-  { value: "fixed_max", label: "固定最大" },
-  { value: "fixed_min", label: "固定最小" },
+  { value: "smart", label: coreT({key: "ui.smart_sort.capture_kind_smart"}) },
+  { value: "fixed_max", label: coreT({key: "ui.smart_sort.capture_kind_fixed_max"}) },
+  { value: "fixed_min", label: coreT({key: "ui.smart_sort.capture_kind_fixed_min"}) },
 ];
 
 type MatchResultState = SmartSortRuleMatchResultDto | null;
@@ -2414,7 +2420,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     if (ruleId) {
       const res = await ipcSmartSortRuleUpdate({ ruleId, patch: payload });
       if (res.ok) {
-        toastSettingsSuccess("已保存");
+        toastSettingsSuccess(coreT({key: "ui.common.saved"}));
         nav.pop();
       } else {
         toastSettingsError(res.error.message);
@@ -2423,7 +2429,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
     const res = await ipcSmartSortRuleCreate(payload);
     if (res.ok) {
-      toastSettingsSuccess("已创建");
+      toastSettingsSuccess(coreT({key: "ui.common.created"}));
       nav.pop();
     } else {
       toastSettingsError(res.error.message);
@@ -2436,37 +2442,37 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   const matches = matchResult?.ok ? matchResult.matches : null;
   const segments = matches && SmartSortHighlight.splitSegments(testText, matches);
 
-  const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
+  const ruleDesc = draft.name.trim() || (ruleId ? coreT({key: "ui.smart_sort.unnamed_rule"}) : coreT({key: "ui.smart_sort.new_rule_title"}));
 
   return (
     <SettingsPanel>
       <SettingsFormSection
-        title="排序规则"
+        title={coreT({key: "ui.smart_sort.form_title"})}
         desc={ruleDesc}
         footer={
           <>
             <Button variant="secondary" onClick={() => void runMatchTest()}>
-              测试
+              {coreT({key: "ui.common.test"})}
             </Button>
             <Button variant="primary" onClick={() => void save()}>
-              保存
+              {coreT({key: "ui.common.save"})}
             </Button>
           </>
         }
       >
-        <SettingsSection title="基本信息">
-          <SettingsField label="名称">
+        <SettingsSection title={coreT({key: "ui.agent.basic_info"})}>
+          <SettingsField label={coreT({key: "ui.common.name"})}>
             <input
               value={draft.name}
-              placeholder="如 中文卷章复合"
+              placeholder={coreT({key: "ui.smart_sort.name_example_desktop"})}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             />
           </SettingsField>
-          <SettingsField label="正则表达式">
+          <SettingsField label={coreT({key: "ui.smart_sort.regex_label"})}>
             <textarea
               rows={2}
               value={draft.patternInput}
-              placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
+              placeholder={coreT({key: "ui.smart_sort.regex_example"})}
               spellCheck={false}
               onChange={(e) => {
                 setDraft({
@@ -2486,13 +2492,13 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
           </p>
           <SettingsField
-            label="捕获数字"
+            label={coreT({key: "ui.smart_sort.capture_label"})}
             hint={
               draft.captureKind === "smart"
-                ? "从捕获组提取序号，中文数字自动转换"
+                ? coreT({key: "ui.smart_sort.capture_smart_hint"})
                 : draft.captureKind === "fixed_min"
-                ? "命中即排在所有序号之前（序章/楔子类）"
-                : "命中即沉底排在所有序号之后（终章/番外类）"
+                ? coreT({key: "ui.smart_sort.capture_hint_before"})
+                : coreT({key: "ui.smart_sort.capture_hint_after"})
             }
           >
             <select
@@ -2512,11 +2518,11 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
               ))}
             </select>
           </SettingsField>
-          <SettingsField label="描述">
+          <SettingsField label={coreT({key: "ui.common.description"})}>
             <textarea
               rows={3}
               value={draft.description}
-              placeholder="描述这条规则匹配什么，如 匹配 第X章 形式的标题"
+              placeholder={coreT({key: "ui.smart_sort.desc_hint"})}
               onChange={(e) =>
                 setDraft({ ...draft, description: e.target.value })
               }
@@ -2529,15 +2535,15 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
           />
         </SettingsSection>
 
-        <SettingsSection title="测试">
+        <SettingsSection title={coreT({key: "ui.common.test"})}>
           <p className="settings-hint">
-            输入一段文本，点击「测试」后原文内高亮显示全部匹配段，并给出匹配计数。
+            {coreT({key: "ui.smart_sort.test_hint_desktop"})}
           </p>
-          <SettingsField label="测试文本">
+          <SettingsField label={coreT({key: "ui.smart_sort.test_text_label"})}>
             <textarea
               rows={3}
               value={testText}
-              placeholder="输入测试文本"
+              placeholder={coreT({key: "ui.smart_sort.test_text_placeholder"})}
               onChange={(e) => {
                 setTestText(e.target.value);
                 invalidateMatchResult();
@@ -2570,12 +2576,13 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
                           key={`${m.index}-${i}`}
                           style={{ color: "var(--text-secondary)" }}
                         >
-                          {`${m.text || "(空匹配)"} → ${m.tuple ?? "无序号"}\n`}
+                          {/* no_match_text 键值为全角括号、源文半角，不同文保留原字面量（待 3c）。 */}
+                          {`${m.text || "(空匹配)"} → ${m.tuple ?? coreT({key: "ui.smart_sort.no_tuple"})}\n`}
                         </span>
                       ))
                     : null}
                   <span style={{ color: "var(--text-secondary)" }}>
-                    {matchCount > 0 ? `共 ${matchCount} 处匹配` : "无匹配"}
+                    {matchCount > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: matchCount}}) : coreT({key: "ui.smart_sort.no_matches"})}
                   </span>
                 </>
               ) : matchResult != null && !matchResult.ok ? (
