@@ -5,6 +5,8 @@
 import React from 'react';
 import {Pressable, Switch, Text, View} from 'react-native';
 
+import {coreT} from '@/i18n/core';
+
 import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
 
@@ -36,7 +38,7 @@ export function PromptSectionHead({
             style={disabled ? styles.actionDisabled : undefined}
             onPress={onAdd}
           >
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.add"})}</Text>
           </Pressable>
         ) : null}
         {switchValue !== undefined && onSwitchChange != null ? (

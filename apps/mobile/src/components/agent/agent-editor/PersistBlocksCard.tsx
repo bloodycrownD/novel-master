@@ -8,6 +8,7 @@ import {Text, View} from 'react-native';
 import type {PersistPromptBlock} from '@novel-master/core/prompt';
 import type {PersistTextPromptBlock} from '@novel-master/core/prompt';
 import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
+import {coreT} from '@/i18n/core';
 import {ROLE_OPTIONS} from '@/config-forms/agent';
 import {AgentEditorState} from '@/config-forms/agent';
 
@@ -112,7 +113,7 @@ export function PersistBlocksCard({
                       disabled={readOnly}
                     />
                   </View>
-                  <FormField label="名称" tokens={tokens}>
+                  <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
                     <FormTextInput
                       tokens={tokens}
                       value={block.name}
@@ -126,7 +127,7 @@ export function PersistBlocksCard({
                       }
                     />
                   </FormField>
-                  <FormField label="角色" tokens={tokens}>
+                  <FormField label={coreT({key: "ui.common.role"})} tokens={tokens}>
                     <FormSelectField
                       tokens={tokens}
                       value={block.role}
@@ -143,7 +144,7 @@ export function PersistBlocksCard({
                         )
                       }
                       options={ROLE_OPTIONS}
-                      sheetTitle="选择角色"
+                      sheetTitle={coreT({key: "ui.agent.block_role_picker_title"})}
                       disabled={readOnly}
                     />
                   </FormField>
@@ -154,7 +155,7 @@ export function PersistBlocksCard({
                   </Text>
                   {/* persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。 */}
                   <ExpandablePromptInput
-                    label="内容"
+                    label={coreT({key: "ui.common.content"})}
                     disabled={readOnly}
                     openEditor={() =>
                       openPromptEditor(block.name, block.content, v =>

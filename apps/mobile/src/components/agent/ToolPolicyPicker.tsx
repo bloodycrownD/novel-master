@@ -15,6 +15,7 @@ import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'r
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@/config-forms/agent';
+import {coreT} from '@/i18n/core';
 import {FormTextInput} from '../form/FormTextInput';
 import {useFormOverlay} from '../form/FormOverlayHost';
 import {ModalShell} from '../ui/ModalShell';
@@ -105,9 +106,9 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
         }}
         panelStyle={styles.sheet}
       >
-        <Text style={[styles.sheetTitle, {color: tokens.text}]}>选择工具</Text>
+        <Text style={[styles.sheetTitle, {color: tokens.text}]}>{coreT({key: "ui.agent.select_tools"})}</Text>
         <View style={styles.searchWrap}>
-          <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder="搜索工具…" />
+          <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder={coreT({key: "ui.agent.search_tools_placeholder"})} />
         </View>
         <FlatList
           data={filtered}
@@ -136,10 +137,10 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
           ]}
         >
           <Pressable onPress={close} style={styles.actionBtn}>
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
+            <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
           </Pressable>
           <Pressable onPress={confirm} style={[styles.actionBtn, {backgroundColor: tokens.primary}]}>
-            <Text style={styles.confirmText}>确定</Text>
+            <Text style={styles.confirmText}>{coreT({key: "ui.common.confirm"})}</Text>
           </Pressable>
         </View>
       </ModalShell>
@@ -171,7 +172,7 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
         }}
         numberOfLines={1}
       >
-        {selected.length === 0 ? `未选择工具（0/${TOTAL}）` : selected.length >= TOTAL ? `全部工具（${TOTAL}/${TOTAL}）` : `已选工具（${selected.length}/${TOTAL}）`}
+        {selected.length === 0 ? coreT({key: "ui.agent.no_tools_selected", params: {total: String(TOTAL)}}) : selected.length >= TOTAL ? coreT({key: "ui.agent.all_tools_selected", params: {total: String(TOTAL)}}) : coreT({key: "ui.agent.selected_tools_aria", params: {selected: String(selected.length), total: String(TOTAL)}})}
       </Text>
       <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>
     </Pressable>

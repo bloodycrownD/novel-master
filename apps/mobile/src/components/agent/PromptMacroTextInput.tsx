@@ -21,6 +21,7 @@
 import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
+import {coreT} from '@/i18n/core';
 import type {ComposerInputMetrics, ComposerInputSelection, ComposerInputTheme} from '@/components/chat/ComposerInputBridge';
 import {ComposerInputTheme as ComposerInputThemeNs, ComposerInputWebView, type ComposerInputWebViewHandle} from '@/components/chat/ComposerInputWebView';
 import {PROMPT_INSERTABLE_MACROS, PromptMacroInput} from './prompt-macro-input';
@@ -135,7 +136,7 @@ export function PromptMacroTextInput({tokens, value, onChangeText, placeholder, 
         />
       </View>
       <View style={styles.chipRow}>
-        <Text style={[styles.chipLabel, {color: tokens.textSecondary}]}>宏</Text>
+        <Text style={[styles.chipLabel, {color: tokens.textSecondary}]}>{coreT({key: "ui.agent.macro_chip"})}</Text>
         {PROMPT_INSERTABLE_MACROS.map(macro => (
           <Pressable
             key={macro.token}

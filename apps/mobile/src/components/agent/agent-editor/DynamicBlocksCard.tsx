@@ -7,6 +7,7 @@ import {Text, View} from 'react-native';
 
 import type {DynamicPromptBlock} from '@novel-master/core/prompt';
 import {PROMPT_REGION_LABELS, ROLE_OPTIONS} from '@/config-forms/agent';
+import {coreT} from '@/i18n/core';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';
@@ -106,7 +107,7 @@ export function DynamicBlocksCard({
                     disabled={readOnly}
                   />
                 </View>
-                <FormField label="名称" tokens={tokens}>
+                <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
                   <FormTextInput
                     tokens={tokens}
                     value={block.name}
@@ -118,7 +119,7 @@ export function DynamicBlocksCard({
                     }
                   />
                 </FormField>
-                <FormField label="角色" tokens={tokens}>
+                <FormField label={coreT({key: "ui.common.role"})} tokens={tokens}>
                   <FormSelectField
                     tokens={tokens}
                     value={block.role}
@@ -132,12 +133,12 @@ export function DynamicBlocksCard({
                       )
                     }
                     options={ROLE_OPTIONS}
-                    sheetTitle="选择角色"
+                    sheetTitle={coreT({key: "ui.agent.block_role_picker_title"})}
                     disabled={readOnly}
                   />
                 </FormField>
                 <ExpandablePromptInput
-                  label="内容"
+                  label={coreT({key: "ui.common.content"})}
                   disabled={readOnly}
                   openEditor={() =>
                     openPromptEditor(block.name, block.content, v =>
@@ -159,7 +160,7 @@ export function DynamicBlocksCard({
                           ),
                         )
                       }
-                      placeholder="支持 $time、$week_cn、$filetree…"
+                      placeholder={coreT({key: "ui.agent.attach_macro_hint"})}
                       disabled={readOnly}
                       style={ctx.style}
                       selection={ctx.selection}

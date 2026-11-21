@@ -4,6 +4,8 @@
  */
 import React from 'react';
 
+import {coreT} from '@/i18n/core';
+
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';
 import {FormSelectField} from '../../form/FormSelectField';
@@ -26,20 +28,20 @@ export function AgentEditorModelSection({
   readOnly = false,
 }: Props) {
   return (
-    <FormSectionCard title="模型" tokens={tokens}>
+    <FormSectionCard title={coreT({key: "ui.common.model"})} tokens={tokens}>
       <FormField
-        label="专属模型"
+        label={coreT({key: "ui.agent.model_dedicated"})}
         tokens={tokens}
-        hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
+        hint={coreT({key: "ui.agent.model_follow_hint"})}
       >
         <FormSelectField
           tokens={tokens}
           value={value}
           onChange={onChange}
           options={options}
-          sheetTitle="选择专属模型"
-          placeholder="默认(跟随)"
-          emptyLabel="请先在「服务商」页添加模型"
+          sheetTitle={coreT({key: "ui.agent.model_picker_title"})}
+          placeholder={coreT({key: "ui.agent.model_follow_option"})}
+          emptyLabel={coreT({key: "ui.agent.no_models_hint"})}
           disabled={readOnly}
         />
       </FormField>

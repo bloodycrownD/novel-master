@@ -8,6 +8,7 @@ import {Text, View} from 'react-native';
 
 import {DEFAULT_SKILLS_INDEX_PREFIX} from '@novel-master/core/prompt';
 import {AgentEditorState, PROMPT_REGION_LABELS, WORKPLACE_ASSISTANT_TEXT_LABEL, WORKPLACE_BLOCK_HINT, WORKPLACE_BLOCK_LABEL, WORKPLACE_DISABLED_HINT} from '@/config-forms/agent';
+import {coreT} from '@/i18n/core';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormSectionCard} from '../../form/FormSectionCard';
@@ -22,7 +23,7 @@ import type {AgentEditorFormState} from './useAgentEditorFormState';
 import type {AgentEditorFormPatch} from './useAgentEditorFormState';
 
 // 自定义附加信息输入框文案（core 未导出，UI 层自管）。
-const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
+const CUSTOM_ATTACH_TEXT_LABEL = coreT({key: "ui.agent.attach_text_label_mobile"});
 
 type Props = {
   tokens: AgentEditorTokens;
@@ -56,12 +57,12 @@ export function PromptLayoutSection({
   openPromptEditor,
   readOnly = false,
 }: Props) {
-  /** 四区小标题；旧 core 包缺键时用本地兜底，避免标题空白。 */
+  /** 四区小标题（catalog 键面兜底由 coreT 回显承担）。 */
   const promptSectionLabels = {
-    system: PROMPT_REGION_LABELS.systemBlocks ?? '系统区',
-    skills: PROMPT_REGION_LABELS.skillsBlocks ?? '技能索引区',
+    system: PROMPT_REGION_LABELS.systemBlocks,
+    skills: PROMPT_REGION_LABELS.skillsBlocks,
     persist: PROMPT_REGION_LABELS.persistBlocks,
-    chat: PROMPT_REGION_LABELS.chatBlocks ?? '会话区',
+    chat: PROMPT_REGION_LABELS.chatBlocks,
     dynamic: PROMPT_REGION_LABELS.dynamicBlocks,
   };
 
@@ -113,9 +114,9 @@ export function PromptLayoutSection({
           <>
             <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>{PROMPT_REGION_LABELS.skillsReadonlyHint}</Text>
             <ExpandablePromptInput
-              label="索引前缀语"
+              label={coreT({key: "ui.agent.skills_prefix_label"})}
               disabled={readOnly}
-              openEditor={() => openPromptEditor('索引前缀语', form.skillsPrefixText, value => patch({skillsPrefixText: value}))}
+              openEditor={() => openPromptEditor(coreT({key: "ui.agent.skills_prefix_label"}), form.skillsPrefixText, value => patch({skillsPrefixText: value}))}
               renderInline={ctx => (
                 <FormTextInput
                   tokens={tokens}
@@ -155,7 +156,7 @@ export function PromptLayoutSection({
           <>
             <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
               {/* 只读态（内置 general）不说「可编辑」，避免禁用控件与文案矛盾 */}
-              {readOnly ? '助手确认语（只读）。' : WORKPLACE_BLOCK_HINT}
+              {readOnly ? coreT({key: "ui.agent.assistant_text_readonly_hint"}) : WORKPLACE_BLOCK_HINT}
             </Text>
             <ExpandablePromptInput
               label={WORKPLACE_ASSISTANT_TEXT_LABEL}
@@ -200,7 +201,7 @@ export function PromptLayoutSection({
 
       <PromptSectionHead label={promptSectionLabels.chat} tokens={tokens} switchValue={form.customAttachEnabled} onSwitchChange={value => patch({customAttachEnabled: value})} disabled={readOnly} />
       <View style={blockCardStyle}>
-        <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>用户聊天历史，开启后可给每次输入附加额外内容</Text>
+        <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>{coreT({key: "ui.agent.attach_toggle_hint"})}</Text>
         {form.customAttachEnabled ? (
           <ExpandablePromptInput
             label={CUSTOM_ATTACH_TEXT_LABEL}
@@ -214,7 +215,7 @@ export function PromptLayoutSection({
                 tokens={tokens}
                 value={form.customAttachText}
                 onChangeText={value => patch({customAttachText: value})}
-                placeholder="支持 $time、$week_cn、$filetree…"
+                placeholder={coreT({key: "ui.agent.attach_macro_hint"})}
                 disabled={readOnly}
                 style={ctx.style}
                 selection={ctx.selection}

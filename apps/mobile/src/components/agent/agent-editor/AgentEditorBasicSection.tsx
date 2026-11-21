@@ -7,6 +7,8 @@ import {Pressable, Text, View} from 'react-native';
 
 import {MODE_OPTIONS, type AgentMode} from '@/config-forms/agent';
 
+import {coreT} from '@/i18n/core';
+
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';
 import {FormSelectField} from '../../form/FormSelectField';
@@ -41,7 +43,7 @@ export function AgentEditorBasicSection({
   readOnly = false,
 }: Props) {
   return (
-    <FormSectionCard title="基本信息" tokens={tokens}>
+    <FormSectionCard title={coreT({key: "ui.agent.basic_info"})} tokens={tokens}>
       <View style={styles.yamlActions}>
         <Pressable
           disabled={readOnly}
@@ -49,7 +51,7 @@ export function AgentEditorBasicSection({
           onPress={() => onImportYaml()}
         >
           <Text style={{color: tokens.primary, fontWeight: '600'}}>
-            导入 YAML
+            {coreT({key: "ui.agent.import_yaml"})}
           </Text>
         </Pressable>
         <Pressable
@@ -58,11 +60,11 @@ export function AgentEditorBasicSection({
           onPress={() => onExportYaml()}
         >
           <Text style={{color: tokens.primary, fontWeight: '600'}}>
-            导出 YAML
+            {coreT({key: "ui.agent.export_yaml"})}
           </Text>
         </Pressable>
       </View>
-      <FormField label="名称" tokens={tokens}>
+      <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
         <FormTextInput
           tokens={tokens}
           value={name}
@@ -70,20 +72,20 @@ export function AgentEditorBasicSection({
           disabled={readOnly}
         />
       </FormField>
-      <FormField label="作用域" tokens={tokens}>
+      <FormField label={coreT({key: "ui.agent.scope"})} tokens={tokens}>
         <FormSelectField
           tokens={tokens}
           value={mode}
           onChange={value => onModeChange(value as AgentMode)}
           options={MODE_OPTIONS}
-          sheetTitle="选择作用域"
+          sheetTitle={coreT({key: "ui.agent.scope_picker_title"})}
           disabled={readOnly}
         />
       </FormField>
       <FormField
-        label="描述"
+        label={coreT({key: "ui.common.description"})}
         tokens={tokens}
-        hint="向 task 工具说明这个智能体擅长什么，可留空。"
+        hint={coreT({key: "ui.agent.description_hint"})}
       >
         <FormTextInput
           tokens={tokens}
@@ -91,7 +93,7 @@ export function AgentEditorBasicSection({
           onChangeText={onDescriptionChange}
           multiline
           disabled={readOnly}
-          placeholder="例如：擅长检索代码库、写测试。"
+          placeholder={coreT({key: "ui.agent.description_placeholder"})}
         />
       </FormField>
     </FormSectionCard>

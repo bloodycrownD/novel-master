@@ -16,6 +16,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 import {PROMPT_INLINE_MAX_HEIGHT} from './prompt-collapse';
 
 type PromptSelection = {start: number; end: number};
@@ -70,7 +71,7 @@ export function ExpandablePromptInput({label, renderInline, openEditor, disabled
           testID={testID ? `${testID}-fullscreen` : undefined}
           onPress={handleOpenPress}
           disabled={disabled}
-          accessibilityLabel="全屏编辑"
+          accessibilityLabel={coreT({key: "ui.common.open_fullscreen"})}
           style={[styles.openBtn, disabled ? styles.openBtnDisabled : null]}
           hitSlop={8}
         >

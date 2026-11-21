@@ -7,7 +7,9 @@
 import React from 'react';
 import {Text} from 'react-native';
 
-import {TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
+import {BUILTIN_TOOL_CATALOG, TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
+
+import {coreT} from '@/i18n/core';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';
@@ -35,20 +37,20 @@ export function AgentEditorToolsSection({
   readOnly = false,
 }: Props) {
   return (
-    <FormSectionCard title="工具策略" tokens={tokens}>
-      <FormField label="模式" tokens={tokens}>
+    <FormSectionCard title={coreT({key: "ui.agent.tools_section"})} tokens={tokens}>
+      <FormField label={coreT({key: "ui.agent.tools_mode_label"})} tokens={tokens}>
         <FormSelectField
           tokens={tokens}
           value={toolsMode}
           onChange={value => onToolsModeChange(value as ToolsMode)}
           options={TOOL_MODE_OPTIONS}
-          sheetTitle="工具名单模式"
+          sheetTitle={coreT({key: "ui.agent.tools_mode_picker_title"})}
           disabled={readOnly}
         />
       </FormField>
       {toolsMode !== 'default' ? (
         <FormField
-          label={toolsMode === 'allow' ? '白名单工具' : '黑名单工具'}
+          label={toolsMode === 'allow' ? coreT({key: "ui.agent.allowlist_label"}) : coreT({key: "ui.agent.denylist_label"})}
           tokens={tokens}
         >
           <ToolPolicyPicker
@@ -60,8 +62,7 @@ export function AgentEditorToolsSection({
         </FormField>
       ) : (
         <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          未配置时使用全部内置工具（11
-          个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search。
+          {coreT({key: "ui.agent.builtin_tools_hint", params: {count: String(BUILTIN_TOOL_CATALOG.length)}})}
         </Text>
       )}
     </FormSectionCard>
