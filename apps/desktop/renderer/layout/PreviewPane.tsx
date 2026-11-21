@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { MermaidMarkdown } from "../components/MermaidMarkdown";
 import {
   createTextAnnotator,
@@ -320,7 +321,7 @@ export function PreviewPane() {
       } else {
         const scope = toCoreVfsScope( previewFile.workspaceScope, projectId, sessionId );
         const msg = formatVfsErrorForUser( { code: result.error.code, message: result.error.message }, scope );
-        showToast(`保存失败：${msg}`);
+        showToast(`${coreT({key: "ui.common.save_failed"})}：${msg}`);
       }
     } finally {
       setSaving(false);
@@ -331,16 +332,16 @@ export function PreviewPane() {
 
   return (
     <>
-      <header className="column-header" id="preview-header" aria-label="文件预览">
+      <header className="column-header" id="preview-header" aria-label={coreT({key: "ui.vfs.preview_title"})}>
         <PreviewEditorTabs />
         <div className="column-header__actions">
           {physicalReadOnly ? null : (
             <SegmentedControl
-              aria-label="预览模式"
+              aria-label={coreT({key: "ui.vfs.preview_mode_label"})}
               value={mode}
               options={[
-                { value: "read", label: "预览" },
-                { value: "edit", label: "编辑" },
+                { value: "read", label: coreT({key: "ui.common.preview"}) },
+                { value: "edit", label: coreT({key: "ui.common.edit"}) },
               ]}
               onChange={setMode}
             />
@@ -351,29 +352,29 @@ export function PreviewPane() {
               disabled={!isDirty || saving}
               onClick={() => void save()}
             >
-              {saving ? "保存中…" : "保存"}
+              {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
             </Button>
           ) : null}
         </div>
       </header>
-      <section id="preview-pane" aria-label="文件预览">
+      <section id="preview-pane" aria-label={coreT({key: "ui.vfs.preview_title"})}>
         {!previewFile ? (
           <div className="preview-body" id="preview-body">
             <p className="preview-empty">
               {mode === "edit"
-                ? "在工作区选择文件以编辑"
-                : "在工作区选择文件以预览"}
+                ? coreT({key: "ui.vfs.select_to_edit"})
+                : coreT({key: "ui.vfs.select_to_preview"})}
             </p>
           </div>
         ) : showMissing ? (
           <div className="preview-body" id="preview-body">
             <p className="preview-empty preview-empty--deleted">
-              文件已删除或不存在
+              {coreT({key: "ui.vfs.file_missing"})}
             </p>
           </div>
         ) : loading ? (
           <div className="preview-body" id="preview-body">
-            <p className="preview-empty">加载中…</p>
+            <p className="preview-empty">{coreT({key: "ui.common.loading"})}</p>
           </div>
         ) : mode === "read" ? (
           <div className="preview-body" id="preview-body">
@@ -383,32 +384,32 @@ export function PreviewPane() {
                   <MermaidMarkdown content={content} />
                 </div>
               ) : (
-                <p className="preview-empty">（空文件）</p>
+                <p className="preview-empty">{coreT({key: "ui.common.empty_file"})}</p>
               )
             ) : (
-              <pre className="preview-text">{content || "（空文件）"}</pre>
+              <pre className="preview-text">{content || coreT({key: "ui.common.empty_file"})}</pre>
             )}
           </div>
         ) : (
           <div className="preview-editor-shell">
             <CodeEditor
               id="preview-editor"
-              aria-label="文件编辑"
+              aria-label={coreT({key: "ui.vfs.editor_title"})}
               value={content}
               languagePath={previewFile.path}
               onChange={setContent}
               onSave={() => void save()}
             />
             <div className="preview-editor-status">
-              <span>{lineCount} 行</span>
+              <span>{coreT({key: "ui.vfs.line_count", params: {count: lineCount}})}</span>
               <div className="preview-editor-status__right">
-                <span className="preview-editor-status__hint">Ctrl+S 保存</span>
+                <span className="preview-editor-status__hint">{coreT({key: "ui.vfs.ctrl_s_hint"})}</span>
                 <span
                   className={
                     isDirty ? "preview-editor-status__dirty" : undefined
                   }
                 >
-                  {isDirty ? "未保存" : "已保存"}
+                  {isDirty ? coreT({key: "ui.common.unsaved_title"}) : coreT({key: "ui.common.saved"})}
                 </span>
               </div>
             </div>

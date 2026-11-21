@@ -1,3 +1,4 @@
+import { coreT } from "@shared/logic/core-i18n";
 import { useShellNav } from "../providers/ShellNavProvider";
 import { previewTabKey } from "./preview-tab-utils";
 
@@ -17,7 +18,7 @@ export function PreviewEditorTabs() {
     <div
       className="preview-editor-tabs"
       role="tablist"
-      aria-label="打开的文件"
+      aria-label={coreT({key: "ui.vfs.tabs_title"})}
     >
       {previewTabs.map((tab) => {
         const key = previewTabKey(tab.workspaceScope, tab.path);
@@ -34,7 +35,7 @@ export function PreviewEditorTabs() {
               className="preview-editor-tabs__label"
               role="tab"
               aria-selected={isActive}
-              title={isDeleted ? `${tab.path}（已删除）` : tab.path}
+              title={isDeleted ? coreT({key: "ui.vfs.tab_deleted_suffix", params: {path: tab.path}}) : tab.path}
               onClick={() => selectPreviewFile(tab.workspaceScope, tab.path)}
             >
               {tab.name}
@@ -42,7 +43,7 @@ export function PreviewEditorTabs() {
             <button
               type="button"
               className="preview-editor-tabs__close"
-              aria-label="关闭"
+              aria-label={coreT({key: "ui.common.close"})}
               onClick={(event) => {
                 event.stopPropagation();
                 closePreviewTab(tab.workspaceScope, tab.path);
