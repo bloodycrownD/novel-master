@@ -32,7 +32,7 @@ const WRITE_CHUNK_BYTES = 256 * 1024;
 /**
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
  *
- * 成功路径走返回值；「覆盖已成功、收尾失败」沿 `DB_SYNC_REPLACE_INCOMPLETE` 走 Result 通道
+ * 成功路径走返回值；「覆盖已成功、收尾失败」沿 `DB_BACKUP_REPLACE_INCOMPLETE` 走 Result 通道
  * （error-matrix-final R2：全链路纯 Result，异常哨兵已退役）。
  */
 type DbImportOutcome = {
@@ -75,7 +75,7 @@ export namespace DbBackupService {
    * - 文件级校验（存在性 / 体积）为已知失败，沿 `Result.err` 上行（错误通道迁移五期）。
    * - 备份步裸 await，失败即抛（全新安装 dbPath 不存在时跳过，此时无可回滚）。
    * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后返回
-   *   `DB_SYNC_REPLACE_INCOMPLETE`，**不回滚**。
+   *   `DB_BACKUP_REPLACE_INCOMPLETE`，**不回滚**。
    * - 回滚失败**不得静默**：与原错误合并成一条可读信息，并保留 bak 副本
    *   （mobile 从不删 bak，用户还能手工救回）。
    */
@@ -122,13 +122,13 @@ export namespace DbBackupService {
         }
       } catch (error) {
         if (databaseReplaced) {
-          // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」沿 DB_SYNC_REPLACE_INCOMPLETE
+          // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」沿 DB_BACKUP_REPLACE_INCOMPLETE
           // 如实报上去（error-matrix-final R2：异常哨兵 DatabaseReplacedError 退役，
           // providerTablesRestored 进 details；调用方判 key 后重建 runtime）。
           const recoveryHint = bakCreated ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。` : '';
           // cause 必须走第三参 options（塞 params 会被 firstDescriptorOf 误认成 descriptor，
           // 污染 messageKey——desktop 同款教训）。
-          return Result.err(new AppError('DB_SYNC_REPLACE_INCOMPLETE', {detail: `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}${recoveryHint}`, reason: errorDetail(error), recoveryHint, providerTablesRestored: false}, {cause: error}));
+          return Result.err(new AppError('DB_BACKUP_REPLACE_INCOMPLETE', {detail: `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}${recoveryHint}`, reason: errorDetail(error), recoveryHint, providerTablesRestored: false}, {cause: error}));
         }
 
         // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。
@@ -181,7 +181,7 @@ export namespace DbBackupService {
       } finally {
         await stream.close();
       }
-      // 委托 FromPath：DbImportOutcome 必须原样透传（含 DB_SYNC_REPLACE_INCOMPLETE 的
+      // 委托 FromPath：DbImportOutcome 必须原样透传（含 DB_BACKUP_REPLACE_INCOMPLETE 的
       // 类型），漏了这一层委托就拿不到「已换代」信号。
       return await importFromPath(tmpPath);
     } finally {

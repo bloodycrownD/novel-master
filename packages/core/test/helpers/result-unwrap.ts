@@ -16,6 +16,16 @@ export function unwrap<T>(r: Result<T, AppError> | T): T {
   return r;
 }
 
+/** 取 Err 载荷（配合 key/cause 断言）；Ok 或非 Result 形状即断言失败（error-matrix-final R1 起高频）。 */
+export function unwrapErr<T, E>(r: Result<T, E> | T): E {
+  if (r !== null && typeof r === "object" && "ok" in r) {
+    const result = r as Result<T, E>;
+    assert.ok(!result.ok, `预期 Err 分支，实际 ${result.ok ? "Ok" : ""}`);
+    if (!result.ok) return result.error;
+  }
+  return assert.fail("预期 Err 分支，实际非 Result 形状");
+}
+
 /**
  * 旧 `assert.rejects` 的 Result 版（同形替换用）：域方法不再 throw 后，
  * 失败走 `Result.err`——取 Err 载荷交给断言回调。call 接 promise 或 thunk。

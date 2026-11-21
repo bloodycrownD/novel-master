@@ -1,4 +1,4 @@
-import {  rejectsErr, unwrap  } from "../../helpers/result-unwrap.js";
+import {  rejectsErr, unwrap, unwrapErr  } from "../../helpers/result-unwrap.js";
 import {  outcomeValue  } from "../../helpers/outcome-value.js";
 import {  Result  } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
@@ -650,15 +650,19 @@ describe("runAgentTurn", () => {
         throw new Error("baseline capture failed");
       },
     });
-    await assert.rejects(
-      () =>
-        AgentTurnRunner.run(
-          runtime,
-          { projectId: "p", sessionId: "s" },
-          "纯文本消息",
-        ),
-      /baseline capture failed/,
+    // error-matrix-final R1：未知异常转 Result（cause 透传），不再 reject。
+    // 本用例的 runtime stub 未注入 delete ⇒ append 的回滚补偿也失败 ⇒
+    // 落 INFRA_ROLLBACK_DEGRADED（rootCause 挂 cause、回滚清单进 details）——
+    // 恰好顺带钉住「回滚损坏优先上报」的分级语义。
+    const rD = unwrapErr(
+      await AgentTurnRunner.run(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "纯文本消息",
+      ),
     );
+    assert.equal(rD.key, "INFRA_ROLLBACK_DEGRADED");
+    assert.match((rD.cause as Error).message, /baseline capture failed/);
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
@@ -686,15 +690,16 @@ describe("runAgentTurn", () => {
         backfilled.push({ sessionId, projectId });
       },
     });
-    await assert.rejects(
-      () =>
-        AgentTurnRunner.run(
-          runtime,
-          { projectId: "p", sessionId: "s" },
-          "会触发 capture 失败的消息",
-        ),
-      /capture boom/,
+    // error-matrix-final R1：未知异常转 INFRA_UNEXPECTED_ERROR（cause 透传），不再 reject。
+    const rC = unwrapErr(
+      await AgentTurnRunner.run(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "会触发 capture 失败的消息",
+      ),
     );
+    assert.equal(rC.key, "INFRA_UNEXPECTED_ERROR");
+    assert.match((rC.cause as Error).message, /capture boom/);
     // 入口 baseline 回填仍执行 → 历史消息的 baseline checkpoint 存在、会话可回滚
     assert.equal(backfilled.length, 1, "入口必须调一次 backfillMissingBaselines");
     // append 的补偿动作：刚写入的 user 消息被删

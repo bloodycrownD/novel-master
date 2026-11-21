@@ -268,7 +268,7 @@ export const ErrorCodes = {
   DB_BACKUP_SECRET_ROW_VERSION_NOT_NUMBER: {code: 125014, desc: "secret row version is not a number", messageKey: "error.db_backup.secret_row_version_not_number"},
   // 库已换代但收尾（服务商三表恢复）失败：不回滚、调用方须重建 runtime——
   // DatabaseReplacedError 异常哨兵退役（error-matrix-final R2）改走此码。
-  DB_SYNC_REPLACE_INCOMPLETE: {code: 125015, desc: "database replaced but provider tables restore failed", messageKey: "error.db_backup.replace_incomplete"},
+  DB_BACKUP_REPLACE_INCOMPLETE: {code: 125015, desc: "database replaced but provider tables restore failed", messageKey: "error.db_backup.replace_incomplete"},
 } as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;

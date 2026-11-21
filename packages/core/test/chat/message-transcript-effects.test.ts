@@ -3,7 +3,7 @@
  */
 
 import {  outcomeValue  } from "../helpers/outcome-value.js";
-import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  unwrap, unwrapErr, rejectsErr  } from "../helpers/result-unwrap.js";
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
 import {  describe, it  } from 'node:test';
@@ -267,11 +267,13 @@ describe('MessageTranscriptEffectsService', () => {
       sessionKkv: failingKkv,
     });
 
-    // CoordinatedWrite 的补偿机制依赖 throw 回滚通道：中间步骤失败仍以 reject 冒泡。
-    await assert.rejects(
-      () => effects.setMessageFloorAtMessage(project.id, session.id, m3.id),
-      /clear-rule-snapshot boom/,
+    // error-matrix-final R1：CoordinatedWrite 未知异常转 INFRA_UNEXPECTED_ERROR（cause
+    // 透传），补偿（逆序回滚）沿 Result 交回，不再 reject。
+    const sc3 = unwrapErr(
+      await effects.setMessageFloorAtMessage(project.id, session.id, m3.id),
     );
+    assert.equal(sc3.key, "INFRA_UNEXPECTED_ERROR");
+    assert.match((sc3.cause as Error).message, /clear-rule-snapshot boom/);
 
     // 可见性回滚：与调用前完全一致（hide-prefix 的 showRange 补偿 + show-suffix 的 hideRange 补偿）
     const after = outcomeValue(await ctx.messages.listBySession(session.id));

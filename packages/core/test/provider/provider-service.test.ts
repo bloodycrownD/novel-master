@@ -1,4 +1,4 @@
-import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
+import {  unwrap, unwrapErr, rejectsErr  } from "../helpers/result-unwrap.js";
 import {  describe, it, mock  } from "node:test";
 import assert from "node:assert/strict";
 import {  randomUUID  } from "node:crypto";
@@ -281,16 +281,17 @@ describe("ProviderService", () => {
       conn: ctx.conn,
     });
 
-    await assert.rejects(
-      () =>
-        service.create({
-          protocol: "openai",
-          baseUrl: "https://example.com/v1",
-          displayName: "sc2gw",
-          apiKey: "half-cred",
-        }),
-      /insert boom/,
+    // error-matrix-final R1：CoordinatedWrite 未知异常转 INFRA_UNEXPECTED_ERROR（cause 透传）。
+    const sc2 = unwrapErr(
+      await service.create({
+        protocol: "openai",
+        baseUrl: "https://example.com/v1",
+        displayName: "sc2gw",
+        apiKey: "half-cred",
+      }),
     );
+    assert.equal(sc2.key, "INFRA_UNEXPECTED_ERROR");
+    assert.match((sc2.cause as Error).message, /insert boom/);
 
     // 不留半套凭据：secretStore 里不应残留任何含 half-cred 的条目
     const leftoverValues = [...secretMap.values()].filter((v) =>

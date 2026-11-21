@@ -31,7 +31,7 @@ const SQLITE_HEADER_BYTES = 16;
 /**
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
  *
- * 成功路径走返回值；「覆盖已成功、收尾失败」沿 `DB_SYNC_REPLACE_INCOMPLETE` 走 Result 通道
+ * 成功路径走返回值；「覆盖已成功、收尾失败」沿 `DB_BACKUP_REPLACE_INCOMPLETE` 走 Result 通道
  * （error-matrix-final R2：全链路纯 Result，异常哨兵已退役）。
  */
 type DbImportOutcome = {
@@ -94,7 +94,7 @@ export namespace DbBackupService {
    *   「备份失败 → 覆盖成功 → 回滚失败」这条链路上没有任何一处会中断，
    *   最终库文件已是远端快照而本地改动无声消失。
    * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后（databaseReplaced）
-   *   返回 `DB_SYNC_REPLACE_INCOMPLETE`，**不回滚**——库已经是新快照。
+   *   返回 `DB_BACKUP_REPLACE_INCOMPLETE`，**不回滚**——库已经是新快照。
    * - 三条终态各自对 bak 的处置：**①回滚失败** ⇒ 保留（用户要能手工救回）；
    *   **②覆盖失败且回滚成功** ⇒ 冗余，finally 删掉；**③覆盖成功但三表恢复失败**
    *   ⇒ 同样保留（CR-F01：此时 bak 是磁盘上唯一一份含未同步本地改动的旧库，
@@ -151,13 +151,13 @@ export namespace DbBackupService {
         keepBackupForManualRecovery = true;
         const recoveryHint = bakCreated ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。` : "导入前没有可备份的活动库文件，无旧库副本可保留。";
         const reason = Errors.text(error);
-        // error-matrix-final R2：「已换代 + 收尾失败」沿 DB_SYNC_REPLACE_INCOMPLETE 走
+        // error-matrix-final R2：「已换代 + 收尾失败」沿 DB_BACKUP_REPLACE_INCOMPLETE 走
         // Result 通道（providerTablesRestored 进 details）——异常哨兵 DatabaseReplacedError 退役。
         // 此时不得回滚：库已是新快照，回滚会把用户拉回来的数据丢掉。
         // detail 保持旧 message 口径（完整中文句，边界 formatIpcError 直出给用户）。
         // cause 必须走第三参 options——塞进 params 会被 firstDescriptorOf 误认成
         // descriptor（AppError 实例带 key 字段），把 messageKey 污染成内层错误 key。
-        return Result.err(new AppError("DB_SYNC_REPLACE_INCOMPLETE", {detail: `数据库已导入，但本机服务商配置恢复失败：${reason}${recoveryHint}`, reason, recoveryHint, providerTablesRestored: false}, {cause: error}));
+        return Result.err(new AppError("DB_BACKUP_REPLACE_INCOMPLETE", {detail: `数据库已导入，但本机服务商配置恢复失败：${reason}${recoveryHint}`, reason, recoveryHint, providerTablesRestored: false}, {cause: error}));
       }
 
       // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。

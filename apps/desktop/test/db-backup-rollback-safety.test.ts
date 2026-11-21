@@ -149,7 +149,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     await DesktopRuntimeSingleton.rebootstrap();
   });
 
-  it("覆盖已成功但收尾失败时返回 DB_SYNC_REPLACE_INCOMPLETE 且不回滚", async () => {
+  it("覆盖已成功但收尾失败时返回 DB_BACKUP_REPLACE_INCOMPLETE 且不回滚", async () => {
     const runtimeR = await DesktopRuntimeSingleton.get();
     if (!runtimeR.ok) throw runtimeR.error;
     const runtime = runtimeR.value;
@@ -159,7 +159,7 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
 
     // 覆盖动作照常发生，但落进去的是一份「不是数据库」的内容 ⇒
     // 恢复三表用的短连接打不开 ⇒ 收尾失败。
-    // 这正是 DB_SYNC_REPLACE_INCOMPLETE 的场景：库已换代，**不得回滚**。
+    // 这正是 DB_BACKUP_REPLACE_INCOMPLETE 的场景：库已换代，**不得回滚**。
     const notADb = join(tempDir, "not-a-db.bin");
     await writeFile(notADb, Buffer.alloc(4096, 0x41));
     const realCopy = copyFile;
@@ -173,9 +173,9 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
     });
     try {
       const result = await DbBackupService.importFromPath(src);
-      assert.ok(!result.ok, `必须是 Err（DB_SYNC_REPLACE_INCOMPLETE），实际 ${result.ok ? "Ok" : result.error.key}`);
+      assert.ok(!result.ok, `必须是 Err（DB_BACKUP_REPLACE_INCOMPLETE），实际 ${result.ok ? "Ok" : result.error.key}`);
       const error = result.error;
-      assert.equal(error.key, "DB_SYNC_REPLACE_INCOMPLETE", `必须是 DB_SYNC_REPLACE_INCOMPLETE，实际: ${error.key}`);
+      assert.equal(error.key, "DB_BACKUP_REPLACE_INCOMPLETE", `必须是 DB_BACKUP_REPLACE_INCOMPLETE，实际: ${error.key}`);
       const details = error.details as {providerTablesRestored?: boolean; recoveryHint?: string};
       assert.equal(details.providerTablesRestored, false);
       assert.match(error.message, /服务商配置恢复失败/);

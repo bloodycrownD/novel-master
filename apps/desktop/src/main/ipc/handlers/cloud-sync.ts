@@ -135,10 +135,10 @@ export namespace CloudSync {
       const pulled = await service.pull({ checkpoint: () => scope.checkpoint() });
       // 已知失败沿 Result 到达；coordinator 侧故障仍走下方 catch。
       if (!pulled.ok) {
-        // 换代失败（error-matrix-final R2：DB_SYNC_REPLACE_INCOMPLETE 沿 Result 到达，
+        // 换代失败（error-matrix-final R2：DB_BACKUP_REPLACE_INCOMPLETE 沿 Result 到达，
         // 不再经异常通道）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」
         // 更糟（后续请求继续绑在已关连接上）。
-        if (pulled.error.key === "DB_SYNC_REPLACE_INCOMPLETE") {
+        if (pulled.error.key === "DB_BACKUP_REPLACE_INCOMPLETE") {
           const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
           if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
           // providerTablesRestored 等字段值只进日志；用户文案在 error 的 detail 里，
@@ -161,10 +161,10 @@ export namespace CloudSync {
       }
       return { kind: "completed", value: result };
     } catch (err) {
-      // 库已换代但收尾失败（error-matrix-final R2：DB_SYNC_REPLACE_INCOMPLETE 沿 Result
+      // 库已换代但收尾失败（error-matrix-final R2：DB_BACKUP_REPLACE_INCOMPLETE 沿 Result
       // 到达此处）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」更糟
       // （后续请求继续绑在已关连接上）。
-      if (err instanceof AppError && err.key === "DB_SYNC_REPLACE_INCOMPLETE") {
+      if (err instanceof AppError && err.key === "DB_BACKUP_REPLACE_INCOMPLETE") {
         const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
         if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
         // providerTablesRestored 等字段值只进日志；用户文案在 error 的 descriptor 里，

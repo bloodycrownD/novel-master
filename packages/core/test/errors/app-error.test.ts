@@ -19,6 +19,8 @@ function domainOf(key: string): string {
 
 /** 与 ErrorParamsMap 手工对齐的字段清单（带 ? 尾缀 = 可选）；漂移由下面的占位符守卫与 T-K2 编译期断言抓。 */
 const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
+  INFRA_ROLLBACK_DEGRADED: ["causeText", "steps", "rollbackErrors?"],
+  DB_BACKUP_REPLACE_INCOMPLETE: ["reason", "recoveryHint?", "providerTablesRestored?"],
   AGENT_NOT_FOUND: ["agentId"],
   AGENT_REFERENCED_NOT_FOUND: ["agentId", "detail"],
   AGENT_INVALID_MODEL: ["modelId?"],
