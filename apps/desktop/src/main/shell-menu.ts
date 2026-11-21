@@ -5,6 +5,7 @@ import { app, BrowserWindow, Menu, dialog, type MenuItemConstructorOptions } fro
 import { LogFactory } from "@novel-master/core/log";
 import type { ShellMenuId } from "../../shared/ipc-types.js";
 import { DesktopDiagnostics } from "./log/desktop-diagnostics.js";
+import { coreT } from "../../shared/logic/core-i18n.js";
 
 const log = LogFactory.create("desktop.shell-menu");
 
@@ -58,9 +59,9 @@ export const ShellMenu = {
           { role: "redo", label: "重做" },
           { type: "separator" },
           { role: "cut", label: "剪切" },
-          { role: "copy", label: "复制" },
-          { role: "paste", label: "粘贴" },
-          { role: "selectAll", label: "全选" },
+          { role: "copy", label: coreT({key: "ui.common.copy"}) },
+          { role: "paste", label: coreT({key: "ui.common.paste"}) },
+          { role: "selectAll", label: coreT({key: "ui.common.select_all"}) },
         ],
       },
       {
@@ -88,7 +89,7 @@ export const ShellMenu = {
           { label: "打开日志目录", click: () => deps.onOpenLogsDir() },
           { label: "导出诊断包", click: () => deps.onExportDiagnostics() },
           { type: "separator" },
-          { label: "关于 Novel Master", click: () => deps.onAbout() },
+          { label: coreT({key: "ui.nav.about"}), click: () => deps.onAbout() },
         ],
       },
     ];
