@@ -44,7 +44,7 @@ export function toPosix(file: string): string {
 }
 
 export function isTestPath(rel: string): boolean {
-  return rel.includes("/test/") || rel.includes("/__tests__/") || rel.includes("/e2e/") || /\.(test|spec)\.tsx?$/.test(rel);
+  return rel.includes("/test/") || rel.includes("/test-utils/") || rel.includes("/__tests__/") || rel.includes("/e2e/") || /\.(test|spec)\.tsx?$/.test(rel);
 }
 
 /** 收集待扫文件：--changed 用 git 改动集（含未跟踪文件），否则用 paths，缺省 packages/core/src；测试路径默认剔除。 */

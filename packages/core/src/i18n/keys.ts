@@ -170,11 +170,13 @@ const ERROR_MESSAGE_KEYS = [
   "error.db_backup.secret_row_ciphertext_missing",
   "error.db_backup.secret_row_algo_empty",
   "error.db_backup.secret_row_version_not_number",
+  "error.db_backup.replace_incomplete",
   // infra：启动基线
   "error.infra.baseline_too_old",
   "error.infra.decode_invalid_schema",
   "error.infra.encode_not_supported",
   "error.infra.aborted",
+  "error.infra.rollback_degraded",
   "error.infra.invalid_abort_target",
   // prompt：布局校验与动态宏校验（PROMPT_INVALID_LAYOUT / PROMPT_INVALID_MACRO）
   "error.prompt.invalid_layout.workplace_nonempty_string",

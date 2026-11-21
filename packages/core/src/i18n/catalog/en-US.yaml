@@ -22,6 +22,7 @@ error:
     decode_invalid_schema: "Config data does not match its schema: {detail}"
     encode_not_supported: "Encoding is not supported for this format: {detail}"
     aborted: Operation cancelled.
+    rollback_degraded: "Coordinated write failed during rollback (original cause: {cause_text}; failed rollback steps: {steps})."
     invalid_abort_target: Unrecognized abort target.
   prompt:
     invalid_yaml: Invalid prompt YAML.
@@ -79,6 +80,8 @@ error:
     secret_row_ciphertext_missing: sksp_secrets row {row_index} is missing ciphertext (ref={ref})
     secret_row_algo_empty: sksp_secrets row {row_index} has an empty algo (ref={ref})
     secret_row_version_not_number: sksp_secrets row {row_index} has a non-numeric version (ref={ref})
+    # -- db_sync: database replaced but tail-end restore failed (DB_SYNC_REPLACE_INCOMPLETE; no rollback, runtime rebuild required) --
+    replace_incomplete: "Database imported, but restoring local provider config failed: {reason}{recovery_hint}"
 label:
   agent:
     max_steps: Max steps {n}

@@ -76,12 +76,15 @@ error:
     secret_row_ciphertext_missing: sksp_secrets 第 {row_index} 行 ciphertext 缺失（ref={ref}）
     secret_row_algo_empty: sksp_secrets 第 {row_index} 行 algo 为空（ref={ref}）
     secret_row_version_not_number: sksp_secrets 第 {row_index} 行 version 不是数字（ref={ref}）
+    # —— db_sync：库已换代但收尾失败（DB_SYNC_REPLACE_INCOMPLETE，不回滚、须重建 runtime）——
+    replace_incomplete: 数据库已导入，但本机服务商配置恢复失败：{reason}{recovery_hint}
   # —— infra：启动基线与 IPC 取消边界（INFRA_BASELINE_TOO_OLD，bootstrap 域不在词表，按 code 归 infra；IPC_ABORTED / IPC_INVALID_ABORT_TARGET 是 123 段控制流码，按域归 infra）——
   infra:
     baseline_too_old: 检测到当前数据库低于本版本最低支持版本（{minimum_version}）。请先升级到{minimum_version}，再升级到本版本。
     decode_invalid_schema: 配置数据不符合 schema：{detail}
     encode_not_supported: 此数据格式不支持写入：{detail}
     aborted: 操作已取消
+    rollback_degraded: 跨资源写在回滚阶段再次失败（原始原因：{cause_text}；回滚失败步骤：{steps}）
     invalid_abort_target: 无法识别的取消目标
   # —— prompt：布局校验（PROMPT_INVALID_LAYOUT）与动态宏校验（PROMPT_INVALID_MACRO）；{block} 是块名「N」片段，{hint} 是嵌套 descriptor ——
   prompt:

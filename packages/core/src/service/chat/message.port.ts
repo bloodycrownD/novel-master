@@ -118,8 +118,5 @@ export interface MessageService {
    *
    * 主要给 agent turn abort 回滚用——干净回到 turn 起点。
    */
-  truncateAfter(
-    sessionId: string,
-    afterMessageId: string | null
-  ): Promise<Result<void, AppError>>;
+  truncateAfter(sessionId: string, afterMessageId: string | null): Promise<Result<void, AppError>>;
 }

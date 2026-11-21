@@ -176,6 +176,7 @@ export const ErrorCodes = {
   // 110 INFRA 004-005：IPC 边界兜底（三期迁入；message 是边界格式化的动态文案，不配模板）。
   INFRA_VALIDATION_FAILED: {code: 110004, desc: "request validation failed"},
   INFRA_UNEXPECTED_ERROR: {code: 110005, desc: "unexpected internal error"},
+  INFRA_ROLLBACK_DEGRADED: {code: 110006, desc: "coordinated write rollback partially failed", messageKey: "error.infra.rollback_degraded"},
 
   // 114 FORMAT 001-999：外部 wire 版本串格式校验。
   FORMAT_INVALID_VERSION: {code: 114001, desc: "invalid version string"},
@@ -265,6 +266,9 @@ export const ErrorCodes = {
   DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING: {code: 125012, desc: "secret row ciphertext missing", messageKey: "error.db_backup.secret_row_ciphertext_missing"},
   DB_BACKUP_SECRET_ROW_ALGO_EMPTY: {code: 125013, desc: "secret row algo empty", messageKey: "error.db_backup.secret_row_algo_empty"},
   DB_BACKUP_SECRET_ROW_VERSION_NOT_NUMBER: {code: 125014, desc: "secret row version is not a number", messageKey: "error.db_backup.secret_row_version_not_number"},
+  // 库已换代但收尾（服务商三表恢复）失败：不回滚、调用方须重建 runtime——
+  // DatabaseReplacedError 异常哨兵退役（error-matrix-final R2）改走此码。
+  DB_SYNC_REPLACE_INCOMPLETE: {code: 125015, desc: "database replaced but provider tables restore failed", messageKey: "error.db_backup.replace_incomplete"},
 } as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;
