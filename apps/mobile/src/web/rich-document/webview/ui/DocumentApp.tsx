@@ -11,7 +11,8 @@
  */
 import type {ComponentChildren} from 'preact';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
-import {OVER_LIMIT_HINT, DocumentModel, type DocumentPayload} from '../runtime/document-model';
+import {DocumentModel, type DocumentPayload} from '../runtime/document-model';
+import {RichDocumentBridge} from '../runtime/bridge';
 
 type DocumentAppProps = {
   payload: DocumentPayload;
@@ -39,7 +40,9 @@ export function DocumentApp({payload}: DocumentAppProps) {
     children.push(body);
   }
   if (overLimit) {
-    children.push(<div className="over-limit-hint">{OVER_LIMIT_HINT}</div>);
+    // 超限提示文案走第二桥 labels 读取口（宿主 init.labels 下发）；
+    // 旧宿主/缺省由 DEFAULT_RICH_DOCUMENT_UI_LABELS 回退原常量，渲染值恒存在。
+    children.push(<div className="over-limit-hint">{RichDocumentBridge.currentLabels().ui['ui.rich_document.over_limit_hint']}</div>);
   }
   return children;
 }

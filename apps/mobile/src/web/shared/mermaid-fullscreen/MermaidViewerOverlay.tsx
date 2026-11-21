@@ -32,6 +32,8 @@ const MERMAID_BAKE_FALLBACK_MS = 200;
 type MermaidViewerOverlayProps = {
   svgClone: Element;
   onClose: () => void;
+  /** 关闭按钮 aria-label（宿主 init.labels 下发；缺省回退默认中文）。 */
+  closeLabel?: string;
 };
 
 type DragSession = {
@@ -46,7 +48,7 @@ type PinchSession = {
   basePan: MermaidViewerPan;
 };
 
-export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayProps) {
+export function MermaidViewerOverlay({svgClone, onClose, closeLabel = '关闭'}: MermaidViewerOverlayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{scale: number; pan: MermaidViewerPan}>({
@@ -380,7 +382,7 @@ export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayPr
       <div ref={stageRef} className="mermaid-fullscreen-stage" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} onClick={onStageClick}>
         <div ref={viewportRef} className="mermaid-fullscreen-viewport" />
       </div>
-      <button type="button" className="mermaid-fullscreen-close" aria-label="关闭" onClick={onClose}>
+      <button type="button" className="mermaid-fullscreen-close" aria-label={closeLabel} onClick={onClose}>
         ✕
       </button>
     </div>

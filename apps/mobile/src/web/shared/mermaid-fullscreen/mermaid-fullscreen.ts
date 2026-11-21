@@ -32,6 +32,10 @@ type MermaidViewerPost = (type: string, payload?: Record<string, unknown>) => vo
 
 const viewerSlot = ViewSlot.create<MermaidViewerViewProps | null>();
 
+/** 关闭按钮 aria-label 读取口（p27 R6 波 3-2d 两点接线）：各管线 set 注入，
+ * 渲染时惰性取（晚到的 init.labels 也能生效）；未注入回退组件缺省中文。 */
+let closeLabelProvider: (() => string) | null = null;
+
 /** Mermaid 全屏查看器运行时槽（模块内 holder，对象管理）。 */
 const viewerRuntime = {
   /** 向宿主发消息的通道（attachDelegation 注入）。 */
@@ -110,6 +114,11 @@ export const MermaidFullscreen = {
     });
   },
 
+  /** 注入关闭按钮 aria-label 读取口（p27 R6 波 3-2d 两点接线；每 bundle 单例，管线各自 set）。 */
+  setCloseLabelProvider: (fn: () => string): void => {
+    closeLabelProvider = fn;
+  },
+
   /**
    * portal 挂接一行化（web/C-orch-5）：注册覆盖层渲染到指定 portal 容器。
    * 各管线 main.ts 模块初始化处调用一次，替代原先逐行重复的注册块。
@@ -122,7 +131,7 @@ export const MermaidFullscreen = {
         render(null, portal);
         return;
       }
-      const overlay = h(MermaidViewerOverlay, {svgClone: props.svgClone, onClose: () => MermaidFullscreen.close(true)});
+      const overlay = h(MermaidViewerOverlay, {svgClone: props.svgClone, onClose: () => MermaidFullscreen.close(true), closeLabel: closeLabelProvider?.() ?? undefined});
       render(overlay, portal);
     });
   },

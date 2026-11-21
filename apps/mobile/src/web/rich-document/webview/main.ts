@@ -34,7 +34,9 @@ documentViewSlot.register(payload => {
 
 Annotate.bindUi();
 
-// Mermaid 全屏查看器：模块刈处一行挂接（不进 setDocument 视图刷新链路）
+// Mermaid 全屏查看器：模块刈处一行挂接（不进 setDocument 视图刷新链路）；
+// 关闭按钮文案走第二桥 labels 读取口（宿主 init.labels 下发，缺省回退默认中文）
+MermaidFullscreen.setCloseLabelProvider(() => RichDocumentBridge.currentLabels().ui['ui.common.close']);
 MermaidFullscreen.mountPortal('overlay-portal');
 MermaidFullscreen.attachDelegation(post);
 // 代码块复制按钮：document 捕获委托（一次挂接，不进 setDocument 视图刷新链路）

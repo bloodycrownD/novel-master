@@ -21,6 +21,7 @@ import {rowsViewSlot} from './render/row-logic';
 import {RowWindow} from './render/row-windowing';
 import {BootTranscript} from './boot/boot-transcript';
 import {post} from './bridge';
+import {state} from './state/state';
 import {MermaidFullscreen} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {MenuOverlay} from '../ui/menu/MenuOverlay';
 import {RowList} from '../ui/render/RowList';
@@ -62,7 +63,9 @@ export const Factory = {
       RowWindow.measure();
     });
 
-    // Mermaid 全屏查看器：模块刈处一行挂接（不进 renderRows 链路）
+    // Mermaid 全屏查看器：模块刈处一行挂接（不进 renderRows 链路）；
+    // 关闭按钮文案走首桥 labels（state.labels.ui，宿主 init 下发，缺省回退默认中文）
+    MermaidFullscreen.setCloseLabelProvider(() => state.labels.ui['ui.common.close']);
     MermaidFullscreen.mountPortal('mermaid-viewer-portal');
     MermaidFullscreen.attachDelegation(post);
 
