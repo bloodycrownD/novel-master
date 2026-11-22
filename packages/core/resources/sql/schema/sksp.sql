@@ -1,11 +1,6 @@
-/**
- * SKSP secrets table DDL.
- *
- * @module bootstrap/sksp/sksp-schema
- */
+-- SKSP secrets table DDL.
 
-export const SKSP_SCHEMA_STATEMENTS: readonly string[] = [
-  `CREATE TABLE IF NOT EXISTS sksp_secrets (
+CREATE TABLE IF NOT EXISTS sksp_secrets (
   ref TEXT NOT NULL PRIMARY KEY,
   ciphertext BLOB NOT NULL,
   iv BLOB,
@@ -18,5 +13,4 @@ export const SKSP_SCHEMA_STATEMENTS: readonly string[] = [
   version INTEGER NOT NULL DEFAULT 1,
   updated_at_ms INTEGER NOT NULL,
   CHECK ((algo = 'dpapi-v1') OR (iv IS NOT NULL))
-);`,
-];
+);

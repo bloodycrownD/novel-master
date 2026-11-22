@@ -1,19 +1,14 @@
-/**
- * Chat tables DDL (project, session, message).
- *
- * @module bootstrap/chat/chat-schema
- */
+-- Chat tables DDL (project, session, message).
 
-/** Idempotent DDL for chat entities. */
-export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
-  `CREATE TABLE IF NOT EXISTS chat_project (
+CREATE TABLE IF NOT EXISTS chat_project (
     id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
     agent_config_json TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
-  )`,
-  `CREATE TABLE IF NOT EXISTS chat_session (
+  );
+
+CREATE TABLE IF NOT EXISTS chat_session (
     id TEXT NOT NULL PRIMARY KEY,
     project_id TEXT NOT NULL,
     title TEXT,
@@ -22,10 +17,12 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     parent_session_id TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_session_project
-    ON chat_session(project_id)`,
-  `CREATE TABLE IF NOT EXISTS chat_message (
+  );
+
+CREATE INDEX IF NOT EXISTS idx_chat_session_project
+    ON chat_session(project_id);
+
+CREATE TABLE IF NOT EXISTS chat_message (
     id TEXT NOT NULL PRIMARY KEY,
     session_id TEXT NOT NULL,
     seq INTEGER NOT NULL CHECK (seq >= 1),
@@ -53,7 +50,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     content_encoding TEXT NULL CHECK (content_encoding IN ('zlib', 'zlib-b64')),
     content_blob BLOB NULL,
     UNIQUE (session_id, seq)
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_message_created_at
-    ON chat_message(created_at_ms)`,
-];
+  );
+
+CREATE INDEX IF NOT EXISTS idx_chat_message_created_at
+    ON chat_message(created_at_ms);

@@ -20,24 +20,25 @@ import { Result } from "@/errors/either.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { LogFactory } from "@/infra/log/logger.js";
-import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
-import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
-import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schema.js";
-import { VFS_CONTENT_PACK_SCHEMA_STATEMENTS } from "./vfs/vfs-content-pack-schema.js";
-import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
-import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
-import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
-import { FILE_CACHE_SCHEMA_STATEMENTS } from "./session-kkv/file-cache-schema.js";
-import { SESSION_RUN_STATE_SCHEMA_STATEMENTS } from "./session-run-state/session-run-state-schema.js";
-import { USAGE_RECORD_SCHEMA_STATEMENTS } from "./usage/usage-record-schema.js";
-import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
-import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
-import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
-import { SMART_SORT_RULE_SCHEMA_STATEMENTS } from "./smart-sort-rule/smart-sort-rule-schema.js";
-import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
-import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
-import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
-import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
+import {
+  AGENT_SCHEMA_STATEMENTS,
+  CHAT_SCHEMA_STATEMENTS,
+  FILE_CACHE_SCHEMA_STATEMENTS,
+  KKV_SCHEMA_STATEMENTS,
+  MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
+  PROVIDER_SCHEMA_STATEMENTS,
+  SESSION_KKV_SCHEMA_STATEMENTS,
+  SESSION_RUN_STATE_SCHEMA_STATEMENTS,
+  SKILLS_SCHEMA_STATEMENTS,
+  SKSP_SCHEMA_STATEMENTS,
+  SMART_SORT_RULE_SCHEMA_STATEMENTS,
+  USAGE_RECORD_SCHEMA_STATEMENTS,
+  VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
+  VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
+  VFS_REVISION_SCHEMA_STATEMENTS,
+  VFS_SCHEMA_STATEMENTS,
+  WORKPLACE_SCHEMA_STATEMENTS,
+} from "@/infra/sql-template/generated/schema.generated.js";
 import { BuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { BuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
 import { BuiltinSkills } from "./skills/seed-builtin-skills.js";
@@ -167,7 +168,6 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...SESSION_RUN_STATE_SCHEMA_STATEMENTS,
   ...USAGE_RECORD_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
-  ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
   ...SMART_SORT_RULE_SCHEMA_STATEMENTS,
   ...SKILLS_SCHEMA_STATEMENTS,

@@ -28,7 +28,11 @@ import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlit
 import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
-import {  VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT, VFS_BLOB_GC_TRIGGER_LEGACY_NAMES, VFS_BLOB_GC_TRIGGER_NAMES_V2, VFS_ENTRY_CONTENT_HASH_INDEX_NAME  } from "../../src/bootstrap/vfs/vfs-revision-schema.js";
+// vfs-revision-schema.ts 的 DDL 已迁 resources/sql/schema/vfs-revision.sql；测试断言锁的是契约字面值，就地内联。
+const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT = "NOT EXISTS (SELECT 1 FROM vfs_entry";
+const VFS_ENTRY_CONTENT_HASH_INDEX_NAME = "idx_vfs_entry_content_hash";
+const VFS_BLOB_GC_TRIGGER_NAMES_V2 = ["trg_revision_delete_dec_blob_ref_v2", "trg_revision_update_transfer_blob_ref_v2"] as const;
+const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = ["trg_revision_delete_dec_blob_ref", "trg_revision_update_transfer_blob_ref"] as const;
 import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 import {  openNovelMasterTestConnection  } from "../helpers/novel-master.js";
 

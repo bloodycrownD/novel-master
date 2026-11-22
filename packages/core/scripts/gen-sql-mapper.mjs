@@ -18,10 +18,12 @@
  * @module scripts/gen-sql-mapper
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { XMLParser } from "fast-xml-parser";
+
+const NL = String.fromCharCode(10);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const coreRoot = join(here, "..");
@@ -73,6 +75,13 @@ function textOfNodes(nodes, fragments, path) {
   return out;
 }
 
+/** 语句模板 → TS 模板字面量：语句值 = 原文本逐字符（生成器不添加缩进——缩进会进字符串值，破坏依赖语句文本形态的断言/豁免正则）。 */
+function templateLines(text) {
+  const BT = String.fromCharCode(96);
+  const rest = text.split(NL);
+  const first = rest.shift();
+  return ["    " + BT + first, ...rest, BT + ","].join(NL);
+}
 /** 模板文本规范化：首尾 trim + 连续 3+ 空行收敛为 1 空行。 */
 function normalize(template) {
   const cleaned = template.replace(/\n{3,}/g, "\n\n");
@@ -151,9 +160,7 @@ for (const file of mapperFiles) {
   lines.push("");
   lines.push(`export const ${exportName} = {`);
   for (const s of statements) {
-    lines.push(`    ${s.id}: \``);
-    for (const line of s.text.split("\n")) lines.push(`    ${line}`);
-    lines.push("    `,");
+    lines.push(`    ${s.id}: ${templateLines(s.text).trimStart()}`);
   }
   lines.push("} as const;");
   lines.push("");
@@ -161,9 +168,7 @@ for (const file of mapperFiles) {
     lines.push(`/** <sql id> 片段原样导出（供 base repository 的结构化拼装等非语句消费）。 */`);
     lines.push(`export const ${exportName}Fragments = {`);
     for (const [id, text] of fragments) {
-      lines.push(`    ${id}: \``);
-      for (const line of text.split("\n")) lines.push(`    ${line}`);
-      lines.push("    `,");
+      lines.push(`    ${id}: ${templateLines(text).trimStart()}`);
     }
     lines.push("} as const;");
     lines.push("");
@@ -189,6 +194,99 @@ for (const file of mapperFiles) {
   }
   writeFileSync(outFile, body, "utf8");
   console.log(`generated: ${outFile}（${statements.length} 条语句）`);
+}
+
+// ===== schema DDL：resources/sql/schema/*.sql → generated 数组（导出名 <DOMAIN>_SCHEMA_STATEMENTS） =====
+
+const schemaDir = join(coreRoot, "resources/sql/schema");
+const schemaOutFile = join(coreRoot, "src/infra/sql-template/generated/schema.generated.ts");
+
+/** SQL 文本按分号切语句（-- 行注释内的分号不切分），空语句丢弃，注释随语句保留。 */
+function splitSqlStatements(text) {
+  const stmts = [];
+  let buf = "";
+  let inTriggerBody = false; // CREATE TRIGGER ... BEGIN ... END;：体内分号属语句本体，不切分
+  for (const line of text.split(NL)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("--")) {
+      buf += line + NL;
+      continue;
+    }
+    if (inTriggerBody) {
+      buf += line + NL;
+      if (/\bEND\b/i.test(trimmed) && trimmed.endsWith(";")) {
+        const stmt = buf.trim();
+        if (stmt) stmts.push(stmt);
+        buf = "";
+        inTriggerBody = false;
+      }
+      continue;
+    }
+    if (/\bBEGIN\b\s*;?\s*$/i.test(trimmed)) {
+      buf += line + NL;
+      inTriggerBody = true;
+      continue;
+    }
+    let rest = line;
+    while (rest.includes(";")) {
+      const idx = rest.indexOf(";");
+      buf += rest.slice(0, idx);
+      const stmt = buf.trim();
+      if (stmt) stmts.push(stmt);
+      buf = "";
+      rest = rest.slice(idx + 1);
+    }
+    if (rest.trim()) buf += rest + NL;
+  }
+  const tail = buf.trim();
+  if (tail) stmts.push(tail);
+  // 剥离语句头部注释行：执行文本与原 TS 数组形态一致（依赖 ^CREATE 锚定的豁免/断言
+  // 正则不再被注释行干扰）；体内注释保留。.sql 源文件里的注释原样保留（文档价值）。
+  return stmts.map((st) => st.replace(/^(?:\s*--[^\n]*\n)+/, "").trim());
+}
+
+function kebabToUpperSnake(name) {
+  return name.split("-").map((part) => part.toUpperCase()).join("_");
+}
+
+if (existsSync(schemaDir)) {
+  const exports = [];
+  for (const file of readdirSync(schemaDir).filter((f) => f.endsWith(".sql")).sort()) {
+    const base = basename(file, ".sql");
+    const exportName = kebabToUpperSnake(base) + "_SCHEMA_STATEMENTS";
+    const stmts = splitSqlStatements(readFileSync(join(schemaDir, file), "utf8"));
+    if (stmts.length === 0) throw new Error(`${file} 没有任何语句`);
+    for (const st of stmts) {
+      if (st.includes("${")) throw new Error(`${file} 语句含未展开插值: ${st.slice(0, 60)}`);
+    }
+    const lines = stmts.map((st) => templateLines(st));
+    exports.push(`/** ${base}.sql 的幂等 DDL 语句序列（执行顺序 = 文件内顺序）。 */
+export const ${exportName}: readonly string[] = [
+${lines.join(NL)}
+] as const;`);
+  }
+  const body = [
+    "/**",
+    " * 自动生成：scripts/gen-sql-mapper.mjs 从 resources/sql/schema/*.sql 生成，勿手改。",
+    " * 每个域一个 .sql 文件（幂等 DDL，分号分隔），装配方逐条 tx.execute；",
+    " * 空数组域（session-fs）不产文件、导出随消费点退役。",
+    " *",
+    " * @module infra/sql-template/generated",
+    " */",
+    "",
+    exports.join(NL + NL),
+    "",
+  ].join(NL);
+  if (checkMode) {
+    const current = existsSync(schemaOutFile) ? readFileSync(schemaOutFile, "utf8") : "";
+    if (current !== body) {
+      console.error(`生成物过期：${schemaOutFile}`);
+      dirty += 1;
+    }
+  } else {
+    writeFileSync(schemaOutFile, body, "utf8");
+    console.log(`generated: ${schemaOutFile}（${exports.length} 个域）`);
+  }
 }
 
 if (checkMode && dirty > 0) {
