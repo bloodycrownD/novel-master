@@ -49,3 +49,13 @@ tsc-alias 的 `@/` 别名重写，app 端照样解析不了）。
 
 core 960/0、desktop 774/0、mobile 2384/0、typecheck 15/15、nm-style 硬段 0
 （signatures/top-let/throw-audit 全 0，mapper 文件零 FIND）。
+
+## 后续两轮结构收口（0616ce0d7 / 18a83f0a8）
+
+- resources/sql 收口 mapper/ 子目录（22 xml 与 schema/ 对称）；gen 脚本 mapperDir 同步。
+- i18n yaml 源迁 resources/i18n（5 个 catalog yaml 与 sql 同居包根 resources）：
+  **非 TS 源统一住 resources/** 成为包结构约定。gen 脚本 catalogDir、测试 CATALOG_DIR、
+  keys.ts 文档注释同步；删掉零消费的 ./i18n/catalog/* 通配 exports（双轨收敛残留，
+  具名 chat/settings 走 dist generated、jest 映射指向 dist，不受影响）。
+- 边界口径：src/ 只装 TS 代码与 generated 产物；resources/ 只装人写的非 TS 源
+  （XML/SQL/YAML），不入公开面、不被 tsc/nm-style 扫。
