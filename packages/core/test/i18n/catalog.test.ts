@@ -11,13 +11,16 @@ import {  tCore  } from "../helpers/core-i18n.js";
 import {  CORE_CATALOGS  } from "../../src/i18n/generated-catalog.js";
 
 const CATALOG_DIR = new URL("../../src/i18n/catalog/", import.meta.url);
-const zhCnSource = readFileSync(new URL("zh-CN.yaml", CATALOG_DIR), "utf8");
-const enUsSource = readFileSync(new URL("en-US.yaml", CATALOG_DIR), "utf8");
-// i18n 双轨收敛后 yaml 含三个组：core（parseCore 校验的对象）与 chat/settings（域段，
-// 键含伪嵌套点分、不属 CORE_MESSAGE_KEY_PATTERN 词表——只做展平对比，不进 parseCore）。
+// i18n 按域拆分：catalog/{error,label,ui,chat,settings}.yaml，文件名 = 组；每文件顶层 locale 段。
 import { parse } from "yaml";
-function flattenLocale(source: string): Record<string, string> {
+const CORE_FILES = ["error", "label", "ui"] as const;
+const DOMAIN_FILES = ["error", "label", "ui", "chat", "settings"] as const;
+
+function flattenFile(file: string, locale: string): Record<string, string> {
   const out: Record<string, string> = {};
+  const doc = parse(readFileSync(new URL(`${file}.yaml`, CATALOG_DIR), "utf8")) as Record<string, unknown>;
+  const segment = doc[locale];
+  if (segment == null || typeof segment !== "object") throw new Error(`${file}.yaml 缺 ${locale} 段`);
   const walk = (node: Record<string, unknown>, prefix: string): void => {
     for (const [k, v] of Object.entries(node)) {
       const path = prefix === "" ? k : `${prefix}.${k}`;
@@ -25,19 +28,22 @@ function flattenLocale(source: string): Record<string, string> {
       else out[path] = v as string;
     }
   };
-  walk(parse(source) as Record<string, unknown>, "");
+  walk(segment as Record<string, unknown>, file); // 文件名 = 域前缀（与生成器 flatten(segment, domain) 同构）
   return out;
 }
-const zhCnAll = flattenLocale(zhCnSource);
-const enUsAll = flattenLocale(enUsSource);
-const byGroup = (flat: Record<string, string>, group: "core" | "chat" | "settings"): Record<string, string> =>
-  Object.fromEntries(Object.entries(flat).filter(([k]) => (group === "chat" ? k.startsWith("chat.") : group === "settings" ? k.startsWith("settings.") : !k.startsWith("chat.") && !k.startsWith("settings."))));
-const zhCn = byGroup(zhCnAll, "core");
-const enUs = byGroup(enUsAll, "core");
-const zhCnChat = byGroup(zhCnAll, "chat");
-const enUsChat = byGroup(enUsAll, "chat");
-const zhCnSettings = byGroup(zhCnAll, "settings");
-const enUsSettings = byGroup(enUsAll, "settings");
+
+function groupBy(files: readonly string[], locale: string): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const file of files) Object.assign(merged, flattenFile(file, locale));
+  return merged;
+}
+
+const zhCn = groupBy(CORE_FILES, "zh-CN");
+const enUs = groupBy(CORE_FILES, "en-US");
+const zhCnChat = flattenFile("chat", "zh-CN");
+const enUsChat = flattenFile("chat", "en-US");
+const zhCnSettings = flattenFile("settings", "zh-CN");
+const enUsSettings = flattenFile("settings", "en-US");
 
 function paramsOf(template: string): string[] {
   return [...template.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!).sort();
@@ -104,8 +110,10 @@ describe("core catalog（G0.7）", () => {
   });
 
   it("静态书写规范：无 Tab 缩进、无裸陷阱词/数字/布尔、含半角冒号的值必须加引号", () => {
-    assertWritingRules(zhCnSource, "zh-CN.yaml");
-    assertWritingRules(enUsSource, "en-US.yaml");
+    for (const file of DOMAIN_FILES) {
+      const source = readFileSync(new URL(`${file}.yaml`, CATALOG_DIR), "utf8");
+      assertWritingRules(source, `${file}.yaml`);
+    }
   });
 
   it("tCore 接线：默认 zh-CN、{param} 插值、en-US 覆盖与回退", () => {

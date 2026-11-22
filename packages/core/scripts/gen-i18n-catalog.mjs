@@ -33,15 +33,39 @@ function flatten(node, prefix, out) {
   return out;
 }
 
-function loadLocale(locale) {
-  const doc = parse(readFileSync(join(catalogDir, `${locale}.yaml`), "utf8"));
-  return flatten(doc ?? {}, "", {});
+/**
+ * i18n 按域拆分：catalog/{error,label,ui,chat,settings}.yaml，文件名 = 顶层段，
+ * 每文件顶层 zh-CN: / en-US: locale 段、段下保留完整段子树（与旧单文件同构，纯物理拆分）。
+ */
+const DOMAIN_FILES = ["error", "label", "ui", "chat", "settings"];
+const LOCALES = ["zh-CN", "en-US"];
+
+function loadGroups() {
+  const flat = { "zh-CN": {}, "en-US": {} };
+  for (const domain of DOMAIN_FILES) {
+    const doc = parse(readFileSync(join(catalogDir, `${domain}.yaml`), "utf8")) ?? {};
+    const seenLocales = Object.keys(doc);
+    if (seenLocales.sort().join(",") !== [...LOCALES].sort().join(",")) {
+      throw new Error(`${domain}.yaml 顶层必须且只能是 ${LOCALES.join(" / ")} locale 段，实际：${seenLocales.join(" / ")}`);
+    }
+    for (const locale of LOCALES) {
+      const segment = doc[locale];
+      if (segment == null || typeof segment !== "object" || Array.isArray(segment)) throw new Error(`${domain}.yaml 缺 ${locale} 段`);
+      // locale 段下直接是域内容（域层由文件名承载，组装时补 ${domain}. 前缀）；同名子层说明双层嵌套，报错。
+      if (Object.keys(segment).includes(domain)) {
+        throw new Error(`${domain}.yaml 的 ${locale} 段下不应再嵌套 ${domain}: 层（域层由文件名承载）`);
+      }
+      Object.assign(flat[locale], flatten(segment, domain, {}));
+    }
+  }
+  return flat;
 }
 
-const zhCn = loadLocale("zh-CN");
-const enUs = loadLocale("en-US");
+const grouped = loadGroups();
+const zhCn = grouped["zh-CN"];
+const enUs = grouped["en-US"];
 
-/** 按键前缀分拆三个 catalog 组：core（coreT 装载的 ui/error/label 段）、chat、settings（域 translator 各自装载）。 */
+/** 按来源文件分拆三个 catalog 组：core（error+label+ui，coreT 装载）、chat、settings（域 translator 各自装载）。 */
 function splitByDomain(flat) {
   const core = {};
   const chat = {};
@@ -54,8 +78,8 @@ function splitByDomain(flat) {
   return { core, chat, settings };
 }
 
-const domains = { core: splitByDomain(zhCn).core, chat: splitByDomain(zhCn).chat, settings: splitByDomain(zhCn).settings };
-const domainsEn = { core: splitByDomain(enUs).core, chat: splitByDomain(enUs).chat, settings: splitByDomain(enUs).settings };
+const domains = splitByDomain(zhCn);
+const domainsEn = splitByDomain(enUs);
 
 function literal(obj, indent) {
   const pad = " ".repeat(indent);

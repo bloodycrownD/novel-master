@@ -26,12 +26,9 @@ export const Catalog = {
     }
     const flat: Record<string, string> = {};
     // 迭代式深度展平：[节点, dotted 前缀] 入栈，替代递归私有函数。
-    // 顶层 chat / settings 是域段（i18n 双轨收敛）：键含伪嵌套点分、不属 CORE_MESSAGE_KEY_PATTERN
-    // 词表，由各自域 catalog（CHAT_CATALOGS / SETTINGS_CATALOGS）装载——这里跳过，不进 core 组。
-    const pending: Array<[Record<string, unknown>, string]> = [[
-      Object.fromEntries(Object.entries(root as Record<string, unknown>).filter(([k]) => k !== "chat" && k !== "settings")),
-      "",
-    ]];
+    // 输入约定为 core 组（error / label / ui）文本；chat / settings 域段拆分后各自成文件，
+    // 由 CHAT_CATALOGS / SETTINGS_CATALOGS 装载，不经此处。
+    const pending: Array<[Record<string, unknown>, string]> = [[root as Record<string, unknown>, ""]];
     while (pending.length > 0) {
       const [node, prefix] = pending.pop()!;
       for (const [name, value] of Object.entries(node)) {
