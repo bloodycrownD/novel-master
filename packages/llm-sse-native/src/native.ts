@@ -34,20 +34,14 @@ const nativeModule = NativeModules.LlmSseNative as | LlmSseNativeModule | undefi
 
 // nm-style 注记：文件名 native 太泛，按内容主体起名（NativeSse）。
 export namespace NativeSse {
-    /** Android 且 Kotlin 模块已 autolink 时为 true（iOS / 测试环境 false，装配点据此跳过注册回落 XHR）。 */
+    /** Android 且 Kotlin 模块的流式方法面（sseConnect/sseAbort）可用时为 true（iOS / 测试环境 false，装配点据此跳过注册回落 XHR）。 */
     export function isAvailable(): boolean {
-        // 四个方法逐个 typeof 访问（而非 spread/keys 枚举）：bridgeless lazy
-        // jsRepresentation 的方法要靠属性访问实体化，sseAbort / requestAbort 必须
-        // 在此显式探测（stop-button P0：漏探测导致 spread bridge 缺该方法；取消对
-        // request 路径同样是「方法缺失 → 静默失效、连接跑满 callTimeout」）。
-        return (
-            Platform.OS === "android" &&
-            nativeModule != null &&
-            typeof nativeModule.sseConnect === "function" &&
-            typeof nativeModule.sseAbort === "function" &&
-            typeof nativeModule.request === "function" &&
-            typeof nativeModule.requestAbort === "function"
-        );
+        // 只探测流式必需的两个方法（属性访问而非 spread 枚举：bridgeless lazy
+        // jsRepresentation 的方法要靠属性访问实体化）。request/requestAbort 是
+        // 非流式 shim 的方法面，由 setup-llm-fetch 自行探测退化——流式可用性
+        // 探测不得被非流式方法面绑死（2026-11-22 真机实锤：旧 APK 三方法面 ×
+        // 四方法探测 → requestAbort 缺失 → native 永不接管、流式全走 XHR 黑盒）。
+        return Platform.OS === "android" && nativeModule != null && typeof nativeModule.sseConnect === "function" && typeof nativeModule.sseAbort === "function";
     }
 
     /** 组装生产 bridge：NativeEventEmitter 订阅四类事件（bridgeless 下无参构造走全局发射器）。 */
@@ -68,13 +62,13 @@ export namespace NativeSse {
         // bridgeless 下 NativeModules.X 返回 lazy jsRepresentation——初始为空对象，
         // 方法挂 HostObject 原型上、首次属性访问才实体化为 own property（见 RN
         // TurboModuleBinding.getModule）。spread 只枚举 own property，拿到的是
-        // 「已被访问过」的方法子集：isAvailable 只访问过 sseConnect/
-        // request，sseAbort 缺失 → 终止链 bridge.sseAbort 为 undefined，abort
-        // 时抛 "undefined is not a function" 且连接不断（挂死 run 只能等 callTimeout 兜底）。
-        // requestAbort 同款：非流式取消靠它真断连，spread 漏掉就退化成假取消。
-        // 解构的属性访问走原型查找，四个方法引用在此刻全部取到。
-        const {sseConnect, sseAbort, request, requestAbort} = nativeModule;
-        return {sseConnect, sseAbort, request, requestAbort, events};
+        // 「已被访问过」的方法子集：isAvailable 只访问过 sseConnect，sseAbort 缺失
+        // → 终止链 bridge.sseAbort 为 undefined，abort 时抛 "undefined is not a
+        // function" 且连接不断（挂死 run 只能等 callTimeout 兜底）。
+        // 解构的属性访问走原型查找，方法引用在此刻全部取到。request/requestAbort
+        // 是非流式方法面，流式 bridge 不携带（types.ts LlmSseNativeBridge 注记）。
+        const {sseConnect, sseAbort} = nativeModule;
+        return {sseConnect, sseAbort, events};
     }
 
     /** 已缓存的 transport 单例槽（共享事件订阅，避免重复 addListener）。 */
@@ -107,6 +101,11 @@ export namespace NativeSse {
    */
     export function registerWith(register: (transport: SseTransport) => void,): boolean {
         if (!isAvailable()) {
+            // 注册失败可见化（mobile-sse-utf8-decode-fix Step 1）：console.warn 进 logcat；
+            // 静默 return false 曾让「native 从未接管」隐蔽数月（真机 xhr ×100%）。
+            const runtime = (NativeModules as {LlmSseNative?: Partial<LlmSseNativeModule>}).LlmSseNative;
+            // eslint-disable-next-line no-console
+            console.warn("[nm-llm] native transport 注册失败", {platform: Platform.OS, capturedNull: nativeModule == null, captured: nativeModule == null ? null : {sseConnect: typeof nativeModule.sseConnect, sseAbort: typeof nativeModule.sseAbort}, runtimeNull: runtime == null});
             return false;
         }
         register(createTransport());

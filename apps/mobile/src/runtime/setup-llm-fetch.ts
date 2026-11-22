@@ -35,7 +35,15 @@ export const LlmFetchSetup = {
             return;
         }
         setupState.configured = true;
-        NativeSse.registerWith(LlmSseTransport.register);
+        const nativeRegistered = NativeSse.registerWith(LlmSseTransport.register);
+        // 注册结果可见化（mobile-sse-utf8-decode-fix Step 1）：成功/失败都落 logcat，
+        // 「从未接管」根因定位后此日志收敛为失败分支。
+        // eslint-disable-next-line no-console
+        console.warn(`[nm-llm] native SSE transport 注册结果: ${nativeRegistered ? '成功(registered)' : '失败(isAvailable=false)'}`);
+        if (!nativeRegistered) {
+            // eslint-disable-next-line no-console
+            console.warn('[nm-llm] 装配时 NativeModules.LlmSseNative:', NativeModules.LlmSseNative == null ? 'undefined' : Object.keys(NativeModules.LlmSseNative as object).join(','));
+        }
         // 装配工厂（原 createMobileLlmFetch）：native request 可用（Android 且已
         // autolink）→ 以它为底座的 fetch shim；不可用（iOS 工程 / Jest 环境）→ 回落
         // `globalThis.fetch`——发布面仅 Android，iOS 只是开发调试面，缺 native 不应

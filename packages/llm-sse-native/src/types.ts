@@ -85,10 +85,16 @@ export interface LlmSseNativeModule {
     requestAbort(requestId: string): void;
 }
 
-/** bridge = native 模块 + 事件通道（transport 的全部环境依赖，测试注入点）。 */
-export interface LlmSseNativeBridge extends LlmSseNativeModule {
+/**
+ * bridge = 流式所需的 native 方法面 + 事件通道（transport 的全部环境依赖，测试注入点）。
+ * 只含 sseConnect/sseAbort：流式取消走 sseAbort；request/requestAbort 是非流式 shim 的
+ * 方法面，由 apps/mobile setup-llm-fetch 自行探测退化，不属于流式 bridge 概念
+ * （2026-11-22 真机实锤：旧 APK 三方法面 × 新 JS 四方法探测 → requestAbort 缺失
+ * → 流式永不接管全走 XHR 黑盒，探测自己不用的方法拒绝了整个接管）。
+ */
+export type LlmSseNativeBridge = Pick<LlmSseNativeModule, "sseConnect" | "sseAbort"> & {
     readonly events: LlmSseEventSink;
-}
+};
 
 /**
  * SSE 传输 port（结构化对齐 spec llm-stream-native §3 的 `SseTransport`）。

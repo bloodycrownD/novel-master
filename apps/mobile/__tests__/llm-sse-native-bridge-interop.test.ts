@@ -15,23 +15,26 @@
 
 import {describe, expect, it, jest} from '@jest/globals';
 
+// 以 mock 开头的变量可被 hoisted jest.mock 工厂引用（jest 约定）；
+// 外提是为了让「方法面残缺」用例能直接增删 proto 方法（见 2026-11-22 防回归用例）。
+const mockProto: Record<string, unknown> = {
+    sseConnect: jest.fn(),
+    sseAbort: jest.fn(),
+    request: jest.fn(() => Promise.reject(new Error('unused'))),
+    requestAbort: jest.fn(),
+};
+
 jest.mock('react-native', () => {
-    // 原型上放四个方法（模拟 TurboModule HostObject 原型查找）；Proxy 的 get
+    // 原型上放方法（模拟 TurboModule HostObject 原型查找）；Proxy 的 get
     // trap 把访问过的属性写回本体缓存——精确复刻 RN jsRepresentation 的
     // 「首次属性访问实体化为 own property」语义。Object.keys() 初始为 []，
     // 与真机 BRIDGEKEYS 实测一致（stop-button P0 取证构建）。
-    // requestAbort 与 sseAbort 同理：可用性探测失败会让流式 transport 整体被
-    // 判不可用（回落 XHR），非流式取消则退化为假取消。
-    const proto = {
-        sseConnect: jest.fn(),
-        sseAbort: jest.fn(),
-        request: jest.fn(() => Promise.reject(new Error('unused'))),
-        requestAbort: jest.fn(),
-    };
+    // sseAbort 缺失会让流式 transport 被判不可用（回落 XHR）；requestAbort
+    // 缺失自 2026-11-22 起只影响非流式 shim（其自行退化），不再绑死流式探测。
     const lazyModule = new Proxy({} as Record<string, unknown>, {
-        get(target, prop) {
-            if (typeof prop === 'string' && prop in proto) {
-                const value = (proto as Record<string, unknown>)[prop];
+        get(target: Record<string, unknown>, prop: string | symbol) {
+            if (typeof prop === 'string' && prop in mockProto) {
+                const value = mockProto[prop];
                 target[prop] = value; // 实体化缓存（RN interop 同款）
                 return value;
             }
@@ -59,6 +62,23 @@ describe('stop-button P0 防回归：lazy interop bridge 方法完整性', () =>
         expect(Object.keys(nm)).toEqual([]);
         expect(typeof nm.sseAbort).toBe('function');
         expect(typeof nm.requestAbort).toBe('function');
+    });
+
+    it('2026-11-22 防回归：requestAbort 缺失（旧 APK 三方法面）时流式 transport 仍可注册', () => {
+        NativeSse.resetTransportForTests();
+        const original = mockProto.requestAbort;
+        delete mockProto.requestAbort;
+        try {
+            // 真机实锤形态：11-12 APK 方法面 sseConnect/sseAbort/request × 11-17+ JS。
+            // 旧探测（四方法全测）在此 false → native 永不接管、流式全走 XHR 黑盒
+            // （UTF-8 无声损坏根因链的入口）；新契约只测流式必需的 sseConnect/sseAbort。
+            expect(NativeSse.isAvailable()).toBe(true);
+            let registered = false;
+            expect(NativeSse.registerWith(() => { registered = true; })).toBe(true);
+            expect(registered).toBe(true);
+        } finally {
+            mockProto.requestAbort = original;
+        }
     });
 
     it('挂起流中 abort → 原型上的 sseAbort 被调用 + postSse 形态 reject', async () => {
